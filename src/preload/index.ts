@@ -37,6 +37,8 @@ const api: RayfinStudioApi = {
     setActive: (id: string | null) => ipcRenderer.invoke(IpcChannels.projectsSetActive, id),
     rename: (id: string, name: string) =>
       ipcRenderer.invoke(IpcChannels.projectsRename, id, name),
+    setWorkspace: (id: string, workspace?: string) =>
+      ipcRenderer.invoke(IpcChannels.projectsSetWorkspace, id, workspace),
     remove: (id: string, deleteFiles?: boolean) =>
       ipcRenderer.invoke(IpcChannels.projectsRemove, id, deleteFiles),
     git: {

@@ -185,6 +185,8 @@ export async function createProject(
   const name = input.name?.trim()
   if (!name) return { ok: false, error: 'Please enter a project name.' }
   const template = input.template?.trim() || 'blankapp'
+  const templateName = input.templateName?.trim()
+  const isUrl = /^(https?:\/\/|git@|git\+)/i.test(template)
   const slug = slugify(name)
   if (!slug) return { ok: false, error: 'Project name must contain letters or numbers.' }
 
@@ -200,8 +202,14 @@ export async function createProject(
     return { ok: false, error: `A folder named "${slug}" already exists in your workspace.` }
   }
 
-  onData?.('stdout', `Creating "${slug}" from the ${template} template…\n`)
-  const init = await run('rayfin', ['init', slug, '-t', template, '-y'], {
+  const label = isUrl ? 'community template' : `${template} template`
+  onData?.('stdout', `Creating "${slug}" from the ${label}…\n`)
+  // `rayfin init -t` takes a built-in name OR a community template URL; for a
+  // multi-template source, `--template-name` selects one.
+  const initArgs = ['init', slug, '-t', template]
+  if (isUrl && templateName) initArgs.push('--template-name', templateName)
+  initArgs.push('-y')
+  const init = await run('rayfin', initArgs, {
     cwd: root,
     onData,
     timeout: 300_000
@@ -209,11 +217,16 @@ export async function createProject(
 
   if (init.notFound) return { ok: false, error: 'The rayfin CLI was not found on PATH.' }
   if (!init.ok || !isRayfinProject(dir)) {
-    return { ok: false, error: `rayfin init failed (exit code ${init.exitCode ?? 'unknown'}).` }
+    return {
+      ok: false,
+      error: isUrl
+        ? `rayfin init from the template URL failed (exit code ${init.exitCode ?? 'unknown'}). Check the URL is a valid Rayfin template.`
+        : `rayfin init failed (exit code ${init.exitCode ?? 'unknown'}).`
+    }
   }
 
   ensureAgentInstructions(dir)
-  await initGitRepo(dir, `Initial commit (${template} template)`, onData)
+  await initGitRepo(dir, `Initial commit (${isUrl ? 'community template' : `${template} template`})`, onData)
 
   const project = registerProject(dir, name)
   store.setActive(project.id)
@@ -282,6 +295,20 @@ export function renameProject(id: string, name: string): ProjectActionResult {
   writeProjectName(project.path, trimmed)
   store.updateProject(id, { name: trimmed })
   const updated = store.findProject(id) ?? { ...project, name: trimmed }
+  return { ok: true, project: { ...updated, missing: !isRayfinProject(updated.path) } }
+}
+
+/**
+ * Set (or clear, when empty) the Fabric workspace target a project deploys to.
+ * Stored on the project and reused by `rayfin up`; switching the active
+ * deployment of an already-deployed project should use `deploy.switch` instead.
+ */
+export function setProjectWorkspace(id: string, workspace?: string): ProjectActionResult {
+  const project = store.findProject(id)
+  if (!project) return { ok: false, error: 'Project not found.' }
+  const trimmed = workspace?.trim() || undefined
+  store.updateProject(id, { workspace: trimmed })
+  const updated = store.findProject(id) ?? { ...project, workspace: trimmed }
   return { ok: true, project: { ...updated, missing: !isRayfinProject(updated.path) } }
 }
 

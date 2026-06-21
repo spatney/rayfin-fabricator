@@ -207,8 +207,18 @@ export interface ProjectsState {
 
 export interface CreateProjectInput {
   name: string
-  /** Template name, e.g. 'blankapp' | 'dataapp' | 'gettingstartedauth' | 'todoapp'. */
+  /**
+   * Template the project is scaffolded from. Either a built-in name
+   * ('blankapp' | 'dataapp' | 'gettingstartedauth' | 'todoapp') or a community
+   * template URL (e.g. an awesome-rayfin git/tarball URL) — `rayfin init -t`
+   * accepts either.
+   */
   template: string
+  /**
+   * For a multi-template source URL, the specific template to pick
+   * (`rayfin init --template-name <name>`). Ignored for built-in templates.
+   */
+  templateName?: string
 }
 
 export interface ProjectActionResult {
@@ -357,6 +367,7 @@ export const IpcChannels = {
   projectsOpen: 'projects:open',
   projectsSetActive: 'projects:setActive',
   projectsRename: 'projects:rename',
+  projectsSetWorkspace: 'projects:setWorkspace',
   projectsRemove: 'projects:remove',
   projectsGitStatus: 'projects:gitStatus',
   projectsGitCommit: 'projects:gitCommit',
@@ -427,6 +438,8 @@ export interface RayfinStudioApi {
     setActive: (id: string | null) => Promise<ProjectsState>
     /** Rename a project (updates the display name and rayfin/rayfin.yml `name`). */
     rename: (id: string, name: string) => Promise<ProjectActionResult>
+    /** Set (or clear, when empty) the Fabric workspace a project deploys to. */
+    setWorkspace: (id: string, workspace?: string) => Promise<ProjectActionResult>
     /**
      * Remove a project. By default it is only forgotten (files left on disk);
      * pass `deleteFiles: true` to also move the project folder to the OS trash.

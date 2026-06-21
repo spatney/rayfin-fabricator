@@ -9,7 +9,10 @@ interface Props {
 export default function NewProjectModal({ onClose, onCreated }: Props): JSX.Element {
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [name, setName] = useState('')
+  const [source, setSource] = useState<'builtin' | 'url'>('builtin')
   const [template, setTemplate] = useState('blankapp')
+  const [url, setUrl] = useState('')
+  const [templateName, setTemplateName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [log, setLog] = useState('')
@@ -38,7 +41,12 @@ export default function NewProjectModal({ onClose, onCreated }: Props): JSX.Elem
     setError(null)
     setLog('')
     try {
-      const result = await window.api.projects.create({ name, template })
+      const chosen = source === 'url' ? url.trim() : template
+      const result = await window.api.projects.create({
+        name,
+        template: chosen,
+        templateName: source === 'url' ? templateName.trim() || undefined : undefined
+      })
       if (result.ok) {
         onCreated(result)
       } else {
@@ -54,6 +62,9 @@ export default function NewProjectModal({ onClose, onCreated }: Props): JSX.Elem
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+
+  const urlValid = source === 'url' ? /^(https?:\/\/|git@|git\+)/i.test(url.trim()) : true
+  const canCreate = Boolean(slug) && (source === 'builtin' || urlValid)
 
   return (
     <div className="modal-backdrop" onClick={busy ? undefined : onClose}>
@@ -86,20 +97,70 @@ export default function NewProjectModal({ onClose, onCreated }: Props): JSX.Elem
 
           <div className="field">
             <span className="field-label">Template</span>
-            <div className="template-grid">
-              {templates.map((t) => (
-                <button
-                  key={t.name}
-                  type="button"
-                  disabled={busy}
-                  className={`template-card${template === t.name ? ' template-card--active' : ''}`}
-                  onClick={() => setTemplate(t.name)}
-                >
-                  <span className="template-card-name">{t.displayName}</span>
-                  <span className="template-card-desc">{t.description}</span>
-                </button>
-              ))}
+            <div className="seg">
+              <button
+                type="button"
+                disabled={busy}
+                className={`seg-btn${source === 'builtin' ? ' seg-btn--active' : ''}`}
+                onClick={() => setSource('builtin')}
+              >
+                Built-in
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className={`seg-btn${source === 'url' ? ' seg-btn--active' : ''}`}
+                onClick={() => setSource('url')}
+              >
+                Community URL
+              </button>
             </div>
+
+            {source === 'builtin' ? (
+              <div className="template-grid">
+                {templates.map((t) => (
+                  <button
+                    key={t.name}
+                    type="button"
+                    disabled={busy}
+                    className={`template-card${template === t.name ? ' template-card--active' : ''}`}
+                    onClick={() => setTemplate(t.name)}
+                  >
+                    <span className="template-card-name">{t.displayName}</span>
+                    <span className="template-card-desc">{t.description}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="template-url">
+                <input
+                  className="field-input"
+                  type="text"
+                  value={url}
+                  placeholder="https://github.com/owner/awesome-rayfin-template"
+                  spellCheck={false}
+                  disabled={busy}
+                  onChange={(e) => setUrl(e.target.value)}
+                />
+                <span className="field-hint">
+                  A git or tarball URL for a community (awesome-rayfin) template.
+                </span>
+                <input
+                  className="field-input"
+                  type="text"
+                  value={templateName}
+                  placeholder="Template name (optional, for multi-template repos)"
+                  spellCheck={false}
+                  disabled={busy}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                />
+                {url.trim() && !urlValid && (
+                  <span className="field-hint field-hint--warn">
+                    Enter a valid http(s) or git URL.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {(busy || log) && (
@@ -115,7 +176,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props): JSX.Elem
           <button className="btn btn--ghost" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button className="btn btn--primary" onClick={create} disabled={busy || !slug}>
+          <button className="btn btn--primary" onClick={create} disabled={busy || !canCreate}>
             {busy ? 'Creating…' : 'Create project'}
           </button>
         </div>

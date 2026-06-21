@@ -22,6 +22,7 @@ import {
   removeProject,
   renameProject,
   setActive,
+  setProjectWorkspace,
   setWorkspaceRoot
 } from './services/projects'
 import { getState } from './services/store'
@@ -106,6 +107,9 @@ export function registerIpc(): void {
   ipcMain.handle(IpcChannels.projectsSetActive, (_event, id: string | null) => setActive(id))
   ipcMain.handle(IpcChannels.projectsRename, (_event, id: string, name: string) =>
     renameProject(id, name)
+  )
+  ipcMain.handle(IpcChannels.projectsSetWorkspace, (_event, id: string, workspace?: string) =>
+    setProjectWorkspace(id, workspace)
   )
   ipcMain.handle(IpcChannels.projectsRemove, (_event, id: string, deleteFiles?: boolean) => {
     cancelMessage(id)

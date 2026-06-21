@@ -13,6 +13,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import ChatPanel, { type UIChatMessage } from '../components/ChatPanel'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 import GitControl from '../components/GitControl'
+import WorkspaceControl from '../components/WorkspaceControl'
 import CodeViewer from '../components/CodeViewer'
 import logo from '../assets/logo.png'
 
@@ -434,6 +435,7 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                 </div>
                 <div className="project-meta">
                   {active.template && <span className="chip">{active.template}</span>}
+                  <WorkspaceControl project={active} onChanged={() => void refreshProjects()} />
                   <GitControl projectId={active.id} refreshKey={gitRefresh} />
                   {deploys[active.id]?.running ? (
                     <span className="chip chip--busy">deploying…</span>
