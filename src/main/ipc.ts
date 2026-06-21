@@ -1,7 +1,24 @@
 import { ipcMain, app, type IpcMainInvokeEvent } from 'electron'
-import { IpcChannels, type AppVersions, type ProcStreamId, type ToolId } from '../shared/ipc'
+import {
+  IpcChannels,
+  type AppVersions,
+  type CreateProjectInput,
+  type ProcStreamId,
+  type ToolId
+} from '../shared/ipc'
 import { checkEnvironment, installTool } from './services/doctor'
 import { getAuthStatus, loginCopilot, loginRayfin, logoutRayfin } from './services/auth'
+import {
+  createProject,
+  getProjectsState,
+  listTemplates,
+  openProject,
+  pickFolder,
+  removeProject,
+  setActive,
+  setWorkspaceRoot
+} from './services/projects'
+import { getState } from './services/store'
 
 /** Build an onData callback that streams process output to the calling renderer. */
 function streamer(event: IpcMainInvokeEvent, channel: ProcStreamId) {
@@ -48,4 +65,22 @@ export function registerIpc(): void {
   ipcMain.handle(IpcChannels.authLogoutRayfin, (event) =>
     logoutRayfin(streamer(event, 'logout:rayfin'))
   )
+
+  // Projects
+  ipcMain.handle(IpcChannels.projectsState, () => getProjectsState())
+  ipcMain.handle(IpcChannels.projectsTemplates, () => listTemplates())
+  ipcMain.handle(IpcChannels.projectsPickFolder, () => pickFolder('Open a Rayfin project'))
+  ipcMain.handle(IpcChannels.projectsPickWorkspaceRoot, async () => {
+    const picked = await pickFolder('Choose a workspace folder', getState().workspaceRoot)
+    return picked ? setWorkspaceRoot(picked) : getProjectsState()
+  })
+  ipcMain.handle(IpcChannels.projectsSetWorkspaceRoot, (_event, path: string) =>
+    setWorkspaceRoot(path)
+  )
+  ipcMain.handle(IpcChannels.projectsCreate, (event, input: CreateProjectInput) =>
+    createProject(input, streamer(event, 'create:project'))
+  )
+  ipcMain.handle(IpcChannels.projectsOpen, (_event, path: string) => openProject(path))
+  ipcMain.handle(IpcChannels.projectsSetActive, (_event, id: string | null) => setActive(id))
+  ipcMain.handle(IpcChannels.projectsRemove, (_event, id: string) => removeProject(id))
 }

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import {
   IpcChannels,
+  type CreateProjectInput,
   type ProcLogEvent,
   type RayfinStudioApi,
   type ToolId
@@ -20,6 +21,19 @@ const api: RayfinStudioApi = {
     loginCopilot: () => ipcRenderer.invoke(IpcChannels.authLoginCopilot),
     loginRayfin: (tenant?: string) => ipcRenderer.invoke(IpcChannels.authLoginRayfin, tenant),
     logoutRayfin: () => ipcRenderer.invoke(IpcChannels.authLogoutRayfin)
+  },
+
+  projects: {
+    state: () => ipcRenderer.invoke(IpcChannels.projectsState),
+    templates: () => ipcRenderer.invoke(IpcChannels.projectsTemplates),
+    pickFolder: () => ipcRenderer.invoke(IpcChannels.projectsPickFolder),
+    pickWorkspaceRoot: () => ipcRenderer.invoke(IpcChannels.projectsPickWorkspaceRoot),
+    setWorkspaceRoot: (path: string) =>
+      ipcRenderer.invoke(IpcChannels.projectsSetWorkspaceRoot, path),
+    create: (input: CreateProjectInput) => ipcRenderer.invoke(IpcChannels.projectsCreate, input),
+    open: (path: string) => ipcRenderer.invoke(IpcChannels.projectsOpen, path),
+    setActive: (id: string | null) => ipcRenderer.invoke(IpcChannels.projectsSetActive, id),
+    remove: (id: string) => ipcRenderer.invoke(IpcChannels.projectsRemove, id)
   },
 
   onProcLog: (cb: (event: ProcLogEvent) => void) => {

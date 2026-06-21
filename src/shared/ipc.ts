@@ -73,6 +73,7 @@ export type ProcStreamId =
   | 'logout:rayfin'
   | 'install:rayfin'
   | 'install:copilot'
+  | 'create:project'
 
 export interface ProcLogEvent {
   channel: ProcStreamId
@@ -83,6 +84,62 @@ export interface ProcLogEvent {
 export interface ProcResult {
   ok: boolean
   exitCode: number | null
+}
+
+/* ------------------------------------------------------------------ *
+ * Projects
+ * ------------------------------------------------------------------ */
+
+/** A Rayfin project template (from `rayfin init --list-templates`). */
+export interface TemplateInfo {
+  name: string
+  displayName: string
+  description: string
+}
+
+export interface DeployInfo {
+  url?: string
+  status?: string
+  /** ISO timestamp of the last deploy attempt. */
+  at?: string
+}
+
+/** A project tracked by the app. Source lives in a local git repo on disk. */
+export interface StudioProject {
+  /** Internal stable id (uuid) used by the app. */
+  id: string
+  /** Display name (from rayfin/rayfin.yml, falls back to folder name). */
+  name: string
+  /** Absolute path to the project directory. */
+  path: string
+  /** Template id the project was scaffolded from, when known. */
+  template?: string
+  /** ISO timestamp when the project was added to the app. */
+  addedAt: string
+  /** Most recent deployment metadata. */
+  lastDeploy?: DeployInfo
+  /** True when the folder no longer exists / is no longer a Rayfin project. */
+  missing?: boolean
+}
+
+export interface ProjectsState {
+  /** Folder under which new projects are created. */
+  workspaceRoot: string
+  /** Currently active project id, or null when none is selected. */
+  activeProjectId: string | null
+  projects: StudioProject[]
+}
+
+export interface CreateProjectInput {
+  name: string
+  /** Template name, e.g. 'blankapp' | 'dataapp' | 'gettingstartedauth' | 'todoapp'. */
+  template: string
+}
+
+export interface ProjectActionResult {
+  ok: boolean
+  error?: string
+  project?: StudioProject
 }
 
 /* ------------------------------------------------------------------ *
@@ -100,6 +157,16 @@ export const IpcChannels = {
   authLoginCopilot: 'auth:loginCopilot',
   authLoginRayfin: 'auth:loginRayfin',
   authLogoutRayfin: 'auth:logoutRayfin',
+
+  projectsState: 'projects:state',
+  projectsTemplates: 'projects:templates',
+  projectsPickFolder: 'projects:pickFolder',
+  projectsPickWorkspaceRoot: 'projects:pickWorkspaceRoot',
+  projectsSetWorkspaceRoot: 'projects:setWorkspaceRoot',
+  projectsCreate: 'projects:create',
+  projectsOpen: 'projects:open',
+  projectsSetActive: 'projects:setActive',
+  projectsRemove: 'projects:remove',
 
   // main -> renderer event
   procLog: 'proc:log'
@@ -126,6 +193,25 @@ export interface RayfinStudioApi {
     loginCopilot: () => Promise<ProcResult>
     loginRayfin: (tenant?: string) => Promise<ProcResult>
     logoutRayfin: () => Promise<ProcResult>
+  }
+
+  projects: {
+    /** Current projects state (workspace root, list, active id). */
+    state: () => Promise<ProjectsState>
+    /** Available scaffolding templates. */
+    templates: () => Promise<TemplateInfo[]>
+    /** Native folder picker; returns the chosen path or null if cancelled. */
+    pickFolder: () => Promise<string | null>
+    /** Native folder picker for the workspace root; persists and returns state. */
+    pickWorkspaceRoot: () => Promise<ProjectsState>
+    setWorkspaceRoot: (path: string) => Promise<ProjectsState>
+    /** Scaffold a new project (streams output on the 'create:project' channel). */
+    create: (input: CreateProjectInput) => Promise<ProjectActionResult>
+    /** Register an existing Rayfin project by path and make it active. */
+    open: (path: string) => Promise<ProjectActionResult>
+    setActive: (id: string | null) => Promise<ProjectsState>
+    /** Remove a project from the list (does not delete files on disk). */
+    remove: (id: string) => Promise<ProjectsState>
   }
 
   /** Subscribe to streamed process output. Returns an unsubscribe function. */
