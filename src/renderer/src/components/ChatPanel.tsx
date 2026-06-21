@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import type {
-  ChatEvent,
-  ChatMessage,
-  ChatToolCall,
-  ChatTurnResult,
-  ReasoningEffort,
-  StudioProject
+import {
+  MAIN_THREAD_ID,
+  type ChatEvent,
+  type ChatMessage,
+  type ChatToolCall,
+  type ChatTurnResult,
+  type ReasoningEffort,
+  type StudioProject
 } from '@shared/ipc'
 import type { PendingShot } from './PreviewPane'
 import Markdown from './Markdown'
@@ -33,10 +34,14 @@ export interface OutboundPrompt {
 
 interface Props {
   project: StudioProject
+  /** Which thread this panel drives (main thread when omitted). */
+  threadId?: string
   messages: UIChatMessage[]
   onChange: (updater: (prev: UIChatMessage[]) => UIChatMessage[]) => void
   /** Called after a turn completes (used later to trigger deploy/preview refresh). */
   onTurnComplete?: (result: ChatTurnResult) => void
+  /** Called when this thread starts/stops a turn (drives status dots + merge defer). */
+  onBusyChange?: (busy: boolean) => void
   /** Region screenshots staged for the next message. */
   attachments?: PendingShot[]
   /** Remove a staged screenshot (also deletes its temp file). */
@@ -262,9 +267,11 @@ const TOOL_ICON: Record<ChatToolCall['state'], string> = {
 
 export default function ChatPanel({
   project,
+  threadId = MAIN_THREAD_ID,
   messages,
   onChange,
   onTurnComplete,
+  onBusyChange,
   attachments,
   onRemoveAttachment,
   onAttachmentsConsumed,
@@ -307,7 +314,7 @@ export default function ChatPanel({
 
   useEffect(() => {
     const off = window.api.onChatEvent((envelope) => {
-      if (envelope.projectId !== project.id) return
+      if (envelope.projectId !== project.id || envelope.threadId !== threadId) return
       onChangeRef.current((prev) =>
         prev.map((m) =>
           m.turnId === envelope.turnId && m.role === 'assistant' ? reduce(m, envelope.event) : m
@@ -315,7 +322,7 @@ export default function ChatPanel({
       )
     })
     return off
-  }, [project.id])
+  }, [project.id, threadId])
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -365,17 +372,20 @@ export default function ChatPanel({
     }
     onChange((prev) => [...prev, userMsg, assistantMsg])
     setSending(true)
+    onBusyChange?.(true)
     try {
       const result = await window.api.chat.send(
         project.id,
         turnId,
         prompt,
-        shots.map((s) => s.path)
+        shots.map((s) => s.path),
+        threadId
       )
       onChange((prev) => prev.map((m) => (m.turnId === turnId ? { ...m, pending: false } : m)))
       onTurnComplete?.(result)
     } finally {
       setSending(false)
+      onBusyChange?.(false)
     }
   }
 
@@ -390,11 +400,11 @@ export default function ChatPanel({
   }
 
   async function stop(): Promise<void> {
-    await window.api.chat.cancel(project.id)
+    await window.api.chat.cancel(project.id, threadId)
   }
 
   async function newChat(): Promise<void> {
-    await window.api.chat.reset(project.id)
+    await window.api.chat.reset(project.id, threadId)
     onChange(() => [])
     onClearHistory?.()
   }

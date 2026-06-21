@@ -1,12 +1,14 @@
 import { ipcMain, app, shell, type IpcMainInvokeEvent } from 'electron'
 import {
   IpcChannels,
+  MAIN_THREAD_ID,
   type AppSettings,
   type AppVersions,
   type ChatEvent,
   type ChatMessage,
   type ChatOptions,
   type CreateProjectInput,
+  type CreateThreadInput,
   type ProcStreamId,
   type ToolId
 } from '../shared/ipc'
@@ -31,6 +33,13 @@ import {
 import { getSettings, getState, setSettings } from './services/store'
 import { cancelMessage, resetSession, sendMessage, setChatOptions } from './services/chat'
 import { loadHistory, saveHistory, clearHistory } from './services/history'
+import {
+  createThread,
+  listThreads,
+  removeAllThreads,
+  removeThread
+} from './services/threads'
+import { mergeThread } from './services/merge'
 import {
   getDeployStatus,
   hasPendingChanges,
@@ -133,7 +142,7 @@ export function registerIpc(): void {
   ipcMain.handle(IpcChannels.projectsRemove, (_event, id: string, deleteFiles?: boolean) => {
     cancelMessage(id)
     clearHistory(id)
-    return removeProject(id, deleteFiles ?? false)
+    return removeAllThreads(id).then(() => removeProject(id, deleteFiles ?? false))
   })
   ipcMain.handle(IpcChannels.projectsGitStatus, (_event, id: string) => gitStatus(id))
   ipcMain.handle(IpcChannels.projectsGitCommit, (_event, id: string, message: string) =>
@@ -168,27 +177,69 @@ export function registerIpc(): void {
   // Chat (Copilot CLI)
   ipcMain.handle(
     IpcChannels.chatSend,
-    (event, projectId: string, turnId: string, text: string, attachments?: string[]) => {
+    (
+      event,
+      projectId: string,
+      turnId: string,
+      text: string,
+      attachments?: string[],
+      threadId?: string
+    ) => {
+      const thread = threadId ?? MAIN_THREAD_ID
       const emit = (chatEvent: ChatEvent): void => {
         if (!event.sender.isDestroyed()) {
-          event.sender.send(IpcChannels.chatEvent, { projectId, turnId, event: chatEvent })
+          event.sender.send(IpcChannels.chatEvent, {
+            projectId,
+            threadId: thread,
+            turnId,
+            event: chatEvent
+          })
         }
       }
-      return sendMessage(projectId, text, emit, attachments ?? [])
+      return sendMessage(projectId, thread, text, emit, attachments ?? [])
     }
   )
-  ipcMain.handle(IpcChannels.chatCancel, (_event, projectId: string) => cancelMessage(projectId))
-  ipcMain.handle(IpcChannels.chatReset, (_event, projectId: string) => resetSession(projectId))
-  ipcMain.handle(IpcChannels.chatHistory, (_event, projectId: string) => loadHistory(projectId))
+  ipcMain.handle(IpcChannels.chatCancel, (_event, projectId: string, threadId?: string) =>
+    cancelMessage(projectId, threadId ?? MAIN_THREAD_ID)
+  )
+  ipcMain.handle(IpcChannels.chatReset, (_event, projectId: string, threadId?: string) =>
+    resetSession(projectId, threadId ?? MAIN_THREAD_ID)
+  )
+  ipcMain.handle(IpcChannels.chatHistory, (_event, projectId: string, threadId?: string) =>
+    loadHistory(projectId, threadId ?? MAIN_THREAD_ID)
+  )
   ipcMain.handle(
     IpcChannels.chatSaveHistory,
-    (_event, projectId: string, messages: ChatMessage[]) => {
-      saveHistory(projectId, Array.isArray(messages) ? messages : [])
+    (_event, projectId: string, messages: ChatMessage[], threadId?: string) => {
+      saveHistory(projectId, Array.isArray(messages) ? messages : [], threadId ?? MAIN_THREAD_ID)
     }
   )
   ipcMain.handle(IpcChannels.chatSetOptions, (_event, projectId: string, options: ChatOptions) =>
     setChatOptions(projectId, options ?? {})
   )
+
+  // Experimental side threads (parallel forks)
+  ipcMain.handle(IpcChannels.threadsList, (_event, projectId: string) => listThreads(projectId))
+  ipcMain.handle(IpcChannels.threadsCreate, (_event, input: CreateThreadInput) =>
+    createThread(input)
+  )
+  ipcMain.handle(IpcChannels.threadsRemove, (_event, projectId: string, threadId: string) =>
+    removeThread(projectId, threadId)
+  )
+  ipcMain.handle(IpcChannels.threadsMerge, (event, projectId: string, threadId: string) => {
+    // Conflict-resolution progress streams into the project's MAIN thread chat.
+    const emit = (chatEvent: ChatEvent): void => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(IpcChannels.chatEvent, {
+          projectId,
+          threadId: MAIN_THREAD_ID,
+          turnId: `merge-${threadId}`,
+          event: chatEvent
+        })
+      }
+    }
+    return mergeThread(projectId, threadId, emit)
+  })
 
   // Preview screenshots (region capture → temp PNG → chat attachment)
   ipcMain.handle(IpcChannels.screenshotSave, (_event, dataUrl: string) => saveScreenshot(dataUrl))

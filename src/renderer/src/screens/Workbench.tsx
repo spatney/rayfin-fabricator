@@ -1,20 +1,24 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import type {
-  AppSettings,
-  AppVersions,
-  AuthStatus,
-  ChatMessage,
-  ChatTurnResult,
-  DeployResult,
-  ProjectsState,
-  RayfinVersionInfo,
-  StudioProject
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import {
+  MAIN_THREAD_ID,
+  type AppSettings,
+  type AppVersions,
+  type AuthStatus,
+  type ChatMessage,
+  type ChatTurnResult,
+  type DeployResult,
+  type ProjectsState,
+  type ProjectThread,
+  type RayfinVersionInfo,
+  type StudioProject
 } from '@shared/ipc'
 import NewProjectModal from '../components/NewProjectModal'
+import NewThreadModal from '../components/NewThreadModal'
 import ConfirmModal from '../components/ConfirmModal'
 import SettingsModal from '../components/SettingsModal'
 import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../components/ChatPanel'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
+import ThreadBar, { type ThreadView } from '../components/ThreadBar'
 import DeploymentsControl from '../components/DeploymentsControl'
 import RayfinVersionControl from '../components/RayfinVersionControl'
 import SkillsView from '../components/SkillsView'
@@ -22,6 +26,26 @@ import logo from '../assets/logo.png'
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
+
+/** Seconds the cancellable "merging to main" countdown runs before it fires. */
+const MERGE_COUNTDOWN_SECONDS = 8
+
+/** Composite key for per-thread chat/shot state (main collapses to the project id). */
+function chatKey(projectId: string, threadId: string): string {
+  return threadId === MAIN_THREAD_ID ? projectId : `${projectId}\u0000${threadId}`
+}
+
+/** Split a composite chat key back into its project + thread ids. */
+function splitKey(key: string): { projectId: string; threadId: string } {
+  const i = key.indexOf('\u0000')
+  return i < 0
+    ? { projectId: key, threadId: MAIN_THREAD_ID }
+    : { projectId: key.slice(0, i), threadId: key.slice(i + 1) }
+}
+
+function uid(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
 
 /** Hydrate a persisted message into a live (non-pending) UI message. */
 function toUi(m: ChatMessage): UIChatMessage {
@@ -91,7 +115,7 @@ export default function Workbench({
   const [rayfinVer, setRayfinVer] = useState<RayfinVersionInfo | null>(null)
   /** A prompt queued for the chat composer (e.g. the Rayfin upgrade hand-off). */
   const [chatOutbound, setChatOutbound] = useState<
-    (OutboundPrompt & { projectId: string }) | null
+    (OutboundPrompt & { projectId: string; threadId: string }) | null
   >(null)
   /** Project content view: the build loop (chat + preview) or the code browser. */
   const [viewMode, setViewMode] = useState<'build' | 'code' | 'skills'>('build')
@@ -109,25 +133,52 @@ export default function Workbench({
   /** Latest active project id, for guarding async (per-project) responses. */
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = projects?.activeProjectId ?? null
-  /** Projects whose persisted history has been loaded this session. */
+  /** Projects whose persisted history has been loaded this session (keyed by chatKey). */
   const hydratedRef = useRef<Set<string>>(new Set())
+  /** Latest projects snapshot, for reading inside async callbacks. */
+  const projectsRef = useRef(projects)
+  projectsRef.current = projects
+  /** The currently active project (or null). Declared early — effects depend on it. */
+  const active = projects?.projects.find((p) => p.id === projects.activeProjectId) ?? null
 
-  const addShot = useCallback((projectId: string, shot: PendingShot): void => {
-    setShots((all) => ({ ...all, [projectId]: [...(all[projectId] ?? []), shot] }))
+  /** Per-project active thread (absent ⇒ main). Drives the chat switcher. */
+  const [activeThread, setActiveThread] = useState<Record<string, string>>({})
+  /** Whether each thread has a turn in flight (keyed by chatKey). */
+  const [busyThreads, setBusyThreads] = useState<Record<string, boolean>>({})
+  /** New-side-thread modal state. */
+  const [showNewThread, setShowNewThread] = useState(false)
+  const [creatingThread, setCreatingThread] = useState(false)
+  const [threadError, setThreadError] = useState<string | null>(null)
+  /** Side thread queued for discard confirmation. */
+  const [confirmDiscard, setConfirmDiscard] = useState<ProjectThread | null>(null)
+  const [discarding, setDiscarding] = useState(false)
+  /** Live auto-merge countdowns (chatKey → seconds left); source of truth. */
+  const countdownsRef = useRef<Map<string, number>>(new Map())
+  /** Side threads whose merge is currently running (chatKey). */
+  const mergingRef = useRef<Set<string>>(new Set())
+  /** Projects with a deploy queued behind the running one (coalesced). */
+  const pendingDeployRef = useRef<Set<string>>(new Set())
+  /** Stable handle to runDeploy for use inside its own completion path. */
+  const runDeployRef = useRef<((projectId: string) => void) | null>(null)
+  /** Forces a re-render when ref-backed countdown / merge state changes. */
+  const [, forceTick] = useReducer((x: number) => x + 1, 0)
+
+  const addShot = useCallback((key: string, shot: PendingShot): void => {
+    setShots((all) => ({ ...all, [key]: [...(all[key] ?? []), shot] }))
   }, [])
 
-  const removeShot = useCallback((projectId: string, path: string): void => {
-    setShots((all) => ({ ...all, [projectId]: (all[projectId] ?? []).filter((s) => s.path !== path) }))
+  const removeShot = useCallback((key: string, path: string): void => {
+    setShots((all) => ({ ...all, [key]: (all[key] ?? []).filter((s) => s.path !== path) }))
     void window.api.screenshot.cleanup([path])
   }, [])
 
-  const clearShots = useCallback((projectId: string): void => {
-    setShots((all) => ({ ...all, [projectId]: [] }))
+  const clearShots = useCallback((key: string): void => {
+    setShots((all) => ({ ...all, [key]: [] }))
   }, [])
 
   const setMessagesFor = useCallback(
-    (projectId: string, updater: (prev: UIChatMessage[]) => UIChatMessage[]): void => {
-      setChats((all) => ({ ...all, [projectId]: updater(all[projectId] ?? []) }))
+    (key: string, updater: (prev: UIChatMessage[]) => UIChatMessage[]): void => {
+      setChats((all) => ({ ...all, [key]: updater(all[key] ?? []) }))
     },
     []
   )
@@ -159,7 +210,11 @@ export default function Workbench({
 
   const runDeploy = useCallback(
     async (projectId: string, workspace?: string, force?: boolean): Promise<void> => {
-      if (deployingIdRef.current) return // one deploy at a time (skeleton)
+      if (deployingIdRef.current) {
+        // A deploy is already streaming — queue this one to run right after.
+        pendingDeployRef.current.add(projectId)
+        return
+      }
       deployingIdRef.current = projectId
       setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
       try {
@@ -173,9 +228,24 @@ export default function Workbench({
         deployingIdRef.current = null
         setGitRefresh((n) => n + 1)
         void refreshRayfinVer(projectId)
+        // Run the next coalesced deploy, if one was requested mid-flight.
+        if (pendingDeployRef.current.size > 0) {
+          const next = pendingDeployRef.current.values().next().value as string
+          pendingDeployRef.current.delete(next)
+          runDeployRef.current?.(next)
+        }
       }
     },
     [refreshProjects, refreshRayfinVer]
+  )
+  runDeployRef.current = (projectId: string) => void runDeploy(projectId)
+
+  /** Start (or coalesce) a full deploy of main — used after an auto-merge. */
+  const requestDeploy = useCallback(
+    (projectId: string): void => {
+      void runDeploy(projectId)
+    },
+    [runDeploy]
   )
 
   // Switch the active Fabric deployment, then reflect the new URL/status.
@@ -189,31 +259,152 @@ export default function Workbench({
     [refreshProjects]
   )
 
-  // After a chat turn, persist the transcript and auto-deploy when the agent
-  // left undeployed changes.
+  // After a chat turn, persist the transcript. The main thread auto-deploys when
+  // the agent left undeployed changes; a side thread instead starts the
+  // cancellable auto-merge countdown once it goes idle after a successful turn.
   const handleTurnComplete = useCallback(
-    async (projectId: string, result: ChatTurnResult): Promise<void> => {
+    async (projectId: string, threadId: string, result: ChatTurnResult): Promise<void> => {
       await refreshProjects()
       setGitRefresh((n) => n + 1)
-      void window.api.chat.saveHistory(projectId, toStored(chatsRef.current[projectId] ?? []))
+      const key = chatKey(projectId, threadId)
+      void window.api.chat.saveHistory(projectId, toStored(chatsRef.current[key] ?? []), threadId)
+      if (threadId !== MAIN_THREAD_ID) {
+        if (result.ok) startMergeCountdown(projectId, threadId)
+        return
+      }
       // The agent may have changed the Rayfin deps (e.g. an upgrade) — re-check.
       void refreshRayfinVer(projectId)
       if (!result.ok) return
       const changed = await window.api.deploy.hasChanges(projectId)
       if (changed) void runDeploy(projectId)
     },
+    // startMergeCountdown is stable (defined below); intentionally omitted.
     [refreshProjects, refreshRayfinVer, runDeploy]
   )
 
-  // Hydrate a project's persisted chat history the first time it becomes active.
+  /** Track per-thread busy state; resuming work on a thread defers its merge. */
+  const handleBusyChange = useCallback(
+    (projectId: string, threadId: string, busy: boolean): void => {
+      const key = chatKey(projectId, threadId)
+      setBusyThreads((b) => ({ ...b, [key]: busy }))
+      if (busy && countdownsRef.current.delete(key)) forceTick()
+    },
+    []
+  )
+
+  const startMergeCountdown = useCallback((projectId: string, threadId: string): void => {
+    countdownsRef.current.set(chatKey(projectId, threadId), MERGE_COUNTDOWN_SECONDS)
+    forceTick()
+  }, [])
+
+  const cancelCountdown = useCallback((projectId: string, threadId: string): void => {
+    if (countdownsRef.current.delete(chatKey(projectId, threadId))) forceTick()
+  }, [])
+
+  /** Merge a side thread into main, streaming conflict resolution into main chat. */
+  const performMerge = useCallback(
+    async (projectId: string, threadId: string): Promise<void> => {
+      const key = chatKey(projectId, threadId)
+      countdownsRef.current.delete(key)
+      if (mergingRef.current.has(key)) return
+      const project = projectsRef.current?.projects.find((p) => p.id === projectId)
+      const thread = project?.threads?.find((t) => t.id === threadId)
+      if (!thread || thread.status !== 'active') return
+
+      mergingRef.current.add(key)
+      forceTick()
+
+      // Show the merge as a turn on the main thread so Copilot's conflict
+      // resolution (if any) streams where the user can see it.
+      const mainKey = chatKey(projectId, MAIN_THREAD_ID)
+      const turnId = `merge-${threadId}`
+      const userMsg: UIChatMessage = {
+        id: uid(),
+        role: 'user',
+        text: `Merge “${thread.name}” into main`,
+        tools: [],
+        pending: false
+      }
+      const assistantMsg: UIChatMessage = {
+        id: uid(),
+        turnId,
+        role: 'assistant',
+        text: '',
+        tools: [],
+        pending: true
+      }
+      setChats((all) => ({ ...all, [mainKey]: [...(all[mainKey] ?? []), userMsg, assistantMsg] }))
+
+      try {
+        const res = await window.api.threads.merge(projectId, threadId)
+        setChats((all) => ({
+          ...all,
+          [mainKey]: (all[mainKey] ?? []).map((m) =>
+            m.turnId === turnId
+              ? { ...m, pending: false, error: res.ok ? m.error : res.error ?? 'Merge failed.' }
+              : m
+          )
+        }))
+        await refreshProjects()
+        // If the merged thread was the one being viewed, fall back to main.
+        setActiveThread((map) =>
+          map[projectId] === threadId ? { ...map, [projectId]: MAIN_THREAD_ID } : map
+        )
+        void window.api.chat.saveHistory(
+          projectId,
+          toStored(chatsRef.current[mainKey] ?? []),
+          MAIN_THREAD_ID
+        )
+        if (res.ok) requestDeploy(projectId)
+      } finally {
+        mergingRef.current.delete(key)
+        forceTick()
+      }
+    },
+    [refreshProjects, requestDeploy]
+  )
+
+  // One steady ticker drives every live auto-merge countdown; at zero it fires
+  // the merge. Ref-backed so React StrictMode can't double-trigger a merge.
   useEffect(() => {
-    const id = projects?.activeProjectId
-    if (!id || hydratedRef.current.has(id)) return
-    hydratedRef.current.add(id)
-    void window.api.chat.history(id).then((stored) => {
-      setChats((all) => (all[id] !== undefined ? all : { ...all, [id]: stored.map(toUi) }))
-    })
-  }, [projects?.activeProjectId])
+    const t = setInterval(() => {
+      const counts = countdownsRef.current
+      if (counts.size === 0) return
+      const fire: string[] = []
+      for (const [key, secs] of [...counts]) {
+        if (secs <= 1) {
+          counts.delete(key)
+          fire.push(key)
+        } else {
+          counts.set(key, secs - 1)
+        }
+      }
+      forceTick()
+      for (const key of fire) {
+        const { projectId, threadId } = splitKey(key)
+        void performMerge(projectId, threadId)
+      }
+    }, 1000)
+    return () => clearInterval(t)
+  }, [performMerge])
+
+  // Hydrate persisted chat history for the active project's main + side threads.
+  useEffect(() => {
+    if (!active) return
+    const ids = [
+      MAIN_THREAD_ID,
+      ...(active.threads ?? []).filter((t) => t.status === 'active').map((t) => t.id)
+    ]
+    for (const tid of ids) {
+      const key = chatKey(active.id, tid)
+      if (hydratedRef.current.has(key)) continue
+      hydratedRef.current.add(key)
+      void window.api.chat.history(active.id, tid).then((stored) => {
+        setChats((all) => (all[key] !== undefined ? all : { ...all, [key]: stored.map(toUi) }))
+      })
+    }
+    // active identity is captured via id + threads; effect re-runs are guarded.
+  }, [active?.id, active?.threads])
 
   // Hand a Rayfin upgrade to the Copilot agent: build a precise "from X → to Y"
   // prompt and queue it into the chat (the agent edits package.json + installs).
@@ -236,6 +427,7 @@ export default function Workbench({
     setChatOutbound({
       id: `rayfin-up-${Date.now()}`,
       projectId: id,
+      threadId: MAIN_THREAD_ID,
       display: `Update Rayfin to ${to}`,
       prompt
     })
@@ -255,9 +447,11 @@ export default function Workbench({
   // Debounce-persist chat transcripts whenever they change (after streaming settles).
   useEffect(() => {
     const t = setTimeout(() => {
-      for (const pid of hydratedRef.current) {
-        const msgs = chatsRef.current[pid]
-        if (msgs) void window.api.chat.saveHistory(pid, toStored(msgs))
+      for (const key of hydratedRef.current) {
+        const msgs = chatsRef.current[key]
+        if (!msgs) continue
+        const { projectId, threadId } = splitKey(key)
+        void window.api.chat.saveHistory(projectId, toStored(msgs), threadId)
       }
     }, 600)
     return () => clearTimeout(t)
@@ -276,11 +470,64 @@ export default function Workbench({
     return () => window.removeEventListener('click', close)
   }, [menuOpenId])
 
-  const active = projects?.projects.find((p) => p.id === projects.activeProjectId) ?? null
-
   async function selectProject(p: StudioProject): Promise<void> {
     setNotice(null)
     setProjects(await window.api.projects.setActive(p.id))
+  }
+
+  // Fork a new side thread and immediately hand it its first task.
+  async function createSideThread(name: string, firstTask: string): Promise<void> {
+    if (!active) return
+    setCreatingThread(true)
+    setThreadError(null)
+    try {
+      const res = await window.api.threads.create({ projectId: active.id, name })
+      if (!res.ok || !res.thread) {
+        setThreadError(res.error ?? 'Could not create the side thread.')
+        return
+      }
+      const tid = res.thread.id
+      await refreshProjects()
+      setActiveThread((m) => ({ ...m, [active.id]: tid }))
+      setShowNewThread(false)
+      setViewMode('build')
+      setFocusPane(null)
+      setChatOutbound({
+        id: `thread-${tid}-${Date.now()}`,
+        projectId: active.id,
+        threadId: tid,
+        display: firstTask,
+        prompt: firstTask
+      })
+    } finally {
+      setCreatingThread(false)
+    }
+  }
+
+  // Discard a side thread (after confirmation): cancel it, remove its worktree.
+  async function discardThread(): Promise<void> {
+    if (!confirmDiscard || !active) return
+    const threadId = confirmDiscard.id
+    const key = chatKey(active.id, threadId)
+    setDiscarding(true)
+    try {
+      countdownsRef.current.delete(key)
+      await window.api.chat.cancel(active.id, threadId)
+      await window.api.threads.remove(active.id, threadId)
+      setActiveThread((m) =>
+        m[active.id] === threadId ? { ...m, [active.id]: MAIN_THREAD_ID } : m
+      )
+      hydratedRef.current.delete(key)
+      setChats((all) => {
+        const next = { ...all }
+        delete next[key]
+        return next
+      })
+      await refreshProjects()
+      setConfirmDiscard(null)
+    } finally {
+      setDiscarding(false)
+    }
   }
 
   async function openExisting(): Promise<void> {
@@ -373,6 +620,35 @@ export default function Workbench({
       }
     }
   }
+
+  // Derived side-thread view state for the active project (experimental).
+  const sideThreadsOn = Boolean(settings?.experiments?.sideThreads)
+  const liveThreads = (active?.threads ?? []).filter(
+    (t) => t.status === 'active' || t.status === 'error'
+  )
+  const panelThreadIds = active
+    ? sideThreadsOn
+      ? [MAIN_THREAD_ID, ...liveThreads.map((t) => t.id)]
+      : [MAIN_THREAD_ID]
+    : []
+  const rawActiveThread = active ? activeThread[active.id] ?? MAIN_THREAD_ID : MAIN_THREAD_ID
+  const activeThreadId = panelThreadIds.includes(rawActiveThread)
+    ? rawActiveThread
+    : MAIN_THREAD_ID
+  const threadViews: ThreadView[] = active
+    ? liveThreads.map((t) => {
+        const key = chatKey(active.id, t.id)
+        let status: ThreadView['status'] = 'idle'
+        let countdown: number | undefined
+        if (mergingRef.current.has(key)) status = 'merging'
+        else if (countdownsRef.current.has(key)) {
+          status = 'countdown'
+          countdown = countdownsRef.current.get(key)
+        } else if (t.status === 'error') status = 'error'
+        else if (busyThreads[key]) status = 'working'
+        return { id: t.id, name: t.name, status, countdown, error: t.lastError }
+      })
+    : []
 
   return (
     <div className="app-shell">
@@ -642,32 +918,71 @@ export default function Workbench({
                   }`}
                 >
                   <section className="pane pane--chat">
-                    <ChatPanel
-                      key={active.id}
-                      project={active}
-                      messages={chats[active.id] ?? []}
-                      onChange={(updater) => setMessagesFor(active.id, updater)}
-                      onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
-                      attachments={shots[active.id] ?? []}
-                      onRemoveAttachment={(path) => removeShot(active.id, path)}
-                      onAttachmentsConsumed={() => clearShots(active.id)}
-                      onClearHistory={() => void window.api.chat.saveHistory(active.id, [])}
-                      onOptionsChanged={() => void refreshProjects()}
-                      outbound={
-                        chatOutbound?.projectId === active.id ? chatOutbound : null
-                      }
-                      focused={focusPane === 'chat'}
-                      onToggleFocus={() =>
-                        setFocusPane((f) => (f === 'chat' ? null : 'chat'))
-                      }
-                    />
+                    {sideThreadsOn && (
+                      <ThreadBar
+                        threads={threadViews}
+                        activeThreadId={activeThreadId}
+                        mainBusy={Boolean(busyThreads[chatKey(active.id, MAIN_THREAD_ID)])}
+                        onSelect={(tid) =>
+                          setActiveThread((m) => ({ ...m, [active.id]: tid }))
+                        }
+                        onNew={() => {
+                          setThreadError(null)
+                          setShowNewThread(true)
+                        }}
+                        onMergeNow={(tid) => void performMerge(active.id, tid)}
+                        onKeepWorking={(tid) => cancelCountdown(active.id, tid)}
+                        onDiscard={(tid) => {
+                          const t = liveThreads.find((x) => x.id === tid)
+                          if (t) setConfirmDiscard(t)
+                        }}
+                      />
+                    )}
+                    {panelThreadIds.map((tid) => {
+                      const key = chatKey(active.id, tid)
+                      const isActive = tid === activeThreadId
+                      return (
+                        <div
+                          key={key}
+                          className={`thread-host${isActive ? '' : ' thread-host--hidden'}`}
+                        >
+                          <ChatPanel
+                            project={active}
+                            threadId={tid}
+                            messages={chats[key] ?? []}
+                            onChange={(updater) => setMessagesFor(key, updater)}
+                            onTurnComplete={(result) =>
+                              void handleTurnComplete(active.id, tid, result)
+                            }
+                            onBusyChange={(busy) => handleBusyChange(active.id, tid, busy)}
+                            attachments={shots[key] ?? []}
+                            onRemoveAttachment={(path) => removeShot(key, path)}
+                            onAttachmentsConsumed={() => clearShots(key)}
+                            onClearHistory={() =>
+                              void window.api.chat.saveHistory(active.id, [], tid)
+                            }
+                            onOptionsChanged={() => void refreshProjects()}
+                            outbound={
+                              chatOutbound?.projectId === active.id &&
+                              chatOutbound.threadId === tid
+                                ? chatOutbound
+                                : null
+                            }
+                            focused={focusPane === 'chat'}
+                            onToggleFocus={() =>
+                              setFocusPane((f) => (f === 'chat' ? null : 'chat'))
+                            }
+                          />
+                        </div>
+                      )
+                    })}
                   </section>
                   <section className="pane pane--preview">
                     <PreviewPane
                       project={active}
                       deploy={deploys[active.id]}
                       onDeploy={(workspace, force) => void runDeploy(active.id, workspace, force)}
-                      onCapture={(shot) => addShot(active.id, shot)}
+                      onCapture={(shot) => addShot(chatKey(active.id, activeThreadId), shot)}
                       focused={focusPane === 'preview'}
                       onToggleFocus={() =>
                         setFocusPane((f) => (f === 'preview' ? null : 'preview'))
@@ -775,6 +1090,43 @@ export default function Workbench({
                 <p>The deployed Fabric app is not affected — only the local code is removed.</p>
               )}
               {deleteError && <p className="confirm-error">{deleteError}</p>}
+            </>
+          }
+        />
+      )}
+
+      {showNewThread && (
+        <NewThreadModal
+          busy={creatingThread}
+          error={threadError}
+          onCancel={() => {
+            if (!creatingThread) {
+              setShowNewThread(false)
+              setThreadError(null)
+            }
+          }}
+          onCreate={(name, firstTask) => void createSideThread(name, firstTask)}
+        />
+      )}
+
+      {confirmDiscard && (
+        <ConfirmModal
+          title="Discard side thread?"
+          danger
+          busy={discarding}
+          busyLabel="Discarding…"
+          confirmLabel="Discard"
+          onCancel={() => {
+            if (!discarding) setConfirmDiscard(null)
+          }}
+          onConfirm={() => void discardThread()}
+          message={
+            <>
+              <p>
+                <strong>{confirmDiscard.name}</strong> and all of its unmerged work will be
+                permanently removed.
+              </p>
+              <p>This can’t be undone. The main thread is not affected.</p>
             </>
           }
         />

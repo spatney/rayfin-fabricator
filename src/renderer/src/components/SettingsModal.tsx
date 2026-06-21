@@ -94,6 +94,29 @@ export default function SettingsModal({
           </label>
 
           <div className="field">
+            <span className="field-label">
+              Experiments <span className="settings-beta">Beta</span>
+            </span>
+            <label className="settings-check">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.experiments?.sideThreads)}
+                onChange={(e) =>
+                  onChange({ experiments: { sideThreads: e.target.checked } })
+                }
+              />
+              <span>
+                <span className="settings-check-label">Side threads</span>
+                <span className="field-hint">
+                  Fork a project into parallel background agents. Each side thread works in
+                  isolation, then auto-merges into your main thread and redeploys when it’s
+                  done.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div className="field">
             <span className="field-label">Diagnostics</span>
             <div className="settings-row">
               <span className="field-hint">Crash and error logs are saved on this device.</span>

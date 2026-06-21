@@ -25,7 +25,7 @@ function defaults(): ProjectsState {
 }
 
 function defaultSettings(): AppSettings {
-  return { theme: 'system', telemetry: false }
+  return { theme: 'system', telemetry: false, experiments: { sideThreads: false } }
 }
 
 let cache: ProjectsState | null = null
@@ -72,7 +72,13 @@ function persist(next: ProjectsState): ProjectsState {
 
 /** Merge a settings patch and persist. */
 export function setSettings(patch: Partial<AppSettings>): AppSettings {
-  const next = { ...getSettings(), ...patch }
+  const current = getSettings()
+  const next: AppSettings = {
+    ...current,
+    ...patch,
+    // Deep-merge experiment flags so toggling one doesn't drop the others.
+    experiments: { ...current.experiments, ...patch.experiments }
+  }
   settingsCache = next
   persist(getState())
   return next

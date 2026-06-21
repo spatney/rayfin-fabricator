@@ -3289,6 +3289,19 @@ code {
   color: var(--text);
   margin-bottom: 2px;
 }
+.settings-beta {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  vertical-align: middle;
+}
 .settings-footer {
   justify-content: space-between;
   align-items: center;
@@ -3950,6 +3963,223 @@ code {
   font-size: 12px;
   font-style: italic;
   opacity: 0.85;
+}
+
+/* ------------------------------------------------------------------ *
+ * Side threads (experimental): switcher, status dots, merge countdown
+ * ------------------------------------------------------------------ */
+.threadbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+
+.threadbar-pills {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.thread-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.thread-pill:hover {
+  color: var(--text);
+  border-color: var(--border-soft);
+}
+
+.thread-pill--active {
+  color: var(--text);
+  background: var(--accent-soft);
+  border-color: var(--accent-ring);
+}
+
+/* Side-thread pills wrap a select button + a discard button. */
+span.thread-pill {
+  padding: 0;
+  overflow: hidden;
+}
+
+.thread-pill-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 4px 4px 11px;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.thread-pill-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-pill-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  align-self: stretch;
+  padding: 0 8px 0 4px;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.thread-pill-x:hover {
+  color: var(--danger);
+}
+
+.thread-pill--new {
+  color: var(--text-dim);
+  background: none;
+  border-style: dashed;
+}
+
+.thread-pill--new:hover {
+  color: var(--accent);
+  border-color: var(--accent-ring);
+}
+
+.thread-plus {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.thread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-faint);
+}
+
+.thread-dot--idle {
+  background: var(--accent-2);
+}
+
+.thread-dot--working {
+  background: var(--pending);
+  animation: threadPulse 1.3s ease-in-out infinite;
+}
+
+.thread-dot--merging,
+.thread-dot--countdown {
+  background: var(--accent);
+  animation: threadPulse 1.1s ease-in-out infinite;
+}
+
+.thread-dot--error {
+  background: var(--danger);
+}
+
+@keyframes threadPulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 7px 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+}
+
+.merge-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--radius-sm);
+  animation: mergeBannerIn 0.18s ease;
+}
+
+@keyframes mergeBannerIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.merge-banner-spinner {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ws-spin 0.7s linear infinite;
+}
+
+.merge-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.merge-banner-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+/* Each thread's chat is mounted (so background turns keep streaming); only the
+   active one is shown. */
+.thread-host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.thread-host--hidden {
+  display: none;
+}
+
+/* New-thread modal extras */
+.modal-sub {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.field-textarea {
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.45;
 }
 
 /* Markdown-rendered assistant messages */

@@ -80,15 +80,32 @@ const api: RayfinStudioApi = {
   },
 
   chat: {
-    send: (projectId: string, turnId: string, text: string, attachments?: string[]) =>
-      ipcRenderer.invoke(IpcChannels.chatSend, projectId, turnId, text, attachments),
-    cancel: (projectId: string) => ipcRenderer.invoke(IpcChannels.chatCancel, projectId),
-    reset: (projectId: string) => ipcRenderer.invoke(IpcChannels.chatReset, projectId),
-    history: (projectId: string) => ipcRenderer.invoke(IpcChannels.chatHistory, projectId),
-    saveHistory: (projectId: string, messages) =>
-      ipcRenderer.invoke(IpcChannels.chatSaveHistory, projectId, messages),
+    send: (
+      projectId: string,
+      turnId: string,
+      text: string,
+      attachments?: string[],
+      threadId?: string
+    ) => ipcRenderer.invoke(IpcChannels.chatSend, projectId, turnId, text, attachments, threadId),
+    cancel: (projectId: string, threadId?: string) =>
+      ipcRenderer.invoke(IpcChannels.chatCancel, projectId, threadId),
+    reset: (projectId: string, threadId?: string) =>
+      ipcRenderer.invoke(IpcChannels.chatReset, projectId, threadId),
+    history: (projectId: string, threadId?: string) =>
+      ipcRenderer.invoke(IpcChannels.chatHistory, projectId, threadId),
+    saveHistory: (projectId: string, messages, threadId?: string) =>
+      ipcRenderer.invoke(IpcChannels.chatSaveHistory, projectId, messages, threadId),
     setOptions: (projectId: string, options) =>
       ipcRenderer.invoke(IpcChannels.chatSetOptions, projectId, options)
+  },
+
+  threads: {
+    list: (projectId: string) => ipcRenderer.invoke(IpcChannels.threadsList, projectId),
+    create: (input) => ipcRenderer.invoke(IpcChannels.threadsCreate, input),
+    remove: (projectId: string, threadId: string) =>
+      ipcRenderer.invoke(IpcChannels.threadsRemove, projectId, threadId),
+    merge: (projectId: string, threadId: string) =>
+      ipcRenderer.invoke(IpcChannels.threadsMerge, projectId, threadId)
   },
 
   screenshot: {

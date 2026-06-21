@@ -12,6 +12,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import type { ChatMessage } from '../../shared/ipc'
+import { MAIN_THREAD_ID } from '../../shared/ipc'
 
 /** Keep transcripts bounded; older messages beyond this are dropped on save. */
 const MAX_MESSAGES = 1000
@@ -20,10 +21,16 @@ function chatsDir(): string {
   return join(app.getPath('userData'), 'chats')
 }
 
-/** Restrict the on-disk filename to a safe slug derived from the project id. */
-function historyFile(projectId: string): string {
-  const safe = projectId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128)
-  return join(chatsDir(), `${safe || 'unknown'}.json`)
+/**
+ * Restrict the on-disk filename to a safe slug derived from the project id (and
+ * thread id, for side threads). The main thread keeps the bare `<projectId>.json`
+ * name for backward compatibility with transcripts written before side threads.
+ */
+function historyFile(projectId: string, threadId: string = MAIN_THREAD_ID): string {
+  const safeProject = projectId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128) || 'unknown'
+  if (threadId === MAIN_THREAD_ID) return join(chatsDir(), `${safeProject}.json`)
+  const safeThread = threadId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128) || 'thread'
+  return join(chatsDir(), `${safeProject}__${safeThread}.json`)
 }
 
 /** Coerce arbitrary persisted JSON into a clean ChatMessage[]. */
@@ -45,19 +52,19 @@ function sanitize(input: unknown): ChatMessage[] {
   return out
 }
 
-/** Load a project's persisted conversation (empty array when none/invalid). */
-export function loadHistory(projectId: string): ChatMessage[] {
+/** Load a project thread's persisted conversation (empty array when none/invalid). */
+export function loadHistory(projectId: string, threadId?: string): ChatMessage[] {
   try {
-    return sanitize(JSON.parse(readFileSync(historyFile(projectId), 'utf8')))
+    return sanitize(JSON.parse(readFileSync(historyFile(projectId, threadId), 'utf8')))
   } catch {
     return []
   }
 }
 
-/** Persist a project's conversation. An empty array removes the file. */
-export function saveHistory(projectId: string, messages: ChatMessage[]): void {
+/** Persist a project thread's conversation. An empty array removes the file. */
+export function saveHistory(projectId: string, messages: ChatMessage[], threadId?: string): void {
   const clean = sanitize(messages).slice(-MAX_MESSAGES)
-  const file = historyFile(projectId)
+  const file = historyFile(projectId, threadId)
   if (clean.length === 0) {
     try {
       rmSync(file, { force: true })
@@ -71,10 +78,10 @@ export function saveHistory(projectId: string, messages: ChatMessage[]): void {
   writeFileSync(file, JSON.stringify(clean), 'utf8')
 }
 
-/** Delete a project's persisted conversation (used when a project is removed). */
-export function clearHistory(projectId: string): void {
+/** Delete a project thread's persisted conversation (used on removal). */
+export function clearHistory(projectId: string, threadId?: string): void {
   try {
-    rmSync(historyFile(projectId), { force: true })
+    rmSync(historyFile(projectId, threadId), { force: true })
   } catch {
     /* best-effort */
   }

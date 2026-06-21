@@ -17,13 +17,19 @@ import { run } from './exec'
 import { findProject, updateProject } from './store'
 import { cleanupScreenshots } from './screenshot'
 import type { ChatEvent, ChatOptions, ChatTurnResult } from '../../shared/ipc'
+import { MAIN_THREAD_ID } from '../../shared/ipc'
 
 type Emit = (event: ChatEvent) => void
 
-/** In-flight turns keyed by projectId, so they can be cancelled. */
+/** Composite key so a project's main + side threads run independently. */
+function turnKey(projectId: string, threadId: string): string {
+  return `${projectId}\u0000${threadId}`
+}
+
+/** In-flight turns keyed by project+thread, so they can be cancelled. */
 const inflight = new Map<string, { cancel: () => void }>()
 
-/** Project ids whose current turn the user explicitly cancelled (no retry). */
+/** Keys (project+thread) whose current turn the user explicitly cancelled. */
 const cancelled = new Set<string>()
 
 const MAX_TOOL_OUTPUT = 4000
@@ -124,9 +130,47 @@ function handleEvent(raw: unknown, emit: Emit, ctx: TurnContext): void {
   }
 }
 
-/** Send a message to the project's Copilot agent, streaming events via `emit`. */
+interface ThreadContext {
+  cwd: string
+  sessionId: string
+}
+
+/**
+ * Resolve the working directory + Copilot session id for a thread, creating and
+ * persisting a session id on first use. Returns null when the project/thread is
+ * gone. Model/effort stay project-level (shared across threads).
+ */
+function resolveContext(projectId: string, threadId: string): ThreadContext | null {
+  const project = findProject(projectId)
+  if (!project) return null
+
+  if (threadId === MAIN_THREAD_ID) {
+    let sessionId = project.copilotSessionId
+    if (!sessionId) {
+      sessionId = randomUUID()
+      updateProject(projectId, { copilotSessionId: sessionId })
+    }
+    return { cwd: project.path, sessionId }
+  }
+
+  const thread = project.threads?.find((t) => t.id === threadId)
+  if (!thread) return null
+  let sessionId = thread.copilotSessionId
+  if (!sessionId) {
+    sessionId = randomUUID()
+    const sid = sessionId
+    const threads = (project.threads ?? []).map((t) =>
+      t.id === threadId ? { ...t, copilotSessionId: sid } : t
+    )
+    updateProject(projectId, { threads })
+  }
+  return { cwd: thread.worktreePath, sessionId }
+}
+
+/** Send a message to a project thread's Copilot agent, streaming via `emit`. */
 export async function sendMessage(
   projectId: string,
+  threadId: string,
   text: string,
   emit: Emit,
   attachments: string[] = []
@@ -137,16 +181,18 @@ export async function sendMessage(
     cleanupScreenshots(attachments)
     return { ok: false, error: 'Project not found.', filesModified: [], ranDeploy: false }
   }
-  if (inflight.has(projectId)) {
-    emit({ type: 'error', text: 'A message is already being processed for this project.' })
-    return { ok: false, error: 'Turn already running.', filesModified: [], ranDeploy: false }
+
+  const ctxInfo = resolveContext(projectId, threadId)
+  if (!ctxInfo) {
+    emit({ type: 'error', text: 'Side thread not found.' })
+    cleanupScreenshots(attachments)
+    return { ok: false, error: 'Thread not found.', filesModified: [], ranDeploy: false }
   }
 
-  // One persistent Copilot session per project (created on first message).
-  let sessionId = project.copilotSessionId
-  if (!sessionId) {
-    sessionId = randomUUID()
-    updateProject(projectId, { copilotSessionId: sessionId })
+  const key = turnKey(projectId, threadId)
+  if (inflight.has(key)) {
+    emit({ type: 'error', text: 'A message is already being processed for this thread.' })
+    return { ok: false, error: 'Turn already running.', filesModified: [], ranDeploy: false }
   }
 
   const args = [
@@ -155,9 +201,9 @@ export async function sendMessage(
     '--output-format',
     'json',
     '--session-id',
-    sessionId,
+    ctxInfo.sessionId,
     '-C',
-    project.path,
+    ctxInfo.cwd,
     ...(project.model && project.model !== 'auto' ? ['--model', project.model] : []),
     ...(project.effort ? ['--effort', project.effort] : []),
     ...attachments.flatMap((a) => ['--attachment', a]),
@@ -165,9 +211,9 @@ export async function sendMessage(
     '--no-color'
   ]
 
-  cancelled.delete(projectId)
+  cancelled.delete(key)
   let ctx: TurnContext = newContext()
-  let result = await runAttempt(projectId, args, project.path, emit, ctx)
+  let result = await runAttempt(key, args, ctxInfo.cwd, emit, ctx)
 
   // Retry only when nothing happened yet (no output, no tools, no result) and
   // the failure looks transient — re-running the same prompt is then side-effect free.
@@ -177,13 +223,13 @@ export async function sendMessage(
       !result.ok &&
       !ctx.sawResult &&
       !ctx.sawActivity &&
-      !cancelled.has(projectId) &&
+      !cancelled.has(key) &&
       TRANSIENT_RE.test(result.stderr || '')
     if (!retryable) break
     emit({ type: 'notice', text: `Copilot CLI hiccup — retrying (${attempt - 1}/${MAX_ATTEMPTS - 1})…` })
     await delay((attempt - 1) * 1000)
     ctx = newContext()
-    result = await runAttempt(projectId, args, project.path, emit, ctx)
+    result = await runAttempt(key, args, ctxInfo.cwd, emit, ctx)
   }
 
   cleanupScreenshots(attachments)
@@ -214,7 +260,7 @@ function newContext(): TurnContext {
 
 /** Run a single copilot invocation, parsing its JSONL stream into ChatEvents. */
 async function runAttempt(
-  projectId: string,
+  key: string,
   args: string[],
   cwd: string,
   emit: Emit,
@@ -234,7 +280,7 @@ async function runAttempt(
   const result = await run('copilot', args, {
     cwd,
     timeout: 20 * 60_000,
-    onSpawn: (handle) => inflight.set(projectId, handle),
+    onSpawn: (handle) => inflight.set(key, handle),
     onData: (stream, chunk) => {
       if (stream === 'stdout') {
         buffer += chunk
@@ -249,15 +295,16 @@ async function runAttempt(
   })
 
   if (buffer) flushLine(buffer)
-  inflight.delete(projectId)
+  inflight.delete(key)
   return result
 }
 
-/** Cancel the in-flight turn for a project, if any. */
-export function cancelMessage(projectId: string): void {
-  cancelled.add(projectId)
-  inflight.get(projectId)?.cancel()
-  inflight.delete(projectId)
+/** Cancel the in-flight turn for a project thread, if any. */
+export function cancelMessage(projectId: string, threadId: string = MAIN_THREAD_ID): void {
+  const key = turnKey(projectId, threadId)
+  cancelled.add(key)
+  inflight.get(key)?.cancel()
+  inflight.delete(key)
 }
 
 /** Persist the model / reasoning effort used for a project's chat. */
@@ -270,7 +317,16 @@ export function setChatOptions(projectId: string, options: ChatOptions): void {
 }
 
 /** Start a fresh conversation by dropping the persisted session id. */
-export function resetSession(projectId: string): void {
-  cancelMessage(projectId)
-  updateProject(projectId, { copilotSessionId: undefined })
+export function resetSession(projectId: string, threadId: string = MAIN_THREAD_ID): void {
+  cancelMessage(projectId, threadId)
+  if (threadId === MAIN_THREAD_ID) {
+    updateProject(projectId, { copilotSessionId: undefined })
+    return
+  }
+  const project = findProject(projectId)
+  if (!project?.threads) return
+  const threads = project.threads.map((t) =>
+    t.id === threadId ? { ...t, copilotSessionId: undefined } : t
+  )
+  updateProject(projectId, { threads })
 }
