@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "Rayfin Studio — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI.",
   "main": "./out/main/index.js",
-  "author": "",
+  "author": "Rayfin Studio",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -15,7 +15,12 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\"",
+    "pack:dir": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
     "execa": "^9.5.1",
@@ -32,6 +37,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "eslint": "^9.15.0",
     "globals": "^15.12.0",
