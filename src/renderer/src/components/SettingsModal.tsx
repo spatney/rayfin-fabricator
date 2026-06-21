@@ -92,6 +92,16 @@ export default function SettingsModal({
               </span>
             </span>
           </label>
+
+          <div className="field">
+            <span className="field-label">Diagnostics</span>
+            <div className="settings-row">
+              <span className="field-hint">Crash and error logs are saved on this device.</span>
+              <button className="btn btn--sm btn--ghost" onClick={() => void window.api.openLogs()}>
+                Open logs folder
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="modal-footer settings-footer">

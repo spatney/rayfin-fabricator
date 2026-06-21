@@ -231,6 +231,55 @@ code {
   height: 56px;
 }
 
+/* Crash fallback (renderer ErrorBoundary) */
+.crash {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+  color: var(--text);
+}
+.crash .brand-mark {
+  width: 48px;
+  height: 48px;
+  opacity: 0.85;
+}
+.crash h1 {
+  margin: 0;
+  font-size: 20px;
+}
+.crash-sub {
+  margin: 0;
+  max-width: 460px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.crash-detail {
+  max-width: 560px;
+  max-height: 160px;
+  overflow: auto;
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  text-align: left;
+  color: var(--danger);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.crash-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
 /* Buttons */
 .btn {
   font: inherit;

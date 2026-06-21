@@ -38,6 +38,7 @@ import {
   switchDeployment
 } from './services/deploy'
 import { listProjectFiles, readProjectFile } from './services/files'
+import { openLogs } from './services/crashlog'
 import { saveScreenshot, cleanupScreenshots } from './services/screenshot'
 
 /** Build an onData callback that streams process output to the calling renderer. */
@@ -59,6 +60,7 @@ export function registerIpc(): void {
   ipcMain.handle(IpcChannels.openExternal, async (_event, url: string) => {
     if (typeof url === 'string' && /^https?:\/\//i.test(url)) await shell.openExternal(url)
   })
+  ipcMain.handle(IpcChannels.openLogs, () => openLogs())
 
   ipcMain.handle(
     IpcChannels.getVersions,

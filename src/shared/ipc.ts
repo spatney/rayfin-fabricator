@@ -358,6 +358,7 @@ export const IpcChannels = {
   ping: 'app:ping',
   getVersions: 'app:getVersions',
   openExternal: 'app:openExternal',
+  openLogs: 'app:openLogs',
 
   doctorCheck: 'doctor:check',
   doctorInstall: 'doctor:install',
@@ -419,6 +420,8 @@ export interface RayfinStudioApi {
   getVersions: () => Promise<AppVersions>
   /** Open a URL in the user's default browser. */
   openExternal: (url: string) => Promise<void>
+  /** Open the logs folder (userData/logs) in the OS file manager; returns its path. */
+  openLogs: () => Promise<string>
 
   doctor: {
     check: () => Promise<DoctorReport>

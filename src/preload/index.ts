@@ -13,6 +13,7 @@ const api: RayfinStudioApi = {
   ping: () => ipcRenderer.invoke(IpcChannels.ping),
   getVersions: () => ipcRenderer.invoke(IpcChannels.getVersions),
   openExternal: (url: string) => ipcRenderer.invoke(IpcChannels.openExternal, url),
+  openLogs: () => ipcRenderer.invoke(IpcChannels.openLogs),
 
   doctor: {
     check: () => ipcRenderer.invoke(IpcChannels.doctorCheck),

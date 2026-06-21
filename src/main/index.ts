@@ -1,6 +1,10 @@
 import { app, shell, BrowserWindow, type WebContents } from 'electron'
 import { join } from 'path'
 import { registerIpc } from './ipc'
+import { installCrashHandlers, logError } from './services/crashlog'
+
+// Capture otherwise-fatal main-process errors to userData/logs as early as possible.
+installCrashHandlers()
 
 /** Session partition shared by the preview <webview> and its auth popups. */
 const PREVIEW_PARTITION = 'persist:rayfin-preview'
@@ -68,6 +72,11 @@ function createWindow(): BrowserWindow {
     mainWindow.show()
   })
 
+  // Log renderer crashes (white-screen / GPU process death) for diagnosis.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    logError('render-process-gone', `${details.reason} (exitCode ${details.exitCode})`)
+  })
+
   // Open target=_blank / external links in the user's browser, not in-app.
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -88,8 +97,13 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(() => {
   // Identify the app to Windows so the taskbar uses our icon and groups windows.
   if (process.platform === 'win32') app.setAppUserModelId('com.rayfin.studio')
-  registerIpc()
-  createWindow()
+  try {
+    registerIpc()
+    createWindow()
+  } catch (err) {
+    logError('startup', err)
+    throw err
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
