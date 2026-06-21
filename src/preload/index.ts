@@ -1,9 +1,32 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import { IpcChannels, type RayfinStudioApi } from '../shared/ipc'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import {
+  IpcChannels,
+  type ProcLogEvent,
+  type RayfinStudioApi,
+  type ToolId
+} from '../shared/ipc'
 
 const api: RayfinStudioApi = {
   ping: () => ipcRenderer.invoke(IpcChannels.ping),
-  getVersions: () => ipcRenderer.invoke(IpcChannels.getVersions)
+  getVersions: () => ipcRenderer.invoke(IpcChannels.getVersions),
+
+  doctor: {
+    check: () => ipcRenderer.invoke(IpcChannels.doctorCheck),
+    install: (id: ToolId) => ipcRenderer.invoke(IpcChannels.doctorInstall, id)
+  },
+
+  auth: {
+    status: () => ipcRenderer.invoke(IpcChannels.authStatus),
+    loginCopilot: () => ipcRenderer.invoke(IpcChannels.authLoginCopilot),
+    loginRayfin: (tenant?: string) => ipcRenderer.invoke(IpcChannels.authLoginRayfin, tenant),
+    logoutRayfin: () => ipcRenderer.invoke(IpcChannels.authLogoutRayfin)
+  },
+
+  onProcLog: (cb: (event: ProcLogEvent) => void) => {
+    const listener = (_e: IpcRendererEvent, payload: ProcLogEvent): void => cb(payload)
+    ipcRenderer.on(IpcChannels.procLog, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.procLog, listener)
+  }
 }
 
 if (process.contextIsolated) {
@@ -14,6 +37,5 @@ if (process.contextIsolated) {
   }
 } else {
   // Fallback when context isolation is disabled (not expected in production).
-  // @ts-ignore - window is augmented in index.d.ts
-  window.api = api
+  ;(globalThis as unknown as { api: RayfinStudioApi }).api = api
 }

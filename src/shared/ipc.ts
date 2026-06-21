@@ -15,17 +15,119 @@ export interface AppVersions {
   v8: string
 }
 
+/* ------------------------------------------------------------------ *
+ * Environment doctor
+ * ------------------------------------------------------------------ */
+
+export type ToolId = 'node' | 'npm' | 'git' | 'rayfin' | 'copilot'
+
+export interface ToolStatus {
+  id: ToolId
+  name: string
+  found: boolean
+  version: string | null
+  /** Short human guidance shown when the tool is missing. */
+  installHint: string
+  /** Docs / download URL for tools the app cannot auto-install. */
+  installUrl?: string
+  /** True when the app can install this tool itself (global npm package). */
+  autoInstallable: boolean
+  /** Whether this tool must be present before the app can be used. */
+  required: boolean
+}
+
+export interface DoctorReport {
+  tools: ToolStatus[]
+  /** True when every required tool is present. */
+  ready: boolean
+}
+
+/* ------------------------------------------------------------------ *
+ * Authentication
+ * ------------------------------------------------------------------ */
+
+export interface CopilotAuthStatus {
+  signedIn: boolean
+  user?: string
+}
+
+export interface RayfinAuthStatus {
+  signedIn: boolean
+  user?: string
+  tenant?: string
+}
+
+export interface AuthStatus {
+  copilot: CopilotAuthStatus
+  rayfin: RayfinAuthStatus
+}
+
+/* ------------------------------------------------------------------ *
+ * Long-running / streaming processes (logins, installs, deploys)
+ * ------------------------------------------------------------------ */
+
+/** Stable identifiers for streamed process output. */
+export type ProcStreamId =
+  | 'login:copilot'
+  | 'login:rayfin'
+  | 'logout:rayfin'
+  | 'install:rayfin'
+  | 'install:copilot'
+
+export interface ProcLogEvent {
+  channel: ProcStreamId
+  stream: 'stdout' | 'stderr' | 'system'
+  data: string
+}
+
+export interface ProcResult {
+  ok: boolean
+  exitCode: number | null
+}
+
+/* ------------------------------------------------------------------ *
+ * IPC channels
+ * ------------------------------------------------------------------ */
+
 export const IpcChannels = {
   ping: 'app:ping',
-  getVersions: 'app:getVersions'
+  getVersions: 'app:getVersions',
+
+  doctorCheck: 'doctor:check',
+  doctorInstall: 'doctor:install',
+
+  authStatus: 'auth:status',
+  authLoginCopilot: 'auth:loginCopilot',
+  authLoginRayfin: 'auth:loginRayfin',
+  authLogoutRayfin: 'auth:logoutRayfin',
+
+  // main -> renderer event
+  procLog: 'proc:log'
 } as const
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels]
 
-/** The API surface exposed to the renderer via the preload contextBridge. */
+/* ------------------------------------------------------------------ *
+ * Renderer-facing API (exposed via preload contextBridge as window.api)
+ * ------------------------------------------------------------------ */
+
 export interface RayfinStudioApi {
-  /** Simple liveness check that round-trips through the main process. */
   ping: () => Promise<string>
-  /** Runtime versions for diagnostics / about screens. */
   getVersions: () => Promise<AppVersions>
+
+  doctor: {
+    check: () => Promise<DoctorReport>
+    /** Install an auto-installable tool (currently rayfin / copilot via npm -g). */
+    install: (id: ToolId) => Promise<ProcResult>
+  }
+
+  auth: {
+    status: () => Promise<AuthStatus>
+    loginCopilot: () => Promise<ProcResult>
+    loginRayfin: (tenant?: string) => Promise<ProcResult>
+    logoutRayfin: () => Promise<ProcResult>
+  }
+
+  /** Subscribe to streamed process output. Returns an unsubscribe function. */
+  onProcLog: (cb: (event: ProcLogEvent) => void) => () => void
 }

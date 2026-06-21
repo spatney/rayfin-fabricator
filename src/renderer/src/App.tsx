@@ -1,78 +1,48 @@
-import { useEffect, useState } from 'react'
-import type { AppVersions } from '@shared/ipc'
+import { useCallback, useEffect, useState } from 'react'
+import type { AuthStatus, DoctorReport } from '@shared/ipc'
+import SetupScreen from './screens/SetupScreen'
+import Workbench from './screens/Workbench'
+
+type Phase = 'loading' | 'setup' | 'ready'
 
 function App(): JSX.Element {
-  const [versions, setVersions] = useState<AppVersions | null>(null)
-  const [bridgeOk, setBridgeOk] = useState<boolean | null>(null)
+  const [phase, setPhase] = useState<Phase>('loading')
+  const [doctor, setDoctor] = useState<DoctorReport | null>(null)
+  const [auth, setAuth] = useState<AuthStatus | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load(): Promise<void> {
-      try {
-        const [pong, v] = await Promise.all([window.api.ping(), window.api.getVersions()])
-        if (cancelled) return
-        setBridgeOk(pong === 'pong')
-        setVersions(v)
-      } catch {
-        if (!cancelled) setBridgeOk(false)
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
+  const refresh = useCallback(async (): Promise<void> => {
+    setRefreshing(true)
+    try {
+      const [d, a] = await Promise.all([window.api.doctor.check(), window.api.auth.status()])
+      setDoctor(d)
+      setAuth(a)
+      const ready = d.ready && a.copilot.signedIn && a.rayfin.signedIn
+      setPhase(ready ? 'ready' : 'setup')
+    } finally {
+      setRefreshing(false)
     }
   }, [])
 
-  return (
-    <div className="app-shell">
-      <header className="titlebar">
-        <div className="brand">
-          <span className="brand-mark">▰</span>
-          <span className="brand-name">Rayfin Studio</span>
-        </div>
-        <div className="titlebar-status">
-          <span className={`pill ${bridgeOk ? 'pill--ok' : 'pill--pending'}`}>
-            {bridgeOk === null ? 'starting…' : bridgeOk ? 'ready' : 'bridge error'}
-          </span>
-        </div>
-      </header>
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
 
-      <div className="workbench">
-        <aside className="sidebar">
-          <div className="sidebar-section-title">Projects</div>
-          <div className="sidebar-empty">
-            No projects yet.
-            <br />
-            Project management arrives in a later phase.
-          </div>
-        </aside>
-
-        <main className="content">
-          <section className="pane pane--chat">
-            <div className="pane-title">Chat</div>
-            <div className="pane-placeholder">
-              The Copilot-powered chat will live here.
-            </div>
-          </section>
-          <section className="pane pane--preview">
-            <div className="pane-title">Preview</div>
-            <div className="pane-placeholder">
-              Your deployed Rayfin app will render here after <code>rayfin up</code>.
-            </div>
-          </section>
-        </main>
+  if (phase === 'loading') {
+    return (
+      <div className="splash">
+        <span className="brand-mark">▰</span>
+        <span>Starting Rayfin Studio…</span>
       </div>
+    )
+  }
 
-      <footer className="statusbar">
-        <span className="statusbar-item">Rayfin Studio v{versions?.app ?? '—'}</span>
-        <span className="statusbar-sep">·</span>
-        <span className="statusbar-item">Electron {versions?.electron ?? '—'}</span>
-        <span className="statusbar-sep">·</span>
-        <span className="statusbar-item">Node {versions?.node ?? '—'}</span>
-        <span className="statusbar-sep">·</span>
-        <span className="statusbar-item">Chromium {versions?.chrome ?? '—'}</span>
-      </footer>
-    </div>
+  if (phase === 'ready' && auth) {
+    return <Workbench auth={auth} onSignOut={refresh} />
+  }
+
+  return (
+    <SetupScreen doctor={doctor} auth={auth} refreshing={refreshing} onRefresh={refresh} />
   )
 }
 

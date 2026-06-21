@@ -1,6 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
-import { IpcChannels, type AppVersions } from '../shared/ipc'
+import { registerIpc } from './ipc'
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -39,27 +39,8 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
-/**
- * Core IPC handlers. Feature modules added in later phases (env doctor, auth,
- * projects, chat, deploy, preview) should expose their own `registerXxxIpc()`
- * function and be wired up here.
- */
-function registerCoreIpc(): void {
-  ipcMain.handle(IpcChannels.ping, () => 'pong')
-
-  ipcMain.handle(IpcChannels.getVersions, (): AppVersions => {
-    return {
-      app: app.getVersion(),
-      electron: process.versions.electron,
-      chrome: process.versions.chrome,
-      node: process.versions.node,
-      v8: process.versions.v8
-    }
-  })
-}
-
 app.whenReady().then(() => {
-  registerCoreIpc()
+  registerIpc()
   createWindow()
 
   app.on('activate', () => {
