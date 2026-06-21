@@ -17,6 +17,7 @@ import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../component
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 import DeploymentsControl from '../components/DeploymentsControl'
 import RayfinVersionControl from '../components/RayfinVersionControl'
+import SkillsView from '../components/SkillsView'
 import logo from '../assets/logo.png'
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
@@ -74,7 +75,7 @@ export default function Workbench({
     (OutboundPrompt & { projectId: string }) | null
   >(null)
   /** Project content view: the build loop (chat + preview) or the code browser. */
-  const [viewMode, setViewMode] = useState<'build' | 'code'>('build')
+  const [viewMode, setViewMode] = useState<'build' | 'code' | 'skills'>('build')
   /** Build-view focus: expand a single pane to fill the area (null = split). */
   const [focusPane, setFocusPane] = useState<'chat' | 'preview' | null>(null)
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
@@ -490,6 +491,14 @@ export default function Workbench({
                   >
                     Code
                   </button>
+                  <button
+                    className={`project-tab${viewMode === 'skills' ? ' project-tab--active' : ''}`}
+                    role="tab"
+                    aria-selected={viewMode === 'skills'}
+                    onClick={() => setViewMode('skills')}
+                  >
+                    Skills
+                  </button>
                 </div>
                 <div className="project-meta">
                   <DeploymentsControl
@@ -528,6 +537,11 @@ export default function Workbench({
                 <Suspense fallback={<div className="code-empty">Loading editor…</div>}>
                   <CodeViewer project={active} refreshKey={gitRefresh} />
                 </Suspense>
+              ) : viewMode === 'skills' ? (
+                <SkillsView
+                  project={active}
+                  onChanged={() => setGitRefresh((n) => n + 1)}
+                />
               ) : (
                 <div
                   className={`panes${

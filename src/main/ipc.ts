@@ -41,6 +41,7 @@ import {
 import { listProjectFiles, readProjectFile } from './services/files'
 import { gitChanges, gitFileDiff, gitLog } from './services/git'
 import { getProjectRayfinVersion } from './services/rayfinVersion'
+import { listSkills, setSkill } from './services/skills'
 import { openLogs } from './services/crashlog'
 import { saveScreenshot, cleanupScreenshots } from './services/screenshot'
 
@@ -147,6 +148,12 @@ export function registerIpc(): void {
 
   // Local Rayfin CLI / SDK version + upgrade availability
   ipcMain.handle(IpcChannels.rayfinVersions, (_event, id: string) => getProjectRayfinVersion(id))
+
+  // Project skills (curated agent-guidance modules inlined into copilot-instructions.md)
+  ipcMain.handle(IpcChannels.skillsList, (_event, id: string) => listSkills(id))
+  ipcMain.handle(IpcChannels.skillsSet, (_event, id: string, skillId: string, active: boolean) =>
+    setSkill(id, skillId, active)
+  )
 
   // Chat (Copilot CLI)
   ipcMain.handle(

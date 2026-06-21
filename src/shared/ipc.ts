@@ -472,6 +472,39 @@ export interface RayfinVersionInfo {
   packages: RayfinPackageVersion[]
 }
 
+/* ------------------------------------------------------------------ *
+ * Skills
+ * ------------------------------------------------------------------ */
+
+/**
+ * A curated app-building "skill" the user can switch on per project. Active
+ * skills are inlined into the project's `.github/copilot-instructions.md` so the
+ * agent applies them. The base skill is always on and cannot be removed.
+ */
+export interface SkillInfo {
+  /** Stable id, e.g. 'buttery-animations'. */
+  id: string
+  /** Short human title shown on the card. */
+  title: string
+  /** One-line description of what the skill does. */
+  description: string
+  /** Emoji/glyph for the card. */
+  icon: string
+  /** True for the locked base skill (always active, can't be removed). */
+  base: boolean
+  /** Whether the skill is currently active for the project. */
+  active: boolean
+}
+
+/** Result of toggling a skill: ok plus the refreshed skill list. */
+export interface SkillActionResult {
+  ok: boolean
+  /** The project's full skill catalog with updated active flags. */
+  skills: SkillInfo[]
+  /** Set when ok is false. */
+  error?: string
+}
+
 /** Per-project chat configuration (model + reasoning effort). */
 export interface ChatOptions {
   /** Copilot model id (`--model`); 'auto' or undefined lets Copilot pick. */
@@ -537,6 +570,9 @@ export const IpcChannels = {
   projectsFilesRead: 'projects:filesRead',
 
   rayfinVersions: 'rayfin:versions',
+
+  skillsList: 'skills:list',
+  skillsSet: 'skills:set',
 
   chatSend: 'chat:send',
   chatCancel: 'chat:cancel',
@@ -649,6 +685,13 @@ export interface RayfinStudioApi {
   rayfin: {
     /** The project's local Rayfin CLI + SDK versions, with upgrade availability. */
     versions: (id: string) => Promise<RayfinVersionInfo>
+  }
+
+  skills: {
+    /** The project's skill catalog, each flagged active/inactive. */
+    list: (id: string) => Promise<SkillInfo[]>
+    /** Turn a skill on/off; updates instructions + commits. Base can't be removed. */
+    set: (id: string, skillId: string, active: boolean) => Promise<SkillActionResult>
   }
 
   chat: {
