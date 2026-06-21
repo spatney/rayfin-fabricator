@@ -851,6 +851,12 @@ code {
   background: #fff;
 }
 
+.preview-webview-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .preview-overlay {
   position: absolute;
   inset: 0;

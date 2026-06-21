@@ -40,15 +40,13 @@ function statusLabel(running: boolean, status: string | undefined): string {
 
 export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Props): JSX.Element {
   const running = deploy?.running ?? false
-  // Prefer the Fabric portal shell URL: it embeds the deployed app and handles
-  // Fabric auth itself (embedded/postMessage mode), so the app never needs to
-  // open a sign-in popup — which Electron's <webview> blocks. Fall back to the
-  // standalone hosting URL only when no portal URL was recorded.
-  const deployedUrl = project.lastDeploy?.portalUrl ?? project.lastDeploy?.url
+  const deployedUrl = project.lastDeploy?.url
   const status = running ? 'deploying' : project.lastDeploy?.status
   const error = project.lastDeploy?.error
 
   const webviewRef = useRef<PreviewWebview | null>(null)
+  const deployedUrlRef = useRef(deployedUrl)
+  deployedUrlRef.current = deployedUrl
   const logRef = useRef<HTMLPreElement>(null)
   const prevRunningRef = useRef(running)
   const [reloadNonce, setReloadNonce] = useState(0)
@@ -81,15 +79,25 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [deploy?.log])
 
-  // Wire webview events whenever it (re)mounts via a stable callback ref.
-  const attachWebview = useCallback((node: HTMLElement | null): void => {
-    const wv = node as PreviewWebview | null
-    webviewRef.current = wv
-    if (!wv) return
-    // React drops `allowpopups={true}` (it never reaches the DOM), so set it
-    // imperatively — without it Electron blocks the deployed app's window.open
-    // sign-in popup before our main-process window-open handler can run.
+  // Build the <webview> imperatively inside its host container so `allowpopups`
+  // and `partition` are present BEFORE the element is connected to the DOM.
+  // Electron reads those attributes when the guest attaches (on DOM-connect),
+  // which happens earlier than any React ref / setAttribute could run — a late
+  // setAttribute leaves the guest without popup permission, so Chromium blocks the
+  // deployed app's window.open sign-in popup before our main-process handler runs.
+  const attachWebviewHost = useCallback((host: HTMLDivElement | null): void => {
+    if (!host) {
+      webviewRef.current = null
+      return
+    }
+    const initialUrl = deployedUrlRef.current
+    if (!initialUrl) return
+    const wv = document.createElement('webview') as unknown as PreviewWebview
     wv.setAttribute('allowpopups', 'true')
+    wv.setAttribute('partition', 'persist:rayfin-preview')
+    wv.setAttribute('src', initialUrl)
+    wv.className = 'preview-webview'
+    webviewRef.current = wv
     setLoadError(null)
     setLoading(true)
     const syncNav = (): void => {
@@ -123,6 +131,7 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
         setLoading(false)
       }
     })
+    host.appendChild(wv)
   }, [])
 
   const reload = (): void => webviewRef.current?.reload()
@@ -275,12 +284,10 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
           </pre>
         ) : showWebview ? (
           <>
-            <webview
+            <div
               key={`${deployedUrl}#${reloadNonce}`}
-              ref={attachWebview}
-              src={deployedUrl}
-              className="preview-webview"
-              partition="persist:rayfin-preview"
+              className="preview-webview-host"
+              ref={attachWebviewHost}
             />
             {loadError && (
               <div className="preview-overlay">
