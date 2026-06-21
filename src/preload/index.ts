@@ -39,10 +39,15 @@ const api: RayfinStudioApi = {
   },
 
   chat: {
-    send: (projectId: string, turnId: string, text: string) =>
-      ipcRenderer.invoke(IpcChannels.chatSend, projectId, turnId, text),
+    send: (projectId: string, turnId: string, text: string, attachments?: string[]) =>
+      ipcRenderer.invoke(IpcChannels.chatSend, projectId, turnId, text, attachments),
     cancel: (projectId: string) => ipcRenderer.invoke(IpcChannels.chatCancel, projectId),
     reset: (projectId: string) => ipcRenderer.invoke(IpcChannels.chatReset, projectId)
+  },
+
+  screenshot: {
+    save: (dataUrl: string) => ipcRenderer.invoke(IpcChannels.screenshotSave, dataUrl),
+    cleanup: (paths: string[]) => ipcRenderer.invoke(IpcChannels.screenshotCleanup, paths)
   },
 
   deploy: {

@@ -8,7 +8,7 @@ import type {
 } from '@shared/ipc'
 import NewProjectModal from '../components/NewProjectModal'
 import ChatPanel, { type UIChatMessage } from '../components/ChatPanel'
-import PreviewPane, { type DeployUiState } from '../components/PreviewPane'
+import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 
 interface Props {
   auth: AuthStatus
@@ -24,8 +24,23 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   const [notice, setNotice] = useState<string | null>(null)
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
+  /** Region screenshots staged per project for the next chat message. */
+  const [shots, setShots] = useState<Record<string, PendingShot[]>>({})
   /** The project whose `rayfin up` is currently streaming (routes deploy:run logs). */
   const deployingIdRef = useRef<string | null>(null)
+
+  const addShot = useCallback((projectId: string, shot: PendingShot): void => {
+    setShots((all) => ({ ...all, [projectId]: [...(all[projectId] ?? []), shot] }))
+  }, [])
+
+  const removeShot = useCallback((projectId: string, path: string): void => {
+    setShots((all) => ({ ...all, [projectId]: (all[projectId] ?? []).filter((s) => s.path !== path) }))
+    void window.api.screenshot.cleanup([path])
+  }, [])
+
+  const clearShots = useCallback((projectId: string): void => {
+    setShots((all) => ({ ...all, [projectId]: [] }))
+  }, [])
 
   const setMessagesFor = useCallback(
     (projectId: string, updater: (prev: UIChatMessage[]) => UIChatMessage[]): void => {
@@ -242,6 +257,9 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                     messages={chats[active.id] ?? []}
                     onChange={(updater) => setMessagesFor(active.id, updater)}
                     onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
+                    attachments={shots[active.id] ?? []}
+                    onRemoveAttachment={(path) => removeShot(active.id, path)}
+                    onAttachmentsConsumed={() => clearShots(active.id)}
                   />
                 </section>
                 <section className="pane pane--preview">
@@ -249,6 +267,7 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                     project={active}
                     deploy={deploys[active.id]}
                     onDeploy={() => void runDeploy(active.id)}
+                    onCapture={(shot) => addShot(active.id, shot)}
                   />
                 </section>
               </div>

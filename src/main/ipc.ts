@@ -22,6 +22,7 @@ import {
 import { getState } from './services/store'
 import { cancelMessage, resetSession, sendMessage } from './services/chat'
 import { getDeployStatus, hasPendingChanges, runDeploy } from './services/deploy'
+import { saveScreenshot, cleanupScreenshots } from './services/screenshot'
 
 /** Build an onData callback that streams process output to the calling renderer. */
 function streamer(event: IpcMainInvokeEvent, channel: ProcStreamId) {
@@ -94,17 +95,23 @@ export function registerIpc(): void {
   // Chat (Copilot CLI)
   ipcMain.handle(
     IpcChannels.chatSend,
-    (event, projectId: string, turnId: string, text: string) => {
+    (event, projectId: string, turnId: string, text: string, attachments?: string[]) => {
       const emit = (chatEvent: ChatEvent): void => {
         if (!event.sender.isDestroyed()) {
           event.sender.send(IpcChannels.chatEvent, { projectId, turnId, event: chatEvent })
         }
       }
-      return sendMessage(projectId, text, emit)
+      return sendMessage(projectId, text, emit, attachments ?? [])
     }
   )
   ipcMain.handle(IpcChannels.chatCancel, (_event, projectId: string) => cancelMessage(projectId))
   ipcMain.handle(IpcChannels.chatReset, (_event, projectId: string) => resetSession(projectId))
+
+  // Preview screenshots (region capture → temp PNG → chat attachment)
+  ipcMain.handle(IpcChannels.screenshotSave, (_event, dataUrl: string) => saveScreenshot(dataUrl))
+  ipcMain.handle(IpcChannels.screenshotCleanup, (_event, paths: string[]) =>
+    cleanupScreenshots(Array.isArray(paths) ? paths : [])
+  )
 
   // Deploy loop (Studio-owned `rayfin up`)
   ipcMain.handle(IpcChannels.deployRun, (event, projectId: string) =>

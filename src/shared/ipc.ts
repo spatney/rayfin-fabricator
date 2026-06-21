@@ -251,6 +251,9 @@ export const IpcChannels = {
   chatCancel: 'chat:cancel',
   chatReset: 'chat:reset',
 
+  screenshotSave: 'screenshot:save',
+  screenshotCleanup: 'screenshot:cleanup',
+
   deployRun: 'deploy:run',
   deployStatus: 'deploy:status',
   deployHasChanges: 'deploy:hasChanges',
@@ -308,13 +311,27 @@ export interface RayfinStudioApi {
     /**
      * Send a message to the Copilot agent scoped to the project. Streams
      * `chat:event` envelopes (subscribe via onChatEvent) and resolves with the
-     * final turn result. `turnId` correlates the streamed events.
+     * final turn result. `turnId` correlates the streamed events. `attachments`
+     * are absolute file paths (e.g. region screenshots) passed to copilot as
+     * `--attachment` and cleaned up after the turn.
      */
-    send: (projectId: string, turnId: string, text: string) => Promise<ChatTurnResult>
+    send: (
+      projectId: string,
+      turnId: string,
+      text: string,
+      attachments?: string[]
+    ) => Promise<ChatTurnResult>
     /** Cancel the in-flight turn for a project. */
     cancel: (projectId: string) => Promise<void>
     /** Start a fresh conversation (drops the persisted Copilot session id). */
     reset: (projectId: string) => Promise<void>
+  }
+
+  screenshot: {
+    /** Persist a captured PNG (data URL) to a temp file; returns its path. */
+    save: (dataUrl: string) => Promise<string>
+    /** Delete temp screenshot files (best-effort; only within Studio's temp dir). */
+    cleanup: (paths: string[]) => Promise<void>
   }
 
   deploy: {

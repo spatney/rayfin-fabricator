@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { ChatEvent, ChatToolCall, ChatTurnResult, StudioProject } from '@shared/ipc'
+import type { PendingShot } from './PreviewPane'
 
 export interface UIChatMessage {
   id: string
@@ -9,6 +10,8 @@ export interface UIChatMessage {
   tools: ChatToolCall[]
   pending: boolean
   error?: string
+  /** Number of screenshots attached to this (user) message. */
+  attachments?: number
 }
 
 interface Props {
@@ -17,6 +20,12 @@ interface Props {
   onChange: (updater: (prev: UIChatMessage[]) => UIChatMessage[]) => void
   /** Called after a turn completes (used later to trigger deploy/preview refresh). */
   onTurnComplete?: (result: ChatTurnResult) => void
+  /** Region screenshots staged for the next message. */
+  attachments?: PendingShot[]
+  /** Remove a staged screenshot (also deletes its temp file). */
+  onRemoveAttachment?: (path: string) => void
+  /** Called once staged screenshots have been sent so the parent can clear them. */
+  onAttachmentsConsumed?: () => void
 }
 
 function uid(): string {
@@ -56,7 +65,10 @@ export default function ChatPanel({
   project,
   messages,
   onChange,
-  onTurnComplete
+  onTurnComplete,
+  attachments,
+  onRemoveAttachment,
+  onAttachmentsConsumed
 }: Props): JSX.Element {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -82,9 +94,18 @@ export default function ChatPanel({
 
   async function send(): Promise<void> {
     const text = input.trim()
-    if (!text || sending) return
+    const shots = attachments ?? []
+    if ((!text && shots.length === 0) || sending) return
+    const prompt = text || 'Here is a screenshot of the current preview — please take a look.'
     const turnId = uid()
-    const userMsg: UIChatMessage = { id: uid(), role: 'user', text, tools: [], pending: false }
+    const userMsg: UIChatMessage = {
+      id: uid(),
+      role: 'user',
+      text: text || '(screenshot)',
+      tools: [],
+      pending: false,
+      attachments: shots.length || undefined
+    }
     const assistantMsg: UIChatMessage = {
       id: uid(),
       turnId,
@@ -96,11 +117,15 @@ export default function ChatPanel({
     onChange((prev) => [...prev, userMsg, assistantMsg])
     setInput('')
     setSending(true)
+    onAttachmentsConsumed?.()
     try {
-      const result = await window.api.chat.send(project.id, turnId, text)
-      onChange((prev) =>
-        prev.map((m) => (m.turnId === turnId ? { ...m, pending: false } : m))
+      const result = await window.api.chat.send(
+        project.id,
+        turnId,
+        prompt,
+        shots.map((s) => s.path)
       )
+      onChange((prev) => prev.map((m) => (m.turnId === turnId ? { ...m, pending: false } : m)))
       onTurnComplete?.(result)
     } finally {
       setSending(false)
@@ -168,6 +193,11 @@ export default function ChatPanel({
               </div>
             )}
             {m.text && <div className="msg-text">{m.text}</div>}
+            {m.attachments ? (
+              <div className="msg-attach">
+                ⛶ {m.attachments} screenshot{m.attachments > 1 ? 's' : ''} attached
+              </div>
+            ) : null}
             {m.pending && !m.text && m.tools.length === 0 && (
               <div className="msg-thinking">Thinking…</div>
             )}
@@ -177,6 +207,22 @@ export default function ChatPanel({
       </div>
 
       <div className="chat-input">
+        {(attachments?.length ?? 0) > 0 && (
+          <div className="chat-attachments">
+            {attachments!.map((a) => (
+              <div key={a.path} className="chat-attachment" title="Screenshot to send">
+                <img src={a.thumb} alt="screenshot" />
+                <button
+                  className="chat-attachment-x"
+                  onClick={() => onRemoveAttachment?.(a.path)}
+                  title="Remove"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           className="chat-textarea"
           placeholder={`Message Copilot about ${project.name}…`}
@@ -192,7 +238,11 @@ export default function ChatPanel({
               Stop
             </button>
           ) : (
-            <button className="btn btn--primary btn--sm" onClick={send} disabled={!input.trim()}>
+            <button
+              className="btn btn--primary btn--sm"
+              onClick={send}
+              disabled={!input.trim() && (attachments?.length ?? 0) === 0}
+            >
               Send
             </button>
           )}

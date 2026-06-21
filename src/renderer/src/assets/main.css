@@ -863,6 +863,90 @@ code {
   background: color-mix(in srgb, var(--bg) 85%, transparent);
 }
 
+/* Region-screenshot selection overlay (sits above the inline <webview>). */
+.shot-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  cursor: crosshair;
+  background: color-mix(in srgb, var(--bg) 28%, transparent);
+}
+
+.shot-box {
+  position: absolute;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 45%, transparent);
+  pointer-events: none;
+}
+
+.shot-hint {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+/* Staged screenshot thumbnails above the chat input. */
+.chat-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.chat-attachment {
+  position: relative;
+  width: 88px;
+  height: 56px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.chat-attachment img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.chat-attachment-x {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  color: #fff;
+  background: color-mix(in srgb, #000 60%, transparent);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.chat-attachment-x:hover {
+  background: var(--danger);
+}
+
+.msg-attach {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 /* Empty content state */
 .content-empty {
   flex: 1;

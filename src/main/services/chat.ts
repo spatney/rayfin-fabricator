@@ -15,6 +15,7 @@
 import { randomUUID } from 'crypto'
 import { run } from './exec'
 import { findProject, updateProject } from './store'
+import { cleanupScreenshots } from './screenshot'
 import type { ChatEvent, ChatTurnResult } from '../../shared/ipc'
 
 type Emit = (event: ChatEvent) => void
@@ -109,11 +110,13 @@ function handleEvent(raw: unknown, emit: Emit, ctx: TurnContext): void {
 export async function sendMessage(
   projectId: string,
   text: string,
-  emit: Emit
+  emit: Emit,
+  attachments: string[] = []
 ): Promise<ChatTurnResult> {
   const project = findProject(projectId)
   if (!project) {
     emit({ type: 'error', text: 'Project not found.' })
+    cleanupScreenshots(attachments)
     return { ok: false, error: 'Project not found.', filesModified: [], ranDeploy: false }
   }
   if (inflight.has(projectId)) {
@@ -155,6 +158,7 @@ export async function sendMessage(
     sessionId,
     '-C',
     project.path,
+    ...attachments.flatMap((a) => ['--attachment', a]),
     '--allow-all',
     '--no-color'
   ]
@@ -178,6 +182,7 @@ export async function sendMessage(
 
   if (buffer) flushLine(buffer)
   inflight.delete(projectId)
+  cleanupScreenshots(attachments)
 
   if (result.notFound) {
     emit({ type: 'error', text: 'The copilot CLI was not found on PATH.' })
