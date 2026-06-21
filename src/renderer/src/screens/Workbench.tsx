@@ -60,6 +60,21 @@ export default function Workbench({
   const [showNewProject, setShowNewProject] = useState(false)
   const [opening, setOpening] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  /** Left projects sidebar collapsed state (persisted across sessions). */
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('rf.sidebarCollapsed') === '1'
+  )
+  const toggleSidebar = useCallback((): void => {
+    setSidebarCollapsed((c) => {
+      const next = !c
+      try {
+        localStorage.setItem('rf.sidebarCollapsed', next ? '1' : '0')
+      } catch {
+        /* ignore persistence errors */
+      }
+      return next
+    })
+  }, [])
   /** Sidebar per-project actions menu / inline-rename / delete-confirm state. */
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -349,8 +364,13 @@ export default function Workbench({
     try {
       await window.api.auth.logoutRayfin()
     } finally {
-      setSigningOut(false)
-      await onSignOut()
+      try {
+        // Keep the overlay up through the auth re-check + screen swap; this
+        // component normally unmounts when the app returns to the setup screen.
+        await onSignOut()
+      } finally {
+        setSigningOut(false)
+      }
     }
   }
 
@@ -358,6 +378,34 @@ export default function Workbench({
     <div className="app-shell">
       <header className="titlebar">
         <div className="brand">
+          <button
+            className="sidebar-toggle"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? 'Show projects panel' : 'Hide projects panel'}
+            aria-label={sidebarCollapsed ? 'Show projects panel' : 'Hide projects panel'}
+            aria-pressed={!sidebarCollapsed}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect
+                x="3"
+                y="4.5"
+                width="18"
+                height="15"
+                rx="2.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              />
+              <line
+                x1="9.5"
+                y1="4.5"
+                x2="9.5"
+                y2="19.5"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              />
+            </svg>
+          </button>
           <img className="brand-mark" src={logo} alt="" />
           <span className="brand-name">Rayfin Fabricator</span>
         </div>
@@ -376,7 +424,7 @@ export default function Workbench({
         </div>
       </header>
 
-      <div className="workbench">
+      <div className={`workbench${sidebarCollapsed ? ' workbench--sidebar-collapsed' : ''}`}>
         <aside className="sidebar">
           <div className="sidebar-actions">
             <button className="btn btn--primary btn--block" onClick={() => setShowNewProject(true)}>
@@ -717,6 +765,26 @@ export default function Workbench({
             </>
           }
         />
+      )}
+
+      {signingOut && (
+        <div
+          className="signout-overlay"
+          role="alertdialog"
+          aria-busy="true"
+          aria-label="Signing out"
+        >
+          <div className="signout-card">
+            <div className="signout-mark">
+              <img src={logo} alt="" />
+              <span className="signout-ring" />
+            </div>
+            <div className="signout-text">
+              <strong>Signing you out…</strong>
+              <span>Ending your Fabric session securely</span>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

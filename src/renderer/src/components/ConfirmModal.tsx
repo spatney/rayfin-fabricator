@@ -54,7 +54,14 @@ export default function ConfirmModal({
             disabled={busy}
             autoFocus
           >
-            {busy ? busyLabel : confirmLabel}
+            {busy ? (
+              <span className="btn-busy">
+                <span className="btn-spin" aria-hidden="true" />
+                {busyLabel}
+              </span>
+            ) : (
+              confirmLabel
+            )}
           </button>
         </div>
       </div>

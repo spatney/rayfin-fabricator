@@ -182,6 +182,41 @@ code {
   color: var(--accent);
 }
 
+.sidebar-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 1px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.sidebar-toggle:active {
+  transform: translateY(0.5px);
+}
+
+.sidebar-toggle svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
 .pill {
   font-size: 12px;
   padding: 3px 10px;
@@ -205,6 +240,11 @@ code {
   display: grid;
   grid-template-columns: 260px 1fr;
   min-height: 0;
+  transition: grid-template-columns 0.24s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.workbench--sidebar-collapsed {
+  grid-template-columns: 0 1fr;
 }
 
 .sidebar {
@@ -212,6 +252,18 @@ code {
   background: var(--bg-elev);
   padding: 14px;
   overflow-y: auto;
+  min-width: 0;
+  transition:
+    padding 0.24s cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-right-color 0.24s ease;
+}
+
+.workbench--sidebar-collapsed .sidebar {
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+  border-right-color: transparent;
+  pointer-events: none;
 }
 
 .sidebar-section-title {
@@ -1293,6 +1345,23 @@ code {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Inline spinner + label for a button mid-action (e.g. confirm dialog). */
+.btn-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-spin {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border: 2px solid color-mix(in srgb, currentColor 32%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: ws-spin 0.7s linear infinite;
 }
 .ws-list {
   display: flex;
@@ -4179,4 +4248,89 @@ code {
 
 .composer-stop {
   flex: none;
+}
+
+/* Signing-out overlay — full-app, flat & modern, covers the logout + screen swap */
+.signout-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  backdrop-filter: blur(9px) saturate(118%);
+  -webkit-backdrop-filter: blur(9px) saturate(118%);
+  animation: signoutFade 0.18s ease both;
+}
+
+.signout-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 34px 44px;
+  text-align: center;
+}
+
+.signout-mark {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+}
+
+.signout-mark img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  animation: signoutPulse 1.7s ease-in-out infinite;
+}
+
+.signout-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2.5px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-top-color: var(--accent);
+  animation: ws-spin 0.95s linear infinite;
+}
+
+.signout-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.signout-text strong {
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: 0.1px;
+  color: var(--text);
+}
+
+.signout-text span {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+@keyframes signoutFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes signoutPulse {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: scale(0.93);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.07);
+  }
 }
