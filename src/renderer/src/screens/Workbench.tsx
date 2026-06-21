@@ -11,6 +11,7 @@ import NewProjectModal from '../components/NewProjectModal'
 import ConfirmModal from '../components/ConfirmModal'
 import ChatPanel, { type UIChatMessage } from '../components/ChatPanel'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
+import GitControl from '../components/GitControl'
 import logo from '../assets/logo.png'
 
 /** Hydrate a persisted message into a live (non-pending) UI message. */
@@ -48,6 +49,8 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   const [renameValue, setRenameValue] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<StudioProject | null>(null)
   const [deleting, setDeleting] = useState(false)
+  /** Bumped whenever the working tree likely changed (deploy / chat turn). */
+  const [gitRefresh, setGitRefresh] = useState(0)
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
   /** Region screenshots staged per project for the next chat message. */
@@ -112,6 +115,7 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
         await refreshProjects()
       } finally {
         deployingIdRef.current = null
+        setGitRefresh((n) => n + 1)
       }
     },
     [refreshProjects]
@@ -122,6 +126,7 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   const handleTurnComplete = useCallback(
     async (projectId: string, result: ChatTurnResult): Promise<void> => {
       await refreshProjects()
+      setGitRefresh((n) => n + 1)
       void window.api.chat.saveHistory(projectId, toStored(chatsRef.current[projectId] ?? []))
       if (!result.ok) return
       const changed = await window.api.deploy.hasChanges(projectId)
@@ -376,6 +381,7 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                 </div>
                 <div className="project-meta">
                   {active.template && <span className="chip">{active.template}</span>}
+                  <GitControl projectId={active.id} refreshKey={gitRefresh} />
                   {deploys[active.id]?.running ? (
                     <span className="chip chip--busy">deploying…</span>
                   ) : active.lastDeploy?.status === 'error' ? (

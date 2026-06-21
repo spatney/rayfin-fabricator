@@ -38,7 +38,12 @@ const api: RayfinStudioApi = {
     rename: (id: string, name: string) =>
       ipcRenderer.invoke(IpcChannels.projectsRename, id, name),
     remove: (id: string, deleteFiles?: boolean) =>
-      ipcRenderer.invoke(IpcChannels.projectsRemove, id, deleteFiles)
+      ipcRenderer.invoke(IpcChannels.projectsRemove, id, deleteFiles),
+    git: {
+      status: (id: string) => ipcRenderer.invoke(IpcChannels.projectsGitStatus, id),
+      commit: (id: string, message: string) =>
+        ipcRenderer.invoke(IpcChannels.projectsGitCommit, id, message)
+    }
   },
 
   chat: {

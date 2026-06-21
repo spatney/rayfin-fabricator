@@ -17,6 +17,8 @@ import { run } from './exec'
 import * as store from './store'
 import type {
   CreateProjectInput,
+  GitCommitResult,
+  GitStatus,
   ProjectActionResult,
   ProjectsState,
   StudioProject,
@@ -298,4 +300,88 @@ export async function removeProject(id: string, deleteFiles = false): Promise<Pr
   }
   store.removeProject(id)
   return getProjectsState()
+}
+
+/** Parse `git status --porcelain=v1 --branch` into branch + change count. */
+function parseGitStatus(stdout: string): {
+  branch?: string
+  changedCount: number
+  noCommits: boolean
+} {
+  let branch: string | undefined
+  let noCommits = false
+  let changedCount = 0
+  for (const line of stdout.split('\n')) {
+    if (!line) continue
+    if (line.startsWith('## ')) {
+      const head = line.slice(3).trim()
+      const unborn = head.match(/^No commits yet on (.+)$/)
+      if (unborn) {
+        noCommits = true
+        branch = unborn[1].trim()
+      } else if (head.startsWith('HEAD (no branch)')) {
+        branch = 'detached HEAD'
+      } else {
+        // "main...origin/main [ahead 1]" → the branch is the token before "..." / space.
+        branch = head.split('...')[0].split(' ')[0]
+      }
+    } else {
+      // Each remaining line is one changed/renamed/untracked path.
+      changedCount++
+    }
+  }
+  return { branch, changedCount, noCommits }
+}
+
+/** Snapshot the project's git working tree (branch + uncommitted change count). */
+export async function gitStatus(id: string): Promise<GitStatus> {
+  const project = store.findProject(id)
+  if (!project || !existsSync(project.path)) return { isRepo: false, changedCount: 0 }
+  const res = await run('git', ['status', '--porcelain=v1', '--branch'], {
+    cwd: project.path,
+    timeout: 30_000
+  })
+  if (!res.ok) return { isRepo: false, changedCount: 0 }
+  const parsed = parseGitStatus(res.stdout)
+  return {
+    isRepo: true,
+    branch: parsed.branch,
+    changedCount: parsed.changedCount,
+    noCommits: parsed.noCommits || undefined
+  }
+}
+
+/** Stage everything and commit; resolves with the post-commit status. */
+export async function gitCommit(id: string, message: string): Promise<GitCommitResult> {
+  const project = store.findProject(id)
+  if (!project || !existsSync(project.path)) {
+    return { ok: false, error: 'Project folder not found.', status: { isRepo: false, changedCount: 0 } }
+  }
+  const msg = message.trim()
+  if (!msg) return { ok: false, error: 'Enter a commit message.', status: await gitStatus(id) }
+  const dir = project.path
+
+  // Scaffolds may lack a committer identity — set a local fallback if missing.
+  const email = await run('git', ['config', 'user.email'], { cwd: dir, timeout: 15_000 })
+  if (!email.ok || !email.stdout.trim()) {
+    await run('git', ['config', 'user.email', 'studio@rayfin.local'], { cwd: dir, timeout: 15_000 })
+    await run('git', ['config', 'user.name', 'Rayfin Studio'], { cwd: dir, timeout: 15_000 })
+  }
+
+  const add = await run('git', ['add', '-A'], { cwd: dir, timeout: 30_000 })
+  if (!add.ok) {
+    return { ok: false, error: add.stderr.trim() || 'git add failed.', status: await gitStatus(id) }
+  }
+
+  const commit = await run('git', ['commit', '-m', msg], { cwd: dir, timeout: 30_000 })
+  if (!commit.ok) {
+    const err = `${commit.stdout}\n${commit.stderr}`.trim()
+    const nothing = /nothing to commit|no changes added/i.test(err)
+    return {
+      ok: false,
+      error: nothing ? 'Nothing to commit.' : err || 'git commit failed.',
+      status: await gitStatus(id)
+    }
+  }
+  return { ok: true, status: await gitStatus(id) }
 }

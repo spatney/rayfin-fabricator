@@ -14,6 +14,8 @@ import { getAuthStatus, loginCopilot, loginRayfin, logoutRayfin } from './servic
 import {
   createProject,
   getProjectsState,
+  gitCommit,
+  gitStatus,
   listTemplates,
   openProject,
   pickFolder,
@@ -102,6 +104,10 @@ export function registerIpc(): void {
     clearHistory(id)
     return removeProject(id, deleteFiles ?? false)
   })
+  ipcMain.handle(IpcChannels.projectsGitStatus, (_event, id: string) => gitStatus(id))
+  ipcMain.handle(IpcChannels.projectsGitCommit, (_event, id: string, message: string) =>
+    gitCommit(id, message)
+  )
 
   // Chat (Copilot CLI)
   ipcMain.handle(

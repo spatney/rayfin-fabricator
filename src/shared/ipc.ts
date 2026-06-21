@@ -195,6 +195,25 @@ export interface ProjectActionResult {
   project?: StudioProject
 }
 
+/** A compact snapshot of a project's git working tree. */
+export interface GitStatus {
+  /** False when the folder is missing or is not a git repository. */
+  isRepo: boolean
+  /** Current branch name (or a detached-HEAD label) when known. */
+  branch?: string
+  /** Files with staged, unstaged, or untracked changes. */
+  changedCount: number
+  /** True when the repo has no commits yet (unborn HEAD). */
+  noCommits?: boolean
+}
+
+export interface GitCommitResult {
+  ok: boolean
+  error?: string
+  /** The working-tree status after the commit attempt. */
+  status: GitStatus
+}
+
 /* ------------------------------------------------------------------ *
  * Chat (Copilot CLI)
  * ------------------------------------------------------------------ */
@@ -293,6 +312,8 @@ export const IpcChannels = {
   projectsSetActive: 'projects:setActive',
   projectsRename: 'projects:rename',
   projectsRemove: 'projects:remove',
+  projectsGitStatus: 'projects:gitStatus',
+  projectsGitCommit: 'projects:gitCommit',
 
   chatSend: 'chat:send',
   chatCancel: 'chat:cancel',
@@ -360,6 +381,12 @@ export interface RayfinStudioApi {
      * pass `deleteFiles: true` to also move the project folder to the OS trash.
      */
     remove: (id: string, deleteFiles?: boolean) => Promise<ProjectsState>
+    git: {
+      /** Snapshot of the project's git working tree (branch + change count). */
+      status: (id: string) => Promise<GitStatus>
+      /** Stage everything and commit; resolves with the post-commit status. */
+      commit: (id: string, message: string) => Promise<GitCommitResult>
+    }
   }
 
   chat: {

@@ -722,6 +722,7 @@ code {
 
 .project-meta {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex: none;
 }
@@ -748,6 +749,99 @@ code {
 .chip--err {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+/* Git status pill + commit popover (project header) */
+.git-control {
+  position: relative;
+  display: inline-flex;
+}
+
+.git-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.git-chip--clean {
+  cursor: default;
+}
+
+.git-chip--dirty {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.git-chip:hover.git-chip--dirty {
+  border-color: var(--accent);
+}
+
+.git-branch {
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-dot {
+  opacity: 0.5;
+}
+
+.git-popover {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  z-index: 30;
+  width: 280px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+
+.git-popover-title {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.git-msg-input {
+  width: 100%;
+  height: 30px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 9px;
+}
+
+.git-msg-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.git-error {
+  font-size: 12px;
+  color: var(--danger);
+  word-break: break-word;
+}
+
+.git-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 /* Preview pane (deploy controls + embedded app) */
