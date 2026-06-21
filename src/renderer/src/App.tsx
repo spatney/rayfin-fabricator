@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AuthStatus, DoctorReport } from '@shared/ipc'
 import SetupScreen from './screens/SetupScreen'
 import Workbench from './screens/Workbench'
+import logo from './assets/logo.png'
 
 type Phase = 'loading' | 'setup' | 'ready'
 
@@ -31,7 +32,7 @@ function App(): JSX.Element {
   if (phase === 'loading') {
     return (
       <div className="splash">
-        <span className="brand-mark">▰</span>
+        <img className="brand-mark" src={logo} alt="Rayfin Studio" />
         <span>Starting Rayfin Studio…</span>
       </div>
     )

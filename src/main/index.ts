@@ -6,6 +6,14 @@ import { registerIpc } from './ipc'
 const PREVIEW_PARTITION = 'persist:rayfin-preview'
 
 /**
+ * Absolute path to the app icon. `app.getAppPath()` is the project root in dev and
+ * the app resources root when packaged, so `resources/icon.png` resolves in both.
+ */
+function appIconPath(): string {
+  return join(app.getAppPath(), 'resources', 'icon.png')
+}
+
+/**
  * Microsoft's identity pages (login.microsoftonline.com / Fabric broker) refuse
  * to render inside an "embedded webview": they sniff the User-Agent for framework
  * tokens (e.g. `Electron/…`, the app name) and return a blank/blocked page. Present
@@ -45,6 +53,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     title: 'Rayfin Studio',
+    icon: appIconPath(),
     backgroundColor: '#0f1115',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -77,6 +86,8 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // Identify the app to Windows so the taskbar uses our icon and groups windows.
+  if (process.platform === 'win32') app.setAppUserModelId('com.rayfin.studio')
   registerIpc()
   createWindow()
 
@@ -124,6 +135,7 @@ function configurePreviewWebview(host: WebContents): void {
           height,
           autoHideMenuBar: true,
           title: 'Sign in',
+          icon: appIconPath(),
           webPreferences: {
             partition: PREVIEW_PARTITION,
             contextIsolation: true,

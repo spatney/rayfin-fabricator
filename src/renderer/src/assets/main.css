@@ -68,8 +68,11 @@ code {
 }
 
 .brand-mark {
-  color: var(--accent);
-  font-size: 18px;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
+  flex: none;
 }
 
 .brand-name {
@@ -207,7 +210,8 @@ code {
 }
 
 .splash .brand-mark {
-  font-size: 34px;
+  width: 56px;
+  height: 56px;
 }
 
 /* Buttons */
@@ -289,7 +293,8 @@ code {
 }
 
 .setup-header .brand-mark {
-  font-size: 24px;
+  width: 30px;
+  height: 30px;
 }
 
 .setup-sub {
@@ -1040,8 +1045,9 @@ code {
 }
 
 .content-empty-mark {
-  font-size: 40px;
-  color: var(--accent);
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
 }
 
 .content-empty h1 {

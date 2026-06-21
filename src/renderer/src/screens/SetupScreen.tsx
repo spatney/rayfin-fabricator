@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AuthStatus, DoctorReport, ProcLogEvent, ToolId, ToolStatus } from '@shared/ipc'
+import logo from '../assets/logo.png'
 
 interface Props {
   doctor: DoctorReport | null
@@ -53,7 +54,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
       <div className="setup-inner">
         <header className="setup-header">
           <div className="brand">
-            <span className="brand-mark">▰</span>
+            <img className="brand-mark" src={logo} alt="" />
             <span className="brand-name">Rayfin Studio</span>
           </div>
           <p className="setup-sub">

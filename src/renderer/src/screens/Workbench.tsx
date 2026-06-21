@@ -10,6 +10,7 @@ import type {
 import NewProjectModal from '../components/NewProjectModal'
 import ChatPanel, { type UIChatMessage } from '../components/ChatPanel'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
+import logo from '../assets/logo.png'
 
 /** Hydrate a persisted message into a live (non-pending) UI message. */
 function toUi(m: ChatMessage): UIChatMessage {
@@ -194,7 +195,7 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
     <div className="app-shell">
       <header className="titlebar">
         <div className="brand">
-          <span className="brand-mark">▰</span>
+          <img className="brand-mark" src={logo} alt="" />
           <span className="brand-name">Rayfin Studio</span>
         </div>
         <div className="titlebar-status">
@@ -322,7 +323,7 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
             </>
           ) : (
             <div className="content-empty">
-              <span className="content-empty-mark">▰</span>
+              <img className="content-empty-mark" src={logo} alt="" />
               <h1>Welcome to Rayfin Studio</h1>
               <p>
                 Create a new Rayfin app or open an existing project to start building with chat.
