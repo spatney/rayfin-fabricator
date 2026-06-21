@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { AppVersions, AuthStatus, ProjectsState, StudioProject } from '@shared/ipc'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  AppVersions,
+  AuthStatus,
+  ChatTurnResult,
+  ProjectsState,
+  StudioProject
+} from '@shared/ipc'
 import NewProjectModal from '../components/NewProjectModal'
 import ChatPanel, { type UIChatMessage } from '../components/ChatPanel'
+import PreviewPane, { type DeployUiState } from '../components/PreviewPane'
 
 interface Props {
   auth: AuthStatus
@@ -16,6 +23,9 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   const [opening, setOpening] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
+  const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
+  /** The project whose `rayfin up` is currently streaming (routes deploy:run logs). */
+  const deployingIdRef = useRef<string | null>(null)
 
   const setMessagesFor = useCallback(
     (projectId: string, updater: (prev: UIChatMessage[]) => UIChatMessage[]): void => {
@@ -27,6 +37,50 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   const refreshProjects = useCallback(async (): Promise<void> => {
     setProjects(await window.api.projects.state())
   }, [])
+
+  // Route streamed `rayfin up` output to the deploying project's log buffer.
+  useEffect(() => {
+    const off = window.api.onProcLog((event) => {
+      if (event.channel !== 'deploy:run') return
+      const id = deployingIdRef.current
+      if (!id) return
+      setDeploys((all) => {
+        const cur = all[id] ?? { running: true, log: [] }
+        return { ...all, [id]: { ...cur, log: [...cur.log, event.data] } }
+      })
+    })
+    return off
+  }, [])
+
+  const runDeploy = useCallback(
+    async (projectId: string): Promise<void> => {
+      if (deployingIdRef.current) return // one deploy at a time (skeleton)
+      deployingIdRef.current = projectId
+      setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
+      try {
+        const result = await window.api.deploy.run(projectId)
+        setDeploys((all) => {
+          const cur = all[projectId] ?? { running: false, log: [] }
+          return { ...all, [projectId]: { ...cur, running: false, result } }
+        })
+        await refreshProjects()
+      } finally {
+        deployingIdRef.current = null
+      }
+    },
+    [refreshProjects]
+  )
+
+  // After a chat turn, auto-deploy when the agent left undeployed changes.
+  const handleTurnComplete = useCallback(
+    async (projectId: string, result: ChatTurnResult): Promise<void> => {
+      await refreshProjects()
+      if (!result.ok) return
+      const changed = await window.api.deploy.hasChanges(projectId)
+      if (changed) void runDeploy(projectId)
+    },
+    [refreshProjects, runDeploy]
+  )
 
   useEffect(() => {
     void window.api.getVersions().then(setVersions)
@@ -169,7 +223,11 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                 </div>
                 <div className="project-meta">
                   {active.template && <span className="chip">{active.template}</span>}
-                  {active.lastDeploy?.url ? (
+                  {deploys[active.id]?.running ? (
+                    <span className="chip chip--busy">deploying…</span>
+                  ) : active.lastDeploy?.status === 'error' ? (
+                    <span className="chip chip--err">deploy failed</span>
+                  ) : active.lastDeploy?.url ? (
                     <span className="chip chip--ok">deployed</span>
                   ) : (
                     <span className="chip">not deployed</span>
@@ -183,14 +241,15 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                     project={active}
                     messages={chats[active.id] ?? []}
                     onChange={(updater) => setMessagesFor(active.id, updater)}
-                    onTurnComplete={() => void refreshProjects()}
+                    onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
                   />
                 </section>
                 <section className="pane pane--preview">
-                  <div className="pane-title">Preview</div>
-                  <div className="pane-placeholder">
-                    Your deployed app will render here after <code>rayfin up</code>.
-                  </div>
+                  <PreviewPane
+                    project={active}
+                    deploy={deploys[active.id]}
+                    onDeploy={() => void runDeploy(active.id)}
+                  />
                 </section>
               </div>
             </>

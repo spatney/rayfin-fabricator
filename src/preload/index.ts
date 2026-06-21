@@ -11,6 +11,7 @@ import {
 const api: RayfinStudioApi = {
   ping: () => ipcRenderer.invoke(IpcChannels.ping),
   getVersions: () => ipcRenderer.invoke(IpcChannels.getVersions),
+  openExternal: (url: string) => ipcRenderer.invoke(IpcChannels.openExternal, url),
 
   doctor: {
     check: () => ipcRenderer.invoke(IpcChannels.doctorCheck),
@@ -42,6 +43,12 @@ const api: RayfinStudioApi = {
       ipcRenderer.invoke(IpcChannels.chatSend, projectId, turnId, text),
     cancel: (projectId: string) => ipcRenderer.invoke(IpcChannels.chatCancel, projectId),
     reset: (projectId: string) => ipcRenderer.invoke(IpcChannels.chatReset, projectId)
+  },
+
+  deploy: {
+    run: (projectId: string) => ipcRenderer.invoke(IpcChannels.deployRun, projectId),
+    status: (projectId: string) => ipcRenderer.invoke(IpcChannels.deployStatus, projectId),
+    hasChanges: (projectId: string) => ipcRenderer.invoke(IpcChannels.deployHasChanges, projectId)
   },
 
   onProcLog: (cb: (event: ProcLogEvent) => void) => {

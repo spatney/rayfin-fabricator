@@ -74,6 +74,7 @@ export type ProcStreamId =
   | 'install:rayfin'
   | 'install:copilot'
   | 'create:project'
+  | 'deploy:run'
 
 export interface ProcLogEvent {
   channel: ProcStreamId
@@ -98,10 +99,39 @@ export interface TemplateInfo {
 }
 
 export interface DeployInfo {
+  /** Best URL to load in the preview (hostingUrl → rayfinApiUrl → fabricPortalUrl). */
   url?: string
+  /** Rayfin item BaaS endpoint (`deployment.rayfinApiUrl`). */
+  apiUrl?: string
+  /** Fabric portal deep link for the deployed item. */
+  portalUrl?: string
+  /** 'deploying' | 'success' | 'error' | 'cancelled'. */
   status?: string
+  /** Error message from the last failed deploy, if any. */
+  error?: string
   /** ISO timestamp of the last deploy attempt. */
   at?: string
+}
+
+/** Outcome of a Studio-driven `rayfin up`. */
+export type DeployOutcome = 'success' | 'error' | 'cancelled' | 'not-signed-in' | 'not-found'
+
+export interface DeployResult {
+  ok: boolean
+  outcome: DeployOutcome
+  /** Best URL to load in the preview. */
+  url?: string
+  apiUrl?: string
+  portalUrl?: string
+  error?: string
+}
+
+/** Read-only deployment status from `rayfin up status --json`. */
+export interface DeployStatus {
+  deployed: boolean
+  url?: string
+  apiUrl?: string
+  portalUrl?: string
 }
 
 /** A project tracked by the app. Source lives in a local git repo on disk. */
@@ -197,6 +227,7 @@ export interface ChatTurnResult {
 export const IpcChannels = {
   ping: 'app:ping',
   getVersions: 'app:getVersions',
+  openExternal: 'app:openExternal',
 
   doctorCheck: 'doctor:check',
   doctorInstall: 'doctor:install',
@@ -220,6 +251,10 @@ export const IpcChannels = {
   chatCancel: 'chat:cancel',
   chatReset: 'chat:reset',
 
+  deployRun: 'deploy:run',
+  deployStatus: 'deploy:status',
+  deployHasChanges: 'deploy:hasChanges',
+
   // main -> renderer events
   procLog: 'proc:log',
   chatEvent: 'chat:event'
@@ -234,6 +269,8 @@ export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels]
 export interface RayfinStudioApi {
   ping: () => Promise<string>
   getVersions: () => Promise<AppVersions>
+  /** Open a URL in the user's default browser. */
+  openExternal: (url: string) => Promise<void>
 
   doctor: {
     check: () => Promise<DoctorReport>
@@ -278,6 +315,18 @@ export interface RayfinStudioApi {
     cancel: (projectId: string) => Promise<void>
     /** Start a fresh conversation (drops the persisted Copilot session id). */
     reset: (projectId: string) => Promise<void>
+  }
+
+  deploy: {
+    /**
+     * Run a full `rayfin up` for the project (streams progress on the
+     * 'deploy:run' channel) and resolve the live URL. Studio owns deploys.
+     */
+    run: (projectId: string) => Promise<DeployResult>
+    /** Read the persisted deployment status (`rayfin up status --json`). */
+    status: (projectId: string) => Promise<DeployStatus>
+    /** True when the project has uncommitted changes not yet deployed. */
+    hasChanges: (projectId: string) => Promise<boolean>
   }
 
   /** Subscribe to streamed process output. Returns an unsubscribe function. */

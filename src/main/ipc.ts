@@ -1,4 +1,4 @@
-import { ipcMain, app, type IpcMainInvokeEvent } from 'electron'
+import { ipcMain, app, shell, type IpcMainInvokeEvent } from 'electron'
 import {
   IpcChannels,
   type AppVersions,
@@ -21,10 +21,11 @@ import {
 } from './services/projects'
 import { getState } from './services/store'
 import { cancelMessage, resetSession, sendMessage } from './services/chat'
+import { getDeployStatus, hasPendingChanges, runDeploy } from './services/deploy'
 
 /** Build an onData callback that streams process output to the calling renderer. */
 function streamer(event: IpcMainInvokeEvent, channel: ProcStreamId) {
-  return (stream: 'stdout' | 'stderr', data: string): void => {
+  return (stream: 'stdout' | 'stderr' | 'system', data: string): void => {
     if (!event.sender.isDestroyed()) {
       event.sender.send(IpcChannels.procLog, { channel, stream, data })
     }
@@ -37,6 +38,10 @@ function streamer(event: IpcMainInvokeEvent, channel: ProcStreamId) {
  */
 export function registerIpc(): void {
   ipcMain.handle(IpcChannels.ping, () => 'pong')
+
+  ipcMain.handle(IpcChannels.openExternal, async (_event, url: string) => {
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) await shell.openExternal(url)
+  })
 
   ipcMain.handle(
     IpcChannels.getVersions,
@@ -100,4 +105,15 @@ export function registerIpc(): void {
   )
   ipcMain.handle(IpcChannels.chatCancel, (_event, projectId: string) => cancelMessage(projectId))
   ipcMain.handle(IpcChannels.chatReset, (_event, projectId: string) => resetSession(projectId))
+
+  // Deploy loop (Studio-owned `rayfin up`)
+  ipcMain.handle(IpcChannels.deployRun, (event, projectId: string) =>
+    runDeploy(projectId, streamer(event, 'deploy:run'))
+  )
+  ipcMain.handle(IpcChannels.deployStatus, (_event, projectId: string) =>
+    getDeployStatus(projectId)
+  )
+  ipcMain.handle(IpcChannels.deployHasChanges, (_event, projectId: string) =>
+    hasPendingChanges(projectId)
+  )
 }

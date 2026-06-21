@@ -11,7 +11,7 @@
 
 import { BrowserWindow, dialog } from 'electron'
 import { basename, join, resolve } from 'path'
-import { existsSync, mkdirSync, readFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import { run } from './exec'
 import * as store from './store'
@@ -44,6 +44,40 @@ function slugify(name: string): string {
 /** True when `dir` looks like a Rayfin project. */
 export function isRayfinProject(dir: string): boolean {
   return existsSync(join(dir, 'rayfin', 'rayfin.yml'))
+}
+
+const AGENT_INSTRUCTIONS = `# Rayfin Studio — agent guidance
+
+This is a **Rayfin app** (a Microsoft Fabric Backend-as-a-Service app). You are the
+coding agent running inside **Rayfin Studio**, a desktop app that drives you plus the
+Rayfin CLI to build and deploy this app.
+
+## Rules
+- **Make the requested code changes only.** Edit files to implement what the user asks.
+- **Do NOT run \`rayfin up\` or otherwise deploy.** Rayfin Studio runs the full
+  \`rayfin up\` automatically after your changes and shows the deployed app in its preview.
+- Do **not** start dev servers or run the app locally — it is only ever run via deploy.
+- Keep the project building; prefer small, correct changes.
+- Rayfin project config lives under \`rayfin/\` (e.g. \`rayfin/rayfin.yml\`); the data model
+  and services (auth/data/storage/functions/static hosting) are configured there.
+
+When you finish editing, briefly summarize what you changed — Studio handles the deploy.
+`
+
+/**
+ * Write `.github/copilot-instructions.md` so the Copilot agent edits code only and
+ * leaves deploys to Studio. Never clobbers an existing file.
+ */
+export function ensureAgentInstructions(dir: string): void {
+  try {
+    const ghDir = join(dir, '.github')
+    const file = join(ghDir, 'copilot-instructions.md')
+    if (existsSync(file)) return
+    if (!existsSync(ghDir)) mkdirSync(ghDir, { recursive: true })
+    writeFileSync(file, AGENT_INSTRUCTIONS, 'utf8')
+  } catch {
+    /* best-effort — the deploy loop still works without it */
+  }
 }
 
 /** Read the project's display name from rayfin/rayfin.yml (falls back to folder). */
@@ -176,6 +210,7 @@ export async function createProject(
     return { ok: false, error: `rayfin init failed (exit code ${init.exitCode ?? 'unknown'}).` }
   }
 
+  ensureAgentInstructions(dir)
   await initGitRepo(dir, `Initial commit (${template} template)`, onData)
 
   const project = registerProject(dir, name)
@@ -191,6 +226,7 @@ export function openProject(path: string): ProjectActionResult {
   if (!isRayfinProject(abs)) {
     return { ok: false, error: 'That folder is not a Rayfin project (no rayfin/rayfin.yml).' }
   }
+  ensureAgentInstructions(abs)
   const project = registerProject(abs)
   store.setActive(project.id)
   return { ok: true, project: { ...project, missing: false } }
