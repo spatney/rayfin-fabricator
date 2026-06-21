@@ -692,6 +692,13 @@ export interface ChatMessage {
   error?: string
   /** Number of screenshots that were attached to this (user) message. */
   attachments?: number
+  /**
+   * Marks a non-conversational system event rendered distinctly from a normal
+   * turn. `'merge'` = an auto-merge of a side thread into main.
+   */
+  kind?: 'merge'
+  /** For a `kind: 'merge'` event: the merged side thread's display name. */
+  mergeName?: string
 }
 
 /* ------------------------------------------------------------------ *

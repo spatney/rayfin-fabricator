@@ -230,6 +230,51 @@ function SendIcon(): JSX.Element {
   )
 }
 
+function MergeIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="6" cy="6" r="2.4" />
+      <circle cx="6" cy="18" r="2.4" />
+      <circle cx="18" cy="9" r="2.4" />
+      <path d="M6 8.4v7.2" />
+      <path d="M6 12h4a5 5 0 0 0 5-5V9" />
+    </svg>
+  )
+}
+
+/** Renders a turn's tool-activity list (shared by normal turns + merge events). */
+function ToolActivity({
+  tools,
+  projectPath
+}: {
+  tools: ChatToolCall[]
+  projectPath: string
+}): JSX.Element {
+  return (
+    <div className="tool-activity">
+      {tools.map((t) => (
+        <details key={t.id} className={`tool-call tool-call--${t.state}`}>
+          <summary title={t.title}>
+            <span className="tool-call-icon">
+              {t.state === 'running' ? <span className="tool-spin" /> : TOOL_ICON[t.state]}
+            </span>
+            <span className="tool-call-name">{friendlyTool(t.name)}</span>
+            <span className="tool-call-title">{shortDetail(t.title, projectPath)}</span>
+          </summary>
+          {t.output && <pre className="tool-call-output">{t.output}</pre>}
+        </details>
+      ))}
+    </div>
+  )
+}
+
 function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
@@ -544,6 +589,41 @@ export default function ChatPanel({
         )}
 
         {messages.map((m, i) => {
+          if (m.kind === 'merge') {
+            const who = m.mergeName ?? 'side thread'
+            const label = m.error
+              ? `Couldn’t merge “${who}” into main`
+              : m.pending
+                ? `Merging “${who}” into main…`
+                : `Merged “${who}” into main`
+            const hasBody = m.tools.length > 0 || Boolean(m.text)
+            return (
+              <div
+                key={m.id}
+                className={`merge-event${m.error ? ' merge-event--error' : ''}${
+                  m.pending ? ' merge-event--pending' : ''
+                }`}
+              >
+                <div className="merge-event-head">
+                  <span className="merge-event-icon">
+                    {m.pending ? <span className="tool-spin" /> : m.error ? '⚠' : <MergeIcon />}
+                  </span>
+                  <span className="merge-event-label">{label}</span>
+                </div>
+                {hasBody && (
+                  <div className="merge-event-body">
+                    {m.tools.length > 0 && <ToolActivity tools={m.tools} projectPath={project.path} />}
+                    {m.text && (
+                      <div className="msg-text msg-text--md">
+                        <Markdown>{m.text}</Markdown>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {m.error && <div className="alert alert--error merge-event-error">{m.error}</div>}
+              </div>
+            )
+          }
           const prevUser = m.role === 'assistant' && i > 0 ? messages[i - 1] : undefined
           const canRetry =
             Boolean(m.error) &&
@@ -558,26 +638,7 @@ export default function ChatPanel({
               </div>
               <div className="turn-main">
                 <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
-                {m.tools.length > 0 && (
-                  <div className="tool-activity">
-                    {m.tools.map((t) => (
-                      <details key={t.id} className={`tool-call tool-call--${t.state}`}>
-                        <summary title={t.title}>
-                          <span className="tool-call-icon">
-                            {t.state === 'running' ? (
-                              <span className="tool-spin" />
-                            ) : (
-                              TOOL_ICON[t.state]
-                            )}
-                          </span>
-                          <span className="tool-call-name">{friendlyTool(t.name)}</span>
-                          <span className="tool-call-title">{shortDetail(t.title, project.path)}</span>
-                        </summary>
-                        {t.output && <pre className="tool-call-output">{t.output}</pre>}
-                      </details>
-                    ))}
-                  </div>
-                )}
+                {m.tools.length > 0 && <ToolActivity tools={m.tools} projectPath={project.path} />}
                 {m.text &&
                   (m.role === 'assistant' ? (
                     <div className="msg-text msg-text--md">

@@ -4286,6 +4286,62 @@ span.thread-pill {
   display: none;
 }
 
+/* Auto-merge system event in the main chat. Rendered as a distinct, centered
+   marker (no avatar / "You" turn) so a side-thread merge never looks like the
+   main thread's own in-progress turn just completed. */
+.merge-event {
+  align-self: center;
+  width: 100%;
+  max-width: 560px;
+  margin: 2px auto;
+  padding: 9px 13px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--radius-sm);
+  animation: turnIn 0.25s ease both;
+}
+
+.merge-event--error {
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-elev-2));
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.merge-event-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.merge-event-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+
+.merge-event-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.merge-event--error .merge-event-icon {
+  color: var(--danger);
+}
+
+.merge-event-body {
+  margin-top: 8px;
+}
+
+.merge-event-error {
+  margin-top: 8px;
+}
+
 /* New-thread modal extras */
 .modal-sub {
   margin: 6px 0 0;

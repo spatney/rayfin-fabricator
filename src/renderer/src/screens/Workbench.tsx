@@ -47,6 +47,29 @@ function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
+/**
+ * Derive a short, human display name for a side thread from its first task, so
+ * the user never has to name it. Strips leading filler/imperatives ("add a…",
+ * "please implement…"), keeps the first few meaningful words and title-cases.
+ */
+function deriveThreadName(task: string): string {
+  const firstLine = (task.split('\n').find((l) => l.trim()) ?? '').trim()
+  const s = firstLine
+    .replace(/^(please|hey|ok|okay|so)[,\s]+/i, '')
+    .replace(/^(can|could|would)\s+you\s+/i, '')
+    .replace(/^(i\s+want\s+to|i\s+want|i'?d\s+like\s+to|i\s+need\s+to|let'?s|help\s+me)\s+/i, '')
+    .replace(
+      /^(add|implement|build|create|make|set\s+up|setup|design|introduce|enable|support|improve|fix|update|wire\s+up|refactor|redesign|rework)\s+/i,
+      ''
+    )
+    .replace(/^(a|an|the|some)\s+/i, '')
+  const words = s.split(/\s+/).filter(Boolean).slice(0, 6)
+  let name = words.join(' ').replace(/[.,;:!?]+$/, '').trim()
+  if (name.length > 42) name = name.slice(0, 42).replace(/\s+\S*$/, '').trim() + '…'
+  if (!name) return 'Side thread'
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
+
 /** Hydrate a persisted message into a live (non-pending) UI message. */
 function toUi(m: ChatMessage): UIChatMessage {
   return { ...m, pending: false }
@@ -54,13 +77,15 @@ function toUi(m: ChatMessage): UIChatMessage {
 
 /** Strip transient fields (turnId, pending) before persisting to disk. */
 function toStored(messages: UIChatMessage[]): ChatMessage[] {
-  return messages.map(({ id, role, text, tools, error, attachments }) => ({
+  return messages.map(({ id, role, text, tools, error, attachments, kind, mergeName }) => ({
     id,
     role,
     text,
     tools,
     error,
-    attachments
+    attachments,
+    kind,
+    mergeName
   }))
 }
 
@@ -314,26 +339,22 @@ export default function Workbench({
       mergingRef.current.add(key)
       forceTick()
 
-      // Show the merge as a turn on the main thread so Copilot's conflict
-      // resolution (if any) streams where the user can see it.
+      // Render the merge as a single, distinct system event on the main thread
+      // (not a fake "You" turn) so it never looks like main's own turn finished.
+      // Copilot's conflict resolution (if any) streams into this same event.
       const mainKey = chatKey(projectId, MAIN_THREAD_ID)
       const turnId = `merge-${threadId}`
-      const userMsg: UIChatMessage = {
-        id: uid(),
-        role: 'user',
-        text: `Merge “${thread.name}” into main`,
-        tools: [],
-        pending: false
-      }
-      const assistantMsg: UIChatMessage = {
+      const mergeMsg: UIChatMessage = {
         id: uid(),
         turnId,
         role: 'assistant',
+        kind: 'merge',
+        mergeName: thread.name,
         text: '',
         tools: [],
         pending: true
       }
-      setChats((all) => ({ ...all, [mainKey]: [...(all[mainKey] ?? []), userMsg, assistantMsg] }))
+      setChats((all) => ({ ...all, [mainKey]: [...(all[mainKey] ?? []), mergeMsg] }))
 
       try {
         const res = await window.api.threads.merge(projectId, threadId)
@@ -476,11 +497,12 @@ export default function Workbench({
   }
 
   // Fork a new side thread and immediately hand it its first task.
-  async function createSideThread(name: string, firstTask: string): Promise<void> {
+  async function createSideThread(firstTask: string): Promise<void> {
     if (!active) return
     setCreatingThread(true)
     setThreadError(null)
     try {
+      const name = deriveThreadName(firstTask)
       const res = await window.api.threads.create({ projectId: active.id, name })
       if (!res.ok || !res.thread) {
         setThreadError(res.error ?? 'Could not create the side thread.')
@@ -1105,7 +1127,7 @@ export default function Workbench({
               setThreadError(null)
             }
           }}
-          onCreate={(name, firstTask) => void createSideThread(name, firstTask)}
+          onCreate={(firstTask) => void createSideThread(firstTask)}
         />
       )}
 
