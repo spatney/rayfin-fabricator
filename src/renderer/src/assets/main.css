@@ -4209,6 +4209,11 @@ span.thread-pill {
   background: var(--danger);
 }
 
+.thread-dot--waiting-main {
+  background: var(--pending);
+  animation: threadPulse 2s ease-in-out infinite;
+}
+
 @keyframes threadPulse {
   0%,
   100% {
@@ -4243,6 +4248,17 @@ span.thread-pill {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.merge-banner--waiting {
+  background: var(--bg-elev-2);
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+.merge-banner--waiting .merge-banner-spinner {
+  border-color: color-mix(in srgb, var(--pending) 35%, transparent);
+  border-top-color: var(--pending);
 }
 
 .merge-banner-spinner {

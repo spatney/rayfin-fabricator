@@ -7,7 +7,13 @@
  * Purely presentational: all state + orchestration lives in Workbench.
  */
 
-export type ThreadUiStatus = 'idle' | 'working' | 'merging' | 'error' | 'countdown'
+export type ThreadUiStatus =
+  | 'idle'
+  | 'working'
+  | 'merging'
+  | 'error'
+  | 'countdown'
+  | 'waiting-main'
 
 export interface ThreadView {
   id: string
@@ -48,6 +54,7 @@ export default function ThreadBar({
   onDiscard
 }: Props): JSX.Element {
   const counting = threads.filter((t) => t.status === 'countdown')
+  const waitingMain = threads.filter((t) => t.status === 'waiting-main')
 
   return (
     <div className="threadbar">
@@ -102,6 +109,24 @@ export default function ThreadBar({
             <button type="button" className="btn btn--xs btn--primary" onClick={() => onMergeNow(t.id)}>
               Merge now
             </button>
+            <button
+              type="button"
+              className="btn btn--xs btn--ghost"
+              onClick={() => onKeepWorking(t.id)}
+            >
+              Keep working
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {waitingMain.map((t) => (
+        <div key={t.id} className="merge-banner merge-banner--waiting">
+          <span className="merge-banner-spinner" aria-hidden="true" />
+          <span className="merge-banner-text">
+            <strong>{t.name}</strong> is ready — merging once <strong>Main</strong> finishes…
+          </span>
+          <div className="merge-banner-actions">
             <button
               type="button"
               className="btn btn--xs btn--ghost"

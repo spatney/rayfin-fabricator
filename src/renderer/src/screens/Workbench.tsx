@@ -181,6 +181,15 @@ export default function Workbench({
   const countdownsRef = useRef<Map<string, number>>(new Map())
   /** Side threads whose merge is currently running (chatKey). */
   const mergingRef = useRef<Set<string>>(new Set())
+  /**
+   * Side threads that are done and would merge, but whose merge is held back
+   * because the main thread is still working (chatKey). Drained when main goes idle.
+   */
+  const pendingMergeRef = useRef<Set<string>>(new Set())
+  /** Latest per-thread busy state, readable synchronously inside callbacks. */
+  const busyThreadsRef = useRef<Record<string, boolean>>({})
+  /** Stable handle to drain main-blocked merges once the main thread goes idle. */
+  const drainPendingRef = useRef<(projectId: string) => void>(() => {})
   /** Projects with a deploy queued behind the running one (coalesced). */
   const pendingDeployRef = useRef<Set<string>>(new Set())
   /** Stable handle to runDeploy for use inside its own completion path. */
@@ -311,8 +320,18 @@ export default function Workbench({
   const handleBusyChange = useCallback(
     (projectId: string, threadId: string, busy: boolean): void => {
       const key = chatKey(projectId, threadId)
-      setBusyThreads((b) => ({ ...b, [key]: busy }))
-      if (busy && countdownsRef.current.delete(key)) forceTick()
+      busyThreadsRef.current = { ...busyThreadsRef.current, [key]: busy }
+      setBusyThreads(busyThreadsRef.current)
+      // Resuming work on a side thread cancels its queued merge (countdown or
+      // main-blocked) — the user clearly isn't done with it yet.
+      if (busy) {
+        let changed = countdownsRef.current.delete(key)
+        if (pendingMergeRef.current.delete(key)) changed = true
+        if (changed) forceTick()
+      }
+      // When the main thread finishes its turn, run any merges that were waiting
+      // on it so conflict resolution never collides with main's own work.
+      if (threadId === MAIN_THREAD_ID && !busy) drainPendingRef.current(projectId)
     },
     []
   )
@@ -323,7 +342,10 @@ export default function Workbench({
   }, [])
 
   const cancelCountdown = useCallback((projectId: string, threadId: string): void => {
-    if (countdownsRef.current.delete(chatKey(projectId, threadId))) forceTick()
+    const key = chatKey(projectId, threadId)
+    let changed = countdownsRef.current.delete(key)
+    if (pendingMergeRef.current.delete(key)) changed = true
+    if (changed) forceTick()
   }, [])
 
   /** Merge a side thread into main, streaming conflict resolution into main chat. */
@@ -332,6 +354,17 @@ export default function Workbench({
       const key = chatKey(projectId, threadId)
       countdownsRef.current.delete(key)
       if (mergingRef.current.has(key)) return
+      // Don't merge while the main thread is mid-turn: it would commit main's
+      // half-written work and start the conflict-resolution turn on top of main's
+      // running one (which is what leaves conflicts unresolved). Hold the merge and
+      // let it run when main goes idle (drainPendingRef, fired from handleBusyChange).
+      const mainKey = chatKey(projectId, MAIN_THREAD_ID)
+      if (busyThreadsRef.current[mainKey]) {
+        pendingMergeRef.current.add(key)
+        forceTick()
+        return
+      }
+      pendingMergeRef.current.delete(key)
       const project = projectsRef.current?.projects.find((p) => p.id === projectId)
       const thread = project?.threads?.find((t) => t.id === threadId)
       if (!thread || thread.status !== 'active') return
@@ -342,7 +375,6 @@ export default function Workbench({
       // Render the merge as a single, distinct system event on the main thread
       // (not a fake "You" turn) so it never looks like main's own turn finished.
       // Copilot's conflict resolution (if any) streams into this same event.
-      const mainKey = chatKey(projectId, MAIN_THREAD_ID)
       const turnId = `merge-${threadId}`
       const mergeMsg: UIChatMessage = {
         id: uid(),
@@ -384,6 +416,17 @@ export default function Workbench({
     },
     [refreshProjects, requestDeploy]
   )
+
+  // Run merges that were held back while the main thread was working. Reassigned
+  // every render so it always closes over the latest performMerge.
+  drainPendingRef.current = (projectId: string): void => {
+    for (const key of [...pendingMergeRef.current]) {
+      const { projectId: pid, threadId } = splitKey(key)
+      if (pid !== projectId) continue
+      pendingMergeRef.current.delete(key)
+      void performMerge(pid, threadId)
+    }
+  }
 
   // One steady ticker drives every live auto-merge countdown; at zero it fires
   // the merge. Ref-backed so React StrictMode can't double-trigger a merge.
@@ -534,6 +577,7 @@ export default function Workbench({
     setDiscarding(true)
     try {
       countdownsRef.current.delete(key)
+      pendingMergeRef.current.delete(key)
       await window.api.chat.cancel(active.id, threadId)
       await window.api.threads.remove(active.id, threadId)
       setActiveThread((m) =>
@@ -663,6 +707,7 @@ export default function Workbench({
         let status: ThreadView['status'] = 'idle'
         let countdown: number | undefined
         if (mergingRef.current.has(key)) status = 'merging'
+        else if (pendingMergeRef.current.has(key)) status = 'waiting-main'
         else if (countdownsRef.current.has(key)) {
           status = 'countdown'
           countdown = countdownsRef.current.get(key)

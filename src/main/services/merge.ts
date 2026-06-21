@@ -124,10 +124,27 @@ async function doMerge(projectId: string, threadId: string, emit: Emit): Promise
 
     await sendMessage(projectId, MAIN_THREAD_ID, conflictPrompt(thread.name, thread.baseBranch, files), emit)
 
-    // Whatever the agent did, the markers must be gone and nothing left unmerged.
-    const markers = await git(cwd, ['diff', '--check'])
+    // The agent is told NOT to run git, so it edits the working tree to resolve the
+    // conflicts but leaves the paths "unmerged" in the index. Check the *working tree*
+    // for leftover conflict markers — git reports them as "leftover conflict marker".
+    // (Checking `--diff-filter=U` here would always report unmerged, because nothing is
+    // staged yet, and would falsely reject a resolution the agent actually completed.)
+    const check = await git(cwd, ['diff', '--check'])
+    const markersRemain = !check.ok && /conflict marker/i.test(check.stdout)
+    if (markersRemain) {
+      if (await isMerging(cwd)) await git(cwd, ['merge', '--abort'])
+      return fail(
+        projectId,
+        threadId,
+        'Copilot couldn’t fully resolve the merge conflicts. The side thread was left intact so you can try again.'
+      )
+    }
+
+    // Markers are gone — stage the agent's resolution so the index clears the unmerged
+    // stages, then confirm nothing is still unmerged before committing.
+    await git(cwd, ['add', '-A'])
     const stillUnmerged = await conflictedFiles(cwd)
-    if (stillUnmerged.length > 0 || !markers.ok) {
+    if (stillUnmerged.length > 0) {
       if (await isMerging(cwd)) await git(cwd, ['merge', '--abort'])
       return fail(
         projectId,
@@ -138,7 +155,6 @@ async function doMerge(projectId: string, threadId: string, emit: Emit): Promise
 
     // Finish the merge commit if the agent didn't already commit it.
     if (await isMerging(cwd)) {
-      await git(cwd, ['add', '-A'])
       const commit = await git(cwd, [...COMMIT_IDENT, 'commit', '--no-edit'])
       if (!commit.ok) {
         if (await isMerging(cwd)) await git(cwd, ['merge', '--abort'])
