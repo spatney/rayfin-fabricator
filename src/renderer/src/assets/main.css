@@ -3667,7 +3667,7 @@ code {
 .turn-avatar img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .turn-avatar svg {
@@ -3682,21 +3682,28 @@ code {
 }
 
 .turn--assistant .turn-avatar {
-  background: #fff;
-  border-color: var(--border);
+  padding: 5px;
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--accent) 18%, var(--bg-elev-2)),
+    var(--bg-elev-2)
+  );
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
 }
 
 .turn-avatar--pending {
-  animation: avatarPulse 1.5s ease-in-out infinite;
+  animation: avatarPulse 1.6s ease-out infinite;
 }
 
 @keyframes avatarPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-ring);
   }
-  50% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent);
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
@@ -3733,36 +3740,39 @@ code {
 
 .msg-typing {
   display: inline-flex;
+  align-items: center;
   gap: 5px;
-  padding: 6px 0 2px;
+  padding: 8px 0 4px;
 }
 
 .msg-typing span {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--text-dim);
-  animation: typingDot 1.2s ease-in-out infinite;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  animation: typingDot 1.15s ease-in-out infinite;
 }
 
 .msg-typing span:nth-child(2) {
-  animation-delay: 0.18s;
+  animation-delay: 0.16s;
 }
 
 .msg-typing span:nth-child(3) {
-  animation-delay: 0.36s;
+  animation-delay: 0.32s;
 }
 
 @keyframes typingDot {
   0%,
-  60%,
+  70%,
   100% {
-    opacity: 0.25;
-    transform: translateY(0);
+    opacity: 0.3;
+    transform: scale(0.72);
+    box-shadow: 0 0 0 0 transparent;
   }
-  30% {
+  35% {
     opacity: 1;
-    transform: translateY(-3px);
+    transform: scale(1);
+    box-shadow: 0 0 8px 0 color-mix(in srgb, var(--accent) 55%, transparent);
   }
 }
 
@@ -3950,36 +3960,53 @@ code {
 .tool-activity {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 1px;
+  margin: 2px 0;
 }
 
+/* Flat, lightweight rows that read as a live activity feed (not chunky cards). */
 .tool-call {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elev);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   overflow: hidden;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .tool-call > summary {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 11px;
+  gap: 9px;
+  padding: 5px 9px;
   cursor: pointer;
   list-style: none;
   font-size: 12.5px;
+  border-radius: 8px;
 }
 
 .tool-call > summary::-webkit-details-marker {
   display: none;
 }
 
-.tool-call-icon {
-  flex: none;
+.tool-call:not(.tool-call--running):hover {
+  background: var(--bg-elev);
 }
 
-.tool-call--running .tool-call-icon {
-  color: var(--pending);
+.tool-call[open] {
+  border-color: var(--border);
+  background: var(--bg-elev);
+}
+
+.tool-call-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .tool-call--success .tool-call-icon {
@@ -3990,10 +4017,54 @@ code {
   color: var(--danger);
 }
 
+/* Spinner for the action that's running right now. */
+.tool-spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ws-spin 0.7s linear infinite;
+}
+
+/* The active row gets a faint branded wash + a sweeping shimmer so it feels alive. */
+.tool-call--running {
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--accent) 13%, transparent),
+      transparent
+    ),
+    color-mix(in srgb, var(--accent) 7%, transparent);
+  background-size:
+    200% 100%,
+    auto;
+  background-repeat: no-repeat;
+  animation: toolShimmer 1.5s linear infinite;
+}
+
+@keyframes toolShimmer {
+  from {
+    background-position:
+      200% 0,
+      0 0;
+  }
+  to {
+    background-position:
+      -200% 0,
+      0 0;
+  }
+}
+
 .tool-call-name {
   font-weight: 600;
   color: var(--text);
   flex: none;
+}
+
+.tool-call--running .tool-call-name {
+  color: var(--accent);
 }
 
 .tool-call-title {
@@ -4001,6 +4072,7 @@ code {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 12px;
 }
 
 .tool-call-output {

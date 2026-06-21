@@ -179,6 +179,20 @@ function friendlyTool(name: string): string {
   return 'Working'
 }
 
+/**
+ * Shorten a tool's detail for display: absolute paths inside the project are
+ * shown relative to the project root (e.g. `src\pages\HomePage.tsx`) so the feed
+ * reads cleanly for non-coders. Commands / descriptions pass through unchanged.
+ */
+function shortDetail(title: string, projectPath: string): string {
+  const root = projectPath.replace(/[\\/]+$/, '')
+  if (root && title.toLowerCase().startsWith(root.toLowerCase())) {
+    const rel = title.slice(root.length).replace(/^[\\/]+/, '')
+    return rel || 'project root'
+  }
+  return title
+}
+
 function UserIcon(): JSX.Element {
   return (
     <svg
@@ -533,15 +547,21 @@ export default function ChatPanel({
                 {m.role === 'user' ? <UserIcon /> : <img src={logo} alt="" />}
               </div>
               <div className="turn-main">
-                <div className="turn-role">{m.role === 'user' ? 'You' : 'Copilot'}</div>
+                <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
                 {m.tools.length > 0 && (
                   <div className="tool-activity">
                     {m.tools.map((t) => (
                       <details key={t.id} className={`tool-call tool-call--${t.state}`}>
-                        <summary>
-                          <span className="tool-call-icon">{TOOL_ICON[t.state]}</span>
+                        <summary title={t.title}>
+                          <span className="tool-call-icon">
+                            {t.state === 'running' ? (
+                              <span className="tool-spin" />
+                            ) : (
+                              TOOL_ICON[t.state]
+                            )}
+                          </span>
                           <span className="tool-call-name">{friendlyTool(t.name)}</span>
-                          <span className="tool-call-title">{t.title}</span>
+                          <span className="tool-call-title">{shortDetail(t.title, project.path)}</span>
                         </summary>
                         {t.output && <pre className="tool-call-output">{t.output}</pre>}
                       </details>
@@ -610,7 +630,7 @@ export default function ChatPanel({
           <textarea
             ref={taRef}
             className="composer-input"
-            placeholder={`Message Copilot about ${project.name}…`}
+            placeholder={`Message Fabricator about ${project.name}…`}
             value={input}
             rows={1}
             onChange={(e) => setInput(e.target.value)}
