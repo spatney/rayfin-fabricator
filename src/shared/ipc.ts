@@ -291,6 +291,7 @@ export const IpcChannels = {
   projectsCreate: 'projects:create',
   projectsOpen: 'projects:open',
   projectsSetActive: 'projects:setActive',
+  projectsRename: 'projects:rename',
   projectsRemove: 'projects:remove',
 
   chatSend: 'chat:send',
@@ -352,8 +353,13 @@ export interface RayfinStudioApi {
     /** Register an existing Rayfin project by path and make it active. */
     open: (path: string) => Promise<ProjectActionResult>
     setActive: (id: string | null) => Promise<ProjectsState>
-    /** Remove a project from the list (does not delete files on disk). */
-    remove: (id: string) => Promise<ProjectsState>
+    /** Rename a project (updates the display name and rayfin/rayfin.yml `name`). */
+    rename: (id: string, name: string) => Promise<ProjectActionResult>
+    /**
+     * Remove a project. By default it is only forgotten (files left on disk);
+     * pass `deleteFiles: true` to also move the project folder to the OS trash.
+     */
+    remove: (id: string, deleteFiles?: boolean) => Promise<ProjectsState>
   }
 
   chat: {

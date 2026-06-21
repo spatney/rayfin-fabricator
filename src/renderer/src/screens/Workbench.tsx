@@ -8,6 +8,7 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import NewProjectModal from '../components/NewProjectModal'
+import ConfirmModal from '../components/ConfirmModal'
 import ChatPanel, { type UIChatMessage } from '../components/ChatPanel'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 import logo from '../assets/logo.png'
@@ -41,6 +42,12 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   const [showNewProject, setShowNewProject] = useState(false)
   const [opening, setOpening] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  /** Sidebar per-project actions menu / inline-rename / delete-confirm state. */
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<StudioProject | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
   /** Region screenshots staged per project for the next chat message. */
@@ -149,6 +156,14 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
     void refreshProjects()
   }, [refreshProjects])
 
+  // Close the open sidebar actions menu on any outside click.
+  useEffect(() => {
+    if (!menuOpenId) return
+    const close = (): void => setMenuOpenId(null)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [menuOpenId])
+
   const active = projects?.projects.find((p) => p.id === projects.activeProjectId) ?? null
 
   async function selectProject(p: StudioProject): Promise<void> {
@@ -177,8 +192,38 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
     setProjects(await window.api.projects.pickWorkspaceRoot())
   }
 
-  async function removeProject(p: StudioProject): Promise<void> {
-    setProjects(await window.api.projects.remove(p.id))
+  async function removeFromList(p: StudioProject): Promise<void> {
+    setMenuOpenId(null)
+    setProjects(await window.api.projects.remove(p.id, false))
+  }
+
+  function startRename(p: StudioProject): void {
+    setMenuOpenId(null)
+    setRenameValue(p.name)
+    setRenamingId(p.id)
+  }
+
+  async function submitRename(p: StudioProject): Promise<void> {
+    const next = renameValue.trim()
+    setRenamingId(null)
+    if (!next || next === p.name) return
+    const result = await window.api.projects.rename(p.id, next)
+    if (!result.ok) {
+      setNotice(result.error ?? 'Could not rename the project.')
+      return
+    }
+    await refreshProjects()
+  }
+
+  async function deleteFromDisk(): Promise<void> {
+    if (!confirmDelete) return
+    setDeleting(true)
+    try {
+      setProjects(await window.api.projects.remove(confirmDelete.id, true))
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(null)
+    }
   }
 
   async function signOut(): Promise<void> {
@@ -233,30 +278,76 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
             {projects?.projects.map((p) => (
               <div
                 key={p.id}
-                className={`project-item${p.id === projects.activeProjectId ? ' project-item--active' : ''}`}
-                onClick={() => void selectProject(p)}
+                className={`project-item${p.id === projects.activeProjectId ? ' project-item--active' : ''}${menuOpenId === p.id ? ' project-item--menu-open' : ''}`}
+                onClick={() => {
+                  if (renamingId !== p.id) void selectProject(p)
+                }}
                 role="button"
                 tabIndex={0}
               >
                 <div className="project-item-main">
-                  <span className="project-item-name">
-                    {p.name}
-                    {p.missing && <span className="badge badge--warn">missing</span>}
-                  </span>
-                  <span className="project-item-path" title={p.path}>
-                    {p.path}
-                  </span>
+                  {renamingId === p.id ? (
+                    <input
+                      className="project-rename-input"
+                      value={renameValue}
+                      autoFocus
+                      spellCheck={false}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => void submitRename(p)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation()
+                        if (e.key === 'Enter') void submitRename(p)
+                        else if (e.key === 'Escape') setRenamingId(null)
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <span className="project-item-name">
+                        {p.name}
+                        {p.missing && <span className="badge badge--warn">missing</span>}
+                      </span>
+                      <span className="project-item-path" title={p.path}>
+                        {p.path}
+                      </span>
+                    </>
+                  )}
                 </div>
-                <button
-                  className="project-item-remove"
-                  title="Remove from list"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void removeProject(p)
-                  }}
-                >
-                  ✕
-                </button>
+                <div className="project-item-actions">
+                  <button
+                    className="project-item-menu-btn"
+                    title="Project actions"
+                    aria-label="Project actions"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setMenuOpenId((cur) => (cur === p.id ? null : p.id))
+                    }}
+                  >
+                    ⋯
+                  </button>
+                  {menuOpenId === p.id && (
+                    <div className="project-menu" onClick={(e) => e.stopPropagation()}>
+                      <button className="project-menu-item" onClick={() => startRename(p)}>
+                        Rename
+                      </button>
+                      <button
+                        className="project-menu-item"
+                        onClick={() => void removeFromList(p)}
+                      >
+                        Remove from list
+                      </button>
+                      <button
+                        className="project-menu-item project-menu-item--danger"
+                        onClick={() => {
+                          setMenuOpenId(null)
+                          setConfirmDelete(p)
+                        }}
+                      >
+                        Delete from disk…
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -358,6 +449,29 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
             setShowNewProject(false)
             await refreshProjects()
           }}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete project from disk?"
+          danger
+          busy={deleting}
+          confirmLabel="Move to trash"
+          onCancel={() => {
+            if (!deleting) setConfirmDelete(null)
+          }}
+          onConfirm={() => void deleteFromDisk()}
+          message={
+            <>
+              <p>
+                <strong>{confirmDelete.name}</strong> and all its files will be moved to your
+                system trash:
+              </p>
+              <p className="confirm-path">{confirmDelete.path}</p>
+              <p>The deployed Fabric app is not affected — only the local code is removed.</p>
+            </>
+          }
         />
       )}
     </div>

@@ -35,7 +35,10 @@ const api: RayfinStudioApi = {
     create: (input: CreateProjectInput) => ipcRenderer.invoke(IpcChannels.projectsCreate, input),
     open: (path: string) => ipcRenderer.invoke(IpcChannels.projectsOpen, path),
     setActive: (id: string | null) => ipcRenderer.invoke(IpcChannels.projectsSetActive, id),
-    remove: (id: string) => ipcRenderer.invoke(IpcChannels.projectsRemove, id)
+    rename: (id: string, name: string) =>
+      ipcRenderer.invoke(IpcChannels.projectsRename, id, name),
+    remove: (id: string, deleteFiles?: boolean) =>
+      ipcRenderer.invoke(IpcChannels.projectsRemove, id, deleteFiles)
   },
 
   chat: {

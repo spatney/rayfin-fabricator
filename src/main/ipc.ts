@@ -18,6 +18,7 @@ import {
   openProject,
   pickFolder,
   removeProject,
+  renameProject,
   setActive,
   setWorkspaceRoot
 } from './services/projects'
@@ -93,10 +94,13 @@ export function registerIpc(): void {
   )
   ipcMain.handle(IpcChannels.projectsOpen, (_event, path: string) => openProject(path))
   ipcMain.handle(IpcChannels.projectsSetActive, (_event, id: string | null) => setActive(id))
-  ipcMain.handle(IpcChannels.projectsRemove, (_event, id: string) => {
+  ipcMain.handle(IpcChannels.projectsRename, (_event, id: string, name: string) =>
+    renameProject(id, name)
+  )
+  ipcMain.handle(IpcChannels.projectsRemove, (_event, id: string, deleteFiles?: boolean) => {
     cancelMessage(id)
     clearHistory(id)
-    return removeProject(id)
+    return removeProject(id, deleteFiles ?? false)
   })
 
   // Chat (Copilot CLI)

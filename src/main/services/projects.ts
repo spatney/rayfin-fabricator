@@ -9,7 +9,7 @@
  *    `npm install`, but does NOT create a git repo — we `git init` ourselves.
  */
 
-import { BrowserWindow, dialog } from 'electron'
+import { BrowserWindow, dialog, shell } from 'electron'
 import { basename, join, resolve } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
@@ -255,7 +255,47 @@ export function setActive(id: string | null): ProjectsState {
   return getProjectsState()
 }
 
-export function removeProject(id: string): ProjectsState {
+/** Best-effort update of the `name:` field in rayfin/rayfin.yml. */
+function writeProjectName(dir: string, name: string): void {
+  try {
+    const file = join(dir, 'rayfin', 'rayfin.yml')
+    const yml = readFileSync(file, 'utf8')
+    // Quote names containing characters YAML would otherwise mis-parse.
+    const value = /[:#"'\n]/.test(name) ? JSON.stringify(name) : name
+    if (/^name:.*$/m.test(yml)) {
+      const next = yml.replace(/^name:.*$/m, `name: ${value}`)
+      if (next !== yml) writeFileSync(file, next, 'utf8')
+    }
+  } catch {
+    /* best-effort — the display name still updates in the store */
+  }
+}
+
+/** Rename a project's display name (and rayfin/rayfin.yml `name`). */
+export function renameProject(id: string, name: string): ProjectActionResult {
+  const project = store.findProject(id)
+  if (!project) return { ok: false, error: 'Project not found.' }
+  const trimmed = name.trim()
+  if (!trimmed) return { ok: false, error: 'Please enter a project name.' }
+  writeProjectName(project.path, trimmed)
+  store.updateProject(id, { name: trimmed })
+  const updated = store.findProject(id) ?? { ...project, name: trimmed }
+  return { ok: true, project: { ...updated, missing: !isRayfinProject(updated.path) } }
+}
+
+/**
+ * Remove a project. By default only forgets it (files stay on disk); when
+ * `deleteFiles` is set, the project folder is moved to the OS trash first.
+ */
+export async function removeProject(id: string, deleteFiles = false): Promise<ProjectsState> {
+  const project = store.findProject(id)
+  if (deleteFiles && project) {
+    try {
+      if (existsSync(project.path)) await shell.trashItem(resolve(project.path))
+    } catch {
+      /* best-effort — still forget the project below */
+    }
+  }
   store.removeProject(id)
   return getProjectsState()
 }
