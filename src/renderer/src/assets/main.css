@@ -2429,6 +2429,18 @@ code {
 
 .msg-error {
   margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.msg-error-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.msg-error-retry {
+  flex: 0 0 auto;
 }
 
 .tool-activity {

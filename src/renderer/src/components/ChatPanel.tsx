@@ -125,11 +125,23 @@ export default function ChatPanel({
     const shots = attachments ?? []
     if ((!text && shots.length === 0) || sending) return
     const prompt = text || 'Here is a screenshot of the current preview — please take a look.'
+    setInput('')
+    onAttachmentsConsumed?.()
+    await dispatch(text || '(screenshot)', prompt, shots)
+  }
+
+  /** Append a fresh turn and stream its result. Shared by send + retry. */
+  async function dispatch(
+    displayText: string,
+    prompt: string,
+    shots: PendingShot[]
+  ): Promise<void> {
+    if (sending) return
     const turnId = uid()
     const userMsg: UIChatMessage = {
       id: uid(),
       role: 'user',
-      text: text || '(screenshot)',
+      text: displayText,
       tools: [],
       pending: false,
       attachments: shots.length || undefined
@@ -143,9 +155,7 @@ export default function ChatPanel({
       pending: true
     }
     onChange((prev) => [...prev, userMsg, assistantMsg])
-    setInput('')
     setSending(true)
-    onAttachmentsConsumed?.()
     try {
       const result = await window.api.chat.send(
         project.id,
@@ -158,6 +168,16 @@ export default function ChatPanel({
     } finally {
       setSending(false)
     }
+  }
+
+  /** Re-send the user prompt that produced a failed assistant turn. */
+  async function retry(assistantId: string): Promise<void> {
+    if (sending) return
+    const idx = messages.findIndex((m) => m.id === assistantId)
+    if (idx <= 0) return
+    const user = messages[idx - 1]
+    if (!user || user.role !== 'user' || user.text === '(screenshot)') return
+    await dispatch(user.text, user.text, [])
   }
 
   async function stop(): Promise<void> {
@@ -240,43 +260,65 @@ export default function ChatPanel({
           </div>
         )}
 
-        {messages.map((m) => (
-          <div key={m.id} className={`msg msg--${m.role}`}>
-            <div className="msg-role">{m.role === 'user' ? 'You' : 'Copilot'}</div>
-            {m.tools.length > 0 && (
-              <div className="tool-activity">
-                {m.tools.map((t) => (
-                  <details key={t.id} className={`tool-call tool-call--${t.state}`}>
-                    <summary>
-                      <span className="tool-call-icon">{TOOL_ICON[t.state]}</span>
-                      <span className="tool-call-name">{t.name}</span>
-                      <span className="tool-call-title">{t.title}</span>
-                    </summary>
-                    {t.output && <pre className="tool-call-output">{t.output}</pre>}
-                  </details>
-                ))}
-              </div>
-            )}
-            {m.text &&
-              (m.role === 'assistant' ? (
-                <div className="msg-text msg-text--md">
-                  <Markdown>{m.text}</Markdown>
+        {messages.map((m, i) => {
+          const prevUser = m.role === 'assistant' && i > 0 ? messages[i - 1] : undefined
+          const canRetry =
+            Boolean(m.error) &&
+            !sending &&
+            prevUser?.role === 'user' &&
+            !prevUser.attachments &&
+            prevUser.text !== '(screenshot)'
+          return (
+            <div key={m.id} className={`msg msg--${m.role}`}>
+              <div className="msg-role">{m.role === 'user' ? 'You' : 'Copilot'}</div>
+              {m.tools.length > 0 && (
+                <div className="tool-activity">
+                  {m.tools.map((t) => (
+                    <details key={t.id} className={`tool-call tool-call--${t.state}`}>
+                      <summary>
+                        <span className="tool-call-icon">{TOOL_ICON[t.state]}</span>
+                        <span className="tool-call-name">{t.name}</span>
+                        <span className="tool-call-title">{t.title}</span>
+                      </summary>
+                      {t.output && <pre className="tool-call-output">{t.output}</pre>}
+                    </details>
+                  ))}
                 </div>
-              ) : (
-                <div className="msg-text">{m.text}</div>
-              ))}
-            {m.attachments ? (
-              <div className="msg-attach">
-                ⛶ {m.attachments} screenshot{m.attachments > 1 ? 's' : ''} attached
-              </div>
-            ) : null}
-            {m.notice && <div className="msg-notice">↻ {m.notice}</div>}
-            {m.pending && !m.text && m.tools.length === 0 && (
-              <div className="msg-thinking">Thinking…</div>
-            )}
-            {m.error && <div className="alert alert--error msg-error">{m.error}</div>}
-          </div>
-        ))}
+              )}
+              {m.text &&
+                (m.role === 'assistant' ? (
+                  <div className="msg-text msg-text--md">
+                    <Markdown>{m.text}</Markdown>
+                  </div>
+                ) : (
+                  <div className="msg-text">{m.text}</div>
+                ))}
+              {m.attachments ? (
+                <div className="msg-attach">
+                  ⛶ {m.attachments} screenshot{m.attachments > 1 ? 's' : ''} attached
+                </div>
+              ) : null}
+              {m.notice && <div className="msg-notice">↻ {m.notice}</div>}
+              {m.pending && !m.text && m.tools.length === 0 && (
+                <div className="msg-thinking">Thinking…</div>
+              )}
+              {m.error && (
+                <div className="alert alert--error msg-error">
+                  <span className="msg-error-text">{m.error}</span>
+                  {canRetry && (
+                    <button
+                      className="btn btn--xs btn--ghost msg-error-retry"
+                      onClick={() => void retry(m.id)}
+                      title="Re-send this message"
+                    >
+                      ↻ Retry
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       <div className="chat-input">
