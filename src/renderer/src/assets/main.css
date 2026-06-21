@@ -385,6 +385,10 @@ code {
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   color: var(--text);
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
@@ -410,8 +414,10 @@ code {
 }
 
 .btn--sm {
-  padding: 5px 10px;
+  height: 28px;
+  padding: 0 12px;
   font-size: 12px;
+  border-radius: 8px;
 }
 
 .btn--block {
@@ -936,6 +942,16 @@ code {
 .chip--err {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+/* In the project-header control row, size status chips like the other controls. */
+.project-meta .chip {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  border-radius: 8px;
+  padding: 0 12px;
 }
 
 /* Git status pill + commit popover (project header) */
@@ -1897,7 +1913,7 @@ code {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent);
   background: none;
   border: none;
@@ -2033,12 +2049,12 @@ code {
 
 .preview-nav {
   display: inline-flex;
-  gap: 2px;
+  gap: 4px;
 }
 
 .preview-navbtn {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2047,7 +2063,7 @@ code {
   color: var(--text);
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
@@ -2210,12 +2226,18 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: transparent;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 12px;
   color: var(--text-dim);
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 .dep-chip--set {
   color: var(--accent);
@@ -2236,8 +2258,8 @@ code {
   white-space: nowrap;
 }
 .dep-chip-caret {
-  font-size: 8px;
-  opacity: 0.6;
+  font-size: 9px;
+  color: var(--text-faint);
 }
 .dep-deploy {
   white-space: nowrap;
@@ -2245,9 +2267,11 @@ code {
 .dep-pop {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  right: 0;
+  left: auto;
   z-index: 30;
   width: 340px;
+  max-width: min(340px, calc(100vw - 32px));
   padding: 13px;
   display: flex;
   flex-direction: column;
@@ -2455,7 +2479,24 @@ code {
 }
 
 .device-select {
+  height: 28px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   cursor: pointer;
+}
+
+.device-select:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+
+.device-select:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .console-badge {
@@ -3036,7 +3077,7 @@ code {
   color: var(--text-dim);
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 8px;
   cursor: pointer;
   transition:
     border-color 0.12s ease,

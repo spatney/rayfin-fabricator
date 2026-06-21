@@ -14,7 +14,6 @@ import ConfirmModal from '../components/ConfirmModal'
 import SettingsModal from '../components/SettingsModal'
 import ChatPanel, { type UIChatMessage } from '../components/ChatPanel'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
-import GitControl from '../components/GitControl'
 import DeploymentsControl from '../components/DeploymentsControl'
 import logo from '../assets/logo.png'
 
@@ -435,7 +434,6 @@ export default function Workbench({
                   </button>
                 </div>
                 <div className="project-meta">
-                  {active.template && <span className="chip">{active.template}</span>}
                   <DeploymentsControl
                     project={active}
                     running={Boolean(deploys[active.id]?.running)}
@@ -457,7 +455,6 @@ export default function Workbench({
                     onSwitch={(workspace, byId) => switchDeployment(active.id, workspace, byId)}
                     onChanged={() => void refreshProjects()}
                   />
-                  <GitControl projectId={active.id} refreshKey={gitRefresh} />
                   {deploys[active.id]?.running ? (
                     <span className="chip chip--busy">deploying…</span>
                   ) : active.lastDeploy?.status === 'error' ? (

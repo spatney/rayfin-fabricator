@@ -353,7 +353,7 @@ export default function PreviewPane({
           {capturing && <span className="preview-loading">Capturing…</span>}
           {loading && showWebview && <span className="preview-loading">Loading…</span>}
           <select
-            className="chat-effort device-select"
+            className="device-select"
             value={device}
             onChange={(e) => setDevice(e.target.value as DeviceId)}
             disabled={!showWebview}

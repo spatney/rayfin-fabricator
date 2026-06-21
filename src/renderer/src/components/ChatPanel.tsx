@@ -445,7 +445,7 @@ export default function ChatPanel({
           )}
         </div>
         <button
-          className="btn btn--xs btn--ghost"
+          className="btn btn--sm btn--ghost"
           onClick={newChat}
           disabled={sending || messages.length === 0}
           title="Start a new conversation"
@@ -454,7 +454,7 @@ export default function ChatPanel({
         </button>
         {onToggleFocus && (
           <button
-            className={`btn btn--xs ${focused ? 'btn--primary' : 'btn--ghost'}`}
+            className={`btn btn--sm ${focused ? 'btn--primary' : 'btn--ghost'}`}
             onClick={onToggleFocus}
             title={focused ? 'Exit focus — show the preview again' : 'Focus the chat — hide the preview'}
           >
