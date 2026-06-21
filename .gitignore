@@ -3,6 +3,7 @@ out/
 dist/
 dist-electron/
 *.log
+.boot.*
 .DS_Store
 .env
 .env.local

@@ -214,6 +214,30 @@ export interface GitCommitResult {
   status: GitStatus
 }
 
+/** A node in a project's file tree (directories carry `children`). */
+export interface FileNode {
+  name: string
+  /** Project-relative POSIX-style path. */
+  path: string
+  type: 'file' | 'dir'
+  children?: FileNode[]
+}
+
+/** The result of reading one project file for the viewer. */
+export interface FileContent {
+  path: string
+  /** Size in bytes. */
+  size: number
+  /** UTF-8 text content (omitted for binary / too-large / errored reads). */
+  content?: string
+  /** True when the file is binary and not shown. */
+  binary?: boolean
+  /** True when the file exceeds the viewer size cap. */
+  tooLarge?: boolean
+  /** Populated when the read failed. */
+  error?: string
+}
+
 /* ------------------------------------------------------------------ *
  * Chat (Copilot CLI)
  * ------------------------------------------------------------------ */
@@ -314,6 +338,8 @@ export const IpcChannels = {
   projectsRemove: 'projects:remove',
   projectsGitStatus: 'projects:gitStatus',
   projectsGitCommit: 'projects:gitCommit',
+  projectsFilesTree: 'projects:filesTree',
+  projectsFilesRead: 'projects:filesRead',
 
   chatSend: 'chat:send',
   chatCancel: 'chat:cancel',
@@ -386,6 +412,12 @@ export interface RayfinStudioApi {
       status: (id: string) => Promise<GitStatus>
       /** Stage everything and commit; resolves with the post-commit status. */
       commit: (id: string, message: string) => Promise<GitCommitResult>
+    }
+    files: {
+      /** The project's pruned, sorted file tree (read-only browsing). */
+      tree: (id: string) => Promise<FileNode[]>
+      /** Read one project file's text (size-capped, traversal-guarded). */
+      read: (id: string, path: string) => Promise<FileContent>
     }
   }
 

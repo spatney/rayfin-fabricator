@@ -12,6 +12,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import ChatPanel, { type UIChatMessage } from '../components/ChatPanel'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 import GitControl from '../components/GitControl'
+import CodeViewer from '../components/CodeViewer'
 import logo from '../assets/logo.png'
 
 /** Hydrate a persisted message into a live (non-pending) UI message. */
@@ -51,6 +52,8 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   const [deleting, setDeleting] = useState(false)
   /** Bumped whenever the working tree likely changed (deploy / chat turn). */
   const [gitRefresh, setGitRefresh] = useState(0)
+  /** Project content view: the build loop (chat + preview) or the code browser. */
+  const [viewMode, setViewMode] = useState<'build' | 'code'>('build')
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
   /** Region screenshots staged per project for the next chat message. */
@@ -379,6 +382,24 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                   <h1 className="project-title">{active.name}</h1>
                   <span className="project-subpath">{active.path}</span>
                 </div>
+                <div className="project-tabs" role="tablist">
+                  <button
+                    className={`project-tab${viewMode === 'build' ? ' project-tab--active' : ''}`}
+                    role="tab"
+                    aria-selected={viewMode === 'build'}
+                    onClick={() => setViewMode('build')}
+                  >
+                    Build
+                  </button>
+                  <button
+                    className={`project-tab${viewMode === 'code' ? ' project-tab--active' : ''}`}
+                    role="tab"
+                    aria-selected={viewMode === 'code'}
+                    onClick={() => setViewMode('code')}
+                  >
+                    Code
+                  </button>
+                </div>
                 <div className="project-meta">
                   {active.template && <span className="chip">{active.template}</span>}
                   <GitControl projectId={active.id} refreshKey={gitRefresh} />
@@ -393,30 +414,34 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                   )}
                 </div>
               </div>
-              <div className="panes">
-                <section className="pane pane--chat">
-                  <ChatPanel
-                    key={active.id}
-                    project={active}
-                    messages={chats[active.id] ?? []}
-                    onChange={(updater) => setMessagesFor(active.id, updater)}
-                    onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
-                    attachments={shots[active.id] ?? []}
-                    onRemoveAttachment={(path) => removeShot(active.id, path)}
-                    onAttachmentsConsumed={() => clearShots(active.id)}
-                    onClearHistory={() => void window.api.chat.saveHistory(active.id, [])}
-                    onOptionsChanged={() => void refreshProjects()}
-                  />
-                </section>
-                <section className="pane pane--preview">
-                  <PreviewPane
-                    project={active}
-                    deploy={deploys[active.id]}
-                    onDeploy={(workspace) => void runDeploy(active.id, workspace)}
-                    onCapture={(shot) => addShot(active.id, shot)}
-                  />
-                </section>
-              </div>
+              {viewMode === 'code' ? (
+                <CodeViewer project={active} refreshKey={gitRefresh} />
+              ) : (
+                <div className="panes">
+                  <section className="pane pane--chat">
+                    <ChatPanel
+                      key={active.id}
+                      project={active}
+                      messages={chats[active.id] ?? []}
+                      onChange={(updater) => setMessagesFor(active.id, updater)}
+                      onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
+                      attachments={shots[active.id] ?? []}
+                      onRemoveAttachment={(path) => removeShot(active.id, path)}
+                      onAttachmentsConsumed={() => clearShots(active.id)}
+                      onClearHistory={() => void window.api.chat.saveHistory(active.id, [])}
+                      onOptionsChanged={() => void refreshProjects()}
+                    />
+                  </section>
+                  <section className="pane pane--preview">
+                    <PreviewPane
+                      project={active}
+                      deploy={deploys[active.id]}
+                      onDeploy={(workspace) => void runDeploy(active.id, workspace)}
+                      onCapture={(shot) => addShot(active.id, shot)}
+                    />
+                  </section>
+                </div>
+              )}
             </>
           ) : (
             <div className="content-empty">

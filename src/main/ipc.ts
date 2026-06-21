@@ -28,6 +28,7 @@ import { getState } from './services/store'
 import { cancelMessage, resetSession, sendMessage, setChatOptions } from './services/chat'
 import { loadHistory, saveHistory, clearHistory } from './services/history'
 import { getDeployStatus, hasPendingChanges, runDeploy } from './services/deploy'
+import { listProjectFiles, readProjectFile } from './services/files'
 import { saveScreenshot, cleanupScreenshots } from './services/screenshot'
 
 /** Build an onData callback that streams process output to the calling renderer. */
@@ -107,6 +108,10 @@ export function registerIpc(): void {
   ipcMain.handle(IpcChannels.projectsGitStatus, (_event, id: string) => gitStatus(id))
   ipcMain.handle(IpcChannels.projectsGitCommit, (_event, id: string, message: string) =>
     gitCommit(id, message)
+  )
+  ipcMain.handle(IpcChannels.projectsFilesTree, (_event, id: string) => listProjectFiles(id))
+  ipcMain.handle(IpcChannels.projectsFilesRead, (_event, id: string, path: string) =>
+    readProjectFile(id, path)
   )
 
   // Chat (Copilot CLI)

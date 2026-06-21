@@ -43,6 +43,11 @@ const api: RayfinStudioApi = {
       status: (id: string) => ipcRenderer.invoke(IpcChannels.projectsGitStatus, id),
       commit: (id: string, message: string) =>
         ipcRenderer.invoke(IpcChannels.projectsGitCommit, id, message)
+    },
+    files: {
+      tree: (id: string) => ipcRenderer.invoke(IpcChannels.projectsFilesTree, id),
+      read: (id: string, path: string) =>
+        ipcRenderer.invoke(IpcChannels.projectsFilesRead, id, path)
     }
   },
 

@@ -1,3 +1,5 @@
+@import 'highlight.js/styles/github-dark.css';
+
 :root {
   --bg: #0f1115;
   --bg-elev: #161922;
@@ -842,6 +844,213 @@ code {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.project-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.project-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.project-tab:hover {
+  color: var(--text);
+}
+
+.project-tab--active {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+/* Code viewer (file tree + highlighted file) */
+.code-viewer {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.code-tree {
+  width: 260px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+
+.code-tree-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.code-tree-body {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 0;
+}
+
+.code-tree-empty {
+  padding: 14px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tree-row:hover {
+  background: var(--bg-elev-2);
+}
+
+.tree-row--active {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-elev));
+  color: var(--text);
+}
+
+.tree-caret {
+  width: 12px;
+  flex: none;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.tree-row--dir .tree-name {
+  font-weight: 500;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.code-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+
+.code-path {
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-head-spacer {
+  flex: 1;
+}
+
+.code-size {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.code-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.code-empty {
+  margin: auto;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 24px;
+}
+
+.code-empty--err {
+  color: var(--danger);
+}
+
+.code-scroll {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.code-rows {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.code-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 12px 10px 12px 14px;
+  text-align: right;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border);
+  user-select: none;
+  white-space: pre;
+}
+
+.code-content {
+  margin: 0;
+  padding: 12px 16px;
+  white-space: pre;
+}
+
+.code-content code.hljs {
+  padding: 0;
+  background: transparent;
+  font: inherit;
 }
 
 /* Preview pane (deploy controls + embedded app) */
