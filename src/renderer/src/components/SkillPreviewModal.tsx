@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
+// Point @monaco-editor/react at the locally-bundled Monaco (this app runs offline
+// from a file:// renderer). Without this side-effect the editor tries to fetch
+// Monaco from the CDN and hangs forever on "Loading editor…". The Code tab pulls
+// this in too, but a user can open this preview before ever visiting that tab.
+import '../monaco'
 import type { SkillInfo, SkillSource } from '@shared/ipc'
 
 interface Props {

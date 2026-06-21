@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SkillInfo, StudioProject } from '@shared/ipc'
-import SkillPreviewModal from './SkillPreviewModal'
+
+// Lazy so Monaco (pulled in by the preview modal) stays out of the main bundle.
+const SkillPreviewModal = lazy(() => import('./SkillPreviewModal'))
 
 interface Props {
   project: StudioProject
@@ -12,8 +14,6 @@ interface SkillGroup {
   /** Stable key for the group. */
   key: string
   title: string
-  /** Optional one-line explanation under the group title. */
-  hint?: string
   skills: SkillInfo[]
 }
 
@@ -25,12 +25,7 @@ function groupSkills(skills: SkillInfo[]): SkillGroup[] {
 
   const groups: SkillGroup[] = []
   if (base.length) {
-    groups.push({
-      key: '__base',
-      title: 'Always on',
-      hint: 'Core skills Rayfin manages for you — these can’t be turned off.',
-      skills: base
-    })
+    groups.push({ key: '__base', title: 'Always on', skills: base })
   }
 
   // Catalog skills grouped by category, preserving first-seen order.
@@ -45,12 +40,7 @@ function groupSkills(skills: SkillInfo[]): SkillGroup[] {
   }
 
   if (custom.length) {
-    groups.push({
-      key: '__custom',
-      title: 'Your custom skills',
-      hint: 'Skills found in this project that aren’t part of the Fabricator catalog.',
-      skills: custom
-    })
+    groups.push({ key: '__custom', title: 'Your custom skills', skills: custom })
   }
   return groups
 }
@@ -152,7 +142,6 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
             <section className="skills-group" key={group.key}>
               <div className="skills-group-head">
                 <h3 className="skills-group-title">{group.title}</h3>
-                {group.hint && <p className="skills-group-hint">{group.hint}</p>}
               </div>
               <div className="skills-grid">
                 {group.skills.map((skill) => {
@@ -211,11 +200,13 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
       )}
 
       {preview && (
-        <SkillPreviewModal
-          projectId={project.id}
-          skill={preview}
-          onClose={() => setPreview(null)}
-        />
+        <Suspense fallback={null}>
+          <SkillPreviewModal
+            projectId={project.id}
+            skill={preview}
+            onClose={() => setPreview(null)}
+          />
+        </Suspense>
       )}
     </div>
   )

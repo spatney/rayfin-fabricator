@@ -1592,9 +1592,9 @@ code {
 }
 
 .skills-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(264px, 1fr));
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .skill-card {
@@ -1681,23 +1681,22 @@ code {
   color: var(--text-faint);
 }
 
-/* Skills: grouped sections (always-on, categories, custom) */
+/* Skills: grouped sections (always-on, categories, custom).
+   A responsive masonry of group-columns so wide windows pack several groups
+   side by side instead of stacking sparse full-width bands. Cards stack inside
+   each group. */
 .skills-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 26px;
+  columns: 340px;
+  column-gap: 22px;
 }
 
 .skills-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  break-inside: avoid;
+  margin: 0 0 22px;
 }
 
 .skills-group-head {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-soft);
 }
@@ -1709,12 +1708,6 @@ code {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-dim);
-}
-
-.skills-group-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-faint);
 }
 
 /* Skill preview modal (raw SKILL.md in Monaco) */
