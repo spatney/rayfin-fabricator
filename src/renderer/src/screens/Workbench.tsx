@@ -4,6 +4,7 @@ import type {
   AuthStatus,
   ChatMessage,
   ChatTurnResult,
+  DeployResult,
   ProjectsState,
   StudioProject
 } from '@shared/ipc'
@@ -93,7 +94,7 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   // Route streamed `rayfin up` output to the deploying project's log buffer.
   useEffect(() => {
     const off = window.api.onProcLog((event) => {
-      if (event.channel !== 'deploy:run') return
+      if (event.channel !== 'deploy:run' && event.channel !== 'deploy:dryrun') return
       const id = deployingIdRef.current
       if (!id) return
       setDeploys((all) => {
@@ -105,12 +106,12 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   }, [])
 
   const runDeploy = useCallback(
-    async (projectId: string, workspace?: string): Promise<void> => {
+    async (projectId: string, workspace?: string, force?: boolean): Promise<void> => {
       if (deployingIdRef.current) return // one deploy at a time (skeleton)
       deployingIdRef.current = projectId
-      setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
+      setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [], mode: 'deploy' } }))
       try {
-        const result = await window.api.deploy.run(projectId, workspace)
+        const result = await window.api.deploy.run(projectId, workspace, force)
         setDeploys((all) => {
           const cur = all[projectId] ?? { running: false, log: [] }
           return { ...all, [projectId]: { ...cur, running: false, result } }
@@ -123,6 +124,37 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
     },
     [refreshProjects]
   )
+
+  // Dry-run a deploy: stream the preview output, keep it visible until dismissed.
+  const runDryRun = useCallback(async (projectId: string, workspace?: string): Promise<void> => {
+    if (deployingIdRef.current) return
+    deployingIdRef.current = projectId
+    setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [], mode: 'dryrun' } }))
+    try {
+      await window.api.deploy.dryRun(projectId, workspace)
+    } finally {
+      setDeploys((all) => {
+        const cur = all[projectId] ?? { running: false, log: [], mode: 'dryrun' }
+        return { ...all, [projectId]: { ...cur, running: false } }
+      })
+      deployingIdRef.current = null
+    }
+  }, [])
+
+  // Switch the active Fabric deployment, then reflect the new URL/status.
+  const switchDeployment = useCallback(
+    async (projectId: string, workspace: string, byId: boolean): Promise<DeployResult> => {
+      const result = await window.api.deploy.switch(projectId, workspace, byId)
+      await refreshProjects()
+      setGitRefresh((n) => n + 1)
+      return result
+    },
+    [refreshProjects]
+  )
+
+  const clearDeployLog = useCallback((projectId: string): void => {
+    setDeploys((all) => ({ ...all, [projectId]: { running: false, log: [] } }))
+  }, [])
 
   // After a chat turn, persist the transcript and auto-deploy when the agent
   // left undeployed changes.
@@ -436,7 +468,11 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                     <PreviewPane
                       project={active}
                       deploy={deploys[active.id]}
-                      onDeploy={(workspace) => void runDeploy(active.id, workspace)}
+                      onDeploy={(workspace, force) => void runDeploy(active.id, workspace, force)}
+                      onDryRun={(workspace) => void runDryRun(active.id, workspace)}
+                      onListDeployments={() => window.api.deploy.list(active.id)}
+                      onSwitch={(workspace, byId) => switchDeployment(active.id, workspace, byId)}
+                      onDismissDeployLog={() => clearDeployLog(active.id)}
                       onCapture={(shot) => addShot(active.id, shot)}
                     />
                   </section>

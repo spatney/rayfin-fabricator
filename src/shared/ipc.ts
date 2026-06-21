@@ -75,6 +75,7 @@ export type ProcStreamId =
   | 'install:copilot'
   | 'create:project'
   | 'deploy:run'
+  | 'deploy:dryrun'
 
 export interface ProcLogEvent {
   channel: ProcStreamId
@@ -123,6 +124,7 @@ export type DeployOutcome =
   | 'not-signed-in'
   | 'not-found'
   | 'needs-workspace'
+  | 'needs-force'
 
 export interface DeployResult {
   ok: boolean
@@ -140,6 +142,26 @@ export interface DeployStatus {
   url?: string
   apiUrl?: string
   portalUrl?: string
+}
+
+/** Result of a `rayfin up --dry-run` preview (no API calls made). */
+export interface DryRunResult {
+  ok: boolean
+  /** The captured human-readable preview output. */
+  output: string
+  error?: string
+}
+
+/** One Fabric deployment recorded for a project (`rayfin up list`). */
+export interface FabricDeployment {
+  workspaceName: string
+  /** True for the currently active deployment (the one `rayfin up` targets). */
+  active: boolean
+  workspaceId?: string
+  itemId?: string
+  apiUrl?: string
+  hostingUrl?: string
+  deployedAt?: string
 }
 
 /** Reasoning effort levels supported by the Copilot CLI (`--effort`). */
@@ -354,6 +376,9 @@ export const IpcChannels = {
   deployRun: 'deploy:run',
   deployStatus: 'deploy:status',
   deployHasChanges: 'deploy:hasChanges',
+  deployDryRun: 'deploy:dryRun',
+  deployList: 'deploy:list',
+  deploySwitch: 'deploy:switch',
 
   // main -> renderer events
   procLog: 'proc:log',
@@ -461,11 +486,20 @@ export interface RayfinStudioApi {
      * `workspace` optionally targets a Fabric workspace by display name (first
      * deploy); subsequent deploys reuse the recorded active deployment.
      */
-    run: (projectId: string, workspace?: string) => Promise<DeployResult>
+    run: (projectId: string, workspace?: string, force?: boolean) => Promise<DeployResult>
+    /** Preview a deploy with `rayfin up --dry-run` (no API calls). */
+    dryRun: (projectId: string, workspace?: string) => Promise<DryRunResult>
     /** Read the persisted deployment status (`rayfin up status --json`). */
     status: (projectId: string) => Promise<DeployStatus>
     /** True when the project has uncommitted changes not yet deployed. */
     hasChanges: (projectId: string) => Promise<boolean>
+    /** List the Fabric deployments recorded for this project (`rayfin up list`). */
+    list: (projectId: string) => Promise<FabricDeployment[]>
+    /**
+     * Switch the active Fabric deployment (`rayfin up switch`). `workspace` is a
+     * recorded workspace name; pass `byId` to switch by workspace GUID instead.
+     */
+    switch: (projectId: string, workspace: string, byId?: boolean) => Promise<DeployResult>
   }
 
   /** Subscribe to streamed process output. Returns an unsubscribe function. */

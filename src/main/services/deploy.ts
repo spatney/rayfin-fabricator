@@ -15,7 +15,13 @@
 
 import { run } from './exec'
 import { findProject, updateDeploy, updateProject } from './store'
-import type { DeployOutcome, DeployResult, DeployStatus } from '../../shared/ipc'
+import type {
+  DeployOutcome,
+  DeployResult,
+  DeployStatus,
+  DryRunResult,
+  FabricDeployment
+} from '../../shared/ipc'
 
 type StreamFn = (stream: 'stdout' | 'stderr' | 'system', chunk: string) => void
 
@@ -119,7 +125,8 @@ async function commitCheckpoint(dir: string, message: string): Promise<void> {
 export async function runDeploy(
   projectId: string,
   onData?: StreamFn,
-  workspace?: string
+  workspace?: string,
+  force = false
 ): Promise<DeployResult> {
   const project = findProject(projectId)
   if (!project) return { ok: false, outcome: 'not-found', error: 'Project not found.' }
@@ -133,7 +140,7 @@ export async function runDeploy(
   updateDeploy(projectId, { status: 'deploying', outcome: undefined, at: new Date().toISOString() })
   onData?.('system', `Deploying ${project.name} to Fabric…\n`)
 
-  const upArgs = ['up', '-y', ...workspaceArgs(workspaceTarget)]
+  const upArgs = ['up', '-y', ...(force ? ['--force'] : []), ...workspaceArgs(workspaceTarget)]
   let captured = ''
   // Use the project's pinned CLI (devDependency) via npx, not a global rayfin.
   const result = await run('npx', ['rayfin', ...upArgs], {
@@ -154,12 +161,15 @@ export async function runDeploy(
   if (!result.ok) {
     const lower = (captured + result.stderr).toLowerCase()
     const notSignedIn = /not (logged|signed) in|login|unauthor|authenticate/.test(lower)
+    const needsForce = !force && lower.includes('destructive')
     const needsWorkspace = /no workspace targeting context|pass --workspace/.test(lower)
     const outcome: DeployOutcome = notSignedIn
       ? 'not-signed-in'
-      : needsWorkspace
-        ? 'needs-workspace'
-        : 'error'
+      : needsForce
+        ? 'needs-force'
+        : needsWorkspace
+          ? 'needs-workspace'
+          : 'error'
     const error =
       (result.stderr.trim() || captured.trim().split(/\r?\n/).slice(-3).join(' ')).slice(0, 500) ||
       `rayfin up exited with code ${result.exitCode ?? 'unknown'}.`
@@ -168,7 +178,9 @@ export async function runDeploy(
       'system',
       outcome === 'needs-workspace'
         ? '\nThis project has no Fabric workspace yet — choose one to deploy into.\n'
-        : `\nDeploy failed: ${error}\n`
+        : outcome === 'needs-force'
+          ? '\nThis deploy needs --force to apply destructive schema changes (possible data loss).\n'
+          : `\nDeploy failed: ${error}\n`
     )
     return { ok: false, outcome, error }
   }
@@ -194,4 +206,127 @@ export async function runDeploy(
   onData?.('system', `\n✅ Deployed. ${url ? `Live at ${url}` : ''}\n`)
 
   return { ok: true, outcome: 'success', url, apiUrl, portalUrl }
+}
+
+/**
+ * Preview a deploy with `rayfin up --dry-run` — reports the operations that
+ * *would* run without touching Fabric. Streams output and never throws.
+ */
+export async function dryRunDeploy(
+  projectId: string,
+  onData?: StreamFn,
+  workspace?: string
+): Promise<DryRunResult> {
+  const project = findProject(projectId)
+  if (!project) return { ok: false, output: '', error: 'Project not found.' }
+
+  const workspaceTarget = (workspace ?? project.workspace)?.trim() || undefined
+  onData?.('system', `Previewing deploy for ${project.name} (dry run — no changes)…\n`)
+
+  let captured = ''
+  const result = await run('npx', ['rayfin', 'up', '-n', ...workspaceArgs(workspaceTarget)], {
+    cwd: project.path,
+    timeout: DEPLOY_TIMEOUT_MS,
+    onData: (stream, chunk) => {
+      captured += chunk
+      onData?.(stream, chunk)
+    }
+  })
+
+  if (result.notFound) {
+    return { ok: false, output: captured, error: 'The rayfin CLI was not found on PATH.' }
+  }
+  if (!result.ok) {
+    const error =
+      (result.stderr.trim() || captured.trim().split(/\r?\n/).slice(-3).join(' ')).slice(0, 500) ||
+      `rayfin up --dry-run exited with code ${result.exitCode ?? 'unknown'}.`
+    onData?.('system', `\nDry run failed: ${error}\n`)
+    return { ok: false, output: captured, error }
+  }
+
+  onData?.('system', '\n✅ Dry run complete — no changes were made.\n')
+  return { ok: true, output: captured }
+}
+
+interface RawDeployment {
+  workspaceName?: string
+  active?: boolean
+  workspaceId?: string
+  itemId?: string
+  apiUrl?: string
+  hostingUrl?: string
+  deployedAt?: string
+}
+
+/** List the Fabric deployments recorded for a project (`rayfin up list --json`). */
+export async function listDeployments(projectId: string): Promise<FabricDeployment[]> {
+  const project = findProject(projectId)
+  if (!project) return []
+  const res = await run('npx', ['rayfin', 'up', 'list', '--json'], {
+    cwd: project.path,
+    timeout: 60_000
+  })
+  if (!res.ok) return []
+  // `up list --json` prints a single compact JSON array; grab the last line
+  // that parses as an array (defensive against any preceding noise).
+  const lines = res.stdout.split(/\r?\n/).filter((l) => l.trim())
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const parsed = JSON.parse(lines[i]) as RawDeployment[]
+      if (Array.isArray(parsed)) {
+        return parsed.map((d) => ({
+          workspaceName: d.workspaceName ?? '(unknown)',
+          active: Boolean(d.active),
+          workspaceId: d.workspaceId,
+          itemId: d.itemId,
+          apiUrl: d.apiUrl,
+          hostingUrl: d.hostingUrl,
+          deployedAt: d.deployedAt
+        }))
+      }
+    } catch {
+      /* not JSON — keep scanning upward */
+    }
+  }
+  return []
+}
+
+/**
+ * Switch the active Fabric deployment (`rayfin up switch`). Rewrites the
+ * project's `rayfin/.env`, then refreshes the recorded URL so the preview
+ * follows the newly active workspace.
+ */
+export async function switchDeployment(
+  projectId: string,
+  workspace: string,
+  byId = false
+): Promise<DeployResult> {
+  const project = findProject(projectId)
+  if (!project) return { ok: false, outcome: 'not-found', error: 'Project not found.' }
+
+  const args = byId ? ['rayfin', 'up', 'switch', '--workspace-id', workspace] : ['rayfin', 'up', 'switch', workspace]
+  const res = await run('npx', args, { cwd: project.path, timeout: 120_000 })
+  if (res.notFound) {
+    return { ok: false, outcome: 'not-found', error: 'The rayfin CLI was not found on PATH.' }
+  }
+  if (!res.ok) {
+    const error =
+      (res.stderr.trim() || res.stdout.trim().split(/\r?\n/).slice(-3).join(' ')).slice(0, 500) ||
+      'rayfin up switch failed.'
+    return { ok: false, outcome: 'error', error }
+  }
+
+  const status = await getDeployStatus(projectId)
+  const url = pickPreviewUrl(undefined, status.apiUrl, status.portalUrl)
+  updateProject(projectId, { workspace })
+  updateDeploy(projectId, {
+    url,
+    apiUrl: status.apiUrl,
+    portalUrl: status.portalUrl,
+    status: status.deployed ? 'success' : undefined,
+    outcome: status.deployed ? 'success' : undefined,
+    error: undefined,
+    at: new Date().toISOString()
+  })
+  return { ok: true, outcome: 'success', url, apiUrl: status.apiUrl, portalUrl: status.portalUrl }
 }

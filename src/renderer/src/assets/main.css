@@ -1299,6 +1299,146 @@ code {
   text-overflow: ellipsis;
 }
 
+/* Destructive-change (--force) guardrail banner */
+.preview-force-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, var(--bg-elev));
+  border-bottom: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border));
+}
+.preview-force-msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Deployments switcher popover */
+.deployments-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.deployments-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 320px;
+  max-height: 360px;
+  overflow: auto;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.deployments-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-elev-2);
+}
+.deployments-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.deployments-close:hover {
+  color: var(--text);
+  background: var(--bg-elev);
+}
+.deployments-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+.deployments-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.deployments-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.deployments-item:hover {
+  background: var(--bg-elev);
+}
+.deployments-item.is-active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
+}
+.deployments-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.deployments-item-name {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deployments-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 999px;
+  padding: 1px 6px;
+  flex: none;
+}
+.deployments-item-url {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dry-run result panel */
+.dryrun-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 760px;
+}
+.dryrun-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
 .preview-webview {
   flex: 1;
   width: 100%;

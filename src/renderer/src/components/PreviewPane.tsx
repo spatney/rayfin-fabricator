@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DeployResult, StudioProject } from '@shared/ipc'
+import type { DeployResult, FabricDeployment, StudioProject } from '@shared/ipc'
 import type { PreviewWebview } from '../webview'
 
 export interface DeployUiState {
   running: boolean
   log: string[]
   result?: DeployResult
+  /** Distinguishes a real `rayfin up` from a `--dry-run` preview. */
+  mode?: 'deploy' | 'dryrun'
 }
 
 /** A region screenshot pending attachment to the next chat message. */
@@ -20,13 +22,25 @@ interface Props {
   project: StudioProject
   deploy: DeployUiState | undefined
   /** Deploy the project; pass a workspace target (name / portal URL / GUID) when known. */
-  onDeploy: (workspace?: string) => void
+  onDeploy: (workspace?: string, force?: boolean) => void
+  /** Preview the deploy with `rayfin up --dry-run` (no Fabric changes). */
+  onDryRun: (workspace?: string) => void
+  /** Load the project's recorded Fabric deployments (`rayfin up list`). */
+  onListDeployments: () => Promise<FabricDeployment[]>
+  /** Switch the active Fabric deployment (`rayfin up switch`). */
+  onSwitch: (workspace: string, byId: boolean) => Promise<DeployResult>
+  /** Clear a finished dry-run / deploy log from the body. */
+  onDismissDeployLog: () => void
   /** Called when the user captures a region of the preview. */
   onCapture: (shot: PendingShot) => void
 }
 
-function statusLabel(running: boolean, status: string | undefined): string {
-  if (running) return 'Deploying…'
+function statusLabel(
+  running: boolean,
+  status: string | undefined,
+  mode?: 'deploy' | 'dryrun'
+): string {
+  if (running) return mode === 'dryrun' ? 'Previewing…' : 'Deploying…'
   switch (status) {
     case 'success':
       return 'Live'
@@ -39,8 +53,18 @@ function statusLabel(running: boolean, status: string | undefined): string {
   }
 }
 
-export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Props): JSX.Element {
+export default function PreviewPane({
+  project,
+  deploy,
+  onDeploy,
+  onDryRun,
+  onListDeployments,
+  onSwitch,
+  onDismissDeployLog,
+  onCapture
+}: Props): JSX.Element {
   const running = deploy?.running ?? false
+  const mode = deploy?.mode
   const deployedUrl = project.lastDeploy?.url
   const status = running ? 'deploying' : project.lastDeploy?.status
   const error = project.lastDeploy?.error
@@ -48,7 +72,14 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
   // prompt instead of a dead error so the user can pick a target and retry.
   const outcome = deploy?.result?.outcome ?? project.lastDeploy?.outcome
   const needsWorkspace = !running && outcome === 'needs-workspace'
+  // A destructive schema change needs an explicit --force opt-in (data loss risk).
+  const needsForce = !running && outcome === 'needs-force'
   const [wsInput, setWsInput] = useState(project.workspace ?? '')
+
+  // Deployments switcher (multi-deployment via `rayfin up switch`).
+  const [showDeployments, setShowDeployments] = useState(false)
+  const [deployments, setDeployments] = useState<FabricDeployment[] | null>(null)
+  const [switching, setSwitching] = useState<string | null>(null)
 
   const webviewRef = useRef<PreviewWebview | null>(null)
   const deployedUrlRef = useRef(deployedUrl)
@@ -223,6 +254,31 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
     if (running) return
     onDeploy(needsWorkspace ? wsInput.trim() || undefined : undefined)
   }
+  const submitDryRun = (): void => {
+    if (running) return
+    onDryRun(needsWorkspace ? wsInput.trim() || undefined : undefined)
+  }
+
+  const toggleDeployments = async (): Promise<void> => {
+    const next = !showDeployments
+    setShowDeployments(next)
+    if (next) {
+      setDeployments(null)
+      setDeployments(await onListDeployments())
+    }
+  }
+  const doSwitch = async (d: FabricDeployment): Promise<void> => {
+    const byId = Boolean(d.workspaceId)
+    const target = d.workspaceId ?? d.workspaceName
+    if (!target) return
+    setSwitching(target)
+    try {
+      await onSwitch(target, byId)
+      setShowDeployments(false)
+    } finally {
+      setSwitching(null)
+    }
+  }
 
   const dotClass =
     status === 'success'
@@ -233,7 +289,9 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
           ? 'busy'
           : 'idle'
 
-  const showWebview = !running && Boolean(deployedUrl)
+  // A finished dry run keeps its output visible in the body until dismissed.
+  const dryRunDone = !running && mode === 'dryrun' && (deploy?.log.length ?? 0) > 0
+  const showWebview = !running && !dryRunDone && Boolean(deployedUrl)
 
   return (
     <div className="preview">
@@ -266,7 +324,7 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
         </div>
         <span className={`preview-status preview-status--${dotClass}`}>
           <span className="preview-dot" />
-          {statusLabel(running, status)}
+          {statusLabel(running, status, mode)}
         </span>
         {(displayUrl || deployedUrl) && (
           <button className="preview-url" title={displayUrl || deployedUrl} onClick={openExternal}>
@@ -284,22 +342,124 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
         >
           {selecting ? 'Cancel' : '⛶ Capture'}
         </button>
+        <span className="deployments-wrap">
+          <button
+            className="btn btn--sm btn--ghost"
+            onClick={() => void toggleDeployments()}
+            disabled={running}
+            title="Switch between Fabric deployments"
+          >
+            ⇄ Deployments
+          </button>
+          {showDeployments && (
+            <div className="deployments-pop">
+              <div className="deployments-pop-head">
+                <span>Deployments</span>
+                <button
+                  className="deployments-close"
+                  onClick={() => setShowDeployments(false)}
+                  title="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              {deployments === null ? (
+                <div className="deployments-empty">Loading…</div>
+              ) : deployments.length === 0 ? (
+                <div className="deployments-empty">No deployments recorded yet.</div>
+              ) : (
+                <ul className="deployments-list">
+                  {deployments.map((d) => {
+                    const key = (d.workspaceId ?? d.workspaceName) + (d.itemId ?? '')
+                    const target = d.workspaceId ?? d.workspaceName
+                    return (
+                      <li
+                        key={key}
+                        className={`deployments-item${d.active ? ' is-active' : ''}`}
+                      >
+                        <div className="deployments-item-main">
+                          <span className="deployments-item-name">{d.workspaceName}</span>
+                          {d.active && <span className="deployments-badge">active</span>}
+                        </div>
+                        {(d.hostingUrl || d.apiUrl) && (
+                          <span
+                            className="deployments-item-url"
+                            title={d.hostingUrl || d.apiUrl}
+                          >
+                            {d.hostingUrl || d.apiUrl}
+                          </span>
+                        )}
+                        {!d.active && (
+                          <button
+                            className="btn btn--xs btn--ghost"
+                            disabled={Boolean(switching)}
+                            onClick={() => void doSwitch(d)}
+                          >
+                            {switching === target ? 'Switching…' : 'Switch'}
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </span>
+        <button
+          className="btn btn--sm btn--ghost"
+          onClick={submitDryRun}
+          disabled={running}
+          title="Preview the deploy without changing Fabric"
+        >
+          Dry run
+        </button>
         <button className="btn btn--sm btn--primary" onClick={submitDeploy} disabled={running}>
-          {running ? 'Deploying…' : deployedUrl ? 'Redeploy' : 'Deploy'}
+          {running ? statusLabel(true, status, mode) : deployedUrl ? 'Redeploy' : 'Deploy'}
         </button>
       </div>
 
-      {status === 'error' && error && !running && !needsWorkspace && (
+      {status === 'error' && error && !running && !needsWorkspace && !needsForce && (
         <div className="preview-error-banner" title={error}>
           ⚠ {error}
+        </div>
+      )}
+
+      {needsForce && (
+        <div className="preview-force-banner">
+          <span className="preview-force-msg" title={error}>
+            ⚠ Destructive schema change — applying may drop data.
+          </span>
+          <button className="btn btn--xs btn--ghost" onClick={submitDryRun} disabled={running}>
+            Preview changes
+          </button>
+          <button
+            className="btn btn--xs btn--danger"
+            onClick={() => onDeploy(undefined, true)}
+            disabled={running}
+          >
+            Apply anyway (--force)
+          </button>
         </div>
       )}
 
       <div className="preview-body">
         {running ? (
           <pre className="deploy-log" ref={logRef}>
-            {deploy?.log.join('') || 'Starting deploy…'}
+            {deploy?.log.join('') || (mode === 'dryrun' ? 'Starting dry run…' : 'Starting deploy…')}
           </pre>
+        ) : dryRunDone ? (
+          <div className="preview-placeholder">
+            <div className="dryrun-result">
+              <div className="dryrun-result-head">
+                <span>Dry run preview — no changes were made</span>
+                <button className="btn btn--xs btn--ghost" onClick={onDismissDeployLog}>
+                  Dismiss
+                </button>
+              </div>
+              <pre className="deploy-log deploy-log--static">{deploy?.log.join('')}</pre>
+            </div>
+          </div>
         ) : showWebview ? (
           <>
             <div

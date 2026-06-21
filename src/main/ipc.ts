@@ -27,7 +27,14 @@ import {
 import { getState } from './services/store'
 import { cancelMessage, resetSession, sendMessage, setChatOptions } from './services/chat'
 import { loadHistory, saveHistory, clearHistory } from './services/history'
-import { getDeployStatus, hasPendingChanges, runDeploy } from './services/deploy'
+import {
+  dryRunDeploy,
+  getDeployStatus,
+  hasPendingChanges,
+  listDeployments,
+  runDeploy,
+  switchDeployment
+} from './services/deploy'
 import { listProjectFiles, readProjectFile } from './services/files'
 import { saveScreenshot, cleanupScreenshots } from './services/screenshot'
 
@@ -146,8 +153,19 @@ export function registerIpc(): void {
   )
 
   // Deploy loop (Studio-owned `rayfin up`)
-  ipcMain.handle(IpcChannels.deployRun, (event, projectId: string, workspace?: string) =>
-    runDeploy(projectId, streamer(event, 'deploy:run'), workspace)
+  ipcMain.handle(IpcChannels.deployRun, (event, projectId: string, workspace?: string, force?: boolean) =>
+    runDeploy(projectId, streamer(event, 'deploy:run'), workspace, force)
+  )
+  ipcMain.handle(IpcChannels.deployDryRun, (event, projectId: string, workspace?: string) =>
+    dryRunDeploy(projectId, streamer(event, 'deploy:dryrun'), workspace)
+  )
+  ipcMain.handle(IpcChannels.deployList, (_event, projectId: string) =>
+    listDeployments(projectId)
+  )
+  ipcMain.handle(
+    IpcChannels.deploySwitch,
+    (_event, projectId: string, workspace: string, byId?: boolean) =>
+      switchDeployment(projectId, workspace, byId)
   )
   ipcMain.handle(IpcChannels.deployStatus, (_event, projectId: string) =>
     getDeployStatus(projectId)
