@@ -14,12 +14,28 @@
  */
 
 import { run } from './exec'
-import { findProject, updateDeploy } from './store'
-import type { DeployResult, DeployStatus } from '../../shared/ipc'
+import { findProject, updateDeploy, updateProject } from './store'
+import type { DeployOutcome, DeployResult, DeployStatus } from '../../shared/ipc'
 
 type StreamFn = (stream: 'stdout' | 'stderr' | 'system', chunk: string) => void
 
 const DEPLOY_TIMEOUT_MS = 20 * 60_000
+
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Map a user-supplied workspace target to the right `rayfin up` flag:
+ *  - a Fabric portal URL  → `--workspace-uri <url>`
+ *  - a bare GUID          → `--workspace-id <id>`
+ *  - anything else        → `-w <display name>`
+ */
+function workspaceArgs(workspace: string | undefined): string[] {
+  const w = workspace?.trim()
+  if (!w) return []
+  if (/^https?:\/\//i.test(w)) return ['--workspace-uri', w]
+  if (GUID_RE.test(w)) return ['--workspace-id', w]
+  return ['-w', w]
+}
 
 /** Pull a `Hosting URL:` / `Static Hosting URL:` value out of human deploy output. */
 function scrapeHostingUrl(text: string): string | undefined {
@@ -108,10 +124,16 @@ export async function runDeploy(
   const project = findProject(projectId)
   if (!project) return { ok: false, outcome: 'not-found', error: 'Project not found.' }
 
-  updateDeploy(projectId, { status: 'deploying', at: new Date().toISOString() })
+  // Explicit target wins; otherwise reuse the workspace the user picked before.
+  const workspaceTarget = (workspace ?? project.workspace)?.trim() || undefined
+  if (workspace && workspace.trim()) {
+    updateProject(projectId, { workspace: workspace.trim() })
+  }
+
+  updateDeploy(projectId, { status: 'deploying', outcome: undefined, at: new Date().toISOString() })
   onData?.('system', `Deploying ${project.name} to Fabric…\n`)
 
-  const upArgs = ['up', '-y', ...(workspace ? ['-w', workspace] : [])]
+  const upArgs = ['up', '-y', ...workspaceArgs(workspaceTarget)]
   let captured = ''
   // Use the project's pinned CLI (devDependency) via npx, not a global rayfin.
   const result = await run('npx', ['rayfin', ...upArgs], {
@@ -125,19 +147,30 @@ export async function runDeploy(
 
   if (result.notFound) {
     const error = 'The rayfin CLI was not found on PATH.'
-    updateDeploy(projectId, { status: 'error', error, at: new Date().toISOString() })
+    updateDeploy(projectId, { status: 'error', outcome: 'not-found', error, at: new Date().toISOString() })
     return { ok: false, outcome: 'not-found', error }
   }
 
   if (!result.ok) {
     const lower = (captured + result.stderr).toLowerCase()
     const notSignedIn = /not (logged|signed) in|login|unauthor|authenticate/.test(lower)
+    const needsWorkspace = /no workspace targeting context|pass --workspace/.test(lower)
+    const outcome: DeployOutcome = notSignedIn
+      ? 'not-signed-in'
+      : needsWorkspace
+        ? 'needs-workspace'
+        : 'error'
     const error =
       (result.stderr.trim() || captured.trim().split(/\r?\n/).slice(-3).join(' ')).slice(0, 500) ||
       `rayfin up exited with code ${result.exitCode ?? 'unknown'}.`
-    updateDeploy(projectId, { status: 'error', error, at: new Date().toISOString() })
-    onData?.('system', `\nDeploy failed: ${error}\n`)
-    return { ok: false, outcome: notSignedIn ? 'not-signed-in' : 'error', error }
+    updateDeploy(projectId, { status: 'error', outcome, error, at: new Date().toISOString() })
+    onData?.(
+      'system',
+      outcome === 'needs-workspace'
+        ? '\nThis project has no Fabric workspace yet — choose one to deploy into.\n'
+        : `\nDeploy failed: ${error}\n`
+    )
+    return { ok: false, outcome, error }
   }
 
   // Success — resolve the canonical URL from status, enrich with scraped hostingUrl.
@@ -152,6 +185,7 @@ export async function runDeploy(
     apiUrl,
     portalUrl,
     status: 'success',
+    outcome: 'success',
     error: undefined,
     at: new Date().toISOString()
   })

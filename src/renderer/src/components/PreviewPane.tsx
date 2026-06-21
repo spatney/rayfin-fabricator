@@ -19,7 +19,8 @@ export interface PendingShot {
 interface Props {
   project: StudioProject
   deploy: DeployUiState | undefined
-  onDeploy: () => void
+  /** Deploy the project; pass a workspace target (name / portal URL / GUID) when known. */
+  onDeploy: (workspace?: string) => void
   /** Called when the user captures a region of the preview. */
   onCapture: (shot: PendingShot) => void
 }
@@ -43,6 +44,11 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
   const deployedUrl = project.lastDeploy?.url
   const status = running ? 'deploying' : project.lastDeploy?.status
   const error = project.lastDeploy?.error
+  // The first deploy of a project has no recorded Fabric workspace — surface a
+  // prompt instead of a dead error so the user can pick a target and retry.
+  const outcome = deploy?.result?.outcome ?? project.lastDeploy?.outcome
+  const needsWorkspace = !running && outcome === 'needs-workspace'
+  const [wsInput, setWsInput] = useState(project.workspace ?? '')
 
   const webviewRef = useRef<PreviewWebview | null>(null)
   const deployedUrlRef = useRef(deployedUrl)
@@ -74,6 +80,11 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
   useEffect(() => {
     if (deployedUrl) setDisplayUrl(deployedUrl)
   }, [deployedUrl])
+
+  // Keep the workspace input seeded with the project's remembered workspace.
+  useEffect(() => {
+    setWsInput(project.workspace ?? '')
+  }, [project.workspace])
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
@@ -206,6 +217,13 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
     if (b && b.w >= 5 && b.h >= 5) void captureRegion(b)
   }
 
+  // Deploy: when the project still needs a workspace, send the typed target;
+  // otherwise let the main process reuse the project's remembered workspace.
+  const submitDeploy = (): void => {
+    if (running) return
+    onDeploy(needsWorkspace ? wsInput.trim() || undefined : undefined)
+  }
+
   const dotClass =
     status === 'success'
       ? 'ok'
@@ -266,12 +284,12 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
         >
           {selecting ? 'Cancel' : '⛶ Capture'}
         </button>
-        <button className="btn btn--sm btn--primary" onClick={onDeploy} disabled={running}>
+        <button className="btn btn--sm btn--primary" onClick={submitDeploy} disabled={running}>
           {running ? 'Deploying…' : deployedUrl ? 'Redeploy' : 'Deploy'}
         </button>
       </div>
 
-      {status === 'error' && error && !running && (
+      {status === 'error' && error && !running && !needsWorkspace && (
         <div className="preview-error-banner" title={error}>
           ⚠ {error}
         </div>
@@ -314,6 +332,42 @@ export default function PreviewPane({ project, deploy, onDeploy, onCapture }: Pr
               </div>
             )}
           </>
+        ) : needsWorkspace ? (
+          <div className="preview-placeholder">
+            <div className="ws-prompt">
+              <h3 className="ws-prompt-title">Choose a Fabric workspace</h3>
+              <p className="ws-prompt-sub">
+                <strong>{project.name}</strong> hasn’t been deployed yet. Pick the Fabric
+                workspace to deploy into — enter its name, portal URL, or workspace ID.
+              </p>
+              <div className="ws-prompt-row">
+                <input
+                  className="ws-prompt-input"
+                  value={wsInput}
+                  placeholder="Workspace name, portal URL, or ID"
+                  spellCheck={false}
+                  autoFocus
+                  onChange={(e) => setWsInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && wsInput.trim()) submitDeploy()
+                  }}
+                />
+                <button
+                  className="btn btn--primary"
+                  onClick={submitDeploy}
+                  disabled={!wsInput.trim()}
+                >
+                  Deploy here
+                </button>
+              </div>
+              <p className="ws-prompt-hint">
+                e.g. <code>Rayfin Apps</code>, a portal URL like{' '}
+                <code>https://app.fabric.microsoft.com/groups/&lt;id&gt;/list</code>, or a
+                workspace GUID.
+              </p>
+              {error && <div className="alert alert--error ws-prompt-err">{error}</div>}
+            </div>
+          </div>
         ) : (
           <div className="preview-placeholder">
             {error ? (

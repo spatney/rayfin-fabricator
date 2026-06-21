@@ -91,12 +91,12 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
   }, [])
 
   const runDeploy = useCallback(
-    async (projectId: string): Promise<void> => {
+    async (projectId: string, workspace?: string): Promise<void> => {
       if (deployingIdRef.current) return // one deploy at a time (skeleton)
       deployingIdRef.current = projectId
       setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
       try {
-        const result = await window.api.deploy.run(projectId)
+        const result = await window.api.deploy.run(projectId, workspace)
         setDeploys((all) => {
           const cur = all[projectId] ?? { running: false, log: [] }
           return { ...all, [projectId]: { ...cur, running: false, result } }
@@ -307,13 +307,14 @@ export default function Workbench({ auth, onSignOut }: Props): JSX.Element {
                     onRemoveAttachment={(path) => removeShot(active.id, path)}
                     onAttachmentsConsumed={() => clearShots(active.id)}
                     onClearHistory={() => void window.api.chat.saveHistory(active.id, [])}
+                    onOptionsChanged={() => void refreshProjects()}
                   />
                 </section>
                 <section className="pane pane--preview">
                   <PreviewPane
                     project={active}
                     deploy={deploys[active.id]}
-                    onDeploy={() => void runDeploy(active.id)}
+                    onDeploy={(workspace) => void runDeploy(active.id, workspace)}
                     onCapture={(shot) => addShot(active.id, shot)}
                   />
                 </section>

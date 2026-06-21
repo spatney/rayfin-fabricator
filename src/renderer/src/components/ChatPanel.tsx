@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import type { ChatEvent, ChatMessage, ChatToolCall, ChatTurnResult, StudioProject } from '@shared/ipc'
+import type {
+  ChatEvent,
+  ChatMessage,
+  ChatToolCall,
+  ChatTurnResult,
+  ReasoningEffort,
+  StudioProject
+} from '@shared/ipc'
 import type { PendingShot } from './PreviewPane'
 import Markdown from './Markdown'
 
@@ -8,6 +15,8 @@ export interface UIChatMessage extends ChatMessage {
   turnId?: string
   /** True while the assistant turn is still streaming. */
   pending: boolean
+  /** Transient status note (e.g. a transient-failure retry); not persisted. */
+  notice?: string
 }
 
 interface Props {
@@ -24,7 +33,14 @@ interface Props {
   onAttachmentsConsumed?: () => void
   /** Called when the user starts a new chat (parent clears persisted history). */
   onClearHistory?: () => void
+  /** Called after the model / effort options change (parent refreshes project). */
+  onOptionsChanged?: () => void
 }
+
+/** Suggested Copilot models (free-text still allowed via the datalist input). */
+const MODEL_SUGGESTIONS = ['claude-sonnet-4.5', 'gpt-5.4', 'gpt-5-mini', 'gpt-4.1', 'o4-mini']
+
+const EFFORT_OPTIONS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
 function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -33,10 +49,10 @@ function uid(): string {
 function reduce(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
   switch (ev.type) {
     case 'delta':
-      return { ...msg, text: msg.text + ev.text }
+      return { ...msg, text: msg.text + ev.text, notice: undefined }
     case 'tool-start':
       if (msg.tools.some((t) => t.id === ev.tool.id)) return msg
-      return { ...msg, tools: [...msg.tools, ev.tool] }
+      return { ...msg, tools: [...msg.tools, ev.tool], notice: undefined }
     case 'tool-end':
       return {
         ...msg,
@@ -44,10 +60,12 @@ function reduce(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
           t.id === ev.id ? { ...t, state: ev.state, output: ev.output ?? t.output } : t
         )
       }
+    case 'notice':
+      return { ...msg, notice: ev.text }
     case 'error':
-      return { ...msg, error: ev.text, pending: false }
+      return { ...msg, error: ev.text, pending: false, notice: undefined }
     case 'result':
-      return { ...msg, pending: false }
+      return { ...msg, pending: false, notice: undefined }
     default:
       return msg
   }
@@ -67,13 +85,24 @@ export default function ChatPanel({
   attachments,
   onRemoveAttachment,
   onAttachmentsConsumed,
-  onClearHistory
+  onClearHistory,
+  onOptionsChanged
 }: Props): JSX.Element {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [model, setModel] = useState(project.model ?? '')
+  const [effort, setEffort] = useState<ReasoningEffort | ''>(project.effort ?? '')
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  function saveOptions(nextModel: string, nextEffort: ReasoningEffort | ''): void {
+    void window.api.chat.setOptions(project.id, {
+      model: nextModel.trim() || undefined,
+      effort: nextEffort || undefined
+    })
+    onOptionsChanged?.()
+  }
 
   useEffect(() => {
     const off = window.api.onChatEvent((envelope) => {
@@ -152,6 +181,42 @@ export default function ChatPanel({
     <div className="chat">
       <div className="chat-toolbar">
         <span className="chat-toolbar-title">Chat</span>
+        <span className="chat-toolbar-spacer" />
+        <input
+          className="chat-model"
+          list="copilot-models"
+          value={model}
+          placeholder="Model: auto"
+          title="Copilot model (blank = auto)"
+          spellCheck={false}
+          onChange={(e) => setModel(e.target.value)}
+          onBlur={() => saveOptions(model, effort)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+          }}
+        />
+        <datalist id="copilot-models">
+          {MODEL_SUGGESTIONS.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+        <select
+          className="chat-effort"
+          value={effort}
+          title="Reasoning effort"
+          onChange={(e) => {
+            const next = e.target.value as ReasoningEffort | ''
+            setEffort(next)
+            saveOptions(model, next)
+          }}
+        >
+          <option value="">Effort: auto</option>
+          {EFFORT_OPTIONS.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
         <button
           className="btn btn--xs btn--ghost"
           onClick={newChat}
@@ -205,6 +270,7 @@ export default function ChatPanel({
                 ⛶ {m.attachments} screenshot{m.attachments > 1 ? 's' : ''} attached
               </div>
             ) : null}
+            {m.notice && <div className="msg-notice">↻ {m.notice}</div>}
             {m.pending && !m.text && m.tools.length === 0 && (
               <div className="msg-thinking">Thinking…</div>
             )}

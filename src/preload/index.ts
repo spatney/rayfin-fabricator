@@ -45,7 +45,9 @@ const api: RayfinStudioApi = {
     reset: (projectId: string) => ipcRenderer.invoke(IpcChannels.chatReset, projectId),
     history: (projectId: string) => ipcRenderer.invoke(IpcChannels.chatHistory, projectId),
     saveHistory: (projectId: string, messages) =>
-      ipcRenderer.invoke(IpcChannels.chatSaveHistory, projectId, messages)
+      ipcRenderer.invoke(IpcChannels.chatSaveHistory, projectId, messages),
+    setOptions: (projectId: string, options) =>
+      ipcRenderer.invoke(IpcChannels.chatSetOptions, projectId, options)
   },
 
   screenshot: {

@@ -4,6 +4,7 @@ import {
   type AppVersions,
   type ChatEvent,
   type ChatMessage,
+  type ChatOptions,
   type CreateProjectInput,
   type ProcStreamId,
   type ToolId
@@ -21,7 +22,7 @@ import {
   setWorkspaceRoot
 } from './services/projects'
 import { getState } from './services/store'
-import { cancelMessage, resetSession, sendMessage } from './services/chat'
+import { cancelMessage, resetSession, sendMessage, setChatOptions } from './services/chat'
 import { loadHistory, saveHistory, clearHistory } from './services/history'
 import { getDeployStatus, hasPendingChanges, runDeploy } from './services/deploy'
 import { saveScreenshot, cleanupScreenshots } from './services/screenshot'
@@ -118,6 +119,9 @@ export function registerIpc(): void {
     (_event, projectId: string, messages: ChatMessage[]) => {
       saveHistory(projectId, Array.isArray(messages) ? messages : [])
     }
+  )
+  ipcMain.handle(IpcChannels.chatSetOptions, (_event, projectId: string, options: ChatOptions) =>
+    setChatOptions(projectId, options ?? {})
   )
 
   // Preview screenshots (region capture → temp PNG → chat attachment)

@@ -107,6 +107,8 @@ export interface DeployInfo {
   portalUrl?: string
   /** 'deploying' | 'success' | 'error' | 'cancelled'. */
   status?: string
+  /** Structured outcome of the last attempt (drives e.g. the workspace prompt). */
+  outcome?: DeployOutcome
   /** Error message from the last failed deploy, if any. */
   error?: string
   /** ISO timestamp of the last deploy attempt. */
@@ -114,7 +116,13 @@ export interface DeployInfo {
 }
 
 /** Outcome of a Studio-driven `rayfin up`. */
-export type DeployOutcome = 'success' | 'error' | 'cancelled' | 'not-signed-in' | 'not-found'
+export type DeployOutcome =
+  | 'success'
+  | 'error'
+  | 'cancelled'
+  | 'not-signed-in'
+  | 'not-found'
+  | 'needs-workspace'
 
 export interface DeployResult {
   ok: boolean
@@ -134,6 +142,9 @@ export interface DeployStatus {
   portalUrl?: string
 }
 
+/** Reasoning effort levels supported by the Copilot CLI (`--effort`). */
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
 /** A project tracked by the app. Source lives in a local git repo on disk. */
 export interface StudioProject {
   /** Internal stable id (uuid) used by the app. */
@@ -150,6 +161,16 @@ export interface StudioProject {
   lastDeploy?: DeployInfo
   /** Persisted Copilot CLI session id so chat resumes across restarts. */
   copilotSessionId?: string
+  /**
+   * Last Fabric workspace target used for deploys (display name, portal URL,
+   * or GUID). Remembered after the user picks one so subsequent deploys reuse
+   * it without re-prompting.
+   */
+  workspace?: string
+  /** Copilot model id for this project's chat (`--model`); undefined = auto. */
+  model?: string
+  /** Copilot reasoning effort for this project's chat (`--effort`). */
+  effort?: ReasoningEffort
   /** True when the folder no longer exists / is no longer a Rayfin project. */
   missing?: boolean
 }
@@ -220,6 +241,14 @@ export interface ChatTurnResult {
   ranDeploy: boolean
 }
 
+/** Per-project chat configuration (model + reasoning effort). */
+export interface ChatOptions {
+  /** Copilot model id (`--model`); 'auto' or undefined lets Copilot pick. */
+  model?: string
+  /** Reasoning effort (`--effort`). */
+  effort?: ReasoningEffort
+}
+
 /**
  * A persisted chat message. This is the durable shape written to disk per
  * project so a conversation survives app restarts (the Copilot session id is
@@ -269,6 +298,7 @@ export const IpcChannels = {
   chatReset: 'chat:reset',
   chatHistory: 'chat:history',
   chatSaveHistory: 'chat:saveHistory',
+  chatSetOptions: 'chat:setOptions',
 
   screenshotSave: 'screenshot:save',
   screenshotCleanup: 'screenshot:cleanup',
@@ -348,6 +378,8 @@ export interface RayfinStudioApi {
     history: (projectId: string) => Promise<ChatMessage[]>
     /** Persist the conversation history for a project (empty array clears it). */
     saveHistory: (projectId: string, messages: ChatMessage[]) => Promise<void>
+    /** Set the model / reasoning effort used for this project's chat. */
+    setOptions: (projectId: string, options: ChatOptions) => Promise<void>
   }
 
   screenshot: {

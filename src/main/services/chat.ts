@@ -16,14 +16,28 @@ import { randomUUID } from 'crypto'
 import { run } from './exec'
 import { findProject, updateProject } from './store'
 import { cleanupScreenshots } from './screenshot'
-import type { ChatEvent, ChatTurnResult } from '../../shared/ipc'
+import type { ChatEvent, ChatOptions, ChatTurnResult } from '../../shared/ipc'
 
 type Emit = (event: ChatEvent) => void
 
 /** In-flight turns keyed by projectId, so they can be cancelled. */
 const inflight = new Map<string, { cancel: () => void }>()
 
+/** Project ids whose current turn the user explicitly cancelled (no retry). */
+const cancelled = new Set<string>()
+
 const MAX_TOOL_OUTPUT = 4000
+
+/** Up to this many copilot invocations per turn when a transient pre-work failure occurs. */
+const MAX_ATTEMPTS = 3
+
+/** Stderr signatures that indicate a transient, safe-to-retry failure. */
+const TRANSIENT_RE =
+  /rate.?limit|too many requests|temporar|timeout|etimedout|econnreset|enotfound|socket hang up|network error|503|502|500|overloaded|service unavailable|try again/i
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text
@@ -42,6 +56,8 @@ interface TurnContext {
   filesModified: string[]
   ranDeploy: boolean
   sawResult: boolean
+  /** True once any assistant text or tool call occurred (blocks unsafe retries). */
+  sawActivity: boolean
   /** Characters of each assistant message already streamed as deltas (dedup). */
   streamed: Map<string, number>
 }
@@ -58,6 +74,7 @@ function handleEvent(raw: unknown, emit: Emit, ctx: TurnContext): void {
       const id = String(data['messageId'] ?? '')
       const text = String(data['deltaContent'] ?? '')
       if (!text) break
+      ctx.sawActivity = true
       ctx.streamed.set(id, (ctx.streamed.get(id) ?? 0) + text.length)
       emit({ type: 'delta', text })
       break
@@ -78,6 +95,7 @@ function handleEvent(raw: unknown, emit: Emit, ctx: TurnContext): void {
       const title = toolTitle(toolName, args)
       const command = args && typeof args['command'] === 'string' ? (args['command'] as string) : ''
       if (/\brayfin\s+up\b/.test(command)) ctx.ranDeploy = true
+      ctx.sawActivity = true
       emit({
         type: 'tool-start',
         tool: { id: String(data['toolCallId'] ?? randomUUID()), name: toolName, title, state: 'running' }
@@ -131,24 +149,6 @@ export async function sendMessage(
     updateProject(projectId, { copilotSessionId: sessionId })
   }
 
-  const ctx: TurnContext = {
-    filesModified: [],
-    ranDeploy: false,
-    sawResult: false,
-    streamed: new Map()
-  }
-
-  let buffer = ''
-  const flushLine = (line: string): void => {
-    const trimmed = line.trim()
-    if (!trimmed) return
-    try {
-      handleEvent(JSON.parse(trimmed), emit, ctx)
-    } catch {
-      /* non-JSON line (rare) — ignore */
-    }
-  }
-
   const args = [
     '-p',
     text,
@@ -158,30 +158,34 @@ export async function sendMessage(
     sessionId,
     '-C',
     project.path,
+    ...(project.model && project.model !== 'auto' ? ['--model', project.model] : []),
+    ...(project.effort ? ['--effort', project.effort] : []),
     ...attachments.flatMap((a) => ['--attachment', a]),
     '--allow-all',
     '--no-color'
   ]
 
-  const result = await run('copilot', args, {
-    cwd: project.path,
-    timeout: 20 * 60_000,
-    onSpawn: (handle) => inflight.set(projectId, handle),
-    onData: (stream, chunk) => {
-      if (stream === 'stdout') {
-        buffer += chunk
-        let nl: number
-        while ((nl = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, nl)
-          buffer = buffer.slice(nl + 1)
-          flushLine(line)
-        }
-      }
-    }
-  })
+  cancelled.delete(projectId)
+  let ctx: TurnContext = newContext()
+  let result = await runAttempt(projectId, args, project.path, emit, ctx)
 
-  if (buffer) flushLine(buffer)
-  inflight.delete(projectId)
+  // Retry only when nothing happened yet (no output, no tools, no result) and
+  // the failure looks transient — re-running the same prompt is then side-effect free.
+  for (let attempt = 2; attempt <= MAX_ATTEMPTS; attempt++) {
+    const retryable =
+      !result.notFound &&
+      !result.ok &&
+      !ctx.sawResult &&
+      !ctx.sawActivity &&
+      !cancelled.has(projectId) &&
+      TRANSIENT_RE.test(result.stderr || '')
+    if (!retryable) break
+    emit({ type: 'notice', text: `Copilot CLI hiccup — retrying (${attempt - 1}/${MAX_ATTEMPTS - 1})…` })
+    await delay((attempt - 1) * 1000)
+    ctx = newContext()
+    result = await runAttempt(projectId, args, project.path, emit, ctx)
+  }
+
   cleanupScreenshots(attachments)
 
   if (result.notFound) {
@@ -204,10 +208,65 @@ export async function sendMessage(
   }
 }
 
+function newContext(): TurnContext {
+  return { filesModified: [], ranDeploy: false, sawResult: false, sawActivity: false, streamed: new Map() }
+}
+
+/** Run a single copilot invocation, parsing its JSONL stream into ChatEvents. */
+async function runAttempt(
+  projectId: string,
+  args: string[],
+  cwd: string,
+  emit: Emit,
+  ctx: TurnContext
+): Promise<Awaited<ReturnType<typeof run>>> {
+  let buffer = ''
+  const flushLine = (line: string): void => {
+    const trimmed = line.trim()
+    if (!trimmed) return
+    try {
+      handleEvent(JSON.parse(trimmed), emit, ctx)
+    } catch {
+      /* non-JSON line (rare) — ignore */
+    }
+  }
+
+  const result = await run('copilot', args, {
+    cwd,
+    timeout: 20 * 60_000,
+    onSpawn: (handle) => inflight.set(projectId, handle),
+    onData: (stream, chunk) => {
+      if (stream === 'stdout') {
+        buffer += chunk
+        let nl: number
+        while ((nl = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, nl)
+          buffer = buffer.slice(nl + 1)
+          flushLine(line)
+        }
+      }
+    }
+  })
+
+  if (buffer) flushLine(buffer)
+  inflight.delete(projectId)
+  return result
+}
+
 /** Cancel the in-flight turn for a project, if any. */
 export function cancelMessage(projectId: string): void {
+  cancelled.add(projectId)
   inflight.get(projectId)?.cancel()
   inflight.delete(projectId)
+}
+
+/** Persist the model / reasoning effort used for a project's chat. */
+export function setChatOptions(projectId: string, options: ChatOptions): void {
+  const model = options.model?.trim()
+  updateProject(projectId, {
+    model: model ? model : undefined,
+    effort: options.effort
+  })
 }
 
 /** Start a fresh conversation by dropping the persisted session id. */
