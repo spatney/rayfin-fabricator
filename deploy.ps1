@@ -6,7 +6,7 @@ param(
     [string]$Location = 'eastus2',
     [string]$LogAnalyticsName = 'rayfin-desktop-logs',
     [string]$AppInsightsName = 'rayfin-desktop-insights',
-    [string]$Repo = 'spatney/rayfin-desktop',
+    [string]$Repo = 'spatney/rayfin-fabricator',
     [decimal]$BudgetAmount = 5,
     [switch]$BuildLocal = $false,
     [string]$AlertEmail

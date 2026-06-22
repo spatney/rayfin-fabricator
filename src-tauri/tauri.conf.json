@@ -32,7 +32,7 @@
     "targets": ["nsis"],
     "publisher": "Rayfin Fabricator",
     "category": "DeveloperTool",
-    "copyright": "Copyright © Rayfin Fabricator",
+    "copyright": "Copyright © 2026 Sachin Patney",
     "resources": {
       "../resources/telemetry*.json": "resources/"
     },

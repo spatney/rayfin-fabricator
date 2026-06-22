@@ -4,7 +4,7 @@ version = "0.3.0"
 description = "Rayfin Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
 authors = ["Rayfin Fabricator"]
 license = "MIT"
-repository = "https://github.com/spatney/rayfin-desktop"
+repository = "https://github.com/spatney/rayfin-fabricator"
 edition = "2021"
 rust-version = "1.77.2"
 

@@ -761,6 +761,28 @@ export default function Workbench({
     }
   }
 
+  // Open a prefilled GitHub issue (app + system info) in the browser so bug
+  // reports arrive with the version/environment details already filled in.
+  function reportIssue(): void {
+    const repo = 'https://github.com/spatney/rayfin-fabricator'
+    const body = [
+      '### What happened?',
+      '',
+      '',
+      '### Steps to reproduce',
+      '',
+      '1. ',
+      '',
+      '### Environment',
+      `- App: Rayfin Fabricator ${versions?.app ?? 'unknown'}`,
+      `- Tauri: ${versions?.tauri ?? 'unknown'}`,
+      `- WebView2: ${versions?.webview2 ?? 'unknown'}`,
+      `- User agent: ${navigator.userAgent}`
+    ].join('\n')
+    const url = `${repo}/issues/new?labels=bug&title=${encodeURIComponent('[Bug] ')}&body=${encodeURIComponent(body)}`
+    void window.api.openExternal(url)
+  }
+
   // Derived side-thread view state for the active project (experimental).
   const sideThreadsOn = Boolean(settings?.experiments?.sideThreads)
   const liveThreads = (active?.threads ?? []).filter(
@@ -828,6 +850,27 @@ export default function Workbench({
         </div>
         <div className="titlebar-status">
           <span className="who">{auth.rayfin.user ?? 'Signed in'}</span>
+          <button
+            className="btn btn--sm btn--ghost"
+            onClick={reportIssue}
+            title="Report an issue on GitHub — opens a prefilled bug report with app & system info"
+          >
+            <svg
+              className="btn-ico"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            Report an issue
+          </button>
           <button
             className="btn btn--sm btn--ghost"
             onClick={() => setShowSettings(true)}

@@ -6,7 +6,7 @@
 
 - PowerShell 7 (`pwsh`)
 - Azure CLI (`az`) with access to subscription `57a3a6e5-037c-4ae2-97a3-2ec2e02c461a`
-- GitHub CLI (`gh`) authenticated to `spatney/rayfin-desktop` for automatic `APPINSIGHTS_CONNECTION_STRING` secret wiring
+- GitHub CLI (`gh`) authenticated to `spatney/rayfin-fabricator` for automatic `APPINSIGHTS_CONNECTION_STRING` secret wiring
 - Node.js/npm for local builds
 - Rust toolchain (stable, MSVC) and the WebView2 runtime for `-BuildLocal` Tauri builds
 
