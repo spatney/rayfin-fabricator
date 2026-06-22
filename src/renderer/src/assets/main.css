@@ -5097,3 +5097,122 @@ span.thread-pill {
     transform: scale(1.07);
   }
 }
+
+/* ── Annotate overlay ─────────────────────────────────────────────────────
+   Full-window surface for drawing on a frozen screenshot of the preview. The
+   native WebView2 preview is suppressed (hidden) while this is open, so normal
+   HTML stacking applies. */
+.annotate {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: rgba(5, 7, 12, 0.82);
+  animation: backdropIn 0.16s ease both;
+}
+
+.annotate-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--bg-elev-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.annotate-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.annotate-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.annotate-colors,
+.annotate-widths {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.annotate-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--border) 70%, transparent);
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.annotate-swatch:hover {
+  transform: scale(1.12);
+}
+
+.annotate-swatch.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+.annotate-width {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.annotate-width.is-active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.annotate-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.annotate-error {
+  font-size: 12px;
+  color: var(--danger);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annotate-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+
+.annotate-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  background: #fff;
+  cursor: crosshair;
+  touch-action: none;
+}

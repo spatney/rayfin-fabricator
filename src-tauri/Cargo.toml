@@ -47,6 +47,18 @@ trash = "5"
 thiserror = "2"
 anyhow = "1"
 
+# Windows-only: capture the native WebView2 preview to a PNG (ICoreWebView2::CapturePreview).
+# webview2-com / windows versions are pinned to what the vendored wry (and tauri) resolve to,
+# so Cargo unifies them rather than pulling a second copy. See services/preview.rs.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Memory",
+] }
+
 [profile.release]
 panic = "abort"
 codegen-units = 1

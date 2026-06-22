@@ -1054,6 +1054,13 @@ export interface RayfinStudioApi {
     back: () => Promise<void>
     /** Navigate forward one entry in the preview's history. */
     forward: () => Promise<void>
+    /**
+     * Capture the current preview content as a PNG `data:` URL (via WebView2's
+     * `CapturePreview`). Used by the annotate-and-attach flow: the renderer freezes
+     * this image, lets the user draw on it, then stages the result as a chat
+     * attachment. Rejects when no preview is open or capture fails.
+     */
+    capture: () => Promise<string>
     /** Subscribe to preview navigation state. Returns an unsubscribe function. */
     onNavState: (cb: (state: PreviewNavState) => void) => () => void
   }

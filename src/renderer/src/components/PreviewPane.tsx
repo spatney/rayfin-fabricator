@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeployResult, PreviewBounds, StudioProject } from '@shared/ipc'
 import { usePreviewSuppressed } from '../overlay'
+import AnnotateOverlay from './AnnotateOverlay'
 
 export interface DeployUiState {
   running: boolean
@@ -9,12 +10,9 @@ export interface DeployUiState {
 }
 
 /**
- * A region screenshot pending attachment to the next chat message.
- *
- * NOTE: region-capture is deferred in the Tauri migration (the WebView2 child
- * webview has no `capturePage` equivalent yet), so this type is currently unused
- * at runtime. It is kept — along with {@link Props.onCapture} — to preserve the
- * seam so the feature can be restored without touching the chat plumbing.
+ * An annotated screenshot pending attachment to the next chat message. Produced
+ * by {@link AnnotateOverlay} after the user draws on a frozen capture of the
+ * preview, and consumed by the chat composer (see {@link Props.onCapture}).
  */
 export interface PendingShot {
   /** Absolute temp-file path passed to copilot as `--attachment`. */
@@ -36,10 +34,7 @@ interface Props {
   deploy: DeployUiState | undefined
   /** Deploy the project; pass a workspace target (name / portal URL / GUID) when known. */
   onDeploy: (workspace?: string, force?: boolean) => void
-  /**
-   * Called when the user captures a region of the preview. Deferred in the Tauri
-   * build (see {@link PendingShot}); retained to keep the chat-attachment seam.
-   */
+  /** Called with an annotated screenshot to stage as a chat attachment. */
   onCapture: (shot: PendingShot) => void
   /** True when the preview pane is expanded to fill the build view (chat hidden). */
   focused: boolean
@@ -65,6 +60,7 @@ export default function PreviewPane({
   project,
   deploy,
   onDeploy,
+  onCapture,
   focused,
   onToggleFocus
 }: Props): JSX.Element {
@@ -89,6 +85,10 @@ export default function PreviewPane({
   const [canBack, setCanBack] = useState(false)
   const [canForward, setCanForward] = useState(false)
   const [clearing, setClearing] = useState(false)
+  // Annotate-and-attach: `captured` holds the frozen PNG (data URL) being drawn on.
+  const [captured, setCaptured] = useState<string | null>(null)
+  const [capturing, setCapturing] = useState(false)
+  const [captureErr, setCaptureErr] = useState<string | null>(null)
 
   const [device, setDevice] = useState<DeviceId>('desktop')
 
@@ -209,6 +209,20 @@ export default function PreviewPane({
     const u = displayUrl || deployedUrl
     if (u) void window.api.openExternal(u)
   }
+  // Freeze the current preview to a PNG, then open the annotate overlay on top.
+  // Capture runs while the webview is still visible; the overlay then hides it.
+  const startAnnotate = useCallback(async (): Promise<void> => {
+    setCaptureErr(null)
+    setCapturing(true)
+    try {
+      const dataUrl = await window.api.preview.capture()
+      setCaptured(dataUrl)
+    } catch (e) {
+      setCaptureErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCapturing(false)
+    }
+  }, [])
 
   const dotClass =
     status === 'success'
@@ -285,6 +299,14 @@ export default function PreviewPane({
             <option value="phone">Phone · 390</option>
           </select>
           <button
+            className="btn btn--sm btn--ghost"
+            onClick={() => void startAnnotate()}
+            disabled={!showWebview || capturing}
+            title="Take a screenshot of the preview, draw on it, and attach it to your message"
+          >
+            {capturing ? 'Capturing…' : '✎ Annotate'}
+          </button>
+          <button
             className={`btn btn--sm ${focused ? 'btn--primary' : 'btn--ghost'}`}
             onClick={onToggleFocus}
             title={focused ? 'Exit focus — show the chat again' : 'Focus the preview — hide the chat'}
@@ -293,6 +315,12 @@ export default function PreviewPane({
           </button>
         </div>
       </div>
+
+      {captureErr && (
+        <div className="preview-error-banner" title={captureErr}>
+          ⚠ Couldn’t capture the preview: {captureErr}
+        </div>
+      )}
 
       {status === 'error' && error && !running && !needsWorkspace && !needsForce && (
         <div className="preview-error-banner" title={error}>
@@ -357,6 +385,17 @@ export default function PreviewPane({
           </div>
         )}
       </div>
+
+      {captured && (
+        <AnnotateOverlay
+          image={captured}
+          onCancel={() => setCaptured(null)}
+          onConfirm={(shot) => {
+            onCapture(shot)
+            setCaptured(null)
+          }}
+        />
+      )}
     </div>
   )
 }

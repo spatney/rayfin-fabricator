@@ -140,6 +140,7 @@ pub fn run() {
       services::preview::preview_clear_data,
       services::preview::preview_back,
       services::preview::preview_forward,
+      services::preview::preview_capture,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

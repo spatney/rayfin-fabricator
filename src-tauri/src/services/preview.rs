@@ -17,6 +17,7 @@
 
 use std::sync::Mutex;
 
+use base64::Engine;
 use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, Url, WebviewUrl};
 use tauri_plugin_opener::OpenerExt;
@@ -339,4 +340,88 @@ fn navigate_to(app: &AppHandle, target: Option<String>) {
       let _ = wv.navigate(parsed);
     }
   }
+}
+
+/// Capture the current preview content as a PNG and return it as a `data:` URL.
+///
+/// Uses WebView2's `ICoreWebView2::CapturePreview`, which captures the actual
+/// rendered web content (not screen pixels), so it works regardless of the
+/// webview's z-order or whether something overlaps it. The capture must run on the
+/// UI thread, so it is dispatched via [`tauri::webview::Webview::with_webview`];
+/// the resulting bytes are handed back to this async command over a oneshot
+/// channel. The renderer then shows the image in an annotation overlay.
+#[tauri::command]
+pub async fn preview_capture(app: AppHandle) -> AppResult<String> {
+  let wv = app
+    .get_webview(PREVIEW_LABEL)
+    .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
+
+  let (tx, rx) = tokio::sync::oneshot::channel::<Result<Vec<u8>, String>>();
+  wv.with_webview(move |platform| {
+    let _ = tx.send(capture_png(&platform));
+  })
+  .map_err(|e| AppError::Msg(format!("failed to access preview webview: {e}")))?;
+
+  let bytes = rx
+    .await
+    .map_err(|_| AppError::Msg("preview capture was cancelled".into()))?
+    .map_err(AppError::Msg)?;
+
+  let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+  Ok(format!("data:image/png;base64,{b64}"))
+}
+
+/// Capture the WebView2 preview to PNG bytes. Runs on the UI thread inside
+/// [`preview_capture`]'s `with_webview` closure, where pumping the message loop
+/// (via `wait_for_async_operation`) to await the COM completion is safe.
+#[cfg(windows)]
+fn capture_png(platform: &tauri::webview::PlatformWebview) -> Result<Vec<u8>, String> {
+  use webview2_com::CapturePreviewCompletedHandler;
+  use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG;
+  use windows::Win32::Foundation::HGLOBAL;
+  use windows::Win32::System::Com::StructuredStorage::{CreateStreamOnHGlobal, GetHGlobalFromStream};
+  use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+
+  let core = unsafe { platform.controller().CoreWebView2() }
+    .map_err(|e| format!("CoreWebView2(): {e}"))?;
+
+  // An auto-growing in-memory stream; its HGLOBAL is freed when the last
+  // reference (`stream`) drops, after we have copied the bytes out below.
+  let stream = unsafe { CreateStreamOnHGlobal(HGLOBAL(std::ptr::null_mut()), true) }
+    .map_err(|e| format!("CreateStreamOnHGlobal: {e}"))?;
+
+  let capture_stream = stream.clone();
+  CapturePreviewCompletedHandler::wait_for_async_operation(
+    Box::new(move |handler| unsafe {
+      core
+        .CapturePreview(
+          COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
+          &capture_stream,
+          &handler,
+        )
+        .map_err(webview2_com::Error::WindowsError)
+    }),
+    Box::new(|result: windows::core::Result<()>| result),
+  )
+  .map_err(|e| format!("CapturePreview: {e}"))?;
+
+  // The PNG now lives in the stream's backing HGLOBAL — copy it into a Vec.
+  unsafe {
+    let hglobal =
+      GetHGlobalFromStream(&stream).map_err(|e| format!("GetHGlobalFromStream: {e}"))?;
+    let size = GlobalSize(hglobal);
+    let ptr = GlobalLock(hglobal) as *const u8;
+    if ptr.is_null() {
+      return Err("GlobalLock returned null".into());
+    }
+    let bytes = std::slice::from_raw_parts(ptr, size).to_vec();
+    let _ = GlobalUnlock(hglobal);
+    Ok(bytes)
+  }
+}
+
+/// Non-Windows stub so the crate still builds on other targets (WebView2-only).
+#[cfg(not(windows))]
+fn capture_png(_platform: &tauri::webview::PlatformWebview) -> Result<Vec<u8>, String> {
+  Err("preview capture is only supported on Windows".into())
 }

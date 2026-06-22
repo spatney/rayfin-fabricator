@@ -3010,7 +3010,9 @@ dependencies = [
  "tokio",
  "trash",
  "uuid",
+ "webview2-com",
  "which",
+ "windows 0.61.3",
 ]
 
 [[package]]
