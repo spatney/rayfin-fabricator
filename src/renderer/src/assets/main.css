@@ -1851,97 +1851,159 @@ code {
   gap: 10px;
 }
 
-.advisor-count {
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--danger) 34%, transparent);
-  border-radius: 999px;
-  padding: 5px 12px;
+.advisor-loading {
+  margin: 44px auto;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
 }
 
-.advisor-count--ok {
-  color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-  border-color: color-mix(in srgb, var(--ok) 34%, transparent);
-}
-
-/* Scanning indicator while a review runs. */
-.advisor-scanning {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 18px;
-  margin-bottom: 18px;
+/* Analyzing: a live feed of what Copilot is doing, so progress feels alive. */
+.advisor-analyze {
+  margin-top: 4px;
+  overflow: hidden;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  animation: turnIn 0.18s ease;
+  animation: turnIn 0.2s ease;
 }
 
-.advisor-scanner {
+.advisor-scanstrip {
   position: relative;
-  flex: none;
-  width: 50px;
-  height: 50px;
-  border-radius: var(--radius);
+  height: 3px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--accent) 9%, transparent) 0,
-      color-mix(in srgb, var(--accent) 9%, transparent) 2px,
-      transparent 2px,
-      transparent 8px
-    ),
-    var(--bg-elev);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .advisor-scanline {
   position: absolute;
-  left: 0;
-  right: 0;
-  height: 45%;
-  background: linear-gradient(
-    180deg,
-    transparent,
-    color-mix(in srgb, var(--accent) 55%, transparent),
-    transparent
-  );
-  animation: advisor-scan 1.4s ease-in-out infinite;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: advisor-scan 1.3s ease-in-out infinite;
 }
 
 @keyframes advisor-scan {
   0% {
-    transform: translateY(-110%);
+    left: -40%;
   }
   100% {
-    transform: translateY(230%);
+    left: 100%;
   }
 }
 
-.advisor-scan-text {
+.advisor-analyze-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.advisor-spinner {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: ws-spin 0.7s linear infinite;
+}
+
+.advisor-analyze-headmain {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  min-width: 0;
+  gap: 2px;
 }
 
-.advisor-scan-title {
+.advisor-analyze-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text);
 }
 
-.advisor-progress {
-  font-size: 12.5px;
+.advisor-analyze-desc {
+  font-size: 12px;
   color: var(--text-dim);
+}
+
+.advisor-analyze-meta {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.advisor-analyze-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.advisor-analyze-steps {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.advisor-feed {
+  max-height: 264px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  font-family:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.advisor-feed-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.advisor-feed-item {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  animation: advisor-feed-in 0.22s ease;
+}
+
+.advisor-feed-item--current {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.advisor-feed-icon {
+  flex: none;
+  font-size: 12px;
+}
+
+.advisor-feed-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@keyframes advisor-feed-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .advisor-error {
@@ -1949,58 +2011,134 @@ code {
   white-space: pre-wrap;
 }
 
-/* All-clear state. */
-.advisor-empty {
+.advisor-results {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+
+/* "Your code changed since this analysis" prompt. */
+.advisor-stale {
+  display: flex;
   align-items: center;
-  text-align: center;
-  gap: 6px;
-  padding: 48px 24px;
-  margin-top: 8px;
+  gap: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--pending) 12%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--pending) 38%, var(--border));
+  border-radius: var(--radius);
+}
+
+.advisor-stale-icon {
+  flex: none;
+  font-size: 15px;
+  color: var(--pending);
+}
+
+.advisor-stale-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+/* Result summary banner (status + counts + when). */
+.advisor-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   animation: turnIn 0.2s ease;
 }
 
-.advisor-empty-badge {
+.advisor-banner--ok {
+  border-color: color-mix(in srgb, var(--ok) 32%, var(--border));
+}
+
+.advisor-banner--warn {
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+}
+
+.advisor-banner-icon {
+  flex: none;
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
-  margin-bottom: 6px;
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ok) 34%, transparent);
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.advisor-empty-title {
-  margin: 0;
-  font-size: 17px;
+.advisor-banner--ok .advisor-banner-icon {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+}
+
+.advisor-banner--warn .advisor-banner-icon {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.advisor-banner-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.advisor-banner-title {
+  font-size: 16px;
   font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
-.advisor-empty-sub {
-  margin: 0;
-  max-width: 460px;
-  font-size: 13px;
-  line-height: 1.55;
+.advisor-banner-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
   color: var(--text-dim);
 }
 
-/* Results. */
-.advisor-results {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
+.advisor-meta-when {
+  color: var(--text-faint);
+}
+
+.advisor-sevpills {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.sevpill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.sevpill--high {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+}
+
+.sevpill--med {
+  color: var(--pending);
+  background: color-mix(in srgb, var(--pending) 15%, transparent);
+}
+
+.sevpill--low {
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
 }
 
 .advisor-summary {
-  margin: -4px 0 0;
+  margin: 0;
   padding: 12px 14px;
   font-size: 13px;
   line-height: 1.55;
@@ -2163,14 +2301,14 @@ code {
   margin-top: 2px;
 }
 
-/* Intro / hero (before the first run). */
+/* Intro / hero (before the first run) — intentionally generic, no fixed checklist. */
 .advisor-intro {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 8px;
-  padding: 44px 24px 40px;
+  padding: 46px 24px 42px;
   margin-top: 8px;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
@@ -2198,53 +2336,20 @@ code {
 
 .advisor-intro-sub {
   margin: 0;
-  max-width: 480px;
+  max-width: 500px;
   font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-dim);
-}
-
-.advisor-checks {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-  width: 100%;
-  max-width: 560px;
-  margin: 14px 0 6px;
-  text-align: left;
-}
-
-.advisor-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  padding: 13px 14px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-}
-
-.advisor-check-icon {
-  font-size: 18px;
-  line-height: 1.2;
-}
-
-.advisor-check-title {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.advisor-check-desc {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.6;
   color: var(--text-dim);
 }
 
 .advisor-intro-run {
-  margin-top: 8px;
+  margin-top: 12px;
+}
+
+.advisor-intro-foot {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-faint);
 }
 
 /* Skill preview modal (raw SKILL.md in Monaco) */

@@ -113,6 +113,7 @@ pub fn run() {
       // advisor
       commands::advisor::advisor_run,
       commands::advisor::advisor_cancel,
+      commands::advisor::advisor_load,
       // chat
       commands::chat::chat_send,
       commands::chat::chat_cancel,

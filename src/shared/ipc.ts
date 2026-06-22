@@ -703,7 +703,7 @@ export interface AdvisorFinding {
   recommendation: string
 }
 
-/** The full Advisor report returned by {@link RayfinStudioApi.advisor.run}. */
+/** The full Advisor report (persisted and reloaded across runs). */
 export interface AdvisorReport {
   /** True when Copilot completed and its JSON report parsed cleanly. */
   ok: boolean
@@ -712,9 +712,20 @@ export interface AdvisorReport {
   findings: AdvisorFinding[]
 }
 
+/** A saved review: the report plus when it ran, how long it took, and staleness. */
+export interface AdvisorSnapshot {
+  report: AdvisorReport
+  /** RFC3339 timestamp of when the review completed. */
+  analyzedAt: string
+  /** Wall-clock duration of the review, in milliseconds. */
+  durationMs: number
+  /** True when the project's code changed since this review (recomputed on load). */
+  stale: boolean
+}
+
 /** Streamed advisor events (main -> renderer) during a review run. */
 export type AdvisorEvent =
-  | { type: 'progress'; text: string }
+  | { type: 'progress'; text: string; tool?: string }
   | { type: 'error'; text: string }
   | { type: 'done'; ok: boolean }
 
@@ -987,13 +998,19 @@ export interface RayfinStudioApi {
   advisor: {
     /**
      * Run a security review of the project with the Copilot CLI and resolve the
-     * parsed report. Streams `advisor:event` progress (subscribe via
-     * onAdvisorEvent). Uses an ephemeral Copilot session so the review never
-     * lands in the project's Build chat history.
+     * saved snapshot (report + timing). Streams `advisor:event` progress
+     * (subscribe via onAdvisorEvent). Uses an ephemeral Copilot session so the
+     * review never lands in the project's Build chat history. A successful review
+     * is persisted and can be reloaded with {@link load}.
      */
-    run: (projectId: string) => Promise<AdvisorReport>
+    run: (projectId: string) => Promise<AdvisorSnapshot>
     /** Cancel the in-flight review for a project. Resolves true if one was running. */
     cancel: (projectId: string) => Promise<boolean>
+    /**
+     * Load the last saved review for a project (with `stale` recomputed against
+     * the current code), or null if it has never been analyzed.
+     */
+    load: (projectId: string) => Promise<AdvisorSnapshot | null>
     /** Subscribe to streamed advisor events. Returns an unsubscribe function. */
     onEvent: (cb: (envelope: AdvisorEventEnvelope) => void) => () => void
   }

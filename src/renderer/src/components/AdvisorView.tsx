@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AdvisorFinding, AdvisorReport, StudioProject } from '@shared/ipc'
+import type {
+  AdvisorFinding,
+  AdvisorSnapshot,
+  StudioProject
+} from '@shared/ipc'
 
 interface Props {
   project: StudioProject
@@ -10,22 +14,20 @@ interface Props {
 interface FindingGroup {
   key: string
   title: string
-  blurb: string
   findings: AdvisorFinding[]
 }
 
+/** One live step shown in the analyzing feed. */
+interface Step {
+  id: number
+  text: string
+  tool?: string
+}
+
 /** Display order + copy for each check category. */
-const CATEGORIES: { key: string; title: string; blurb: string }[] = [
-  {
-    key: 'auth',
-    title: 'Authentication & access',
-    blurb: 'Routes and data that can be reached without signing in.'
-  },
-  {
-    key: 'policy',
-    title: 'Data policies',
-    blurb: 'Database access that is broader than it should be.'
-  }
+const CATEGORIES: { key: string; title: string }[] = [
+  { key: 'auth', title: 'Authentication & access' },
+  { key: 'policy', title: 'Data policies' }
 ]
 
 function sevRank(severity: string): number {
@@ -71,10 +73,9 @@ function groupFindings(findings: AdvisorFinding[]): FindingGroup[] {
     }
   }
 
-  // Any categories the model invented beyond our known set.
   const extras = findings.filter((f) => !seen.has(f.category || 'other'))
   if (extras.length) {
-    groups.push({ key: 'other', title: 'Other', blurb: 'Additional findings.', findings: extras })
+    groups.push({ key: 'other', title: 'Other', findings: extras })
   }
 
   for (const g of groups) {
@@ -83,77 +84,183 @@ function groupFindings(findings: AdvisorFinding[]): FindingGroup[] {
   return groups
 }
 
+function severityCounts(findings: AdvisorFinding[]): { high: number; med: number; low: number } {
+  let high = 0
+  let med = 0
+  let low = 0
+  for (const f of findings) {
+    const c = sevClass(f.severity)
+    if (c === 'high') high += 1
+    else if (c === 'low') low += 1
+    else med += 1
+  }
+  return { high, med, low }
+}
+
+/** A small emoji icon for the tool driving a live step. */
+function toolIcon(tool?: string): string {
+  const t = (tool || '').toLowerCase()
+  if (!t) return '▹'
+  if (/(str_replace|edit|write|create)/.test(t)) return '✏️'
+  if (/(bash|shell|powershell|exec|run|command|terminal)/.test(t)) return '⚡'
+  if (/(grep|search|ripgrep|find_text)/.test(t)) return '🔎'
+  if (/(glob|find|list)/.test(t)) return '📁'
+  if (/rayfin/.test(t)) return '🐟'
+  if (/(fetch|web|http|url)/.test(t)) return '🌐'
+  if (/(view|read|cat|open|file)/.test(t)) return '📄'
+  return '▹'
+}
+
+/** `0:14` style mm:ss clock for the elapsed timer. */
+function formatClock(ms: number): string {
+  const total = Math.floor(ms / 1000)
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+/** Human duration for a completed run (e.g. `8s`, `1m 4s`). */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return '<1s'
+  const total = Math.round(ms / 1000)
+  if (total < 60) return `${total}s`
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return s ? `${m}m ${s}s` : `${m}m`
+}
+
+/** Coarse "x ago" for when a saved review ran. */
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  if (!then || Number.isNaN(then)) return 'recently'
+  const s = Math.floor((Date.now() - then) / 1000)
+  if (s < 45) return 'just now'
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d ago`
+  return new Date(then).toLocaleDateString()
+}
+
 /**
  * The Advisor tab: runs a Copilot-driven, read-only security review of the active
- * Rayfin app and presents the findings. Two checks for now — routes not behind
- * authentication, and database policies that are too permissive — each rendered as
- * a severity-coded card with a one-click "Fix with Copilot" hand-off to the chat.
+ * Rayfin app and presents the findings. The last review is saved per project and
+ * reloaded on open; if the code has changed since, it flags the result as stale
+ * and offers a re-run. Each finding is a severity-coded card with a one-click
+ * "Fix with Copilot" hand-off to the Build chat.
  */
 export default function AdvisorView({ project, onFix }: Props): JSX.Element {
-  const [report, setReport] = useState<AdvisorReport | null>(null)
+  const [snapshot, setSnapshot] = useState<AdvisorSnapshot | null>(null)
+  const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState<string | null>(null)
+  const [steps, setSteps] = useState<Step[]>([])
   const [error, setError] = useState<string | null>(null)
-  const mounted = useRef(true)
+  const [elapsed, setElapsed] = useState(0)
+
+  const mountedRef = useRef(true)
   const cancelledRef = useRef(false)
+  const startedAtRef = useRef(0)
+  const stepSeq = useRef(0)
+  const feedRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    mounted.current = true
+    mountedRef.current = true
     return () => {
-      mounted.current = false
+      mountedRef.current = false
     }
   }, [])
 
-  // Reset when switching projects.
+  // Load the saved review (with fresh staleness) whenever the project changes.
   useEffect(() => {
-    setReport(null)
-    setRunning(false)
-    setProgress(null)
+    let alive = true
+    setLoading(true)
+    setSnapshot(null)
     setError(null)
+    setSteps([])
+    setRunning(false)
+    window.api.advisor
+      .load(project.id)
+      .then((snap) => {
+        if (alive) {
+          setSnapshot(snap)
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
   }, [project.id])
 
-  // Live progress while a review runs (scoped to this project).
+  // Accumulate live progress into the scanning feed.
   useEffect(() => {
     const off = window.api.advisor.onEvent((env) => {
       if (env.projectId !== project.id) return
-      if (env.event.type === 'progress') setProgress(env.event.text)
+      if (env.event.type === 'progress') {
+        const { text, tool } = env.event
+        setSteps((prev) => {
+          const next = [...prev, { id: stepSeq.current++, text, tool }]
+          return next.length > 80 ? next.slice(next.length - 80) : next
+        })
+      }
     })
     return off
   }, [project.id])
 
+  // Tick the elapsed timer while a review runs.
+  useEffect(() => {
+    if (!running) return
+    const t = window.setInterval(() => setElapsed(Date.now() - startedAtRef.current), 200)
+    return () => window.clearInterval(t)
+  }, [running])
+
+  // Keep the feed scrolled to the newest step.
+  useEffect(() => {
+    const el = feedRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [steps])
+
   const run = useCallback(async () => {
     cancelledRef.current = false
-    setRunning(true)
+    startedAtRef.current = Date.now()
+    setElapsed(0)
+    setSteps([])
     setError(null)
-    setProgress('Starting analysis…')
-    setReport(null)
+    setRunning(true)
     try {
-      const result = await window.api.advisor.run(project.id)
-      if (!mounted.current || cancelledRef.current) return
-      setReport(result)
-      if (!result.ok) setError(result.summary)
-    } catch (err) {
-      if (mounted.current) setError(String(err))
-    } finally {
-      if (mounted.current) {
-        setRunning(false)
-        setProgress(null)
+      const snap = await window.api.advisor.run(project.id)
+      if (!mountedRef.current || cancelledRef.current) return
+      if (snap.report.ok) {
+        setSnapshot(snap)
+        setError(null)
+      } else {
+        // Keep any prior good snapshot on screen; just surface the failure.
+        setError(snap.report.summary)
       }
+    } catch (err) {
+      if (mountedRef.current) setError(String(err))
+    } finally {
+      if (mountedRef.current) setRunning(false)
     }
   }, [project.id])
 
   const cancel = useCallback(() => {
     cancelledRef.current = true
     setRunning(false)
-    setProgress(null)
     void window.api.advisor.cancel(project.id)
   }, [project.id])
 
+  const report = snapshot?.report ?? null
+  const issueCount = report?.ok ? report.findings.length : 0
   const groups = useMemo(
     () => (report?.ok ? groupFindings(report.findings) : []),
     [report]
   )
-  const issueCount = report?.ok ? report.findings.length : 0
+  const counts = useMemo(() => severityCounts(report?.findings ?? []), [report])
 
   return (
     <div className="advisor">
@@ -161,142 +268,186 @@ export default function AdvisorView({ project, onFix }: Props): JSX.Element {
         <div>
           <h2 className="advisor-title">Advisor</h2>
           <p className="advisor-sub">
-            Run a Copilot-powered security review of your app. It flags routes that
-            aren’t behind authentication and database policies that are too permissive.
+            A Copilot-powered security review of your app. It looks for access that isn’t
+            properly authenticated and data policies that are too permissive.
           </p>
         </div>
         <div className="advisor-actions">
-          {report?.ok && !running && (
-            <span className={`advisor-count${issueCount === 0 ? ' advisor-count--ok' : ''}`}>
-              {issueCount === 0 ? 'All clear' : `${issueCount} issue${issueCount === 1 ? '' : 's'}`}
-            </span>
-          )}
           {running ? (
             <button className="btn btn--sm btn--ghost" onClick={cancel}>
               Cancel
             </button>
-          ) : (
+          ) : snapshot || error ? (
             <button className="btn btn--sm btn--primary" onClick={() => void run()}>
-              {report ? 'Re-run analysis' : 'Run analysis'}
+              Re-run analysis
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {running && (
-        <div className="advisor-scanning">
-          <div className="advisor-scanner" aria-hidden="true">
+      {loading && <div className="advisor-loading">Loading saved analysis…</div>}
+
+      {!loading && running && (
+        <div className="advisor-analyze">
+          <div className="advisor-scanstrip" aria-hidden="true">
             <span className="advisor-scanline" />
           </div>
-          <div className="advisor-scan-text">
-            <span className="advisor-scan-title">Analyzing your app…</span>
-            <span className="advisor-progress">
-              {progress ?? 'Reviewing routes and data policies…'}
-            </span>
+          <div className="advisor-analyze-head">
+            <span className="advisor-spinner" aria-hidden="true" />
+            <div className="advisor-analyze-headmain">
+              <span className="advisor-analyze-title">Analyzing your app…</span>
+              <span className="advisor-analyze-desc">
+                Copilot is reading your code and checking routes and data policies.
+              </span>
+            </div>
+            <div className="advisor-analyze-meta">
+              <span className="advisor-analyze-time">{formatClock(elapsed)}</span>
+              <span className="advisor-analyze-steps">
+                {steps.length} step{steps.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
+          <div className="advisor-feed" ref={feedRef}>
+            {steps.length === 0 ? (
+              <div className="advisor-feed-empty">Starting analysis…</div>
+            ) : (
+              steps.map((s, i) => (
+                <div
+                  className={`advisor-feed-item${
+                    i === steps.length - 1 ? ' advisor-feed-item--current' : ''
+                  }`}
+                  key={s.id}
+                >
+                  <span className="advisor-feed-icon">{toolIcon(s.tool)}</span>
+                  <span className="advisor-feed-text">{s.text}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
 
-      {!running && error && <div className="alert alert--error advisor-error">{error}</div>}
+      {!loading && !running && (
+        <>
+          {error && <div className="alert alert--error advisor-error">{error}</div>}
 
-      {!running && report?.ok && issueCount === 0 && (
-        <div className="advisor-empty">
-          <div className="advisor-empty-badge" aria-hidden="true">
-            ✓
-          </div>
-          <h3 className="advisor-empty-title">No issues found</h3>
-          <p className="advisor-empty-sub">
-            {report.summary ||
-              'Your routes look authenticated and your data policies appropriately scoped.'}
-          </p>
-        </div>
-      )}
+          {snapshot && report?.ok ? (
+            <div className="advisor-results">
+              {snapshot.stale && (
+                <div className="advisor-stale">
+                  <span className="advisor-stale-icon" aria-hidden="true">
+                    ↻
+                  </span>
+                  <span className="advisor-stale-text">
+                    Your code has changed since this analysis — the results may be out of date.
+                  </span>
+                  <button className="btn btn--sm btn--primary" onClick={() => void run()}>
+                    Re-run
+                  </button>
+                </div>
+              )}
 
-      {!running && report?.ok && issueCount > 0 && (
-        <div className="advisor-results">
-          {report.summary && <p className="advisor-summary">{report.summary}</p>}
-          {groups.map((group) => (
-            <section className="advisor-group" key={group.key}>
-              <div className="advisor-group-head">
-                <h3 className="advisor-group-title">{group.title}</h3>
-                <span className="advisor-group-count">{group.findings.length}</span>
-              </div>
-              <div className="advisor-grid">
-                {group.findings.map((finding, i) => (
-                  <div className="advisor-finding" key={finding.id || `${group.key}-${i}`}>
-                    <div className="advisor-finding-top">
-                      <span className={`sev sev--${sevClass(finding.severity)}`}>
-                        {sevLabel(finding.severity)}
-                      </span>
-                      {finding.file && (
-                        <span className="advisor-file" title={finding.file}>
-                          {finding.file}
-                        </span>
-                      )}
-                    </div>
-                    <h4 className="advisor-finding-title">{finding.title}</h4>
-                    <p className="advisor-finding-detail">{finding.detail}</p>
-                    {finding.recommendation && (
-                      <div className="advisor-rec">
-                        <span className="advisor-rec-label">Fix</span>
-                        <span className="advisor-rec-text">{finding.recommendation}</span>
-                      </div>
-                    )}
-                    <div className="advisor-finding-foot">
-                      <button
-                        className="btn btn--sm btn--primary"
-                        onClick={() => onFix(finding)}
-                        title="Send this issue to the Build chat for Copilot to fix"
-                      >
-                        ✨ Fix with Copilot
-                      </button>
-                    </div>
+              <div className={`advisor-banner advisor-banner--${issueCount === 0 ? 'ok' : 'warn'}`}>
+                <div className="advisor-banner-icon" aria-hidden="true">
+                  {issueCount === 0 ? '✓' : '!'}
+                </div>
+                <div className="advisor-banner-main">
+                  <div className="advisor-banner-title">
+                    {issueCount === 0
+                      ? 'No issues found'
+                      : `${issueCount} issue${issueCount === 1 ? '' : 's'} found`}
                   </div>
-                ))}
+                  <div className="advisor-banner-meta">
+                    {issueCount > 0 && (
+                      <span className="advisor-sevpills">
+                        {counts.high > 0 && (
+                          <span className="sevpill sevpill--high">{counts.high} high</span>
+                        )}
+                        {counts.med > 0 && (
+                          <span className="sevpill sevpill--med">{counts.med} medium</span>
+                        )}
+                        {counts.low > 0 && (
+                          <span className="sevpill sevpill--low">{counts.low} low</span>
+                        )}
+                      </span>
+                    )}
+                    <span className="advisor-meta-when">
+                      Analyzed {relativeTime(snapshot.analyzedAt)} · {formatDuration(snapshot.durationMs)}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </section>
-          ))}
-        </div>
-      )}
 
-      {!running && !report && !error && (
-        <div className="advisor-intro">
-          <div className="advisor-intro-badge" aria-hidden="true">
-            🛡️
-          </div>
-          <h3 className="advisor-intro-title">Review your app for security issues</h3>
-          <p className="advisor-intro-sub">
-            The Advisor asks Copilot to read your app and report problems. It won’t change
-            any code — just run it and review what it finds.
-          </p>
-          <div className="advisor-checks">
-            <div className="advisor-check">
-              <span className="advisor-check-icon" aria-hidden="true">
-                🔒
-              </span>
-              <div>
-                <span className="advisor-check-title">Unauthenticated routes</span>
-                <span className="advisor-check-desc">
-                  Data entities and pages reachable without signing in.
-                </span>
-              </div>
+              {report.summary && (
+                <p className="advisor-summary">{report.summary}</p>
+              )}
+
+              {groups.map((group) => (
+                <section className="advisor-group" key={group.key}>
+                  <div className="advisor-group-head">
+                    <h3 className="advisor-group-title">{group.title}</h3>
+                    <span className="advisor-group-count">{group.findings.length}</span>
+                  </div>
+                  <div className="advisor-grid">
+                    {group.findings.map((finding, i) => (
+                      <div className="advisor-finding" key={finding.id || `${group.key}-${i}`}>
+                        <div className="advisor-finding-top">
+                          <span className={`sev sev--${sevClass(finding.severity)}`}>
+                            {sevLabel(finding.severity)}
+                          </span>
+                          {finding.file && (
+                            <span className="advisor-file" title={finding.file}>
+                              {finding.file}
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="advisor-finding-title">{finding.title}</h4>
+                        <p className="advisor-finding-detail">{finding.detail}</p>
+                        {finding.recommendation && (
+                          <div className="advisor-rec">
+                            <span className="advisor-rec-label">Fix</span>
+                            <span className="advisor-rec-text">{finding.recommendation}</span>
+                          </div>
+                        )}
+                        <div className="advisor-finding-foot">
+                          <button
+                            className="btn btn--sm btn--primary"
+                            onClick={() => onFix(finding)}
+                            title="Send this issue to the Build chat for Copilot to fix"
+                          >
+                            ✨ Fix with Copilot
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))}
             </div>
-            <div className="advisor-check">
-              <span className="advisor-check-icon" aria-hidden="true">
-                🗄️
-              </span>
-              <div>
-                <span className="advisor-check-title">Permissive data policies</span>
-                <span className="advisor-check-desc">
-                  Access that lets users reach data they shouldn’t.
-                </span>
+          ) : (
+            !error && (
+              <div className="advisor-intro">
+                <div className="advisor-intro-badge" aria-hidden="true">
+                  🛡️
+                </div>
+                <h3 className="advisor-intro-title">Security review</h3>
+                <p className="advisor-intro-sub">
+                  Ask Copilot to review your app for security and best-practice issues — like
+                  access that isn’t properly authenticated, or data policies that are too
+                  permissive. It reads your code and reports what it finds, without changing
+                  anything.
+                </p>
+                <button
+                  className="btn btn--primary advisor-intro-run"
+                  onClick={() => void run()}
+                >
+                  Run analysis
+                </button>
+                <span className="advisor-intro-foot">Read-only · powered by Copilot</span>
               </div>
-            </div>
-          </div>
-          <button className="btn btn--primary advisor-intro-run" onClick={() => void run()}>
-            Run analysis
-          </button>
-        </div>
+            )
+          )}
+        </>
       )}
     </div>
   )

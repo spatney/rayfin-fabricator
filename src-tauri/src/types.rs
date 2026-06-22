@@ -687,15 +687,39 @@ pub struct AdvisorFinding {
   pub recommendation: String,
 }
 
-/// The full Advisor report returned by `advisor_run`.
-#[derive(Serialize, Clone)]
+/// The full Advisor report. Persisted to disk and reloaded, so it is both
+/// `Serialize` and `Deserialize` (tolerant of older/omitted fields).
+#[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AdvisorReport {
   /// True when Copilot completed and its JSON report parsed cleanly.
+  #[serde(default)]
   pub ok: bool,
   /// One-line human summary (or a raw/error message when `ok` is false).
+  #[serde(default)]
   pub summary: String,
+  #[serde(default)]
   pub findings: Vec<AdvisorFinding>,
+}
+
+/// A saved review: the report plus when it ran, how long it took, and whether the
+/// project's code has changed since (recomputed on load via the fingerprint).
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvisorSnapshot {
+  pub report: AdvisorReport,
+  /// RFC3339 timestamp of when the review completed.
+  #[serde(default)]
+  pub analyzed_at: String,
+  /// Wall-clock duration of the review in milliseconds.
+  #[serde(default)]
+  pub duration_ms: u64,
+  /// True when the code changed since this review (set on load, not persisted meaningfully).
+  #[serde(default)]
+  pub stale: bool,
+  /// Cheap signature of the reviewed source tree, used only for change detection.
+  #[serde(default, skip_serializing_if = "String::is_empty")]
+  pub fingerprint: String,
 }
 
 /// Shape of the JSON block Copilot is asked to emit. Kept separate from
@@ -714,7 +738,12 @@ pub struct AdvisorRawReport {
 pub enum AdvisorEvent {
   /// Live status line shown while Copilot scans (from tool activity).
   #[serde(rename = "progress")]
-  Progress { text: String },
+  Progress {
+    text: String,
+    /// The tool driving this step (for an icon), when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool: Option<String>,
+  },
   #[serde(rename = "error")]
   Error { text: String },
   #[serde(rename = "done")]

@@ -10,18 +10,20 @@
 //! checks can be added later by extending the prompt alone.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{Instant, UNIX_EPOCH};
 
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 use crate::services::emit::emit_advisor_event;
 use crate::services::exec::{run, OnData, RunOptions, Stream};
-use crate::services::store;
+use crate::services::{paths, store};
 use crate::state::AppState;
-use crate::types::{AdvisorEvent, AdvisorRawReport, AdvisorReport};
+use crate::types::{AdvisorEvent, AdvisorRawReport, AdvisorReport, AdvisorSnapshot};
 
 /// 10 minute ceiling for a single review run.
 const RUN_TIMEOUT_MS: u64 = 10 * 60_000;
@@ -79,9 +81,9 @@ struct ReviewState {
   streamed: HashMap<String, usize>,
 }
 
-/// Derive a short, human progress label from a tool-start event.
-fn progress_label(data: &Value) -> String {
-  let tool = data.get("toolName").and_then(|v| v.as_str()).unwrap_or("Working");
+/// Derive a short progress label plus the tool name from a tool-start event.
+fn progress_label(data: &Value) -> (String, Option<String>) {
+  let tool = data.get("toolName").and_then(|v| v.as_str()).unwrap_or("");
   let detail = data
     .get("arguments")
     .and_then(|a| {
@@ -89,15 +91,21 @@ fn progress_label(data: &Value) -> String {
         .or_else(|| a.get("command"))
         .or_else(|| a.get("path"))
         .or_else(|| a.get("query"))
+        .or_else(|| a.get("pattern"))
+        .or_else(|| a.get("prompt"))
     })
     .and_then(|v| v.as_str())
     .unwrap_or("");
   let detail = detail.split_whitespace().collect::<Vec<_>>().join(" ");
-  if detail.is_empty() {
+  let tool_opt = (!tool.is_empty()).then(|| tool.to_string());
+  let text = if !detail.is_empty() {
+    detail.chars().take(100).collect()
+  } else if !tool.is_empty() {
     tool.to_string()
   } else {
-    detail.chars().take(80).collect()
-  }
+    "Working".to_string()
+  };
+  (text, tool_opt)
 }
 
 /// Parse one JSONL line: accumulate assistant text and surface tool activity as
@@ -105,7 +113,7 @@ fn progress_label(data: &Value) -> String {
 fn handle_line(
   line: &str,
   st: &mut ReviewState,
-  emit_progress: &mut dyn FnMut(String),
+  emit_progress: &mut dyn FnMut(String, Option<String>),
 ) {
   let trimmed = line.trim();
   if trimmed.is_empty() {
@@ -142,7 +150,8 @@ fn handle_line(
       }
     }
     "tool.execution_start" => {
-      emit_progress(progress_label(data));
+      let (text, tool) = progress_label(data);
+      emit_progress(text, tool);
     }
     _ => {}
   }
@@ -188,15 +197,118 @@ fn extract_report(text: &str) -> Option<AdvisorRawReport> {
   None
 }
 
-/// Run a read-only Copilot security review of the project and return its report.
-/// Always resolves to a report (with `ok` reflecting success) except for caller
-/// errors (unknown project, or a run already in flight).
+/// Directories that never affect a review and would be expensive to walk.
+const SKIP_DIRS: &[&str] = &[
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "out",
+  "target",
+  ".next",
+  "coverage",
+  ".rayfin",
+  ".turbo",
+  ".cache",
+];
+
+/// Walk `dir`, feeding `relpath|len|mtime` of each file into `hasher` (stat-only,
+/// no reads), skipping heavy/irrelevant directories.
+fn hash_dir(hasher: &mut Sha256, root: &Path, dir: &Path) {
+  let Ok(entries) = std::fs::read_dir(dir) else {
+    return;
+  };
+  let mut entries: Vec<_> = entries.flatten().collect();
+  entries.sort_by_key(|e| e.file_name());
+  for entry in entries {
+    let name = entry.file_name();
+    let name = name.to_string_lossy();
+    let Ok(ft) = entry.file_type() else {
+      continue;
+    };
+    let path = entry.path();
+    if ft.is_dir() {
+      if !SKIP_DIRS.contains(&name.as_ref()) {
+        hash_dir(hasher, root, &path);
+      }
+    } else if ft.is_file() {
+      let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy();
+      let (len, mtime) = entry
+        .metadata()
+        .map(|m| {
+          let mtime = m
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+          (m.len(), mtime)
+        })
+        .unwrap_or((0, 0));
+      hasher.update(rel.as_bytes());
+      hasher.update(b"\0");
+      hasher.update(len.to_le_bytes());
+      hasher.update(mtime.to_le_bytes());
+      hasher.update(b"\n");
+    }
+  }
+}
+
+/// A cheap signature of the project's source tree. Any file added, removed, or
+/// edited (size/mtime) changes it; used only to flag a saved review as stale.
+fn fingerprint(project_path: &str) -> String {
+  let root = Path::new(project_path);
+  let mut hasher = Sha256::new();
+  let mut hashed_any = false;
+  // Prefer the dirs a review actually depends on; fall back to the whole root.
+  for sub in ["rayfin", "src"] {
+    let p = root.join(sub);
+    if p.is_dir() {
+      hash_dir(&mut hasher, root, &p);
+      hashed_any = true;
+    }
+  }
+  if !hashed_any {
+    hash_dir(&mut hasher, root, root);
+  }
+  hex::encode(hasher.finalize())
+}
+
+/// Persist a successful review for later reload.
+fn save_snapshot(project_id: &str, snapshot: &AdvisorSnapshot) {
+  if let Ok(text) = serde_json::to_string_pretty(snapshot) {
+    let _ = std::fs::write(paths::advisor_file(project_id), text);
+  }
+}
+
+/// Load a saved review, recomputing `stale` against the project's current code.
+fn load_snapshot(project_id: &str, project_path: &str) -> Option<AdvisorSnapshot> {
+  let text = std::fs::read_to_string(paths::advisor_file(project_id)).ok()?;
+  let mut snapshot: AdvisorSnapshot = serde_json::from_str(&text).ok()?;
+  let current = fingerprint(project_path);
+  snapshot.stale = !snapshot.fingerprint.is_empty() && snapshot.fingerprint != current;
+  Some(snapshot)
+}
+
+/// Return the saved review for a project (with `stale` recomputed), or `None`.
+#[tauri::command]
+pub async fn advisor_load(project_id: String) -> Result<Option<AdvisorSnapshot>, String> {
+  let Some(project) = store::find_project(&project_id) else {
+    return Ok(None);
+  };
+  Ok(load_snapshot(&project_id, &project.path))
+}
+
+/// Run a read-only Copilot security review of the project and return a snapshot
+/// (report + timing). Always resolves to a snapshot (with `report.ok` reflecting
+/// success) except for caller errors (unknown project, or a run already in
+/// flight). A successful review is persisted for later reload.
 #[tauri::command]
 pub async fn advisor_run(
   app: AppHandle,
   state: State<'_, AppState>,
   project_id: String,
-) -> Result<AdvisorReport, String> {
+) -> Result<AdvisorSnapshot, String> {
   let Some(project) = store::find_project(&project_id) else {
     return Err("Project not found.".into());
   };
@@ -205,6 +317,7 @@ pub async fn advisor_run(
     return Err("An analysis is already running for this project.".into());
   };
 
+  let started = Instant::now();
   let session_id = Uuid::new_v4().to_string();
   let cwd = PathBuf::from(&project.path);
   let args: Vec<&str> = vec![
@@ -231,7 +344,9 @@ pub async fn advisor_run(
       }
       let mut st = shared.lock().unwrap();
       st.buffer.push_str(chunk);
-      let mut emit = |text: String| emit_advisor_event(&app, &pid, AdvisorEvent::Progress { text });
+      let mut emit = |text: String, tool: Option<String>| {
+        emit_advisor_event(&app, &pid, AdvisorEvent::Progress { text, tool })
+      };
       while let Some(nl) = st.buffer.find('\n') {
         let line = st.buffer[..nl].to_string();
         st.buffer.replace_range(..=nl, "");
@@ -258,7 +373,9 @@ pub async fn advisor_run(
     let mut st = shared.lock().unwrap();
     if !st.buffer.is_empty() {
       let line = std::mem::take(&mut st.buffer);
-      let mut emit = |text: String| emit_advisor_event(&app, &project_id, AdvisorEvent::Progress { text });
+      let mut emit = |text: String, tool: Option<String>| {
+        emit_advisor_event(&app, &project_id, AdvisorEvent::Progress { text, tool })
+      };
       handle_line(&line, &mut st, &mut emit);
     }
   }
@@ -300,7 +417,21 @@ pub async fn advisor_run(
     emit_advisor_event(&app, &project_id, AdvisorEvent::Error { text: report.summary.clone() });
   }
   emit_advisor_event(&app, &project_id, AdvisorEvent::Done { ok: report.ok });
-  Ok(report)
+
+  let mut snapshot = AdvisorSnapshot {
+    report,
+    analyzed_at: chrono::Utc::now().to_rfc3339(),
+    duration_ms: started.elapsed().as_millis() as u64,
+    stale: false,
+    fingerprint: String::new(),
+  };
+  // Only persist a clean, successful review so a failed/cancelled run never
+  // clobbers a good saved one.
+  if snapshot.report.ok {
+    snapshot.fingerprint = fingerprint(&project.path);
+    save_snapshot(&project_id, &snapshot);
+  }
+  Ok(snapshot)
 }
 
 /// Cancel the in-flight review for a project, if any.
