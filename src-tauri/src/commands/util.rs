@@ -85,6 +85,12 @@ pub fn annotate_state(mut state: ProjectsState) -> ProjectsState {
   state
 }
 
+/// Current UTC time as an ISO-8601 string with millisecond precision (matches
+/// the JavaScript `new Date().toISOString()` used by the original services).
+pub fn now_iso() -> String {
+  chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

@@ -216,13 +216,24 @@ where
 /// Run a command to completion, capturing (and optionally streaming) output.
 /// Never returns Err — failures surface via [`RunResult`].
 pub async fn run(file: &str, args: &[&str], opts: RunOptions) -> RunResult {
-  let resolved = resolve_program(file);
+  spawn_and_run(resolve_program(file), args, opts).await
+}
+
+/// Run a project's pinned Rayfin CLI (the `npx rayfin` equivalent) by resolving
+/// the project-local `@microsoft/rayfin-cli` script and spawning node directly,
+/// so deploys honor the version installed with the project.
+pub async fn run_project_rayfin(project_dir: &Path, args: &[&str], opts: RunOptions) -> RunResult {
+  let (program, prefix) = project_rayfin(project_dir);
+  spawn_and_run(Resolved { program, prefix, not_found: false }, args, opts).await
+}
+
+async fn spawn_and_run(resolved: Resolved, args: &[&str], opts: RunOptions) -> RunResult {
   if resolved.not_found {
     return RunResult {
       ok: false,
       exit_code: None,
       stdout: String::new(),
-      stderr: format!("{file} was not found on PATH"),
+      stderr: format!("{} was not found on PATH", resolved.program.display()),
       not_found: true,
     };
   }
