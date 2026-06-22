@@ -13,18 +13,6 @@ pub const PROC_LOG: &str = "proc:log";
 /// Event name for streamed chat events (matches `IpcChannels.chatEvent`).
 pub const CHAT_EVENT: &str = "chat:event";
 
-/// Emit one process-log line to the renderer.
-pub fn emit_proc_log(app: &AppHandle, channel: &str, stream: &str, data: &str) {
-  let _ = app.emit(
-    PROC_LOG,
-    ProcLogEvent {
-      channel: channel.to_string(),
-      stream: stream.to_string(),
-      data: data.to_string(),
-    },
-  );
-}
-
 /// Build an [`OnData`] callback that forwards process output to the renderer on
 /// the given logical channel.
 pub fn proc_streamer(app: &AppHandle, channel: &str) -> OnData {

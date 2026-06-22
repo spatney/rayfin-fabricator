@@ -11,12 +11,14 @@ permissions:
 
 jobs:
   build:
-    name: Build installers (${{ matrix.os }})
+    name: Build installer (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        # macOS is parked until the Tauri port is validated on mac; add
+        # `macos-latest` back here (and an Apple-target Rust toolchain) to ship it.
+        os: [windows-latest]
 
     steps:
       - name: Check out repository
@@ -28,6 +30,14 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install dependencies
         run: npm ci
 
@@ -36,23 +46,15 @@ jobs:
         env:
           CS: ${{ secrets.APPINSIGHTS_CONNECTION_STRING }}
 
-      - name: Build application
-        run: npm run build
+      - name: Build Tauri installer
+        run: npm run tauri:build
 
-      - name: Package Windows installer
-        if: runner.os == 'Windows'
-        run: npx electron-builder --win --publish never
-
-      - name: Package macOS installers
-        if: runner.os == 'macOS'
-        run: npx electron-builder --mac --publish never
-
-      - name: Upload dist artifacts
+      - name: Upload installer artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.os }}
-          path: dist/
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
 
   release:
@@ -79,10 +81,6 @@ jobs:
           draft: false
           fail_on_unmatched_files: false
           files: |
-            dist/*.exe
-            dist/*.dmg
-            dist/*.zip
-            dist/*.blockmap
-            dist/latest*.yml
+            dist/*-setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

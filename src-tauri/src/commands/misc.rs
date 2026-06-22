@@ -13,27 +13,19 @@ pub fn ping() -> &'static str {
 }
 
 /// Version info for the About/Settings panel. Under Tauri there is no Node/V8
-/// runtime, so those fields report the closest equivalents (Tauri + WebView2).
+/// runtime, so the panel reports the app, Tauri framework and WebView2 versions.
 #[tauri::command]
 pub fn get_versions(app: AppHandle) -> AppVersions {
   let pkg = app.package_info();
   AppVersions {
     app: pkg.version.to_string(),
-    electron: tauri::VERSION.to_string(),
-    chrome: webview_version(),
-    node: rustc_version(),
-    v8: String::new(),
+    tauri: tauri::VERSION.to_string(),
+    webview2: webview_version(),
   }
 }
 
 fn webview_version() -> String {
   tauri::webview_version().unwrap_or_default()
-}
-
-fn rustc_version() -> String {
-  // Best-effort: the compiler version baked in at build time is not available
-  // at runtime without a build script, so report the Tauri runtime instead.
-  format!("tauri {}", tauri::VERSION)
 }
 
 /// Open a URL in the user's default browser (http/https only).

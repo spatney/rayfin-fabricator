@@ -337,7 +337,7 @@ function Set-GitHubActionsValues {
 }
 
 function Invoke-LocalBuild {
-    Write-Step 'Building local Windows installer'
+    Write-Step 'Building local Windows installer (Tauri)'
     Push-Location -LiteralPath $ScriptRoot
     try {
         if (Test-Path -LiteralPath (Join-Path $ScriptRoot 'package-lock.json')) {
@@ -346,10 +346,9 @@ function Invoke-LocalBuild {
         else {
             Invoke-CommandChecked -FilePath 'npm' -Arguments @('install') | Out-Host
         }
-        Invoke-CommandChecked -FilePath 'npm' -Arguments @('run', 'build') | Out-Host
-        Invoke-CommandChecked -FilePath 'npx' -Arguments @('electron-builder', '--win') | Out-Host
+        Invoke-CommandChecked -FilePath 'npm' -Arguments @('run', 'tauri:build') | Out-Host
 
-        $distPath = Join-Path $ScriptRoot 'dist'
+        $distPath = Join-Path $ScriptRoot 'src-tauri\target\release\bundle\nsis'
         Write-Info "Local installer artifacts are available under $distPath for testing."
     }
     finally {
@@ -391,5 +390,5 @@ finally {
     Write-Host "  Application Insights:    $AppInsightsName"
     Write-Host "  Daily telemetry cap:     $DailyCapGb GB/day"
     Write-Host "  Budget guard:            `$$BudgetAmount monthly budget alert"
-    Write-Host '  Release note: Push a tag like `git tag v0.1.0 && git push origin v0.1.0` to trigger the GitHub Actions release that builds Windows + macOS installers and publishes them to a GitHub Release.'
+    Write-Host '  Release note: Push a tag like `git tag v0.1.0 && git push origin v0.1.0` to trigger the GitHub Actions release that builds the Windows installer and publishes it to a GitHub Release.'
 }

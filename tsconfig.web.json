@@ -22,7 +22,6 @@
   "include": [
     "src/renderer/src/**/*",
     "src/renderer/src/**/*.tsx",
-    "src/preload/index.d.ts",
     "src/shared/**/*"
   ]
 }

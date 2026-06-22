@@ -2,37 +2,28 @@
   "name": "rayfin-desktop",
   "version": "0.1.0",
   "description": "Rayfin Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI.",
-  "main": "./out/main/index.js",
   "author": "Rayfin Fabricator",
   "license": "MIT",
   "private": true,
   "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
     "dev:renderer": "vite",
     "build:renderer": "vite build",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
-    "start": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\"",
-    "pack:dir": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:linux": "npm run build && electron-builder --linux"
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\""
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
-    "execa": "^9.5.1",
     "highlight.js": "^11.11.1",
     "monaco-editor": "^0.52.2",
     "react": "^18.3.1",
@@ -48,9 +39,6 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^33.3.1",
-    "electron-builder": "^25.1.8",
-    "electron-vite": "^2.3.0",
     "eslint": "^9.15.0",
     "globals": "^15.12.0",
     "prettier": "^3.3.3",
@@ -59,7 +47,6 @@
     "vite": "^5.4.11"
   },
   "allowScripts": {
-    "electron@33.4.11": true,
     "esbuild@0.21.5": true
   }
 }

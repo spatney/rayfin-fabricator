@@ -9,14 +9,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AppVersions {
+  /// The Rayfin Fabricator application version.
   pub app: String,
-  /// Kept for renderer compatibility; reports the Tauri version under Tauri.
-  pub electron: String,
+  /// The Tauri framework version.
+  pub tauri: String,
   /// WebView2 runtime version on Windows (the embedded browser engine).
-  pub chrome: String,
-  /// Reports the Rust toolchain version under Tauri (no Node runtime).
-  pub node: String,
-  pub v8: String,
+  pub webview2: String,
 }
 
 /* ----------------------------- doctor ----------------------------- */

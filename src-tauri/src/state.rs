@@ -20,17 +20,6 @@ fn key(project_id: &str, thread_id: Option<&str>) -> String {
 }
 
 impl AppState {
-  /// Register a fresh cancel token for a turn, returning it.
-  pub fn begin_chat(&self, project_id: &str, thread_id: Option<&str>) -> CancelToken {
-    let token = CancelToken::new();
-    self
-      .chat_cancels
-      .lock()
-      .unwrap()
-      .insert(key(project_id, thread_id), token.clone());
-    token
-  }
-
   /// Register a fresh cancel token for a turn only if none is already running for
   /// this project/thread. Returns `None` when a turn is already in flight.
   pub fn try_begin_chat(&self, project_id: &str, thread_id: Option<&str>) -> Option<CancelToken> {

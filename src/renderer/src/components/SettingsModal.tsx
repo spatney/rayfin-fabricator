@@ -125,7 +125,7 @@ export default function SettingsModal({
         <div className="modal-footer settings-footer">
           <span className="settings-version">
             {versions
-              ? `Rayfin Fabricator · Electron ${versions.electron} · Node ${versions.node}`
+              ? `Rayfin Fabricator ${versions.app} · Tauri ${versions.tauri} · WebView2 ${versions.webview2}`
               : ''}
           </span>
           <button className="btn btn--primary" onClick={onClose}>

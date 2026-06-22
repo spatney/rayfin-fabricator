@@ -1,18 +1,16 @@
 /**
- * Shared IPC contract between the Electron main process and the renderer.
+ * Shared contract between the Rust backend and the renderer.
  *
- * Channel names and the typed surface exposed on `window.api` live here so that
- * both `src/main` (Node) and `src/renderer` (DOM) stay in sync. As new phases add
- * capabilities (env doctor, auth, projects, chat, deploy, preview), extend the
+ * Command names, event channel names and the typed surface exposed on
+ * `window.api` live here so the Rust `#[tauri::command]`s and the
+ * `src/renderer` (DOM) client stay in sync. To add capabilities, extend the
  * `RayfinStudioApi` interface and the `IpcChannels` map together.
  */
 
 export interface AppVersions {
   app: string
-  electron: string
-  chrome: string
-  node: string
-  v8: string
+  tauri: string
+  webview2: string
 }
 
 /* ------------------------------------------------------------------ *

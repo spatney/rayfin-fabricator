@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use super::paths;
 use crate::types::{
-  AppSettings, DeployInfo, ExperimentFlags, ProjectThread, ProjectsState, StudioProject,
+  AppSettings, ExperimentFlags, ProjectThread, ProjectsState, StudioProject,
 };
 
 struct Cache {
@@ -170,47 +170,6 @@ pub fn remove_project(id: &str) -> ProjectsState {
     persist(c);
     c.state.clone()
   })
-}
-
-pub fn update_deploy(id: &str, deploy: DeployInfo) -> ProjectsState {
-  with_cache(|c| {
-    if let Some(p) = c.state.projects.iter_mut().find(|p| p.id == id) {
-      let merged = merge_deploy(p.last_deploy.take(), deploy);
-      p.last_deploy = Some(merged);
-    }
-    persist(c);
-    c.state.clone()
-  })
-}
-
-/// Shallow-merge a deploy patch over the existing record (set fields win).
-fn merge_deploy(prev: Option<DeployInfo>, patch: DeployInfo) -> DeployInfo {
-  let mut base = prev.unwrap_or_default();
-  if patch.url.is_some() {
-    base.url = patch.url;
-  }
-  if patch.api_url.is_some() {
-    base.api_url = patch.api_url;
-  }
-  if patch.portal_url.is_some() {
-    base.portal_url = patch.portal_url;
-  }
-  if patch.status.is_some() {
-    base.status = patch.status;
-  }
-  if patch.outcome.is_some() {
-    base.outcome = patch.outcome;
-  }
-  if patch.error.is_some() {
-    base.error = patch.error;
-  }
-  if patch.at.is_some() {
-    base.at = patch.at;
-  }
-  if patch.commit.is_some() {
-    base.commit = patch.commit;
-  }
-  base
 }
 
 /// Mutate a tracked project in place (id preserved) and persist.

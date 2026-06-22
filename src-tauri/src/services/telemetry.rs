@@ -31,6 +31,10 @@ static SESSION_ID: Lazy<String> = Lazy::new(|| uuid::Uuid::new_v4().to_string())
 #[derive(Default, Clone)]
 pub struct TelemetryIdentity {
   pub email: Option<String>,
+  /// Raw tenant id/name — captured for parity with the Electron build but
+  /// currently unused for hashing (the `tenantHash` dimension is derived from
+  /// the email domain in [`track`]).
+  #[allow(dead_code)]
   pub tenant: Option<String>,
 }
 

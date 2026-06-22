@@ -1169,7 +1169,7 @@ export default function Workbench({
           </>
         )}
         <span className="statusbar-sep">·</span>
-        <span className="statusbar-item">WebView2 {versions?.chrome ?? '—'}</span>
+        <span className="statusbar-item">WebView2 {versions?.webview2 ?? '—'}</span>
       </footer>
 
       {showSettings && settings && (

@@ -171,3 +171,12 @@ export const api: RayfinStudioApi = {
   onChatEvent: (cb: (envelope: ChatEventEnvelope) => void) =>
     subscribe<ChatEventEnvelope>(IpcChannels.chatEvent, cb)
 }
+
+// The renderer talks to the Rust backend exclusively through `window.api`
+// (assigned from `api` in `main.tsx`). This global augmentation replaces the
+// former Electron `preload` contextBridge type declaration.
+declare global {
+  interface Window {
+    api: RayfinStudioApi
+  }
+}
