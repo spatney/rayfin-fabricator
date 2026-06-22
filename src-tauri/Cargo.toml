@@ -53,3 +53,16 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# Vendored copy of wry 0.55.1 with a single local change: it enables the WebView2
+# `AllowSingleSignOnUsingOSPrimaryAccount` environment option (see
+# vendor/wry/src/webview2/mod.rs). That lets the embedded preview present the
+# device's Entra identity (PRT / device certificate) to Azure AD, so deployed
+# apps behind a Conditional Access "require compliant/managed device" policy can
+# sign in inside the preview instead of failing with "You can't get there from
+# here". Upstream wry leaves this `false` and exposes no setter, so it must be
+# patched here. When bumping Tauri (which pins wry), re-vendor the matching wry
+# version and re-apply the one-line change, or drop this patch if upstream adds
+# the option. Full notes + upgrade steps: docs/VENDORED-WRY-PATCH.md.
+[patch.crates-io]
+wry = { path = "vendor/wry" }
