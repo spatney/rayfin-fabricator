@@ -319,7 +319,7 @@ function Set-GitHubActionsValues {
 
     if ($canUseGh) {
         try {
-            $ConnectionString | & gh secret set APPINSIGHTS_CONNECTION_STRING -R $Repo --body-file - | Out-Null
+            $ConnectionString | & gh secret set APPINSIGHTS_CONNECTION_STRING -R $Repo | Out-Null
             if ($LASTEXITCODE -ne 0) { throw 'gh secret set APPINSIGHTS_CONNECTION_STRING failed.' }
             Write-Info "GitHub Actions secret set for $Repo."
             return
