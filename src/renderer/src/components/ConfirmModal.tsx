@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useSuppressPreview } from '../overlay'
 
 interface Props {
   title: string
@@ -27,6 +28,7 @@ export default function ConfirmModal({
   onConfirm,
   onCancel
 }: Props): JSX.Element {
+  useSuppressPreview()
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && !busy) onCancel()

@@ -29,6 +29,7 @@ import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../component
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 import ThreadBar, { type ThreadView } from '../components/ThreadBar'
 import DeploymentsControl from '../components/DeploymentsControl'
+import { SuppressPreview } from '../overlay'
 import RayfinVersionControl from '../components/RayfinVersionControl'
 import SkillsView from '../components/SkillsView'
 import logo from '../assets/logo.png'
@@ -114,7 +115,6 @@ export default function Workbench({
   const [versions, setVersions] = useState<AppVersions | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const [depsMenuOpen, setDepsMenuOpen] = useState(false)
   const [projects, setProjects] = useState<ProjectsState | null>(null)
   const [showNewProject, setShowNewProject] = useState(false)
   const [opening, setOpening] = useState(false)
@@ -991,7 +991,6 @@ export default function Workbench({
                     }}
                     onSwitch={(workspace, byId) => switchDeployment(active.id, workspace, byId)}
                     onChanged={() => void refreshProjects()}
-                    onOpenChange={setDepsMenuOpen}
                   />
                   {deploys[active.id]?.running ? (
                     <span className="chip chip--busy">deploying…</span>
@@ -1116,15 +1115,6 @@ export default function Workbench({
                       focused={focusPane === 'preview'}
                       onToggleFocus={() =>
                         setFocusPane((f) => (f === 'preview' ? null : 'preview'))
-                      }
-                      suppressed={
-                        showSettings ||
-                        showNewProject ||
-                        showNewThread ||
-                        signingOut ||
-                        depsMenuOpen ||
-                        Boolean(confirmDelete) ||
-                        Boolean(confirmDiscard)
                       }
                     />
                   </section>
@@ -1286,6 +1276,7 @@ export default function Workbench({
           aria-busy="true"
           aria-label="Signing out"
         >
+          <SuppressPreview />
           <div className="signout-card">
             <div className="signout-mark">
               <img src={logo} alt="" />

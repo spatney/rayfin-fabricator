@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AppSettings, AppVersions, ThemePreference } from '@shared/ipc'
 import { applyTheme } from '../theme'
+import { useSuppressPreview } from '../overlay'
 
 interface Props {
   settings: AppSettings
@@ -22,6 +23,7 @@ export default function SettingsModal({
   onChange,
   onClose
 }: Props): JSX.Element {
+  useSuppressPreview()
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
 
   useEffect(() => {

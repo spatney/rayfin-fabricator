@@ -6,6 +6,7 @@ import type {
   FabricWorkspacesResult,
   StudioProject
 } from '@shared/ipc'
+import { useSuppressPreview } from '../overlay'
 
 interface Props {
   project: StudioProject
@@ -19,12 +20,6 @@ interface Props {
   onSwitch: (workspace: string, byId: boolean) => Promise<DeployResult>
   /** Refresh the project list after a rename / switch. */
   onChanged: () => void
-  /**
-   * Notify the parent whenever the deployments popover opens or closes. The
-   * native preview webview paints above all HTML, so the parent must hide it
-   * while the popover is open or it would cover the menu.
-   */
-  onOpenChange?: (open: boolean) => void
 }
 
 /** Where to send users who have no Fabric/Premium capacity yet. */
@@ -51,8 +46,7 @@ export default function DeploymentsControl({
   onCreate,
   onRedeploy,
   onSwitch,
-  onChanged,
-  onOpenChange
+  onChanged
 }: Props): JSX.Element {
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -99,11 +93,9 @@ export default function DeploymentsControl({
     if (!wsResult) void loadWorkspaces()
   }, [open, project.id])
 
-  // Tell the parent when the popover opens/closes so it can hide the native
-  // preview webview (which floats above all HTML) while the menu is up.
-  useEffect(() => {
-    onOpenChange?.(open)
-  }, [open])
+  // The deployments popover floats above all HTML; hide the native preview
+  // webview while it is open so it doesn't cover the menu.
+  useSuppressPreview(open)
 
   // Close on any outside click.
   useEffect(() => {

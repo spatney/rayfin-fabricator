@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CommunityGallery, ProjectActionResult, TemplateInfo } from '@shared/ipc'
+import { useSuppressPreview } from '../overlay'
 
 interface Props {
   onClose: () => void
@@ -9,6 +10,7 @@ interface Props {
 const keyOf = (t: { path?: string; name: string }): string => t.path || t.name
 
 export default function NewProjectModal({ onClose, onCreated }: Props): JSX.Element {
+  useSuppressPreview()
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(true)
   const [name, setName] = useState('')

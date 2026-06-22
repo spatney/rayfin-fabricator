@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeployResult, PreviewBounds, StudioProject } from '@shared/ipc'
+import { usePreviewSuppressed } from '../overlay'
 
 export interface DeployUiState {
   running: boolean
@@ -44,12 +45,6 @@ interface Props {
   focused: boolean
   /** Toggle preview focus (full-width preview ⇄ split with chat). */
   onToggleFocus: () => void
-  /**
-   * True when something is painted over the preview host (a modal, the sign-out
-   * overlay, …). The native webview floats above all HTML, so it must be hidden
-   * while suppressed or it would cover the overlay.
-   */
-  suppressed: boolean
 }
 
 function statusLabel(running: boolean, status: string | undefined): string {
@@ -71,9 +66,9 @@ export default function PreviewPane({
   deploy,
   onDeploy,
   focused,
-  onToggleFocus,
-  suppressed
+  onToggleFocus
 }: Props): JSX.Element {
+  const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
   const deployedUrl = project.lastDeploy?.url
   const status = running ? 'deploying' : project.lastDeploy?.status

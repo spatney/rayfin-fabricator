@@ -3,3 +3,5 @@ out
 dist
 dist-electron
 out-tsc
+src-tauri/target
+src-tauri/vendor

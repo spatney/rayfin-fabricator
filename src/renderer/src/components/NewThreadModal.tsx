@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSuppressPreview } from '../overlay'
 
 interface Props {
   /** Disable controls + show progress while the fork is being created. */
@@ -14,6 +15,7 @@ interface Props {
  * Mirrors the flat modal style used elsewhere.
  */
 export default function NewThreadModal({ busy = false, error, onCreate, onCancel }: Props): JSX.Element {
+  useSuppressPreview()
   const [task, setTask] = useState('')
   const taskRef = useRef<HTMLTextAreaElement>(null)
 
