@@ -3040,10 +3040,23 @@ code {
   min-height: 0;
   min-width: 0;
   display: flex;
+  position: relative;
   /* Matches the preview body so that when the native webview is hidden (a modal
      is open, the pane is collapsed, …) the placeholder dims with the rest of the
      app instead of flashing a bright rectangle. The live webview paints over it. */
   background: var(--bg);
+}
+
+/* Frozen last-frame painted into the host while an HTML overlay suppresses the
+   native preview, so the overlay floats over a still image rather than black. */
+.preview-frozen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+  pointer-events: none;
 }
 
 /* Preview-depth: device-width framing + console drawer. */

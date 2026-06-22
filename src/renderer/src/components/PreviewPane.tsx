@@ -89,6 +89,9 @@ export default function PreviewPane({
   const [captured, setCaptured] = useState<string | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [captureErr, setCaptureErr] = useState<string | null>(null)
+  // While an HTML overlay suppresses the native preview, `frozen` holds a PNG of
+  // the last visible frame so the placeholder shows that still image, not black.
+  const [frozen, setFrozen] = useState<string | null>(null)
 
   const [device, setDevice] = useState<DeviceId>('desktop')
 
@@ -131,9 +134,38 @@ export default function PreviewPane({
     const visible = showWebview && !suppressed && Boolean(deployedUrl)
     const host = hostRef.current
     if (!visible || !host || !deployedUrl) {
+      // An HTML overlay (a dropdown/menu/modal) covering a live preview suppresses
+      // the native webview, which would otherwise paint over it. Rather than blank
+      // the pane to black, freeze the last visible frame to a PNG and paint it into
+      // the placeholder so the overlay appears to float over a still preview. (The
+      // device-width <select> is a native OS popup, not HTML, so it needs none of
+      // this and keeps rendering over the live webview.)
+      if (suppressed && showWebview && deployedUrl) {
+        let cancelled = false
+        void (async () => {
+          try {
+            const frame = await window.api.preview.capture()
+            if (!cancelled) setFrozen(frame)
+          } catch {
+            // Capture can fail (e.g. no surface yet) — fall back to a blank pane.
+          } finally {
+            // Skip the hide if the overlay closed mid-capture: the visible branch
+            // has already re-shown the webview and cleared the frozen frame, and a
+            // late hide() here would wrongly blank the now-visible preview.
+            if (!cancelled) void window.api.preview.hide()
+          }
+        })()
+        return () => {
+          cancelled = true
+        }
+      }
+      setFrozen(null)
       void window.api.preview.hide()
       return
     }
+
+    // Becoming visible again — drop any frozen frame so the live webview shows through.
+    setFrozen(null)
 
     let raf = 0
     // `shownKey` is the bounds key the webview is currently shown at; '' means
@@ -177,9 +209,13 @@ export default function PreviewPane({
 
     return () => {
       cancelAnimationFrame(raf)
-      void window.api.preview.hide()
     }
   }, [deployedUrl, showWebview, suppressed])
+
+  // The positioning effect hides the webview whenever a dependency change makes it
+  // not-visible (and its rAF loop hides it when the host collapses to 0×0); this
+  // hides it once more when the pane itself unmounts.
+  useEffect(() => () => void window.api.preview.hide(), [])
 
   // Refresh the page after a successful (re)deploy (URL is often unchanged).
   useEffect(() => {
@@ -351,8 +387,14 @@ export default function PreviewPane({
         ) : showWebview ? (
           <div className="preview-canvas">
             <div className={`preview-stage preview-stage--${device}`} style={stageStyle}>
-              {/* Placeholder the native WebView2 child is positioned over. */}
-              <div className="preview-webview-host" ref={hostRef} />
+              {/* Placeholder the native WebView2 child is positioned over. When an
+                  overlay suppresses the native child, `frozen` paints the last frame
+                  here so the overlay floats over a still preview instead of black. */}
+              <div className="preview-webview-host" ref={hostRef}>
+                {frozen && (
+                  <img className="preview-frozen" src={frozen} alt="" draggable={false} />
+                )}
+              </div>
             </div>
           </div>
         ) : needsWorkspace ? (
