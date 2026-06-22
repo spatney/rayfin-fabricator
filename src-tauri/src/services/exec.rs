@@ -253,8 +253,17 @@ pub async fn run(file: &str, args: &[&str], opts: RunOptions) -> RunResult {
 /// Run a project's pinned Rayfin CLI (the `npx rayfin` equivalent) by resolving
 /// the project-local `@microsoft/rayfin-cli` script and spawning node directly,
 /// so deploys honor the version installed with the project.
-pub async fn run_project_rayfin(project_dir: &Path, args: &[&str], opts: RunOptions) -> RunResult {
+///
+/// The CLI locates the project by walking up from its working directory looking
+/// for a `rayfin/` folder, so the child must run *inside* the project. We default
+/// `cwd` to `project_dir` when the caller didn't set one — otherwise commands like
+/// `up list` / `up status` exit with "Not inside a Rayfin project" and report no
+/// deployments even when the project is deployed.
+pub async fn run_project_rayfin(project_dir: &Path, args: &[&str], mut opts: RunOptions) -> RunResult {
   let (program, prefix) = project_rayfin(project_dir);
+  if opts.cwd.is_none() {
+    opts.cwd = Some(project_dir.to_path_buf());
+  }
   spawn_and_run(Resolved { program, prefix, not_found: false }, args, opts).await
 }
 
