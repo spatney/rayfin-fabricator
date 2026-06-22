@@ -168,6 +168,37 @@ fn resolve_program(file: &str) -> Resolved {
   }
 }
 
+/// Resolve the global rayfin-cli's auth entry module (`dist/auth/index.js`),
+/// reusing the same CLI the app already drives. Mirrors the TS `npm root -g`
+/// lookup but derives the global package root from the `rayfin` shim on PATH so
+/// we never have to spawn the non-bypassable `npm` cmd-shim. Returns the first
+/// existing candidate, or `None` when the CLI can't be located.
+pub fn global_rayfin_auth_module() -> Option<PathBuf> {
+  let shim = which::which("rayfin").ok()?;
+  let mut candidates: Vec<PathBuf> = Vec::new();
+  // Standard npm global layout: <binDir>/node_modules/@microsoft/rayfin-cli/...
+  if let Some(bin_dir) = shim.parent() {
+    candidates.push(
+      bin_dir
+        .join("node_modules")
+        .join("@microsoft")
+        .join("rayfin-cli")
+        .join("dist")
+        .join("auth")
+        .join("index.js"),
+    );
+  }
+  // Or derive from the cmd-shim's node target (<pkgRoot>/scripts/main.js).
+  if is_batch(&shim) {
+    if let Some(script) = parse_shim(&shim) {
+      if let Some(pkg_root) = script.parent().and_then(|p| p.parent()) {
+        candidates.push(pkg_root.join("dist").join("auth").join("index.js"));
+      }
+    }
+  }
+  candidates.into_iter().find(|p| p.exists())
+}
+
 /// Build the `node <script>` invocation for a project's locally-installed Rayfin
 /// CLI (the `npx rayfin` equivalent, honoring the project-pinned version).
 /// Falls back to the global `rayfin` shim, then to `npx`.

@@ -71,7 +71,7 @@ pub struct AuthStatus {
 
 /* ----------------------------- fabric ----------------------------- */
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FabricWorkspace {
   pub id: String,
@@ -90,7 +90,7 @@ pub struct FabricWorkspace {
   pub eligible: bool,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FabricWorkspacesResult {
   pub ok: bool,
@@ -102,14 +102,14 @@ pub struct FabricWorkspacesResult {
   pub error: Option<String>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FabricDeleteFailure {
   pub name: String,
   pub error: String,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FabricDeleteResult {
   pub ok: bool,
