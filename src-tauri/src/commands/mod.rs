@@ -17,3 +17,4 @@ pub mod screenshot;
 pub mod settings;
 pub mod skills;
 pub mod threads;
+pub mod util;

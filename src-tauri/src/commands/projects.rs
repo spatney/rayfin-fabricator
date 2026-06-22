@@ -4,6 +4,7 @@
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
+use crate::commands::util::{annotate_state, with_missing};
 use crate::services::store;
 use crate::types::{
   CommunityGalleryResult, CreateProjectInput, FileContent, FileNode, GitChange, GitCommitResult,
@@ -26,7 +27,7 @@ async fn pick_folder_dialog(app: &AppHandle) -> Option<String> {
 
 #[tauri::command]
 pub fn projects_state() -> ProjectsState {
-  store::get_state()
+  annotate_state(store::get_state())
 }
 
 #[tauri::command]
@@ -47,14 +48,14 @@ pub async fn projects_pick_folder(app: AppHandle) -> Option<String> {
 #[tauri::command]
 pub async fn projects_pick_workspace_root(app: AppHandle) -> ProjectsState {
   match pick_folder_dialog(&app).await {
-    Some(path) => store::set_workspace_root(path),
-    None => store::get_state(),
+    Some(path) => annotate_state(store::set_workspace_root(path)),
+    None => annotate_state(store::get_state()),
   }
 }
 
 #[tauri::command]
 pub fn projects_set_workspace_root(path: String) -> ProjectsState {
-  store::set_workspace_root(path)
+  annotate_state(store::set_workspace_root(path))
 }
 
 #[tauri::command]
@@ -69,7 +70,7 @@ pub async fn projects_open(path: String) -> ProjectActionResult {
 
 #[tauri::command]
 pub fn projects_set_active(id: Option<String>) -> ProjectsState {
-  store::set_active(id)
+  annotate_state(store::set_active(id))
 }
 
 #[tauri::command]
@@ -96,7 +97,7 @@ pub fn projects_set_workspace(
   ProjectActionResult {
     ok: true,
     error: None,
-    project: store::find_project(&id),
+    project: store::find_project(&id).map(with_missing),
   }
 }
 
