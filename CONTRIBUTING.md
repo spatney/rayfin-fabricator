@@ -109,7 +109,7 @@ To enable signing, set the following on the repository (**Settings → Secrets a
 | Variable | `AZURE_SIGNING_ACCOUNT` | Trusted Signing account name |
 | Variable | `AZURE_SIGNING_CERT_PROFILE` | Certificate profile name |
 
-The app registration's service principal needs the **Trusted Signing Certificate Profile Signer** role on the signing account. Signing removes the "Unknown Publisher" prompt immediately; Microsoft SmartScreen still builds per-certificate reputation over time, so brand-new releases may show a SmartScreen prompt until enough downloads accrue.
+The app registration's service principal needs the **Artifact Signing Certificate Profile Signer** role on the signing account. Signing removes the "Unknown Publisher" prompt immediately; Microsoft SmartScreen still builds per-certificate reputation over time, so brand-new releases may show a SmartScreen prompt until enough downloads accrue.
 
 ## Issues and pull requests
 
