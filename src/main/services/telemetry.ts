@@ -41,7 +41,6 @@ const CLOUD_ROLE = 'rayfin-fabricator'
 
 interface TelemetryConfig {
   connectionString?: string
-  downloadBaseUrl?: string
 }
 
 interface ParsedConnection {

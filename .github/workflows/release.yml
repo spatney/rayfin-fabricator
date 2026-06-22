@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -32,10 +32,9 @@ jobs:
         run: npm ci
 
       - name: Write telemetry configuration
-        run: node -e "const fs=require('fs');fs.mkdirSync('resources',{recursive:true});fs.writeFileSync('resources/telemetry.json',JSON.stringify({connectionString:process.env.CS||'',downloadBaseUrl:process.env.DL||''},null,2))"
+        run: node -e "const fs=require('fs');fs.mkdirSync('resources',{recursive:true});fs.writeFileSync('resources/telemetry.json',JSON.stringify({connectionString:process.env.CS},null,2))"
         env:
           CS: ${{ secrets.APPINSIGHTS_CONNECTION_STRING }}
-          DL: ${{ vars.DOWNLOAD_BASE_URL }}
 
       - name: Build application
         run: npm run build
@@ -48,20 +47,6 @@ jobs:
         if: runner.os == 'macOS'
         run: npx electron-builder --mac --publish never
 
-      - name: Upload installers to Azure Blob Storage
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            az storage blob upload-batch -d downloads -s dist --pattern "*.exe" --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --overwrite
-          elif [ "$RUNNER_OS" = "macOS" ]; then
-            az storage blob upload-batch -d downloads -s dist --pattern "*.dmg" --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --overwrite
-            az storage blob upload-batch -d downloads -s dist --pattern "*.zip" --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --overwrite
-          fi
-          az storage blob upload-batch -d downloads -s dist --pattern "*.blockmap" --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --overwrite || true
-        env:
-          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
-
       - name: Upload dist artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -70,43 +55,34 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  manifest:
-    name: Publish latest manifest
+  release:
+    name: Publish GitHub Release
     needs: [build]
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
 
-      - name: Create latest.json manifest
-        run: |
-          node - <<'NODE'
-          const fs = require('fs');
-          const refName = process.env.GITHUB_REF_NAME || '';
-          let version;
-          if (refName.startsWith('v')) {
-            version = refName.slice(1);
-          } else {
-            version = require('./package.json').version;
-          }
+      - name: List artifacts
+        run: ls -R dist
 
-          const baseUrl = process.env.DOWNLOAD_BASE_URL || '';
-          const normalizedBaseUrl = baseUrl && !baseUrl.endsWith('/') ? `${baseUrl}/` : baseUrl;
-          const manifest = {
-            version,
-            windows: `${normalizedBaseUrl}rayfin-desktop-${version}-setup.exe`,
-            mac: `${normalizedBaseUrl}rayfin-desktop-${version}.dmg`,
-            updatedAt: new Date().toISOString()
-          };
-
-          fs.writeFileSync('latest.json', `${JSON.stringify(manifest, null, 2)}\n`);
-          NODE
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          fail_on_unmatched_files: false
+          files: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.blockmap
+            dist/latest*.yml
         env:
-          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
-
-      - name: Upload latest manifest to Azure Blob Storage
-        continue-on-error: true
-        run: az storage blob upload --container-name downloads --name latest.json --file latest.json --connection-string "$AZURE_STORAGE_CONNECTION_STRING" --overwrite true
-        env:
-          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

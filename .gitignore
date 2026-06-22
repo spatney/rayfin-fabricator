@@ -18,4 +18,3 @@ workspace/
 # Telemetry/Azure endpoints injected at deploy time (per-deployment, never committed)
 resources/telemetry.json
 .deploy.state.json
-.deploy.lifecycle-policy.json

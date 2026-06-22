@@ -8,7 +8,7 @@ param(
     [string]$AppInsightsName = 'rayfin-desktop-insights',
     [string]$Repo = 'spatney/rayfin-desktop',
     [decimal]$BudgetAmount = 5,
-    [switch]$BuildLocal = $true,
+    [switch]$BuildLocal = $false,
     [string]$AlertEmail
 )
 
@@ -18,8 +18,6 @@ $ErrorActionPreference = 'Stop'
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $StatePath = Join-Path $ScriptRoot '.deploy.state.json'
 $TelemetryPath = Join-Path $ScriptRoot 'resources\telemetry.json'
-$LifecyclePolicyPath = Join-Path $ScriptRoot '.deploy.lifecycle-policy.json'
-$ContainerName = 'downloads'
 $BudgetName = 'rayfin-desktop-budget'
 $DailyCapGb = 0.1
 
@@ -67,33 +65,6 @@ function Invoke-Az {
     }
 
     return Invoke-CommandChecked -FilePath 'az' -Arguments $argsWithSubscription -AllowFailure:$AllowFailure -Quiet:$Quiet
-}
-
-function Get-StorageAccountName {
-    param([Parameter(Mandatory)][string]$SubId)
-
-    if (Test-Path -LiteralPath $StatePath) {
-        try {
-            $state = Get-Content -LiteralPath $StatePath -Raw | ConvertFrom-Json
-            if ($state.storageAccount -and ($state.storageAccount -match '^[a-z0-9]{3,24}$')) {
-                return [string]$state.storageAccount
-            }
-        }
-        catch {
-            Write-Warning "Ignoring unreadable state file $StatePath`: $($_.Exception.Message)"
-        }
-    }
-
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($SubId)
-        $hash = $sha.ComputeHash($bytes)
-        $hex = -join ($hash | ForEach-Object { $_.ToString('x2') })
-        return ('rayfindesktop' + $hex.Substring(0, 8)).Substring(0, 21)
-    }
-    finally {
-        $sha.Dispose()
-    }
 }
 
 function Mask-Secret {
@@ -253,68 +224,6 @@ function Set-AppInsightsDailyCap {
     }
 }
 
-function Ensure-StorageAccount {
-    param([Parameter(Mandatory)][string]$StorageAccountName)
-
-    Write-Step "Ensuring storage account $StorageAccountName"
-    $storage = Invoke-Az -Arguments @('storage', 'account', 'show', '-n', $StorageAccountName, '-g', $ResourceGroup, '-o', 'json') -AllowFailure -Quiet
-    if (-not $storage) {
-        Invoke-Az -Arguments @('storage', 'account', 'create', '-n', $StorageAccountName, '-g', $ResourceGroup, '-l', $Location, '--sku', 'Standard_LRS', '--kind', 'StorageV2', '--allow-blob-public-access', 'true', '--min-tls-version', 'TLS1_2', '-o', 'none') | Out-Null
-    }
-
-    $connectionString = Invoke-Az -Arguments @('storage', 'account', 'show-connection-string', '-n', $StorageAccountName, '-g', $ResourceGroup, '--query', 'connectionString', '-o', 'tsv')
-    if ([string]::IsNullOrWhiteSpace($connectionString)) {
-        throw 'Azure Storage connection string was empty.'
-    }
-
-    Write-Step "Ensuring blob container $ContainerName with anonymous blob read"
-    $containerExists = Invoke-Az -Arguments @('storage', 'container', 'exists', '-n', $ContainerName, '--account-name', $StorageAccountName, '--connection-string', $connectionString.Trim(), '--query', 'exists', '-o', 'tsv') -AllowFailure -Quiet
-    if (($containerExists -as [string]).Trim() -ne 'true') {
-        Invoke-Az -Arguments @('storage', 'container', 'create', '-n', $ContainerName, '--account-name', $StorageAccountName, '--connection-string', $connectionString.Trim(), '--public-access', 'blob', '-o', 'none') | Out-Null
-    }
-    Set-StorageLifecyclePolicy -StorageAccountName $StorageAccountName
-
-    return $connectionString.Trim()
-}
-
-function Set-StorageLifecyclePolicy {
-    param([Parameter(Mandatory)][string]$StorageAccountName)
-
-    Write-Step 'Ensuring storage lifecycle rule deletes downloads older than 60 days'
-    try {
-        $policy = @{
-            rules = @(
-                @{
-                    enabled = $true
-                    name = 'delete-downloads-after-60-days'
-                    type = 'Lifecycle'
-                    definition = @{
-                        filters = @{
-                            blobTypes = @('blockBlob')
-                            prefixMatch = @("$ContainerName/")
-                        }
-                        actions = @{
-                            baseBlob = @{
-                                delete = @{
-                                    daysAfterModificationGreaterThan = 60
-                                }
-                            }
-                        }
-                    }
-                }
-            )
-        }
-        $policy | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $LifecyclePolicyPath -Encoding utf8
-        Invoke-Az -Arguments @('storage', 'account', 'management-policy', 'create', '--account-name', $StorageAccountName, '-g', $ResourceGroup, '--policy', $LifecyclePolicyPath, '-o', 'none') | Out-Null
-    }
-    catch {
-        Write-Warning "Could not create storage lifecycle management policy. $($_.Exception.Message)"
-    }
-    finally {
-        Remove-Item -LiteralPath $LifecyclePolicyPath -Force -ErrorAction SilentlyContinue
-    }
-}
-
 function Ensure-Budget {
     param([Parameter(Mandatory)][string]$Email)
 
@@ -373,9 +282,7 @@ function Ensure-Budget {
 
 function Write-EndpointFiles {
     param(
-        [Parameter(Mandatory)][string]$ConnectionString,
-        [Parameter(Mandatory)][string]$DownloadBaseUrl,
-        [Parameter(Mandatory)][string]$StorageAccountName
+        [Parameter(Mandatory)][string]$ConnectionString
     )
 
     Write-Step 'Writing endpoint files'
@@ -386,7 +293,6 @@ function Write-EndpointFiles {
 
     [ordered]@{
         connectionString = $ConnectionString
-        downloadBaseUrl = $DownloadBaseUrl
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $TelemetryPath -Encoding utf8
 
     [ordered]@{
@@ -395,20 +301,16 @@ function Write-EndpointFiles {
         location = $Location
         logAnalyticsName = $LogAnalyticsName
         appInsightsName = $AppInsightsName
-        storageAccount = $StorageAccountName
-        downloadBaseUrl = $DownloadBaseUrl
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $StatePath -Encoding utf8
 }
 
 function Set-GitHubActionsValues {
     param(
         [Parameter(Mandatory)][string]$ConnectionString,
-        [Parameter(Mandatory)][string]$StorageConnectionString,
-        [Parameter(Mandatory)][string]$DownloadBaseUrl,
         [Parameter(Mandatory)][bool]$GhAvailable
     )
 
-    Write-Step 'Wiring GitHub Actions secrets and variables'
+    Write-Step 'Wiring GitHub Actions secret'
     $canUseGh = $false
     if ($GhAvailable) {
         $status = Invoke-CommandChecked -FilePath 'gh' -Arguments @('auth', 'status') -AllowFailure -Quiet
@@ -419,11 +321,7 @@ function Set-GitHubActionsValues {
         try {
             $ConnectionString | & gh secret set APPINSIGHTS_CONNECTION_STRING -R $Repo --body-file - | Out-Null
             if ($LASTEXITCODE -ne 0) { throw 'gh secret set APPINSIGHTS_CONNECTION_STRING failed.' }
-            $StorageConnectionString | & gh secret set AZURE_STORAGE_CONNECTION_STRING -R $Repo --body-file - | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw 'gh secret set AZURE_STORAGE_CONNECTION_STRING failed.' }
-            & gh variable set DOWNLOAD_BASE_URL -R $Repo --body $DownloadBaseUrl | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw 'gh variable set DOWNLOAD_BASE_URL failed.' }
-            Write-Info "GitHub Actions values set for $Repo."
+            Write-Info "GitHub Actions secret set for $Repo."
             return
         }
         catch {
@@ -433,21 +331,13 @@ function Set-GitHubActionsValues {
 
     Write-Warning 'GitHub CLI is unavailable or not authenticated. Add these in GitHub: Settings -> Secrets and variables -> Actions.'
     Write-Host ''
-    Write-Host 'GitHub Actions values to configure:' -ForegroundColor Yellow
+    Write-Host 'GitHub Actions secret to configure:' -ForegroundColor Yellow
     Write-Host "  Secret:   APPINSIGHTS_CONNECTION_STRING = $(Mask-Secret $ConnectionString)"
-    Write-Host "  Secret:   AZURE_STORAGE_CONNECTION_STRING = $(Mask-Secret $StorageConnectionString)"
-    Write-Host "  Variable: DOWNLOAD_BASE_URL = $DownloadBaseUrl"
     Write-Host '  Re-run this script after gh auth login to set secrets automatically.'
 }
 
-function Invoke-LocalBuildAndUpload {
-    param(
-        [Parameter(Mandatory)][string]$StorageAccountName,
-        [Parameter(Mandatory)][string]$StorageConnectionString,
-        [Parameter(Mandatory)][string]$DownloadBaseUrl
-    )
-
-    Write-Step 'Building local Windows installer and uploading artifacts'
+function Invoke-LocalBuild {
+    Write-Step 'Building local Windows installer'
     Push-Location -LiteralPath $ScriptRoot
     try {
         if (Test-Path -LiteralPath (Join-Path $ScriptRoot 'package-lock.json')) {
@@ -459,22 +349,8 @@ function Invoke-LocalBuildAndUpload {
         Invoke-CommandChecked -FilePath 'npm' -Arguments @('run', 'build') | Out-Host
         Invoke-CommandChecked -FilePath 'npx' -Arguments @('electron-builder', '--win') | Out-Host
 
-        foreach ($pattern in @('*.exe', '*.blockmap', 'latest*.yml')) {
-            try {
-                Invoke-Az -Arguments @('storage', 'blob', 'upload-batch', '-d', $ContainerName, '-s', 'dist', '--pattern', $pattern, '--account-name', $StorageAccountName, '--connection-string', $StorageConnectionString, '--overwrite', 'true', '-o', 'none') | Out-Null
-            }
-            catch {
-                if ($pattern -eq '*.exe') { throw }
-                Write-Warning "Best-effort upload for $pattern failed. $($_.Exception.Message)"
-            }
-        }
-
         $distPath = Join-Path $ScriptRoot 'dist'
-        if (Test-Path -LiteralPath $distPath) {
-            Get-ChildItem -LiteralPath $distPath -File | Where-Object { $_.Name -like '*.exe' -or $_.Name -like '*.blockmap' -or $_.Name -like 'latest*.yml' } | ForEach-Object {
-                Write-Host "$DownloadBaseUrl$([System.Uri]::EscapeDataString($_.Name))"
-            }
-        }
+        Write-Info "Local installer artifacts are available under $distPath for testing."
     }
     finally {
         Pop-Location
@@ -490,26 +366,22 @@ try {
         $AlertEmail = (Invoke-Az -Arguments @('account', 'show', '--query', 'user.name', '-o', 'tsv')).Trim()
     }
 
-    foreach ($provider in @('Microsoft.Insights', 'Microsoft.OperationalInsights', 'Microsoft.Storage')) {
+    foreach ($provider in @('Microsoft.Insights', 'Microsoft.OperationalInsights')) {
         Ensure-ProviderRegistered -ProviderNamespace $provider
     }
-
-    $storageAccountName = Get-StorageAccountName -SubId $SubscriptionId
-    $downloadBaseUrl = "https://$storageAccountName.blob.core.windows.net/$ContainerName/"
 
     Ensure-ResourceGroup
     $workspaceId = Ensure-Workspace
     $appInsightsConnectionString = Ensure-AppInsights -WorkspaceId $workspaceId
-    $storageConnectionString = Ensure-StorageAccount -StorageAccountName $storageAccountName
     Ensure-Budget -Email $AlertEmail
-    Write-EndpointFiles -ConnectionString $appInsightsConnectionString -DownloadBaseUrl $downloadBaseUrl -StorageAccountName $storageAccountName
-    Set-GitHubActionsValues -ConnectionString $appInsightsConnectionString -StorageConnectionString $storageConnectionString -DownloadBaseUrl $downloadBaseUrl -GhAvailable $ghAvailable
+    Write-EndpointFiles -ConnectionString $appInsightsConnectionString
+    Set-GitHubActionsValues -ConnectionString $appInsightsConnectionString -GhAvailable $ghAvailable
 
     if ($BuildLocal) {
-        Invoke-LocalBuildAndUpload -StorageAccountName $storageAccountName -StorageConnectionString $storageConnectionString -DownloadBaseUrl $downloadBaseUrl
+        Invoke-LocalBuild
     }
     else {
-        Write-Step 'Skipping local build and upload because -BuildLocal is false'
+        Write-Step 'Skipping local build because -BuildLocal is false'
     }
 }
 finally {
@@ -517,13 +389,7 @@ finally {
     Write-Host 'Deployment summary' -ForegroundColor Green
     Write-Host "  Resource group:          $ResourceGroup"
     Write-Host "  Application Insights:    $AppInsightsName"
-    if (Get-Variable -Name storageAccountName -ErrorAction SilentlyContinue) {
-        Write-Host "  Storage account:         $storageAccountName"
-    }
-    if (Get-Variable -Name downloadBaseUrl -ErrorAction SilentlyContinue) {
-        Write-Host "  Public download base URL: $downloadBaseUrl"
-    }
     Write-Host "  Daily telemetry cap:     $DailyCapGb GB/day"
     Write-Host "  Budget guard:            `$$BudgetAmount monthly budget alert"
-    Write-Host '  Release note: Push a tag like `git tag v0.1.0 && git push origin v0.1.0` to trigger the GitHub Actions release that builds + uploads BOTH Windows and macOS installers.'
+    Write-Host '  Release note: Push a tag like `git tag v0.1.0 && git push origin v0.1.0` to trigger the GitHub Actions release that builds Windows + macOS installers and publishes them to a GitHub Release.'
 }

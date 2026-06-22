@@ -60,8 +60,8 @@ linux:
     - AppImage
     - deb
 
-# No publish provider configured — auto-update is intentionally deferred. Building
-# locally produces installers under dist/ without contacting any update server.
+# Installers are distributed via GitHub Releases. The CI release job uploads
+# dist/ installers to the GitHub Release created for each v* tag.
 #
 # Windows note: building the NSIS installer (or embedding the exe icon via rcedit)
 # downloads electron-builder's winCodeSign tool, whose archive contains macOS
