@@ -283,7 +283,7 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
     });
   }
 
-  // TODO(skills): ensure_project_skills(dir) once skills are ported.
+  crate::commands::skills::ensure_project_skills(dir.to_string_lossy().as_ref());
   init_git_repo(&dir, &format!("Initial commit ({label})"), &on).await;
 
   let project = register_project(&dir, Some(&name));
@@ -306,7 +306,7 @@ pub async fn open_project(path: String) -> ProjectActionResult {
   if !is_rayfin_project(&abs_str) {
     return err("That folder is not a Rayfin project (no rayfin/rayfin.yml).");
   }
-  // TODO(skills): ensure_project_skills(abs) once skills are ported.
+  crate::commands::skills::ensure_project_skills(&abs_str);
   let project = register_project(&abs, None);
   store::set_active(Some(project.id.clone()));
   ProjectActionResult {
