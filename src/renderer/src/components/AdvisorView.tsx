@@ -27,7 +27,8 @@ interface Step {
 /** Display order + copy for each check category. */
 const CATEGORIES: { key: string; title: string }[] = [
   { key: 'auth', title: 'Authentication & access' },
-  { key: 'policy', title: 'Data policies' }
+  { key: 'policy', title: 'Data policies' },
+  { key: 'version', title: 'Versions & dependencies' }
 ]
 
 function sevRank(severity: string): number {
@@ -268,8 +269,9 @@ export default function AdvisorView({ project, onFix }: Props): JSX.Element {
         <div>
           <h2 className="advisor-title">Advisor</h2>
           <p className="advisor-sub">
-            A Copilot-powered security review of your app. It looks for access that isn’t
-            properly authenticated and data policies that are too permissive.
+            A Copilot-powered review of your app. It looks for access that isn’t properly
+            authenticated, data policies that are too permissive, and outdated Rayfin CLI or
+            SDK versions.
           </p>
         </div>
         <div className="advisor-actions">
@@ -297,7 +299,8 @@ export default function AdvisorView({ project, onFix }: Props): JSX.Element {
             <div className="advisor-analyze-headmain">
               <span className="advisor-analyze-title">Analyzing your app…</span>
               <span className="advisor-analyze-desc">
-                Copilot is reading your code and checking routes and data policies.
+                Copilot is reading your code, checking routes and data policies, and comparing
+                your Rayfin versions against the latest release.
               </span>
             </div>
             <div className="advisor-analyze-meta">
@@ -433,9 +436,9 @@ export default function AdvisorView({ project, onFix }: Props): JSX.Element {
                 <h3 className="advisor-intro-title">Security review</h3>
                 <p className="advisor-intro-sub">
                   Ask Copilot to review your app for security and best-practice issues — like
-                  access that isn’t properly authenticated, or data policies that are too
-                  permissive. It reads your code and reports what it finds, without changing
-                  anything.
+                  access that isn’t properly authenticated, data policies that are too
+                  permissive, or an outdated Rayfin CLI or SDK. It reads your code and reports
+                  what it finds, without changing anything.
                 </p>
                 <button
                   className="btn btn--primary advisor-intro-run"

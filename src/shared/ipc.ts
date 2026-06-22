@@ -690,8 +690,8 @@ export interface SkillSource {
 export interface AdvisorFinding {
   /** Short slug; the UI falls back to the array index if empty. */
   id: string
-  /** Check bucket: 'auth' (access/authentication) or 'policy' (data policies). */
-  category: 'auth' | 'policy' | string
+  /** Check bucket: 'auth' (access/authentication), 'policy' (data policies), or 'version' (stale Rayfin CLI/SDK). */
+  category: 'auth' | 'policy' | 'version' | string
   severity: 'high' | 'medium' | 'low' | string
   /** Short headline for the card. */
   title: string

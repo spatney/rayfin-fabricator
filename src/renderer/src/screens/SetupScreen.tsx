@@ -73,13 +73,20 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
   const tools = doctor?.tools ?? []
   const tool = (id: ToolId): ToolStatus | undefined => tools.find((t) => t.id === id)
   const copilotReady = tool('copilot')?.found ?? false
-  const rayfinReady = tool('rayfin')?.found ?? false
   const missingAuto = tools.filter((t) => t.required && !t.found && t.autoInstallable)
 
   const allReady =
     (doctor?.ready ?? false) &&
     (auth?.copilot.signedIn ?? false) &&
     (auth?.rayfin.signedIn ?? false)
+
+  const loginProvider =
+    busy === 'login:copilot'
+      ? 'GitHub Copilot'
+      : busy === 'login:rayfin'
+        ? 'Microsoft Fabric'
+        : null
+  const logTail = log.trim().split('\n').slice(-8).join('\n')
 
   return (
     <div className="setup">
@@ -180,8 +187,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
               signedIn={auth?.rayfin.signedIn ?? false}
               detail={auth?.rayfin.user}
               extra={auth?.rayfin.tenant ? `Tenant ${auth.rayfin.tenant}` : undefined}
-              disabled={!rayfinReady || busy !== null}
-              disabledReason={!rayfinReady ? 'Install the Rayfin CLI first' : undefined}
+              disabled={busy !== null}
               busy={busy === 'login:rayfin'}
               onSignIn={() =>
                 runAction('login:rayfin', 'Sign in to Fabric / Rayfin', () =>
@@ -216,6 +222,27 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
           </pre>
         )}
       </div>
+
+      {loginProvider && (
+        <div
+          className="signin-overlay"
+          role="alertdialog"
+          aria-busy="true"
+          aria-label="Signing in"
+        >
+          <div className="signin-card">
+            <div className="signin-mark">
+              <img src={logo} alt="" />
+              <span className="signin-ring" />
+            </div>
+            <div className="signin-text">
+              <strong>Signing you in…</strong>
+              <span>Finish signing in to {loginProvider} in the window that opened.</span>
+            </div>
+            {logTail && <pre className="signin-log">{logTail}</pre>}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

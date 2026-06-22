@@ -6,6 +6,10 @@
   <p><strong>Build Rayfin apps through chat, deploy them to Microsoft Fabric, and debug the real remote runtime from your Windows desktop.</strong></p>
 
   <p>
+    <a href="#install"><img alt="Download Rayfin Fabricator" src="https://img.shields.io/badge/Download-Rayfin%20Fabricator-0078D4?style=for-the-badge&logo=windows&logoColor=white" /></a>
+  </p>
+
+  <p>
     <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
     <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows-0078D4.svg" />
     <img alt="Built with Tauri" src="https://img.shields.io/badge/built%20with-Tauri-24C8DB.svg" />
@@ -29,6 +33,20 @@ It combines a **Tauri v2 Rust backend**, a **React 18 + TypeScript renderer buil
 The core workflow is simple:
 
 > **author locally → deploy, preview, debug, and validate remotely**
+
+## Install
+
+Rayfin Fabricator is a **Windows 10/11** desktop app distributed as an NSIS installer.
+
+> **[⬇️ Download the latest release](https://github.com/spatney/rayfin-fabricator/releases/latest)**
+
+1. Grab the `Rayfin Fabricator_<version>_x64-setup.exe` asset (the `*-setup.exe` file) from the [latest release](https://github.com/spatney/rayfin-fabricator/releases/latest), or browse every build on the [Releases](https://github.com/spatney/rayfin-fabricator/releases) page.
+2. Run the installer. The build is **not code-signed**, so Windows SmartScreen may warn you — choose **More info → Run anyway**.
+3. Launch **Rayfin Fabricator**. The built-in onboarding doctor checks the remaining prerequisites (WebView2 runtime, the GitHub Copilot CLI) and walks you through signing in to GitHub Copilot and Microsoft Fabric.
+
+To build apps you'll also create a Rayfin project with `npm create @microsoft/rayfin@latest` — Fabricator uses that project's pinned Rayfin CLI, so no global install is required.
+
+Prefer to build from source instead? See [Getting started](#getting-started).
 
 ## Feature tour
 
@@ -128,7 +146,7 @@ Validation is remote and AI-assisted: the Advisor uses Copilot-driven checks to 
 
 ## Prerequisites
 
-The onboarding doctor checks for these tools:
+Rayfin Fabricator relies on these tools and sign-ins:
 
 | Requirement | Notes |
 | --- | --- |
@@ -137,7 +155,7 @@ The onboarding doctor checks for these tools:
 | Rust stable with MSVC | Required only when building the desktop app from source. |
 | Tauri prerequisites | Required for local desktop development and packaging. |
 | Git | Used for local project history. |
-| Rayfin CLI | Available as a command, for example through `npx rayfin`; sign in to Microsoft Fabric. |
+| Rayfin CLI | Not required globally — it ships with each Rayfin project (`npm create @microsoft/rayfin@latest`); Fabricator runs the project-pinned version via `npx rayfin`. Sign in to Microsoft Fabric in-app. |
 | GitHub Copilot CLI | Available as a command; sign in to GitHub Copilot. |
 
 ## Getting started

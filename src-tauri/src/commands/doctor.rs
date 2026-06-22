@@ -1,5 +1,5 @@
 //! Environment doctor — the Rust port of `src/main/services/doctor.ts`.
-//! Detects external tools (Node, npm, Git, Rayfin CLI, Copilot CLI) and can
+//! Detects external tools (Node, npm, Git, Copilot CLI) and can
 //! auto-install the npm CLIs (`npm -g`) and system prerequisites (winget on
 //! Windows, brew on macOS), falling back to the official installer.
 
@@ -69,17 +69,6 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       }),
       install_hint: "Install Git for version control of your apps.",
       install_url: Some("https://git-scm.com/downloads"),
-    },
-    ToolDef {
-      id: "rayfin",
-      name: "Rayfin CLI",
-      bin: "rayfin",
-      version_args: &["--version"],
-      required: true,
-      npm_package: Some("@microsoft/rayfin-cli"),
-      system: None,
-      install_hint: "Scaffolds and deploys Rayfin apps to Microsoft Fabric.",
-      install_url: Some("https://aka.ms/rayfin/docs"),
     },
     ToolDef {
       id: "copilot",
@@ -171,7 +160,6 @@ pub async fn doctor_install(app: AppHandle, id: String) -> InstallResult {
     "node" => "install:node",
     "npm" => "install:setup",
     "git" => "install:git",
-    "rayfin" => "install:rayfin",
     "copilot" => "install:copilot",
     _ => "install:setup",
   };
@@ -423,7 +411,7 @@ pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> In
     };
   }
 
-  // Phase 2 — npm CLIs (Node present). Install copilot + rayfin.
+  // Phase 2 — npm CLIs (Node present). Install the Copilot CLI.
   let mut all_ok = true;
   let mut last_exit: Option<i32> = Some(0);
   for def in TOOLS

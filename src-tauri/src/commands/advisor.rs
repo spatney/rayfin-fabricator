@@ -4,9 +4,10 @@
 //! review never lands in the project's Build chat history. The model is asked to
 //! emit a single fenced JSON report which we parse into [`AdvisorReport`].
 //!
-//! For now the review covers two checks: data/routes not behind authentication
-//! (`category: "auth"`) and overly permissive database policies
-//! (`category: "policy"`). The `category` field drives grouping in the UI, so new
+//! The review currently covers three checks: data/routes not behind
+//! authentication (`category: "auth"`), overly permissive database policies
+//! (`category: "policy"`), and stale Rayfin CLI/SDK versions
+//! (`category: "version"`). The `category` field drives grouping in the UI, so new
 //! checks can be added later by extending the prompt alone.
 
 use std::collections::HashMap;
@@ -32,7 +33,7 @@ const RUN_TIMEOUT_MS: u64 = 10 * 60_000;
 /// contract we can parse out of the assistant's final message.
 const ADVISOR_PROMPT: &str = r#"You are a security reviewer for a Rayfin app (a Microsoft Fabric app: a TypeScript frontend under `src/` plus a Rayfin backend defined under `rayfin/`). Perform a READ-ONLY review of the app in this directory. DO NOT modify, create, or delete any files, and DO NOT run any deploy or `rayfin up` command.
 
-Review for exactly these two categories of issues:
+Review for these three categories of issues:
 
 1) category "auth" — data or routes not behind authentication:
    - Rayfin data entities (in `rayfin/data/schema.ts` and any files it imports) that are MISSING an explicit permission decorator. An entity without one silently defaults to `authenticated: *` (full CRUD for ANY signed-in user). Flag each such entity.
@@ -44,9 +45,17 @@ Review for exactly these two categories of issues:
    - `@authenticated` or `@role` grants that are broader than the data warrants.
    - Sensitive fields exposed to clients that should be hidden via `exclude: [...]`.
 
+3) category "version" — stale Rayfin CLI or SDK:
+   - Look at the project's `package.json` (and `package-lock.json`) for its Rayfin dependencies: the Rayfin CLI plus the SDK/runtime packages — e.g. `@microsoft/rayfin-cli`, `@microsoft/rayfin-sdk`, and any other `@microsoft/rayfin*` package the project depends on.
+   - For each, determine the version the project currently uses, then look up the latest published version (run a read-only command such as `npm view <package> version`; you may also use `npx rayfin --version` for the CLI). Do NOT install, update, or modify anything.
+   - Flag a finding when the project is meaningfully behind the latest release. Severity: "high" if a MAJOR version behind (risks missing security or breaking fixes), "medium" if a minor version behind, "low" if only patch versions behind. State the current and latest versions in the detail and recommend the upgrade (e.g. `npm install <package>@latest`, or `npm create @microsoft/rayfin@latest` to refresh the project scaffold).
+   - If you cannot determine the latest published version (for example there is no network access), do NOT raise anything for this category.
+
 Use the `rayfin` MCP tools or `rayfin docs ...` if you need to confirm decorator or policy semantics. Read `rayfin/rayfin.yml`, `rayfin/data/schema.ts`, and the frontend routing under `src/`. Only report real issues you verified by reading the code — do not invent problems.
 
 Severity guidance: "high" = unauthenticated/public access to data, or one user able to reach another user's data; "medium" = overly broad authenticated access; "low" = minor hardening.
+
+Each finding's "category" must be exactly one of "auth", "policy", or "version".
 
 When you are done, the FINAL thing in your reply must be a single fenced ```json code block (and nothing after it) exactly matching this schema:
 

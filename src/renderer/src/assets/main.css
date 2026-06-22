@@ -5629,6 +5629,90 @@ span.thread-pill {
   }
 }
 
+/* Signing-in overlay — landing-page sign-in, mirrors the sign-out overlay */
+.signin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  backdrop-filter: blur(9px) saturate(118%);
+  -webkit-backdrop-filter: blur(9px) saturate(118%);
+  animation: signoutFade 0.18s ease both;
+}
+
+.signin-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 34px 40px;
+  max-width: 460px;
+  text-align: center;
+}
+
+.signin-mark {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+}
+
+.signin-mark img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  animation: signoutPulse 1.7s ease-in-out infinite;
+}
+
+.signin-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2.5px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-top-color: var(--accent);
+  animation: ws-spin 0.95s linear infinite;
+}
+
+.signin-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.signin-text strong {
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: 0.1px;
+  color: var(--text);
+}
+
+.signin-text span {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.signin-log {
+  margin: 4px 0 0;
+  width: 380px;
+  max-width: 100%;
+  max-height: 132px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-elev-2) 80%, transparent);
+  color: var(--text-dim);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ── Annotate overlay ─────────────────────────────────────────────────────
    Full-window surface for drawing on a frozen screenshot of the preview. The
    native WebView2 preview is suppressed (hidden) while this is open, so normal
