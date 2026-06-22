@@ -59,6 +59,11 @@ export default function PreviewPane({
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
   const deployedUrl = project.lastDeploy?.url
+  // The deployed item can also be viewed embedded in the Fabric portal shell
+  // (`…/groups/{workspace}/appbackends/{item}`). The CLI hands us that deep link
+  // as `lastDeploy.portalUrl`; a toolbar toggle switches the webview between the
+  // direct app URL and this Fabric-hosted view.
+  const fabricUrl = project.lastDeploy?.portalUrl
   const status = running ? 'deploying' : project.lastDeploy?.status
   const error = project.lastDeploy?.error
   // The first deploy of a project has no recorded Fabric workspace — surface a
@@ -86,6 +91,15 @@ export default function PreviewPane({
   const [frozen, setFrozen] = useState<string | null>(null)
 
   const showWebview = !running && Boolean(deployedUrl)
+  // Which URL the embedded webview actually loads. Falls back to the direct URL
+  // whenever the Fabric link is unavailable or the toggle is off.
+  const [previewMode, setPreviewMode] = useState<'direct' | 'fabric'>('direct')
+  const previewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
+
+  // Switching projects shouldn't carry a prior project's Fabric view over.
+  useEffect(() => {
+    setPreviewMode('direct')
+  }, [project.id])
 
   // Auto-reload the preview after a successful (re)deploy.
   useEffect(() => {
@@ -121,7 +135,7 @@ export default function PreviewPane({
   useEffect(() => {
     const visible = showWebview && !suppressed && Boolean(deployedUrl)
     const host = hostRef.current
-    if (!visible || !host || !deployedUrl) {
+    if (!visible || !host || !deployedUrl || !previewUrl) {
       // An HTML overlay (a dropdown/menu/modal) covering a live preview suppresses
       // the native webview, which would otherwise paint over it. Rather than blank
       // the pane to black, freeze the last visible frame to a PNG and paint it into
@@ -177,7 +191,7 @@ export default function PreviewPane({
         if (shownKey === '') {
           // Was hidden → show + position (showUrl re-shows the surface).
           shownKey = key
-          void window.api.preview.showUrl(deployedUrl, b)
+          void window.api.preview.showUrl(previewUrl, b)
         } else if (key !== shownKey) {
           shownKey = key
           void window.api.preview.setBounds(b)
@@ -189,14 +203,14 @@ export default function PreviewPane({
     const initial = measure()
     if (initial) {
       shownKey = `${initial.x}|${initial.y}|${initial.width}|${initial.height}`
-      void window.api.preview.showUrl(deployedUrl, initial)
+      void window.api.preview.showUrl(previewUrl, initial)
     }
     raf = requestAnimationFrame(tick)
 
     return () => {
       cancelAnimationFrame(raf)
     }
-  }, [deployedUrl, showWebview, suppressed])
+  }, [deployedUrl, previewUrl, showWebview, suppressed])
 
   // The positioning effect hides the webview whenever a dependency change makes it
   // not-visible (and its rAF loop hides it when the host collapses to 0×0); this
@@ -301,6 +315,20 @@ export default function PreviewPane({
         </div>
         <div className="preview-toolbar-right">
           {loading && showWebview && <span className="preview-loading">Loading…</span>}
+          <button
+            className={`btn btn--sm ${previewMode === 'fabric' ? 'btn--primary' : 'btn--ghost'}`}
+            onClick={() => setPreviewMode((m) => (m === 'fabric' ? 'direct' : 'fabric'))}
+            disabled={!showWebview || !fabricUrl}
+            title={
+              !fabricUrl
+                ? 'The Fabric portal view is unavailable for this deployment'
+                : previewMode === 'fabric'
+                  ? 'Viewing inside the Fabric portal shell — click to return to the direct app view'
+                  : 'View the app embedded in the Fabric portal shell'
+            }
+          >
+            ⧉ Fabric
+          </button>
           <button
             className="btn btn--sm btn--ghost"
             onClick={() => void startAnnotate()}
