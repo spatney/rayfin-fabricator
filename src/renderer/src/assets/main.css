@@ -292,6 +292,7 @@ code {
   grid-template-columns: 1fr 1fr;
   flex: 1;
   min-height: 0;
+  position: relative;
 }
 
 .pane {
@@ -301,8 +302,69 @@ code {
   border-right: 1px solid var(--border);
 }
 
+.pane--chat {
+  border-right: none;
+}
+
 .pane--preview {
   border-right: none;
+}
+
+/* Draggable divider between chat and preview — thin at rest, accent on hover. */
+.pane-divider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.pane-divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  background: var(--border);
+  transition:
+    background 0.12s ease,
+    width 0.12s ease;
+}
+
+.pane-divider:hover::before,
+.panes--resizing .pane-divider::before {
+  width: 2px;
+  background: var(--accent);
+}
+
+.pane-divider-grip {
+  position: relative;
+  width: 3px;
+  height: 30px;
+  border-radius: 3px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.pane-divider:hover .pane-divider-grip,
+.panes--resizing .pane-divider-grip {
+  opacity: 1;
+}
+
+/* Transparent capture layer so dragging stays smooth over the preview webview. */
+.pane-resize-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  cursor: col-resize;
+}
+
+.panes--resizing {
+  user-select: none;
 }
 
 /* Build-view focus: expand one pane to fill the area (hide the other). */
@@ -3927,8 +3989,8 @@ code {
 
 .turn {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 7px;
   animation: turnIn 0.25s ease both;
 }
 
@@ -3941,6 +4003,12 @@ code {
     opacity: 1;
     transform: none;
   }
+}
+
+.turn-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .turn-avatar {
@@ -3985,28 +4053,25 @@ code {
 }
 
 .turn-avatar--pending {
-  animation: avatarPulse 1.6s ease-out infinite;
+  animation: avatarGlow 1.7s ease-in-out infinite;
 }
 
-@keyframes avatarPulse {
-  0% {
-    box-shadow: 0 0 0 0 var(--accent-ring);
-  }
-  70% {
-    box-shadow: 0 0 0 7px transparent;
-  }
+@keyframes avatarGlow {
+  0%,
   100% {
-    box-shadow: 0 0 0 0 transparent;
+    box-shadow: 0 0 4px 0 color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 10px 0 color-mix(in srgb, var(--accent) 42%, transparent);
   }
 }
 
 .turn-main {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-top: 3px;
+  padding-left: 2px;
 }
 
 .turn-role {
@@ -4031,49 +4096,150 @@ code {
   white-space: pre-wrap;
 }
 
-.msg-typing {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 8px 0 4px;
-}
-
-.msg-typing span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: linear-gradient(180deg, var(--accent-2), var(--accent));
-  animation: typingDot 1.15s ease-in-out infinite;
-}
-
-.msg-typing span:nth-child(2) {
-  animation-delay: 0.16s;
-}
-
-.msg-typing span:nth-child(3) {
-  animation-delay: 0.32s;
-}
-
-@keyframes typingDot {
-  0%,
-  70%,
-  100% {
-    opacity: 0.3;
-    transform: scale(0.72);
-    box-shadow: 0 0 0 0 transparent;
-  }
-  35% {
-    opacity: 1;
-    transform: scale(1);
-    box-shadow: 0 0 8px 0 color-mix(in srgb, var(--accent) 55%, transparent);
-  }
-}
-
 .msg-notice {
   color: var(--text-dim);
   font-size: 12px;
   font-style: italic;
   opacity: 0.85;
+}
+
+/* Live "working" bar — keeps visible motion on screen while a turn streams, so
+   it never feels stalled even when tokens / tool updates briefly pause. */
+.agent-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  align-self: flex-start;
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 5px 12px 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  animation: statusIn 0.2s ease both;
+}
+
+@keyframes statusIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.agent-status-orb {
+  flex: none;
+  position: relative;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+}
+
+.agent-status-orb::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 42%, transparent);
+  animation: orbRing 1.5s ease-out infinite;
+}
+
+.agent-status-orb-core {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px 0 color-mix(in srgb, var(--accent) 70%, transparent);
+  animation: orbCore 1.5s ease-in-out infinite;
+}
+
+@keyframes orbRing {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes orbCore {
+  0%,
+  100% {
+    transform: scale(0.82);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+.agent-status-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agent-status-time {
+  flex: none;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  letter-spacing: 0.3px;
+  padding-left: 2px;
+}
+
+.agent-status--notice {
+  background: color-mix(in srgb, var(--pending) 13%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--pending) 36%, var(--border));
+}
+
+.agent-status--notice .agent-status-orb-core {
+  background: var(--pending);
+  box-shadow: 0 0 6px 0 color-mix(in srgb, var(--pending) 70%, transparent);
+}
+
+.agent-status--notice .agent-status-orb::before {
+  background: color-mix(in srgb, var(--pending) 42%, transparent);
+}
+
+.agent-status--notice .agent-status-label {
+  color: var(--pending);
+}
+
+/* Shimmering text sweep (Claude-style) so the status label always reads as live. */
+.shimmer-text {
+  background: linear-gradient(100deg, var(--text-dim) 30%, var(--text) 50%, var(--text-dim) 70%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmerSweep 2s linear infinite;
+}
+
+@keyframes shimmerSweep {
+  from {
+    background-position: 220% 0;
+  }
+  to {
+    background-position: -220% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-status-orb::before,
+  .agent-status-orb-core,
+  .shimmer-text {
+    animation: none;
+  }
+  .shimmer-text {
+    color: var(--text);
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -4676,6 +4842,53 @@ span.thread-pill {
   border-top: 1px solid var(--border);
   padding: 12px 14px 14px;
   background: var(--bg-elev);
+  position: relative;
+}
+
+/* Thin indeterminate progress line above the composer while a turn is running. */
+.composer-busyline {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.composer-busyline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent) 35%,
+    var(--accent-2) 65%,
+    transparent
+  );
+  animation: busySlide 1.25s ease-in-out infinite;
+}
+
+@keyframes busySlide {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-busyline::before {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.5;
+  }
 }
 
 .composer-box {

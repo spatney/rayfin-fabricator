@@ -275,6 +275,56 @@ function ToolActivity({
   )
 }
 
+/**
+ * Live "working" bar shown at the bottom of an assistant turn while it streams.
+ * It keeps motion on screen even when tokens / tool updates pause: a pulsing orb,
+ * a shimmering contextual label (what's happening right now) and a ticking timer.
+ * The label mirrors the current phase; per-step detail stays in the tool rows.
+ */
+function AgentStatus({
+  tools,
+  hasText,
+  notice
+}: {
+  tools: ChatToolCall[]
+  hasText: boolean
+  notice?: string
+}): JSX.Element {
+  const [elapsed, setElapsed] = useState(0)
+  const startRef = useRef(Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startRef.current) / 1000))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const running = tools.find((t) => t.state === 'running')
+  let label: string
+  if (notice) label = notice
+  else if (running) label = friendlyTool(running.name)
+  else if (hasText) label = 'Writing the response'
+  else if (tools.length) label = 'Working through the steps'
+  else label = 'Thinking'
+
+  const mm = Math.floor(elapsed / 60)
+  const ss = String(elapsed % 60).padStart(2, '0')
+
+  return (
+    <div className={`agent-status${notice ? ' agent-status--notice' : ''}`}>
+      <span className="agent-status-orb" aria-hidden="true">
+        <span className="agent-status-orb-core" />
+      </span>
+      <span className={`agent-status-label${notice ? '' : ' shimmer-text'}`}>
+        {notice ? `↻ ${label}` : `${label}…`}
+      </span>
+      <span className="agent-status-time" aria-label="Elapsed time">
+        {mm}:{ss}
+      </span>
+    </div>
+  )
+}
+
 function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
@@ -633,11 +683,13 @@ export default function ChatPanel({
             prevUser.text !== '(screenshot)'
           return (
             <div key={m.id} className={`turn turn--${m.role}`}>
-              <div className={`turn-avatar${m.pending ? ' turn-avatar--pending' : ''}`}>
-                {m.role === 'user' ? <UserIcon /> : <img src={logo} alt="" />}
+              <div className="turn-head">
+                <div className={`turn-avatar${m.pending ? ' turn-avatar--pending' : ''}`}>
+                  {m.role === 'user' ? <UserIcon /> : <img src={logo} alt="" />}
+                </div>
+                <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
               </div>
               <div className="turn-main">
-                <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
                 {m.tools.length > 0 && <ToolActivity tools={m.tools} projectPath={project.path} />}
                 {m.text &&
                   (m.role === 'assistant' ? (
@@ -652,13 +704,9 @@ export default function ChatPanel({
                     ⛶ {m.attachments} screenshot{m.attachments > 1 ? 's' : ''} attached
                   </div>
                 ) : null}
-                {m.notice && <div className="msg-notice">↻ {m.notice}</div>}
-                {m.pending && !m.text && m.tools.length === 0 && (
-                  <div className="msg-typing" aria-label="Thinking">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
+                {m.notice && !m.pending && <div className="msg-notice">↻ {m.notice}</div>}
+                {m.pending && (
+                  <AgentStatus tools={m.tools} hasText={Boolean(m.text)} notice={m.notice} />
                 )}
                 {m.error && (
                   <div className="alert alert--error msg-error">
@@ -680,7 +728,8 @@ export default function ChatPanel({
         })}
       </div>
 
-      <div className="composer">
+      <div className={`composer${sending ? ' composer--busy' : ''}`}>
+        {sending && <div className="composer-busyline" aria-hidden="true" />}
         {(attachments?.length ?? 0) > 0 && (
           <div className="chat-attachments">
             {attachments!.map((a) => (

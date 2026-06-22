@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent
+} from 'react'
 import {
   MAIN_THREAD_ID,
   type AppSettings,
@@ -146,6 +155,37 @@ export default function Workbench({
   const [viewMode, setViewMode] = useState<'build' | 'code' | 'skills'>('build')
   /** Build-view focus: expand a single pane to fill the area (null = split). */
   const [focusPane, setFocusPane] = useState<'chat' | 'preview' | null>(null)
+  /** Chat's share of the build split (0..1); the rest goes to the preview. */
+  const [chatFrac, setChatFrac] = useState<number>(() => {
+    const v = parseFloat(localStorage.getItem('rayfin.splitFrac') ?? '')
+    return Number.isFinite(v) && v >= 0.2 && v <= 0.8 ? v : 0.5
+  })
+  /** True while the user is dragging the chat/preview divider. */
+  const [resizing, setResizing] = useState(false)
+  const panesRef = useRef<HTMLDivElement>(null)
+
+  function onDividerDown(e: ReactMouseEvent): void {
+    e.preventDefault()
+    setResizing(true)
+  }
+  function onResizeMove(e: ReactMouseEvent): void {
+    const el = panesRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const frac = Math.min(0.8, Math.max(0.2, (e.clientX - rect.left) / rect.width))
+    setChatFrac(frac)
+  }
+  function endResize(): void {
+    setResizing(false)
+    setChatFrac((f) => {
+      localStorage.setItem('rayfin.splitFrac', String(f))
+      return f
+    })
+  }
+  function resetSplit(): void {
+    setChatFrac(0.5)
+    localStorage.setItem('rayfin.splitFrac', '0.5')
+  }
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
   /** Region screenshots staged per project for the next chat message. */
@@ -980,9 +1020,15 @@ export default function Workbench({
                 />
               ) : (
                 <div
-                  className={`panes${
-                    focusPane ? ` panes--focus-${focusPane}` : ''
+                  className={`panes${focusPane ? ` panes--focus-${focusPane}` : ''}${
+                    resizing ? ' panes--resizing' : ''
                   }`}
+                  ref={panesRef}
+                  style={
+                    focusPane
+                      ? undefined
+                      : { gridTemplateColumns: `${chatFrac}fr 7px ${1 - chatFrac}fr` }
+                  }
                 >
                   <section className="pane pane--chat">
                     {sideThreadsOn && (
@@ -1044,6 +1090,19 @@ export default function Workbench({
                       )
                     })}
                   </section>
+                  {!focusPane && (
+                    <div
+                      className="pane-divider"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Resize chat and preview"
+                      title="Drag to resize · double-click to reset"
+                      onMouseDown={onDividerDown}
+                      onDoubleClick={resetSplit}
+                    >
+                      <span className="pane-divider-grip" />
+                    </div>
+                  )}
                   <section className="pane pane--preview">
                     <PreviewPane
                       project={active}
@@ -1056,6 +1115,14 @@ export default function Workbench({
                       }
                     />
                   </section>
+                  {resizing && (
+                    <div
+                      className="pane-resize-overlay"
+                      onMouseMove={onResizeMove}
+                      onMouseUp={endResize}
+                      onMouseLeave={endResize}
+                    />
+                  )}
                 </div>
               )}
             </>
