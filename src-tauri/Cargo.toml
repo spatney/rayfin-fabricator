@@ -1,12 +1,14 @@
 [package]
 name = "rayfin-fabricator"
-version = "0.6.0"
+version = "0.7.0"
 description = "Rayfin Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
 authors = ["Rayfin Fabricator"]
 license = "MIT"
 repository = "https://github.com/spatney/rayfin-fabricator"
 edition = "2021"
-rust-version = "1.77.2"
+# Bumped from 1.77.2 for github-copilot-sdk, which requires Rust >= 1.94 (it is an
+# edition-2024 crate). This crate stays edition 2021; only the toolchain must be >= 1.94.
+rust-version = "1.94"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -31,6 +33,15 @@ log = "0.4"
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "sync", "time"] }
 futures = "0.3"
+async-trait = "0.1"
+
+# GitHub Copilot CLI, driven via JSON-RPC instead of the old one-shot `copilot -p`
+# exec path. The default `bundled-cli` feature embeds a version-pinned Copilot CLI
+# at build time (downloaded by its build.rs) and self-extracts it to
+# %LOCALAPPDATA%\github-copilot-sdk\cli\<ver>\copilot.exe at runtime, so the app is
+# self-contained (no separate install). Build requires network; cache via
+# BUNDLED_CLI_CACHE_DIR in CI.
+github-copilot-sdk = "1.0.3"
 
 uuid = { version = "1", features = ["v4"] }
 sha2 = "0.10"

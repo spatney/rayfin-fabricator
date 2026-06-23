@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Rayfin Fabricator",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "identifier": "com.rayfin.fabricator",
   "build": {
     "frontendDist": "../dist",
@@ -20,7 +20,8 @@
         "minHeight": 640,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "backgroundColor": "#0b0e14"
       }
     ],
     "security": {

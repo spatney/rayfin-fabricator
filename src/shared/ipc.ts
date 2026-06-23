@@ -11,6 +11,8 @@ export interface AppVersions {
   app: string
   tauri: string
   webview2: string
+  /** Bundled GitHub Copilot CLI version, or null if unavailable. */
+  copilot: string | null
 }
 
 /** An available application update (mirrors the Rust `UpdateInfo`). */
@@ -43,7 +45,11 @@ export interface ToolStatus {
   id: ToolId
   name: string
   found: boolean
+  /** True when found AND meeting any minimum-version requirement. */
+  satisfied: boolean
   version: string | null
+  /** Minimum required version (`major.minor[.patch]`), when version-gated. */
+  minVersion?: string | null
   /** Short human guidance shown when the tool is missing. */
   installHint: string
   /** Docs / download URL for tools the app cannot auto-install. */
@@ -56,7 +62,7 @@ export interface ToolStatus {
 
 export interface DoctorReport {
   tools: ToolStatus[]
-  /** True when every required tool is present. */
+  /** True when every required tool is present and meets its minimum version. */
   ready: boolean
 }
 
@@ -275,6 +281,22 @@ export interface FabricDeployment {
 
 /** Reasoning effort levels supported by the Copilot CLI (`--effort`). */
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/**
+ * A Copilot model available to the signed-in user, as reported by the engine
+ * (`models.list`). Drives the chat model picker so the choices match each user's
+ * plan/policy instead of a hard-coded list.
+ */
+export interface CopilotModel {
+  /** Selection id passed to the engine as the model (e.g. "claude-sonnet-4.5"). */
+  id: string
+  /** Human-friendly display name. */
+  name: string
+  /** Reasoning-effort levels this model supports; empty when it has none. */
+  supportedReasoningEfforts: ReasoningEffort[]
+  /** The model's default reasoning effort, when it supports configuring one. */
+  defaultReasoningEffort?: ReasoningEffort
+}
 
 /** A project tracked by the app. Source lives in a local git repo on disk. */
 export interface StudioProject {
@@ -1078,6 +1100,8 @@ export interface RayfinStudioApi {
     saveHistory: (projectId: string, messages: ChatMessage[], threadId?: string) => Promise<void>
     /** Set the model / reasoning effort used for this project's chat. */
     setOptions: (projectId: string, options: ChatOptions) => Promise<void>
+    /** List the Copilot models available to the signed-in user (for the picker). */
+    listModels: () => Promise<CopilotModel[]>
   }
 
   /** Experimental side threads (parallel forks). */

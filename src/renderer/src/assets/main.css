@@ -544,20 +544,227 @@ code {
   gap: 10px;
 }
 
-/* Splash */
+/* Splash — a slick "the logo builds itself" startup screen. */
 .splash {
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 34px;
   color: var(--text-dim);
 }
 
-.splash .brand-mark {
-  width: 56px;
-  height: 56px;
+.splash-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+}
+
+.splash-stage {
+  position: relative;
+  width: 200px;
+  height: 198px;
+  display: grid;
+  place-items: center;
+}
+
+/* Soft halo that blooms in behind the assembled mark. */
+.splash-stage::before {
+  content: '';
+  position: absolute;
+  inset: -28%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-soft), transparent 70%);
+  opacity: 0;
+  animation: splash-glow-in 1s ease 0.9s both;
+  pointer-events: none;
+}
+
+.splash-logo {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Each tile glides smoothly into place from a small offset — orderly, not bouncy. */
+.tile {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: tile-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.tile--stem {
+  --tile-x: -28px;
+  --tile-y: 0px;
+  animation-delay: 0.1s;
+}
+.tile--topbar {
+  --tile-x: 0px;
+  --tile-y: -26px;
+  animation-delay: 0.18s;
+}
+.tile--mid {
+  --tile-x: 28px;
+  --tile-y: 0px;
+  animation-delay: 0.26s;
+}
+.tile--botleft {
+  --tile-x: 0px;
+  --tile-y: 26px;
+  animation-delay: 0.34s;
+}
+.tile--square {
+  --tile-x: 0px;
+  --tile-y: 14px;
+  animation-delay: 0.42s;
+}
+.bracket--tl {
+  --tile-x: 0px;
+  --tile-y: 0px;
+  animation-delay: 0.52s;
+}
+.bracket--br {
+  --tile-x: 0px;
+  --tile-y: 0px;
+  animation-delay: 0.58s;
+}
+
+@keyframes tile-in {
+  0% {
+    opacity: 0;
+    transform: translate(var(--tile-x, 0), var(--tile-y, 0)) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+@keyframes splash-glow-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* A highlight that periodically sweeps across the finished mark (clipped to its shape). */
+.splash-sheen {
+  opacity: 0;
+  animation: splash-sheen 3s ease-in-out 1.5s infinite;
+}
+@keyframes splash-sheen {
+  0% {
+    opacity: 0;
+    transform: translateX(-200px);
+  }
+  6% {
+    opacity: 1;
+  }
+  28% {
+    opacity: 1;
+  }
+  34% {
+    opacity: 0;
+    transform: translateX(560px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(560px);
+  }
+}
+
+.splash-wordmark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-align: center;
+  opacity: 0;
+  animation: splash-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.95s both;
+}
+.splash-word {
+  font-size: 23px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: var(--text);
+}
+.splash-sub {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  color: var(--text-dim);
+}
+@keyframes splash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Slim indeterminate progress bar. */
+.splash-progress {
+  position: relative;
+  width: 212px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--bg-elev-3);
+  overflow: hidden;
+  opacity: 0;
+  animation: splash-rise 0.6s ease 1.2s both;
+}
+.splash-progress > span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  transform: translateX(-100%);
+  animation: splash-progress 1.3s ease-in-out 1.3s infinite;
+}
+@keyframes splash-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/* Respect users who prefer less motion: show the finished mark + wordmark, no animation. */
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .splash-sheen,
+  .splash-stage::before,
+  .splash-wordmark,
+  .splash-progress,
+  .splash-progress > span {
+    animation: none !important;
+  }
+  .tile {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .splash-wordmark {
+    opacity: 1 !important;
+  }
+  .splash-stage::before {
+    opacity: 1;
+  }
+  .splash-progress {
+    display: none;
+  }
 }
 
 /* Crash fallback (renderer ErrorBoundary) */

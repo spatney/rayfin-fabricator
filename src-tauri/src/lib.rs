@@ -128,6 +128,7 @@ pub fn run() {
       commands::chat::chat_history,
       commands::chat::chat_save_history,
       commands::chat::chat_set_options,
+      commands::chat::chat_models,
       // threads
       commands::threads::threads_list,
       commands::threads::threads_create,

@@ -31,12 +31,25 @@ jobs:
           cache: npm
 
       - name: Set up Rust
+        # github-copilot-sdk requires Rust >= 1.94 (edition 2024); stable satisfies it.
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust build
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+
+      - name: Cache bundled Copilot CLI archive
+        uses: actions/cache@v4
+        with:
+          # The Copilot SDK's build.rs downloads the platform CLI archive and
+          # embeds it into the binary. Persist that download across runs so we
+          # don't re-fetch it every build. Keyed on Cargo.lock, which pins the
+          # SDK version (and therefore the bundled CLI version).
+          path: ${{ runner.temp }}/copilot-cli-cache
+          key: copilot-cli-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            copilot-cli-${{ runner.os }}-
 
       - name: Install dependencies
         run: npm ci
@@ -87,6 +100,10 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNING_CLIENT_SECRET }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
+          # Reuse the cached Copilot CLI archive that build.rs embeds (see the
+          # "Cache bundled Copilot CLI archive" step). Avoids re-downloading on
+          # every build; build.rs creates the directory on a cache miss.
+          BUNDLED_CLI_CACHE_DIR: ${{ runner.temp }}/copilot-cli-cache
           # Updater signing — emits *-setup.exe.sig used by latest.json.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}

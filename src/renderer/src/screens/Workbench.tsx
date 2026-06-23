@@ -777,6 +777,7 @@ export default function Workbench({
       `- App: Rayfin Fabricator ${versions?.app ?? 'unknown'}`,
       `- Tauri: ${versions?.tauri ?? 'unknown'}`,
       `- WebView2: ${versions?.webview2 ?? 'unknown'}`,
+      `- Copilot CLI: ${versions?.copilot ?? 'unknown'}`,
       `- User agent: ${navigator.userAgent}`
     ].join('\n')
     const url = `${repo}/issues/new?labels=bug&title=${encodeURIComponent('[Bug] ')}&body=${encodeURIComponent(body)}`
@@ -1238,7 +1239,16 @@ export default function Workbench({
       <footer className="statusbar">
         <span className="statusbar-item">Rayfin Fabricator v{versions?.app ?? '—'}</span>
         <span className="statusbar-sep">·</span>
-        <span className="statusbar-item">Copilot {auth.copilot.signedIn ? '✓' : '—'}</span>
+        <span
+          className="statusbar-item"
+          title={
+            auth.copilot.signedIn
+              ? `Copilot CLI signed in${auth.copilot.user ? ` as ${auth.copilot.user}` : ''}`
+              : 'Copilot CLI not signed in'
+          }
+        >
+          Copilot {versions?.copilot ?? (auth.copilot.signedIn ? '✓' : '—')}
+        </span>
         <span className="statusbar-sep">·</span>
         <span className="statusbar-item">Fabric {auth.rayfin.signedIn ? '✓' : '—'}</span>
         {active && (

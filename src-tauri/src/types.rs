@@ -15,6 +15,9 @@ pub struct AppVersions {
   pub tauri: String,
   /// WebView2 runtime version on Windows (the embedded browser engine).
   pub webview2: String,
+  /// The bundled GitHub Copilot CLI version (self-reported via `--version`).
+  /// `None` if the platform isn't bundled or the probe failed.
+  pub copilot: Option<String>,
 }
 
 /* ----------------------------- updates ----------------------------- */
@@ -54,7 +57,11 @@ pub struct ToolStatus {
   pub id: String,
   pub name: String,
   pub found: bool,
+  /// True when the tool is present *and* meets any minimum-version requirement.
+  pub satisfied: bool,
   pub version: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub min_version: Option<String>,
   pub install_hint: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub install_url: Option<String>,
@@ -577,6 +584,22 @@ pub struct ChatOptions {
   pub model: Option<String>,
   #[serde(default)]
   pub effort: Option<String>,
+}
+
+/// A Copilot model available to the signed-in user, surfaced in the chat model
+/// picker. Trimmed from the SDK's richer `Model` to just what the UI renders.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CopilotModel {
+  /// Selection id passed to the engine as `--model` (e.g. `"claude-sonnet-4.5"`).
+  pub id: String,
+  /// Human-friendly display name.
+  pub name: String,
+  /// Reasoning-effort levels this model supports (empty when it has none).
+  pub supported_reasoning_efforts: Vec<String>,
+  /// The model's default reasoning effort, when it supports configuring one.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub default_reasoning_effort: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

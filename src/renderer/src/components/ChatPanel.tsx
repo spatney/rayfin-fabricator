@@ -5,6 +5,7 @@ import {
   type ChatMessage,
   type ChatToolCall,
   type ChatTurnResult,
+  type CopilotModel,
   type ReasoningEffort,
   type StudioProject
 } from '@shared/ipc'
@@ -60,10 +61,58 @@ interface Props {
   onToggleFocus?: () => void
 }
 
-/** Suggested Copilot models (free-text still allowed via the datalist input). */
-const MODEL_SUGGESTIONS = ['claude-sonnet-4.5', 'gpt-5.4', 'gpt-5-mini', 'gpt-4.1', 'o4-mini']
-
+/** Reasoning efforts shown when the engine's per-model list is unavailable
+ * (offline / pre-fetch / signed-out). Also defines the canonical display order. */
 const EFFORT_OPTIONS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
+const EFFORT_ORDER: ReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max']
+
+// Module-level cache so the per-user model list is fetched once and shared across
+// every ChatPanel instance (one per thread), rather than re-queried on each open.
+let modelsCache: CopilotModel[] | null = null
+let modelsPromise: Promise<CopilotModel[]> | null = null
+
+function loadCopilotModels(): Promise<CopilotModel[]> {
+  if (modelsCache) return Promise.resolve(modelsCache)
+  if (!modelsPromise) {
+    modelsPromise = window.api.chat
+      .listModels()
+      .then((list) => {
+        modelsCache = list
+        return list
+      })
+      .catch((err) => {
+        modelsPromise = null // allow a retry on the next popover open
+        throw err
+      })
+  }
+  return modelsPromise
+}
+
+/** Fetch the available models once `enabled` (the picker is open), keeping the
+ * static fallback until they arrive (or if the engine can't be reached). */
+function useCopilotModels(enabled: boolean): { models: CopilotModel[]; loading: boolean } {
+  const [models, setModels] = useState<CopilotModel[]>(modelsCache ?? [])
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    if (!enabled || modelsCache) return
+    let cancelled = false
+    setLoading(true)
+    loadCopilotModels()
+      .then((list) => {
+        if (!cancelled) setModels(list)
+      })
+      .catch(() => {
+        /* keep the static fallback */
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [enabled])
+  return { models, loading }
+}
 
 /** A clickable starter prompt shown on the empty state. */
 interface Suggestion {
@@ -381,6 +430,7 @@ export default function ChatPanel({
   const [model, setModel] = useState(project.model ?? '')
   const [effort, setEffort] = useState<ReasoningEffort | ''>(project.effort ?? '')
   const [showModel, setShowModel] = useState(false)
+  const { models, loading: modelsLoading } = useCopilotModels(showModel)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -390,6 +440,26 @@ export default function ChatPanel({
     () => suggestionsFor(project),
     [project.id, project.name, project.template]
   )
+
+  // The currently-selected model's metadata (when a concrete, still-listed model
+  // is chosen) — used to label the picker button and scope the effort options.
+  const selectedModel = useMemo(() => models.find((m) => m.id === model), [models, model])
+
+  // Reasoning efforts offered for the current selection: the chosen model's own
+  // set, or — on Auto — the union across all models (an effort still rides along
+  // with whatever the engine picks). Falls back to the static list when empty.
+  const effortOptions = useMemo<ReasoningEffort[]>(() => {
+    let efforts: ReasoningEffort[]
+    if (selectedModel) {
+      efforts = selectedModel.supportedReasoningEfforts
+    } else {
+      const set = new Set<ReasoningEffort>()
+      for (const m of models) for (const e of m.supportedReasoningEfforts) set.add(e)
+      efforts = [...set]
+    }
+    if (efforts.length === 0) efforts = EFFORT_OPTIONS
+    return EFFORT_ORDER.filter((e) => efforts.includes(e))
+  }, [models, selectedModel])
 
   // Close the model/effort popover on any outside click.
   useEffect(() => {
@@ -405,6 +475,17 @@ export default function ChatPanel({
       effort: nextEffort || undefined
     })
     onOptionsChanged?.()
+  }
+
+  // Switch model; if the in-effect effort isn't valid for the new model, drop
+  // back to Auto so we never send an unsupported model/effort pair.
+  function selectModel(nextModel: string): void {
+    setModel(nextModel)
+    const next = models.find((m) => m.id === nextModel)
+    const stillValid = !effort || !next || next.supportedReasoningEfforts.includes(effort)
+    const nextEffort = stillValid ? effort : ''
+    if (nextEffort !== effort) setEffort(nextEffort)
+    saveOptions(nextModel, nextEffort)
   }
 
   useEffect(() => {
@@ -542,31 +623,30 @@ export default function ChatPanel({
             onClick={() => setShowModel((s) => !s)}
           >
             <span className="chat-model-btn-icon">✨</span>
-            <span className="chat-model-btn-label">{model || 'Auto'}</span>
+            <span className="chat-model-btn-label">{selectedModel?.name || model || 'Auto'}</span>
             <span className="chat-model-btn-caret">▾</span>
           </button>
           {showModel && (
             <div className="chat-model-pop" role="dialog">
               <label className="chat-model-field">
                 <span className="chat-model-field-label">Model</span>
-                <input
+                <select
                   className="chat-model-input"
-                  list="copilot-models"
                   value={model}
-                  placeholder="Auto (recommended)"
-                  spellCheck={false}
                   autoFocus
-                  onChange={(e) => setModel(e.target.value)}
-                  onBlur={() => saveOptions(model, effort)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.currentTarget.blur()
-                  }}
-                />
-                <datalist id="copilot-models">
-                  {MODEL_SUGGESTIONS.map((m) => (
-                    <option key={m} value={m} />
+                  onChange={(e) => selectModel(e.target.value)}
+                >
+                  <option value="">Auto (recommended)</option>
+                  {/* Keep a saved model selectable even if it's no longer listed. */}
+                  {model && !models.some((m) => m.id === model) && (
+                    <option value={model}>{model}</option>
+                  )}
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
                   ))}
-                </datalist>
+                </select>
               </label>
               <label className="chat-model-field">
                 <span className="chat-model-field-label">Reasoning effort</span>
@@ -580,14 +660,18 @@ export default function ChatPanel({
                   }}
                 >
                   <option value="">Auto</option>
-                  {EFFORT_OPTIONS.map((o) => (
+                  {effortOptions.map((o) => (
                     <option key={o} value={o}>
                       {o}
                     </option>
                   ))}
                 </select>
               </label>
-              <p className="chat-model-hint">Leave on Auto unless you know what you need.</p>
+              <p className="chat-model-hint">
+                {modelsLoading && models.length === 0
+                  ? 'Loading models…'
+                  : 'Leave on Auto unless you know what you need.'}
+              </p>
             </div>
           )}
         </div>

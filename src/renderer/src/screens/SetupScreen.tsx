@@ -3,9 +3,7 @@ import type {
   AuthStatus,
   DoctorReport,
   InstallResult,
-  ProcLogEvent,
-  ToolId,
-  ToolStatus
+  ProcLogEvent
 } from '@shared/ipc'
 import logo from '../assets/logo.png'
 
@@ -80,9 +78,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
   }
 
   const tools = doctor?.tools ?? []
-  const tool = (id: ToolId): ToolStatus | undefined => tools.find((t) => t.id === id)
-  const copilotReady = tool('copilot')?.found ?? false
-  const missingAuto = tools.filter((t) => t.required && !t.found && t.autoInstallable)
+  const needsAuto = tools.filter((t) => t.required && !t.satisfied && t.autoInstallable)
 
   const allReady =
     (doctor?.ready ?? false) &&
@@ -114,7 +110,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
         <section className="setup-card">
           <div className="setup-card-head">
             <h2 className="setup-card-title">1 · Tools</h2>
-            {missingAuto.length > 0 && (
+            {needsAuto.length > 0 && (
               <button
                 className="btn btn--primary btn--sm"
                 disabled={busy !== null}
@@ -144,23 +140,37 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
           <ul className="tool-list">
             {tools.map((t) => (
               <li key={t.id} className="tool-row">
-                <span className={`status-dot ${t.found ? 'status-dot--ok' : 'status-dot--bad'}`} />
+                <span className={`status-dot ${t.satisfied ? 'status-dot--ok' : 'status-dot--bad'}`} />
                 <span className="tool-name">{t.name}</span>
-                <span className="tool-version">{t.found ? t.version : t.installHint}</span>
+                <span className="tool-version">
+                  {t.satisfied
+                    ? t.version
+                    : t.found
+                      ? `${t.version} · update to ${t.minVersion}+ needed`
+                      : t.installHint}
+                </span>
                 <span className="tool-action">
-                  {t.found ? (
+                  {t.satisfied ? (
                     <span className="tag tag--ok">installed</span>
                   ) : t.autoInstallable ? (
                     <button
                       className="btn btn--sm"
                       disabled={busy !== null}
                       onClick={() =>
-                        runInstall(`install:${t.id}`, `Install ${t.name}`, () =>
-                          window.api.doctor.install(t.id)
+                        runInstall(
+                          `install:${t.id}`,
+                          `${t.found ? 'Update' : 'Install'} ${t.name}`,
+                          () => window.api.doctor.install(t.id)
                         )
                       }
                     >
-                      {busy === `install:${t.id}` ? 'Installing…' : 'Install'}
+                      {busy === `install:${t.id}`
+                        ? t.found
+                          ? 'Updating…'
+                          : 'Installing…'
+                        : t.found
+                          ? 'Update'
+                          : 'Install'}
                     </button>
                   ) : (
                     <a className="btn btn--sm btn--link" href={t.installUrl} target="_blank" rel="noreferrer">
@@ -181,8 +191,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
               subtitle="The AI agent that writes your code"
               signedIn={auth?.copilot.signedIn ?? false}
               detail={auth?.copilot.user}
-              disabled={!copilotReady || busy !== null}
-              disabledReason={!copilotReady ? 'Install the Copilot CLI first' : undefined}
+              disabled={busy !== null}
               busy={busy === 'login:copilot'}
               onSignIn={() =>
                 runAction('login:copilot', 'Sign in to GitHub Copilot', () =>

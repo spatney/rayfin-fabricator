@@ -2,6 +2,7 @@
 //! persistence, paths, event emission, telemetry, crash logging).
 
 pub mod crashlog;
+pub mod copilot;
 pub mod emit;
 pub mod exec;
 pub mod history;

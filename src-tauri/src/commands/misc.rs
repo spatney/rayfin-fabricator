@@ -13,14 +13,17 @@ pub fn ping() -> &'static str {
 }
 
 /// Version info for the About/Settings panel. Under Tauri there is no Node/V8
-/// runtime, so the panel reports the app, Tauri framework and WebView2 versions.
+/// runtime, so the panel reports the app, Tauri framework, WebView2 and bundled
+/// Copilot CLI versions.
 #[tauri::command]
-pub fn get_versions(app: AppHandle) -> AppVersions {
-  let pkg = app.package_info();
+pub async fn get_versions(app: AppHandle) -> AppVersions {
+  let app_version = app.package_info().version.to_string();
+  let copilot = crate::services::copilot::bundled_cli_version().await;
   AppVersions {
-    app: pkg.version.to_string(),
+    app: app_version,
     tauri: tauri::VERSION.to_string(),
     webview2: webview_version(),
+    copilot,
   }
 }
 

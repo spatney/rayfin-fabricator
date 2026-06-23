@@ -1,8 +1,8 @@
 //! Advisor: a Copilot-driven, read-only security review of the active Rayfin
-//! app. Drives the same Copilot CLI path as chat (`copilot -p <prompt>
-//! --output-format json -C <cwd> ...`) but with an *ephemeral* session id so the
-//! review never lands in the project's Build chat history. The model is asked to
-//! emit a single fenced JSON report which we parse into [`AdvisorReport`].
+//! app. Uses the GitHub Copilot SDK like chat, but on a *transient* session (a
+//! throwaway session id, disconnected after the run) so the review never lands
+//! in the project's Build chat history. The model is asked to emit a single
+//! fenced JSON report which we parse into [`AdvisorReport`].
 //!
 //! The review currently covers three checks: data/routes not behind
 //! authentication (`category: "auth"`), overly permissive database policies
@@ -11,17 +11,16 @@
 //! checks can be added later by extending the prompt alone.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::{Instant, UNIX_EPOCH};
+use std::path::Path;
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
+use github_copilot_sdk::subscription::RecvErrorKind;
+use github_copilot_sdk::MessageOptions;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
-use uuid::Uuid;
 
 use crate::services::emit::emit_advisor_event;
-use crate::services::exec::{run, OnData, RunOptions, Stream};
 use crate::services::{paths, store};
 use crate::state::AppState;
 use crate::types::{AdvisorEvent, AdvisorRawReport, AdvisorReport, AdvisorSnapshot};
@@ -81,13 +80,13 @@ If you find no issues, return an empty "findings" array and a reassuring "summar
 /// Per-run streaming accumulator.
 #[derive(Default)]
 struct ReviewState {
-  /// Partial line carried across stdout chunks.
-  buffer: String,
   /// Full assistant text, reassembled in stream order (for JSON extraction).
   assistant: String,
   /// Characters of each assistant message already appended (dedup with the
   /// terminal `assistant.message` event).
   streamed: HashMap<String, usize>,
+  /// Error message if the session reported one (`session.error`).
+  errored: Option<String>,
 }
 
 /// Derive a short progress label plus the tool name from a tool-start event.
@@ -117,32 +116,21 @@ fn progress_label(data: &Value) -> (String, Option<String>) {
   (text, tool_opt)
 }
 
-/// Parse one JSONL line: accumulate assistant text and surface tool activity as
-/// progress events.
-fn handle_line(
-  line: &str,
+/// Feed one Copilot **server** event into the review accumulator, surfacing tool
+/// activity as progress. Returns `true` once the turn reaches a terminal state
+/// (`session.idle` / `session.error`).
+fn map_review_event(
+  event_type: &str,
+  data: &Value,
   st: &mut ReviewState,
   emit_progress: &mut dyn FnMut(String, Option<String>),
-) {
-  let trimmed = line.trim();
-  if trimmed.is_empty() {
-    return;
-  }
-  let Ok(raw) = serde_json::from_str::<Value>(trimmed) else {
-    return;
-  };
-  let Some(kind) = raw.get("type").and_then(|v| v.as_str()) else {
-    return;
-  };
-  let empty = Value::Object(serde_json::Map::new());
-  let data = raw.get("data").filter(|d| d.is_object()).unwrap_or(&empty);
-
-  match kind {
+) -> bool {
+  match event_type {
     "assistant.message_delta" => {
       let id = data.get("messageId").and_then(|v| v.as_str()).unwrap_or("").to_string();
       let text = data.get("deltaContent").and_then(|v| v.as_str()).unwrap_or("");
       if text.is_empty() {
-        return;
+        return false;
       }
       st.assistant.push_str(text);
       *st.streamed.entry(id).or_insert(0) += text.chars().count();
@@ -162,8 +150,21 @@ fn handle_line(
       let (text, tool) = progress_label(data);
       emit_progress(text, tool);
     }
+    "session.error" => {
+      let msg = data
+        .get("message")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("Copilot reported an error.")
+        .to_string();
+      st.errored = Some(msg);
+      return true;
+    }
+    "session.idle" => return true,
     _ => {}
   }
+  false
 }
 
 /// Pull fenced code-block bodies out of `s`, stripping a short leading language
@@ -327,93 +328,106 @@ pub async fn advisor_run(
   };
 
   let started = Instant::now();
-  let session_id = Uuid::new_v4().to_string();
-  let cwd = PathBuf::from(&project.path);
-  let args: Vec<&str> = vec![
-    "-p",
-    ADVISOR_PROMPT,
-    "--output-format",
-    "json",
-    "--session-id",
-    &session_id,
-    "-C",
-    &project.path,
-    "--allow-all",
-    "--no-color",
-  ];
 
-  let shared = Arc::new(Mutex::new(ReviewState::default()));
-  let on_data: OnData = {
-    let shared = shared.clone();
-    let app = app.clone();
-    let pid = project_id.clone();
-    Arc::new(move |stream: Stream, chunk: &str| {
-      if !matches!(stream, Stream::Stdout) {
-        return;
-      }
-      let mut st = shared.lock().unwrap();
-      st.buffer.push_str(chunk);
-      let mut emit = |text: String, tool: Option<String>| {
-        emit_advisor_event(&app, &pid, AdvisorEvent::Progress { text, tool })
-      };
-      while let Some(nl) = st.buffer.find('\n') {
-        let line = st.buffer[..nl].to_string();
-        st.buffer.replace_range(..=nl, "");
-        handle_line(&line, &mut st, &mut emit);
-      }
-    })
+  // A transient, uncached session keeps the review out of the project's chat
+  // history; the default model is used (matching the previous behaviour).
+  let session = match state.copilot.transient_session(&project.path, None, None).await {
+    Ok(s) => s,
+    Err(e) => {
+      state.end_advisor(&project_id);
+      emit_advisor_event(&app, &project_id, AdvisorEvent::Error { text: e.clone() });
+      emit_advisor_event(&app, &project_id, AdvisorEvent::Done { ok: false });
+      return Ok(AdvisorSnapshot {
+        report: AdvisorReport { ok: false, summary: format!("Couldn't start the analysis. {e}"), findings: vec![] },
+        analyzed_at: chrono::Utc::now().to_rfc3339(),
+        duration_ms: started.elapsed().as_millis() as u64,
+        stale: false,
+        fingerprint: String::new(),
+      });
+    }
   };
 
-  let result = run(
-    "copilot",
-    &args,
-    RunOptions {
-      cwd: Some(cwd),
-      env: vec![],
-      on_data: Some(on_data),
-      timeout_ms: Some(RUN_TIMEOUT_MS),
-      cancel: Some(token.clone()),
-    },
-  )
-  .await;
+  enum DrainEnd {
+    Finished,
+    Cancelled,
+    Closed,
+  }
 
-  // Flush any trailing partial line.
-  {
-    let mut st = shared.lock().unwrap();
-    if !st.buffer.is_empty() {
-      let line = std::mem::take(&mut st.buffer);
-      let mut emit = |text: String, tool: Option<String>| {
-        emit_advisor_event(&app, &project_id, AdvisorEvent::Progress { text, tool })
-      };
-      handle_line(&line, &mut st, &mut emit);
+  let mut st = ReviewState::default();
+  let mut cancelled = false;
+  let mut timed_out = false;
+
+  // Subscribe before sending so no events are missed.
+  let mut sub = session.subscribe();
+  let send_err = session.send(MessageOptions::new(ADVISOR_PROMPT)).await.err().map(|e| e.to_string());
+
+  if send_err.is_none() {
+    // Drain until the session goes idle / errors, honouring cancellation and the
+    // 10-minute cap.
+    let drain = async {
+      loop {
+        if token.is_cancelled() {
+          let _ = session.abort().await;
+          return DrainEnd::Cancelled;
+        }
+        tokio::select! {
+          _ = token.wait_cancelled() => {
+            let _ = session.abort().await;
+            return DrainEnd::Cancelled;
+          }
+          recv = sub.recv() => match recv {
+            Ok(ev) => {
+              let mut emit = |text: String, tool: Option<String>| {
+                emit_advisor_event(&app, &project_id, AdvisorEvent::Progress { text, tool });
+              };
+              if map_review_event(&ev.event_type, &ev.data, &mut st, &mut emit) {
+                return DrainEnd::Finished;
+              }
+            }
+            Err(err) => match err.kind() {
+              RecvErrorKind::Lagged(l) => {
+                log::warn!("advisor event stream lagged, skipped {} events", l.skipped());
+              }
+              RecvErrorKind::Closed => return DrainEnd::Closed,
+              other => {
+                log::warn!("advisor event stream error: {other:?}");
+                return DrainEnd::Closed;
+              }
+            },
+          }
+        }
+      }
+    };
+    match tokio::time::timeout(Duration::from_millis(RUN_TIMEOUT_MS), drain).await {
+      Ok(DrainEnd::Cancelled) => cancelled = true,
+      Ok(DrainEnd::Finished) | Ok(DrainEnd::Closed) => {}
+      Err(_) => {
+        let _ = session.abort().await;
+        timed_out = true;
+      }
     }
   }
 
+  // The advisor session is one-shot; disconnect it so it never accumulates.
+  let _ = session.disconnect().await;
   state.end_advisor(&project_id);
 
-  let assistant = shared.lock().unwrap().assistant.clone();
-
   // Map the outcome to a report, keeping the UI on a single happy path.
-  let report = if token.is_cancelled() {
+  let report = if cancelled {
     AdvisorReport { ok: false, summary: "Analysis cancelled.".into(), findings: vec![] }
-  } else if result.not_found {
-    AdvisorReport {
-      ok: false,
-      summary: "The copilot CLI was not found on PATH.".into(),
-      findings: vec![],
-    }
-  } else if let Some(raw) = extract_report(&assistant) {
+  } else if let Some(e) = send_err {
+    AdvisorReport { ok: false, summary: format!("Couldn't complete the analysis. {e}"), findings: vec![] }
+  } else if let Some(raw) = extract_report(&st.assistant) {
     AdvisorReport { ok: true, summary: raw.summary, findings: raw.findings }
   } else {
-    let detail = if !result.stderr.trim().is_empty() {
-      result.stderr.trim().to_string()
-    } else if !assistant.trim().is_empty() {
-      assistant.trim().chars().take(600).collect()
+    let detail = if let Some(e) = &st.errored {
+      e.clone()
+    } else if timed_out {
+      "the analysis timed out after 10 minutes".to_string()
+    } else if !st.assistant.trim().is_empty() {
+      st.assistant.trim().chars().take(600).collect()
     } else {
-      format!(
-        "copilot exited with code {}",
-        result.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into())
-      )
+      "Copilot ended without a report.".to_string()
     };
     AdvisorReport {
       ok: false,

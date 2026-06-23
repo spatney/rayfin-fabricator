@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use crate::services::copilot::CopilotManager;
 use crate::services::exec::CancelToken;
 use crate::services::history::MAIN_THREAD_ID;
 
@@ -15,6 +16,8 @@ pub struct AppState {
   chat_cancels: Mutex<HashMap<String, CancelToken>>,
   /// Active advisor-run cancel tokens, keyed by `projectId` (one run per project).
   advisor_cancels: Mutex<HashMap<String, CancelToken>>,
+  /// Shared Copilot SDK client + per-thread session cache.
+  pub copilot: CopilotManager,
 }
 
 fn key(project_id: &str, thread_id: Option<&str>) -> String {

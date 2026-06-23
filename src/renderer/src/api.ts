@@ -139,7 +139,8 @@ export const api: RayfinStudioApi = {
     saveHistory: (projectId: string, messages: ChatMessage[], threadId?: string) =>
       invoke('chat_save_history', { projectId, messages, threadId }),
     setOptions: (projectId: string, options: ChatOptions) =>
-      invoke('chat_set_options', { projectId, options })
+      invoke('chat_set_options', { projectId, options }),
+    listModels: () => invoke('chat_models')
   },
 
   threads: {

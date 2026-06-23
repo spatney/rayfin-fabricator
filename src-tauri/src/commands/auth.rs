@@ -167,8 +167,12 @@ pub async fn auth_status() -> AuthStatus {
 pub async fn auth_login_copilot(app: AppHandle) -> ProcResult {
   let on_data = proc_streamer(&app, "login:copilot");
   on_data(exec::Stream::Stdout, "Starting GitHub Copilot sign-in…\n");
-  let res = exec::run(
-    "copilot",
+  let Some(cli) = crate::services::copilot::bundled_cli_path() else {
+    on_data(exec::Stream::Stderr, "The bundled Copilot CLI is unavailable on this platform.\n");
+    return ProcResult { ok: false, exit_code: None };
+  };
+  let res = exec::run_program(
+    cli,
     &["login"],
     RunOptions {
       on_data: Some(on_data),

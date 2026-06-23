@@ -1,13 +1,15 @@
 //! Cross-platform process runner — the Rust counterpart to `src/main/services/exec.ts`.
 //!
-//! On Windows the npm-distributed CLIs (`copilot`, `rayfin`) are `.cmd` shims.
-//! Spawning a `.cmd` through `std`/`tokio` routes it via `cmd.exe`, which mangles
-//! arguments containing `&` `|` `^` `<` `>` and *rejects* arguments containing
-//! newlines outright — fatal for `copilot -p <multi-line prompt>`. We therefore
-//! resolve the shim to its underlying `node <script>` invocation and spawn
-//! `node.exe` (a real executable) directly, so arbitrary argument text is
-//! delivered verbatim. Other tools are resolved on `PATH` via the `which` crate
-//! (which also yields a clean "not found" signal).
+//! On Windows the npm-distributed `rayfin` CLI is a `.cmd` shim. Spawning a
+//! `.cmd` through `std`/`tokio` routes it via `cmd.exe`, which mangles arguments
+//! containing `&` `|` `^` `<` `>` and *rejects* arguments containing newlines
+//! outright. We therefore resolve the shim to its underlying `node <script>`
+//! invocation and spawn `node.exe` (a real executable) directly, so arbitrary
+//! argument text is delivered verbatim. Other tools are resolved on `PATH` via
+//! the `which` crate (which also yields a clean "not found" signal). The Copilot
+//! CLI no longer goes through here — the GitHub Copilot SDK drives its own
+//! bundled binary (see [`crate::services::copilot`]); only `login` and the
+//! version probe still spawn it, by absolute path via [`run_program`].
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -62,7 +64,10 @@ impl CancelToken {
     self.cancelled.load(Ordering::SeqCst)
   }
 
-  async fn wait_cancelled(&self) {
+  /// Resolves when this token is cancelled (or immediately if already
+  /// cancelled). Lets async consumers `select!` on cancellation — e.g. the
+  /// chat turn loop aborts the live Copilot session when the user hits stop.
+  pub async fn wait_cancelled(&self) {
     if self.is_cancelled() {
       return;
     }
@@ -124,8 +129,8 @@ fn is_batch(path: &Path) -> bool {
   )
 }
 
-/// Resolve an npm-installed CLI (`copilot`, `rayfin`) to a direct
-/// `node <script>` invocation, bypassing the fragile `.cmd` shim.
+/// Resolve the npm-installed `rayfin` CLI to a direct `node <script>`
+/// invocation, bypassing the fragile `.cmd` shim.
 fn node_bypass(name: &str) -> Option<Resolved> {
   let cmd = which::which(name).ok()?;
   if is_batch(&cmd) {
@@ -163,7 +168,7 @@ fn which_resolved(file: &str) -> Resolved {
 
 fn resolve_program(file: &str) -> Resolved {
   match file {
-    "copilot" | "rayfin" => node_bypass(file).unwrap_or_else(|| which_resolved(file)),
+    "rayfin" => node_bypass(file).unwrap_or_else(|| which_resolved(file)),
     _ => which_resolved(file),
   }
 }
@@ -248,6 +253,14 @@ where
 /// Never returns Err — failures surface via [`RunResult`].
 pub async fn run(file: &str, args: &[&str], opts: RunOptions) -> RunResult {
   spawn_and_run(resolve_program(file), args, opts).await
+}
+
+/// Run an already-resolved executable by absolute path, skipping PATH/shim
+/// resolution. Used for the SDK-bundled Copilot CLI (`login` + version probe),
+/// whose binary lives under `%LOCALAPPDATA%` and is never on `PATH`.
+pub async fn run_program(program: PathBuf, args: &[&str], opts: RunOptions) -> RunResult {
+  let missing = !program.is_file();
+  spawn_and_run(Resolved { program, prefix: vec![], not_found: missing }, args, opts).await
 }
 
 /// Run a project's pinned Rayfin CLI (the `npx rayfin` equivalent) by resolving
@@ -375,7 +388,16 @@ async fn spawn_and_run(resolved: Resolved, args: &[&str], opts: RunOptions) -> R
 
 /// Convenience: run a process and return trimmed stdout, or None on failure.
 pub async fn try_version(file: &str, args: &[&str]) -> Option<String> {
-  let res = run(file, args, RunOptions::timeout(15_000)).await;
+  version_from(run(file, args, RunOptions::timeout(15_000)).await)
+}
+
+/// Like [`try_version`] but for an absolute executable path (e.g. the bundled
+/// Copilot CLI under `%LOCALAPPDATA%`, which is never on `PATH`).
+pub async fn try_version_path(program: PathBuf, args: &[&str]) -> Option<String> {
+  version_from(run_program(program, args, RunOptions::timeout(15_000)).await)
+}
+
+fn version_from(res: RunResult) -> Option<String> {
   if !res.ok {
     return None;
   }

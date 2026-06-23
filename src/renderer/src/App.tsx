@@ -1,12 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, AuthStatus, DoctorReport } from '@shared/ipc'
 import SetupScreen from './screens/SetupScreen'
 import Workbench from './screens/Workbench'
 import UpdateBanner from './components/UpdateBanner'
+import SplashScreen from './components/SplashScreen'
 import { watchTheme } from './theme'
-import logo from './assets/logo.png'
 
 type Phase = 'loading' | 'setup' | 'ready'
+
+// Keep the playful splash on screen long enough to actually be seen, even when the
+// startup checks resolve almost instantly. Only the very first load is gated.
+const SPLASH_MIN_MS = 2500
+const SPLASH_MIN_MS_REDUCED = 700
 
 function App(): JSX.Element {
   const [phase, setPhase] = useState<Phase>('loading')
@@ -15,6 +20,22 @@ function App(): JSX.Element {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
+  // Don't leave the splash before its minimum showtime has elapsed (first load only).
+  const gateUntilRef = useRef(
+    Date.now() +
+      (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        ? SPLASH_MIN_MS_REDUCED
+        : SPLASH_MIN_MS)
+  )
+  const applyPhase = useCallback((next: Phase): void => {
+    const wait = gateUntilRef.current - Date.now()
+    if (wait <= 0) {
+      setPhase(next)
+    } else {
+      setTimeout(() => setPhase(next), wait)
+    }
+  }, [])
+
   const refresh = useCallback(async (): Promise<void> => {
     setRefreshing(true)
     try {
@@ -22,11 +43,11 @@ function App(): JSX.Element {
       setDoctor(d)
       setAuth(a)
       const ready = d.ready && a.copilot.signedIn && a.rayfin.signedIn
-      setPhase(ready ? 'ready' : 'setup')
+      applyPhase(ready ? 'ready' : 'setup')
     } finally {
       setRefreshing(false)
     }
-  }, [])
+  }, [applyPhase])
 
   useEffect(() => {
     void refresh()
@@ -48,10 +69,7 @@ function App(): JSX.Element {
     return (
       <>
         <UpdateBanner />
-        <div className="splash">
-          <img className="brand-mark" src={logo} alt="Rayfin Fabricator" />
-          <span>Starting Rayfin Fabricator…</span>
-        </div>
+        <SplashScreen />
       </>
     )
   }

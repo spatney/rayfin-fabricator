@@ -1,7 +1,12 @@
 //! Environment doctor — the Rust port of `src/main/services/doctor.ts`.
-//! Detects external tools (Node, npm, Git, Copilot CLI) and can
-//! auto-install the npm CLIs (`npm -g`) and system prerequisites (winget on
-//! Windows, brew on macOS), falling back to the official installer.
+//! Detects the external prerequisites the user must provide (Node, npm, Git, and
+//! the Rayfin CLI) and can auto-install them — the system ones via winget
+//! (Windows) / brew (macOS) falling back to the official installer, and the
+//! Rayfin CLI globally via npm. The Rayfin CLI is required because Fabric
+//! sign-in and deploys shell out to the global `rayfin` command. The Copilot CLI
+//! is intentionally *not* listed here — it ships bundled with the app (embedded
+//! by the SDK, self-extracted on first use), so it needs no install, only a
+//! one-time sign-in (tracked separately by `auth_status`).
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -22,6 +27,9 @@ struct ToolDef {
   name: &'static str,
   bin: &'static str,
   version_args: &'static [&'static str],
+  /// Minimum acceptable version (`major.minor[.patch]`); below it the tool is
+  /// reported unsatisfied so the doctor offers to upgrade. `None` = any version.
+  min_version: Option<&'static str>,
   required: bool,
   npm_package: Option<&'static str>,
   system: Option<SystemPkg>,
@@ -42,6 +50,7 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
         winget: Some("OpenJS.NodeJS.LTS"),
         brew: Some("node"),
       }),
+      min_version: None,
       install_hint: "Install Node.js 18+ (includes npm).",
       install_url: Some("https://nodejs.org/en/download"),
     },
@@ -53,6 +62,7 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       required: true,
       npm_package: None,
       system: None,
+      min_version: None,
       install_hint: "npm ships with Node.js.",
       install_url: Some("https://nodejs.org/en/download"),
     },
@@ -67,19 +77,21 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
         winget: Some("Git.Git"),
         brew: Some("git"),
       }),
+      min_version: None,
       install_hint: "Install Git for version control of your apps.",
       install_url: Some("https://git-scm.com/downloads"),
     },
     ToolDef {
-      id: "copilot",
-      name: "GitHub Copilot CLI",
-      bin: "copilot",
+      id: "rayfin",
+      name: "Rayfin CLI",
+      bin: "rayfin",
       version_args: &["--version"],
       required: true,
-      npm_package: Some("@github/copilot"),
+      npm_package: Some("@microsoft/rayfin-cli"),
       system: None,
-      install_hint: "The AI agent that writes and edits your app code.",
-      install_url: Some("https://docs.github.com/copilot/how-tos/copilot-cli"),
+      min_version: Some("1.32"),
+      install_hint: "Required to sign in to Microsoft Fabric and deploy your apps.",
+      install_url: Some("https://www.npmjs.com/package/@microsoft/rayfin-cli"),
     },
   ]
 });
@@ -126,13 +138,40 @@ fn parse_version(raw: Option<&str>) -> Option<String> {
   }
 }
 
+/// Parse a `major.minor[.patch]` prefix into a comparable tuple (missing parts
+/// default to 0). Tolerates a leading `v` and trailing pre-release/build text.
+fn version_tuple(v: &str) -> Option<(u64, u64, u64)> {
+  static RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?").unwrap());
+  let c = RE.captures(v)?;
+  let part = |i: usize| c.get(i).map_or(0, |m| m.as_str().parse().unwrap_or(0));
+  Some((c.get(1)?.as_str().parse().ok()?, part(2), part(3)))
+}
+
+/// True when `version` is present and meets or exceeds `min` (both
+/// `major.minor[.patch]`). An unparseable/absent version never satisfies a floor.
+fn meets_min_version(version: Option<&str>, min: &str) -> bool {
+  match (version.and_then(version_tuple), version_tuple(min)) {
+    (Some(v), Some(m)) => v >= m,
+    _ => false,
+  }
+}
+
 async fn check_tool(def: &ToolDef) -> ToolStatus {
   let raw = exec::try_version(def.bin, def.version_args).await;
+  let found = raw.is_some();
+  let version = parse_version(raw.as_deref());
+  let satisfied = found
+    && def
+      .min_version
+      .map_or(true, |min| meets_min_version(version.as_deref(), min));
   ToolStatus {
     id: def.id.to_string(),
     name: def.name.to_string(),
-    found: raw.is_some(),
-    version: parse_version(raw.as_deref()),
+    found,
+    satisfied,
+    version,
+    min_version: def.min_version.map(|s| s.to_string()),
     install_hint: def.install_hint.to_string(),
     install_url: def.install_url.map(|s| s.to_string()),
     auto_installable: is_auto_installable(def),
@@ -145,7 +184,7 @@ pub async fn check_environment() -> DoctorReport {
   for def in TOOLS.iter() {
     tools.push(check_tool(def).await);
   }
-  let ready = tools.iter().filter(|t| t.required).all(|t| t.found);
+  let ready = tools.iter().filter(|t| t.required).all(|t| t.satisfied);
   DoctorReport { tools, ready }
 }
 
@@ -160,7 +199,7 @@ pub async fn doctor_install(app: AppHandle, id: String) -> InstallResult {
     "node" => "install:node",
     "npm" => "install:setup",
     "git" => "install:git",
-    "copilot" => "install:copilot",
+    "rayfin" => "install:rayfin",
     _ => "install:setup",
   };
   let on_data = proc_streamer(&app, channel);
@@ -377,7 +416,7 @@ pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> In
   let missing: Vec<String> = report
     .tools
     .iter()
-    .filter(|t| t.required && !t.found)
+    .filter(|t| t.required && !t.satisfied)
     .map(|t| t.id.clone())
     .collect();
   if missing.is_empty() {
@@ -411,7 +450,7 @@ pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> In
     };
   }
 
-  // Phase 2 — npm CLIs (Node present). Install the Copilot CLI.
+  // Phase 2 — npm CLIs (Node present). Install the Rayfin CLI.
   let mut all_ok = true;
   let mut last_exit: Option<i32> = Some(0);
   for def in TOOLS
@@ -430,5 +469,41 @@ pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> In
     exit_code: last_exit,
     requires_relaunch: None,
     manual: None,
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn version_tuple_parses_partial_and_prerelease() {
+    assert_eq!(version_tuple("1.23.0"), Some((1, 23, 0)));
+    assert_eq!(version_tuple("1.32"), Some((1, 32, 0)));
+    assert_eq!(version_tuple("v1.33.2"), Some((1, 33, 2)));
+    assert_eq!(version_tuple("1.34.0-alpha.1"), Some((1, 34, 0)));
+    assert_eq!(version_tuple("not-a-version"), None);
+  }
+
+  #[test]
+  fn meets_min_version_enforces_floor() {
+    // At or above the floor.
+    assert!(meets_min_version(Some("1.32.0"), "1.32"));
+    assert!(meets_min_version(Some("1.33.2"), "1.32"));
+    assert!(meets_min_version(Some("2.0.0"), "1.32"));
+    // Below the floor.
+    assert!(!meets_min_version(Some("1.23.0"), "1.32"));
+    assert!(!meets_min_version(Some("1.31.9"), "1.32"));
+    // Absent/unparseable versions never satisfy a floor.
+    assert!(!meets_min_version(None, "1.32"));
+    assert!(!meets_min_version(Some("unknown"), "1.32"));
+  }
+
+  #[test]
+  fn rayfin_tool_has_minimum_and_is_npm_installable() {
+    let rayfin = tool_by_id("rayfin").expect("rayfin tool def");
+    assert_eq!(rayfin.min_version, Some("1.32"));
+    assert_eq!(rayfin.npm_package, Some("@microsoft/rayfin-cli"));
+    assert!(rayfin.required);
   }
 }
