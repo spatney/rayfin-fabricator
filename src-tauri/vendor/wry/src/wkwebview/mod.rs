@@ -1017,8 +1017,25 @@ r#"Object.defineProperty(window, 'ipc', {
 
       unsafe {
         let parent_view = self.webview.superview().unwrap();
+        let mut origin = window_position(&parent_view, x, y, height);
+        // The window uses a full-size content view, so the parent content view
+        // extends up under the native title bar. The main webview lays its web
+        // content out *below* the title bar (via safe-area insets), so the
+        // renderer's CSS y-origin sits `title_bar_inset` points below the content
+        // view's top. A child webview positioned purely by frame doesn't get that
+        // inset, so without this correction it lands `title_bar_inset` points too
+        // high — covering the toolbar. Shift it down to align with the web content.
+        // In fullscreen there is no title bar, the inset is 0, and this is a no-op.
+        if let Some(win) = self.webview.window() {
+          let cl = win.contentLayoutRect();
+          let title_bar_inset =
+            parent_view.frame().size.height - (cl.origin.y + cl.size.height);
+          if title_bar_inset > 0.0 {
+            origin.y -= title_bar_inset;
+          }
+        }
         let frame = CGRect {
-          origin: window_position(&parent_view, x, y, height),
+          origin,
           size: CGSize::new(width, height),
         };
         self.webview.setFrame(frame);
