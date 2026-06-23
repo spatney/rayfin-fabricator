@@ -80,6 +80,10 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
   const tools = doctor?.tools ?? []
   const needsAuto = tools.filter((t) => t.required && !t.satisfied && t.autoInstallable)
 
+  // Fabric sign-in shells out to the global `rayfin` CLI, so it can't work until
+  // the Rayfin CLI (and its Node runtime) are installed. Gate the card on that.
+  const rayfinReady = tools.find((t) => t.id === 'rayfin')?.satisfied ?? false
+
   const allReady =
     (doctor?.ready ?? false) &&
     (auth?.copilot.signedIn ?? false) &&
@@ -205,7 +209,10 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
               signedIn={auth?.rayfin.signedIn ?? false}
               detail={auth?.rayfin.user}
               extra={auth?.rayfin.tenant ? `Tenant ${auth.rayfin.tenant}` : undefined}
-              disabled={busy !== null}
+              disabled={busy !== null || !rayfinReady}
+              disabledReason={
+                !rayfinReady ? 'Install the Rayfin CLI above to enable Fabric sign-in.' : undefined
+              }
               busy={busy === 'login:rayfin'}
               onSignIn={() =>
                 runAction('login:rayfin', 'Sign in to Fabric / Rayfin', () =>

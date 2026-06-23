@@ -44,6 +44,11 @@ fn telemetry_connection_string(app: &tauri::App) -> Option<String> {
 pub fn run() {
   services::crashlog::install_panic_hook();
 
+  // Repair PATH before anything spawns a child process: a Finder/Dock-launched
+  // macOS app inherits a minimal PATH that omits Homebrew and Node version
+  // managers, so the doctor would otherwise report Node/npm/Rayfin CLI as missing.
+  services::env_path::repair();
+
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
