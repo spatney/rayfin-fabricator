@@ -95,7 +95,15 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
       : busy === 'login:rayfin'
         ? 'Microsoft Fabric'
         : null
-  const logTail = log.trim().split('\n').slice(-8).join('\n')
+  // Show only the meaningful tail of the process output in the sign-in overlay:
+  // drop our own "› <label>" echo lines and blank lines so it reads as clean
+  // status rather than a raw terminal dump.
+  const logTail = log
+    .split('\n')
+    .map((line) => line.replace(/\s+$/, ''))
+    .filter((line) => line.trim().length > 0 && !line.trimStart().startsWith('\u203a'))
+    .slice(-6)
+    .join('\n')
 
   return (
     <div className="setup">
@@ -240,13 +248,15 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
             </button>
           </div>
         </footer>
+      </div>
 
-        {showLog && (
+      {showLog && (
+        <div className="setup-logwrap">
           <pre ref={logRef} className="setup-log">
             {log.trim() || 'Process output will appear here.'}
           </pre>
-        )}
-      </div>
+        </div>
+      )}
 
       {loginProvider && (
         <div

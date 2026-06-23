@@ -928,9 +928,9 @@ code {
 /* Setup screen */
 .setup {
   height: 100%;
-  overflow-y: auto;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   background: radial-gradient(
     1200px 600px at 50% -10%,
     color-mix(in srgb, var(--accent) 12%, var(--bg)) 0%,
@@ -941,6 +941,9 @@ code {
 .setup-inner {
   width: 100%;
   max-width: 720px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   padding: 40px 28px 60px;
 }
 
@@ -1152,8 +1155,14 @@ code {
   gap: 10px;
 }
 
+.setup-logwrap {
+  flex: none;
+  width: 100%;
+  max-width: 720px;
+  padding: 0 28px 16px;
+}
+
 .setup-log {
-  margin-top: 16px;
   background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -6011,22 +6020,25 @@ span.thread-pill {
 }
 
 .signin-log {
-  margin: 4px 0 0;
-  width: 380px;
+  margin: 8px 0 0;
+  width: 400px;
   max-width: 100%;
-  max-height: 132px;
+  max-height: 140px;
   overflow: auto;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-elev-2) 80%, transparent);
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-elev-2) 70%, transparent);
   color: var(--text-dim);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11.5px;
-  line-height: 1.5;
+  line-height: 1.6;
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
+  scrollbar-width: thin;
 }
 
 /* ── Annotate overlay ─────────────────────────────────────────────────────
