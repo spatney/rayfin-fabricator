@@ -11,6 +11,15 @@ import {
 } from '@shared/ipc'
 import type { PendingShot } from './PreviewPane'
 import Markdown from './Markdown'
+import {
+  SparkleIcon,
+  EraserIcon,
+  ExpandIcon,
+  CollapseIcon,
+  CloseIcon,
+  StopIcon,
+  ImageIcon
+} from './icons'
 import logo from '../assets/logo.png'
 
 export interface UIChatMessage extends ChatMessage {
@@ -223,9 +232,11 @@ function suggestionsFor(project: StudioProject): Suggestion[] {
 /** Friendly, non-jargon label for a Copilot tool call (for non-coders). */
 function friendlyTool(name: string): string {
   const n = name.toLowerCase()
-  if (n.includes('powershell') || n.includes('bash') || n.includes('shell')) return 'Running a command'
+  if (n.includes('powershell') || n.includes('bash') || n.includes('shell'))
+    return 'Running a command'
   if (n.includes('create')) return 'Creating a file'
-  if (n.includes('edit') || n.includes('replace') || n.includes('str_replace')) return 'Editing code'
+  if (n.includes('edit') || n.includes('replace') || n.includes('str_replace'))
+    return 'Editing code'
   if (n.includes('view') || n.includes('read') || n.includes('cat')) return 'Reading a file'
   if (n.includes('grep') || n.includes('search') || n.includes('glob') || n.includes('find'))
     return 'Searching the project'
@@ -358,6 +369,7 @@ function AgentStatus({
 
   const mm = Math.floor(elapsed / 60)
   const ss = String(elapsed % 60).padStart(2, '0')
+  const steps = tools.length
 
   return (
     <div className={`agent-status${notice ? ' agent-status--notice' : ''}`}>
@@ -367,6 +379,11 @@ function AgentStatus({
       <span className={`agent-status-label${notice ? '' : ' shimmer-text'}`}>
         {notice ? `↻ ${label}` : `${label}…`}
       </span>
+      {steps > 0 && (
+        <span className="agent-status-steps" aria-label={`${steps} steps so far`}>
+          {steps} step{steps > 1 ? 's' : ''}
+        </span>
+      )}
       <span className="agent-status-time" aria-label="Elapsed time">
         {mm}:{ss}
       </span>
@@ -536,7 +553,8 @@ export default function ChatPanel({
       text: displayText,
       tools: [],
       pending: false,
-      attachments: shots.length || undefined
+      attachments: shots.length || undefined,
+      attachmentThumbs: shots.length ? shots.map((s) => s.thumb) : undefined
     }
     const assistantMsg: UIChatMessage = {
       id: uid(),
@@ -622,7 +640,7 @@ export default function ChatPanel({
             title="Choose the AI model and reasoning effort"
             onClick={() => setShowModel((s) => !s)}
           >
-            <span className="chat-model-btn-icon">✨</span>
+            <SparkleIcon className="chat-model-btn-icon" />
             <span className="chat-model-btn-label">{selectedModel?.name || model || 'Auto'}</span>
             <span className="chat-model-btn-caret">▾</span>
           </button>
@@ -675,23 +693,31 @@ export default function ChatPanel({
             </div>
           )}
         </div>
-        <button
-          className="btn btn--sm btn--ghost"
-          onClick={newChat}
-          disabled={sending || messages.length === 0}
-          title="Start a new conversation"
-        >
-          ＋ New chat
-        </button>
-        {onToggleFocus && (
+        <div className="seg seg--toolbar">
           <button
-            className={`btn btn--sm ${focused ? 'btn--primary' : 'btn--ghost'}`}
-            onClick={onToggleFocus}
-            title={focused ? 'Exit focus — show the preview again' : 'Focus the chat — hide the preview'}
+            className="seg-btn"
+            onClick={newChat}
+            disabled={sending || messages.length === 0}
+            title="Clear this conversation and start fresh"
           >
-            {focused ? '⤡' : '⤢'}
+            <EraserIcon />
+            Clear chat
           </button>
-        )}
+          {onToggleFocus && (
+            <button
+              className={`seg-btn seg-btn--icon${focused ? ' seg-btn--on' : ''}`}
+              onClick={onToggleFocus}
+              title={
+                focused
+                  ? 'Exit focus — show the preview again'
+                  : 'Focus the chat — hide the preview'
+              }
+              aria-label={focused ? 'Exit focus' : 'Focus the chat'}
+            >
+              {focused ? <CollapseIcon /> : <ExpandIcon />}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="chat-scroll" ref={scrollRef}>
@@ -702,8 +728,8 @@ export default function ChatPanel({
             </div>
             <h2 className="chat-welcome-title">Let’s build {project.name}</h2>
             <p className="chat-welcome-sub">
-              Describe what you want in plain language — I’ll write the code and deploy it live.
-              No coding required.
+              Describe what you want in plain language — I’ll write the code and deploy it live. No
+              coding required.
             </p>
             <div className="chat-suggestions">
               {suggestions.map((s) => (
@@ -746,7 +772,9 @@ export default function ChatPanel({
                 </div>
                 {hasBody && (
                   <div className="merge-event-body">
-                    {m.tools.length > 0 && <ToolActivity tools={m.tools} projectPath={project.path} />}
+                    {m.tools.length > 0 && (
+                      <ToolActivity tools={m.tools} projectPath={project.path} />
+                    )}
                     {m.text && (
                       <div className="msg-text msg-text--md">
                         <Markdown>{m.text}</Markdown>
@@ -783,9 +811,16 @@ export default function ChatPanel({
                   ) : (
                     <div className="msg-text">{m.text}</div>
                   ))}
-                {m.attachments ? (
+                {m.attachmentThumbs && m.attachmentThumbs.length > 0 ? (
+                  <div className="msg-shots">
+                    {m.attachmentThumbs.map((src, i) => (
+                      <img key={i} className="msg-shot" src={src} alt="Screenshot attachment" />
+                    ))}
+                  </div>
+                ) : m.attachments ? (
                   <div className="msg-attach">
-                    ⛶ {m.attachments} screenshot{m.attachments > 1 ? 's' : ''} attached
+                    <ImageIcon className="msg-attach-ico" />
+                    {m.attachments} screenshot{m.attachments > 1 ? 's' : ''}
                   </div>
                 ) : null}
                 {m.notice && !m.pending && <div className="msg-notice">↻ {m.notice}</div>}
@@ -824,7 +859,7 @@ export default function ChatPanel({
                   onClick={() => onRemoveAttachment?.(a.path)}
                   title="Remove"
                 >
-                  ✕
+                  <CloseIcon />
                 </button>
               </div>
             ))}
@@ -841,10 +876,22 @@ export default function ChatPanel({
             onKeyDown={onKeyDown}
           />
           <div className="composer-actions">
-            <span className="composer-hint">Enter to send · Shift+Enter for newline</span>
+            <span className="composer-hint">
+              <kbd>Enter</kbd>
+              <span>to send</span>
+              <span className="composer-hint-sep">·</span>
+              <kbd>Shift</kbd>
+              <kbd>Enter</kbd>
+              <span>for newline</span>
+            </span>
             {sending ? (
-              <button className="btn btn--sm btn--ghost composer-stop" onClick={stop}>
-                ■ Stop
+              <button
+                className="composer-send composer-send--stop"
+                onClick={stop}
+                title="Stop generating"
+                aria-label="Stop generating"
+              >
+                <StopIcon />
               </button>
             ) : (
               <button
@@ -852,6 +899,7 @@ export default function ChatPanel({
                 onClick={send}
                 disabled={!input.trim() && (attachments?.length ?? 0) === 0}
                 title="Send (Enter)"
+                aria-label="Send"
               >
                 <SendIcon />
               </button>

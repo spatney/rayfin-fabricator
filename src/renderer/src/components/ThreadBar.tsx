@@ -7,13 +7,9 @@
  * Purely presentational: all state + orchestration lives in Workbench.
  */
 
-export type ThreadUiStatus =
-  | 'idle'
-  | 'working'
-  | 'merging'
-  | 'error'
-  | 'countdown'
-  | 'waiting-main'
+import { BranchIcon, CloseIcon } from './icons'
+
+export type ThreadUiStatus = 'idle' | 'working' | 'merging' | 'error' | 'countdown' | 'waiting-main'
 
 export interface ThreadView {
   id: string
@@ -86,15 +82,23 @@ export default function ThreadBar({
               aria-label={`Discard ${t.name}`}
               onClick={() => onDiscard(t.id)}
             >
-              ✕
+              <CloseIcon className="thread-ico" />
             </button>
           </span>
         ))}
 
-        <button type="button" className="thread-pill thread-pill--new" onClick={onNew}>
-          <span className="thread-plus" aria-hidden="true">
-            +
-          </span>
+        <button
+          type="button"
+          className="thread-pill thread-pill--new"
+          onClick={onNew}
+          disabled={!mainBusy}
+          title={
+            mainBusy
+              ? 'Start a side thread to work on something else in parallel'
+              : 'Side threads run in parallel — start one while Main is busy'
+          }
+        >
+          <BranchIcon className="thread-ico" />
           New thread
         </button>
       </div>
@@ -106,7 +110,11 @@ export default function ThreadBar({
             Merging <strong>{t.name}</strong> into main in {t.countdown}s…
           </span>
           <div className="merge-banner-actions">
-            <button type="button" className="btn btn--xs btn--primary" onClick={() => onMergeNow(t.id)}>
+            <button
+              type="button"
+              className="btn btn--xs btn--primary"
+              onClick={() => onMergeNow(t.id)}
+            >
               Merge now
             </button>
             <button

@@ -2,6 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DeployResult, PreviewBounds, StudioProject } from '@shared/ipc'
 import { usePreviewSuppressed } from '../overlay'
 import AnnotateOverlay from './AnnotateOverlay'
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ReloadIcon,
+  FabricIcon,
+  AnnotateIcon,
+  CookieIcon,
+  ExpandIcon,
+  CollapseIcon
+} from './icons'
 
 export interface DeployUiState {
   running: boolean
@@ -273,30 +283,33 @@ export default function PreviewPane({
     <div className="preview">
       <div className="preview-toolbar">
         <div className="preview-toolbar-left">
-          <div className="preview-nav">
+          <div className="seg seg--toolbar preview-nav">
             <button
-              className="preview-navbtn"
+              className="seg-btn seg-btn--icon"
               onClick={goBack}
               disabled={!showWebview || !canBack}
+              aria-label="Back"
               title="Back"
             >
-              ‹
+              <ChevronLeftIcon />
             </button>
             <button
-              className="preview-navbtn"
+              className="seg-btn seg-btn--icon"
               onClick={goForward}
               disabled={!showWebview || !canForward}
+              aria-label="Forward"
               title="Forward"
             >
-              ›
+              <ChevronRightIcon />
             </button>
             <button
-              className="preview-navbtn"
+              className="seg-btn seg-btn--icon"
               onClick={reload}
               disabled={!showWebview}
+              aria-label="Reload"
               title="Reload"
             >
-              ⟳
+              <ReloadIcon />
             </button>
           </div>
           <span className={`preview-status preview-status--${dotClass}`}>
@@ -315,45 +328,51 @@ export default function PreviewPane({
         </div>
         <div className="preview-toolbar-right">
           {loading && showWebview && <span className="preview-loading">Loading…</span>}
-          <button
-            className={`btn btn--sm ${previewMode === 'fabric' ? 'btn--primary' : 'btn--ghost'}`}
-            onClick={() => setPreviewMode((m) => (m === 'fabric' ? 'direct' : 'fabric'))}
-            disabled={!showWebview || !fabricUrl}
-            title={
-              !fabricUrl
-                ? 'The Fabric portal view is unavailable for this deployment'
-                : previewMode === 'fabric'
-                  ? 'Viewing inside the Fabric portal shell — click to return to the direct app view'
-                  : 'View the app embedded in the Fabric portal shell'
-            }
-          >
-            ⧉ Fabric
-          </button>
-          <button
-            className="btn btn--sm btn--ghost"
-            onClick={() => void startAnnotate()}
-            disabled={!showWebview || capturing}
-            title="Take a screenshot of the preview, draw on it, and attach it to your message"
-          >
-            {capturing ? 'Capturing…' : '✎ Annotate'}
-          </button>
-          <button
-            className="btn btn--sm btn--ghost btn--icon"
-            onClick={() => void clearSession()}
-            disabled={!showWebview || clearing}
-            aria-label="Clear cookies"
-            title="Clear the preview's cookies and cached sign-in, then reload — use this to sign in as a different account or Entra tenant"
-          >
-            {clearing ? <span className="icon-spin">⟳</span> : '🍪'}
-          </button>
-          <button
-            className={`btn btn--sm btn--icon ${focused ? 'btn--primary' : 'btn--ghost'}`}
-            onClick={onToggleFocus}
-            aria-label={focused ? 'Exit focus' : 'Focus'}
-            title={focused ? 'Exit focus — show the chat again' : 'Focus the preview — hide the chat'}
-          >
-            {focused ? '⤡' : '⤢'}
-          </button>
+          <div className="seg seg--toolbar">
+            <button
+              className={`seg-btn ${previewMode === 'fabric' ? 'seg-btn--on' : ''}`}
+              onClick={() => setPreviewMode((m) => (m === 'fabric' ? 'direct' : 'fabric'))}
+              disabled={!showWebview || !fabricUrl}
+              title={
+                !fabricUrl
+                  ? 'The Fabric portal view is unavailable for this deployment'
+                  : previewMode === 'fabric'
+                    ? 'Viewing inside the Fabric portal shell — click to return to the direct app view'
+                    : 'View the app embedded in the Fabric portal shell'
+              }
+            >
+              <FabricIcon />
+              Fabric
+            </button>
+            <button
+              className="seg-btn"
+              onClick={() => void startAnnotate()}
+              disabled={!showWebview || capturing}
+              title="Take a screenshot of the preview, draw on it, and attach it to your message"
+            >
+              <AnnotateIcon />
+              {capturing ? 'Capturing…' : 'Annotate'}
+            </button>
+            <button
+              className="seg-btn seg-btn--icon"
+              onClick={() => void clearSession()}
+              disabled={!showWebview || clearing}
+              aria-label="Clear cookies"
+              title="Clear the preview's cookies and cached sign-in, then reload — use this to sign in as a different account or Entra tenant"
+            >
+              {clearing ? <ReloadIcon className="btn-ico icon-spin" /> : <CookieIcon />}
+            </button>
+            <button
+              className={`seg-btn seg-btn--icon ${focused ? 'seg-btn--on' : ''}`}
+              onClick={onToggleFocus}
+              aria-label={focused ? 'Exit focus' : 'Focus'}
+              title={
+                focused ? 'Exit focus — show the chat again' : 'Focus the preview — hide the chat'
+              }
+            >
+              {focused ? <CollapseIcon /> : <ExpandIcon />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -396,9 +415,7 @@ export default function PreviewPane({
                   overlay suppresses the native child, `frozen` paints the last frame
                   here so the overlay floats over a still preview instead of black. */}
               <div className="preview-webview-host" ref={hostRef}>
-                {frozen && (
-                  <img className="preview-frozen" src={frozen} alt="" draggable={false} />
-                )}
+                {frozen && <img className="preview-frozen" src={frozen} alt="" draggable={false} />}
               </div>
             </div>
           </div>

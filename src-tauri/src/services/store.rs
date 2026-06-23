@@ -34,7 +34,7 @@ fn default_state() -> ProjectsState {
 
 fn default_settings() -> AppSettings {
   AppSettings {
-    theme: "system".to_string(),
+    theme: "dark".to_string(),
     experiments: Some(ExperimentFlags {
       side_threads: Some(false),
     }),

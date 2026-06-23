@@ -800,6 +800,8 @@ export interface ChatMessage {
   error?: string
   /** Number of screenshots that were attached to this (user) message. */
   attachments?: number
+  /** Thumbnail data URLs for screenshots attached to this (user) message. */
+  attachmentThumbs?: string[]
   /**
    * Marks a non-conversational system event rendered distinctly from a normal
    * turn. `'merge'` = an auto-merge of a side thread into main.

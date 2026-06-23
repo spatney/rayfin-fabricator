@@ -34,6 +34,7 @@ import { SuppressPreview } from '../overlay'
 import RayfinVersionControl from '../components/RayfinVersionControl'
 import SkillsView from '../components/SkillsView'
 import AdvisorView from '../components/AdvisorView'
+import { InfoIcon, GearIcon, SignOutIcon } from '../components/icons'
 import logo from '../assets/logo.png'
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
@@ -76,8 +77,16 @@ function deriveThreadName(task: string): string {
     )
     .replace(/^(a|an|the|some)\s+/i, '')
   const words = s.split(/\s+/).filter(Boolean).slice(0, 6)
-  let name = words.join(' ').replace(/[.,;:!?]+$/, '').trim()
-  if (name.length > 42) name = name.slice(0, 42).replace(/\s+\S*$/, '').trim() + '…'
+  let name = words
+    .join(' ')
+    .replace(/[.,;:!?]+$/, '')
+    .trim()
+  if (name.length > 42)
+    name =
+      name
+        .slice(0, 42)
+        .replace(/\s+\S*$/, '')
+        .trim() + '…'
   if (!name) return 'Side thread'
   return name.charAt(0).toUpperCase() + name.slice(1)
 }
@@ -89,16 +98,19 @@ function toUi(m: ChatMessage): UIChatMessage {
 
 /** Strip transient fields (turnId, pending) before persisting to disk. */
 function toStored(messages: UIChatMessage[]): ChatMessage[] {
-  return messages.map(({ id, role, text, tools, error, attachments, kind, mergeName }) => ({
-    id,
-    role,
-    text,
-    tools,
-    error,
-    attachments,
-    kind,
-    mergeName
-  }))
+  return messages.map(
+    ({ id, role, text, tools, error, attachments, attachmentThumbs, kind, mergeName }) => ({
+      id,
+      role,
+      text,
+      tools,
+      error,
+      attachments,
+      attachmentThumbs,
+      kind,
+      mergeName
+    })
+  )
 }
 
 interface Props {
@@ -437,7 +449,7 @@ export default function Workbench({
           ...all,
           [mainKey]: (all[mainKey] ?? []).map((m) =>
             m.turnId === turnId
-              ? { ...m, pending: false, error: res.ok ? m.error : res.error ?? 'Merge failed.' }
+              ? { ...m, pending: false, error: res.ok ? m.error : (res.error ?? 'Merge failed.') }
               : m
           )
         }))
@@ -794,10 +806,8 @@ export default function Workbench({
       ? [MAIN_THREAD_ID, ...liveThreads.map((t) => t.id)]
       : [MAIN_THREAD_ID]
     : []
-  const rawActiveThread = active ? activeThread[active.id] ?? MAIN_THREAD_ID : MAIN_THREAD_ID
-  const activeThreadId = panelThreadIds.includes(rawActiveThread)
-    ? rawActiveThread
-    : MAIN_THREAD_ID
+  const rawActiveThread = active ? (activeThread[active.id] ?? MAIN_THREAD_ID) : MAIN_THREAD_ID
+  const activeThreadId = panelThreadIds.includes(rawActiveThread) ? rawActiveThread : MAIN_THREAD_ID
   const threadViews: ThreadView[] = active
     ? liveThreads.map((t) => {
         const key = chatKey(active.id, t.id)
@@ -836,14 +846,7 @@ export default function Workbench({
                 stroke="currentColor"
                 strokeWidth="1.8"
               />
-              <line
-                x1="9.5"
-                y1="4.5"
-                x2="9.5"
-                y2="19.5"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              />
+              <line x1="9.5" y1="4.5" x2="9.5" y2="19.5" stroke="currentColor" strokeWidth="1.8" />
             </svg>
           </button>
           <img className="brand-mark" src={logo} alt="" />
@@ -851,50 +854,24 @@ export default function Workbench({
         </div>
         <div className="titlebar-status">
           <span className="who">{auth.rayfin.user ?? 'Signed in'}</span>
-          <button
-            className="btn btn--sm btn--ghost"
-            onClick={reportIssue}
-            title="Report an issue on GitHub — opens a prefilled bug report with app & system info"
-          >
-            <svg
-              className="btn-ico"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          <div className="seg seg--toolbar">
+            <button
+              className="seg-btn"
+              onClick={reportIssue}
+              title="Report an issue on GitHub — opens a prefilled bug report with app & system info"
             >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            Report an issue
-          </button>
-          <button
-            className="btn btn--sm btn--ghost"
-            onClick={() => setShowSettings(true)}
-            title="Settings"
-          >
-            <svg
-              className="btn-ico"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            Settings
-          </button>
-          <button className="btn btn--sm btn--ghost" disabled={signingOut} onClick={signOut}>
-            {signingOut ? 'Signing out…' : 'Sign out'}
-          </button>
+              <InfoIcon />
+              Report an issue
+            </button>
+            <button className="seg-btn" onClick={() => setShowSettings(true)} title="Settings">
+              <GearIcon />
+              Settings
+            </button>
+            <button className="seg-btn" disabled={signingOut} onClick={signOut} title="Sign out">
+              <SignOutIcon />
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -904,11 +881,7 @@ export default function Workbench({
             <button className="btn btn--primary btn--block" onClick={() => setShowNewProject(true)}>
               + New project
             </button>
-            <button
-              className="btn btn--ghost btn--block"
-              disabled={opening}
-              onClick={openExisting}
-            >
+            <button className="btn btn--ghost btn--block" disabled={opening} onClick={openExisting}>
               {opening ? 'Opening…' : 'Open existing…'}
             </button>
           </div>
@@ -977,10 +950,7 @@ export default function Workbench({
                       <button className="project-menu-item" onClick={() => startRename(p)}>
                         Rename
                       </button>
-                      <button
-                        className="project-menu-item"
-                        onClick={() => void removeFromList(p)}
-                      >
+                      <button className="project-menu-item" onClick={() => void removeFromList(p)}>
                         Remove from list
                       </button>
                       <button
@@ -1077,15 +1047,6 @@ export default function Workbench({
                     onSwitch={(workspace, byId) => switchDeployment(active.id, workspace, byId)}
                     onChanged={() => void refreshProjects()}
                   />
-                  {deploys[active.id]?.running ? (
-                    <span className="chip chip--busy">deploying…</span>
-                  ) : active.lastDeploy?.status === 'error' ? (
-                    <span className="chip chip--err">deploy failed</span>
-                  ) : active.lastDeploy?.url ? (
-                    <span className="chip chip--ok">deployed</span>
-                  ) : (
-                    <span className="chip">not deployed</span>
-                  )}
                 </div>
               </div>
               {viewMode === 'code' ? (
@@ -1100,10 +1061,7 @@ export default function Workbench({
                   />
                 </Suspense>
               ) : viewMode === 'skills' ? (
-                <SkillsView
-                  project={active}
-                  onChanged={() => setGitRefresh((n) => n + 1)}
-                />
+                <SkillsView project={active} onChanged={() => setGitRefresh((n) => n + 1)} />
               ) : viewMode === 'advisor' ? (
                 <AdvisorView project={active} onFix={fixWithCopilot} />
               ) : (
@@ -1126,9 +1084,7 @@ export default function Workbench({
                         threads={threadViews}
                         activeThreadId={activeThreadId}
                         mainBusy={Boolean(busyThreads[chatKey(active.id, MAIN_THREAD_ID)])}
-                        onSelect={(tid) =>
-                          setActiveThread((m) => ({ ...m, [active.id]: tid }))
-                        }
+                        onSelect={(tid) => setActiveThread((m) => ({ ...m, [active.id]: tid }))}
                         onNew={() => {
                           setThreadError(null)
                           setShowNewThread(true)
@@ -1166,8 +1122,7 @@ export default function Workbench({
                             }
                             onOptionsChanged={() => void refreshProjects()}
                             outbound={
-                              chatOutbound?.projectId === active.id &&
-                              chatOutbound.threadId === tid
+                              chatOutbound?.projectId === active.id && chatOutbound.threadId === tid
                                 ? chatOutbound
                                 : null
                             }
@@ -1294,8 +1249,8 @@ export default function Workbench({
           message={
             <>
               <p>
-                <strong>{confirmDelete.name}</strong> and all its files will be moved to your
-                system trash:
+                <strong>{confirmDelete.name}</strong> and all its files will be moved to your system
+                trash:
               </p>
               <p className="confirm-path">{confirmDelete.path}</p>
               {confirmDelete.lastDeploy?.url ? (
@@ -1315,7 +1270,10 @@ export default function Workbench({
                         <strong>{confirmDelete.workspaceName}</strong>
                       </span>
                     ) : (
-                      <span className="confirm-check-hint"> — permanently removes the app and its data</span>
+                      <span className="confirm-check-hint">
+                        {' '}
+                        — permanently removes the app and its data
+                      </span>
                     )}
                   </span>
                 </label>

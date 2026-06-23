@@ -931,7 +931,11 @@ code {
   overflow-y: auto;
   display: flex;
   justify-content: center;
-  background: radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 12%, var(--bg)) 0%, var(--bg) 60%);
+  background: radial-gradient(
+    1200px 600px at 50% -10%,
+    color-mix(in srgb, var(--accent) 12%, var(--bg)) 0%,
+    var(--bg) 60%
+  );
 }
 
 .setup-inner {
@@ -1433,16 +1437,6 @@ code {
 .chip--err {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
-}
-
-/* In the project-header control row, size status chips like the other controls. */
-.project-meta .chip {
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  font-size: 12px;
-  border-radius: 8px;
-  padding: 0 12px;
 }
 
 /* Git status pill + commit popover (project header) */
@@ -2163,8 +2157,7 @@ code {
   flex-direction: column;
   gap: 2px;
   padding: 8px;
-  font-family:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .advisor-feed-empty {
@@ -2453,8 +2446,7 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   color: var(--text-dim);
   background: var(--code-inline-bg);
@@ -3402,35 +3394,6 @@ code {
   text-align: left;
 }
 
-.preview-nav {
-  display: inline-flex;
-  gap: 4px;
-}
-
-.preview-navbtn {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  line-height: 1;
-  color: var(--text);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.preview-navbtn:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-}
-
-.preview-navbtn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 .preview-loading {
   font-size: 11px;
   color: var(--text-dim);
@@ -3576,35 +3539,6 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-.dep-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  color: var(--text-dim);
-  transition:
-    border-color 0.12s ease,
-    color 0.12s ease;
-}
-.dep-chip--set {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-.dep-chip:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-.dep-chip-icon {
-  font-size: 9px;
-  opacity: 0.85;
 }
 .dep-chip-label {
   max-width: 150px;
@@ -4019,10 +3953,48 @@ code {
   background: var(--danger);
 }
 
+.chat-attachment-x svg {
+  width: 11px;
+  height: 11px;
+}
+
 .msg-attach {
-  margin-top: 6px;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 11px 4px 8px;
+  font-size: 11.5px;
   color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.msg-attach-ico {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: var(--text-faint);
+}
+
+/* Real screenshot thumbnails rendered inside a sent user message. */
+.msg-shots {
+  display: flex;
+  flex-wrap: wrap;
+  align-self: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.msg-shot {
+  display: block;
+  max-width: 160px;
+  max-height: 120px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev-2);
 }
 
 /* Empty content state */
@@ -4333,6 +4305,93 @@ code {
   opacity: 0.6;
 }
 
+/* ── Toolbar segmented groups ───────────────────────────────────────────────
+   Reuse the segmented control as a joined "pill" of action buttons (titlebar
+   account actions, deploy controls, preview toolbar) so every grouped control
+   reads as one family. Items sit edge-to-edge with subtle hairline dividers and
+   rounded outer ends. All new rules are scoped to `.seg--toolbar` so the plain
+   `.seg` pickers (Settings theme, New-project source) are unaffected. */
+.seg--toolbar {
+  gap: 0;
+  padding: 0;
+  margin-bottom: 0;
+  background: var(--bg-elev-2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg--toolbar .seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  height: 28px;
+  padding: 0 11px;
+  font-size: 12px;
+  border-radius: 0;
+  color: var(--text-dim);
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.seg--toolbar .seg-btn + .seg-btn {
+  border-left: 1px solid var(--border);
+}
+.seg--toolbar .seg-btn:hover:not(:disabled) {
+  background: var(--bg-elev-3);
+  color: var(--text);
+}
+.seg--toolbar .seg-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Toggle "on" state (e.g. Fabric portal view, focus mode) — accent-tinted. */
+.seg--toolbar .seg-btn--on,
+.seg--toolbar .seg-btn--on:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+/* Primary call-to-action segment (Deploy). */
+.seg--toolbar .seg-btn--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+.seg--toolbar .seg-btn--primary:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+  filter: brightness(1.08);
+}
+/* Square icon-only segment. */
+.seg--toolbar .seg-btn--icon {
+  width: 30px;
+  padding: 0;
+}
+.seg--toolbar .seg-btn--icon .btn-ico {
+  width: 16px;
+  height: 16px;
+}
+/* Small status dot rendered inside a segment (e.g. the deployment selector). */
+.seg-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: none;
+}
+.seg-dot--set {
+  background: var(--accent);
+}
+.seg-dot--ok {
+  background: var(--ok);
+}
+.seg-dot--busy {
+  background: var(--pending);
+}
+.seg-dot--err {
+  background: var(--danger);
+}
+
 /* Community-template URL inputs */
 .template-url {
   display: flex;
@@ -4558,7 +4617,9 @@ code {
 }
 
 .chat-model-btn-icon {
-  font-size: 11px;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
 }
 
 .chat-model-btn-label {
@@ -4960,13 +5021,28 @@ code {
   white-space: nowrap;
 }
 
+.agent-status-steps {
+  flex: none;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
 .agent-status-time {
   flex: none;
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
   letter-spacing: 0.3px;
-  padding-left: 2px;
+}
+
+/* Hairline middot separators so label · steps · time read as one cohesive line. */
+.agent-status-steps::before,
+.agent-status-time::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--text-faint);
 }
 
 .agent-status--notice {
@@ -5053,9 +5129,14 @@ code {
     border-color 0.12s ease;
 }
 
-.thread-pill:hover {
+.thread-pill:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--border-soft);
+}
+
+.thread-pill:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .thread-pill--active {
@@ -5113,14 +5194,14 @@ span.thread-pill {
   border-style: dashed;
 }
 
-.thread-pill--new:hover {
+.thread-pill--new:hover:not(:disabled) {
   color: var(--accent);
   border-color: var(--accent-ring);
 }
 
-.thread-plus {
-  font-size: 14px;
-  line-height: 1;
+.thread-ico {
+  width: 13px;
+  height: 13px;
 }
 
 .thread-dot {
@@ -5712,8 +5793,27 @@ span.thread-pill {
 }
 
 .composer-hint {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
   font-size: 11.5px;
   color: var(--text-faint);
+}
+
+.composer-hint kbd {
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--bg-elev-3);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.composer-hint-sep {
+  opacity: 0.6;
 }
 
 .composer-send {
@@ -5742,13 +5842,22 @@ span.thread-pill {
   cursor: not-allowed;
 }
 
+/* Stop the in-flight turn — same footprint as send, but neutral → danger. */
+.composer-send--stop {
+  background: var(--bg-elev-3);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+.composer-send--stop:hover:not(:disabled) {
+  filter: none;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
 .composer-send svg {
   width: 16px;
   height: 16px;
-}
-
-.composer-stop {
-  flex: none;
 }
 
 /* Signing-out overlay — full-app, flat & modern, covers the logout + screen swap */

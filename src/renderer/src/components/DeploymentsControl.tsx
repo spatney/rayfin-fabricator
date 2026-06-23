@@ -173,27 +173,29 @@ export default function DeploymentsControl({
 
   return (
     <div className="dep-control" onClick={(e) => e.stopPropagation()}>
-      <button
-        className={`chip dep-chip${hasDeployment ? ' dep-chip--set' : ''}`}
-        title={activeLabel ? `Active deployment: ${activeLabel}` : 'No deployment yet'}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className="dep-chip-icon">◆</span>
-        <span className="dep-chip-label">{activeLabel || 'No deployment'}</span>
-        <span className="dep-chip-caret">▾</span>
-      </button>
-      <button
-        className="btn btn--sm btn--primary dep-deploy"
-        disabled={running}
-        title={hasDeployment ? 'Redeploy the active deployment' : 'Create your first deployment'}
-        onClick={() => {
-          if (running) return
-          if (hasDeployment) onRedeploy()
-          else openCreate()
-        }}
-      >
-        {running ? 'Deploying…' : hasDeployment ? 'Redeploy' : 'Deploy'}
-      </button>
+      <div className="seg seg--toolbar dep-seg">
+        <button
+          className="seg-btn dep-select"
+          title={activeLabel ? `Active deployment: ${activeLabel}` : 'No deployment yet'}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span className={`seg-dot${hasDeployment ? ' seg-dot--set' : ''}`} />
+          <span className="dep-chip-label">{activeLabel || 'No deployment'}</span>
+          <span className="dep-chip-caret">▾</span>
+        </button>
+        <button
+          className="seg-btn seg-btn--primary dep-deploy"
+          disabled={running}
+          title={hasDeployment ? 'Redeploy the active deployment' : 'Create your first deployment'}
+          onClick={() => {
+            if (running) return
+            if (hasDeployment) onRedeploy()
+            else openCreate()
+          }}
+        >
+          {running ? 'Deploying…' : hasDeployment ? 'Redeploy' : 'Deploy'}
+        </button>
+      </div>
 
       {open && (
         <div className="dep-pop" role="dialog">
@@ -291,7 +293,10 @@ export default function DeploymentsControl({
                         ? 'Your Fabric session has expired — sign out and back in to list workspaces.'
                         : `Couldn’t load workspaces${wsResult?.error ? `: ${wsResult.error}` : '.'}`}
                     </p>
-                    <button className="btn btn--xs btn--ghost" onClick={() => void loadWorkspaces()}>
+                    <button
+                      className="btn btn--xs btn--ghost"
+                      onClick={() => void loadWorkspaces()}
+                    >
                       Retry
                     </button>
                   </div>
@@ -353,7 +358,9 @@ export default function DeploymentsControl({
                               title="Rename this deployment"
                               onClick={() => startRename(d)}
                             >
-                              <span className="dep-item-name-text">{d.name || d.workspaceName}</span>
+                              <span className="dep-item-name-text">
+                                {d.name || d.workspaceName}
+                              </span>
                               <span className="dep-item-edit">✎</span>
                             </button>
                           )}
@@ -375,7 +382,9 @@ export default function DeploymentsControl({
                             {ws?.region ? ` · ${ws.region}` : ''}
                           </span>
                           {ws && (
-                            <span className={`ws-sku ws-sku--${ws.capacityKind}`}>{skuText(ws)}</span>
+                            <span className={`ws-sku ws-sku--${ws.capacityKind}`}>
+                              {skuText(ws)}
+                            </span>
                           )}
                         </div>
                         {url && (

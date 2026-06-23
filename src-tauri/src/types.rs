@@ -369,7 +369,7 @@ pub struct AppSettings {
 }
 
 fn default_theme() -> String {
-  "system".to_string()
+  "dark".to_string()
 }
 
 #[derive(Deserialize, Clone)]
@@ -614,6 +614,8 @@ pub struct ChatMessage {
   pub error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub attachments: Option<u32>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub attachment_thumbs: Option<Vec<String>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub kind: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
