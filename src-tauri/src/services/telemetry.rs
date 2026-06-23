@@ -1,8 +1,9 @@
-//! Anonymous, hashed usage telemetry — the Rust counterpart to
+//! Pseudonymous usage telemetry — the Rust counterpart to
 //! `src/main/services/telemetry.ts`. Two custom events (`signin`, `deploy`) are
-//! POSTed to Azure Application Insights. The user's email and its domain are
-//! reduced to salted SHA-256 hashes before leaving the machine; raw PII is never
-//! sent. Configuration is read once at startup from the bundled
+//! POSTed to Azure Application Insights. The user's email is reduced to a salted
+//! SHA-256 hash before leaving the machine; the email domain is sent in the clear
+//! (the `tenantDomain` dimension) while the raw email is never sent. Configuration
+//! is read once at startup from the bundled
 //! `resources/telemetry.json`; when absent (dev builds) telemetry is a no-op.
 
 use std::time::Duration;
@@ -32,8 +33,8 @@ static SESSION_ID: Lazy<String> = Lazy::new(|| uuid::Uuid::new_v4().to_string())
 pub struct TelemetryIdentity {
   pub email: Option<String>,
   /// Raw tenant id/name — captured for parity with the Electron build but
-  /// currently unused for hashing (the `tenantHash` dimension is derived from
-  /// the email domain in [`track`]).
+  /// currently unused (the `tenantDomain` dimension is derived from the email
+  /// domain in [`track`]).
   #[allow(dead_code)]
   pub tenant: Option<String>,
 }
@@ -146,8 +147,13 @@ fn track(name: &str, identity: Option<&TelemetryIdentity>, props: &[(&str, Strin
   }
   properties.insert("appVersion".to_string(), json!(app_version()));
   properties.insert("os".to_string(), json!(std::env::consts::OS));
-  if let Some(tenant_hash) = hash(email_domain(email).as_deref()) {
-    properties.insert("tenantHash".to_string(), json!(tenant_hash));
+  // Send the raw sign-in domain (e.g. "contoso.com"), normalized but not hashed,
+  // so tenants are directly identifiable. The user id above stays a hash.
+  if let Some(domain) = email_domain(email) {
+    let domain = domain.trim().to_lowercase();
+    if !domain.is_empty() {
+      properties.insert("tenantDomain".to_string(), json!(domain));
+    }
   }
   send(conn, name, user_id, properties);
 }

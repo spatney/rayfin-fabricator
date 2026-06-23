@@ -6,9 +6,9 @@ customEvents
 // ===== Total distinct TENANTS who tried =====
 customEvents
 | where name == "signin"
-| extend tenantHash = tostring(customDimensions.tenantHash)
-| where isnotempty(tenantHash)
-| summarize TriedTenants = dcount(tenantHash)
+| extend tenantDomain = tostring(customDimensions.tenantDomain)
+| where isnotempty(tenantDomain)
+| summarize TriedTenants = dcount(tenantDomain)
 
 // ===== Total distinct users who DEPLOYED =====
 customEvents
@@ -20,9 +20,9 @@ customEvents
 customEvents
 | where name == "deploy"
 | where tostring(customDimensions.success) == "true"
-| extend tenantHash = tostring(customDimensions.tenantHash)
-| where isnotempty(tenantHash)
-| summarize DeployedTenants = dcount(tenantHash)
+| extend tenantDomain = tostring(customDimensions.tenantDomain)
+| where isnotempty(tenantDomain)
+| summarize DeployedTenants = dcount(tenantDomain)
 
 // ===== Tried -> Deployed conversion (users) =====
 let TriedUsers = toscalar(
@@ -149,11 +149,11 @@ customEvents
 customEvents
 | where name in ("signin", "deploy")
 | extend
-    tenantHash = tostring(customDimensions.tenantHash),
+    tenantDomain = tostring(customDimensions.tenantDomain),
     success = tostring(customDimensions.success)
 | summarize
     TriedUsers = dcountif(user_Id, name == "signin"),
     DeployedUsers = dcountif(user_Id, name == "deploy" and success == "true"),
-    TriedTenants = dcountif(tenantHash, name == "signin" and isnotempty(tenantHash)),
-    DeployedTenants = dcountif(tenantHash, name == "deploy" and success == "true" and isnotempty(tenantHash))
+    TriedTenants = dcountif(tenantDomain, name == "signin" and isnotempty(tenantDomain)),
+    DeployedTenants = dcountif(tenantDomain, name == "deploy" and success == "true" and isnotempty(tenantDomain))
 
