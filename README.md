@@ -41,7 +41,7 @@ Rayfin Fabricator is a **Windows 10/11** desktop app distributed as an NSIS inst
 > **[⬇️ Download the latest release](https://github.com/spatney/rayfin-fabricator/releases/latest)**
 
 1. Grab the `Rayfin Fabricator_<version>_x64-setup.exe` asset (the `*-setup.exe` file) from the [latest release](https://github.com/spatney/rayfin-fabricator/releases/latest), or browse every build on the [Releases](https://github.com/spatney/rayfin-fabricator/releases) page.
-2. Run the installer. The build is **not code-signed**, so Windows SmartScreen may warn you — choose **More info → Run anyway**.
+2. Run the installer. The build is **code-signed** (Authenticode, via Azure Artifact Signing) and shows a verified publisher — *Sachin Patney* — instead of "Unknown Publisher". SmartScreen reputation accrues per signing certificate over time, so early downloads may still surface a warning; if so, choose **More info → Run anyway**.
 3. Launch **Rayfin Fabricator**. The built-in onboarding doctor checks the remaining prerequisites (WebView2 runtime, the GitHub Copilot CLI) and walks you through signing in to GitHub Copilot and Microsoft Fabric.
 
 To build apps you'll also create a Rayfin project with `npm create @microsoft/rayfin@latest` — Fabricator uses that project's pinned Rayfin CLI, so no global install is required.
