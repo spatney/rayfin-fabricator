@@ -71,6 +71,33 @@ windows = { version = "0.61", features = [
   "Win32_System_Memory",
 ] }
 
+# macOS-only: capture the native WKWebView preview to a PNG via
+# -[WKWebView takeSnapshotWithConfiguration:completionHandler:]. objc2 versions are
+# pinned to what the vendored wry resolves to so Cargo unifies them. See services/preview.rs.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "NSData",
+  "NSDictionary",
+  "NSDate",
+  "NSRunLoop",
+  "NSError",
+] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+  "std",
+  "NSImage",
+  "NSImageRep",
+  "NSBitmapImageRep",
+] }
+objc2-web-kit = { version = "0.3", default-features = false, features = [
+  "std",
+  "block2",
+  "WKWebView",
+  "WKSnapshotConfiguration",
+] }
+
 [profile.release]
 panic = "abort"
 codegen-units = 1

@@ -421,7 +421,101 @@ fn capture_png(platform: &tauri::webview::PlatformWebview) -> Result<Vec<u8>, St
 }
 
 /// Non-Windows stub so the crate still builds on other targets (WebView2-only).
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 fn capture_png(_platform: &tauri::webview::PlatformWebview) -> Result<Vec<u8>, String> {
-  Err("preview capture is only supported on Windows".into())
+  Err("preview capture is not supported on this platform".into())
+}
+
+/// Capture the WKWebView preview to PNG bytes. Runs on the UI thread inside
+/// [`preview_capture`]'s `with_webview` closure. Uses
+/// `-[WKWebView takeSnapshotWithConfiguration:completionHandler:]`, which captures
+/// the rendered web content (the macOS analogue of WebView2's `CapturePreview`),
+/// then converts the resulting `NSImage` to PNG via `NSBitmapImageRep`. The
+/// snapshot API is asynchronous, so we pump the main run loop until its completion
+/// block fires (bounded by a timeout), mirroring the Windows message-pump approach.
+#[cfg(target_os = "macos")]
+fn capture_png(platform: &tauri::webview::PlatformWebview) -> Result<Vec<u8>, String> {
+  use std::cell::RefCell;
+  use std::rc::Rc;
+
+  use block2::RcBlock;
+  use objc2_app_kit::NSImage;
+  use objc2_foundation::{
+    MainThreadMarker, NSDate, NSDefaultRunLoopMode, NSError, NSRunLoop,
+  };
+  use objc2_web_kit::{WKSnapshotConfiguration, WKWebView};
+
+  // We are invoked on the UI thread from `with_webview`.
+  let mtm = MainThreadMarker::new()
+    .ok_or_else(|| "preview capture must run on the main thread".to_string())?;
+
+  // SAFETY: on macOS, `PlatformWebview::inner()` returns the `WKWebView` pointer.
+  let webview: &WKWebView = unsafe {
+    (platform.inner() as *const WKWebView)
+      .as_ref()
+      .ok_or_else(|| "preview WKWebView was null".to_string())?
+  };
+
+  type Outcome = Result<Vec<u8>, String>;
+  // Shared slot the completion block writes the result into. Everything here runs
+  // on the main thread, so the non-Send `Rc`/`RefCell` are safe.
+  let slot: Rc<RefCell<Option<Outcome>>> = Rc::new(RefCell::new(None));
+  let slot_cb = slot.clone();
+
+  let handler = RcBlock::new(move |image: *mut NSImage, error: *mut NSError| {
+    let outcome = unsafe { snapshot_image_to_png(image, error) };
+    *slot_cb.borrow_mut() = Some(outcome);
+  });
+
+  let config = unsafe { WKSnapshotConfiguration::new(mtm) };
+  unsafe {
+    webview.takeSnapshotWithConfiguration_completionHandler(Some(&config), &handler);
+  }
+
+  // Pump the main run loop until the completion block fires (bounded).
+  let run_loop = NSRunLoop::currentRunLoop();
+  let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+  while slot.borrow().is_none() {
+    if std::time::Instant::now() > deadline {
+      return Err("preview snapshot timed out".into());
+    }
+    let until = NSDate::dateWithTimeIntervalSinceNow(0.02);
+    unsafe { run_loop.runMode_beforeDate(NSDefaultRunLoopMode, &until) };
+  }
+
+  let result = slot.borrow_mut().take();
+  result.unwrap_or_else(|| Err("preview snapshot produced no result".into()))
+}
+
+/// Convert the `NSImage` handed back by `takeSnapshot…` into PNG bytes.
+///
+/// # Safety
+/// `image`/`error` must be the (possibly null) pointers passed to the snapshot
+/// completion block; this must run on the main thread.
+#[cfg(target_os = "macos")]
+unsafe fn snapshot_image_to_png(
+  image: *mut objc2_app_kit::NSImage,
+  error: *mut objc2_foundation::NSError,
+) -> Result<Vec<u8>, String> {
+  use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep};
+  use objc2_foundation::NSDictionary;
+
+  if image.is_null() {
+    if let Some(err) = error.as_ref() {
+      return Err(format!("WKWebView snapshot failed: {}", err.localizedDescription()));
+    }
+    return Err("WKWebView snapshot returned no image".into());
+  }
+  let image = &*image;
+
+  let tiff = image
+    .TIFFRepresentation()
+    .ok_or_else(|| "snapshot has no TIFF representation".to_string())?;
+  let rep = NSBitmapImageRep::imageRepWithData(&tiff)
+    .ok_or_else(|| "could not build a bitmap rep from the snapshot".to_string())?;
+  let empty = NSDictionary::new();
+  let png = rep
+    .representationUsingType_properties(NSBitmapImageFileType::PNG, &empty)
+    .ok_or_else(|| "could not encode the snapshot as PNG".to_string())?;
+  Ok(png.to_vec())
 }

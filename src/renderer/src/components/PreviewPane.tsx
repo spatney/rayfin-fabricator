@@ -188,6 +188,11 @@ export default function PreviewPane({
       if (r.width < 1 || r.height < 1) return null
       return { x: r.left, y: r.top, width: r.width, height: r.height }
     }
+    // The native side flips the y-origin using the window height, so a window
+    // resize that leaves the host's CSS rect unchanged still needs a re-push;
+    // fold the window size into the key so any resize repositions the surface.
+    const keyOf = (b: PreviewBounds): string =>
+      `${b.x}|${b.y}|${b.width}|${b.height}|${window.innerWidth}|${window.innerHeight}`
 
     const tick = (): void => {
       const b = measure()
@@ -197,7 +202,7 @@ export default function PreviewPane({
           void window.api.preview.hide()
         }
       } else {
-        const key = `${b.x}|${b.y}|${b.width}|${b.height}`
+        const key = keyOf(b)
         if (shownKey === '') {
           // Was hidden → show + position (showUrl re-shows the surface).
           shownKey = key
@@ -210,14 +215,34 @@ export default function PreviewPane({
       raf = requestAnimationFrame(tick)
     }
 
+    // During a macOS live-resize, AppKit runs a modal event loop that pauses
+    // `requestAnimationFrame`, so the tick above can't track the host while the
+    // window is being dragged — the native child's autoresize mask drifts and can
+    // momentarily cover the toolbar. Re-push synchronously on every resize event
+    // (these fire during the modal loop) so the surface stays glued to its host.
+    const onResize = (): void => {
+      const b = measure()
+      if (!b) return
+      const key = keyOf(b)
+      if (shownKey === '') {
+        shownKey = key
+        void window.api.preview.showUrl(previewUrl, b)
+      } else if (key !== shownKey) {
+        shownKey = key
+        void window.api.preview.setBounds(b)
+      }
+    }
+    window.addEventListener('resize', onResize)
+
     const initial = measure()
     if (initial) {
-      shownKey = `${initial.x}|${initial.y}|${initial.width}|${initial.height}`
+      shownKey = keyOf(initial)
       void window.api.preview.showUrl(previewUrl, initial)
     }
     raf = requestAnimationFrame(tick)
 
     return () => {
+      window.removeEventListener('resize', onResize)
       cancelAnimationFrame(raf)
     }
   }, [deployedUrl, previewUrl, showWebview, suppressed])
