@@ -210,11 +210,11 @@ jobs:
           draft: false
           fail_on_unmatched_files: false
           files: |
-            dist/*-setup.exe
-            dist/*-setup.exe.sig
-            dist/*.dmg
-            dist/*.app.tar.gz
-            dist/*.app.tar.gz.sig
+            dist/**/*-setup.exe
+            dist/**/*-setup.exe.sig
+            dist/**/*.dmg
+            dist/**/*.app.tar.gz
+            dist/**/*.app.tar.gz.sig
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -243,7 +243,7 @@ jobs:
           platforms='{}'
 
           # Windows (x86_64) — updater artifact is the NSIS *-setup.exe.
-          exe=$(ls dist/*-setup.exe 2>/dev/null | head -n1 || true)
+          exe=$(find dist -name '*-setup.exe' 2>/dev/null | head -n1 || true)
           if [ -n "$exe" ] && [ -f "${exe}.sig" ]; then
             url=$(asset_url "-setup.exe")
             if [ -z "$url" ]; then
@@ -257,7 +257,7 @@ jobs:
           fi
 
           # macOS (arm64) — updater artifact is the *.app.tar.gz.
-          tgz=$(ls dist/*.app.tar.gz 2>/dev/null | head -n1 || true)
+          tgz=$(find dist -name '*.app.tar.gz' 2>/dev/null | head -n1 || true)
           if [ -n "$tgz" ] && [ -f "${tgz}.sig" ]; then
             url=$(asset_url ".app.tar.gz")
             if [ -z "$url" ]; then
