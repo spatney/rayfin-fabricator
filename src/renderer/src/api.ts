@@ -134,13 +134,6 @@ export const api: RayfinStudioApi = {
       subscribe<AdvisorEventEnvelope>(IpcChannels.advisorEvent, cb)
   },
 
-  data: {
-    config: (projectId: string) => invoke('data_config', { projectId }),
-    introspect: (projectId: string) => invoke('data_introspect', { projectId }),
-    query: (projectId: string, query: string, variables?: Record<string, unknown>) =>
-      invoke('data_query', { projectId, query, variables })
-  },
-
   chat: {
     send: (
       projectId: string,

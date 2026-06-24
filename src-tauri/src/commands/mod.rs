@@ -5,7 +5,6 @@
 pub mod advisor;
 pub mod auth;
 pub mod chat;
-pub mod data;
 pub mod deploy;
 pub mod doctor;
 pub mod fabric;

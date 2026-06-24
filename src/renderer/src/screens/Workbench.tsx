@@ -35,7 +35,6 @@ import { SuppressPreview } from '../overlay'
 import RayfinVersionControl from '../components/RayfinVersionControl'
 import AdvisorView, { categoryMeta } from '../components/AdvisorView'
 import ModelView from '../components/ModelView'
-import DataView from '../components/DataView'
 import { useToast } from '../toast'
 import { InfoIcon, GearIcon, SignOutIcon } from '../components/icons'
 import logo from '../assets/logo.png'
@@ -195,7 +194,7 @@ export default function Workbench({
   >(null)
   /** Project content view: the build loop (chat + preview) or the code browser. */
   const [viewMode, setViewMode] = useState<
-    'build' | 'code' | 'model' | 'data' | 'advisor'
+    'build' | 'code' | 'model' | 'advisor'
   >('build')
   /** A pending request to open a specific file in the Code tab (Model → file). */
   const [codeOpen, setCodeOpen] = useState<{ path: string; nonce: number } | null>(null)
@@ -989,10 +988,6 @@ export default function Workbench({
 
   // Derived side-thread view state for the active project (experimental).
   const sideThreadsOn = Boolean(settings?.experiments?.sideThreads)
-  // The Data top-level tab groups the schema Model + the live data browser; the
-  // leaf `viewMode` drives its sub-nav. (Code's Files/History/Skills sub-nav lives
-  // inside CodeViewer.)
-  const dataGroup = viewMode === 'model' || viewMode === 'data'
   const liveThreads = (active?.threads ?? []).filter(
     (t) => t.status === 'active' || t.status === 'error'
   )
@@ -1204,14 +1199,12 @@ export default function Workbench({
                     Code
                   </button>
                   <button
-                    className={`project-tab${dataGroup ? ' project-tab--active' : ''}`}
+                    className={`project-tab${viewMode === 'model' ? ' project-tab--active' : ''}`}
                     role="tab"
-                    aria-selected={dataGroup}
-                    onClick={() => {
-                      if (!dataGroup) setViewMode('model')
-                    }}
+                    aria-selected={viewMode === 'model'}
+                    onClick={() => setViewMode('model')}
                   >
-                    Data
+                    Model
                   </button>
                   <button
                     className={`project-tab${viewMode === 'advisor' ? ' project-tab--active' : ''}`}
@@ -1252,26 +1245,6 @@ export default function Workbench({
                   />
                 </div>
               </div>
-              {dataGroup && (
-                <div className="sub-tabs" role="tablist" aria-label="Data views">
-                  <button
-                    className={`sub-tab${viewMode === 'model' ? ' sub-tab--active' : ''}`}
-                    role="tab"
-                    aria-selected={viewMode === 'model'}
-                    onClick={() => setViewMode('model')}
-                  >
-                    Model
-                  </button>
-                  <button
-                    className={`sub-tab${viewMode === 'data' ? ' sub-tab--active' : ''}`}
-                    role="tab"
-                    aria-selected={viewMode === 'data'}
-                    onClick={() => setViewMode('data')}
-                  >
-                    Browse
-                  </button>
-                </div>
-              )}
               {viewMode === 'code' ? (
                 <Suspense fallback={<div className="code-empty">Loading editor…</div>}>
                   <CodeViewer
@@ -1291,12 +1264,6 @@ export default function Workbench({
                   project={active}
                   refreshKey={gitRefresh}
                   onOpenFile={openFileInCode}
-                  onSendToChat={sendModelToChat}
-                />
-              ) : viewMode === 'data' ? (
-                <DataView
-                  project={active}
-                  refreshKey={gitRefresh}
                   onSendToChat={sendModelToChat}
                 />
               ) : viewMode === 'advisor' ? (

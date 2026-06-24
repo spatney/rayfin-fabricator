@@ -134,9 +134,6 @@ pub fn run() {
       commands::advisor::advisor_run,
       commands::advisor::advisor_cancel,
       commands::advisor::advisor_load,
-      commands::data::data_config,
-      commands::data::data_introspect,
-      commands::data::data_query,
       // chat
       commands::chat::chat_send,
       commands::chat::chat_steer,
