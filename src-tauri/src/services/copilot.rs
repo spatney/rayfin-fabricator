@@ -391,6 +391,14 @@ impl CopilotManager {
     Ok(Arc::new(session))
   }
 
+  /// Return the cached live session for a project/thread **without** creating,
+  /// resuming, or re-applying model/effort. Used by conversation steering, which
+  /// must interject into the exact session a turn is already running on.
+  pub async fn peek_session(&self, project_id: &str, thread_id: &str) -> Option<Arc<Session>> {
+    let key = cache_key(project_id, thread_id);
+    self.sessions.lock().await.get(&key).map(|e| e.session.clone())
+  }
+
   /// Forget (and disconnect) the cached session for a project/thread. Used by
   /// `chat_reset`, which also clears the stored session id so the next turn
   /// starts a brand-new conversation.

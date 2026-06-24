@@ -82,6 +82,13 @@ impl PlanGate {
     rx
   }
 
+  /// The request id of the plan prompt currently awaiting a decision for this
+  /// session, if any. Lets conversation steering treat a message typed while a
+  /// plan card is open as plan-revision feedback.
+  pub fn pending_request(&self, session_id: &str) -> Option<String> {
+    self.pending.lock().unwrap().get(session_id).map(|p| p.request_id.clone())
+  }
+
   /// Resolve a pending plan decision by its request id. Returns `true` when a
   /// matching prompt was found and answered.
   pub fn resolve(&self, request_id: &str, result: ExitPlanModeResult) -> bool {
@@ -147,6 +154,13 @@ impl AppState {
     } else {
       false
     }
+  }
+
+  /// Whether a chat turn is currently in flight for this project/thread. Lets
+  /// conversation steering decide between interjecting into a live turn and
+  /// starting a fresh one.
+  pub fn is_chat_running(&self, project_id: &str, thread_id: Option<&str>) -> bool {
+    self.chat_cancels.lock().unwrap().contains_key(&key(project_id, thread_id))
   }
 
   /// Register a fresh advisor-run cancel token for a project only if none is

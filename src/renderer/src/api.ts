@@ -139,6 +139,12 @@ export const api: RayfinStudioApi = {
       threadId?: string,
       mode?: ChatMode
     ) => invoke('chat_send', { projectId, turnId, text, attachments, threadId, mode }),
+    steer: (
+      projectId: string,
+      text: string,
+      attachments?: string[],
+      threadId?: string
+    ) => invoke('chat_steer', { projectId, text, attachments, threadId }),
     cancel: (projectId: string, threadId?: string) =>
       invoke('chat_cancel', { projectId, threadId }),
     reset: (projectId: string, threadId?: string) => invoke('chat_reset', { projectId, threadId }),

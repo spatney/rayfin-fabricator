@@ -596,7 +596,10 @@ export interface ChatToolCall {
  * text). A `'tool'` segment references a {@link ChatToolCall} in `tools` by id so
  * tool-state updates stay in one place. Persisted so reloaded turns keep order.
  */
-export type ChatSegment = { kind: 'text'; text: string } | { kind: 'tool'; id: string }
+export type ChatSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'tool'; id: string }
+  | { kind: 'interjection'; text: string }
 
 
 /**
@@ -637,6 +640,16 @@ export interface ChatTurnResult {
   filesModified: string[]
   /** True when the agent ran a full `rayfin up` during the turn. */
   ranDeploy: boolean
+}
+
+/** Result of a `chat.steer` call. */
+export interface SteerResult {
+  /**
+   * True when a turn was in flight and the message was handled (interjected, or
+   * routed as plan-revision feedback). False when nothing was running — the
+   * renderer then sends the message as a normal new turn.
+   */
+  steered: boolean
 }
 
 /* ------------------------------------------------------------------ *
@@ -1181,6 +1194,19 @@ export interface RayfinStudioApi {
       threadId?: string,
       mode?: ChatMode
     ) => Promise<ChatTurnResult>
+    /**
+     * Interject a message into the turn already running for a project's thread —
+     * conversation steering. When a turn is in flight the message interrupts the
+     * current step immediately (or, if a Plan card is open, becomes plan-revision
+     * feedback) and resolves with `{ steered: true }`. When nothing is running it
+     * resolves with `{ steered: false }`, so the caller sends it as a new turn.
+     */
+    steer: (
+      projectId: string,
+      text: string,
+      attachments?: string[],
+      threadId?: string
+    ) => Promise<SteerResult>
     /** Cancel the in-flight turn for a project's thread (main when omitted). */
     cancel: (projectId: string, threadId?: string) => Promise<void>
     /** Start a fresh conversation (drops the persisted Copilot session id). */

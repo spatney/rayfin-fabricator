@@ -17,6 +17,7 @@ import {
   type ChatToolCall,
   type ChatTurnResult,
   type CopilotModel,
+  type FileNode,
   type ReasoningEffort,
   type StudioProject,
   type Suggestion
@@ -31,8 +32,7 @@ import {
   CollapseIcon,
   CloseIcon,
   StopIcon,
-  ImageIcon,
-  ClockIcon
+  ImageIcon
 } from './icons'
 import logo from '../assets/logo.png'
 
@@ -348,6 +348,36 @@ function friendlyTool(name: string): string {
   return KIND_LABEL[toolKind(name)]
 }
 
+/**
+ * Compact, client-side roll-up of what a finished turn did, derived from its
+ * tool calls (e.g. "Edited 3 files · ran 2 commands · read 5 files"). Returns an
+ * empty string when there is nothing meaningful to summarise.
+ */
+function summarizeTools(tools: ChatToolCall[]): string {
+  const c: Record<ToolKind, number> = {
+    read: 0,
+    edit: 0,
+    create: 0,
+    search: 0,
+    run: 0,
+    delete: 0,
+    other: 0
+  }
+  for (const t of tools) c[toolKind(t.name)]++
+  const n = (count: number, one: string, many: string): string =>
+    `${count} ${count === 1 ? one : many}`
+  const parts: string[] = []
+  if (c.edit) parts.push(`edited ${n(c.edit, 'file', 'files')}`)
+  if (c.create) parts.push(`created ${n(c.create, 'file', 'files')}`)
+  if (c.run) parts.push(`ran ${n(c.run, 'command', 'commands')}`)
+  if (c.read) parts.push(`read ${n(c.read, 'file', 'files')}`)
+  if (c.search) parts.push(`ran ${n(c.search, 'search', 'searches')}`)
+  if (c.delete) parts.push(`removed ${n(c.delete, 'file', 'files')}`)
+  if (parts.length === 0) return ''
+  const s = parts.join(' · ')
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 /** Cap a tool target for the single-line working bar (keep the filename for paths). */
 function capTarget(s: string): string {
   const max = 44
@@ -438,6 +468,23 @@ function CopyIcon({ className }: { className?: string }): JSX.Element {
     >
       <rect x="9" y="9" width="11" height="11" rx="2" />
       <path d="M5 15V5a2 2 0 0 1 2-2h8" />
+    </svg>
+  )
+}
+
+function CheckIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      className={className ?? 'btn-ico'}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 6L9 17l-5-5" />
     </svg>
   )
 }
@@ -709,6 +756,18 @@ function ToolActivity({
   )
 }
 
+/** Compact roll-up chip shown under a completed assistant turn. */
+function TurnSummary({ tools }: { tools: ChatToolCall[] }): JSX.Element | null {
+  const summary = useMemo(() => summarizeTools(tools), [tools])
+  if (!summary) return null
+  return (
+    <div className="turn-summary" title="What this turn did">
+      <CheckIcon className="turn-summary-ico" />
+      <span className="turn-summary-text">{summary}</span>
+    </div>
+  )
+}
+
 /**
  * Renders an assistant turn body as a single chronological feed: prose and the
  * tool calls it ran, interleaved in the order they streamed. Falls back to the
@@ -724,6 +783,9 @@ function AssistantBody({
 }): JSX.Element {
   const segments = m.segments
   if (segments && segments.length > 0) {
+    const lastIdx = segments.length - 1
+    const last = segments[lastIdx]
+    const caretAtTail = Boolean(m.pending) && last?.kind === 'text' && last.text.trim().length > 0
     return (
       <div className="turn-feed">
         {segments.map((seg, i) => {
@@ -732,6 +794,19 @@ function AssistantBody({
             return (
               <div key={i} className="msg-text msg-text--md">
                 <Markdown>{seg.text}</Markdown>
+                {caretAtTail && i === lastIdx && (
+                  <span className="stream-caret" aria-hidden="true" />
+                )}
+              </div>
+            )
+          }
+          if (seg.kind === 'interjection') {
+            return (
+              <div key={i} className="turn-interject">
+                <span className="turn-interject-tag">You added</span>
+                <div className="turn-interject-text">
+                  <Markdown>{seg.text}</Markdown>
+                </div>
               </div>
             )
           }
@@ -752,6 +827,9 @@ function AssistantBody({
       {m.text && (
         <div className="msg-text msg-text--md">
           <Markdown>{m.text}</Markdown>
+          {m.pending && m.text.trim().length > 0 && (
+            <span className="stream-caret" aria-hidden="true" />
+          )}
         </div>
       )}
     </div>
@@ -789,7 +867,7 @@ function AgentStatus({
 
   if (awaitingDecision) {
     return (
-      <div className="agent-status agent-status--await">
+      <div className="agent-status agent-status--await" role="status" aria-live="polite">
         <span className="agent-status-await-dot" aria-hidden="true" />
         <span className="agent-status-await-label">Waiting for your decision</span>
       </div>
@@ -814,8 +892,10 @@ function AgentStatus({
       <span className="agent-status-orb" aria-hidden="true">
         <span className="agent-status-orb-core" />
       </span>
-      <span className="agent-status-label">{notice ? `↻ ${label}` : `${label}…`}</span>
-      <span className="agent-status-time" aria-label="Elapsed time">
+      <span className="agent-status-label" role="status" aria-live="polite">
+        {notice ? `↻ ${label}` : `${label}…`}
+      </span>
+      <span className="agent-status-time" aria-hidden="true">
         {mm}:{ss}
       </span>
     </div>
@@ -982,6 +1062,24 @@ function appendText(segments: ChatSegment[] | undefined, text: string): ChatSegm
   return [...segs, { kind: 'text', text }]
 }
 
+/**
+ * Drop the most recent interjection segment matching `text` — used to undo an
+ * optimistic steering bubble when the turn finished before it could interject.
+ */
+function rollbackInterjection(
+  segments: ChatSegment[] | undefined,
+  text: string
+): ChatSegment[] | undefined {
+  if (!segments) return segments
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const s = segments[i]
+    if (s.kind === 'interjection' && s.text === text) {
+      return [...segments.slice(0, i), ...segments.slice(i + 1)]
+    }
+  }
+  return segments
+}
+
 function reduce(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
   switch (ev.type) {
     case 'delta':
@@ -1073,6 +1171,42 @@ const ACTION_TO_MODE: Record<string, ChatMode> = {
   autopilot_fleet: 'autopilot'
 }
 
+/** A file the composer can reference via @-mention. */
+interface MentionFile {
+  name: string
+  path: string
+}
+
+/** Flatten a project file tree to a flat list of files (dirs + ignored dropped). */
+function flattenFiles(nodes: FileNode[], out: MentionFile[] = []): MentionFile[] {
+  for (const n of nodes) {
+    if (n.ignored) continue
+    if (n.type === 'file') out.push({ name: n.name, path: n.path })
+    else if (n.children) flattenFiles(n.children, out)
+  }
+  return out
+}
+
+/**
+ * Rank files for an @-mention query: basename prefix beats basename-substring
+ * beats path-substring; ties break toward shorter paths. Empty query lists all.
+ */
+function rankFiles(files: MentionFile[], query: string): MentionFile[] {
+  const q = query.toLowerCase()
+  if (!q) return files.slice(0, 8)
+  const scored: { f: MentionFile; s: number }[] = []
+  for (const f of files) {
+    const name = f.name.toLowerCase()
+    let s = -1
+    if (name.startsWith(q)) s = 0
+    else if (name.includes(q)) s = 1
+    else if (f.path.toLowerCase().includes(q)) s = 2
+    if (s >= 0) scored.push({ f, s })
+  }
+  scored.sort((a, b) => a.s - b.s || a.f.path.length - b.f.path.length)
+  return scored.slice(0, 8).map((x) => x.f)
+}
+
 export default function ChatPanel({
   project,
   threadId = MAIN_THREAD_ID,
@@ -1104,15 +1238,19 @@ export default function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const [showJump, setShowJump] = useState(false)
+  const [jumpNew, setJumpNew] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const dragDepth = useRef(0)
+  const [fileList, setFileList] = useState<MentionFile[] | null>(null)
+  const [atOpen, setAtOpen] = useState(false)
+  const [atStart, setAtStart] = useState(0)
+  const [atQuery, setAtQuery] = useState('')
+  const [atIdx, setAtIdx] = useState(0)
+  const [atDismissed, setAtDismissed] = useState(false)
+  const pendingCaret = useRef<number | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [attaching, setAttaching] = useState(false)
-
-  // Messages the user lined up while a turn was running (CLI-style): they send,
-  // in order, once the current reply finishes. A manual Stop pauses the queue so
-  // "Stop" always halts rather than kicking off the next one.
-  const [queued, setQueued] = useState<{ id: string; text: string }[]>([])
-  const [queuePaused, setQueuePaused] = useState(false)
 
   const fallbackSuggestions = useMemo(
     () => suggestionsFor(project),
@@ -1207,8 +1345,10 @@ export default function ChatPanel({
     if (stick.current) {
       el.scrollTop = el.scrollHeight
       setShowJump(false)
+      setJumpNew(false)
     } else {
       setShowJump(true)
+      setJumpNew(true)
     }
   }, [messages])
 
@@ -1218,6 +1358,7 @@ export default function ChatPanel({
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
     stick.current = nearBottom
     setShowJump(!nearBottom)
+    if (nearBottom) setJumpNew(false)
   }
 
   function jumpToLatest(): void {
@@ -1226,6 +1367,7 @@ export default function ChatPanel({
     stick.current = true
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
     setShowJump(false)
+    setJumpNew(false)
   }
 
   // Auto-grow the composer textarea with its content (capped).
@@ -1276,24 +1418,67 @@ export default function ChatPanel({
     }
   }
 
-  function onComposerDrop(e: DragEvent<HTMLDivElement>): void {
-    const files = e.dataTransfer?.files
-    if (files && Array.from(files).some((f) => f.type.startsWith('image/'))) {
-      e.preventDefault()
-      void stageImages(files)
+  function dragHasFiles(e: DragEvent<HTMLDivElement>): boolean {
+    return Array.from(e.dataTransfer?.items ?? []).some((it) => it.kind === 'file')
+  }
+
+  function onComposerDragEnter(e: DragEvent<HTMLDivElement>): void {
+    if (!dragHasFiles(e) || sending) return
+    e.preventDefault()
+    dragDepth.current += 1
+    setDragOver(true)
+  }
+
+  function onComposerDragOver(e: DragEvent<HTMLDivElement>): void {
+    if (dragHasFiles(e) && !sending) e.preventDefault()
+  }
+
+  function onComposerDragLeave(): void {
+    if (dragDepth.current === 0) return
+    dragDepth.current -= 1
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0
+      setDragOver(false)
+    }
+  }
+
+  async function onComposerDrop(e: DragEvent<HTMLDivElement>): Promise<void> {
+    dragDepth.current = 0
+    setDragOver(false)
+    const all = Array.from(e.dataTransfer?.files ?? [])
+    if (all.length === 0) return
+    e.preventDefault()
+    const images = all.filter((f) => f.type.startsWith('image/'))
+    const others = all.filter((f) => !f.type.startsWith('image/'))
+    if (images.length > 0) void stageImages(images)
+    if (others.length > 0) {
+      // Match dropped files to project files by basename and insert references.
+      const list = await ensureFiles()
+      const refs: string[] = []
+      for (const f of others) {
+        const hits = list
+          .filter((x) => x.name === f.name)
+          .sort((a, b) => a.path.length - b.path.length)
+        if (hits.length > 0) refs.push(`@${hits[0].path}`)
+      }
+      if (refs.length > 0) {
+        setInput((prev) => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}${refs.join(' ')} `)
+        taRef.current?.focus()
+      }
     }
   }
 
   async function send(): Promise<void> {
     const text = input.trim()
     const shots = attachments ?? []
-    // While a turn is in flight, line the message up instead of dropping it; it
-    // sends automatically once the current reply finishes (CLI-style queueing).
+    // Mid-turn: interrupt the running reply with this message (conversation
+    // steering) instead of waiting for it to finish. Screenshot-only sends are
+    // ignored while busy — interjections are about saying something now.
     if (sending) {
-      if (text) {
-        setQueued((q) => [...q, { id: uid(), text }])
-        setInput('')
-      }
+      if (!text) return
+      setInput('')
+      onAttachmentsConsumed?.()
+      await steer(text, shots)
       return
     }
     if (!text && shots.length === 0) return
@@ -1303,13 +1488,48 @@ export default function ChatPanel({
     await dispatch(text || '(screenshot)', prompt, shots)
   }
 
+  /**
+   * Interject `text` into the turn that's currently streaming. Optimistically
+   * shows it inline in the live assistant feed, then asks the backend to deliver
+   * it immediately. If the turn happened to finish first (`steered: false`), the
+   * optimistic bubble is rolled back and the message is sent as a fresh turn.
+   */
+  async function steer(text: string, shots: PendingShot[]): Promise<void> {
+    const liveTurnId = [...messages].reverse().find((m) => m.pending && m.turnId)?.turnId
+    if (liveTurnId) {
+      onChange((prev) =>
+        prev.map((m) =>
+          m.turnId === liveTurnId && m.pending
+            ? { ...m, segments: [...(m.segments ?? []), { kind: 'interjection', text }] }
+            : m
+        )
+      )
+    }
+    let steered = true
+    try {
+      const res = await window.api.chat.steer(project.id, text, shots.map((s) => s.path), threadId)
+      steered = !!res?.steered
+    } catch (err) {
+      console.error('Failed to steer', err)
+    }
+    if (!steered) {
+      if (liveTurnId) {
+        onChange((prev) =>
+          prev.map((m) =>
+            m.turnId === liveTurnId ? { ...m, segments: rollbackInterjection(m.segments, text) } : m
+          )
+        )
+      }
+      await dispatch(text, text, shots)
+    }
+  }
+
   /** Append a fresh turn and stream its result. Shared by send + retry. */
   async function dispatch(
     displayText: string,
     prompt: string,
     shots: PendingShot[]
   ): Promise<void> {
-    if (sending) return
     const turnId = uid()
     const userMsg: UIChatMessage = {
       id: uid(),
@@ -1360,8 +1580,6 @@ export default function ChatPanel({
   }
 
   async function stop(): Promise<void> {
-    // Stop always means halt: pause the queue so the next message doesn't fire.
-    if (queued.length > 0) setQueuePaused(true)
     await window.api.chat.cancel(project.id, threadId)
   }
 
@@ -1389,8 +1607,6 @@ export default function ChatPanel({
     await window.api.chat.reset(project.id, threadId)
     onChange(() => [])
     setMode('agent')
-    setQueued([])
-    setQueuePaused(false)
     onClearHistory?.()
   }
 
@@ -1399,7 +1615,110 @@ export default function ChatPanel({
     taRef.current?.focus()
   }
 
+  // @-mentions: typing "@" (after whitespace/start) opens a fuzzy file picker;
+  // selecting inserts an "@<relative/path>" reference the agent reads as context.
+  async function ensureFiles(): Promise<MentionFile[]> {
+    if (fileList) return fileList
+    try {
+      const tree = await window.api.projects.files.tree(project.id)
+      const flat = flattenFiles(tree)
+      setFileList(flat)
+      return flat
+    } catch (err) {
+      console.error('Failed to load file tree for @-mentions', err)
+      setFileList([])
+      return []
+    }
+  }
+
+  /** Recompute the active @-token from the caret; opens/closes the picker. */
+  function evalAt(): void {
+    const ta = taRef.current
+    if (!ta || sending) {
+      setAtOpen(false)
+      return
+    }
+    const caret = ta.selectionStart ?? ta.value.length
+    const m = /(^|\s)@([^\s@]*)$/.exec(ta.value.slice(0, caret))
+    if (!m) {
+      setAtOpen(false)
+      return
+    }
+    setAtStart(caret - m[2].length - 1)
+    setAtQuery(m[2])
+    setAtIdx(0)
+    setAtOpen(true)
+    void ensureFiles()
+  }
+
+  function onComposerChange(e: ChangeEvent<HTMLTextAreaElement>): void {
+    setInput(e.target.value)
+    setAtDismissed(false)
+    evalAt()
+  }
+
+  function onComposerSelect(): void {
+    if (atDismissed) return
+    evalAt()
+  }
+
+  const atMatches = useMemo(
+    () => (atOpen && fileList ? rankFiles(fileList, atQuery) : []),
+    [atOpen, fileList, atQuery]
+  )
+  const atLoading = atOpen && fileList == null
+  const atCapture = atOpen && atMatches.length > 0
+  const atSel = Math.max(0, Math.min(atIdx, atMatches.length - 1))
+
+  /** Replace the active @-token with a reference to `path`. */
+  function pickFile(path: string): void {
+    const caret = taRef.current?.selectionStart ?? input.length
+    const before = input.slice(0, atStart)
+    const after = input.slice(caret)
+    const insert = `@${path} `
+    setInput(before + insert + after)
+    setAtOpen(false)
+    setAtDismissed(false)
+    pendingCaret.current = before.length + insert.length
+  }
+
+  // Restore focus + caret after an @-mention insertion (input is controlled).
+  useEffect(() => {
+    const c = pendingCaret.current
+    if (c == null) return
+    pendingCaret.current = null
+    const ta = taRef.current
+    if (ta) {
+      ta.focus()
+      ta.setSelectionRange(c, c)
+    }
+  }, [input])
+
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (atCapture) {
+      const len = atMatches.length
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setAtIdx((i) => (Math.max(0, Math.min(i, len - 1)) + 1) % len)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setAtIdx((i) => (Math.max(0, Math.min(i, len - 1)) - 1 + len) % len)
+        return
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        e.preventDefault()
+        pickFile(atMatches[atSel].path)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setAtDismissed(true)
+        setAtOpen(false)
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       void send()
@@ -1422,21 +1741,6 @@ export default function ChatPanel({
     }
     onOutboundConsumed?.()
   }, [outbound?.id])
-
-  // Drive the queue: when a turn finishes (and the user didn't Stop), send the
-  // next lined-up message. Runs off `sending` going false so it always uses
-  // fresh state rather than a stale closure inside dispatch().
-  useEffect(() => {
-    if (sending || queuePaused || queued.length === 0) return
-    const [next, ...rest] = queued
-    setQueued(rest)
-    void dispatch(next.text, next.text, [])
-  }, [sending, queuePaused, queued])
-
-  // Once the queue empties, clear the paused flag so a later Stop starts fresh.
-  useEffect(() => {
-    if (queued.length === 0 && queuePaused) setQueuePaused(false)
-  }, [queued, queuePaused])
 
   return (
     <div className="chat">
@@ -1643,12 +1947,18 @@ export default function ChatPanel({
                 {m.role === 'assistant' && Boolean(m.text) && !m.pending && (
                   <CopyButton text={m.text} className="turn-copy" />
                 )}
+                {m.role === 'user' && Boolean(m.text) && m.text !== '(screenshot)' && (
+                  <CopyButton text={m.text} className="turn-copy" />
+                )}
               </div>
               <div className="turn-main">
                 {m.role === 'assistant' ? (
                   <AssistantBody message={m} projectPath={project.path} />
                 ) : (
                   m.text && <div className="msg-text">{m.text}</div>
+                )}
+                {m.role === 'assistant' && !m.pending && !m.error && m.tools.length > 0 && (
+                  <TurnSummary tools={m.tools} />
                 )}
                 {m.plan && (
                   <PlanCard
@@ -1701,60 +2011,18 @@ export default function ChatPanel({
         {showJump && (
           <button
             type="button"
-            className="chat-jump"
+            className={`chat-jump${jumpNew ? ' chat-jump--new' : ''}`}
             onClick={jumpToLatest}
             title="Jump to the latest message"
           >
-            <span className="chat-jump-label">Jump to latest</span>
+            {jumpNew && <span className="chat-jump-dot" aria-hidden="true" />}
+            <span className="chat-jump-label">{jumpNew ? 'New messages' : 'Jump to latest'}</span>
             <span className="chat-jump-arrow" aria-hidden="true">
               ↓
             </span>
           </button>
         )}
       </div>
-
-      {queued.length > 0 && (
-        <div className="chat-queue">
-          <div className="chat-queue-head">
-            <span className="chat-queue-title">
-              <ClockIcon className="chat-queue-title-icon" />
-              Up next
-              <span className="chat-queue-count">{queued.length}</span>
-            </span>
-            {queuePaused ? (
-              <button
-                className="chat-queue-resume"
-                onClick={() => setQueuePaused(false)}
-                title="Send the queued messages now"
-              >
-                Send now
-              </button>
-            ) : (
-              <span className="chat-queue-hint">sends after the current reply</span>
-            )}
-          </div>
-          <ul className="chat-queue-list">
-            {queued.map((q, i) => (
-              <li key={q.id} className="chat-queue-item">
-                <span className="chat-queue-item-num" aria-hidden="true">
-                  {i + 1}
-                </span>
-                <span className="chat-queue-item-text" title={q.text}>
-                  {q.text}
-                </span>
-                <button
-                  className="chat-queue-item-x"
-                  onClick={() => setQueued((qs) => qs.filter((x) => x.id !== q.id))}
-                  title="Remove from queue"
-                  aria-label="Remove from queue"
-                >
-                  <CloseIcon />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       <div className={`composer${sending ? ' composer--busy' : ''}`}>
         {sending && <div className="composer-busyline" aria-hidden="true" />}
@@ -1775,20 +2043,52 @@ export default function ChatPanel({
           </div>
         )}
         <div
-          className="composer-box"
+          className={`composer-box${dragOver ? ' composer-box--drag' : ''}`}
           onDrop={onComposerDrop}
-          onDragOver={(e) => {
-            if (Array.from(e.dataTransfer.items).some((it) => it.kind === 'file'))
-              e.preventDefault()
-          }}
+          onDragEnter={onComposerDragEnter}
+          onDragOver={onComposerDragOver}
+          onDragLeave={onComposerDragLeave}
         >
+          {dragOver && (
+            <div className="composer-drop" aria-hidden="true">
+              <ImageIcon className="composer-drop-ico" />
+              <span>Drop to attach</span>
+            </div>
+          )}
+          {atOpen && (
+            <div className="mention-menu" role="listbox" aria-label="Project files">
+              <div className="mention-menu-head">Reference a file</div>
+              {atLoading && <div className="mention-empty">Loading files…</div>}
+              {!atLoading && atMatches.length === 0 && (
+                <div className="mention-empty">No files match “{atQuery}”</div>
+              )}
+              {atMatches.map((f, i) => (
+                <button
+                  key={f.path}
+                  type="button"
+                  role="option"
+                  aria-selected={i === atSel}
+                  className={`mention-opt${i === atSel ? ' mention-opt--on' : ''}`}
+                  onMouseEnter={() => setAtIdx(i)}
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    pickFile(f.path)
+                  }}
+                >
+                  <span className="mention-name">{f.name}</span>
+                  <span className="mention-path">{f.path}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <textarea
             ref={taRef}
             className="composer-input"
             placeholder={`Message Fabricator about ${project.name}…`}
             value={input}
             rows={1}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={onComposerChange}
+            onSelect={onComposerSelect}
             onKeyDown={onKeyDown}
             onPaste={onComposerPaste}
           />
@@ -1850,6 +2150,9 @@ export default function ChatPanel({
                 <kbd>Shift</kbd>
                 <kbd>Enter</kbd>
                 <span>for newline</span>
+                <span className="composer-hint-sep">·</span>
+                <kbd>@</kbd>
+                <span>for files</span>
               </span>
             </div>
             <div className="composer-right">
@@ -1872,28 +2175,15 @@ export default function ChatPanel({
               </button>
               {sending ? (
                 <>
-                  {input.trim() && (
-                    <button
-                      className="composer-send composer-send--queue"
-                      onClick={send}
-                      title="Queue this message — sends after the current reply"
-                      aria-label="Queue this message"
-                    >
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M12 5v14M5 12h14" />
-                      </svg>
-                    </button>
-                  )}
+                  <button
+                    className="composer-send composer-send--interject"
+                    onClick={send}
+                    disabled={!input.trim()}
+                    title="Interject — send this now without waiting"
+                    aria-label="Interject this message"
+                  >
+                    <SendIcon />
+                  </button>
                   <button
                     className="composer-send composer-send--stop"
                     onClick={stop}

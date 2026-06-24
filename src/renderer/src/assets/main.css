@@ -2866,14 +2866,20 @@ code {
   min-height: 0;
 }
 
-/* rayfin.yml "extra treatment": a friendly, parsed guide to the config. */
+/* rayfin.yml "extra treatment": a tight, scannable guide to the config. */
 .cfg-guide {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 28px 40px;
+  padding: 18px 22px 28px;
   background: var(--bg);
+}
+
+.cfg-guide > * {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .cfg-guide--empty {
@@ -2893,195 +2899,101 @@ code {
   color: var(--text-dim);
 }
 
-.cfg-head,
-.cfg-card,
-.cfg-foot {
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.cfg-head {
-  margin-bottom: 18px;
-}
-
-.cfg-head-row {
+/* Identity row: app name + meta chips. */
+.cfg-id {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-bottom: 14px;
 }
 
-.cfg-head-icon {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex: none;
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--accent) 16%, var(--bg-elev));
-  color: var(--accent);
+.cfg-id-main {
+  min-width: 0;
 }
 
-.cfg-head-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.cfg-title {
+.cfg-id-name {
   margin: 0;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 650;
+  line-height: 1.2;
   color: var(--text);
 }
 
-.cfg-sub {
-  margin: 4px 0 0;
-  font-size: 13px;
-  line-height: 1.5;
+.cfg-id-tag {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--text-dim);
 }
 
-.cfg-meta {
+.cfg-id-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 14px;
+  gap: 6px;
 }
 
-.cfg-meta-item {
+.cfg-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
+  gap: 5px;
+  padding: 2px 9px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-elev);
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text);
 }
 
-.cfg-meta-k {
-  font-size: 9.5px;
+.cfg-chip-k {
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: var(--text-faint);
 }
 
-.cfg-meta-item--file {
+.cfg-chip--file {
   font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
   color: var(--text-dim);
 }
 
-.cfg-card {
-  margin-bottom: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elev);
-  overflow: hidden;
+/* At-a-glance status strip. */
+.cfg-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
-.cfg-card-head {
+.cfg-tile {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elev-2);
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
 }
 
-.cfg-card-icon {
+.cfg-tile-ico {
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
   flex: none;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
+  background: var(--accent-soft);
 }
 
-.cfg-card-icon svg {
+.cfg-tile-ico svg {
   width: 16px;
   height: 16px;
 }
 
-.cfg-card-title {
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.cfg-status {
-  flex: none;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.cfg-status--on {
-  color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 16%, transparent);
-}
-
-.cfg-status--off {
-  color: var(--text-dim);
-  background: var(--bg-elev-3);
-}
-
-.cfg-card-body {
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cfg-card-desc {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text);
-}
-
-.cfg-methods {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.cfg-method {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elev-2);
-}
-
-.cfg-method-icon {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  flex: none;
-  border-radius: var(--radius-sm);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-.cfg-method-icon svg {
-  width: 15px;
-  height: 15px;
-}
-
-.cfg-method-text {
+.cfg-tile-text {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -3089,140 +3001,247 @@ code {
   flex: 1;
 }
 
-.cfg-method-label {
+.cfg-tile-name {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text);
 }
 
-.cfg-method-desc {
-  font-size: 11.5px;
+.cfg-tile-sub {
+  font-size: 11px;
   color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.cfg-method-mark {
+.cfg-dot {
+  width: 8px;
+  height: 8px;
   flex: none;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ok);
+  border-radius: 50%;
+  background: var(--text-faint);
 }
 
-.cfg-method--off {
-  opacity: 0.6;
+.cfg-dot--on {
+  background: var(--ok);
 }
 
-.cfg-method--off .cfg-method-icon {
+.cfg-tile--off .cfg-tile-ico {
   color: var(--text-dim);
   background: var(--bg-elev-3);
 }
 
-.cfg-method--off .cfg-method-mark {
-  color: var(--text-dim);
-  font-weight: 500;
-}
-
-.cfg-note {
-  margin: 0;
-  padding: 9px 12px;
+/* Detail sections: compact label -> value rows. */
+.cfg-sec {
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-elev-2);
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-dim);
+  background: var(--bg-elev);
+  overflow: hidden;
 }
 
-.cfg-list {
+.cfg-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.cfg-sec-ico {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--accent);
+}
+
+.cfg-sec-ico svg {
+  width: 15px;
+  height: 15px;
+}
+
+.cfg-sec-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cfg-pill {
+  flex: none;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cfg-pill--on {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+}
+
+.cfg-pill--off {
+  color: var(--text-dim);
+  background: var(--bg-elev-3);
+}
+
+.cfg-sec-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 13px;
+}
+
+/* Sign-in method rows. */
+.cfg-meths {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.cfg-list-head {
+.cfg-meth {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-2);
 }
 
-.cfg-list-label {
+.cfg-meth-ico {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.cfg-meth-ico svg {
+  width: 14px;
+  height: 14px;
+}
+
+.cfg-meth-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.cfg-meth-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
 }
 
-.cfg-list-hint {
+.cfg-meth-desc {
   font-size: 11px;
   color: var(--text-dim);
 }
 
-.cfg-list-items {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.cfg-meth--off {
+  opacity: 0.55;
 }
 
-.cfg-list-items li {
-  font-size: 12px;
+.cfg-meth--off .cfg-meth-ico {
   color: var(--text-dim);
+  background: var(--bg-elev-3);
+}
+
+/* Label -> value spec rows. */
+.cfg-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.cfg-row-k {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: none;
+  width: 134px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cfg-row-hint {
+  font-size: 10.5px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--text-faint);
+}
+
+.cfg-row-v {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.cfg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .cfg-guide code {
   font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
-  font-size: 11.5px;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 5px;
   background: var(--bg-elev-3);
   color: var(--text);
+  word-break: break-all;
 }
 
-.cfg-kv {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.cfg-kv-k {
-  flex: none;
-  width: 120px;
-  font-size: 11.5px;
-  font-weight: 600;
+/* Inline notes (off services, warnings). */
+.cfg-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--text-dim);
 }
 
-.cfg-kv-v {
-  flex: 1;
-  min-width: 0;
-  font-size: 12.5px;
+.cfg-note--warn {
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
   color: var(--text);
-  line-height: 1.5;
+  background: color-mix(in srgb, var(--pending) 12%, transparent);
 }
 
+/* Footer hint. */
 .cfg-foot {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 16px;
-  padding: 11px 14px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-dim);
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+  font-size: 11.5px;
+  color: var(--text-faint);
 }
 
 .cfg-foot-icon {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   flex: none;
-  margin-top: 1px;
-  color: var(--accent);
+  color: var(--text-faint);
 }
 
 .cfg-foot strong {
-  color: var(--text);
+  color: var(--text-dim);
   font-weight: 600;
 }
 
@@ -5936,155 +5955,42 @@ code {
   line-height: 1;
 }
 
-/* Queued-messages strip — lined-up follow-ups that send after the current turn. */
-.chat-queue {
-  margin: 0 0 8px;
-  padding: 10px 12px 11px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-elev));
+/* Inline "you added" bubble — a message interjected mid-turn (steering). Flat,
+   accent-tinted, and clearly the user's voice inside the assistant feed. */
+.turn-interject {
+  align-self: flex-start;
+  max-width: 92%;
+  margin: 1px 0;
+  padding: 7px 11px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-left: 2px solid var(--accent);
+  border-radius: 4px 10px 10px 4px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
 }
 
-.chat-queue-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 9px;
-}
-
-.chat-queue-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.chat-queue-title-icon {
-  width: 14px;
-  height: 14px;
-  flex: none;
+.turn-interject-tag {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--accent);
 }
 
-.chat-queue-count {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--on-accent);
-  background: var(--accent);
-}
-
-.chat-queue-hint {
-  font-size: 11.5px;
-  color: var(--text-faint);
-}
-
-.chat-queue-resume {
-  flex: none;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--on-accent);
-  background: var(--accent);
-  border: none;
-  border-radius: 7px;
-  padding: 4px 11px;
-  cursor: pointer;
-  transition: filter 0.12s ease;
-}
-
-.chat-queue-resume:hover {
-  filter: brightness(1.08);
-}
-
-.chat-queue-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.chat-queue-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 8px 7px 9px;
-  border-radius: 10px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  transition: border-color 0.12s ease;
-}
-
-.chat-queue-item:hover {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-}
-
-.chat-queue-item-num {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.chat-queue-item-text {
-  flex: 1;
-  min-width: 0;
-  font-size: 12.5px;
+.turn-interject-text {
+  font-size: 13px;
   color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.chat-queue-item-x {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  opacity: 0;
-  transition:
-    color 0.12s ease,
-    background 0.12s ease,
-    opacity 0.12s ease;
+.turn-interject-text :first-child {
+  margin-top: 0;
 }
 
-.chat-queue-item:hover .chat-queue-item-x,
-.chat-queue-item-x:focus-visible {
-  opacity: 1;
+.turn-interject-text :last-child {
+  margin-bottom: 0;
 }
 
-.chat-queue-item-x:hover {
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-}
-
-.chat-queue-item-x svg {
-  width: 13px;
-  height: 13px;
-}
 
 .turn {
   display: flex;
@@ -6112,16 +6018,15 @@ code {
 
 .turn-avatar {
   flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
-  color: #fff;
 }
 
 .turn-avatar img {
@@ -6131,24 +6036,21 @@ code {
 }
 
 .turn-avatar svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 
+/* User: a calm neutral chip — keeps the single teal accent on the brand mark. */
 .turn--user .turn-avatar {
-  background: var(--accent);
-  border-color: transparent;
-  color: var(--on-accent);
+  background: var(--bg-elev-3);
+  color: var(--text-dim);
 }
 
+/* Assistant: subtle teal tint carrying the brand logo. */
 .turn--assistant .turn-avatar {
-  padding: 5px;
-  background: linear-gradient(
-    150deg,
-    color-mix(in srgb, var(--accent) 18%, var(--bg-elev-2)),
-    var(--bg-elev-2)
-  );
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  padding: 4px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
 }
 
 .turn-avatar--pending {
@@ -6193,6 +6095,36 @@ code {
   word-break: break-word;
 }
 
+/* Blinking caret at the tail of streaming assistant prose. */
+.stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: streamCaret 1.05s step-end infinite;
+}
+
+@keyframes streamCaret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  46%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-caret {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
 .turn--user .msg-text {
   align-self: flex-start;
   max-width: 100%;
@@ -6208,6 +6140,34 @@ code {
   font-size: 12px;
   font-style: italic;
   opacity: 0.85;
+}
+
+/* Compact roll-up chip under a completed assistant turn. */
+.turn-summary {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 3px 9px 3px 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.turn-summary-ico {
+  width: 12px;
+  height: 12px;
+  color: var(--accent);
+}
+
+.turn-summary-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Live "working" bar — keeps visible motion on screen while a turn streams, so
@@ -6362,6 +6322,12 @@ code {
   .agent-status-orb::before,
   .agent-status-orb-core,
   .agent-status-await-dot {
+    animation: none;
+  }
+  .turn {
+    animation: none;
+  }
+  .turn-avatar--pending {
     animation: none;
   }
 }
@@ -6838,7 +6804,13 @@ span.thread-pill {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin: 2px 0;
+  margin: 0;
+}
+
+/* Tighten the gap between back-to-back tool rows in the interleaved feed,
+   without collapsing the larger breathing room around prose blocks. */
+.turn-feed > .tool-activity + .tool-activity {
+  margin-top: -4px;
 }
 
 /* Flat, lightweight rows that read as a live activity feed (not chunky cards). */
@@ -7090,6 +7062,7 @@ span.thread-pill {
 }
 
 .composer-box {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--bg-elev-2);
@@ -7103,6 +7076,120 @@ span.thread-pill {
 .composer-box:focus-within {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
   box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.composer-box--drag {
+  border-color: var(--accent);
+}
+
+/* Dashed overlay shown while dragging an image over the composer. */
+.composer-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+
+.composer-drop-ico {
+  width: 18px;
+  height: 18px;
+}
+
+/* @-mention file picker popover, anchored above the composer box. */
+.mention-menu {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev-3);
+  box-shadow: var(--shadow-md);
+  animation: mentionIn 0.12s ease;
+}
+
+@keyframes mentionIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mention-menu-head {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.mention-opt {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.mention-opt--on {
+  background: var(--accent-soft);
+}
+
+.mention-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.mention-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+.mention-empty {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mention-menu {
+    animation: none;
+  }
 }
 
 .composer-input {
@@ -7480,17 +7567,22 @@ span.thread-pill {
   border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
 }
 
-/* Queue the typed message while a turn runs — teal-tinted, distinct from Stop. */
-.composer-send--queue {
-  background: var(--bg-elev-3);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+/* Interject the typed message into a running turn — accent-tinted, distinct
+   from Stop. Shares the send footprint; reads as "say this now". */
+.composer-send--interject {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 1px solid transparent;
 }
 
-.composer-send--queue:hover:not(:disabled) {
-  filter: none;
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+.composer-send--interject:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.composer-send--interject:disabled {
+  background: var(--bg-elev-3);
+  color: var(--text-faint);
+  border-color: var(--border);
 }
 
 .composer-send svg {
@@ -7980,6 +8072,47 @@ span.thread-pill {
 .chat-jump:hover {
   border-color: var(--accent);
   background: var(--bg-elev-2);
+}
+
+.chat-jump--new {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.chat-jump--new:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  border-color: transparent;
+}
+
+.chat-jump-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: jumpDot 1.4s ease-in-out infinite;
+}
+
+.chat-jump--new .chat-jump-arrow {
+  color: var(--on-accent);
+}
+
+@keyframes jumpDot {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-jump-dot {
+    animation: none;
+  }
 }
 
 .chat-jump-arrow {

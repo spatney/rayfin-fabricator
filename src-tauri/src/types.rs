@@ -548,6 +548,9 @@ pub struct ChatToolCall {
 pub enum ChatSegment {
   Text { text: String },
   Tool { id: String },
+  /// A message the user injected mid-turn (conversation steering), shown inline
+  /// in the assistant feed as a small "you interjected" bubble.
+  Interjection { text: String },
 }
 
 /// Streamed chat events (main -> renderer), tagged by `type`.
@@ -615,6 +618,16 @@ pub struct ChatTurnResult {
   pub error: Option<String>,
   pub files_modified: Vec<String>,
   pub ran_deploy: bool,
+}
+
+/// Result of a `chat_steer` call: whether the message interrupted a running turn.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SteerResult {
+  /// True when a turn was in flight and the message was handled (interjected, or
+  /// routed as plan-revision feedback). False when nothing was running — the
+  /// renderer then sends the message as a normal new turn.
+  pub steered: bool,
 }
 
 #[derive(Deserialize, Clone)]

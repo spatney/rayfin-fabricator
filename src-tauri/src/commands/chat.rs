@@ -18,7 +18,7 @@ use github_copilot_sdk::handler::{ExitPlanModeHandler, ExitPlanModeResult};
 use github_copilot_sdk::rpc::ModeSetRequest;
 use github_copilot_sdk::session_events::SessionMode;
 use github_copilot_sdk::subscription::RecvErrorKind;
-use github_copilot_sdk::{Attachment, MessageOptions};
+use github_copilot_sdk::{Attachment, DeliveryMode, MessageOptions};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::Value;
@@ -31,7 +31,7 @@ use crate::services::emit::emit_chat_event;
 use crate::services::history::{self, MAIN_THREAD_ID};
 use crate::services::store;
 use crate::state::{AppState, TurnRoute};
-use crate::types::{ChatEvent, ChatMessage, ChatOptions, ChatToolCall, ChatToolState, ChatTurnResult, CopilotModel};
+use crate::types::{ChatEvent, ChatMessage, ChatOptions, ChatToolCall, ChatToolState, ChatTurnResult, CopilotModel, SteerResult};
 
 const MAX_TOOL_OUTPUT: usize = 4000;
 /// Up to this many copilot invocations per turn on a transient pre-work failure.
@@ -559,6 +559,87 @@ pub(crate) async fn run_turn(
 #[tauri::command]
 pub fn chat_cancel(state: State<'_, AppState>, project_id: String, thread_id: Option<String>) {
   state.cancel_chat(&project_id, thread_opt(&thread_id));
+}
+
+/// Interject a message into the turn already running for `(project, thread)` —
+/// conversation steering. Returns `{ steered: true }` when a turn was in flight:
+/// the message either interrupts the current step immediately (Immediate
+/// delivery) or, when a Plan card is awaiting a decision, is routed as
+/// plan-revision feedback. Returns `{ steered: false }` when nothing is running,
+/// so the renderer sends it as a normal new turn instead.
+#[tauri::command]
+pub async fn chat_steer(
+  app: AppHandle,
+  state: State<'_, AppState>,
+  project_id: String,
+  text: String,
+  attachments: Option<Vec<String>>,
+  thread_id: Option<String>,
+) -> Result<SteerResult, String> {
+  let thread = thread_id.clone().unwrap_or_else(|| MAIN_THREAD_ID.to_string());
+  let attachments = attachments.unwrap_or_default();
+
+  // Nothing running → let the caller start a normal turn.
+  if !state.is_chat_running(&project_id, thread_opt(&thread_id)) {
+    return Ok(SteerResult { steered: false });
+  }
+  let Some(ctx_info) = resolve_context(&project_id, &thread) else {
+    return Ok(SteerResult { steered: false });
+  };
+  // Where the live turn is streaming, so any plan card dismisses on the right turn.
+  let active_turn = state.plan.route(&ctx_info.session_id).map(|r| r.turn_id);
+
+  // Plan mode: a plan card is awaiting the user's decision, so the agent is
+  // blocked on that choice rather than "thinking". Treat the typed message as
+  // feedback that asks it to revise the plan instead of an immediate interjection.
+  if let Some(request_id) = state.plan.pending_request(&ctx_info.session_id) {
+    if let Some(turn) = &active_turn {
+      emit_chat_event(&app, &project_id, &thread, turn, ChatEvent::PlanResolved { request_id: request_id.clone() });
+    }
+    state.plan.resolve(
+      &request_id,
+      ExitPlanModeResult { approved: false, selected_action: None, feedback: Some(text) },
+    );
+    screenshot::cleanup(&attachments);
+    return Ok(SteerResult { steered: true });
+  }
+
+  // Normal interjection: deliver the message Immediately so it interrupts the
+  // current step. The in-flight `run_turn` drain loop streams the resulting
+  // events to the same turn, so we take no new turn lock here.
+  let Some(session) = state.copilot.peek_session(&project_id, &thread).await else {
+    // Running but no cached session (shouldn't happen) — treat as handled so the
+    // renderer doesn't start a competing turn that the run guard would reject.
+    screenshot::cleanup(&attachments);
+    return Ok(SteerResult { steered: true });
+  };
+
+  let attach: Vec<Attachment> = attachments
+    .iter()
+    .map(|a| Attachment::File { path: PathBuf::from(a), display_name: None, line_range: None })
+    .collect();
+  let mut opts = MessageOptions::new(text).with_mode(DeliveryMode::Immediate);
+  if !attach.is_empty() {
+    opts = opts.with_attachments(attach);
+  }
+  if let Err(e) = session.send(opts).await {
+    if let Some(turn) = &active_turn {
+      emit_chat_event(&app, &project_id, &thread, turn, ChatEvent::Error { text: format!("Couldn't interject: {e}") });
+    }
+    screenshot::cleanup(&attachments);
+    // Handled (with an error shown) — don't start a competing turn.
+    return Ok(SteerResult { steered: true });
+  }
+
+  // The agent reads attachments early in the interjected step; defer cleanup so
+  // we neither delete them before they're read nor leak temp files.
+  if !attachments.is_empty() {
+    tokio::spawn(async move {
+      tokio::time::sleep(Duration::from_secs(120)).await;
+      screenshot::cleanup(&attachments);
+    });
+  }
+  Ok(SteerResult { steered: true })
 }
 
 #[tauri::command]
