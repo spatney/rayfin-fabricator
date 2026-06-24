@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useSuppressPreview } from '../overlay'
 
 interface Props {
@@ -18,6 +18,7 @@ export default function NewThreadModal({ busy = false, error, onCreate, onCancel
   useSuppressPreview()
   const [task, setTask] = useState('')
   const taskRef = useRef<HTMLTextAreaElement>(null)
+  const titleId = useId()
 
   useEffect(() => {
     taskRef.current?.focus()
@@ -40,10 +41,16 @@ export default function NewThreadModal({ busy = false, error, onCreate, onCancel
 
   return (
     <div className="modal-backdrop" onClick={busy ? undefined : onCancel}>
-      <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal modal--sm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <div>
-            <h2>New side thread</h2>
+            <h2 id={titleId}>New side thread</h2>
             <p className="modal-sub">
               Fork a parallel agent to work on something else. It merges back into main and
               redeploys when it’s done.

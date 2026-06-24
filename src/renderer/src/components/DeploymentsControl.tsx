@@ -223,13 +223,14 @@ export default function DeploymentsControl({
       </div>
 
       {open && (
-        <div className="dep-pop" role="dialog">
+        <div className="dep-pop" role="dialog" aria-label={creating ? 'New deployment' : 'Deployments'}>
           <div className="dep-pop-head">
             <span className="dep-pop-title">{creating ? 'New deployment' : 'Deployments'}</span>
             {!creating && (
               <button
                 className="ws-refresh"
                 title="Refresh"
+                aria-label="Refresh deployments"
                 disabled={loadingDeps}
                 onClick={() => void loadDeployments()}
               >
@@ -282,6 +283,7 @@ export default function DeploymentsControl({
                           <button
                             className="ws-search-clear"
                             title="Clear search"
+                            aria-label="Clear search"
                             onClick={() => setWsQuery('')}
                           >
                             ×

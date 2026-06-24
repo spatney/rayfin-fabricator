@@ -1758,7 +1758,7 @@ export default function ChatPanel({
             <span className="chat-model-btn-caret">▾</span>
           </button>
           {showModel && (
-            <div className="chat-model-pop" role="dialog">
+            <div className="chat-model-pop" role="dialog" aria-label="Model settings">
               <label className="chat-model-field">
                 <span className="chat-model-field-label">Model</span>
                 <select

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useId } from 'react'
 import { useSuppressPreview } from '../overlay'
 
 interface Props {
@@ -44,6 +44,7 @@ export default function ConfirmModal({
 }: Props): JSX.Element {
   useSuppressPreview()
   const working = busy || secondaryBusy
+  const titleId = useId()
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && !working) onCancel()
@@ -54,9 +55,15 @@ export default function ConfirmModal({
 
   return (
     <div className="modal-backdrop" onClick={working ? undefined : onCancel}>
-      <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal modal--sm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
-          <h2>{title}</h2>
+          <h2 id={titleId}>{title}</h2>
         </div>
         <div className="modal-body">
           <div className="confirm-message">{message}</div>

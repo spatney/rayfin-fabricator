@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import Editor from '@monaco-editor/react'
 // Point @monaco-editor/react at the locally-bundled Monaco (this app runs offline
 // from a file:// renderer). Without this side-effect the editor tries to fetch
@@ -33,6 +33,7 @@ function useEditorTheme(): string {
 export default function SkillPreviewModal({ projectId, skill, onClose }: Props): JSX.Element {
   const [source, setSource] = useState<SkillSource | null>(null)
   const theme = useEditorTheme()
+  const titleId = useId()
 
   useEffect(() => {
     let alive = true
@@ -54,14 +55,20 @@ export default function SkillPreviewModal({ projectId, skill, onClose }: Props):
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal--code" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal modal--code"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header skill-preview-header">
           <div className="skill-preview-title">
             <span className="skill-preview-icon" aria-hidden="true">
               {skill.icon}
             </span>
             <div>
-              <h2>{skill.title}</h2>
+              <h2 id={titleId}>{skill.title}</h2>
               <p className="modal-sub">
                 <code>.agents/skills/{skill.id}/SKILL.md</code>
                 {source && !source.installed && ' · sample (not yet added)'}

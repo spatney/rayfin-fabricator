@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { CommunityGallery, ProjectActionResult, TemplateInfo } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 
@@ -30,6 +30,15 @@ export default function NewProjectModal({ onClose, onCreated }: Props): JSX.Elem
   const [error, setError] = useState<string | null>(null)
   const [log, setLog] = useState('')
   const logRef = useRef<HTMLPreElement>(null)
+  const titleId = useId()
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !busy) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [busy, onClose])
 
   useEffect(() => {
     void window.api.projects
@@ -127,10 +136,21 @@ export default function NewProjectModal({ onClose, onCreated }: Props): JSX.Elem
 
   return (
     <div className="modal-backdrop" onClick={busy ? undefined : onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
-          <h2>New Rayfin project</h2>
-          <button className="btn btn--sm btn--ghost" onClick={onClose} disabled={busy}>
+          <h2 id={titleId}>New Rayfin project</h2>
+          <button
+            className="btn btn--sm btn--ghost"
+            onClick={onClose}
+            disabled={busy}
+            aria-label="Close"
+          >
             ✕
           </button>
         </div>

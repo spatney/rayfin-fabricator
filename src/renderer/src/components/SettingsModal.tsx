@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { AppSettings, AppVersions, ThemePreference } from '@shared/ipc'
 import { applyTheme } from '../theme'
 import { useSuppressPreview } from '../overlay'
@@ -28,10 +28,19 @@ export default function SettingsModal({
   const { status: updateStatus, info: updateInfo, checkNow } = useUpdates()
   const [checkedUpdates, setCheckedUpdates] = useState(false)
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
+  const titleId = useId()
 
   useEffect(() => {
     void window.api.projects.state().then((s) => setWorkspaceRoot(s.workspaceRoot))
   }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   // Preview a theme choice immediately; persistence happens via onChange.
   function pickTheme(theme: ThemePreference): void {
@@ -63,10 +72,16 @@ export default function SettingsModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
-          <h2>Settings</h2>
-          <button className="btn btn--sm btn--ghost" onClick={onClose}>
+          <h2 id={titleId}>Settings</h2>
+          <button className="btn btn--sm btn--ghost" onClick={onClose} aria-label="Close settings">
             ✕
           </button>
         </div>
