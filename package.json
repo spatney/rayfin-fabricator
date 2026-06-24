@@ -1,6 +1,6 @@
 {
   "name": "rayfin-fabricator",
-  "version": "0.9.4",
+  "version": "0.10.0",
   "description": "Rayfin Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI.",
   "author": "Sachin Patney (https://github.com/spatney)",
   "license": "MIT",

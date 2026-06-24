@@ -13,6 +13,7 @@ import {
   type ChatEvent,
   type ChatMessage,
   type ChatMode,
+  type ChatSegment,
   type ChatToolCall,
   type ChatTurnResult,
   type CopilotModel,
@@ -21,6 +22,7 @@ import {
 } from '@shared/ipc'
 import type { PendingShot } from './PreviewPane'
 import Markdown from './Markdown'
+import { highlightCode, langFromPath } from '../syntax'
 import {
   SparkleIcon,
   EraserIcon,
@@ -251,19 +253,160 @@ function suggestionsFor(project: StudioProject): Suggestion[] {
   return order.map((k) => cards[k])
 }
 
+/** Coarse classification of a Copilot tool call, used for both labels and icons. */
+type ToolKind = 'read' | 'edit' | 'create' | 'search' | 'run' | 'delete' | 'other'
+
+function toolKind(name: string): ToolKind {
+  const n = name.toLowerCase()
+  if (n.includes('powershell') || n.includes('bash') || n.includes('shell')) return 'run'
+  if (n.includes('create')) return 'create'
+  if (n.includes('edit') || n.includes('replace') || n.includes('str_replace')) return 'edit'
+  if (n.includes('view') || n.includes('read') || n.includes('cat')) return 'read'
+  if (n.includes('grep') || n.includes('search') || n.includes('glob') || n.includes('find'))
+    return 'search'
+  if (n.includes('delete') || n.includes('remove')) return 'delete'
+  return 'other'
+}
+
+const KIND_LABEL: Record<ToolKind, string> = {
+  run: 'Running a command',
+  create: 'Creating a file',
+  edit: 'Editing code',
+  read: 'Reading a file',
+  search: 'Searching the project',
+  delete: 'Removing a file',
+  other: 'Working'
+}
+
 /** Friendly, non-jargon label for a Copilot tool call (for non-coders). */
 function friendlyTool(name: string): string {
-  const n = name.toLowerCase()
-  if (n.includes('powershell') || n.includes('bash') || n.includes('shell'))
-    return 'Running a command'
-  if (n.includes('create')) return 'Creating a file'
-  if (n.includes('edit') || n.includes('replace') || n.includes('str_replace'))
-    return 'Editing code'
-  if (n.includes('view') || n.includes('read') || n.includes('cat')) return 'Reading a file'
-  if (n.includes('grep') || n.includes('search') || n.includes('glob') || n.includes('find'))
-    return 'Searching the project'
-  if (n.includes('delete') || n.includes('remove')) return 'Removing a file'
-  return 'Working'
+  return KIND_LABEL[toolKind(name)]
+}
+
+/** Cap a tool target for the single-line working bar (keep the filename for paths). */
+function capTarget(s: string): string {
+  const max = 44
+  if (s.length <= max) return s
+  if (/[\\/]/.test(s)) return '…' + s.slice(s.length - (max - 1))
+  return s.slice(0, max - 1) + '…'
+}
+
+/** Distinct line icon per tool kind, so the activity feed is scannable at a glance. */
+function ToolKindIcon({ kind, className }: { kind: ToolKind; className?: string }): JSX.Element {
+  const p = {
+    className: className ?? 'btn-ico',
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true
+  }
+  switch (kind) {
+    case 'read':
+      return (
+        <svg {...p}>
+          <path d="M7 3.5h7L18 7.5V20.5H7z" />
+          <path d="M14 3.5V8h4" />
+          <path d="M9.5 12.5h6M9.5 16h6" />
+        </svg>
+      )
+    case 'edit':
+      return (
+        <svg {...p}>
+          <path d="M4 20h4L19 9l-4-4L4 16z" />
+          <path d="M13.5 6.5l4 4" />
+        </svg>
+      )
+    case 'create':
+      return (
+        <svg {...p}>
+          <path d="M7 3.5h7L18 7.5V20.5H7z" />
+          <path d="M14 3.5V8h4" />
+          <path d="M12 11.5v5M9.5 14h5" />
+        </svg>
+      )
+    case 'search':
+      return (
+        <svg {...p}>
+          <circle cx="11" cy="11" r="6" />
+          <path d="M20 20l-3.6-3.6" />
+        </svg>
+      )
+    case 'run':
+      return (
+        <svg {...p}>
+          <rect x="3.5" y="5" width="17" height="14" rx="2" />
+          <path d="M7 10l3 2.5L7 15" />
+          <path d="M12.5 15h4" />
+        </svg>
+      )
+    case 'delete':
+      return (
+        <svg {...p}>
+          <path d="M5 7h14" />
+          <path d="M9 7V4.5h6V7" />
+          <path d="M6.5 7l1 12.5h9l1-12.5" />
+        </svg>
+      )
+    default:
+      return (
+        <svg {...p}>
+          <path d="M12 4.5l1.9 4.6 4.6 1.9-4.6 1.9L12 17.5l-1.9-4.6L5.5 11l4.6-1.9z" />
+        </svg>
+      )
+  }
+}
+
+function CopyIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      className={className ?? 'btn-ico'}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V5a2 2 0 0 1 2-2h8" />
+    </svg>
+  )
+}
+
+/** Small clipboard button with brief "Copied" feedback (used on assistant turns). */
+function CopyButton({ text, className }: { text: string; className?: string }): JSX.Element {
+  const [copied, setCopied] = useState(false)
+  async function copy(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* clipboard unavailable — ignore */
+    }
+  }
+  return (
+    <button
+      type="button"
+      className={`copy-btn${className ? ` ${className}` : ''}${copied ? ' copy-btn--done' : ''}`}
+      onClick={copy}
+      title="Copy message"
+      aria-label="Copy message"
+    >
+      {copied ? (
+        <span className="copy-btn-check" aria-hidden="true">
+          ✓
+        </span>
+      ) : (
+        <CopyIcon />
+      )}
+      <span className="copy-btn-label">{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  )
 }
 
 /**
@@ -392,7 +535,99 @@ function ModeIcon({ mode, className }: { mode: ChatMode; className?: string }): 
   )
 }
 
-/** Renders a turn's tool-activity list (shared by normal turns + merge events). */
+const NUM_LINE = /^(\s*)(\d+)\.\s?(.*)$/
+
+/** Detect the read/view tool's `N. <code>` line format; split numbers from code. */
+function parseNumbered(text: string): { nums: (number | null)[]; code: string } | null {
+  const lines = text.split('\n')
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop()
+  const nums: (number | null)[] = []
+  const codes: string[] = []
+  let matched = 0
+  for (const line of lines) {
+    const m = NUM_LINE.exec(line)
+    if (m) {
+      nums.push(Number(m[2]))
+      codes.push(m[3])
+      matched++
+    } else {
+      nums.push(null)
+      codes.push(line)
+    }
+  }
+  if (matched < Math.max(3, Math.ceil(lines.length * 0.7))) return null
+  return { nums, code: codes.join('\n') }
+}
+
+/**
+ * Renders a tool's output. File reads (the `N. <code>` format) get a line-number
+ * gutter + syntax highlighting; everything else (commands, errors) stays plain.
+ */
+function ToolOutput({
+  name,
+  title,
+  output
+}: {
+  name: string
+  title: string
+  output: string
+}): JSX.Element {
+  const numbered = useMemo(() => parseNumbered(output), [output])
+  const kind = toolKind(name)
+  const lang =
+    kind === 'read' || kind === 'edit' || kind === 'create' ? langFromPath(title) : undefined
+  const hl = useMemo(
+    () => (numbered ? highlightCode(numbered.code, lang) : null),
+    [numbered, lang]
+  )
+
+  if (!numbered) return <pre className="tool-call-output">{output}</pre>
+
+  return (
+    <div className="tool-code">
+      <div className="tool-code-gutter" aria-hidden="true">
+        {numbered.nums.map((n, i) => (
+          <span key={i}>{n ?? ''}</span>
+        ))}
+      </div>
+      <pre className="tool-code-pre">
+        {hl ? (
+          <code className="hljs" dangerouslySetInnerHTML={{ __html: hl.html }} />
+        ) : (
+          <code className="hljs">{numbered.code}</code>
+        )}
+      </pre>
+    </div>
+  )
+}
+
+/** A single tool call row (expandable to its captured output). */
+function ToolRow({
+  tool: t,
+  projectPath
+}: {
+  tool: ChatToolCall
+  projectPath: string
+}): JSX.Element {
+  return (
+    <details className={`tool-call tool-call--${t.state}`}>
+      <summary title={t.title}>
+        <span className="tool-call-icon">
+          {t.state === 'running' ? (
+            <span className="tool-spin" />
+          ) : (
+            <ToolKindIcon kind={toolKind(t.name)} className="tool-kind-ico" />
+          )}
+        </span>
+        <span className="tool-call-name">{friendlyTool(t.name)}</span>
+        <span className="tool-call-title">{shortDetail(t.title, projectPath)}</span>
+      </summary>
+      {t.output && <ToolOutput name={t.name} title={t.title} output={t.output} />}
+    </details>
+  )
+}
+
+/** Renders a turn's tool-activity list (used by the legacy / merge-event body). */
 function ToolActivity({
   tools,
   projectPath
@@ -403,40 +638,82 @@ function ToolActivity({
   return (
     <div className="tool-activity">
       {tools.map((t) => (
-        <details key={t.id} className={`tool-call tool-call--${t.state}`}>
-          <summary title={t.title}>
-            <span className="tool-call-icon">
-              {t.state === 'running' ? <span className="tool-spin" /> : TOOL_ICON[t.state]}
-            </span>
-            <span className="tool-call-name">{friendlyTool(t.name)}</span>
-            <span className="tool-call-title">{shortDetail(t.title, projectPath)}</span>
-          </summary>
-          {t.output && <pre className="tool-call-output">{t.output}</pre>}
-        </details>
+        <ToolRow key={t.id} tool={t} projectPath={projectPath} />
       ))}
     </div>
   )
 }
 
 /**
- * Live "working" bar shown at the bottom of an assistant turn while it streams.
- * It keeps motion on screen even when tokens / tool updates pause: a pulsing orb,
- * a shimmering contextual label (what's happening right now) and a ticking timer.
- * The label mirrors the current phase; per-step detail stays in the tool rows.
+ * Renders an assistant turn body as a single chronological feed: prose and the
+ * tool calls it ran, interleaved in the order they streamed. Falls back to the
+ * legacy "all tools, then all text" grouping for turns without segment data
+ * (e.g. older persisted history).
+ */
+function AssistantBody({
+  message: m,
+  projectPath
+}: {
+  message: UIChatMessage
+  projectPath: string
+}): JSX.Element {
+  const segments = m.segments
+  if (segments && segments.length > 0) {
+    return (
+      <div className="turn-feed">
+        {segments.map((seg, i) => {
+          if (seg.kind === 'text') {
+            if (!seg.text.trim()) return null
+            return (
+              <div key={i} className="msg-text msg-text--md">
+                <Markdown>{seg.text}</Markdown>
+              </div>
+            )
+          }
+          const tool = m.tools.find((t) => t.id === seg.id)
+          if (!tool) return null
+          return (
+            <div key={i} className="tool-activity">
+              <ToolRow tool={tool} projectPath={projectPath} />
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+  return (
+    <div className="turn-feed">
+      {m.tools.length > 0 && <ToolActivity tools={m.tools} projectPath={projectPath} />}
+      {m.text && (
+        <div className="msg-text msg-text--md">
+          <Markdown>{m.text}</Markdown>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Live "working" line shown at the bottom of an assistant turn while it streams.
+ * Steps now render inline in the turn feed, so this is a slim pulse: a small orb,
+ * a contextual label (what's happening right now) and a ticking timer. When the
+ * turn is paused on a plan decision it switches to a calm "waiting" state with no
+ * timer or work motion, so it never looks like it's still working.
  */
 function AgentStatus({
   tools,
   hasText,
   notice,
-  projectPath
+  projectPath,
+  awaitingDecision
 }: {
   tools: ChatToolCall[]
   hasText: boolean
   notice?: string
   projectPath: string
+  awaitingDecision?: boolean
 }): JSX.Element {
   const [elapsed, setElapsed] = useState(0)
-  const [open, setOpen] = useState(false)
   const startRef = useRef(Date.now())
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -445,51 +722,37 @@ function AgentStatus({
     return () => window.clearInterval(id)
   }, [])
 
+  if (awaitingDecision) {
+    return (
+      <div className="agent-status agent-status--await">
+        <span className="agent-status-await-dot" aria-hidden="true" />
+        <span className="agent-status-await-label">Waiting for your decision</span>
+      </div>
+    )
+  }
+
   const running = tools.find((t) => t.state === 'running')
   let label: string
   if (notice) label = notice
-  else if (running) label = friendlyTool(running.name)
-  else if (hasText) label = 'Writing the response'
+  else if (running) {
+    const target = running.title ? capTarget(shortDetail(running.title, projectPath)) : ''
+    label = target ? `${friendlyTool(running.name)} — ${target}` : friendlyTool(running.name)
+  } else if (hasText) label = 'Writing the response'
   else if (tools.length) label = 'Working through the steps'
   else label = 'Thinking'
 
   const mm = Math.floor(elapsed / 60)
   const ss = String(elapsed % 60).padStart(2, '0')
-  const steps = tools.length
 
   return (
-    <div className="agent-status-wrap">
-      <div className={`agent-status${notice ? ' agent-status--notice' : ''}`}>
-        <span className="agent-status-orb" aria-hidden="true">
-          <span className="agent-status-orb-core" />
-        </span>
-        <span className={`agent-status-label${notice ? '' : ' shimmer-text'}`}>
-          {notice ? `↻ ${label}` : `${label}…`}
-        </span>
-        {steps > 0 && (
-          <button
-            type="button"
-            className={`agent-status-steps${open ? ' agent-status-steps--open' : ''}`}
-            aria-label={`${steps} steps so far`}
-            aria-expanded={open}
-            title={open ? 'Hide steps' : 'Show steps'}
-            onClick={() => setOpen((v) => !v)}
-          >
-            {steps} step{steps > 1 ? 's' : ''}
-            <span className="agent-status-steps-caret" aria-hidden="true">
-              {open ? '▾' : '▸'}
-            </span>
-          </button>
-        )}
-        <span className="agent-status-time" aria-label="Elapsed time">
-          {mm}:{ss}
-        </span>
-      </div>
-      {open && steps > 0 && (
-        <div className="agent-status-steps-list">
-          <ToolActivity tools={tools} projectPath={projectPath} />
-        </div>
-      )}
+    <div className={`agent-status${notice ? ' agent-status--notice' : ''}`}>
+      <span className="agent-status-orb" aria-hidden="true">
+        <span className="agent-status-orb-core" />
+      </span>
+      <span className="agent-status-label">{notice ? `↻ ${label}` : `${label}…`}</span>
+      <span className="agent-status-time" aria-label="Elapsed time">
+        {mm}:{ss}
+      </span>
     </div>
   )
 }
@@ -640,13 +903,37 @@ async function toPngAndThumb(src: string): Promise<{ png: string; thumb: string 
   return { png, thumb: tCanvas.toDataURL('image/png') }
 }
 
+/**
+ * Append streamed text to the segment list, merging into the trailing text
+ * segment when possible so consecutive deltas stay one prose block (tool
+ * segments in between naturally split the prose into chronological slices).
+ */
+function appendText(segments: ChatSegment[] | undefined, text: string): ChatSegment[] {
+  const segs = segments ?? []
+  const last = segs[segs.length - 1]
+  if (last && last.kind === 'text') {
+    return [...segs.slice(0, -1), { kind: 'text', text: last.text + text }]
+  }
+  return [...segs, { kind: 'text', text }]
+}
+
 function reduce(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
   switch (ev.type) {
     case 'delta':
-      return { ...msg, text: msg.text + ev.text, notice: undefined }
+      return {
+        ...msg,
+        text: msg.text + ev.text,
+        segments: appendText(msg.segments, ev.text),
+        notice: undefined
+      }
     case 'tool-start':
       if (msg.tools.some((t) => t.id === ev.tool.id)) return msg
-      return { ...msg, tools: [...msg.tools, ev.tool], notice: undefined }
+      return {
+        ...msg,
+        tools: [...msg.tools, ev.tool],
+        segments: [...(msg.segments ?? []), { kind: 'tool', id: ev.tool.id }],
+        notice: undefined
+      }
     case 'tool-end':
       return {
         ...msg,
@@ -679,12 +966,6 @@ function reduce(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
     default:
       return msg
   }
-}
-
-const TOOL_ICON: Record<ChatToolCall['state'], string> = {
-  running: '⏳',
-  success: '✓',
-  error: '✗'
 }
 
 /** Composer mode options (Agent / Plan / Autopilot) with hover hints + menu copy. */
@@ -755,6 +1036,8 @@ export default function ChatPanel({
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const scrollRef = useRef<HTMLDivElement>(null)
+  const stick = useRef(true)
+  const [showJump, setShowJump] = useState(false)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [attaching, setAttaching] = useState(false)
@@ -834,9 +1117,35 @@ export default function ChatPanel({
     return off
   }, [project.id, threadId])
 
+  // Keep the view pinned to the newest content — but only when the user is already
+  // near the bottom, so reading earlier messages isn't interrupted. Otherwise we
+  // surface a "Jump to latest" affordance instead of yanking them back down.
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    const el = scrollRef.current
+    if (!el) return
+    if (stick.current) {
+      el.scrollTop = el.scrollHeight
+      setShowJump(false)
+    } else {
+      setShowJump(true)
+    }
   }, [messages])
+
+  function onScrollChat(): void {
+    const el = scrollRef.current
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    stick.current = nearBottom
+    setShowJump(!nearBottom)
+  }
+
+  function jumpToLatest(): void {
+    const el = scrollRef.current
+    if (!el) return
+    stick.current = true
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    setShowJump(false)
+  }
 
   // Auto-grow the composer textarea with its content (capped).
   useEffect(() => {
@@ -927,6 +1236,7 @@ export default function ChatPanel({
       role: 'assistant',
       text: '',
       tools: [],
+      segments: [],
       pending: true
     }
     onChange((prev) => [...prev, userMsg, assistantMsg])
@@ -1107,7 +1417,7 @@ export default function ChatPanel({
         </div>
       </div>
 
-      <div className="chat-scroll" ref={scrollRef}>
+      <div className="chat-scroll" ref={scrollRef} onScroll={onScrollChat}>
         {messages.length === 0 && (
           <div className="chat-welcome">
             <div className="chat-welcome-badge">
@@ -1159,14 +1469,7 @@ export default function ChatPanel({
                 </div>
                 {hasBody && (
                   <div className="merge-event-body">
-                    {m.tools.length > 0 && (
-                      <ToolActivity tools={m.tools} projectPath={project.path} />
-                    )}
-                    {m.text && (
-                      <div className="msg-text msg-text--md">
-                        <Markdown>{m.text}</Markdown>
-                      </div>
-                    )}
+                    <AssistantBody message={m} projectPath={project.path} />
                   </div>
                 )}
                 {m.error && <div className="alert alert--error merge-event-error">{m.error}</div>}
@@ -1187,17 +1490,16 @@ export default function ChatPanel({
                   {m.role === 'user' ? <UserIcon /> : <img src={logo} alt="" />}
                 </div>
                 <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
+                {m.role === 'assistant' && Boolean(m.text) && !m.pending && (
+                  <CopyButton text={m.text} className="turn-copy" />
+                )}
               </div>
               <div className="turn-main">
-                {m.tools.length > 0 && <ToolActivity tools={m.tools} projectPath={project.path} />}
-                {m.text &&
-                  (m.role === 'assistant' ? (
-                    <div className="msg-text msg-text--md">
-                      <Markdown>{m.text}</Markdown>
-                    </div>
-                  ) : (
-                    <div className="msg-text">{m.text}</div>
-                  ))}
+                {m.role === 'assistant' ? (
+                  <AssistantBody message={m} projectPath={project.path} />
+                ) : (
+                  m.text && <div className="msg-text">{m.text}</div>
+                )}
                 {m.plan && (
                   <PlanCard
                     plan={m.plan}
@@ -1225,6 +1527,7 @@ export default function ChatPanel({
                     hasText={Boolean(m.text)}
                     notice={m.notice}
                     projectPath={project.path}
+                    awaitingDecision={Boolean(m.plan && !m.plan.resolved)}
                   />
                 )}
                 {m.error && (
@@ -1245,6 +1548,19 @@ export default function ChatPanel({
             </div>
           )
         })}
+        {showJump && (
+          <button
+            type="button"
+            className="chat-jump"
+            onClick={jumpToLatest}
+            title="Jump to the latest message"
+          >
+            <span className="chat-jump-label">Jump to latest</span>
+            <span className="chat-jump-arrow" aria-hidden="true">
+              ↓
+            </span>
+          </button>
+        )}
       </div>
 
       <div className={`composer${sending ? ' composer--busy' : ''}`}>

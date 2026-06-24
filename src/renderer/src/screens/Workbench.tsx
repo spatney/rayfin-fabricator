@@ -99,11 +99,23 @@ function toUi(m: ChatMessage): UIChatMessage {
 /** Strip transient fields (turnId, pending) before persisting to disk. */
 function toStored(messages: UIChatMessage[]): ChatMessage[] {
   return messages.map(
-    ({ id, role, text, tools, error, attachments, attachmentThumbs, kind, mergeName }) => ({
+    ({
       id,
       role,
       text,
       tools,
+      segments,
+      error,
+      attachments,
+      attachmentThumbs,
+      kind,
+      mergeName
+    }) => ({
+      id,
+      role,
+      text,
+      tools,
+      segments,
       error,
       attachments,
       attachmentThumbs,

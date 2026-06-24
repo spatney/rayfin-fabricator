@@ -1,6 +1,7 @@
 import { isValidElement, useState, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { highlightCode } from '../syntax'
 
 /** Pull the raw text + language hint out of a fenced/indented code block. */
 function extractCode(children: ReactNode): { text: string; lang?: string } {
@@ -24,16 +25,21 @@ function CodeBlock({ text, lang }: { text: string; lang?: string }): JSX.Element
       /* clipboard unavailable — ignore */
     }
   }
+  const hl = highlightCode(text, lang)
   return (
     <div className="md-codeblock">
       <div className="md-codeblock-head">
-        <span className="md-codeblock-lang">{lang ?? 'text'}</span>
+        <span className="md-codeblock-lang">{hl?.label ?? lang ?? 'text'}</span>
         <button className="md-codeblock-copy" onClick={copy} title="Copy code">
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
       <pre className="md-codeblock-pre">
-        <code>{text}</code>
+        {hl ? (
+          <code className="hljs" dangerouslySetInnerHTML={{ __html: hl.html }} />
+        ) : (
+          <code className="hljs">{text}</code>
+        )}
       </pre>
     </div>
   )

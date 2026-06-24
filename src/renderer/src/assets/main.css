@@ -37,6 +37,16 @@
   --code-inline-bg: #1a1f2b;
   --code-inline-text: #d8def0;
 
+  /* Syntax tokens (highlight.js) — low-hue, flat, tuned for the dark code surface. */
+  --syn-comment: #5b667a;
+  --syn-key: #6fb1ff;
+  --syn-str: #8fd6a0;
+  --syn-num: #e0a878;
+  --syn-fn: #76c2c5;
+  --syn-attr: #c8a6f0;
+  --syn-type: #5fc6cc;
+  --syn-punct: #9aa4b8;
+
   color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -71,6 +81,8 @@
 
   --code-inline-bg: #eef1f6;
   --code-inline-text: #1f2733;
+
+  /* Code blocks stay dark in light mode, so syntax tokens keep the dark palette. */
 
   color-scheme: light;
 }
@@ -4973,6 +4985,14 @@ code {
   padding-left: 2px;
 }
 
+/* Interleaved assistant feed: prose blocks and tool rows in stream order. */
+.turn-feed {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .turn-role {
   font-size: 12px;
   font-weight: 600;
@@ -5010,11 +5030,8 @@ code {
   gap: 9px;
   align-self: flex-start;
   max-width: 100%;
-  margin-top: 2px;
-  padding: 5px 12px 5px 9px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  margin-top: 4px;
+  padding: 2px 2px 2px 1px;
   animation: statusIn 0.2s ease both;
 }
 
@@ -5080,64 +5097,9 @@ code {
 
 .agent-status-label {
   font-size: 12.5px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.agent-status-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  align-self: stretch;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.agent-status-steps {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  appearance: none;
-  font-family: inherit;
-  border: 0;
-  margin: 0;
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
+  font-weight: 500;
   color: var(--text-dim);
   white-space: nowrap;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
-}
-
-.agent-status-steps:hover {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--text);
-}
-
-.agent-status-steps--open {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--text);
-}
-
-.agent-status-steps-caret {
-  font-size: 9px;
-  line-height: 1;
-  color: var(--text-faint);
-}
-
-.agent-status-steps-list {
-  width: min(560px, 100%);
-  max-height: 240px;
-  overflow-y: auto;
-  padding-bottom: 2px;
-  animation: statusIn 0.16s ease both;
 }
 
 .agent-status-time {
@@ -5148,19 +5110,14 @@ code {
   letter-spacing: 0.3px;
 }
 
-/* Hairline middot separator so label · time read as one cohesive line.
-   The steps chip is now a button with its own padding/hover, so it omits the dot. */
+/* Hairline middot separator so label · time read as one cohesive line. */
 .agent-status-time::before {
   content: '·';
   margin-right: 6px;
   color: var(--text-faint);
 }
 
-.agent-status--notice {
-  background: color-mix(in srgb, var(--pending) 13%, var(--bg-elev));
-  border-color: color-mix(in srgb, var(--pending) 36%, var(--border));
-}
-
+/* Notice (retry) variant: amber pulse + label, still flat (no pill). */
 .agent-status--notice .agent-status-orb-core {
   background: var(--pending);
   box-shadow: 0 0 6px 0 color-mix(in srgb, var(--pending) 70%, transparent);
@@ -5174,33 +5131,50 @@ code {
   color: var(--pending);
 }
 
-/* Shimmering text sweep (Claude-style) so the status label always reads as live. */
-.shimmer-text {
-  background: linear-gradient(100deg, var(--text-dim) 30%, var(--text) 50%, var(--text-dim) 70%);
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shimmerSweep 2s linear infinite;
+/* Paused on a plan decision: calm, no work motion or timer — just a soft amber
+   breathing dot so the turn never looks like it's still working. */
+.agent-status--await {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 2px 2px 1px;
+  animation: statusIn 0.2s ease both;
 }
 
-@keyframes shimmerSweep {
-  from {
-    background-position: 220% 0;
+.agent-status-await-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pending);
+  box-shadow: 0 0 6px 0 color-mix(in srgb, var(--pending) 55%, transparent);
+  animation: awaitBreathe 2.4s ease-in-out infinite;
+}
+
+.agent-status-await-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--pending);
+  white-space: nowrap;
+}
+
+@keyframes awaitBreathe {
+  0%,
+  100% {
+    opacity: 0.45;
   }
-  to {
-    background-position: -220% 0;
+  50% {
+    opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .agent-status-orb::before,
   .agent-status-orb-core,
-  .shimmer-text {
+  .agent-status-await-dot {
     animation: none;
-  }
-  .shimmer-text {
-    color: var(--text);
   }
 }
 
@@ -5688,6 +5662,18 @@ span.thread-pill {
   transition:
     background 0.15s ease,
     border-color 0.15s ease;
+  animation: toolRowIn 0.2s ease both;
+}
+
+@keyframes toolRowIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .tool-call > summary {
@@ -5724,12 +5710,18 @@ span.thread-pill {
   line-height: 1;
 }
 
+/* Calm, monochrome glyphs for completed steps; only errors draw the eye. */
 .tool-call--success .tool-call-icon {
-  color: var(--ok);
+  color: var(--text-dim);
 }
 
 .tool-call--error .tool-call-icon {
   color: var(--danger);
+}
+
+.tool-kind-ico {
+  width: 14px;
+  height: 14px;
 }
 
 /* Spinner for the action that's running right now. */
@@ -5756,7 +5748,9 @@ span.thread-pill {
     200% 100%,
     auto;
   background-repeat: no-repeat;
-  animation: toolShimmer 1.5s linear infinite;
+  animation:
+    toolRowIn 0.2s ease both,
+    toolShimmer 1.5s linear infinite;
 }
 
 @keyframes toolShimmer {
@@ -5803,6 +5797,54 @@ span.thread-pill {
   word-break: break-word;
   max-height: 240px;
   overflow-y: auto;
+}
+
+/* File-read previews: a sticky line-number gutter + syntax-highlighted code.
+   Both columns share a fixed 18px line box so the numbers stay aligned to the
+   code even when highlighted tokens span multiple lines. */
+.tool-code {
+  display: flex;
+  max-height: 280px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  background: var(--code-bg);
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 18px;
+}
+
+.tool-code-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 10px 8px 10px 12px;
+  background: var(--code-bg);
+  border-right: 1px solid var(--border);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.tool-code-gutter span {
+  display: block;
+  height: 18px;
+}
+
+.tool-code-pre {
+  flex: 1 0 auto;
+  margin: 0;
+  padding: 10px 14px;
+  line-height: 18px;
+  white-space: pre;
+}
+
+.tool-code-pre code.hljs {
+  background: transparent;
+  padding: 0;
 }
 
 .composer {
@@ -6702,5 +6744,197 @@ span.thread-pill {
   }
   100% {
     margin-left: 100%;
+  }
+}
+
+/* ── Chat polish: jump-to-latest, copy answer, syntax theme ──────────────────── */
+
+/* Floating "Jump to latest" pill — sticky to the bottom of the scroll viewport,
+   shown only when the user scrolled up while a turn is streaming. */
+.chat-jump {
+  position: sticky;
+  bottom: 6px;
+  align-self: center;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 13px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-elev-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  animation: statusIn 0.16s ease both;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.chat-jump:hover {
+  border-color: var(--accent);
+  background: var(--bg-elev-2);
+}
+
+.chat-jump-arrow {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+/* Hover-revealed copy button on assistant turns (mirrors the code-block copy). */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.copy-btn:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.copy-btn .btn-ico {
+  width: 13px;
+  height: 13px;
+}
+
+.copy-btn-check {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.copy-btn--done {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
+}
+
+.turn-copy {
+  margin-left: auto;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.turn:hover .turn-copy,
+.turn-copy:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* highlight.js token theme — keyed to the app palette; the code surface stays dark
+   in both themes, so a single (dark) token set is correct everywhere. */
+.md-codeblock-pre .hljs {
+  display: block;
+  background: transparent;
+  color: var(--code-text);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-doctag {
+  color: var(--syn-key);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-meta .hljs-string {
+  color: var(--syn-str);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--syn-num);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-built_in,
+.hljs-name {
+  color: var(--syn-fn);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--syn-attr);
+}
+
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-title.class_,
+.hljs-params {
+  color: var(--syn-type);
+}
+
+.hljs-tag,
+.hljs-punctuation {
+  color: var(--syn-punct);
+}
+
+.hljs-meta {
+  color: var(--syn-comment);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+.hljs-deletion {
+  color: var(--danger);
+}
+
+.hljs-addition {
+  color: var(--ok);
+}
+
+.hljs-link {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-call {
+    animation: none;
+  }
+  .tool-call--running {
+    animation: toolShimmer 1.5s linear infinite;
+  }
+  .chat-jump {
+    animation: none;
   }
 }

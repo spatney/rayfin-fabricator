@@ -529,6 +529,16 @@ pub struct ChatToolCall {
   pub output: Option<String>,
 }
 
+/// One chronological slice of an assistant turn (prose or a tool call), used to
+/// persist the interleaved order of the model's text and the tools it ran. A
+/// `Tool` segment references a `ChatToolCall` in `tools` by id.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ChatSegment {
+  Text { text: String },
+  Tool { id: String },
+}
+
 /// Streamed chat events (main -> renderer), tagged by `type`.
 #[derive(Serialize, Clone)]
 #[serde(tag = "type")]
@@ -629,6 +639,8 @@ pub struct ChatMessage {
   pub text: String,
   #[serde(default)]
   pub tools: Vec<ChatToolCall>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub segments: Option<Vec<ChatSegment>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]

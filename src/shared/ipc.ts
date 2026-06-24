@@ -589,6 +589,15 @@ export interface ChatToolCall {
 }
 
 /**
+ * One chronological slice of an assistant turn, used to interleave the model's
+ * prose with the tool calls it makes (instead of grouping all tools, then all
+ * text). A `'tool'` segment references a {@link ChatToolCall} in `tools` by id so
+ * tool-state updates stay in one place. Persisted so reloaded turns keep order.
+ */
+export type ChatSegment = { kind: 'text'; text: string } | { kind: 'tool'; id: string }
+
+
+/**
  * Streamed chat events sent from main -> renderer during a turn. The renderer
  * appends 'delta' text to the active assistant bubble and tracks tool calls by id.
  */
@@ -814,6 +823,12 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   text: string
   tools: ChatToolCall[]
+  /**
+   * Ordered prose/tool slices for an assistant turn (interleaved as they
+   * streamed). When present, the UI renders these in order; otherwise it falls
+   * back to grouping `tools` then `text` (e.g. for legacy stored turns).
+   */
+  segments?: ChatSegment[]
   /** Error text shown on a failed turn, if any. */
   error?: string
   /** Number of screenshots that were attached to this (user) message. */
