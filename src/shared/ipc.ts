@@ -514,6 +514,37 @@ export interface RevertResult {
   error?: string
 }
 
+/**
+ * Sync state of the current branch against its remote-tracking branch.
+ * `ahead` = local commits not yet pushed; `behind` = remote commits not yet pulled.
+ */
+export interface GitRemoteStatus {
+  /** False when the folder is missing or is not a git repository. */
+  isRepo: boolean
+  /** True when the repository has at least one configured remote. */
+  hasRemote: boolean
+  /** True when the current branch has an upstream/tracking branch set. */
+  hasUpstream: boolean
+  /** Current branch name when known. */
+  branch?: string
+  /** Local commits not on the upstream (pushable). */
+  ahead: number
+  /** Upstream commits not in the local branch (pullable). */
+  behind: number
+  /** Present when a `git fetch` was attempted but failed (offline/auth). */
+  fetchError?: string
+}
+
+/** Outcome of a pull or push, carrying refreshed working-tree + remote status. */
+export interface GitSyncResult {
+  ok: boolean
+  error?: string
+  /** True when a pull couldn't be combined automatically (rebase conflict). */
+  conflict?: boolean
+  status: GitStatus
+  remote: GitRemoteStatus
+}
+
 /** One file changed within a commit or the working tree. */
 export interface GitChange {
   /** Current project-relative path (the new path for renames). */
@@ -953,6 +984,10 @@ export const IpcChannels = {
   projectsGitCompareFileDiff: 'projects:gitCompareFileDiff',
   projectsGitFileLog: 'projects:gitFileLog',
   projectsGitRevert: 'projects:gitRevert',
+  projectsGitRemoteStatus: 'projects:gitRemoteStatus',
+  projectsGitDivergence: 'projects:gitDivergence',
+  projectsGitPull: 'projects:gitPull',
+  projectsGitPush: 'projects:gitPush',
   projectsFilesTree: 'projects:filesTree',
   projectsFilesRead: 'projects:filesRead',
 
@@ -1133,6 +1168,20 @@ export interface RayfinStudioApi {
        * caller then redeploys to publish the restored version.
        */
       revert: (id: string, ref: string) => Promise<RevertResult>
+      /**
+       * Sync state vs the remote: runs `git fetch` first, so it reflects new
+       * remote commits. Drives the header pill's pull/push affordances.
+       */
+      remoteStatus: (id: string) => Promise<GitRemoteStatus>
+      /**
+       * Same shape as `remoteStatus` but WITHOUT fetching — an instant read of the
+       * already-known divergence. Used by the deploy "unpulled changes" guard.
+       */
+      divergence: (id: string) => Promise<GitRemoteStatus>
+      /** Get the latest remote changes (fast-forward, else rebase local on top). */
+      pull: (id: string) => Promise<GitSyncResult>
+      /** Push local commits to the remote (only when an upstream exists). */
+      push: (id: string) => Promise<GitSyncResult>
     }
     files: {
       /** The project's pruned, sorted file tree (read-only browsing). */

@@ -118,6 +118,10 @@ pub fn run() {
       commands::projects::projects_git_compare_file_diff,
       commands::projects::projects_git_file_log,
       commands::projects::projects_git_revert,
+      commands::projects::projects_git_remote_status,
+      commands::projects::projects_git_divergence,
+      commands::projects::projects_git_pull,
+      commands::projects::projects_git_push,
       commands::projects::projects_files_tree,
       commands::projects::projects_files_read,
       // rayfin versions

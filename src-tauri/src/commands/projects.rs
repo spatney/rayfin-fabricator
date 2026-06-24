@@ -9,8 +9,8 @@ use crate::services::store;
 use crate::state::AppState;
 use crate::types::{
   CommunityGalleryResult, CreateProjectInput, FileContent, FileNode, GitChange, GitCommitResult,
-  GitCommitSummary, GitFileDiff, GitHistory, GitStatus, ProjectActionResult, ProjectsState, RevertResult,
-  TemplateInfo,
+  GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus, GitSyncResult,
+  ProjectActionResult, ProjectsState, RevertResult, TemplateInfo,
 };
 
 /// Show a native folder picker, returning the chosen absolute path (or None).
@@ -171,6 +171,26 @@ pub async fn projects_git_file_log(id: String, path: String) -> Vec<GitCommitSum
 #[tauri::command]
 pub async fn projects_git_revert(id: String, r#ref: String) -> RevertResult {
   crate::commands::git::git_revert(id, r#ref).await
+}
+
+#[tauri::command]
+pub async fn projects_git_remote_status(id: String) -> GitRemoteStatus {
+  crate::commands::git::git_remote_status(id).await
+}
+
+#[tauri::command]
+pub async fn projects_git_divergence(id: String) -> GitRemoteStatus {
+  crate::commands::git::git_divergence(id).await
+}
+
+#[tauri::command]
+pub async fn projects_git_pull(id: String) -> GitSyncResult {
+  crate::commands::git::git_pull(id).await
+}
+
+#[tauri::command]
+pub async fn projects_git_push(id: String) -> GitSyncResult {
+  crate::commands::git::git_push(id).await
 }
 
 /* ----------------------------- files (ported in Phase 3) ----------------------------- */

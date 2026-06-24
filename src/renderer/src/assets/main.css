@@ -1553,6 +1553,69 @@ code {
   gap: 8px;
 }
 
+/* Ahead/behind affordances on the git pill + its popover */
+.git-chip--actionable {
+  cursor: pointer;
+}
+
+.git-sync-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.git-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+.git-badge--behind {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.git-badge--ahead {
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text-dim) 18%, transparent);
+}
+
+.git-sync-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.git-sync-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.git-sync-title {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.git-sync-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.git-popover-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
+}
+
 /* Fabric workspace pill + popover (project header) */
 .ws-control {
   position: relative;

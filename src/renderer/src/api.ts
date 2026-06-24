@@ -103,7 +103,11 @@ export const api: RayfinStudioApi = {
       compareFileDiff: (id: string, base: string, target: string, path: string, oldPath?: string) =>
         invoke('projects_git_compare_file_diff', { id, base, target, path, oldPath }),
       fileLog: (id: string, path: string) => invoke('projects_git_file_log', { id, path }),
-      revert: (id: string, ref: string) => invoke('projects_git_revert', { id, ref })
+      revert: (id: string, ref: string) => invoke('projects_git_revert', { id, ref }),
+      remoteStatus: (id: string) => invoke('projects_git_remote_status', { id }),
+      divergence: (id: string) => invoke('projects_git_divergence', { id }),
+      pull: (id: string) => invoke('projects_git_pull', { id }),
+      push: (id: string) => invoke('projects_git_push', { id })
     },
     files: {
       tree: (id: string) => invoke('projects_files_tree', { id }),

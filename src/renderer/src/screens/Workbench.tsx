@@ -30,6 +30,7 @@ import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../component
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 import ThreadBar, { type ThreadView } from '../components/ThreadBar'
 import DeploymentsControl from '../components/DeploymentsControl'
+import GitControl from '../components/GitControl'
 import { SuppressPreview } from '../overlay'
 import RayfinVersionControl from '../components/RayfinVersionControl'
 import SkillsView from '../components/SkillsView'
@@ -172,6 +173,17 @@ export default function Workbench({
   const [deleteError, setDeleteError] = useState<string | null>(null)
   /** Bumped whenever the working tree likely changed (deploy / chat turn). */
   const [gitRefresh, setGitRefresh] = useState(0)
+  /** A user-initiated deploy paused by the "you have unpulled changes" warning. */
+  const [confirmDeploy, setConfirmDeploy] = useState<{
+    projectId: string
+    workspace?: string
+    force?: boolean
+    behind: number
+  } | null>(null)
+  /** True while the deploy warning's "Get latest first" pull is running. */
+  const [deployGuardBusy, setDeployGuardBusy] = useState(false)
+  /** Friendly message when the warning's pull fails (keeps the modal open). */
+  const [deployGuardError, setDeployGuardError] = useState<string | null>(null)
   /** Active project's local Rayfin (CLI + SDK) version + upgrade availability. */
   const [rayfinVer, setRayfinVer] = useState<RayfinVersionInfo | null>(null)
   /** A prompt queued for the chat composer (e.g. the Rayfin upgrade hand-off). */
@@ -380,6 +392,29 @@ export default function Workbench({
   const requestDeploy = useCallback(
     (projectId: string): void => {
       void runDeploy(projectId)
+    },
+    [runDeploy]
+  )
+
+  /**
+   * User-initiated deploy funnel: warn first when the remote has changes the user
+   * hasn't pulled (a fast, non-fetching divergence check), otherwise deploy straight
+   * away. Automatic deploys (post-turn, auto-merge) call runDeploy directly and skip
+   * this guard so they never stall on a modal.
+   */
+  const requestUserDeploy = useCallback(
+    async (projectId: string, workspace?: string, force?: boolean): Promise<void> => {
+      try {
+        const div = await window.api.projects.git.divergence(projectId)
+        if (div.behind > 0) {
+          setDeployGuardError(null)
+          setConfirmDeploy({ projectId, workspace, force, behind: div.behind })
+          return
+        }
+      } catch {
+        /* divergence is best-effort — fall through and deploy */
+      }
+      void runDeploy(projectId, workspace, force)
     },
     [runDeploy]
   )
@@ -1091,6 +1126,11 @@ export default function Workbench({
                   </button>
                 </div>
                 <div className="project-meta">
+                  <GitControl
+                    projectId={active.id}
+                    refreshKey={gitRefresh}
+                    onSynced={() => setGitRefresh((n) => n + 1)}
+                  />
                   <DeploymentsControl
                     project={active}
                     running={Boolean(deploys[active.id]?.running)}
@@ -1103,12 +1143,12 @@ export default function Workbench({
                         } catch {
                           /* naming is best-effort; deploy anyway */
                         }
-                        await runDeploy(active.id, workspaceId)
+                        await requestUserDeploy(active.id, workspaceId)
                       })()
                     }}
                     onRedeploy={() => {
                       setViewMode('build')
-                      void runDeploy(active.id)
+                      void requestUserDeploy(active.id)
                     }}
                     onSwitch={(workspace, byId) => switchDeployment(active.id, workspace, byId)}
                     onChanged={() => void refreshProjects()}
@@ -1122,7 +1162,7 @@ export default function Workbench({
                     refreshKey={gitRefresh}
                     onRequestDeploy={() => {
                       setViewMode('build')
-                      void runDeploy(active.id)
+                      void requestUserDeploy(active.id)
                     }}
                     onSendToChat={sendHistoryToChat}
                   />
@@ -1221,7 +1261,7 @@ export default function Workbench({
                     <PreviewPane
                       project={active}
                       deploy={deploys[active.id]}
-                      onDeploy={(workspace, force) => void runDeploy(active.id, workspace, force)}
+                      onDeploy={(workspace, force) => void requestUserDeploy(active.id, workspace, force)}
                       onCapture={(shot) => addShot(chatKey(active.id, activeThreadId), shot)}
                       focused={focusPane === 'preview'}
                       onToggleFocus={() =>
@@ -1350,6 +1390,56 @@ export default function Workbench({
                 <p>The deployed Fabric app is not affected — only the local code is removed.</p>
               )}
               {deleteError && <p className="confirm-error">{deleteError}</p>}
+            </>
+          }
+        />
+      )}
+
+      {confirmDeploy && (
+        <ConfirmModal
+          title="You have changes to get first"
+          confirmLabel="Get latest first"
+          busyLabel="Getting latest…"
+          busy={deployGuardBusy}
+          secondaryLabel="Deploy anyway"
+          cancelLabel="Cancel"
+          onConfirm={() => {
+            void (async () => {
+              const c = confirmDeploy
+              setDeployGuardBusy(true)
+              setDeployGuardError(null)
+              const res = await window.api.projects.git.pull(c.projectId)
+              setGitRefresh((n) => n + 1)
+              setDeployGuardBusy(false)
+              if (!res.ok) {
+                setDeployGuardError(res.error ?? 'Could not get the latest changes.')
+                return
+              }
+              setConfirmDeploy(null)
+              void runDeploy(c.projectId, c.workspace, c.force)
+            })()
+          }}
+          onSecondary={() => {
+            const c = confirmDeploy
+            setConfirmDeploy(null)
+            setDeployGuardError(null)
+            void runDeploy(c.projectId, c.workspace, c.force)
+          }}
+          onCancel={() => {
+            setConfirmDeploy(null)
+            setDeployGuardError(null)
+          }}
+          message={
+            <>
+              <p>
+                The remote has{' '}
+                <strong>
+                  {confirmDeploy.behind} change{confirmDeploy.behind === 1 ? '' : 's'}
+                </strong>{' '}
+                you haven’t downloaded yet. Deploying now publishes your current version
+                without them.
+              </p>
+              {deployGuardError && <p className="confirm-error">{deployGuardError}</p>}
             </>
           }
         />

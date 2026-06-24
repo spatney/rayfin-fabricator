@@ -12,6 +12,16 @@ interface Props {
   busy?: boolean
   /** Label shown on the confirm button while busy (default: 'Working…'). */
   busyLabel?: string
+  /**
+   * Optional middle button (e.g. "Get latest first") shown between Cancel and the
+   * confirm action. Rendered only when both `secondaryLabel` and `onSecondary` are set.
+   */
+  secondaryLabel?: string
+  onSecondary?: () => void
+  /** When true, show a spinner on the secondary button and disable controls. */
+  secondaryBusy?: boolean
+  /** Label shown on the secondary button while busy (default: 'Working…'). */
+  secondaryBusyLabel?: string
   onConfirm: () => void
   onCancel: () => void
 }
@@ -25,20 +35,25 @@ export default function ConfirmModal({
   danger = false,
   busy = false,
   busyLabel = 'Working…',
+  secondaryLabel,
+  onSecondary,
+  secondaryBusy = false,
+  secondaryBusyLabel = 'Working…',
   onConfirm,
   onCancel
 }: Props): JSX.Element {
   useSuppressPreview()
+  const working = busy || secondaryBusy
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !busy) onCancel()
+      if (e.key === 'Escape' && !working) onCancel()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [busy, onCancel])
+  }, [working, onCancel])
 
   return (
-    <div className="modal-backdrop" onClick={busy ? undefined : onCancel}>
+    <div className="modal-backdrop" onClick={working ? undefined : onCancel}>
       <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{title}</h2>
@@ -47,13 +62,25 @@ export default function ConfirmModal({
           <div className="confirm-message">{message}</div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
+          <button className="btn btn--ghost" onClick={onCancel} disabled={working}>
             {cancelLabel}
           </button>
+          {secondaryLabel && onSecondary && (
+            <button className="btn btn--ghost" onClick={onSecondary} disabled={working}>
+              {secondaryBusy ? (
+                <span className="btn-busy">
+                  <span className="btn-spin" aria-hidden="true" />
+                  {secondaryBusyLabel}
+                </span>
+              ) : (
+                secondaryLabel
+              )}
+            </button>
+          )}
           <button
             className={`btn ${danger ? 'btn--danger' : 'btn--primary'}`}
             onClick={onConfirm}
-            disabled={busy}
+            disabled={working}
             autoFocus
           >
             {busy ? (

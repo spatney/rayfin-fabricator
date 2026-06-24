@@ -489,6 +489,43 @@ pub struct GitFileDiff {
   pub error: Option<String>,
 }
 
+/// Sync state of the project's current branch against its remote-tracking branch.
+/// `ahead` = local commits not yet pushed; `behind` = remote commits not yet pulled.
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRemoteStatus {
+  pub is_repo: bool,
+  /// True when the repository has at least one configured remote.
+  pub has_remote: bool,
+  /// True when the current branch has an upstream/tracking branch set.
+  pub has_upstream: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub branch: Option<String>,
+  /// Local commits not on the upstream (pushable).
+  pub ahead: u32,
+  /// Upstream commits not in the local branch (pullable).
+  pub behind: u32,
+  /// Present when a `git fetch` was attempted but failed (e.g. offline/auth).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub fetch_error: Option<String>,
+}
+
+/// Result of a pull or push. Carries refreshed working-tree + remote status so the
+/// renderer can update without a second round-trip.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitSyncResult {
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  /// `Some(true)` when a pull couldn't be combined automatically (rebase conflict,
+  /// aborted and restored). Distinct from a generic error so the UI can phrase it.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub conflict: Option<bool>,
+  pub status: GitStatus,
+  pub remote: GitRemoteStatus,
+}
+
 /* ----------------------------- files ----------------------------- */
 
 #[derive(Serialize, Clone)]

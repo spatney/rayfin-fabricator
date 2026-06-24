@@ -10,7 +10,10 @@ use regex::Regex;
 use crate::commands::util::{looks_binary, safe_resolve};
 use crate::services::exec::{run, RunOptions};
 use crate::services::store::find_project;
-use crate::types::{GitChange, GitCommitResult, GitCommitSummary, GitFileDiff, GitHistory, GitStatus, RevertResult};
+use crate::types::{
+  GitChange, GitCommitResult, GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus,
+  GitSyncResult, RevertResult,
+};
 
 /// Working-tree sentinel ref (matches `GIT_WORKING_REF` in src/shared/ipc.ts).
 const GIT_WORKING_REF: &str = "WORKING";
@@ -684,6 +687,15 @@ mod tests {
     assert_eq!(changes[1].deletions, 0);
     assert_eq!(changes[1].binary, Some(true));
   }
+
+  #[test]
+  fn parse_ahead_behind_counts() {
+    // `git rev-list --left-right --count @{u}...HEAD` → "<behind>\t<ahead>".
+    assert_eq!(parse_ahead_behind("2\t1\n"), (2, 1));
+    assert_eq!(parse_ahead_behind("0\t0"), (0, 0));
+    assert_eq!(parse_ahead_behind("5   3"), (5, 3));
+    assert_eq!(parse_ahead_behind(""), (0, 0));
+  }
 }
 
 fn revert_err(message: &str) -> RevertResult {
@@ -777,5 +789,260 @@ pub async fn git_revert(id: String, reference: String) -> RevertResult {
     },
     no_changes: None,
     error: None,
+  }
+}
+
+/* ------------------------------ remote sync ------------------------------- */
+
+/// Options for a (possibly networked) git command: a longer timeout plus a
+/// non-interactive environment so a missing credential fails fast instead of
+/// hanging on a terminal/GUI prompt (stdin is already null'd by `exec::run`).
+fn net_opts(cwd: &str) -> RunOptions {
+  RunOptions {
+    cwd: Some(PathBuf::from(cwd)),
+    timeout_ms: Some(90_000),
+    env: vec![
+      ("GIT_TERMINAL_PROMPT".to_string(), "0".to_string()),
+      ("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string()),
+      ("GCM_INTERACTIVE".to_string(), "never".to_string()),
+    ],
+    ..Default::default()
+  }
+}
+
+/// Run a network-touching git command (fetch/pull/push) with [`net_opts`].
+async fn git_net(cwd: &str, args: &[&str]) -> Git {
+  let mut full: Vec<&str> = vec!["-c", "core.quotepath=false"];
+  full.extend_from_slice(args);
+  let res = run("git", &full, net_opts(cwd)).await;
+  Git { ok: res.ok, stdout: res.stdout, stderr: res.stderr }
+}
+
+/// Parse `git rev-list --left-right --count @{u}...HEAD` into `(behind, ahead)`.
+/// The left count is commits on the upstream but not local (pullable / behind);
+/// the right count is local commits not on the upstream (pushable / ahead).
+fn parse_ahead_behind(stdout: &str) -> (u32, u32) {
+  let mut it = stdout.split_whitespace();
+  let behind = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+  let ahead = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+  (behind, ahead)
+}
+
+/// Current branch name, or `None` when detached / unborn.
+async fn current_branch(cwd: &str) -> Option<String> {
+  let r = git(cwd, &["rev-parse", "--abbrev-ref", "HEAD"]).await;
+  let b = r.stdout.trim();
+  if r.ok && !b.is_empty() && b != "HEAD" {
+    Some(b.to_string())
+  } else {
+    None
+  }
+}
+
+/// True when the current branch has an upstream/tracking branch configured.
+async fn has_upstream(cwd: &str) -> bool {
+  let u = git(cwd, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).await;
+  u.ok && !u.stdout.trim().is_empty()
+}
+
+/// Build a [`GitRemoteStatus`] for the project, optionally running `git fetch`
+/// first to refresh the remote-tracking refs. When `do_fetch` is false this is a
+/// fast, network-free read of the already-known divergence.
+async fn compute_remote_status(cwd: &str, do_fetch: bool) -> GitRemoteStatus {
+  let mut out = GitRemoteStatus::default();
+
+  let inside = git(cwd, &["rev-parse", "--is-inside-work-tree"]).await;
+  if !inside.ok || inside.stdout.trim() != "true" {
+    return out;
+  }
+  out.is_repo = true;
+  out.branch = current_branch(cwd).await;
+
+  let remotes = git(cwd, &["remote"]).await;
+  out.has_remote = remotes.ok && !remotes.stdout.trim().is_empty();
+  if !out.has_remote {
+    return out;
+  }
+
+  if do_fetch {
+    let fetched = git_net(cwd, &["fetch", "--no-tags", "--quiet"]).await;
+    if !fetched.ok {
+      let e = fetched.stderr.trim();
+      out.fetch_error =
+        Some(if e.is_empty() { "Could not reach the remote.".to_string() } else { e.to_string() });
+    }
+  }
+
+  out.has_upstream = has_upstream(cwd).await;
+  if !out.has_upstream {
+    return out;
+  }
+
+  let counts = git(cwd, &["rev-list", "--left-right", "--count", "@{u}...HEAD"]).await;
+  if counts.ok {
+    let (behind, ahead) = parse_ahead_behind(&counts.stdout);
+    out.behind = behind;
+    out.ahead = ahead;
+  }
+  out
+}
+
+pub async fn git_remote_status(id: String) -> GitRemoteStatus {
+  let Some(project) = find_project(&id) else {
+    return GitRemoteStatus::default();
+  };
+  if !Path::new(&project.path).exists() {
+    return GitRemoteStatus::default();
+  }
+  compute_remote_status(&project.path, true).await
+}
+
+pub async fn git_divergence(id: String) -> GitRemoteStatus {
+  let Some(project) = find_project(&id) else {
+    return GitRemoteStatus::default();
+  };
+  if !Path::new(&project.path).exists() {
+    return GitRemoteStatus::default();
+  }
+  compute_remote_status(&project.path, false).await
+}
+
+fn no_repo_status() -> GitStatus {
+  GitStatus { is_repo: false, branch: None, changed_count: 0, no_commits: None }
+}
+
+fn sync_err(message: &str, status: GitStatus, remote: GitRemoteStatus) -> GitSyncResult {
+  GitSyncResult { ok: false, error: Some(message.to_string()), conflict: None, status, remote }
+}
+
+pub async fn git_pull(id: String) -> GitSyncResult {
+  let Some(project) = find_project(&id) else {
+    return sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default());
+  };
+  if !Path::new(&project.path).exists() {
+    return sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default());
+  }
+  let cwd = project.path.clone();
+
+  let inside = git(&cwd, &["rev-parse", "--is-inside-work-tree"]).await;
+  if !inside.ok || inside.stdout.trim() != "true" {
+    return sync_err("This project isn’t tracked by git.", git_status(id.clone()).await, GitRemoteStatus::default());
+  }
+  if !has_upstream(&cwd).await {
+    return sync_err(
+      "This branch isn’t linked to a remote branch yet.",
+      git_status(id.clone()).await,
+      compute_remote_status(&cwd, false).await,
+    );
+  }
+
+  // Don't lose uncommitted work — commit it first (mirrors git_revert).
+  let dirty = git(&cwd, &["status", "--porcelain"]).await;
+  if dirty.ok && !dirty.stdout.trim().is_empty() {
+    git(&cwd, &["add", "-A"]).await;
+    let mut args: Vec<&str> = COMMIT_IDENT.to_vec();
+    args.extend_from_slice(&["commit", "-m", "Save before getting the latest changes"]);
+    let saved = git(&cwd, &args).await;
+    if !saved.ok {
+      return sync_err(
+        "Could not save your current changes before updating.",
+        git_status(id.clone()).await,
+        compute_remote_status(&cwd, false).await,
+      );
+    }
+  }
+
+  // Refresh remote-tracking refs before merging.
+  let fetched = git_net(&cwd, &["fetch", "--no-tags", "--quiet"]).await;
+  if !fetched.ok {
+    let e = fetched.stderr.trim();
+    return sync_err(
+      if e.is_empty() { "Could not reach the remote." } else { e },
+      git_status(id.clone()).await,
+      compute_remote_status(&cwd, false).await,
+    );
+  }
+
+  // Fast-forward when possible; fall back to a rebase when histories diverged.
+  let ff = git(&cwd, &["merge", "--ff-only", "@{u}"]).await;
+  if !ff.ok {
+    let orig = git(&cwd, &["rev-parse", "HEAD"]).await;
+    let orig = orig.stdout.trim().to_string();
+    let rebased = git(&cwd, &["rebase", "@{u}"]).await;
+    if !rebased.ok {
+      // Leave no half-applied state: abort and restore exactly where we were.
+      git(&cwd, &["rebase", "--abort"]).await;
+      if !orig.is_empty() {
+        git(&cwd, &["reset", "--hard", &orig]).await;
+      }
+      return GitSyncResult {
+        ok: false,
+        error: Some(
+          "Your changes and the latest changes overlap and couldn’t be combined automatically.".to_string(),
+        ),
+        conflict: Some(true),
+        status: git_status(id.clone()).await,
+        remote: compute_remote_status(&cwd, false).await,
+      };
+    }
+  }
+
+  GitSyncResult {
+    ok: true,
+    error: None,
+    conflict: None,
+    status: git_status(id.clone()).await,
+    remote: compute_remote_status(&cwd, false).await,
+  }
+}
+
+pub async fn git_push(id: String) -> GitSyncResult {
+  let Some(project) = find_project(&id) else {
+    return sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default());
+  };
+  if !Path::new(&project.path).exists() {
+    return sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default());
+  }
+  let cwd = project.path.clone();
+
+  let inside = git(&cwd, &["rev-parse", "--is-inside-work-tree"]).await;
+  if !inside.ok || inside.stdout.trim() != "true" {
+    return sync_err("This project isn’t tracked by git.", git_status(id.clone()).await, GitRemoteStatus::default());
+  }
+  // Per product decision: only push when an upstream already exists.
+  if !has_upstream(&cwd).await {
+    return sync_err(
+      "This branch isn’t linked to a remote branch yet.",
+      git_status(id.clone()).await,
+      compute_remote_status(&cwd, false).await,
+    );
+  }
+
+  let pushed = git_net(&cwd, &["push"]).await;
+  if !pushed.ok {
+    let combined = format!("{}\n{}", pushed.stdout, pushed.stderr);
+    let rejected = Regex::new(r"(?i)rejected|non-fast-forward|fetch first").unwrap().is_match(&combined);
+    let e = combined.trim().to_string();
+    return GitSyncResult {
+      ok: false,
+      error: Some(if rejected {
+        "The remote has changes you don’t have yet. Get the latest changes first, then push again.".to_string()
+      } else if e.is_empty() {
+        "Could not push your changes.".to_string()
+      } else {
+        e
+      }),
+      conflict: None,
+      status: git_status(id.clone()).await,
+      remote: compute_remote_status(&cwd, false).await,
+    };
+  }
+
+  GitSyncResult {
+    ok: true,
+    error: None,
+    conflict: None,
+    status: git_status(id.clone()).await,
+    remote: compute_remote_status(&cwd, false).await,
   }
 }
