@@ -21,6 +21,8 @@ pub struct AppState {
   chat_cancels: Mutex<HashMap<String, CancelToken>>,
   /// Active advisor-run cancel tokens, keyed by `projectId` (one run per project).
   advisor_cancels: Mutex<HashMap<String, CancelToken>>,
+  /// Active suggestion-generation cancel tokens, keyed by `projectId` (one per project).
+  suggest_cancels: Mutex<HashMap<String, CancelToken>>,
   /// Shared Copilot SDK client + per-thread session cache.
   pub copilot: CopilotManager,
   /// Bridges Plan-mode `exit_plan_mode` requests to the renderer's approval UI.
@@ -168,6 +170,34 @@ impl AppState {
   /// token was found and signalled.
   pub fn cancel_advisor(&self, project_id: &str) -> bool {
     if let Some(token) = self.advisor_cancels.lock().unwrap().remove(project_id) {
+      token.cancel();
+      true
+    } else {
+      false
+    }
+  }
+
+  /// Register a fresh suggestion-generation cancel token for a project only if
+  /// none is already running. Returns `None` when generation is already in flight.
+  pub fn try_begin_suggest(&self, project_id: &str) -> Option<CancelToken> {
+    let mut map = self.suggest_cancels.lock().unwrap();
+    if map.contains_key(project_id) {
+      return None;
+    }
+    let token = CancelToken::new();
+    map.insert(project_id.to_string(), token.clone());
+    Some(token)
+  }
+
+  /// Remove a suggestion run's cancel token (called when generation completes).
+  pub fn end_suggest(&self, project_id: &str) {
+    self.suggest_cancels.lock().unwrap().remove(project_id);
+  }
+
+  /// Cancel an in-flight suggestion generation, if one is running. Returns true
+  /// when a token was found and signalled.
+  pub fn cancel_suggest(&self, project_id: &str) -> bool {
+    if let Some(token) = self.suggest_cancels.lock().unwrap().remove(project_id) {
       token.cancel();
       true
     } else {

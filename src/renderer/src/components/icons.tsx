@@ -145,6 +145,16 @@ export function ReloadIcon(props: IconProps): JSX.Element {
   )
 }
 
+/** Clock — a pending / queued item waiting its turn. */
+export function ClockIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </Icon>
+  )
+}
+
 /** Four-point sparkle — the AI model selector. */
 export function SparkleIcon(props: IconProps): JSX.Element {
   return (

@@ -17,6 +17,7 @@ pub mod rayfin_version;
 pub mod screenshot;
 pub mod settings;
 pub mod skills;
+pub mod suggest;
 pub mod threads;
 pub mod updates;
 pub mod util;

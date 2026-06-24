@@ -852,3 +852,45 @@ pub struct AdvisorEventEnvelope {
   pub project_id: String,
   pub event: AdvisorEvent,
 }
+
+/* --------------------------- suggestions --------------------------- */
+
+/// One Copilot-generated starter suggestion shown on the empty Build chat: a
+/// short emoji icon plus a single plain-language idea the user can click to
+/// prefill the composer. Persisted (cached) and reloaded, so it is both
+/// `Serialize` and `Deserialize`.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Suggestion {
+  /// A single emoji used as the card's glyph (falls back to a generic one).
+  #[serde(default)]
+  pub icon: String,
+  /// The suggestion text — one concise imperative the user would type.
+  #[serde(default)]
+  pub text: String,
+}
+
+/// A generated (or cached) set of starter suggestions for one project. `ok` is
+/// set by us based on whether generation produced any usable suggestions; the
+/// renderer falls back to its built-in heuristics when `ok` is false.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestionSet {
+  /// True when Copilot returned a parseable, non-empty list.
+  #[serde(default)]
+  pub ok: bool,
+  #[serde(default)]
+  pub suggestions: Vec<Suggestion>,
+  /// Cheap signature of the source tree these were generated from; used to
+  /// invalidate the cache when the app's code changes.
+  #[serde(default, skip_serializing_if = "String::is_empty")]
+  pub fingerprint: String,
+}
+
+/// Shape of the JSON block Copilot is asked to emit. Kept separate from
+/// [`SuggestionSet`] so `ok`/`fingerprint` are set by us, not the model.
+#[derive(Deserialize, Default)]
+pub struct SuggestionRaw {
+  #[serde(default)]
+  pub suggestions: Vec<Suggestion>,
+}

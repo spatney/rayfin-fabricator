@@ -5832,6 +5832,260 @@ code {
   color: var(--text-faint);
 }
 
+/* "Tailoring ideas…" label shown while Copilot generates starter suggestions. */
+.chat-suggest-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.chat-suggest-status-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* Shimmer placeholder cards rendered in the suggestions grid while generating. */
+.chat-suggestion--skeleton {
+  cursor: default;
+  pointer-events: none;
+}
+
+.chat-suggestion--skeleton .chat-suggestion-text {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.skeleton-block,
+.skeleton-line {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-elev-2);
+}
+
+.skeleton-block {
+  border-radius: 9px;
+}
+
+.skeleton-line {
+  display: block;
+  height: 9px;
+  width: 100%;
+  border-radius: 5px;
+}
+
+.skeleton-line--short {
+  width: 60%;
+}
+
+.skeleton-block::after,
+.skeleton-line::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 16%, transparent),
+    transparent
+  );
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* "Refresh ideas" pill under the generated suggestions. */
+.chat-suggest-refresh {
+  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    border-color 0.14s ease,
+    background 0.14s ease;
+}
+
+.chat-suggest-refresh:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: var(--accent-soft);
+}
+
+.chat-suggest-refresh-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Queued-messages strip — lined-up follow-ups that send after the current turn. */
+.chat-queue {
+  margin: 0 0 8px;
+  padding: 10px 12px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-elev));
+}
+
+.chat-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.chat-queue-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chat-queue-title-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--accent);
+}
+
+.chat-queue-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.chat-queue-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.chat-queue-resume {
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: none;
+  border-radius: 7px;
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+
+.chat-queue-resume:hover {
+  filter: brightness(1.08);
+}
+
+.chat-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px 7px 9px;
+  border-radius: 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  transition: border-color 0.12s ease;
+}
+
+.chat-queue-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.chat-queue-item-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.chat-queue-item-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-queue-item-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.chat-queue-item:hover .chat-queue-item-x,
+.chat-queue-item-x:focus-visible {
+  opacity: 1;
+}
+
+.chat-queue-item-x:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.chat-queue-item-x svg {
+  width: 13px;
+  height: 13px;
+}
+
 .turn {
   display: flex;
   flex-direction: column;
@@ -7224,6 +7478,19 @@ span.thread-pill {
   filter: none;
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+/* Queue the typed message while a turn runs — teal-tinted, distinct from Stop. */
+.composer-send--queue {
+  background: var(--bg-elev-3);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.composer-send--queue:hover:not(:disabled) {
+  filter: none;
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
 }
 
 .composer-send svg {

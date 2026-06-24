@@ -150,7 +150,9 @@ export const api: RayfinStudioApi = {
       invoke('chat_save_history', { projectId, messages, threadId }),
     setOptions: (projectId: string, options: ChatOptions) =>
       invoke('chat_set_options', { projectId, options }),
-    listModels: () => invoke('chat_models')
+    listModels: () => invoke('chat_models'),
+    suggest: (projectId: string) => invoke('chat_suggest', { projectId }),
+    cancelSuggest: (projectId: string) => invoke('chat_suggest_cancel', { projectId })
   },
 
   threads: {

@@ -461,9 +461,11 @@ export default function DeploymentsControl({
                   })}
                 </ul>
               )}
-              <button className="dep-new" onClick={startCreate} disabled={running}>
-                + New deployment
-              </button>
+              {!(loadingDeps && deployments === null) && (
+                <button className="dep-new" onClick={startCreate} disabled={running}>
+                  + New deployment
+                </button>
+              )}
             </>
           )}
         </div>

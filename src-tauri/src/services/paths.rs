@@ -76,6 +76,23 @@ pub fn advisor_file(project_id: &str) -> PathBuf {
   advisor_dir().join(format!("{safe}.json"))
 }
 
+/// Directory holding cached starter-suggestion sets (one JSON file per project).
+pub fn suggest_dir() -> PathBuf {
+  let d = data_dir().join("suggestions");
+  let _ = std::fs::create_dir_all(&d);
+  d
+}
+
+/// The cached-suggestions file for one project. The id is sanitized so it is
+/// always a safe single path segment.
+pub fn suggest_file(project_id: &str) -> PathBuf {
+  let safe: String = project_id
+    .chars()
+    .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+    .collect();
+  suggest_dir().join(format!("{safe}.json"))
+}
+
 /// The JSON file backing app state (projects, settings).
 pub fn store_file() -> PathBuf {
   data_dir().join("studio.json")

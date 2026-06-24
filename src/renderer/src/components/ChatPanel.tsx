@@ -18,7 +18,8 @@ import {
   type ChatTurnResult,
   type CopilotModel,
   type ReasoningEffort,
-  type StudioProject
+  type StudioProject,
+  type Suggestion
 } from '@shared/ipc'
 import type { PendingShot } from './PreviewPane'
 import Markdown from './Markdown'
@@ -30,7 +31,8 @@ import {
   CollapseIcon,
   CloseIcon,
   StopIcon,
-  ImageIcon
+  ImageIcon,
+  ClockIcon
 } from './icons'
 import logo from '../assets/logo.png'
 
@@ -156,12 +158,6 @@ function useCopilotModels(enabled: boolean): { models: CopilotModel[]; loading: 
   return { models, loading }
 }
 
-/** A clickable starter prompt shown on the empty state. */
-interface Suggestion {
-  icon: string
-  text: string
-}
-
 /** Words to drop when guessing what an app is "about" from its name. */
 const STOP_WORDS = new Set([
   'app',
@@ -260,6 +256,66 @@ function suggestionsFor(project: StudioProject): Suggestion[] {
   else if (tpl.includes('data')) order = ['list', 'search', 'chart', 'create']
   else order = ['list', 'create', 'chart', 'design']
   return order.map((k) => cards[k])
+}
+
+/**
+ * Ask Copilot for starter suggestions grounded in the project's actual code. The
+ * backend caches per project (reused until the code changes), so this is cheap to
+ * call whenever the empty Build chat is shown. While a fresh set is generating we
+ * surface `loading` (the welcome shows an animated placeholder); on any
+ * failure/timeout `failed` is set and the caller falls back to the static
+ * heuristic suggestions. The in-flight request is cancelled when the empty state
+ * goes away (e.g. the user sends a message) so it never competes with a real turn.
+ */
+function useGeneratedSuggestions(
+  projectId: string,
+  enabled: boolean
+): { suggestions: Suggestion[] | null; loading: boolean; failed: boolean; refresh: () => void } {
+  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null)
+  // Start in the loading state when enabled so the skeletons show immediately,
+  // rather than flashing the heuristic fallback for a frame before the effect runs.
+  const [loading, setLoading] = useState(enabled)
+  const [failed, setFailed] = useState(false)
+  const [nonce, setNonce] = useState(0)
+
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+    setLoading(true)
+    setFailed(false)
+    // A forced refresh should regenerate even if the code is unchanged.
+    const p = nonce > 0 ? window.api.chat.cancelSuggest(projectId).catch(() => false) : Promise.resolve(false)
+    void p.then(() =>
+      window.api.chat
+        .suggest(projectId)
+        .then((set) => {
+          if (cancelled) return
+          if (set.ok && set.suggestions.length > 0) {
+            setSuggestions(set.suggestions)
+          } else {
+            setFailed(true)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setFailed(true)
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    )
+    return () => {
+      cancelled = true
+      // Stop any in-flight generation so it doesn't run alongside a real turn.
+      void window.api.chat.cancelSuggest(projectId).catch(() => undefined)
+    }
+  }, [projectId, enabled, nonce])
+
+  const refresh = (): void => {
+    setSuggestions(null)
+    setNonce((n) => n + 1)
+  }
+
+  return { suggestions, loading, failed, refresh }
 }
 
 /** Coarse classification of a Copilot tool call, used for both labels and icons. */
@@ -1052,10 +1108,25 @@ export default function ChatPanel({
   const fileRef = useRef<HTMLInputElement>(null)
   const [attaching, setAttaching] = useState(false)
 
-  const suggestions = useMemo(
+  // Messages the user lined up while a turn was running (CLI-style): they send,
+  // in order, once the current reply finishes. A manual Stop pauses the queue so
+  // "Stop" always halts rather than kicking off the next one.
+  const [queued, setQueued] = useState<{ id: string; text: string }[]>([])
+  const [queuePaused, setQueuePaused] = useState(false)
+
+  const fallbackSuggestions = useMemo(
     () => suggestionsFor(project),
     [project.id, project.name, project.template]
   )
+
+  // Copilot-generated starter prompts grounded in the app's code. Only generated
+  // while the empty state is shown; falls back to the heuristics above otherwise.
+  const {
+    suggestions: generatedSuggestions,
+    loading: suggestionsLoading,
+    refresh: refreshSuggestions
+  } = useGeneratedSuggestions(project.id, messages.length === 0)
+  const suggestions = generatedSuggestions ?? fallbackSuggestions
 
   // The currently-selected model's metadata (when a concrete, still-listed model
   // is chosen) — used to label the picker button and scope the effort options.
@@ -1216,7 +1287,16 @@ export default function ChatPanel({
   async function send(): Promise<void> {
     const text = input.trim()
     const shots = attachments ?? []
-    if ((!text && shots.length === 0) || sending) return
+    // While a turn is in flight, line the message up instead of dropping it; it
+    // sends automatically once the current reply finishes (CLI-style queueing).
+    if (sending) {
+      if (text) {
+        setQueued((q) => [...q, { id: uid(), text }])
+        setInput('')
+      }
+      return
+    }
+    if (!text && shots.length === 0) return
     const prompt = text || 'Here is a screenshot of the current preview — please take a look.'
     setInput('')
     onAttachmentsConsumed?.()
@@ -1280,6 +1360,8 @@ export default function ChatPanel({
   }
 
   async function stop(): Promise<void> {
+    // Stop always means halt: pause the queue so the next message doesn't fire.
+    if (queued.length > 0) setQueuePaused(true)
     await window.api.chat.cancel(project.id, threadId)
   }
 
@@ -1307,6 +1389,8 @@ export default function ChatPanel({
     await window.api.chat.reset(project.id, threadId)
     onChange(() => [])
     setMode('agent')
+    setQueued([])
+    setQueuePaused(false)
     onClearHistory?.()
   }
 
@@ -1338,6 +1422,21 @@ export default function ChatPanel({
     }
     onOutboundConsumed?.()
   }, [outbound?.id])
+
+  // Drive the queue: when a turn finishes (and the user didn't Stop), send the
+  // next lined-up message. Runs off `sending` going false so it always uses
+  // fresh state rather than a stale closure inside dispatch().
+  useEffect(() => {
+    if (sending || queuePaused || queued.length === 0) return
+    const [next, ...rest] = queued
+    setQueued(rest)
+    void dispatch(next.text, next.text, [])
+  }, [sending, queuePaused, queued])
+
+  // Once the queue empties, clear the paused flag so a later Stop starts fresh.
+  useEffect(() => {
+    if (queued.length === 0 && queuePaused) setQueuePaused(false)
+  }, [queued, queuePaused])
 
   return (
     <div className="chat">
@@ -1441,19 +1540,57 @@ export default function ChatPanel({
               Describe what you want in plain language — I’ll write the code and deploy it live. No
               coding required.
             </p>
-            <div className="chat-suggestions">
-              {suggestions.map((s) => (
-                <button
-                  key={s.text}
-                  className="chat-suggestion"
-                  onClick={() => applySuggestion(s.text)}
-                >
-                  <span className="chat-suggestion-icon">{s.icon}</span>
-                  <span className="chat-suggestion-text">{s.text}</span>
-                  <span className="chat-suggestion-arrow">→</span>
-                </button>
-              ))}
-            </div>
+            {suggestionsLoading && !generatedSuggestions ? (
+              <>
+                <p className="chat-suggest-status">
+                  <SparkleIcon className="chat-suggest-status-icon" />
+                  Tailoring ideas to your app…
+                </p>
+                <div className="chat-suggestions" aria-busy="true">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="chat-suggestion chat-suggestion--skeleton"
+                      aria-hidden="true"
+                    >
+                      <span className="chat-suggestion-icon skeleton-block" />
+                      <span className="chat-suggestion-text">
+                        <span className="skeleton-line" />
+                        <span className="skeleton-line skeleton-line--short" />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="chat-suggestions">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.text}
+                      className="chat-suggestion"
+                      onClick={() => applySuggestion(s.text)}
+                    >
+                      <span className="chat-suggestion-icon">{s.icon}</span>
+                      <span className="chat-suggestion-text">{s.text}</span>
+                      <span className="chat-suggestion-arrow">→</span>
+                    </button>
+                  ))}
+                </div>
+                {generatedSuggestions && (
+                  <button
+                    className="chat-suggest-refresh"
+                    onClick={refreshSuggestions}
+                    title="Generate fresh ideas from your app's code"
+                  >
+                    <span className="chat-suggest-refresh-icon" aria-hidden="true">
+                      ↻
+                    </span>
+                    Refresh ideas
+                  </button>
+                )}
+              </>
+            )}
             <p className="chat-welcome-foot">Or just type your own idea below ↓</p>
           </div>
         )}
@@ -1576,6 +1713,49 @@ export default function ChatPanel({
         )}
       </div>
 
+      {queued.length > 0 && (
+        <div className="chat-queue">
+          <div className="chat-queue-head">
+            <span className="chat-queue-title">
+              <ClockIcon className="chat-queue-title-icon" />
+              Up next
+              <span className="chat-queue-count">{queued.length}</span>
+            </span>
+            {queuePaused ? (
+              <button
+                className="chat-queue-resume"
+                onClick={() => setQueuePaused(false)}
+                title="Send the queued messages now"
+              >
+                Send now
+              </button>
+            ) : (
+              <span className="chat-queue-hint">sends after the current reply</span>
+            )}
+          </div>
+          <ul className="chat-queue-list">
+            {queued.map((q, i) => (
+              <li key={q.id} className="chat-queue-item">
+                <span className="chat-queue-item-num" aria-hidden="true">
+                  {i + 1}
+                </span>
+                <span className="chat-queue-item-text" title={q.text}>
+                  {q.text}
+                </span>
+                <button
+                  className="chat-queue-item-x"
+                  onClick={() => setQueued((qs) => qs.filter((x) => x.id !== q.id))}
+                  title="Remove from queue"
+                  aria-label="Remove from queue"
+                >
+                  <CloseIcon />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className={`composer${sending ? ' composer--busy' : ''}`}>
         {sending && <div className="composer-busyline" aria-hidden="true" />}
         {(attachments?.length ?? 0) > 0 && (
@@ -1691,14 +1871,38 @@ export default function ChatPanel({
                 <ImageIcon />
               </button>
               {sending ? (
-                <button
-                  className="composer-send composer-send--stop"
-                  onClick={stop}
-                  title="Stop generating"
-                  aria-label="Stop generating"
-                >
-                  <StopIcon />
-                </button>
+                <>
+                  {input.trim() && (
+                    <button
+                      className="composer-send composer-send--queue"
+                      onClick={send}
+                      title="Queue this message — sends after the current reply"
+                      aria-label="Queue this message"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                  )}
+                  <button
+                    className="composer-send composer-send--stop"
+                    onClick={stop}
+                    title="Stop generating"
+                    aria-label="Stop generating"
+                  >
+                    <StopIcon />
+                  </button>
+                </>
               ) : (
                 <button
                   className="composer-send"
