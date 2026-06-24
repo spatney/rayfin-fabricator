@@ -153,7 +153,9 @@ fn extract_suggestions(text: &str) -> Option<SuggestionRaw> {
 /// Persist a successful suggestion set for later reuse.
 fn save_set(project_id: &str, set: &SuggestionSet) {
   if let Ok(text) = serde_json::to_string_pretty(set) {
-    let _ = std::fs::write(paths::suggest_file(project_id), text);
+    if let Err(e) = std::fs::write(paths::suggest_file(project_id), text) {
+      log::warn!("failed to save suggestions for {project_id}: {e}");
+    }
   }
 }
 

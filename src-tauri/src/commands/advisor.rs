@@ -228,7 +228,9 @@ fn extract_report(text: &str) -> Option<AdvisorRawReport> {
 /// Persist a successful review for later reload.
 fn save_snapshot(project_id: &str, snapshot: &AdvisorSnapshot) {
   if let Ok(text) = serde_json::to_string_pretty(snapshot) {
-    let _ = std::fs::write(paths::advisor_file(project_id), text);
+    if let Err(e) = std::fs::write(paths::advisor_file(project_id), text) {
+      log::warn!("failed to save advisor snapshot for {project_id}: {e}");
+    }
   }
 }
 

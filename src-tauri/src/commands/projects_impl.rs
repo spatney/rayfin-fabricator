@@ -288,7 +288,9 @@ fn write_project_name(dir: &str, name: &str) {
   if NAME_RE.is_match(&yml) {
     let next = NAME_RE.replace(&yml, format!("name: {value}").as_str()).to_string();
     if next != yml {
-      let _ = std::fs::write(&file, next);
+      if let Err(e) = std::fs::write(&file, next) {
+        log::warn!("failed to update project name in {}: {e}", file.display());
+      }
     }
   }
 }

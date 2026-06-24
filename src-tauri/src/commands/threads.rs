@@ -196,7 +196,9 @@ async fn create_thread(input: CreateThreadInput) -> ThreadActionResult {
   let thread_id = Uuid::new_v4().to_string();
   let branch = format!("fabricator/thread-{}", &thread_id[..8]);
   let worktree_path = worktree_path_for(&input.project_id, &thread_id);
-  let _ = std::fs::create_dir_all(threads_root(&input.project_id));
+  if let Err(e) = std::fs::create_dir_all(threads_root(&input.project_id)) {
+    log::warn!("failed to create threads dir for {}: {e}", input.project_id);
+  }
 
   let worktree_str = worktree_path.to_string_lossy().to_string();
   let add = git(&cwd, &["worktree", "add", "-b", &branch, &worktree_str, &base_commit]).await;

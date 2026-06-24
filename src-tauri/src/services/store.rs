@@ -99,8 +99,13 @@ fn persist(cache: &Cache) {
       map.insert("settings".to_string(), s);
     }
   }
-  if let Ok(text) = serde_json::to_string_pretty(&value) {
-    let _ = std::fs::write(paths::store_file(), text);
+  match serde_json::to_string_pretty(&value) {
+    Ok(text) => {
+      if let Err(e) = std::fs::write(paths::store_file(), text) {
+        log::error!("failed to persist project store to {}: {e}", paths::store_file().display());
+      }
+    }
+    Err(e) => log::error!("failed to serialize project store: {e}"),
   }
 }
 
