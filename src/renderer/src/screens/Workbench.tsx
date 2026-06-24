@@ -37,6 +37,7 @@ import SkillsView from '../components/SkillsView'
 import AdvisorView, { categoryMeta } from '../components/AdvisorView'
 import ModelView from '../components/ModelView'
 import DataView from '../components/DataView'
+import { useToast } from '../toast'
 import { InfoIcon, GearIcon, SignOutIcon } from '../components/icons'
 import logo from '../assets/logo.png'
 
@@ -141,6 +142,7 @@ export default function Workbench({
   settings,
   onSettingsChange
 }: Props): JSX.Element {
+  const toast = useToast()
   const [versions, setVersions] = useState<AppVersions | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -363,7 +365,7 @@ export default function Workbench({
   }, [active?.id])
 
   const runDeploy = useCallback(
-    async (projectId: string, workspace?: string, force?: boolean): Promise<void> => {
+    async (projectId: string, workspace?: string, force?: boolean, notifySuccess = false): Promise<void> => {
       if (deployingIdRef.current) {
         // A deploy is already streaming — queue this one to run right after.
         pendingDeployRef.current.add(projectId)
@@ -377,6 +379,14 @@ export default function Workbench({
           const cur = all[projectId] ?? { running: false, log: [] }
           return { ...all, [projectId]: { ...cur, running: false, result } }
         })
+        // Deploys are long and the user may be on another tab — surface the
+        // outcome regardless. Errors always toast; success only when the user
+        // explicitly asked (so post-turn auto-deploys stay quiet).
+        if (!result.ok) {
+          toast.error(result.error ?? 'The deployment did not complete.', { title: 'Deploy failed' })
+        } else if (notifySuccess) {
+          toast.success('Your app is live.', { title: 'Deployed' })
+        }
         await refreshProjects()
       } finally {
         deployingIdRef.current = null
@@ -390,7 +400,7 @@ export default function Workbench({
         }
       }
     },
-    [refreshProjects, refreshRayfinVer]
+    [refreshProjects, refreshRayfinVer, toast]
   )
   runDeployRef.current = (projectId: string) => void runDeploy(projectId)
 
@@ -420,7 +430,7 @@ export default function Workbench({
       } catch {
         /* divergence is best-effort — fall through and deploy */
       }
-      void runDeploy(projectId, workspace, force)
+      void runDeploy(projectId, workspace, force, true)
     },
     [runDeploy]
   )
