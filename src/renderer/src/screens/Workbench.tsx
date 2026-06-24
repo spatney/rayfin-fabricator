@@ -36,6 +36,7 @@ import RayfinVersionControl from '../components/RayfinVersionControl'
 import SkillsView from '../components/SkillsView'
 import AdvisorView, { categoryMeta } from '../components/AdvisorView'
 import ModelView from '../components/ModelView'
+import DataView from '../components/DataView'
 import { InfoIcon, GearIcon, SignOutIcon } from '../components/icons'
 import logo from '../assets/logo.png'
 
@@ -193,7 +194,7 @@ export default function Workbench({
   >(null)
   /** Project content view: the build loop (chat + preview) or the code browser. */
   const [viewMode, setViewMode] = useState<
-    'build' | 'code' | 'model' | 'skills' | 'advisor'
+    'build' | 'code' | 'model' | 'data' | 'skills' | 'advisor'
   >('build')
   /** A pending request to open a specific file in the Code tab (Model → file). */
   const [codeOpen, setCodeOpen] = useState<{ path: string; nonce: number } | null>(null)
@@ -1198,6 +1199,14 @@ export default function Workbench({
                     Model
                   </button>
                   <button
+                    className={`project-tab${viewMode === 'data' ? ' project-tab--active' : ''}`}
+                    role="tab"
+                    aria-selected={viewMode === 'data'}
+                    onClick={() => setViewMode('data')}
+                  >
+                    Data
+                  </button>
+                  <button
                     className={`project-tab${viewMode === 'skills' ? ' project-tab--active' : ''}`}
                     role="tab"
                     aria-selected={viewMode === 'skills'}
@@ -1262,6 +1271,12 @@ export default function Workbench({
                   project={active}
                   refreshKey={gitRefresh}
                   onOpenFile={openFileInCode}
+                  onSendToChat={sendModelToChat}
+                />
+              ) : viewMode === 'data' ? (
+                <DataView
+                  project={active}
+                  refreshKey={gitRefresh}
                   onSendToChat={sendModelToChat}
                 />
               ) : viewMode === 'skills' ? (

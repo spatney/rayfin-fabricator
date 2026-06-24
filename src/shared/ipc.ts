@@ -869,6 +869,24 @@ export interface AdvisorEventEnvelope {
   event: AdvisorEvent
 }
 
+/**
+ * Connection status for a project's deployed Rayfin data API. The publishable
+ * key itself never crosses the IPC boundary — only whether one is available.
+ */
+export interface DataApiConfig {
+  /** True when both an endpoint and a publishable key were resolved. */
+  configured: boolean
+  /** Base data-plane URL (safe to display). */
+  apiUrl?: string
+  /** Resolved GraphQL endpoint (`<apiUrl>/graphql`). */
+  endpoint?: string
+  /** True when a publishable key was found (its value stays in the backend). */
+  hasKey: boolean
+  /** Where the config was resolved from: "env" | "rayfin.yml" | "deploy" (joined with "+"). */
+  source?: string
+}
+
+
 /** Per-project chat configuration (model + reasoning effort). */
 export interface ChatOptions {
   /** Copilot model id (`--model`); 'auto' or undefined lets Copilot pick. */
@@ -1244,6 +1262,21 @@ export interface RayfinStudioApi {
     /** Subscribe to streamed advisor events. Returns an unsubscribe function. */
     onEvent: (cb: (envelope: AdvisorEventEnvelope) => void) => () => void
   }
+
+  /** Live Data Browser: query a deployed app's managed Rayfin GraphQL data API. */
+  data: {
+    /**
+     * Resolve the project's data-API connection status (endpoint + whether a
+     * publishable key is available). Never rejects on a missing deploy —
+     * resolves `{ configured: false }` so the Data tab can show an empty state.
+     */
+    config: (projectId: string) => Promise<DataApiConfig>
+    /** Run a GraphQL introspection query against the deployed data API. */
+    introspect: (projectId: string) => Promise<unknown>
+    /** Run an arbitrary GraphQL query/mutation against the deployed data API. */
+    query: (projectId: string, query: string, variables?: Record<string, unknown>) => Promise<unknown>
+  }
+
 
   chat: {
     /**

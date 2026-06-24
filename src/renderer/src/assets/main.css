@@ -8684,3 +8684,302 @@ span.thread-pill {
   color: var(--text-faint);
   padding: 2px 0;
 }
+
+/* ── Data tab (Live Data Browser) ─────────────────────────────────────────── */
+.data-view {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.data-view--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.data-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px;
+  max-width: 460px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.data-empty h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text);
+}
+.data-empty p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.data-empty-mark {
+  font-size: 34px;
+  opacity: 0.5;
+}
+.data-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.data-hint code,
+.data-empty code {
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  font-size: 11px;
+  background: var(--bg-elev-2);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.data-spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  animation: data-spin 0.8s linear infinite;
+}
+@keyframes data-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Sidebar: queryable collections */
+.data-sidebar {
+  flex: none;
+  width: 216px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-elev);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.data-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.data-sidebar-title {
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+.data-sidebar-count {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  background: var(--bg-elev-3);
+  padding: 1px 7px;
+  border-radius: 9px;
+}
+.data-coll-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}
+.data-coll {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  cursor: pointer;
+  color: var(--text);
+}
+.data-coll:hover {
+  background: var(--bg-elev-2);
+}
+.data-coll--active {
+  background: var(--accent-soft);
+  border-color: var(--accent-ring);
+}
+.data-coll-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+}
+.data-coll-meta {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.data-conn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-soft);
+}
+.data-conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: none;
+}
+.data-conn-host {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Main: query console + results */
+.data-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.data-note {
+  flex: none;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text);
+  background: color-mix(in srgb, var(--pending) 13%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--pending) 30%, transparent);
+  padding: 8px 14px;
+}
+.data-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.data-toolbar-label {
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+.data-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.data-editor {
+  flex: none;
+  height: 148px;
+  resize: vertical;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 12px 14px;
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  tab-size: 2;
+}
+.data-editor:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
+}
+
+.data-results {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.data-results-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.data-results-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.data-results-empty {
+  padding: 18px 14px;
+}
+.data-muted {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  padding: 8px 0;
+}
+.data-error {
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--danger);
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  overflow: auto;
+}
+.data-json {
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  color: var(--code-text);
+  background: var(--code-bg);
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.data-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 0 8px;
+}
+.data-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.data-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  font-weight: 650;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  z-index: 1;
+}
+.data-table td {
+  color: var(--text);
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+}
+.data-table tbody tr:hover td {
+  background: var(--bg-elev);
+}
