@@ -261,6 +261,10 @@ export default function Workbench({
   const pendingDeployRef = useRef<Set<string>>(new Set())
   /** Stable handle to runDeploy for use inside its own completion path. */
   const runDeployRef = useRef<((projectId: string) => void) | null>(null)
+  /** Project ids with a deployment reconcile in flight (dedupes overlapping calls). */
+  const reconcilingRef = useRef<Set<string>>(new Set())
+  /** Project ids currently being reconciled — drives a brief "checking" affordance. */
+  const [reconciling, setReconciling] = useState<Set<string>>(new Set())
   /** Forces a re-render when ref-backed countdown / merge state changes. */
   const [, forceTick] = useReducer((x: number) => x + 1, 0)
 
@@ -308,6 +312,37 @@ export default function Workbench({
     })
     return off
   }, [])
+
+  // Reconcile the active project's recorded deployment with on-disk reality
+  // (`rayfin/.deployments.json`) whenever it changes. Opening an already-deployed
+  // app then reflects its deployment (preview + chip) without forcing a redeploy;
+  // disk is treated as the source of truth and re-synced on each open/select.
+  useEffect(() => {
+    const id = active?.id
+    if (!id) return
+    // A streaming deploy will hydrate the store itself — don't race it.
+    if (deployingIdRef.current === id) return
+    // Dedupe overlapping reconciles for the same project.
+    if (reconcilingRef.current.has(id)) return
+    reconcilingRef.current.add(id)
+    setReconciling((s) => new Set(s).add(id))
+    void (async () => {
+      try {
+        const next = await window.api.deploy.reconcile(id)
+        // Apply only if the user hasn't switched projects meanwhile.
+        if (activeIdRef.current === id) setProjects(next)
+      } catch {
+        /* best-effort: leave recorded state as-is on any failure */
+      } finally {
+        reconcilingRef.current.delete(id)
+        setReconciling((s) => {
+          const n = new Set(s)
+          n.delete(id)
+          return n
+        })
+      }
+    })()
+  }, [active?.id])
 
   const runDeploy = useCallback(
     async (projectId: string, workspace?: string, force?: boolean): Promise<void> => {
@@ -1041,6 +1076,7 @@ export default function Workbench({
                   <DeploymentsControl
                     project={active}
                     running={Boolean(deploys[active.id]?.running)}
+                    reconciling={reconciling.has(active.id)}
                     onCreate={(name, workspaceId) => {
                       setViewMode('build')
                       void (async () => {

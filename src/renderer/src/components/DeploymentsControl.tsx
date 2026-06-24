@@ -12,6 +12,8 @@ interface Props {
   project: StudioProject
   /** True while a `rayfin up` is streaming for this project. */
   running: boolean
+  /** True while the recorded deployment is being reconciled with on-disk state. */
+  reconciling?: boolean
   /** Remember a friendly name for the chosen workspace, then deploy into it. */
   onCreate: (name: string, workspaceId: string) => void
   /** Redeploy the active deployment (no workspace change). */
@@ -43,6 +45,7 @@ function skuText(w: FabricWorkspace): string {
 export default function DeploymentsControl({
   project,
   running,
+  reconciling = false,
   onCreate,
   onRedeploy,
   onSwitch,
@@ -55,6 +58,7 @@ export default function DeploymentsControl({
   const [wsResult, setWsResult] = useState<FabricWorkspacesResult | null>(null)
   const [loadingWs, setLoadingWs] = useState(false)
   const [name, setName] = useState('')
+  const [wsQuery, setWsQuery] = useState('')
   const [selectedWs, setSelectedWs] = useState<string | null>(null)
   const [switching, setSwitching] = useState<string | null>(null)
   const [renamingKey, setRenamingKey] = useState<string | null>(null)
@@ -87,6 +91,7 @@ export default function DeploymentsControl({
     if (!open) {
       setCreating(false)
       setRenamingKey(null)
+      setWsQuery('')
       return
     }
     void loadDeployments()
@@ -107,6 +112,17 @@ export default function DeploymentsControl({
 
   const all = wsResult?.ok && wsResult.workspaces ? wsResult.workspaces : []
   const eligible = all.filter((w) => w.eligible)
+  // Once the eligible list grows past this, surface a search box to narrow it.
+  const SEARCH_THRESHOLD = 10
+  const showWsSearch = eligible.length > SEARCH_THRESHOLD
+  const q = wsQuery.trim().toLowerCase()
+  const shownEligible =
+    showWsSearch && q
+      ? eligible.filter((w) =>
+          [w.displayName, w.region, w.capacityName, w.sku]
+            .some((field) => field?.toLowerCase().includes(q))
+        )
+      : eligible
   const wsById = (id?: string): FabricWorkspace | undefined =>
     id ? all.find((w) => w.id === id) : undefined
 
@@ -121,6 +137,7 @@ export default function DeploymentsControl({
   function startCreate(): void {
     setCreating(true)
     setName('')
+    setWsQuery('')
     setSelectedWs(null)
     if (!wsResult) void loadWorkspaces()
   }
@@ -176,19 +193,27 @@ export default function DeploymentsControl({
       <div className="seg seg--toolbar dep-seg">
         <button
           className="seg-btn dep-select"
-          title={activeLabel ? `Active deployment: ${activeLabel}` : 'No deployment yet'}
+          title={
+            activeLabel
+              ? `Active deployment: ${activeLabel}`
+              : reconciling
+                ? 'Checking for an existing deployment…'
+                : 'No deployment yet'
+          }
           onClick={() => setOpen((o) => !o)}
         >
           <span className={`seg-dot${hasDeployment ? ' seg-dot--set' : ''}`} />
-          <span className="dep-chip-label">{activeLabel || 'No deployment'}</span>
+          <span className="dep-chip-label">
+            {activeLabel || (reconciling ? 'Checking…' : 'No deployment')}
+          </span>
           <span className="dep-chip-caret">▾</span>
         </button>
         <button
           className="seg-btn seg-btn--primary dep-deploy"
-          disabled={running}
+          disabled={running || (reconciling && !hasDeployment)}
           title={hasDeployment ? 'Redeploy the active deployment' : 'Create your first deployment'}
           onClick={() => {
-            if (running) return
+            if (running || (reconciling && !hasDeployment)) return
             if (hasDeployment) onRedeploy()
             else openCreate()
           }}
@@ -240,26 +265,65 @@ export default function DeploymentsControl({
                     Loading your workspaces…
                   </div>
                 ) : eligible.length > 0 ? (
-                  <div className="ws-list" role="listbox">
-                    {eligible.map((w) => (
-                      <button
-                        key={w.id}
-                        className={`ws-item${selectedWs === w.id ? ' ws-item--sel' : ''}`}
-                        onClick={() => setSelectedWs(w.id)}
-                      >
-                        <span className="ws-item-main">
-                          <span className="ws-item-name">{w.displayName}</span>
-                          {w.region && <span className="ws-item-sub">{w.region}</span>}
+                  <>
+                    {showWsSearch && (
+                      <div className="ws-search">
+                        <span className="ws-search-icon" aria-hidden>
+                          ⌕
                         </span>
-                        <span
-                          className={`ws-sku ws-sku--${w.capacityKind}`}
-                          title={w.capacityName ? `${w.capacityName} (${w.sku})` : w.sku}
+                        <input
+                          className="ws-input ws-search-input"
+                          placeholder={`Search ${eligible.length} workspaces…`}
+                          value={wsQuery}
+                          spellCheck={false}
+                          onChange={(e) => setWsQuery(e.target.value)}
+                        />
+                        {wsQuery && (
+                          <button
+                            className="ws-search-clear"
+                            title="Clear search"
+                            onClick={() => setWsQuery('')}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {shownEligible.length > 0 ? (
+                      <div className="ws-list" role="listbox">
+                        {shownEligible.map((w) => (
+                          <button
+                            key={w.id}
+                            className={`ws-item${selectedWs === w.id ? ' ws-item--sel' : ''}`}
+                            onClick={() => setSelectedWs(w.id)}
+                          >
+                            <span className="ws-item-main">
+                              <span className="ws-item-name">{w.displayName}</span>
+                              {w.region && <span className="ws-item-sub">{w.region}</span>}
+                            </span>
+                            <span
+                              className={`ws-sku ws-sku--${w.capacityKind}`}
+                              title={w.capacityName ? `${w.capacityName} (${w.sku})` : w.sku}
+                            >
+                              {skuText(w)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="ws-empty">
+                        <p className="ws-empty-sub">
+                          No workspaces match “{wsQuery.trim()}”.
+                        </p>
+                        <button
+                          className="btn btn--xs btn--ghost"
+                          onClick={() => setWsQuery('')}
                         >
-                          {skuText(w)}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                          Clear search
+                        </button>
+                      </div>
+                    )}
+                  </>
                 ) : wsResult?.ok ? (
                   <div className="ws-empty">
                     <p className="ws-empty-title">No eligible workspaces</p>

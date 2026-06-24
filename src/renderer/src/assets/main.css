@@ -1621,6 +1621,43 @@ code {
   outline: none;
   border-color: var(--accent);
 }
+.ws-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.ws-search-icon {
+  position: absolute;
+  left: 9px;
+  font-size: 13px;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+.ws-search-input {
+  padding-left: 26px;
+  padding-right: 26px;
+}
+.ws-search-clear {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ws-search-clear:hover {
+  color: var(--text);
+  background: var(--border);
+}
 .ws-popover-hint {
   margin: 0;
   font-size: 11px;

@@ -169,7 +169,8 @@ export const api: RayfinStudioApi = {
     setName: (projectId: string, workspaceKey: string, name: string) =>
       invoke('deploy_set_name', { projectId, workspaceKey, name }),
     status: (projectId: string) => invoke('deploy_status', { projectId }),
-    hasChanges: (projectId: string) => invoke('deploy_has_changes', { projectId })
+    hasChanges: (projectId: string) => invoke('deploy_has_changes', { projectId }),
+    reconcile: (projectId: string) => invoke('deploy_reconcile', { projectId })
   },
 
   settings: {

@@ -118,34 +118,47 @@ struct RawDeployment {
   deployed_at: Option<String>,
 }
 
-/// Parse `rayfin up list --json` (last line that parses as an array wins).
-fn parse_deploy_list(stdout: &str, names: &std::collections::HashMap<String, String>) -> Vec<FabricDeployment> {
+/// Parse `rayfin up list --json`, distinguishing "no parseable array" (`None`)
+/// from a successfully parsed list that may be empty (`Some(vec)`). The last line
+/// that parses as an array wins. Reconcile uses the `None` vs `Some` distinction
+/// to tell a failed/garbled query apart from "no deployments on disk".
+fn parse_deploy_list_opt(
+  stdout: &str,
+  names: &std::collections::HashMap<String, String>,
+) -> Option<Vec<FabricDeployment>> {
   for line in stdout.lines().filter(|l| !l.trim().is_empty()).rev() {
     if let Ok(list) = serde_json::from_str::<Vec<RawDeployment>>(line.trim()) {
-      return list
-        .into_iter()
-        .map(|d| {
-          let name = d
-            .workspace_id
-            .as_ref()
-            .and_then(|id| names.get(id))
-            .or_else(|| d.workspace_name.as_ref().and_then(|n| names.get(n)))
-            .cloned();
-          FabricDeployment {
-            workspace_name: d.workspace_name.unwrap_or_else(|| "(unknown)".to_string()),
-            name,
-            active: d.active,
-            workspace_id: d.workspace_id,
-            item_id: d.item_id,
-            api_url: d.api_url,
-            hosting_url: d.hosting_url,
-            deployed_at: d.deployed_at,
-          }
-        })
-        .collect();
+      return Some(
+        list
+          .into_iter()
+          .map(|d| {
+            let name = d
+              .workspace_id
+              .as_ref()
+              .and_then(|id| names.get(id))
+              .or_else(|| d.workspace_name.as_ref().and_then(|n| names.get(n)))
+              .cloned();
+            FabricDeployment {
+              workspace_name: d.workspace_name.unwrap_or_else(|| "(unknown)".to_string()),
+              name,
+              active: d.active,
+              workspace_id: d.workspace_id,
+              item_id: d.item_id,
+              api_url: d.api_url,
+              hosting_url: d.hosting_url,
+              deployed_at: d.deployed_at,
+            }
+          })
+          .collect(),
+      );
     }
   }
-  vec![]
+  None
+}
+
+/// Parse `rayfin up list --json` (last line that parses as an array wins).
+fn parse_deploy_list(stdout: &str, names: &std::collections::HashMap<String, String>) -> Vec<FabricDeployment> {
+  parse_deploy_list_opt(stdout, names).unwrap_or_default()
 }
 
 /// Apply a patch to the project's deploy record (explicit field clears honored).
@@ -404,6 +417,84 @@ pub async fn deploy_list(project_id: String) -> Vec<FabricDeployment> {
   parse_deploy_list(&res.stdout, &names)
 }
 
+/// Reconcile the Studio store's recorded deployment with on-disk reality
+/// (`rayfin/.deployments.json`, read via `rayfin up list --json`). Treats disk as
+/// the source of truth and re-syncs `last_deploy` + `workspace`/`workspace_name`
+/// on every open/select so an already-deployed app shows its deployment without a
+/// redeploy. Best-effort: only mutates when the query definitively succeeds — a
+/// failed/offline query leaves recorded state untouched (never wipes it).
+#[tauri::command]
+pub async fn deploy_reconcile(project_id: String) -> ProjectsState {
+  let Some(project) = store::find_project(&project_id) else {
+    return annotate_state(store::get_state());
+  };
+
+  // Never disturb an in-flight deploy.
+  if project.last_deploy.as_ref().and_then(|d| d.status.as_deref()) == Some("deploying") {
+    return annotate_state(store::get_state());
+  }
+
+  let names = project.deployment_names.clone().unwrap_or_default();
+  let res = exec::run_project_rayfin(
+    Path::new(&project.path),
+    &["up", "list", "--json"],
+    RunOptions::timeout(60_000),
+  )
+  .await;
+
+  // A failed or unparseable query is inconclusive (e.g. not signed in, CLI error,
+  // offline) — leave recorded state as-is rather than wiping a real deployment.
+  if res.not_found || !res.ok {
+    return annotate_state(store::get_state());
+  }
+  let Some(list) = parse_deploy_list_opt(&res.stdout, &names) else {
+    return annotate_state(store::get_state());
+  };
+
+  match list.into_iter().find(|d| d.active) {
+    Some(dep) => {
+      // Enrich with the Fabric portal URL (and api fallback) from status.
+      let status = status_for(&project.path).await;
+      let api = dep.api_url.clone().or(status.api_url);
+      let portal = status.portal_url;
+      let url = pick_preview_url(dep.hosting_url.as_deref(), api.as_deref(), portal.as_deref());
+      let ws_name = match dep.workspace_name.as_str() {
+        "" | "(unknown)" => None,
+        other => Some(other.to_string()),
+      };
+      let workspace = dep.workspace_id.clone().or_else(|| ws_name.clone());
+      store::mutate_project(&project_id, move |p| {
+        let mut deploy = p.last_deploy.take().unwrap_or_default();
+        deploy.url = url;
+        deploy.api_url = api;
+        deploy.portal_url = portal;
+        deploy.status = Some("success".into());
+        deploy.outcome = Some("success".into());
+        deploy.error = None;
+        deploy.at = Some(now_iso());
+        // `commit` is intentionally preserved — the deployed commit isn't known
+        // from `up list`, and fabricating it would defeat drift detection.
+        p.last_deploy = Some(deploy);
+        p.workspace = workspace;
+        p.workspace_name = ws_name;
+      });
+    }
+    None => {
+      // Disk has no active deployment — clear any stale recorded success so the UI
+      // matches reality (still never touches an in-flight deploy).
+      store::mutate_project(&project_id, |p| {
+        if p.last_deploy.as_ref().and_then(|d| d.status.as_deref()) != Some("deploying") {
+          p.last_deploy = None;
+          p.workspace = None;
+          p.workspace_name = None;
+        }
+      });
+    }
+  }
+
+  annotate_state(store::get_state())
+}
+
 #[tauri::command]
 pub async fn deploy_switch(project_id: String, workspace: String, by_id: Option<bool>) -> DeployResult {
   let by_id = by_id.unwrap_or(false);
@@ -558,6 +649,23 @@ mod tests {
     assert_eq!(d.name.as_deref(), Some("Prod"));
     assert!(d.active);
     assert_eq!(d.api_url.as_deref(), Some("https://a"));
+  }
+
+  #[test]
+  fn parse_list_opt_distinguishes_failed_empty_and_active() {
+    let names = HashMap::new();
+    // Unparseable output -> None (treated as an inconclusive query by reconcile).
+    assert!(parse_deploy_list_opt("not json at all", &names).is_none());
+    // A parsed-but-empty array -> Some(empty) (disk says nothing is deployed).
+    let empty = parse_deploy_list_opt("[]", &names).expect("empty array parses");
+    assert!(empty.is_empty());
+    // A populated array -> Some(list) with the active entry discoverable.
+    let out = r#"noise
+[{"workspaceName":"WS","active":true,"workspaceId":"g","apiUrl":"https://a","hostingUrl":"https://h"}]"#;
+    let some = parse_deploy_list_opt(out, &names).expect("array parses");
+    let active = some.into_iter().find(|d| d.active).expect("has active");
+    assert_eq!(active.workspace_id.as_deref(), Some("g"));
+    assert_eq!(active.hosting_url.as_deref(), Some("https://h"));
   }
 
   #[test]

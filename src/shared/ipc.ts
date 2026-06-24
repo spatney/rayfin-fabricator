@@ -945,6 +945,7 @@ export const IpcChannels = {
   deployList: 'deploy:list',
   deploySwitch: 'deploy:switch',
   deploySetName: 'deploy:setName',
+  deployReconcile: 'deploy:reconcile',
 
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
@@ -1195,6 +1196,13 @@ export interface RayfinStudioApi {
      * slugified workspace name when no GUID is known).
      */
     setName: (projectId: string, workspaceKey: string, name: string) => Promise<ProjectsState>
+    /**
+     * Reconcile the recorded deployment with on-disk reality
+     * (`rayfin/.deployments.json`) and return the updated projects state. Called
+     * on open/select so an already-deployed app reflects its deployment without a
+     * redeploy. Best-effort: leaves state untouched on a failed/offline query.
+     */
+    reconcile: (projectId: string) => Promise<ProjectsState>
   }
 
   /** App-wide settings (theme, telemetry opt-in). */
