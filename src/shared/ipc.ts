@@ -306,6 +306,10 @@ export interface CopilotModel {
   defaultReasoningEffort?: ReasoningEffort
 }
 
+/** Preview pane view selection: the direct app URL, or the app embedded in the
+ *  Fabric portal shell (`StudioProject.lastDeploy.portalUrl`). */
+export type PreviewMode = 'direct' | 'fabric'
+
 /** A project tracked by the app. Source lives in a local git repo on disk. */
 export interface StudioProject {
   /** Internal stable id (uuid) used by the app. */
@@ -345,6 +349,14 @@ export interface StudioProject {
   model?: string
   /** Copilot reasoning effort for this project's chat (`--effort`). */
   effort?: ReasoningEffort
+  /**
+   * Preview pane view selection. `'fabric'` shows the app embedded in the Fabric
+   * portal shell ({@link DeployInfo.portalUrl}); absent / `'direct'` shows the
+   * direct app URL. Persisted (rather than kept in the renderer alone) so the
+   * Fabricator agent's screenshot/navigate tools honour the same view the user
+   * is looking at.
+   */
+  previewMode?: PreviewMode
   /** True when the folder no longer exists / is no longer a Rayfin project. */
   missing?: boolean
   /**
@@ -956,6 +968,19 @@ export interface PreviewNavState {
   canGoForward: boolean
 }
 
+/**
+ * A request from the Fabricator agent (its in-process `fabricator_*` tools) for
+ * the renderer to surface the preview pane, pushed on the `preview:agent` event.
+ * Lets a deploy/navigate/screenshot tool make the preview visible even when the
+ * user has the chat pane focused.
+ */
+export interface PreviewAgentEvent {
+  /** Currently only `show`: bring the preview into view (optionally at `url`). */
+  action: 'show'
+  /** The live URL the agent is pointing the preview at, when known. */
+  url?: string
+}
+
 /* ------------------------------------------------------------------ *
  * IPC channels
  * ------------------------------------------------------------------ */
@@ -1048,6 +1073,7 @@ export const IpcChannels = {
   chatEvent: 'chat:event',
   advisorEvent: 'advisor:event',
   previewNav: 'preview:nav',
+  previewAgent: 'preview:agent',
   updateProgress: 'update:progress'
 } as const
 
@@ -1148,6 +1174,12 @@ export interface RayfinStudioApi {
       workspace?: string,
       workspaceName?: string
     ) => Promise<ProjectActionResult>
+    /**
+     * Persist the preview pane's view selection (direct app URL vs. the app
+     * embedded in the Fabric portal shell). Stored on the project so the
+     * Fabricator agent's screenshot/navigate tools honour the same view.
+     */
+    setPreviewMode: (id: string, mode: PreviewMode) => Promise<ProjectActionResult>
     /**
      * Remove a project. By default it is only forgotten (files left on disk);
      * pass `deleteFiles: true` to also move the project folder to the OS trash.
@@ -1414,6 +1446,12 @@ export interface RayfinStudioApi {
     capture: () => Promise<string>
     /** Subscribe to preview navigation state. Returns an unsubscribe function. */
     onNavState: (cb: (state: PreviewNavState) => void) => () => void
+    /**
+     * Subscribe to agent requests to surface the preview (the Fabricator
+     * `fabricator_*` tools emit these so a deploy/validate turn can show the
+     * running app). Returns an unsubscribe function.
+     */
+    onAgentPreview: (cb: (event: PreviewAgentEvent) => void) => () => void
   }
 
   /** Subscribe to streamed process output. Returns an unsubscribe function. */

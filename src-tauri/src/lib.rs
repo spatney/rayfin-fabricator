@@ -67,6 +67,10 @@ pub fn run() {
       let version = app.package_info().version.to_string();
       services::telemetry::init(telemetry_connection_string(app), version);
 
+      // Materialize Fabricator's product-scoped agent skills/instructions under
+      // app-data so chat sessions can inject them (never written into the repo).
+      services::agent_skills::ensure_materialized();
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -108,6 +112,7 @@ pub fn run() {
       commands::projects::projects_set_active,
       commands::projects::projects_rename,
       commands::projects::projects_set_workspace,
+      commands::projects::projects_set_preview_mode,
       commands::projects::projects_remove,
       commands::projects::projects_git_status,
       commands::projects::projects_git_commit,

@@ -21,7 +21,7 @@ use github_copilot_sdk::handler::{ApproveAllHandler, ExitPlanModeHandler, ExitPl
 use github_copilot_sdk::session::Session;
 use github_copilot_sdk::{
   Client, ClientOptions, Error as SdkError, ExitPlanModeData, Model, ResumeSessionConfig,
-  SessionConfig, SessionId, SetModelOptions,
+  SessionConfig, SessionId, SetModelOptions, Tool,
 };
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -158,7 +158,10 @@ impl ExitPlanModeHandler for PlanModeHandler {
 /// Resume (when on-disk state exists) or create a session bound to `session_id`,
 /// streaming enabled, auto-approving tool permissions, scoped to `cwd`. When
 /// `exit_plan` is supplied it is installed so Plan-mode turns surface their plan
-/// for approval (harmless for non-plan turns).
+/// for approval (harmless for non-plan turns). `tools` are Fabricator's in-process
+/// `fabricator_*` capabilities; the product-scoped skill/instruction directories
+/// (materialized under app-data, never in the repo) are always registered so these
+/// only ever appear in Fabricator-driven sessions.
 async fn open_session(
   client: &Client,
   cwd: &str,
@@ -166,12 +169,15 @@ async fn open_session(
   model: &Option<String>,
   effort: &Option<String>,
   exit_plan: Option<Arc<dyn ExitPlanModeHandler>>,
+  tools: Vec<Tool>,
 ) -> Result<Session, SdkError> {
   let handler = Arc::new(ApproveAllHandler);
   let sid = SessionId::new(session_id.to_string());
   let cwd_pb = PathBuf::from(cwd);
   let eff = norm_effort(effort);
   let model = concrete_model(model);
+  let skills_dir = crate::services::agent_skills::skills_dir();
+  let instructions_dir = crate::services::agent_skills::instructions_dir();
 
   if session_state_exists(session_id) {
     let mut cfg = ResumeSessionConfig::new(sid)
@@ -179,6 +185,13 @@ async fn open_session(
       .with_client_name(CLIENT_NAME)
       .with_working_directory(cwd_pb)
       .with_permission_handler(handler);
+    if !tools.is_empty() {
+      cfg = cfg
+        .with_enable_skills(true)
+        .with_skill_directories([skills_dir])
+        .with_instruction_directories([instructions_dir])
+        .with_tools(tools);
+    }
     if let Some(h) = exit_plan {
       cfg = cfg.with_exit_plan_mode_handler(h);
     }
@@ -194,6 +207,13 @@ async fn open_session(
       .with_client_name(CLIENT_NAME)
       .with_working_directory(cwd_pb)
       .with_permission_handler(handler);
+    if !tools.is_empty() {
+      cfg = cfg
+        .with_enable_skills(true)
+        .with_skill_directories([skills_dir])
+        .with_instruction_directories([instructions_dir])
+        .with_tools(tools);
+    }
     if let Some(h) = exit_plan {
       cfg = cfg.with_exit_plan_mode_handler(h);
     }
@@ -291,6 +311,7 @@ impl CopilotManager {
     model: Option<String>,
     effort: Option<String>,
     exit_plan: Option<Arc<dyn ExitPlanModeHandler>>,
+    tools: Vec<Tool>,
   ) -> Result<Arc<Session>, String> {
     let key = cache_key(project_id, thread_id);
     let want_model = concrete_model(&model);
@@ -341,13 +362,13 @@ impl CopilotManager {
     }
 
     let client = self.ensure_client().await?;
-    let session = match open_session(&client, cwd, session_id, &model, &effort, exit_plan.clone()).await {
+    let session = match open_session(&client, cwd, session_id, &model, &effort, exit_plan.clone(), tools.clone()).await {
       Ok(s) => s,
       Err(e) if e.is_transport_failure() => {
         // The CLI server died — restart it and try once more.
         self.reset_client().await;
         let client = self.ensure_client().await?;
-        open_session(&client, cwd, session_id, &model, &effort, exit_plan)
+        open_session(&client, cwd, session_id, &model, &effort, exit_plan, tools)
           .await
           .map_err(|e| e.to_string())?
       }
@@ -377,12 +398,12 @@ impl CopilotManager {
   ) -> Result<Arc<Session>, String> {
     let client = self.ensure_client().await?;
     let id = uuid::Uuid::new_v4().to_string();
-    let session = match open_session(&client, cwd, &id, &model, &effort, None).await {
+    let session = match open_session(&client, cwd, &id, &model, &effort, None, Vec::new()).await {
       Ok(s) => s,
       Err(e) if e.is_transport_failure() => {
         self.reset_client().await;
         let client = self.ensure_client().await?;
-        open_session(&client, cwd, &id, &model, &effort, None)
+        open_session(&client, cwd, &id, &model, &effort, None, Vec::new())
           .await
           .map_err(|e| e.to_string())?
       }

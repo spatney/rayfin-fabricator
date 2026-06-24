@@ -346,6 +346,12 @@ pub struct StudioProject {
   pub model: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub effort: Option<String>,
+  /// Preview pane view selection: `"fabric"` shows the app embedded in the Fabric
+  /// portal shell (`last_deploy.portal_url`); absent / `"direct"` shows the app
+  /// URL directly. Persisted so the Fabricator agent's screenshot/navigate tools
+  /// honour the same view the user is looking at.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub preview_mode: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub missing: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]

@@ -22,6 +22,7 @@ import {
   type CreateThreadInput,
   type PreviewBounds,
   type PreviewNavState,
+  type PreviewAgentEvent,
   type ProcLogEvent,
   type RayfinStudioApi,
   type ToolId,
@@ -90,6 +91,8 @@ export const api: RayfinStudioApi = {
     rename: (id: string, name: string) => invoke('projects_rename', { id, name }),
     setWorkspace: (id: string, workspace?: string, workspaceName?: string) =>
       invoke('projects_set_workspace', { id, workspace, workspaceName }),
+    setPreviewMode: (id: string, mode: string) =>
+      invoke('projects_set_preview_mode', { id, mode }),
     remove: (id: string, deleteFiles?: boolean) => invoke('projects_remove', { id, deleteFiles }),
     git: {
       status: (id: string) => invoke('projects_git_status', { id }),
@@ -207,7 +210,9 @@ export const api: RayfinStudioApi = {
     forward: () => invoke('preview_forward'),
     capture: () => invoke('preview_capture'),
     onNavState: (cb: (state: PreviewNavState) => void) =>
-      subscribe<PreviewNavState>(IpcChannels.previewNav, cb)
+      subscribe<PreviewNavState>(IpcChannels.previewNav, cb),
+    onAgentPreview: (cb: (event: PreviewAgentEvent) => void) =>
+      subscribe<PreviewAgentEvent>(IpcChannels.previewAgent, cb)
   },
 
   onProcLog: (cb: (event: ProcLogEvent) => void) =>

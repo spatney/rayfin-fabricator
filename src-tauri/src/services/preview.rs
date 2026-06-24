@@ -16,11 +16,13 @@
 //! in the user's real browser instead.
 
 use std::sync::Mutex;
+use std::time::Duration;
 
 use base64::Engine;
 use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, Url, WebviewUrl};
 use tauri_plugin_opener::OpenerExt;
+use tokio::sync::oneshot;
 
 use crate::error::{AppError, AppResult};
 
@@ -28,6 +30,11 @@ use crate::error::{AppError, AppResult};
 const PREVIEW_LABEL: &str = "preview";
 /// Renderer event carrying preview navigation state (matches `IpcChannels.previewNav`).
 const PREVIEW_NAV: &str = "preview:nav";
+/// Renderer event asking the UI to surface the preview at a URL on the agent's
+/// behalf (matches `IpcChannels.previewAgent`). Used by the Fabricator
+/// validation tools so a host-driven navigation/screenshot can reveal the
+/// preview pane even when another tab is focused.
+const PREVIEW_AGENT: &str = "preview:agent";
 
 /// Logical-pixel rectangle reported by the renderer (its host element's bounds,
 /// relative to the window client area — i.e. `getBoundingClientRect()`).
@@ -88,6 +95,10 @@ struct Inner {
   /// True while a programmatic back/forward navigation is in flight, so the
   /// resulting `on_navigation` does not push a duplicate history entry.
   programmatic: bool,
+  /// One-shot senders awaiting the next `PageLoadEvent::Finished`, used by
+  /// [`navigate_and_wait`] so the validation tools can block until the new
+  /// document has loaded before capturing a screenshot.
+  load_waiters: Vec<oneshot::Sender<()>>,
 }
 
 impl Inner {
@@ -165,7 +176,13 @@ fn on_page_load(app: &AppHandle, event: PageLoadEvent, u: &Url) {
   let loading = matches!(event, PageLoadEvent::Started);
   let state = app.state::<PreviewState>();
   let (can_back, can_fwd) = {
-    let inner = state.inner.lock().unwrap();
+    let mut inner = state.inner.lock().unwrap();
+    // A finished load releases anyone blocked in `navigate_and_wait`.
+    if !loading {
+      for tx in inner.load_waiters.drain(..) {
+        let _ = tx.send(());
+      }
+    }
     (inner.can_back(), inner.can_forward())
   };
   emit_nav(app, &u.to_string(), loading, can_back, can_fwd);
@@ -393,23 +410,72 @@ fn navigate_to(app: &AppHandle, target: Option<String>) {
 /// channel. The renderer then shows the image in an annotation overlay.
 #[tauri::command]
 pub async fn preview_capture(app: AppHandle) -> AppResult<String> {
+  let bytes = capture_preview_bytes(&app).await?;
+  let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+  Ok(format!("data:image/png;base64,{b64}"))
+}
+
+/// Capture the current preview content as raw PNG bytes. Shared by the
+/// [`preview_capture`] command (which base64-encodes for the renderer) and the
+/// Fabricator `fabricator_screenshot`/`fabricator_navigate` tools (which return
+/// the bytes to the agent as an `image/png` tool result). Errors if the preview
+/// webview has not been created yet (the user has not opened a deployed app).
+pub(crate) async fn capture_preview_bytes(app: &AppHandle) -> AppResult<Vec<u8>> {
   let wv = app
     .get_webview(PREVIEW_LABEL)
     .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
 
-  let (tx, rx) = tokio::sync::oneshot::channel::<Result<Vec<u8>, String>>();
+  let (tx, rx) = oneshot::channel::<Result<Vec<u8>, String>>();
   wv.with_webview(move |platform| {
     let _ = tx.send(capture_png(&platform));
   })
   .map_err(|e| AppError::Msg(format!("failed to access preview webview: {e}")))?;
 
-  let bytes = rx
-    .await
+  rx.await
     .map_err(|_| AppError::Msg("preview capture was cancelled".into()))?
-    .map_err(AppError::Msg)?;
+    .map_err(AppError::Msg)
+}
 
-  let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-  Ok(format!("data:image/png;base64,{b64}"))
+/// Whether the preview child webview currently exists (i.e. a deployed app has
+/// been shown at least once this session).
+pub(crate) fn is_preview_open(app: &AppHandle) -> bool {
+  app.get_webview(PREVIEW_LABEL).is_some()
+}
+
+/// Ask the renderer to surface the preview pane and load `url` on the agent's
+/// behalf. Used when a validation tool needs the preview visible but another
+/// tab is focused (or the webview has not been created yet). The renderer owns
+/// positioning, so it calls back into [`preview_show_url`] with real bounds.
+pub(crate) fn request_preview_show(app: &AppHandle, url: &str) {
+  let _ = app.emit(PREVIEW_AGENT, serde_json::json!({ "action": "show", "url": url }));
+}
+
+/// Navigate the existing preview webview to `url` (without touching bounds or
+/// visibility) and wait for the document to finish loading, up to `timeout`.
+/// Resets the back/forward history to the new URL. Returns `Ok` even if the
+/// load times out (the page may still be usable for a screenshot).
+pub(crate) async fn navigate_and_wait(app: &AppHandle, url: &str, timeout: Duration) -> AppResult<()> {
+  let parsed: Url = url
+    .parse()
+    .map_err(|e| AppError::Msg(format!("invalid preview url {url:?}: {e}")))?;
+  let wv = app
+    .get_webview(PREVIEW_LABEL)
+    .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
+
+  let rx = {
+    let state = app.state::<PreviewState>();
+    let mut inner = state.inner.lock().unwrap();
+    let (tx, rx) = oneshot::channel::<()>();
+    inner.load_waiters.push(tx);
+    inner.reset_to(url);
+    rx
+  };
+
+  wv.navigate(parsed).map_err(|e| AppError::Msg(e.to_string()))?;
+
+  // Best-effort: a finished load resolves `rx`; otherwise fall through on timeout.
+  let _ = tokio::time::timeout(timeout, rx).await;
+  Ok(())
 }
 
 /// Capture the WebView2 preview to PNG bytes. Runs on the UI thread inside

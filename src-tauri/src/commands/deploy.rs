@@ -231,6 +231,19 @@ pub async fn deploy_run(
   workspace: Option<String>,
   force: Option<bool>,
 ) -> DeployResult {
+  run_deploy(app, project_id, workspace, force).await
+}
+
+/// Core deploy routine shared by the [`deploy_run`] command and the agent's
+/// `fabricator_deploy_and_wait` tool. Runs `rayfin up` (streamed to the
+/// `deploy:run` UI channel), records the outcome in the store, and returns the
+/// resolved live URL on success.
+pub(crate) async fn run_deploy(
+  app: AppHandle,
+  project_id: String,
+  workspace: Option<String>,
+  force: Option<bool>,
+) -> DeployResult {
   let force = force.unwrap_or(false);
   let Some(project) = store::find_project(&project_id) else {
     return DeployResult {

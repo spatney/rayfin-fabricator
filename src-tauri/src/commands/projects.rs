@@ -102,6 +102,23 @@ pub fn projects_set_workspace(
   }
 }
 
+/// Persist the preview pane's view selection (`"fabric"` ⇒ the app embedded in the
+/// Fabric portal shell; anything else ⇒ the direct app URL). Stored on the project
+/// so the Fabricator agent's screenshot/navigate tools honour the same view the
+/// user is looking at. `"direct"` is stored as `None` to keep `studio.json` clean.
+#[tauri::command]
+pub fn projects_set_preview_mode(id: String, mode: String) -> ProjectActionResult {
+  let normalized = if mode == "fabric" { Some("fabric".to_string()) } else { None };
+  store::mutate_project(&id, |p| {
+    p.preview_mode = normalized.clone();
+  });
+  ProjectActionResult {
+    ok: true,
+    error: None,
+    project: store::find_project(&id).map(with_missing),
+  }
+}
+
 #[tauri::command]
 pub async fn projects_remove(
   app: AppHandle,

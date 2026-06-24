@@ -267,6 +267,7 @@ fn register_project(dir: &Path, display_name: Option<&str>) -> StudioProject {
     deployment_names: None,
     model: None,
     effort: None,
+    preview_mode: None,
     missing: None,
     threads: None,
   };

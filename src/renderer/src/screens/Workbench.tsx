@@ -810,6 +810,22 @@ export default function Workbench({
     return () => window.removeEventListener('click', close)
   }, [menuOpenId])
 
+  // When a Fabricator validation tool wants to show the running app, make sure
+  // the preview pane is actually on screen AND has a deploy URL to load:
+  //  • switch to the build view (the preview only mounts there) and, if chat is
+  //    focused (preview collapsed to 0×0), drop the focus so it gets real bounds;
+  //  • refresh project state from the store. A tool-initiated deploy updates the
+  //    Rust store mid-turn but not React state, so without this the first-ever
+  //    deploy+validate turn would have `lastDeploy.url` still undefined and the
+  //    native webview would never be created for the agent to navigate/screenshot.
+  useEffect(() => {
+    return window.api.preview.onAgentPreview(() => {
+      setViewMode('build')
+      setFocusPane((f) => (f === 'chat' ? null : f))
+      void refreshProjects()
+    })
+  }, [refreshProjects])
+
   async function selectProject(p: StudioProject): Promise<void> {
     setNotice(null)
     setProjects(await window.api.projects.setActive(p.id))
@@ -1370,6 +1386,7 @@ export default function Workbench({
                       onToggleFocus={() =>
                         setFocusPane((f) => (f === 'preview' ? null : 'preview'))
                       }
+                      onPreviewModeChanged={() => void refreshProjects()}
                     />
                   </section>
                   {resizing && (

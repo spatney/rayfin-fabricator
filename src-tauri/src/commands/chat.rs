@@ -371,6 +371,10 @@ pub(crate) async fn run_turn(
   let plan_handler: Arc<dyn ExitPlanModeHandler> =
     Arc::new(PlanModeHandler::new(app.clone(), state.plan.clone()));
 
+  // Build Fabricator's in-process validation tools for this turn. They let the
+  // agent deploy and visually inspect the running app through the preview browser.
+  let fab_tools = crate::services::agent_tools::fabricator_tools(app.clone(), project_id.clone());
+
   // Open (or resume) this thread's persistent SDK session, reconciling model/effort.
   let session = match state
     .copilot
@@ -382,6 +386,7 @@ pub(crate) async fn run_turn(
       project.model.clone(),
       project.effort.clone(),
       Some(plan_handler),
+      fab_tools,
     )
     .await
   {

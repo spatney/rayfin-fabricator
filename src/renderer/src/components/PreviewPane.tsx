@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DeployResult, PreviewBounds, StudioProject } from '@shared/ipc'
+import type { DeployResult, PreviewBounds, PreviewMode, StudioProject } from '@shared/ipc'
 import { usePreviewSuppressed } from '../overlay'
 import AnnotateOverlay from './AnnotateOverlay'
 import {
@@ -42,6 +42,9 @@ interface Props {
   focused: boolean
   /** Toggle preview focus (full-width preview ⇄ split with chat). */
   onToggleFocus: () => void
+  /** Notify the parent that the persisted preview mode changed (so it can refresh
+   *  project state — the selection lives on the project, store-backed). */
+  onPreviewModeChanged?: () => void
 }
 
 function statusLabel(running: boolean, status: string | undefined): string {
@@ -58,16 +61,11 @@ function statusLabel(running: boolean, status: string | undefined): string {
   }
 }
 
-type PreviewMode = 'direct' | 'fabric'
-
-/** Persist the direct/Fabric preview toggle per project so the selection
- *  survives tab switches that unmount the preview pane (and project switches). */
-function previewModeKey(projectId: string): string {
-  return `rayfin.previewMode.${projectId}`
-}
-
-function readPreviewMode(projectId: string): PreviewMode {
-  return localStorage.getItem(previewModeKey(projectId)) === 'fabric' ? 'fabric' : 'direct'
+/** This project's persisted preview view (defaults to the direct app URL). The
+ *  selection lives on the project (store-backed) — not just renderer state — so
+ *  the Fabricator agent's screenshot/navigate tools honour the same view. */
+function readPreviewMode(project: StudioProject): PreviewMode {
+  return project.previewMode === 'fabric' ? 'fabric' : 'direct'
 }
 
 /** Host-only label for the toolbar URL (the full URL stays in the tooltip). */
@@ -85,7 +83,8 @@ export default function PreviewPane({
   onDeploy,
   onCapture,
   focused,
-  onToggleFocus
+  onToggleFocus,
+  onPreviewModeChanged
 }: Props): JSX.Element {
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
@@ -183,13 +182,15 @@ export default function PreviewPane({
   const showWebview = !running && Boolean(deployedUrl)
   // Which URL the embedded webview actually loads. Falls back to the direct URL
   // whenever the Fabric link is unavailable or the toggle is off.
-  const [previewMode, setPreviewMode] = useState<PreviewMode>(() => readPreviewMode(project.id))
+  const [previewMode, setPreviewMode] = useState<PreviewMode>(() => readPreviewMode(project))
   const previewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
 
-  // Load this project's saved preview mode on switch (and don't carry a prior
-  // project's Fabric view over). Persistence happens in the toggle handler.
+  // Re-init from the persisted project on project switch (don't carry a prior
+  // project's Fabric view over). Within a project this component's toggle handler
+  // is the only writer, so local state stays authoritative — no need to re-sync
+  // from the prop (which avoids a flicker on a rapid double-toggle).
   useEffect(() => {
-    setPreviewMode(readPreviewMode(project.id))
+    setPreviewMode(readPreviewMode(project))
   }, [project.id])
 
   // After a successful (re)deploy the URL is usually unchanged but the server
@@ -460,13 +461,16 @@ export default function PreviewPane({
           <div className="seg seg--toolbar">
             <button
               className={`seg-btn ${previewMode === 'fabric' ? 'seg-btn--on' : ''}`}
-              onClick={() =>
-                setPreviewMode((m) => {
-                  const next = m === 'fabric' ? 'direct' : 'fabric'
-                  localStorage.setItem(previewModeKey(project.id), next)
-                  return next
-                })
-              }
+              onClick={() => {
+                const next: PreviewMode = previewMode === 'fabric' ? 'direct' : 'fabric'
+                setPreviewMode(next)
+                // Persist on the project (store-backed) so the Fabricator agent's
+                // screenshot/navigate tools target the same view, not just the UI;
+                // then refresh project state so the choice survives a remount.
+                void window.api.projects
+                  .setPreviewMode(project.id, next)
+                  .then(() => onPreviewModeChanged?.())
+              }}
               disabled={!showWebview || !fabricUrl || transitioning}
               title={
                 !fabricUrl

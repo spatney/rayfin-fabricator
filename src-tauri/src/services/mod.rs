@@ -1,6 +1,8 @@
 //! Cross-cutting services shared by the Tauri commands (process execution,
 //! persistence, paths, event emission, telemetry, crash logging).
 
+pub mod agent_skills;
+pub mod agent_tools;
 pub mod crashlog;
 pub mod copilot;
 pub mod emit;
