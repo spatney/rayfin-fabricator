@@ -120,8 +120,12 @@
   --color-brand-foreground: #3f6212; /* branded text on light surfaces */
   --color-hover: #f3f3f0; /* row / cell hover surface */
 
-  /* ---------- Spacing — 4px baseline grid (p-*, m-*, gap-*) ---------- */
-  --spacing-none: 0;
+  /* ---------- Spacing — 4px baseline grid (p-*, m-*, gap-*) ----------
+     NOTE: do NOT add a `--spacing-none` key here. Tailwind v4 folds the
+     `--spacing-*` namespace into the `leading-*` utilities, so a `none`
+     key turns the core `leading-none` (line-height: 1) into
+     `line-height: 0`, collapsing any `truncate`/`leading-none` text
+     (e.g. KPI values) to height 0. Use `0` literals where you need none. */
   --spacing-xxs: 2px;
   --spacing-xs: 4px;
   --spacing-s-nudge: 6px;

@@ -191,6 +191,12 @@ dot / badge / icon, and an optional sparkline slot (`children`).
 Pass either a literal `value` **or** `data` + `valueKey` (reads the first row).
 With no value and no rows it renders the empty state — never a fake `0`.
 
+> **Empty card with data present?** `valueKey` must match a column name **exactly**
+> (case-sensitive) as it appears in your mapped rows. A mismatch (wrong casing, an
+> un-aliased DAX name like `[Total Revenue]`, or forgetting `toChartData`) makes the
+> card fall back to its empty state. In dev the console prints the available keys —
+> alias columns in `toChartData({ columns: { revenue: "Total Revenue" } })` for stable keys.
+
 Props: `label`, `value` (number→formatted, or string) **or** `data` + `valueKey`,
 `valueFormat`, `secondary`, `delta`, `deltaLabel`, `invertDelta`, `accent`,
 `icon`, `badge`, `loading`, `error`, `emptyMessage`, `onRetry`, `children`.

@@ -95,6 +95,27 @@ export function KpiCard({
     const metricValue = value ?? derived;
     const isEmpty = value === undefined && (data?.length === 0 || derived == null);
 
+    const firstRow = data?.[0];
+    if (
+        import.meta.env.DEV &&
+        value === undefined &&
+        !loading &&
+        error == null &&
+        valueKey &&
+        firstRow != null &&
+        typeof firstRow === "object" &&
+        !(valueKey in firstRow)
+    ) {
+        // Loud, actionable hint instead of a silently empty tile — the most
+        // common KpiCard mistake is a `valueKey` that doesn't match a column
+        // (wrong casing, an un-aliased DAX name, or forgetting `toChartData`).
+        console.warn(
+            `[KpiCard] valueKey "${valueKey}" was not found in the first data row, ` +
+                `so this card renders its empty state. Available keys: ` +
+                `${Object.keys(firstRow).join(", ") || "(none)"}.`,
+        );
+    }
+
     if (loading) return <KpiSkeleton className={className} />;
     if (error != null)
         return (
