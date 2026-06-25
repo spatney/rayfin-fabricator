@@ -85,20 +85,38 @@ const EXT_LANG: Record<string, string> = {
   zsh: 'bash'
 }
 
+type Highlight = { html: string; label: string } | null
+
+// Memoize highlight results so repeated renders of the same code block (every
+// streamed chat token currently re-renders sibling messages) don't re-run the
+// hljs tokenizer. Bounded with simple FIFO eviction to cap memory.
+const HL_CACHE = new Map<string, Highlight>()
+const HL_CACHE_MAX = 500
+
 /** Syntax-highlight `text` for `lang`, returning HTML + resolved label, or null. */
-export function highlightCode(text: string, lang?: string): { html: string; label: string } | null {
-  ensureLanguages()
+export function highlightCode(text: string, lang?: string): Highlight {
   const key = (lang ?? '').toLowerCase()
   const resolved = LANG_ALIAS[key] ?? key
+  const cacheKey = `${resolved}\u0000${text}`
+  const cached = HL_CACHE.get(cacheKey)
+  if (cached !== undefined) return cached
+
+  ensureLanguages()
+  let result: Highlight = null
   if (resolved && hljs.getLanguage(resolved)) {
     try {
       const out = hljs.highlight(text, { language: resolved, ignoreIllegals: true })
-      return { html: out.value, label: resolved }
+      result = { html: out.value, label: resolved }
     } catch {
-      return null
+      result = null
     }
   }
-  return null
+  if (HL_CACHE.size >= HL_CACHE_MAX) {
+    const oldest = HL_CACHE.keys().next().value
+    if (oldest !== undefined) HL_CACHE.delete(oldest)
+  }
+  HL_CACHE.set(cacheKey, result)
+  return result
 }
 
 /** Infer a registered language from a file path's extension, or undefined. */

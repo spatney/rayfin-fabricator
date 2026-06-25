@@ -1,4 +1,6 @@
 import {
+  memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -109,6 +111,12 @@ interface Props {
   focused?: boolean
   /** Toggle chat focus (full-width chat ⇄ split with preview). */
   onToggleFocus?: () => void
+  /** Hard-gate: the project has no deployment yet — disable the composer until it does. */
+  deployLock?: boolean
+  /** True while the project's first deploy is actively streaming (gate shows progress). */
+  deploying?: boolean
+  /** Open the fullscreen deploy step (the gate CTA). */
+  onRequestDeploy?: () => void
 }
 
 /** Reasoning efforts shown when the engine's per-model list is unavailable
@@ -1222,6 +1230,129 @@ function rankFiles(files: MentionFile[], query: string): MentionFile[] {
   return scored.slice(0, 8).map((x) => x.f)
 }
 
+/**
+ * One conversation row (assistant/user turn or a merge event), memoized so the
+ * thousands of state updates a streaming turn produces only re-render the *one*
+ * turn that changed — completed turns keep their object identity (see `reduce`)
+ * and therefore skip re-rendering entirely. Callbacks must be referentially
+ * stable (the parent passes `useCallback`-wrapped wrappers) and `canRetry` is a
+ * precomputed primitive, so memo's shallow compare holds for settled turns.
+ */
+const MessageRow = memo(function MessageRow({
+  message: m,
+  projectPath,
+  canRetry,
+  onRetry,
+  onResolvePlan
+}: {
+  message: UIChatMessage
+  projectPath: string
+  canRetry: boolean
+  onRetry: (id: string) => void
+  onResolvePlan: (msgId: string, requestId: string, action: string, feedback?: string) => void
+}): JSX.Element {
+  if (m.kind === 'merge') {
+    const who = m.mergeName ?? 'side thread'
+    const label = m.error
+      ? `Couldn’t merge “${who}” into main`
+      : m.pending
+        ? `Merging “${who}” into main…`
+        : `Merged “${who}” into main`
+    const hasBody = m.tools.length > 0 || Boolean(m.text)
+    return (
+      <div
+        className={`merge-event${m.error ? ' merge-event--error' : ''}${
+          m.pending ? ' merge-event--pending' : ''
+        }`}
+      >
+        <div className="merge-event-head">
+          <span className="merge-event-icon">
+            {m.pending ? <span className="tool-spin" /> : m.error ? '⚠' : <MergeIcon />}
+          </span>
+          <span className="merge-event-label">{label}</span>
+        </div>
+        {hasBody && (
+          <div className="merge-event-body">
+            <AssistantBody message={m} projectPath={projectPath} />
+          </div>
+        )}
+        {m.error && <div className="alert alert--error merge-event-error">{m.error}</div>}
+      </div>
+    )
+  }
+  return (
+    <div className={`turn turn--${m.role}`}>
+      <div className="turn-head">
+        <div className={`turn-avatar${m.pending ? ' turn-avatar--pending' : ''}`}>
+          {m.role === 'user' ? <UserIcon /> : <img src={logo} alt="" />}
+        </div>
+        <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
+        {m.role === 'assistant' && Boolean(m.text) && !m.pending && (
+          <CopyButton text={m.text} className="turn-copy" />
+        )}
+        {m.role === 'user' && Boolean(m.text) && m.text !== '(screenshot)' && (
+          <CopyButton text={m.text} className="turn-copy" />
+        )}
+      </div>
+      <div className="turn-main">
+        {m.role === 'assistant' ? (
+          <AssistantBody message={m} projectPath={projectPath} />
+        ) : (
+          m.text && <div className="msg-text">{m.text}</div>
+        )}
+        {m.role === 'assistant' && !m.pending && !m.error && m.tools.length > 0 && (
+          <TurnSummary tools={m.tools} />
+        )}
+        {m.plan && (
+          <PlanCard
+            plan={m.plan}
+            onResolve={(action, feedback) =>
+              onResolvePlan(m.id, m.plan!.requestId, action, feedback)
+            }
+          />
+        )}
+        {m.attachmentThumbs && m.attachmentThumbs.length > 0 ? (
+          <div className="msg-shots">
+            {m.attachmentThumbs.map((src, i) => (
+              <img key={i} className="msg-shot" src={src} alt="Screenshot attachment" />
+            ))}
+          </div>
+        ) : m.attachments ? (
+          <div className="msg-attach">
+            <ImageIcon className="msg-attach-ico" />
+            {m.attachments} screenshot{m.attachments > 1 ? 's' : ''}
+          </div>
+        ) : null}
+        {m.notice && !m.pending && <div className="msg-notice">↻ {m.notice}</div>}
+        {m.pending && (
+          <AgentStatus
+            tools={m.tools}
+            hasText={Boolean(m.text)}
+            notice={m.notice}
+            projectPath={projectPath}
+            awaitingDecision={Boolean(m.plan && !m.plan.resolved)}
+            startedAt={m.startedAt}
+          />
+        )}
+        {m.error && (
+          <div className="alert alert--error msg-error">
+            <span className="msg-error-text">{m.error}</span>
+            {canRetry && (
+              <button
+                className="btn btn--xs btn--ghost msg-error-retry"
+                onClick={() => onRetry(m.id)}
+                title="Re-send this message"
+              >
+                ↻ Retry
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
+
 export default function ChatPanel({
   project,
   threadId = MAIN_THREAD_ID,
@@ -1238,7 +1369,10 @@ export default function ChatPanel({
   outbound,
   onOutboundConsumed,
   focused,
-  onToggleFocus
+  onToggleFocus,
+  deployLock = false,
+  deploying = false,
+  onRequestDeploy
 }: Props): JSX.Element {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -1250,6 +1384,20 @@ export default function ChatPanel({
   const { models, loading: modelsLoading } = useCopilotModels(showModel)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  // Referentially-stable wrappers for the per-row callbacks so memoized
+  // `MessageRow`s don't re-render every time `retry`/`resolvePlan` are recreated
+  // (which happens on each render, e.g. every streamed-token flush). The refs
+  // always point at the latest closures, preserving current `messages`/`sending`.
+  const retryRef = useRef(retry)
+  retryRef.current = retry
+  const resolvePlanRef = useRef(resolvePlan)
+  resolvePlanRef.current = resolvePlan
+  const onRetry = useCallback((id: string) => void retryRef.current(id), [])
+  const onResolvePlan = useCallback(
+    (msgId: string, requestId: string, action: string, feedback?: string) =>
+      void resolvePlanRef.current(msgId, requestId, action, feedback),
+    []
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const [showJump, setShowJump] = useState(false)
@@ -1339,32 +1487,84 @@ export default function ChatPanel({
     saveOptions(nextModel, nextEffort)
   }
 
+  // Coalesce high-frequency streamed `delta` events. The SDK emits one IPC event
+  // per token; applying each individually re-rendered the active turn and re-parsed
+  // its markdown thousands of times per reply — the dominant cause of the
+  // VM/Parallels "hang". We buffer delta text per turn and flush at most once per
+  // animation frame, while structural events (tool/result/plan/error) apply
+  // immediately after draining any buffered text so chronological order is kept.
+  const deltaBufRef = useRef<Map<string, string>>(new Map())
+  const flushRafRef = useRef<number | null>(null)
+
   useEffect(() => {
+    const buf = deltaBufRef.current
+
+    const flush = (): void => {
+      flushRafRef.current = null
+      if (buf.size === 0) return
+      const pending = new Map(buf)
+      buf.clear()
+      onChangeRef.current((prev) =>
+        prev.map((m) => {
+          if (m.role !== 'assistant' || !m.turnId) return m
+          const text = pending.get(m.turnId)
+          return text !== undefined ? reduce(m, { type: 'delta', text }) : m
+        })
+      )
+    }
+
+    const scheduleFlush = (): void => {
+      if (flushRafRef.current === null) {
+        flushRafRef.current = requestAnimationFrame(flush)
+      }
+    }
+
     const off = window.api.onChatEvent((envelope) => {
       if (envelope.projectId !== project.id || envelope.threadId !== threadId) return
+      const ev = envelope.event
+      if (ev.type === 'delta') {
+        buf.set(envelope.turnId, (buf.get(envelope.turnId) ?? '') + ev.text)
+        scheduleFlush()
+        return
+      }
+      // Structural event: drain buffered text first so deltas land before it.
+      flush()
       onChangeRef.current((prev) =>
         prev.map((m) =>
-          m.turnId === envelope.turnId && m.role === 'assistant' ? reduce(m, envelope.event) : m
+          m.turnId === envelope.turnId && m.role === 'assistant' ? reduce(m, ev) : m
         )
       )
     })
-    return off
+
+    return () => {
+      off()
+      if (flushRafRef.current !== null) {
+        cancelAnimationFrame(flushRafRef.current)
+        flushRafRef.current = null
+      }
+      buf.clear()
+    }
   }, [project.id, threadId])
 
   // Keep the view pinned to the newest content — but only when the user is already
   // near the bottom, so reading earlier messages isn't interrupted. Otherwise we
-  // surface a "Jump to latest" affordance instead of yanking them back down.
+  // surface a "Jump to latest" affordance instead of yanking them back down. The
+  // scroll write is deferred to an animation frame so it batches with the browser's
+  // layout instead of forcing a synchronous reflow on every (coalesced) update.
   useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    if (stick.current) {
-      el.scrollTop = el.scrollHeight
-      setShowJump(false)
-      setJumpNew(false)
-    } else {
+    if (!stick.current) {
       setShowJump(true)
       setJumpNew(true)
+      return
     }
+    setShowJump(false)
+    setJumpNew(false)
+    const el = scrollRef.current
+    if (!el) return
+    const raf = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight
+    })
+    return () => cancelAnimationFrame(raf)
   }, [messages])
 
   function onScrollChat(): void {
@@ -1484,6 +1684,7 @@ export default function ChatPanel({
   }
 
   async function send(): Promise<void> {
+    if (deployLock) return
     const text = input.trim()
     const shots = attachments ?? []
     // Mid-turn: interrupt the running reply with this message (conversation
@@ -1916,36 +2117,6 @@ export default function ChatPanel({
         )}
 
         {messages.map((m, i) => {
-          if (m.kind === 'merge') {
-            const who = m.mergeName ?? 'side thread'
-            const label = m.error
-              ? `Couldn’t merge “${who}” into main`
-              : m.pending
-                ? `Merging “${who}” into main…`
-                : `Merged “${who}” into main`
-            const hasBody = m.tools.length > 0 || Boolean(m.text)
-            return (
-              <div
-                key={m.id}
-                className={`merge-event${m.error ? ' merge-event--error' : ''}${
-                  m.pending ? ' merge-event--pending' : ''
-                }`}
-              >
-                <div className="merge-event-head">
-                  <span className="merge-event-icon">
-                    {m.pending ? <span className="tool-spin" /> : m.error ? '⚠' : <MergeIcon />}
-                  </span>
-                  <span className="merge-event-label">{label}</span>
-                </div>
-                {hasBody && (
-                  <div className="merge-event-body">
-                    <AssistantBody message={m} projectPath={project.path} />
-                  </div>
-                )}
-                {m.error && <div className="alert alert--error merge-event-error">{m.error}</div>}
-              </div>
-            )
-          }
           const prevUser = m.role === 'assistant' && i > 0 ? messages[i - 1] : undefined
           const canRetry =
             Boolean(m.error) &&
@@ -1954,75 +2125,14 @@ export default function ChatPanel({
             !prevUser.attachments &&
             prevUser.text !== '(screenshot)'
           return (
-            <div key={m.id} className={`turn turn--${m.role}`}>
-              <div className="turn-head">
-                <div className={`turn-avatar${m.pending ? ' turn-avatar--pending' : ''}`}>
-                  {m.role === 'user' ? <UserIcon /> : <img src={logo} alt="" />}
-                </div>
-                <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
-                {m.role === 'assistant' && Boolean(m.text) && !m.pending && (
-                  <CopyButton text={m.text} className="turn-copy" />
-                )}
-                {m.role === 'user' && Boolean(m.text) && m.text !== '(screenshot)' && (
-                  <CopyButton text={m.text} className="turn-copy" />
-                )}
-              </div>
-              <div className="turn-main">
-                {m.role === 'assistant' ? (
-                  <AssistantBody message={m} projectPath={project.path} />
-                ) : (
-                  m.text && <div className="msg-text">{m.text}</div>
-                )}
-                {m.role === 'assistant' && !m.pending && !m.error && m.tools.length > 0 && (
-                  <TurnSummary tools={m.tools} />
-                )}
-                {m.plan && (
-                  <PlanCard
-                    plan={m.plan}
-                    onResolve={(action, feedback) =>
-                      void resolvePlan(m.id, m.plan!.requestId, action, feedback)
-                    }
-                  />
-                )}
-                {m.attachmentThumbs && m.attachmentThumbs.length > 0 ? (
-                  <div className="msg-shots">
-                    {m.attachmentThumbs.map((src, i) => (
-                      <img key={i} className="msg-shot" src={src} alt="Screenshot attachment" />
-                    ))}
-                  </div>
-                ) : m.attachments ? (
-                  <div className="msg-attach">
-                    <ImageIcon className="msg-attach-ico" />
-                    {m.attachments} screenshot{m.attachments > 1 ? 's' : ''}
-                  </div>
-                ) : null}
-                {m.notice && !m.pending && <div className="msg-notice">↻ {m.notice}</div>}
-                {m.pending && (
-                  <AgentStatus
-                    tools={m.tools}
-                    hasText={Boolean(m.text)}
-                    notice={m.notice}
-                    projectPath={project.path}
-                    awaitingDecision={Boolean(m.plan && !m.plan.resolved)}
-                    startedAt={m.startedAt}
-                  />
-                )}
-                {m.error && (
-                  <div className="alert alert--error msg-error">
-                    <span className="msg-error-text">{m.error}</span>
-                    {canRetry && (
-                      <button
-                        className="btn btn--xs btn--ghost msg-error-retry"
-                        onClick={() => void retry(m.id)}
-                        title="Re-send this message"
-                      >
-                        ↻ Retry
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+            <MessageRow
+              key={m.id}
+              message={m}
+              projectPath={project.path}
+              canRetry={canRetry}
+              onRetry={onRetry}
+              onResolvePlan={onResolvePlan}
+            />
           )
         })}
         {showJump && (
@@ -2042,6 +2152,36 @@ export default function ChatPanel({
       </div>
 
       <div className={`composer${sending ? ' composer--busy' : ''}`}>
+        {deployLock && (
+          <div className="deploy-gate" role="status">
+            {deploying ? (
+              <span className="ws-spinner deploy-gate-spin" aria-hidden="true" />
+            ) : (
+              <span className="deploy-gate-ico" aria-hidden="true">
+                🚀
+              </span>
+            )}
+            <div className="deploy-gate-text">
+              <span className="deploy-gate-title">
+                {deploying ? 'Deploying your app…' : 'Deploy your app to start building'}
+              </span>
+              <span className="deploy-gate-sub">
+                {deploying
+                  ? `Chat unlocks as soon as ${project.name} is live.`
+                  : `Chat is locked until ${project.name} has a deployment.`}
+              </span>
+            </div>
+            {deploying ? (
+              <button className="btn btn--sm" disabled>
+                Deploying…
+              </button>
+            ) : (
+              <button className="btn btn--sm btn--primary" onClick={onRequestDeploy}>
+                Deploy now
+              </button>
+            )}
+          </div>
+        )}
         {sending && <div className="composer-busyline" aria-hidden="true" />}
         {(attachments?.length ?? 0) > 0 && (
           <div className="chat-attachments">
@@ -2101,9 +2241,14 @@ export default function ChatPanel({
           <textarea
             ref={taRef}
             className="composer-input"
-            placeholder={`Message Fabricator about ${project.name}…`}
+            placeholder={
+              deployLock
+                ? 'Deploy your app to start chatting…'
+                : `Message Fabricator about ${project.name}…`
+            }
             value={input}
             rows={1}
+            disabled={deployLock}
             onChange={onComposerChange}
             onSelect={onComposerSelect}
             onKeyDown={onKeyDown}
@@ -2184,7 +2329,7 @@ export default function ChatPanel({
               <button
                 className="composer-attach"
                 onClick={() => fileRef.current?.click()}
-                disabled={attaching}
+                disabled={attaching || deployLock}
                 title="Attach an image (or paste / drop one here)"
                 aria-label="Attach an image"
               >
@@ -2214,7 +2359,7 @@ export default function ChatPanel({
                 <button
                   className="composer-send"
                   onClick={send}
-                  disabled={!input.trim() && (attachments?.length ?? 0) === 0}
+                  disabled={deployLock || (!input.trim() && (attachments?.length ?? 0) === 0)}
                   title="Send (Enter)"
                   aria-label="Send"
                 >

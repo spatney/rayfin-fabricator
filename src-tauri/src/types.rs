@@ -199,6 +199,11 @@ pub struct TemplateInfo {
   pub name: String,
   pub display_name: String,
   pub description: String,
+  /// When `Some("fabric")`, projects scaffolded from this template default to the
+  /// embedded Fabric portal preview (the toolbar Fabric toggle is on at creation).
+  /// Absent for templates that open in the direct app view.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub default_preview_mode: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -342,6 +347,12 @@ pub struct StudioProject {
   pub workspace_name: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub deployment_names: Option<std::collections::HashMap<String, String>>,
+  /// Set when a project is freshly created in-app and has never been deployed.
+  /// Drives the onboarding "deploy first" gate (the chat composer is disabled
+  /// until a deployment exists). Cleared on the first successful deploy. Never
+  /// set for projects opened from disk, so opening an existing app is not gated.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub awaiting_first_deploy: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub model: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -374,6 +385,12 @@ pub struct ExperimentFlags {
   /// Auto-refresh the Advisor review when its results go stale (opt-in).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub advisor_auto_run: Option<bool>,
+  /// Force WebView2 software/compatibility rendering (disables GPU acceleration).
+  /// Fixes freezing/hangs in VMs such as Parallels where the virtualized GPU
+  /// misbehaves. Read at startup and applied before the window is created, so a
+  /// change only takes effect after the app is relaunched. Opt-in (off by default).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub compatibility_rendering: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

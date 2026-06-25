@@ -22,7 +22,7 @@ import {
   type RayfinVersionInfo,
   type StudioProject
 } from '@shared/ipc'
-import NewProjectModal from '../components/NewProjectModal'
+import CreateProjectScreen from '../components/CreateProjectScreen'
 import NewThreadModal from '../components/NewThreadModal'
 import ConfirmModal from '../components/ConfirmModal'
 import SettingsModal from '../components/SettingsModal'
@@ -145,7 +145,8 @@ export default function Workbench({
   const [signingOut, setSigningOut] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [projects, setProjects] = useState<ProjectsState | null>(null)
-  const [showNewProject, setShowNewProject] = useState(false)
+  /** Fullscreen create/deploy flow: 'create' = new-project wizard, 'deploy' = first-deploy gate CTA. */
+  const [createMode, setCreateMode] = useState<'create' | 'deploy' | null>(null)
   const [opening, setOpening] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   /** Left projects sidebar collapsed state (persisted across sessions). */
@@ -1081,10 +1082,37 @@ export default function Workbench({
         </div>
       </header>
 
+      {createMode ? (
+        <CreateProjectScreen
+          mode={createMode}
+          projectName={active?.name}
+          deploying={Boolean(active && deploys[active.id]?.running)}
+          onCancel={() => setCreateMode(null)}
+          onCreated={() => void refreshProjects()}
+          onDeploy={(depName, workspaceId) => {
+            if (!active) {
+              setCreateMode(null)
+              return
+            }
+            const projectId = active.id
+            setCreateMode(null)
+            setViewMode('build')
+            void (async () => {
+              try {
+                await window.api.deploy.setName(projectId, workspaceId, depName)
+              } catch {
+                /* naming is best-effort; deploy anyway */
+              }
+              await requestUserDeploy(projectId, workspaceId)
+            })()
+          }}
+          onContinueWithoutDeploy={() => setCreateMode(null)}
+        />
+      ) : (
       <div className={`workbench${sidebarCollapsed ? ' workbench--sidebar-collapsed' : ''}`}>
         <aside className="sidebar">
           <div className="sidebar-actions">
-            <button className="btn btn--primary btn--block" onClick={() => setShowNewProject(true)}>
+            <button className="btn btn--primary btn--block" onClick={() => setCreateMode('create')}>
               + New project
             </button>
             <button className="btn btn--ghost btn--block" disabled={opening} onClick={openExisting}>
@@ -1358,6 +1386,9 @@ export default function Workbench({
                             onToggleFocus={() =>
                               setFocusPane((f) => (f === 'chat' ? null : 'chat'))
                             }
+                            deployLock={active.awaitingFirstDeploy === true}
+                            deploying={Boolean(deploys[active.id]?.running)}
+                            onRequestDeploy={() => setCreateMode('deploy')}
                           />
                         </div>
                       )
@@ -1408,7 +1439,7 @@ export default function Workbench({
                 Create a new Rayfin app or open an existing project to start building with chat.
               </p>
               <div className="content-empty-actions">
-                <button className="btn btn--primary" onClick={() => setShowNewProject(true)}>
+                <button className="btn btn--primary" onClick={() => setCreateMode('create')}>
                   + New project
                 </button>
                 <button className="btn btn--ghost" disabled={opening} onClick={openExisting}>
@@ -1419,6 +1450,7 @@ export default function Workbench({
           )}
         </main>
       </div>
+      )}
 
       <footer className="statusbar">
         <span className="statusbar-item">Rayfin Fabricator v{versions?.app ?? '—'}</span>
@@ -1451,16 +1483,6 @@ export default function Workbench({
           versions={versions}
           onChange={onSettingsChange}
           onClose={() => setShowSettings(false)}
-        />
-      )}
-
-      {showNewProject && (
-        <NewProjectModal
-          onClose={() => setShowNewProject(false)}
-          onCreated={async () => {
-            setShowNewProject(false)
-            await refreshProjects()
-          }}
         />
       )}
 

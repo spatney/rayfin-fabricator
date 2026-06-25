@@ -1,4 +1,4 @@
-import { isValidElement, useState, type ReactNode } from 'react'
+import { isValidElement, memo, useState, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { highlightCode } from '../syntax'
@@ -73,7 +73,7 @@ const components: Components = {
 }
 
 /** Render assistant chat text as sanitized GitHub-flavored markdown. */
-export default function Markdown({ children }: { children: string }): JSX.Element {
+function Markdown({ children }: { children: string }): JSX.Element {
   return (
     <div className="md">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
@@ -82,3 +82,8 @@ export default function Markdown({ children }: { children: string }): JSX.Elemen
     </div>
   )
 }
+
+// Memoized: assistant turns re-render on every streamed token, but a given text
+// segment's markdown only needs re-parsing when its own string changes. Skipping
+// unchanged segments avoids re-running react-markdown + highlight.js needlessly.
+export default memo(Markdown)

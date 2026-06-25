@@ -382,6 +382,9 @@ pub(crate) async fn run_deploy(
     });
   }
 
+  // First successful deploy clears the onboarding "deploy first" gate.
+  store::mutate_project(&project_id, |p| p.awaiting_first_deploy = None);
+
   commit_checkpoint(&project.path, &format!("Deploy {} ({})", project.name, now_iso())).await;
   if let Some(commit) = head_sha(&project.path).await {
     patch_deploy(&project_id, move |d| d.commit = Some(commit));
@@ -490,6 +493,8 @@ pub async fn deploy_reconcile(project_id: String) -> ProjectsState {
         p.last_deploy = Some(deploy);
         p.workspace = workspace;
         p.workspace_name = ws_name;
+        // A recorded deployment exists — lift the onboarding gate.
+        p.awaiting_first_deploy = None;
       });
     }
     None => {
@@ -569,7 +574,11 @@ pub async fn deploy_switch(project_id: String, workspace: String, by_id: Option<
 
   {
     let w = workspace.clone();
-    store::mutate_project(&project_id, move |p| p.workspace = Some(w));
+    store::mutate_project(&project_id, move |p| {
+      p.workspace = Some(w);
+      // Switching to an existing deployment proves one exists — lift the gate.
+      p.awaiting_first_deploy = None;
+    });
   }
   {
     let (url, api, portal) = (url.clone(), api.clone(), portal.clone());

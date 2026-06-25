@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { AppSettings, AppVersions, ThemePreference } from '@shared/ipc'
 import { applyTheme } from '../theme'
 import { useSuppressPreview } from '../overlay'
@@ -29,6 +29,11 @@ export default function SettingsModal({
   const [checkedUpdates, setCheckedUpdates] = useState(false)
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
   const titleId = useId()
+  // Compatibility rendering is applied at startup, so toggling it only takes
+  // effect after a relaunch. Remember its value on open to detect a pending change.
+  const initialCompatRendering = useRef(Boolean(settings.experiments?.compatibilityRendering))
+  const compatRenderingChanged =
+    Boolean(settings.experiments?.compatibilityRendering) !== initialCompatRendering.current
 
   useEffect(() => {
     void window.api.projects.state().then((s) => setWorkspaceRoot(s.workspaceRoot))
@@ -163,6 +168,38 @@ export default function SettingsModal({
                 </span>
               </span>
             </label>
+          </div>
+
+          <div className="field">
+            <span className="field-label">Performance</span>
+            <label className="settings-check">
+              <input
+                type="checkbox"
+                checked={Boolean(settings.experiments?.compatibilityRendering)}
+                onChange={(e) =>
+                  onChange({ experiments: { compatibilityRendering: e.target.checked } })
+                }
+              />
+              <span>
+                <span className="settings-check-label">Compatibility rendering</span>
+                <span className="field-hint">
+                  Turn off GPU acceleration and draw in software instead. Fixes freezing and
+                  hangs in virtual machines such as Parallels, where the emulated GPU can
+                  misbehave. Leave this off on normal hardware.
+                </span>
+              </span>
+            </label>
+            {compatRenderingChanged && (
+              <div className="settings-row">
+                <span className="field-hint">Restart Rayfin Fabricator to apply this change.</span>
+                <button
+                  className="btn btn--sm btn--ghost"
+                  onClick={() => void window.api.relaunch()}
+                >
+                  Restart now
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="field">

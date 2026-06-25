@@ -5577,6 +5577,20 @@ code {
   line-height: 1.4;
 }
 
+/* Indicator on a built-in card whose template opens embedded in the Fabric view. */
+.template-card-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 /* Skeleton placeholder cards while templates / the gallery load */
 .template-card--skel {
   pointer-events: none;
@@ -8812,4 +8826,209 @@ span.thread-pill {
 }
 .toast-close:hover {
   color: var(--text);
+}
+
+/* ===========================================================================
+   Fullscreen create-project + first-deploy experience
+   =========================================================================== */
+
+/* Fills the workbench's 1fr grid row, keeping the title + status bars visible. */
+.create-screen {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  background: radial-gradient(
+    1200px 600px at 50% -10%,
+    color-mix(in srgb, var(--accent) 12%, var(--bg)) 0%,
+    var(--bg) 60%
+  );
+}
+
+.create-shell {
+  width: 100%;
+  max-width: 760px;
+  padding: 36px 28px 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.create-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.create-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.create-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.create-sub {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Step indicator (Details → Deploy) */
+.create-steps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.create-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.create-step-no {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-elev);
+}
+
+.create-step--active {
+  color: var(--text);
+}
+
+.create-step--active .create-step-no {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.create-step--done {
+  color: var(--text-dim);
+}
+
+.create-step--done .create-step-no {
+  border-color: transparent;
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.create-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.create-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+/* Deploy step: a single centered card wrapping the shared workspace picker. */
+.create-body--deploy {
+  align-items: center;
+}
+
+.create-deploy {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+}
+
+/* Bump the shared form's compact buttons up a notch for the fullscreen step. */
+.create-deploy .dep-create-actions .btn {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.create-skip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.create-skip-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+
+/* Chat hard-gate banner: shown above the composer until the project is deployed. */
+.deploy-gate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 11px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent-ring);
+  background: var(--accent-soft);
+}
+
+.deploy-gate-ico {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.deploy-gate-spin {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.deploy-gate-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.deploy-gate-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.deploy-gate-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.composer-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

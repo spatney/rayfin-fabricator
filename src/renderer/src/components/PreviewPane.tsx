@@ -301,43 +301,71 @@ export default function PreviewPane({
     const keyOf = (b: PreviewBounds): string =>
       `${b.x}|${b.y}|${b.width}|${b.height}|${window.innerWidth}|${window.innerHeight}`
 
-    const tick = (): void => {
+    // Reconcile the native surface to the host's current rect. Returns true when
+    // it actually moved/showed/hid, so the tracking loop knows it isn't settled yet.
+    const reconcile = (): boolean => {
       const b = measure()
       if (!b) {
         if (shownKey !== '') {
           shownKey = ''
           void window.api.preview.hide()
+          return true
         }
-      } else {
-        const key = keyOf(b)
-        if (shownKey === '') {
-          // Was hidden → show + position (showUrl re-shows the surface).
-          shownKey = key
-          void window.api.preview.showUrl(previewUrl, b)
-        } else if (key !== shownKey) {
-          shownKey = key
-          void window.api.preview.setBounds(b)
-        }
+        return false
       }
-      raf = requestAnimationFrame(tick)
+      const key = keyOf(b)
+      if (shownKey === '') {
+        // Was hidden → show + position (showUrl re-shows the surface).
+        shownKey = key
+        void window.api.preview.showUrl(previewUrl, b)
+        return true
+      }
+      if (key !== shownKey) {
+        shownKey = key
+        void window.api.preview.setBounds(b)
+        return true
+      }
+      return false
     }
 
+    // Replace the old "rAF forever" poll (which read layout 60×/s even when idle —
+    // a constant drain that's especially costly under a VM's software renderer)
+    // with a self-limiting burst: track frame-by-frame only while the host is
+    // actually moving (CSS transitions, splitter drags), then stop once it has
+    // been stable for a short spell. Observers below restart a burst on demand.
+    const STABLE_LIMIT = 8
+    let stableFrames = 0
+    const track = (): void => {
+      const moved = reconcile()
+      stableFrames = moved ? 0 : stableFrames + 1
+      if (stableFrames >= STABLE_LIMIT) {
+        raf = 0
+        return
+      }
+      raf = requestAnimationFrame(track)
+    }
+    const startTracking = (): void => {
+      stableFrames = 0
+      if (raf === 0) raf = requestAnimationFrame(track)
+    }
+
+    // Host resize (splitter drag, pane collapse/expand) and viewport-intersection
+    // changes (visibility) each kick off a tracking burst. Observing the host's
+    // parent too catches layout shifts that move the host without resizing it.
+    const ro = new ResizeObserver(() => startTracking())
+    ro.observe(host)
+    if (host.parentElement) ro.observe(host.parentElement)
+    const io = new IntersectionObserver(() => startTracking(), { threshold: [0, 0.01, 1] })
+    io.observe(host)
+
     // During a macOS live-resize, AppKit runs a modal event loop that pauses
-    // `requestAnimationFrame`, so the tick above can't track the host while the
+    // `requestAnimationFrame`, so the burst above can't track the host while the
     // window is being dragged — the native child's autoresize mask drifts and can
     // momentarily cover the toolbar. Re-push synchronously on every resize event
     // (these fire during the modal loop) so the surface stays glued to its host.
     const onResize = (): void => {
-      const b = measure()
-      if (!b) return
-      const key = keyOf(b)
-      if (shownKey === '') {
-        shownKey = key
-        void window.api.preview.showUrl(previewUrl, b)
-      } else if (key !== shownKey) {
-        shownKey = key
-        void window.api.preview.setBounds(b)
-      }
+      reconcile()
+      startTracking()
     }
     window.addEventListener('resize', onResize)
 
@@ -346,11 +374,13 @@ export default function PreviewPane({
       shownKey = keyOf(initial)
       void window.api.preview.showUrl(previewUrl, initial)
     }
-    raf = requestAnimationFrame(tick)
+    startTracking()
 
     return () => {
       window.removeEventListener('resize', onResize)
-      cancelAnimationFrame(raf)
+      ro.disconnect()
+      io.disconnect()
+      if (raf !== 0) cancelAnimationFrame(raf)
     }
   }, [deployedUrl, previewUrl, showWebview, suppressed, transitioning])
 

@@ -38,6 +38,7 @@ fn default_settings() -> AppSettings {
     experiments: Some(ExperimentFlags {
       side_threads: Some(false),
       advisor_auto_run: Some(false),
+      compatibility_rendering: Some(false),
     }),
   }
 }
@@ -127,12 +128,16 @@ pub fn set_settings(theme: Option<String>, experiments: Option<ExperimentFlags>)
       let current = c.settings.experiments.get_or_insert(ExperimentFlags {
         side_threads: Some(false),
         advisor_auto_run: Some(false),
+        compatibility_rendering: Some(false),
       });
       if let Some(v) = patch.side_threads {
         current.side_threads = Some(v);
       }
       if let Some(v) = patch.advisor_auto_run {
         current.advisor_auto_run = Some(v);
+      }
+      if let Some(v) = patch.compatibility_rendering {
+        current.compatibility_rendering = Some(v);
       }
     }
     persist(c);

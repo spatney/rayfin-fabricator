@@ -181,11 +181,17 @@ export interface InstallResult extends ProcResult {
  * Projects
  * ------------------------------------------------------------------ */
 
-/** A Rayfin project template (from `npm create @microsoft/rayfin -- --list-templates`). */
+/** A built-in (bundled) Rayfin project template shown in the New Project picker. */
 export interface TemplateInfo {
   name: string
   displayName: string
   description: string
+  /**
+   * When `'fabric'`, projects created from this template default to the embedded
+   * Fabric portal preview (the toolbar Fabric toggle starts on). Absent for
+   * templates that open in the direct app view.
+   */
+  defaultPreviewMode?: PreviewMode
 }
 
 /** One template entry from a community gallery repo's root `rayfin-template.yml`. */
@@ -350,6 +356,13 @@ export interface StudioProject {
    * workspace they live in.
    */
   deploymentNames?: Record<string, string>
+  /**
+   * Set when a project is freshly created in-app and has never been deployed.
+   * Drives the onboarding "deploy first" gate — the chat composer is disabled
+   * until a deployment exists. Cleared on the first successful deploy. Never set
+   * for projects opened from disk, so opening an existing app is never gated.
+   */
+  awaitingFirstDeploy?: boolean
   /** Copilot model id for this project's chat (`--model`); undefined = auto. */
   model?: string
   /** Copilot reasoning effort for this project's chat (`--effort`). */
@@ -442,15 +455,21 @@ export interface ExperimentFlags {
    * re-run the review instead of just flagging it as stale.
    */
   advisorAutoRun?: boolean
+  /**
+   * Compatibility rendering: force WebView2 software rendering (disable GPU
+   * acceleration). Fixes freezing/hangs in VMs such as Parallels where the
+   * virtualized GPU misbehaves. Applied at startup, so a change needs a relaunch.
+   */
+  compatibilityRendering?: boolean
 }
 
 export interface CreateProjectInput {
   name: string
   /**
-   * Template the project is scaffolded from. Either a built-in name
-   * ('blankapp' | 'fabricator-dataapp' | 'fabricator-todoapp' |
-   * 'gettingstartedauth') or a community template URL (e.g. an awesome-rayfin
-   * git/tarball URL) — `npm create @microsoft/rayfin -- -t` accepts either.
+   * Template the project is scaffolded from. Either a built-in (bundled) name
+   * ('fabricator-dataapp' | 'fabricator-todoapp') or a community template URL
+   * (e.g. an awesome-rayfin git/tarball URL) — `npm create @microsoft/rayfin -- -t`
+   * accepts either.
    */
   template: string
   /**

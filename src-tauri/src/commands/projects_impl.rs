@@ -23,33 +23,34 @@ use crate::types::{
 
 const CREATE_CHANNEL: &str = "create:project";
 
-/// Curated built-in template set shown in New Project. The two upstream
-/// data/todo templates are replaced by the bundled Fabricator variants
-/// (`fabricator-dataapp` / `fabricator-todoapp`), which strip the local-testing
-/// surface for the deploy-to-test workflow. `discovered` enriches the upstream
-/// `blankapp` / `gettingstartedauth` entries with their live displayName /
-/// description when the create command could be queried; otherwise curated copy
-/// is used so the picker still works offline.
-fn curated_templates(discovered: &HashMap<String, TemplateInfo>) -> Vec<TemplateInfo> {
-  let upstream = |name: &str, display: &str, description: &str| -> TemplateInfo {
-    discovered.get(name).cloned().unwrap_or_else(|| TemplateInfo {
-      name: name.into(),
-      display_name: display.into(),
-      description: description.into(),
-    })
-  };
+/// The default preview mode a project scaffolded from `template` should adopt.
+/// The Data App is Fabric-auth-only and renders correctly only inside the Fabric
+/// portal shell, so it opens in the embedded Fabric preview by default; every
+/// other template uses the direct app view (`None`). Returned as `Some("fabric")`
+/// to match `StudioProject::preview_mode`.
+pub fn fabricator_default_preview_mode(template: &str) -> Option<String> {
+  match template {
+    "fabricator-dataapp" => Some("fabric".to_string()),
+    _ => None,
+  }
+}
+
+/// The built-in template set shown in New Project: only the two bundled Fabricator
+/// variants (`fabricator-dataapp` / `fabricator-todoapp`, under
+/// `resources/fabricator-templates`), which strip the local-testing surface for the
+/// deploy-to-test workflow. Their metadata ships with the app, so the list is
+/// constant — no registry / `--list-templates` discovery is needed, and New Project
+/// opens instantly and offline. The Data App carries `default_preview_mode = "fabric"`
+/// so it opens in the embedded Fabric portal preview.
+fn bundled_templates() -> Vec<TemplateInfo> {
   vec![
-    upstream(
-      "blankapp",
-      "Blank App",
-      "Bare-bones Fabric-authenticated React + Vite app — no data layer.",
-    ),
     TemplateInfo {
       name: "fabricator-dataapp".into(),
       display_name: "Data App".into(),
       description:
         "Fabric-authenticated React + Vite app wired for Rayfin data — add an entity and deploy to Fabric to try it."
           .into(),
+      default_preview_mode: fabricator_default_preview_mode("fabricator-dataapp"),
     },
     TemplateInfo {
       name: "fabricator-todoapp".into(),
@@ -57,109 +58,15 @@ fn curated_templates(discovered: &HashMap<String, TemplateInfo>) -> Vec<Template
       description:
         "A polished todo app with per-user row-level security on a Rayfin data model, ready to deploy to Fabric."
           .into(),
+      default_preview_mode: fabricator_default_preview_mode("fabricator-todoapp"),
     },
-    upstream(
-      "gettingstartedauth",
-      "Todo App with Auth + Docs",
-      "Todo app with Fabric auth, Tailwind CSS, and getting-started docs.",
-    ),
   ]
 }
 
-/// Parse the `{ bundled: [...] }` JSON emitted by `--list-templates` into a
-/// name -> TemplateInfo map, tolerating non-JSON noise (npm chatter) by scanning
-/// each line for the first object that parses with a non-empty `bundled` array.
-fn parse_bundled_templates(stdout: &str) -> HashMap<String, TemplateInfo> {
-  fn collect(v: &serde_json::Value) -> Option<HashMap<String, TemplateInfo>> {
-    let bundled = v.get("bundled")?.as_array()?;
-    let mut out = HashMap::new();
-    for t in bundled {
-      let Some(name) = t.get("name").and_then(|n| n.as_str()) else {
-        continue;
-      };
-      let display_name = t
-        .get("displayName")
-        .and_then(|v| v.as_str())
-        .unwrap_or(name)
-        .to_string();
-      let description = t
-        .get("description")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-      out.insert(
-        name.to_string(),
-        TemplateInfo {
-          name: name.to_string(),
-          display_name,
-          description,
-        },
-      );
-    }
-    if out.is_empty() {
-      None
-    } else {
-      Some(out)
-    }
-  }
-
-  if let Ok(v) = serde_json::from_str::<serde_json::Value>(stdout.trim()) {
-    if let Some(map) = collect(&v) {
-      return map;
-    }
-  }
-  for line in stdout.lines() {
-    let line = line.trim();
-    if !line.starts_with('{') {
-      continue;
-    }
-    if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
-      if let Some(map) = collect(&v) {
-        return map;
-      }
-    }
-  }
-  // Last resort: carve the widest `{...}` span out of mixed output (handles
-  // pretty-printed JSON interleaved with npm's lifecycle preamble).
-  if let (Some(start), Some(end)) = (stdout.find('{'), stdout.rfind('}')) {
-    if end > start {
-      if let Ok(v) = serde_json::from_str::<serde_json::Value>(&stdout[start..=end]) {
-        if let Some(map) = collect(&v) {
-          return map;
-        }
-      }
-    }
-  }
-  HashMap::new()
-}
-
-/// Caches the curated template list for the session. Discovery via the create
-/// command costs several seconds *even when npm has it cached* (it re-resolves
-/// `@latest` against the registry), and the set is stable, so we only pay it
-/// once per session.
-static TEMPLATES_CACHE: Lazy<std::sync::Mutex<Option<Vec<TemplateInfo>>>> =
-  Lazy::new(|| std::sync::Mutex::new(None));
-
-/// List the curated built-in templates. Discovery runs through the official
-/// `npm create @microsoft/rayfin@latest -- --list-templates` scaffolder (the
-/// same engine as creation) to pull live upstream metadata; the Fabricator
-/// variants replace the upstream data/todo templates, and a curated fallback
-/// keeps the picker populated offline. The result is cached for the session so
-/// New Project opens instantly after the first call.
+/// List the built-in (bundled) templates shown in New Project. The set is constant
+/// (the two bundled Fabricator variants), so this is instant and works offline.
 pub async fn list_templates() -> Vec<TemplateInfo> {
-  if let Some(cached) = TEMPLATES_CACHE.lock().unwrap().clone() {
-    return cached;
-  }
-  let res = run(
-    "npm",
-    &["create", "@microsoft/rayfin@latest", "--", "--list-templates"],
-    RunOptions::timeout(60_000),
-  )
-  .await;
-  let discovered = parse_bundled_templates(&res.stdout);
-  let curated = curated_templates(&discovered);
-  *TEMPLATES_CACHE.lock().unwrap() = Some(curated.clone());
-  curated
+  bundled_templates()
 }
 
 /// Default community gallery (the user can point at any compatible repo).
@@ -346,6 +253,7 @@ fn register_project(dir: &Path, display_name: Option<&str>) -> StudioProject {
     workspace: None,
     workspace_name: None,
     deployment_names: None,
+    awaiting_first_deploy: None,
     model: None,
     effort: None,
     preview_mode: None,
@@ -526,6 +434,17 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   init_git_repo(&dir, &format!("Initial commit ({label})"), &on).await;
 
   let project = register_project(&dir, Some(&name));
+  // Mark this project as awaiting its first deployment so the workbench guides the
+  // user to deploy before chatting (cleared on the first successful deploy). This
+  // is set only on create — projects opened from disk are never gated. Also seed the
+  // template's default preview mode (the Data App opens embedded in the Fabric portal
+  // shell); the user can still flip the toolbar Fabric toggle afterward.
+  let default_preview = fabricator_default_preview_mode(&template);
+  store::mutate_project(&project.id, |p| {
+    p.awaiting_first_deploy = Some(true);
+    p.preview_mode = default_preview.clone();
+  });
+  let project = store::find_project(&project.id).unwrap_or(project);
   store::set_active(Some(project.id.clone()));
   say(&on, "\n✅ Project ready.\n");
   ProjectActionResult {
@@ -666,67 +585,37 @@ entries:
     assert_eq!(yaml_str(None), "");
   }
 
-  // The exact stdout shape `npm create @microsoft/rayfin@latest -- --list-templates`
-  // emits: npm's lifecycle preamble lines, then a single-line JSON document.
-  const NPM_LIST_OUTPUT: &str = r#"
-> rayfin-fabricator@0.16.0 npx
-> create-rayfin --list-templates
-
-{"schemaVersion":1,"bundled":[{"name":"blankapp","displayName":"Blank App","description":"Bare-bones app"},{"name":"dataapp","displayName":"Data App","description":"upstream data"},{"name":"gettingstartedauth","displayName":"Auth Docs","description":"upstream auth"},{"name":"todoapp","displayName":"Basic Todo App","description":"upstream todo"}],"registry":[]}
-"#;
-
   #[test]
-  fn parse_bundled_templates_ignores_npm_preamble() {
-    let map = parse_bundled_templates(NPM_LIST_OUTPUT);
-    assert_eq!(map.len(), 4);
-    assert_eq!(map.get("blankapp").unwrap().display_name, "Blank App");
-    assert_eq!(map.get("dataapp").unwrap().description, "upstream data");
+  fn bundled_templates_lists_only_the_fabricator_variants() {
+    let bundled = bundled_templates();
+    let names: Vec<&str> = bundled.iter().map(|t| t.name.as_str()).collect();
+    // Only the two bundled Fabricator templates are offered as built-ins; the
+    // upstream blankapp / gettingstartedauth entries are dropped.
+    assert_eq!(names, vec!["fabricator-dataapp", "fabricator-todoapp"]);
+    assert!(bundled
+      .iter()
+      .all(|t| !t.display_name.is_empty() && !t.description.is_empty()));
   }
 
   #[test]
-  fn parse_bundled_templates_handles_pretty_printed_json() {
-    let pretty = "noise\n{\n  \"bundled\": [\n    { \"name\": \"blankapp\", \"displayName\": \"Blank App\" }\n  ]\n}\ntrailer";
-    let map = parse_bundled_templates(pretty);
-    assert_eq!(map.len(), 1);
-    assert_eq!(map.get("blankapp").unwrap().display_name, "Blank App");
+  fn data_app_defaults_to_embedded_fabric_preview() {
+    let bundled = bundled_templates();
+    let data = bundled.iter().find(|t| t.name == "fabricator-dataapp").unwrap();
+    let todo = bundled.iter().find(|t| t.name == "fabricator-todoapp").unwrap();
+    // The Data App opens embedded in the Fabric portal shell by default…
+    assert_eq!(data.default_preview_mode.as_deref(), Some("fabric"));
+    // …while the Todo App uses the direct app view.
+    assert_eq!(todo.default_preview_mode, None);
   }
 
   #[test]
-  fn parse_bundled_templates_empty_on_garbage() {
-    assert!(parse_bundled_templates("not json at all").is_empty());
-    assert!(parse_bundled_templates("{\"bundled\":[]}").is_empty());
-  }
-
-  #[test]
-  fn curated_templates_replaces_data_and_todo_with_fabricator_variants() {
-    let discovered = parse_bundled_templates(NPM_LIST_OUTPUT);
-    let curated = curated_templates(&discovered);
-    let names: Vec<&str> = curated.iter().map(|t| t.name.as_str()).collect();
-    // Curated, ordered set: upstream data/todo are dropped in favor of the
-    // bundled Fabricator variants.
+  fn fabricator_default_preview_mode_only_fabric_for_data_app() {
     assert_eq!(
-      names,
-      vec!["blankapp", "fabricator-dataapp", "fabricator-todoapp", "gettingstartedauth"]
+      fabricator_default_preview_mode("fabricator-dataapp").as_deref(),
+      Some("fabric")
     );
-    assert!(!names.contains(&"dataapp"));
-    assert!(!names.contains(&"todoapp"));
-    // Upstream entries are enriched from discovery…
-    assert_eq!(curated[0].display_name, "Blank App");
-    assert_eq!(curated[3].display_name, "Auth Docs");
-    // …while the Fabricator variants carry curated copy.
-    assert_eq!(curated[1].display_name, "Data App");
-    assert_eq!(curated[2].display_name, "Todo App");
-  }
-
-  #[test]
-  fn curated_templates_uses_fallback_copy_when_discovery_empty() {
-    let curated = curated_templates(&HashMap::new());
-    let names: Vec<&str> = curated.iter().map(|t| t.name.as_str()).collect();
-    assert_eq!(
-      names,
-      vec!["blankapp", "fabricator-dataapp", "fabricator-todoapp", "gettingstartedauth"]
-    );
-    // No discovery → curated fallback copy is present (non-empty descriptions).
-    assert!(curated.iter().all(|t| !t.description.is_empty()));
+    assert_eq!(fabricator_default_preview_mode("fabricator-todoapp"), None);
+    assert_eq!(fabricator_default_preview_mode("blankapp"), None);
+    assert_eq!(fabricator_default_preview_mode("anything-else"), None);
   }
 }
