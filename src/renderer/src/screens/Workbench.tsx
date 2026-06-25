@@ -116,7 +116,6 @@ export default function Workbench({
   const [confirmDeploy, setConfirmDeploy] = useState<{
     projectId: string
     workspace?: string
-    force?: boolean
     behind: number
   } | null>(null)
   /** True while the deploy warning's "Get latest first" pull is running. */
@@ -274,7 +273,7 @@ export default function Workbench({
   }, [active?.id])
 
   const runDeploy = useCallback(
-    async (projectId: string, workspace?: string, force?: boolean): Promise<void> => {
+    async (projectId: string, workspace?: string): Promise<void> => {
       if (deployingIdRef.current) {
         // A deploy is already streaming — queue this one to run right after.
         pendingDeployRef.current.add(projectId)
@@ -283,12 +282,12 @@ export default function Workbench({
       deployingIdRef.current = projectId
       setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
       try {
-        let result = await window.api.deploy.run(projectId, workspace, force)
+        let result = await window.api.deploy.run(projectId, workspace)
         // A deploy that failed only because the Fabric/Rayfin login expired: re-sign-in
         // once and retry, so an expired token doesn't force a manual sign out / back in.
         if (!result.ok && result.outcome === 'not-signed-in') {
           const login = await window.api.auth.loginRayfin()
-          if (login.ok) result = await window.api.deploy.run(projectId, workspace, force)
+          if (login.ok) result = await window.api.deploy.run(projectId, workspace)
         }
         setDeploys((all) => {
           const cur = all[projectId] ?? { running: false, log: [] }
@@ -324,18 +323,18 @@ export default function Workbench({
    * so they never stall on a modal.
    */
   const requestUserDeploy = useCallback(
-    async (projectId: string, workspace?: string, force?: boolean): Promise<void> => {
+    async (projectId: string, workspace?: string): Promise<void> => {
       try {
         const div = await window.api.projects.git.divergence(projectId)
         if (div.behind > 0) {
           setDeployGuardError(null)
-          setConfirmDeploy({ projectId, workspace, force, behind: div.behind })
+          setConfirmDeploy({ projectId, workspace, behind: div.behind })
           return
         }
       } catch {
         /* divergence is best-effort — fall through and deploy */
       }
-      void runDeploy(projectId, workspace, force)
+      void runDeploy(projectId, workspace)
     },
     [runDeploy]
   )
@@ -908,7 +907,6 @@ export default function Workbench({
                     <PreviewPane
                       project={active}
                       deploy={deploys[active.id]}
-                      onDeploy={(workspace, force) => void requestUserDeploy(active.id, workspace, force)}
                       onCapture={(shot) => addShot(active.id, shot)}
                       focused={focusPane === 'preview'}
                       onToggleFocus={() =>
@@ -1054,14 +1052,14 @@ export default function Workbench({
                 return
               }
               setConfirmDeploy(null)
-              void runDeploy(c.projectId, c.workspace, c.force)
+              void runDeploy(c.projectId, c.workspace)
             })()
           }}
           onSecondary={() => {
             const c = confirmDeploy
             setConfirmDeploy(null)
             setDeployGuardError(null)
-            void runDeploy(c.projectId, c.workspace, c.force)
+            void runDeploy(c.projectId, c.workspace)
           }}
           onCancel={() => {
             setConfirmDeploy(null)

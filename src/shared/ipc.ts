@@ -252,7 +252,6 @@ export type DeployOutcome =
   | 'not-signed-in'
   | 'not-found'
   | 'needs-workspace'
-  | 'needs-force'
 
 export interface DeployResult {
   ok: boolean
@@ -1283,7 +1282,7 @@ export interface RayfinStudioApi {
      * `workspace` optionally targets a Fabric workspace by display name (first
      * deploy); subsequent deploys reuse the recorded active deployment.
      */
-    run: (projectId: string, workspace?: string, force?: boolean) => Promise<DeployResult>
+    run: (projectId: string, workspace?: string) => Promise<DeployResult>
     /** Read the persisted deployment status (`rayfin up status --json`). */
     status: (projectId: string) => Promise<DeployStatus>
     /** True when the project has uncommitted changes not yet deployed. */

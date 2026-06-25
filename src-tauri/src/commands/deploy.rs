@@ -229,9 +229,8 @@ pub async fn deploy_run(
   app: AppHandle,
   project_id: String,
   workspace: Option<String>,
-  force: Option<bool>,
 ) -> DeployResult {
-  run_deploy(app, project_id, workspace, force).await
+  run_deploy(app, project_id, workspace).await
 }
 
 /// Core deploy routine shared by the [`deploy_run`] command and the agent's
@@ -242,9 +241,7 @@ pub(crate) async fn run_deploy(
   app: AppHandle,
   project_id: String,
   workspace: Option<String>,
-  force: Option<bool>,
 ) -> DeployResult {
-  let force = force.unwrap_or(false);
   let Some(project) = store::find_project(&project_id) else {
     return DeployResult {
       ok: false,
@@ -284,10 +281,9 @@ pub(crate) async fn run_deploy(
     })
   };
 
-  let mut up_args: Vec<String> = vec!["up".into(), "-y".into()];
-  if force {
-    up_args.push("--force".into());
-  }
+  // Always force so destructive datamodel/schema changes are applied — a deploy
+  // must never leave the published datamodel stale.
+  let mut up_args: Vec<String> = vec!["up".into(), "-y".into(), "--force".into()];
   up_args.extend(workspace_args(workspace_target.as_deref()));
   let arg_refs: Vec<&str> = up_args.iter().map(|s| s.as_str()).collect();
 
@@ -327,8 +323,6 @@ pub(crate) async fn run_deploy(
     let lower = format!("{captured_text}{}", result.stderr).to_lowercase();
     let outcome = if NOT_SIGNED_RE.is_match(&lower) {
       "not-signed-in"
-    } else if !force && lower.contains("destructive") {
-      "needs-force"
     } else if NEEDS_WS_RE.is_match(&lower) {
       "needs-workspace"
     } else {
@@ -348,7 +342,6 @@ pub(crate) async fn run_deploy(
     telemetry::track_deploy(get_cached_identity().as_ref(), false);
     let sys = match outcome {
       "needs-workspace" => "\nThis project has no Fabric workspace yet — choose one to deploy into.\n".to_string(),
-      "needs-force" => "\nThis deploy needs --force to apply destructive schema changes (possible data loss).\n".to_string(),
       _ => format!("\nDeploy failed: {error}\n"),
     };
     renderer(Stream::System, &sys);

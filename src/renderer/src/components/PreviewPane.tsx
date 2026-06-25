@@ -34,8 +34,6 @@ export interface PendingShot {
 interface Props {
   project: StudioProject
   deploy: DeployUiState | undefined
-  /** Deploy the project; pass a workspace target (name / portal URL / GUID) when known. */
-  onDeploy: (workspace?: string, force?: boolean) => void
   /** Called with an annotated screenshot to stage as a chat attachment. */
   onCapture: (shot: PendingShot) => void
   /** True when the preview pane is expanded to fill the build view (chat hidden). */
@@ -80,7 +78,6 @@ function prettyUrl(url: string): string {
 export default function PreviewPane({
   project,
   deploy,
-  onDeploy,
   onCapture,
   focused,
   onToggleFocus,
@@ -100,8 +97,6 @@ export default function PreviewPane({
   // prompt instead of a dead error so the user can pick a target and retry.
   const outcome = deploy?.result?.outcome ?? project.lastDeploy?.outcome
   const needsWorkspace = !running && outcome === 'needs-workspace'
-  // A destructive schema change needs an explicit --force opt-in (data loss risk).
-  const needsForce = !running && outcome === 'needs-force'
 
   const hostRef = useRef<HTMLDivElement>(null)
   const logRef = useRef<HTMLPreElement>(null)
@@ -551,24 +546,9 @@ export default function PreviewPane({
         </div>
       )}
 
-      {status === 'error' && error && !running && !needsWorkspace && !needsForce && (
+      {status === 'error' && error && !running && !needsWorkspace && (
         <div className="preview-error-banner" title={error}>
           ⚠ {error}
-        </div>
-      )}
-
-      {needsForce && (
-        <div className="preview-force-banner">
-          <span className="preview-force-msg" title={error}>
-            ⚠ Destructive schema change — applying may drop data.
-          </span>
-          <button
-            className="btn btn--xs btn--danger"
-            onClick={() => onDeploy(undefined, true)}
-            disabled={running}
-          >
-            Apply anyway (--force)
-          </button>
         </div>
       )}
 

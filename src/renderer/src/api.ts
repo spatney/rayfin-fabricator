@@ -169,8 +169,8 @@ export const api: RayfinStudioApi = {
   },
 
   deploy: {
-    run: (projectId: string, workspace?: string, force?: boolean) =>
-      invoke('deploy_run', { projectId, workspace, force }),
+    run: (projectId: string, workspace?: string) =>
+      invoke('deploy_run', { projectId, workspace }),
     list: (projectId: string) => invoke('deploy_list', { projectId }),
     switch: (projectId: string, workspace: string, byId?: boolean) =>
       invoke('deploy_switch', { projectId, workspace, byId }),

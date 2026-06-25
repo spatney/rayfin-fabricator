@@ -192,7 +192,7 @@ struct DeployAndWaitTool {
 #[async_trait]
 impl ToolHandler for DeployAndWaitTool {
   async fn call(&self, _invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
-    let result = deploy::run_deploy(self.app.clone(), self.project_id.clone(), None, None).await;
+    let result = deploy::run_deploy(self.app.clone(), self.project_id.clone(), None).await;
     if !result.ok {
       let err = result.error.unwrap_or_else(|| "deploy failed".to_string());
       return Ok(failure(format!("Deploy failed ({}): {err}", result.outcome)));

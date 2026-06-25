@@ -4686,25 +4686,6 @@ code {
   text-overflow: ellipsis;
 }
 
-/* Destructive-change (--force) guardrail banner */
-.preview-force-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  font-size: 12px;
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 16%, var(--bg-elev));
-  border-bottom: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border));
-}
-.preview-force-msg {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Deployments switcher popover */
 .deployments-wrap {
   position: relative;
