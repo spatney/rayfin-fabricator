@@ -30,8 +30,25 @@ const BUY_URL = 'https://learn.microsoft.com/fabric/enterprise/buy-subscription'
 
 /** "F-SKU · F2" style label for a workspace's capacity. */
 function skuText(w: FabricWorkspace): string {
+  if (w.capacityKind === 'unknown') return 'Capacity'
   const fam = w.capacityKind === 'fabric' ? 'F-SKU' : w.capacityKind === 'premium' ? 'P-SKU' : ''
   return fam + (w.sku ? ` · ${w.sku}` : '')
+}
+
+/** Tooltip for a workspace's capacity chip. */
+function skuTitle(w: FabricWorkspace): string | undefined {
+  if (w.capacityKind === 'unknown') {
+    return 'On a dedicated capacity, but its SKU isn’t visible to you (you don’t administer it) — verified when you deploy'
+  }
+  return w.capacityName ? `${w.capacityName} (${w.sku})` : w.sku
+}
+
+/** Why a workspace can't host a Rayfin app — shown on greyed-out ineligible rows. */
+function reasonFor(w: FabricWorkspace): string {
+  if (w.capacityKind === 'other') {
+    return `Capacity ${w.sku ? `(${w.sku}) ` : ''}isn’t Fabric (F-SKU) or Premium (P-SKU)`
+  }
+  return 'No Fabric/Premium capacity assigned'
 }
 
 /**
@@ -112,17 +129,19 @@ export default function DeploymentsControl({
 
   const all = wsResult?.ok && wsResult.workspaces ? wsResult.workspaces : []
   const eligible = all.filter((w) => w.eligible)
-  // Once the eligible list grows past this, surface a search box to narrow it.
+  const ineligible = all.filter((w) => !w.eligible)
+  // Once the list grows past this, surface a search box to narrow it. Search
+  // spans ALL workspaces (including ineligible ones) so a workspace a user
+  // expects to find is always reachable, even when it can't be selected.
   const SEARCH_THRESHOLD = 10
-  const showWsSearch = eligible.length > SEARCH_THRESHOLD
+  const showWsSearch = all.length > SEARCH_THRESHOLD
   const q = wsQuery.trim().toLowerCase()
-  const shownEligible =
-    showWsSearch && q
-      ? eligible.filter((w) =>
-          [w.displayName, w.region, w.capacityName, w.sku]
-            .some((field) => field?.toLowerCase().includes(q))
-        )
-      : eligible
+  const matchesQuery = (w: FabricWorkspace): boolean =>
+    [w.displayName, w.region, w.capacityName, w.sku].some((field) =>
+      field?.toLowerCase().includes(q)
+    )
+  const shownEligible = showWsSearch && q ? eligible.filter(matchesQuery) : eligible
+  const shownIneligible = showWsSearch && q ? ineligible.filter(matchesQuery) : ineligible
   const wsById = (id?: string): FabricWorkspace | undefined =>
     id ? all.find((w) => w.id === id) : undefined
 
@@ -265,7 +284,7 @@ export default function DeploymentsControl({
                     <span className="ws-spinner" />
                     Loading your workspaces…
                   </div>
-                ) : eligible.length > 0 ? (
+                ) : all.length > 0 ? (
                   <>
                     {showWsSearch && (
                       <div className="ws-search">
@@ -274,7 +293,7 @@ export default function DeploymentsControl({
                         </span>
                         <input
                           className="ws-input ws-search-input"
-                          placeholder={`Search ${eligible.length} workspaces…`}
+                          placeholder={`Search ${all.length} workspaces…`}
                           value={wsQuery}
                           spellCheck={false}
                           onChange={(e) => setWsQuery(e.target.value)}
@@ -291,7 +310,32 @@ export default function DeploymentsControl({
                         )}
                       </div>
                     )}
-                    {shownEligible.length > 0 ? (
+                    {eligible.length === 0 && (
+                      <div className="ws-empty">
+                        <p className="ws-empty-title">No eligible workspaces</p>
+                        <p className="ws-empty-sub">
+                          Rayfin apps need a workspace on a Fabric (<strong>F-SKU</strong>) or Power
+                          BI Premium (<strong>P-SKU</strong>) capacity. None of your {all.length}{' '}
+                          workspace{all.length === 1 ? '' : 's'} qualify — they’re listed below so
+                          you can see why. Start a free Fabric trial or add a capacity, then refresh.
+                        </p>
+                        <div className="ws-empty-actions">
+                          <button
+                            className="btn btn--xs btn--primary"
+                            onClick={() => void window.api.openExternal(TRIAL_URL)}
+                          >
+                            Start a free trial
+                          </button>
+                          <button
+                            className="btn btn--xs btn--ghost"
+                            onClick={() => void window.api.openExternal(BUY_URL)}
+                          >
+                            Buy a capacity
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {shownEligible.length > 0 && (
                       <div className="ws-list" role="listbox">
                         {shownEligible.map((w) => (
                           <button
@@ -305,14 +349,44 @@ export default function DeploymentsControl({
                             </span>
                             <span
                               className={`ws-sku ws-sku--${w.capacityKind}`}
-                              title={w.capacityName ? `${w.capacityName} (${w.sku})` : w.sku}
+                              title={skuTitle(w)}
                             >
                               {skuText(w)}
                             </span>
                           </button>
                         ))}
                       </div>
-                    ) : (
+                    )}
+                    {shownIneligible.length > 0 && (
+                      <>
+                        {eligible.length > 0 && (
+                          <div className="ws-group-label">Not eligible</div>
+                        )}
+                        <div className="ws-list ws-list--muted" role="list">
+                          {shownIneligible.map((w) => (
+                            <button
+                              key={w.id}
+                              type="button"
+                              className="ws-item ws-item--ineligible"
+                              disabled
+                              title={reasonFor(w)}
+                            >
+                              <span className="ws-item-main">
+                                <span className="ws-item-name">{w.displayName}</span>
+                                <span className="ws-item-sub ws-reason">{reasonFor(w)}</span>
+                              </span>
+                              <span
+                                className={`ws-sku ws-sku--${w.capacityKind}`}
+                                title={w.capacityName ?? undefined}
+                              >
+                                {w.sku ?? '—'}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {q && shownEligible.length === 0 && shownIneligible.length === 0 && (
                       <div className="ws-empty">
                         <p className="ws-empty-sub">
                           No workspaces match “{wsQuery.trim()}”.
@@ -328,14 +402,10 @@ export default function DeploymentsControl({
                   </>
                 ) : wsResult?.ok ? (
                   <div className="ws-empty">
-                    <p className="ws-empty-title">No eligible workspaces</p>
+                    <p className="ws-empty-title">No workspaces found</p>
                     <p className="ws-empty-sub">
-                      Rayfin apps need a workspace on a Fabric (<strong>F-SKU</strong>) or Power BI
-                      Premium (<strong>P-SKU</strong>) capacity.
-                      {all.length > 0
-                        ? ` None of your ${all.length} workspace${all.length === 1 ? '' : 's'} qualify.`
-                        : ''}{' '}
-                      Start a free Fabric trial or add a capacity, then refresh.
+                      We couldn’t find any Fabric workspaces for your account. Start a free Fabric
+                      trial or add a capacity, then refresh.
                     </p>
                     <div className="ws-empty-actions">
                       <button

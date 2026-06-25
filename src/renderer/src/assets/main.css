@@ -1870,6 +1870,38 @@ code {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
+.ws-sku--none,
+.ws-sku--other {
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text-dim) 14%, transparent);
+}
+/* On a dedicated capacity but SKU not visible to the user — selectable, not an error. */
+.ws-sku--unknown {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+/* Ineligible workspaces are listed (so users can find them) but not selectable. */
+.ws-item--ineligible {
+  cursor: default;
+}
+.ws-item--ineligible .ws-item-name {
+  color: var(--text-dim);
+}
+.ws-reason {
+  color: var(--text-dim);
+  font-style: italic;
+}
+.ws-list--muted {
+  margin-top: 2px;
+}
+.ws-group-label {
+  margin: 8px 2px 1px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
 .ws-empty {
   display: flex;
   flex-direction: column;

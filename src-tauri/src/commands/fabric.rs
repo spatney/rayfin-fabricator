@@ -41,6 +41,43 @@ console.info = console.log
 
 import { pathToFileURL } from 'node:url'
 
+const API_HOST = 'https://api.fabric.microsoft.com'
+
+// Fabric list endpoints page at 100 items each, returning a continuationUri /
+// continuationToken when more remain. Follow every page so the result is
+// complete — otherwise workspaces (or capacities) past the first page silently
+// vanish from the picker. tolerate: degrade to what we have instead of throwing.
+async function fetchAllPages(startUrl, headers, { tolerate = false, label = '' } = {}) {
+  const out = []
+  const seen = new Set()
+  let url = startUrl
+  for (let i = 0; i < 100 && url; i++) {
+    if (seen.has(url)) break
+    seen.add(url)
+    let res
+    try {
+      res = await fetch(url, { headers })
+    } catch (e) {
+      if (tolerate) break
+      throw e
+    }
+    if (!res.ok) {
+      if (tolerate) break
+      throw new Error('Fabric ' + (label || startUrl) + ' request failed (' + res.status + ')')
+    }
+    const json = await res.json()
+    for (const v of json.value || []) out.push(v)
+    if (json.continuationUri) {
+      url = json.continuationUri.startsWith('http') ? json.continuationUri : API_HOST + json.continuationUri
+    } else if (json.continuationToken) {
+      url = startUrl + (startUrl.includes('?') ? '&' : '?') + '$continuationToken=' + encodeURIComponent(json.continuationToken)
+    } else {
+      url = null
+    }
+  }
+  return out
+}
+
 async function main() {
   const [authPath, base] = process.argv.slice(2)
   const auth = await import(pathToFileURL(authPath).href)
@@ -49,31 +86,33 @@ async function main() {
   const { token } = await rf.acquireToken(undefined, { silentOnly: true })
   const headers = { Authorization: 'Bearer ' + token }
 
-  const wsRes = await fetch(base + '/workspaces', { headers })
-  if (!wsRes.ok) throw new Error('Fabric /workspaces request failed (' + wsRes.status + ')')
-  const wsJson = await wsRes.json()
+  // Follow pagination (100/page) so no workspace past the first page is lost.
+  const wsValue = await fetchAllPages(base + '/workspaces', headers, { label: '/workspaces' })
 
   // Capacities give us the SKU (F-SKU detection); tolerate failure (some
   // tenants restrict the endpoint) by degrading to workspaces without SKUs.
-  let caps = []
-  try {
-    const capRes = await fetch(base + '/capacities', { headers })
-    if (capRes.ok) caps = (await capRes.json()).value || []
-  } catch {}
-  const capById = new Map(caps.map((c) => [c.id, c]))
+  // Paginate too — a capacity past page 1 would otherwise leave its workspace
+  // SKU-less and wrongly ineligible.
+  const caps = await fetchAllPages(base + '/capacities', headers, { tolerate: true, label: '/capacities' })
+  // Index by lower-cased id — /workspaces and /capacities can disagree on GUID casing.
+  const capById = new Map(caps.map((c) => [String(c.id).toLowerCase(), c]))
 
   const kindOf = (sku) => {
-    if (!sku) return 'none'
     const s = String(sku).toUpperCase()
     if (s.startsWith('F')) return 'fabric'
     if (s.startsWith('P')) return 'premium'
     return 'other'
   }
 
-  const workspaces = (wsJson.value || []).map((w) => {
-    const cap = w.capacityId ? capById.get(w.capacityId) : undefined
+  const workspaces = wsValue.map((w) => {
+    const cap = w.capacityId ? capById.get(String(w.capacityId).toLowerCase()) : undefined
     const sku = cap && cap.sku ? String(cap.sku) : undefined
-    const capacityKind = kindOf(sku)
+    // The SKU only resolves for capacities the signed-in user *administers*.
+    // /capacities omits capacities the user merely has member access to, so a
+    // workspace on someone else's F/P capacity comes back SKU-less. It still has
+    // a capacityId, so classify it 'unknown' (eligible — the deploy validates)
+    // rather than wrongly blocking it. 'none' = genuinely no dedicated capacity.
+    const capacityKind = sku ? kindOf(sku) : w.capacityId ? 'unknown' : 'none'
     return {
       id: w.id,
       displayName: w.displayName,
@@ -83,8 +122,9 @@ async function main() {
       sku,
       capacityName: cap && cap.displayName ? cap.displayName : undefined,
       capacityKind,
-      // Only Fabric (F-SKU) or Power BI Premium (P-SKU) capacities can host a Rayfin app.
-      eligible: capacityKind === 'fabric' || capacityKind === 'premium'
+      // Fabric (F) / Premium (P) capacities can host a Rayfin app; 'unknown'
+      // (capacity present but its SKU isn't visible to this user) is allowed too.
+      eligible: capacityKind === 'fabric' || capacityKind === 'premium' || capacityKind === 'unknown'
     }
   })
   process.stdout.write(JSON.stringify({ ok: true, workspaces }))
@@ -494,6 +534,12 @@ mod tests {
     assert!(HELPER_SOURCE.contains("getRayfinAuth"));
     assert!(HELPER_SOURCE.contains("silentOnly: true"));
     assert!(HELPER_SOURCE.contains("process.stdout.write(JSON.stringify({ ok: true, workspaces }))"));
+    // The helper must follow Fabric's 100/page pagination for both lists.
+    assert!(HELPER_SOURCE.contains("fetchAllPages"));
+    assert!(HELPER_SOURCE.contains("continuationUri"));
+    assert!(HELPER_SOURCE.contains("continuationToken"));
+    // A workspace with a capacity but no visible SKU is 'unknown' (still eligible).
+    assert!(HELPER_SOURCE.contains("'unknown'"));
     assert!(DELETE_HELPER_SOURCE.contains("method: 'DELETE'"));
     assert!(DELETE_HELPER_SOURCE.contains("res.status === 404"));
   }

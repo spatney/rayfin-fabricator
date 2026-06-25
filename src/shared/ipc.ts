@@ -99,11 +99,16 @@ export interface FabricWorkspace {
   sku?: string
   /** Capacity display name, when known. */
   capacityName?: string
-  /** Capacity family inferred from the SKU prefix (F* = fabric, P* = premium). */
-  capacityKind: 'fabric' | 'premium' | 'other' | 'none'
   /**
-   * True when a Rayfin app can be created in this workspace — only Fabric
-   * (F-SKU) or Power BI Premium (P-SKU) capacities qualify.
+   * Capacity family inferred from the SKU prefix (F* = fabric, P* = premium).
+   * 'unknown' = the workspace is on a dedicated capacity but its SKU isn't
+   * visible to the signed-in user (they don't administer that capacity).
+   */
+  capacityKind: 'fabric' | 'premium' | 'other' | 'none' | 'unknown'
+  /**
+   * True when a Rayfin app can be created in this workspace — Fabric (F-SKU),
+   * Power BI Premium (P-SKU), or 'unknown' (capacity present, SKU not visible)
+   * qualify; the deploy performs the final validation.
    */
   eligible: boolean
 }
