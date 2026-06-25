@@ -3,7 +3,7 @@
   "icon": "data-app",
   "services": {
     "auth": true,
-    "data": true,
+    "data": false,
     "storage": false,
     "staticHosting": true
   },

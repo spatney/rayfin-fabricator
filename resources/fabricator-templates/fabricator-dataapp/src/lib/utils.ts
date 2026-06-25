@@ -5,12 +5,14 @@
 // </copyright>
 //-----------------------------------------------------------------------
 
-import { EmptyStatePreview } from "./EmptyStatePreview";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
-// Replace `<EmptyStatePreview />` with your dashboard, remove the import
-// above, and delete `EmptyStatePreview.tsx` and `empty-state-preview-world-map.png`.
-function App() {
-    return <EmptyStatePreview />;
+/**
+ * Merge Tailwind CSS class names with conflict resolution.
+ *
+ *   cn("px-2 py-1", isActive && "bg-primary text-primary-foreground")
+ */
+export function cn(...inputs: ClassValue[]) {
+    return twMerge(clsx(inputs));
 }
-
-export default App;

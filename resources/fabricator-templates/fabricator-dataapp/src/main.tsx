@@ -1,15 +1,39 @@
+//-----------------------------------------------------------------------
+// <copyright company="Microsoft Corporation">
+//        Copyright (c) Microsoft Corporation.  All rights reserved.
+//        Licensed under the MIT license. See LICENSE file in the project root for full license information.
+// </copyright>
+//-----------------------------------------------------------------------
+
 import { createRoot } from 'react-dom/client';
+import { ErrorBoundary } from "react-error-boundary";
 
-import App from '@/App';
-import { AuthProvider } from '@/hooks/AuthContext';
-import { bootstrapAuth } from '@/services/bootstrap';
+import App from './App.tsx';
+import { ErrorFallback } from './ErrorFallback';
+import { useAppTheme } from './hooks/use-theme';
+import { ThemeContext } from './hooks/theme.context';
+import { AuthProvider } from './hooks/use-auth';
+import { bootstrapAuth } from './services/rayfin-auth.service';
+import { AuthGate } from './components/auth-gate.component';
 
-import './main.css';
+import "./global.css"
 
-const authService = bootstrapAuth();
+const rayfinAuthService = bootstrapAuth();
 
-createRoot(document.getElementById('root')!).render(
-  <AuthProvider authService={authService}>
-    <App />
-  </AuthProvider>
-);
+function Root() {
+    const { isDark, toggleTheme } = useAppTheme();
+
+    return (
+        <ThemeContext.Provider value={{ isDark, toggleTheme }}>
+            <ErrorBoundary FallbackComponent={ErrorFallback}>
+                <AuthProvider rayfinAuthService={rayfinAuthService}>
+                    <AuthGate>
+                        <App />
+                    </AuthGate>
+                </AuthProvider>
+            </ErrorBoundary>
+        </ThemeContext.Provider>
+    );
+}
+
+createRoot(document.getElementById('root')!).render(<Root />)

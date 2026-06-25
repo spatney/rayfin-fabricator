@@ -48,7 +48,7 @@ fn bundled_templates() -> Vec<TemplateInfo> {
       name: "fabricator-dataapp".into(),
       display_name: "Data App".into(),
       description:
-        "Fabric-authenticated React + Vite app wired for Rayfin data — add an entity and deploy to Fabric to try it."
+        "Fabric Analytics app — connect a Power BI semantic model and build dashboards with DAX-powered visuals, then deploy to Fabric to try it."
           .into(),
       default_preview_mode: fabricator_default_preview_mode("fabricator-dataapp"),
     },

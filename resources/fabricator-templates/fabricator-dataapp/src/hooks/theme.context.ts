@@ -5,12 +5,18 @@
 // </copyright>
 //-----------------------------------------------------------------------
 
-import { EmptyStatePreview } from "./EmptyStatePreview";
+import { createContext, useContext } from "react";
 
-// Replace `<EmptyStatePreview />` with your dashboard, remove the import
-// above, and delete `EmptyStatePreview.tsx` and `empty-state-preview-world-map.png`.
-function App() {
-    return <EmptyStatePreview />;
+interface ThemeContextValue {
+    isDark: boolean;
+    toggleTheme: () => void;
 }
 
-export default App;
+export const ThemeContext = createContext<ThemeContextValue>({
+    isDark: false,
+    toggleTheme: () => {},
+});
+
+export function useThemeContext() {
+    return useContext(ThemeContext);
+}
