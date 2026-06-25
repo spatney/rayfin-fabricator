@@ -1984,10 +1984,6 @@ code {
 .ws-item--ineligible .ws-item-name {
   color: var(--text-dim);
 }
-.ws-reason {
-  color: var(--text-dim);
-  font-style: italic;
-}
 .ws-list--muted {
   margin-top: 2px;
 }
@@ -1997,6 +1993,65 @@ code {
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
+  color: var(--text-dim);
+}
+/* Collapsible "Not eligible" group: collapsed by default so a long ineligible
+   list can't bury the eligible rows or push the deploy button off-screen. */
+.ws-ineligible {
+  display: flex;
+  flex-direction: column;
+}
+.ws-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 8px 0 1px;
+  padding: 5px 4px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ws-group-toggle:not(.ws-group-toggle--static):hover {
+  color: var(--text);
+}
+.ws-group-toggle--static {
+  cursor: default;
+}
+.ws-group-label--btn {
+  margin: 0;
+}
+.ws-group-chevron {
+  display: inline-flex;
+  font-size: 13px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.ws-group-chevron.is-open {
+  transform: rotate(90deg);
+}
+.ws-group-count {
+  margin-left: auto;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text-dim) 16%, transparent);
+  border-radius: 999px;
+}
+.ws-ineligible-hint {
+  margin: 2px 2px 4px;
+  font-size: 11px;
+  line-height: 1.45;
   color: var(--text-dim);
 }
 .ws-empty {

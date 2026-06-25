@@ -365,7 +365,7 @@ export default function Workbench({
   }, [active?.id])
 
   const runDeploy = useCallback(
-    async (projectId: string, workspace?: string, force?: boolean, notifySuccess = false): Promise<void> => {
+    async (projectId: string, workspace?: string, force?: boolean): Promise<void> => {
       if (deployingIdRef.current) {
         // A deploy is already streaming — queue this one to run right after.
         pendingDeployRef.current.add(projectId)
@@ -385,13 +385,11 @@ export default function Workbench({
           const cur = all[projectId] ?? { running: false, log: [] }
           return { ...all, [projectId]: { ...cur, running: false, result } }
         })
-        // Deploys are long and the user may be on another tab — surface the
-        // outcome regardless. Errors always toast; success only when the user
-        // explicitly asked (so post-turn auto-deploys stay quiet).
+        // Deploys are long and the user may be on another tab, so still surface
+        // failures wherever they are. Success needs no toast — it's already
+        // reflected in the preview pane and deploy status.
         if (!result.ok) {
           toast.error(result.error ?? 'The deployment did not complete.', { title: 'Deploy failed' })
-        } else if (notifySuccess) {
-          toast.success('Your app is live.', { title: 'Deployed' })
         }
         await refreshProjects()
       } finally {
@@ -436,7 +434,7 @@ export default function Workbench({
       } catch {
         /* divergence is best-effort — fall through and deploy */
       }
-      void runDeploy(projectId, workspace, force, true)
+      void runDeploy(projectId, workspace, force)
     },
     [runDeploy]
   )

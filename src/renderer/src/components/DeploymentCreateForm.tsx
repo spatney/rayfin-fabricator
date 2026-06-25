@@ -84,6 +84,7 @@ export default function DeploymentCreateForm({
   const [name, setName] = useState(defaultName)
   const [wsQuery, setWsQuery] = useState('')
   const [selectedWs, setSelectedWs] = useState<string | null>(null)
+  const [showIneligible, setShowIneligible] = useState(false)
 
   const all = wsResult?.ok && wsResult.workspaces ? wsResult.workspaces : []
   const eligible = all.filter((w) => w.eligible)
@@ -94,6 +95,11 @@ export default function DeploymentCreateForm({
     [w.displayName, w.region, w.capacityName, w.sku].some((field) => field?.toLowerCase().includes(q))
   const shownEligible = showWsSearch && q ? eligible.filter(matchesQuery) : eligible
   const shownIneligible = showWsSearch && q ? ineligible.filter(matchesQuery) : ineligible
+  // Collapse the (often long) ineligible list by default so it can't bury the
+  // eligible rows or push the deploy button off-screen. Force it open when there
+  // are no eligible workspaces (it's the only list to show) or while searching
+  // (matches must be visible since search spans every workspace).
+  const ineligibleExpanded = eligible.length === 0 || Boolean(q) || showIneligible
 
   function submit(): void {
     if (!selectedWs || running) return
@@ -199,31 +205,63 @@ export default function DeploymentCreateForm({
               </div>
             )}
             {shownIneligible.length > 0 && (
-              <>
-                {eligible.length > 0 && <div className="ws-group-label">Not eligible</div>}
-                <div className="ws-list ws-list--muted" role="list">
-                  {shownIneligible.map((w) => (
+              <div className="ws-ineligible">
+                {eligible.length > 0 &&
+                  (q ? (
+                    <div className="ws-group-toggle ws-group-toggle--static">
+                      <span className="ws-group-label ws-group-label--btn">Not eligible</span>
+                      <span className="ws-group-count">{shownIneligible.length}</span>
+                    </div>
+                  ) : (
                     <button
-                      key={w.id}
                       type="button"
-                      className="ws-item ws-item--ineligible"
-                      disabled
-                      title={reasonFor(w)}
+                      className="ws-group-toggle"
+                      aria-expanded={showIneligible}
+                      onClick={() => setShowIneligible((v) => !v)}
                     >
-                      <span className="ws-item-main">
-                        <span className="ws-item-name">{w.displayName}</span>
-                        <span className="ws-item-sub ws-reason">{reasonFor(w)}</span>
-                      </span>
                       <span
-                        className={`ws-sku ws-sku--${w.capacityKind}`}
-                        title={w.capacityName ?? undefined}
+                        className={`ws-group-chevron${showIneligible ? ' is-open' : ''}`}
+                        aria-hidden
                       >
-                        {w.sku ?? '—'}
+                        ›
                       </span>
+                      <span className="ws-group-label ws-group-label--btn">Not eligible</span>
+                      <span className="ws-group-count">{shownIneligible.length}</span>
                     </button>
                   ))}
-                </div>
-              </>
+                {ineligibleExpanded && (
+                  <>
+                    {eligible.length > 0 && (
+                      <p className="ws-ineligible-hint">
+                        These need a Fabric (<strong>F-SKU</strong>) or Power BI Premium (
+                        <strong>P-SKU</strong>) capacity.
+                      </p>
+                    )}
+                    <div className="ws-list ws-list--muted" role="list">
+                      {shownIneligible.map((w) => (
+                        <button
+                          key={w.id}
+                          type="button"
+                          className="ws-item ws-item--ineligible"
+                          disabled
+                          title={reasonFor(w)}
+                        >
+                          <span className="ws-item-main">
+                            <span className="ws-item-name">{w.displayName}</span>
+                            {w.region && <span className="ws-item-sub">{w.region}</span>}
+                          </span>
+                          <span
+                            className={`ws-sku ws-sku--${w.capacityKind}`}
+                            title={w.capacityName ?? undefined}
+                          >
+                            {w.sku ?? '—'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
             {q && shownEligible.length === 0 && shownIneligible.length === 0 && (
               <div className="ws-empty">
