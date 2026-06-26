@@ -17,6 +17,8 @@ pub const CHAT_EVENT: &str = "chat:event";
 pub const ADVISOR_EVENT: &str = "advisor:event";
 /// Event name for update download progress (matches `IpcChannels.updateProgress`).
 pub const UPDATE_PROGRESS: &str = "update:progress";
+/// Event name for project-delete file-count progress (matches `IpcChannels.deleteProgress`).
+pub const DELETE_PROGRESS: &str = "delete:progress";
 
 /// Build an [`OnData`] callback that forwards process output to the renderer on
 /// the given logical channel.

@@ -191,6 +191,23 @@ pub struct ProcLogEvent {
   pub data: String,
 }
 
+/// File-count progress streamed while a project's files are moved to the system
+/// trash. The trash move is atomic (no per-file callback), so we report the
+/// count from an up-front scan of the tree.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteProgressEvent {
+  /// Project id being deleted (lets the modal match its own delete).
+  pub id: String,
+  /// `"scanning"` while counting files, `"trashing"` while the OS moves them.
+  pub phase: String,
+  /// Files counted so far (equals `total` once the scan completes).
+  pub processed: u64,
+  /// Total files, known once the scan completes.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub total: Option<u64>,
+}
+
 /* ----------------------------- templates ----------------------------- */
 
 #[derive(Serialize, Clone)]

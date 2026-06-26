@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useSuppressPreview } from '../overlay'
 import { FabricIcon } from './icons'
-import type { ProjectsState, StudioProject } from '@shared/ipc'
+import type { DeleteProgressEvent, ProjectsState, StudioProject } from '@shared/ipc'
 
 interface Props {
   project: StudioProject
@@ -73,6 +73,22 @@ function AlertGlyph(): JSX.Element {
   )
 }
 
+/** Live hint for the active "move to trash" step, driven by `delete:progress`. */
+function localStepHint(
+  fallback: string,
+  progress: DeleteProgressEvent | null,
+  elapsed: number
+): string {
+  if (!progress) return fallback
+  if (progress.phase === 'scanning') {
+    return `Scanning files… ${progress.processed.toLocaleString()}`
+  }
+  const total = (progress.total ?? progress.processed).toLocaleString()
+  return elapsed > 0
+    ? `Moving ${total} files to trash… (${elapsed}s)`
+    : `Moving ${total} files to trash…`
+}
+
 /**
  * A focused, stepped dialog for deleting a project. Owns the full delete flow —
  * removing the deployed app(s) from Fabric (optional) and moving the local files
@@ -89,8 +105,29 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
   const [error, setError] = useState<string | null>(null)
   /** Which step failed — drives the recovery actions shown in the footer. */
   const [failedAt, setFailedAt] = useState<StepKey | null>(null)
+  /** Live file-count progress for the local "move to trash" step. */
+  const [localProgress, setLocalProgress] = useState<DeleteProgressEvent | null>(null)
+  /** Seconds elapsed during the (countless) OS trash move, for reassurance. */
+  const [trashElapsed, setTrashElapsed] = useState(0)
 
   const running = phase === 'running'
+
+  // Stream the backend's file-count progress for *this* project's delete.
+  useEffect(() => {
+    const off = window.api.onDeleteProgress((e) => {
+      if (e.id === project.id) setLocalProgress(e)
+    })
+    return off
+  }, [project.id])
+
+  // The OS trash move reports no per-file progress, so tick an elapsed timer
+  // while it runs so the step never looks frozen.
+  useEffect(() => {
+    if (localProgress?.phase !== 'trashing') return
+    const started = Date.now()
+    const t = setInterval(() => setTrashElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(t)
+  }, [localProgress?.phase])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -136,6 +173,8 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
     setSteps(plan)
     setError(null)
     setFailedAt(null)
+    setLocalProgress(null)
+    setTrashElapsed(0)
     setPhase('running')
 
     if (wantFabric) {
@@ -266,27 +305,33 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
             </div>
           ) : (
             <ol className="delete-steps">
-              {steps.map((s) => (
-                <li key={s.key} className={`delete-step delete-step--${s.status}`}>
-                  <span className="delete-step-icon" aria-hidden="true">
-                    {s.status === 'done' ? (
-                      <CheckGlyph />
-                    ) : s.status === 'error' ? (
-                      <AlertGlyph />
-                    ) : s.status === 'active' ? (
-                      <span className="delete-step-spin" />
-                    ) : s.key === 'fabric' ? (
-                      <FabricIcon width={15} height={15} />
-                    ) : (
-                      <TrashGlyph />
-                    )}
-                  </span>
-                  <span className="delete-step-text">
-                    <span className="delete-step-label">{s.label}</span>
-                    <span className="delete-step-hint">{s.hint}</span>
-                  </span>
-                </li>
-              ))}
+              {steps.map((s) => {
+                const hint =
+                  s.key === 'local' && s.status === 'active'
+                    ? localStepHint(s.hint, localProgress, trashElapsed)
+                    : s.hint
+                return (
+                  <li key={s.key} className={`delete-step delete-step--${s.status}`}>
+                    <span className="delete-step-icon" aria-hidden="true">
+                      {s.status === 'done' ? (
+                        <CheckGlyph />
+                      ) : s.status === 'error' ? (
+                        <AlertGlyph />
+                      ) : s.status === 'active' ? (
+                        <span className="delete-step-spin" />
+                      ) : s.key === 'fabric' ? (
+                        <FabricIcon width={15} height={15} />
+                      ) : (
+                        <TrashGlyph />
+                      )}
+                    </span>
+                    <span className="delete-step-text">
+                      <span className="delete-step-label">{s.label}</span>
+                      <span className="delete-step-hint">{hint}</span>
+                    </span>
+                  </li>
+                )
+              })}
               {error && (
                 <li className="delete-step-error" role="alert">
                   {error}

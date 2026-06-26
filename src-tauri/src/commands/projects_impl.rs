@@ -5,12 +5,12 @@
 //! removing.
 
 use std::collections::HashMap;
-use std::path::Path;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 use crate::commands::util::{is_rayfin_project, normalize, same_path, with_missing};
 use crate::services::exec::{run, OnData, RunOptions, Stream};
@@ -18,7 +18,7 @@ use crate::services::{emit, history, store};
 use crate::state::AppState;
 use crate::types::{
   CommunityGallery, CommunityGalleryResult, CommunityTemplate, CreateProjectInput,
-  ProjectActionResult, ProjectsState, StudioProject, TemplateInfo,
+  DeleteProgressEvent, ProjectActionResult, ProjectsState, StudioProject, TemplateInfo,
 };
 
 const CREATE_CHANNEL: &str = "create:project";
@@ -45,20 +45,20 @@ pub fn fabricator_default_preview_mode(template: &str) -> Option<String> {
 fn bundled_templates() -> Vec<TemplateInfo> {
   vec![
     TemplateInfo {
-      name: "fabricator-dataapp".into(),
-      display_name: "Data App".into(),
-      description:
-        "Fabric Analytics app — connect a Power BI semantic model and build dashboards with DAX-powered visuals, then deploy to Fabric to try it."
-          .into(),
-      default_preview_mode: fabricator_default_preview_mode("fabricator-dataapp"),
-    },
-    TemplateInfo {
       name: "fabricator-todoapp".into(),
       display_name: "Todo App".into(),
       description:
         "A polished todo app with per-user row-level security on a Rayfin data model, ready to deploy to Fabric."
           .into(),
       default_preview_mode: fabricator_default_preview_mode("fabricator-todoapp"),
+    },
+    TemplateInfo {
+      name: "fabricator-dataapp".into(),
+      display_name: "Data App".into(),
+      description:
+        "Fabric Analytics app — connect a Power BI semantic model and build dashboards with DAX-powered visuals, then deploy to Fabric to try it."
+          .into(),
+      default_preview_mode: fabricator_default_preview_mode("fabricator-dataapp"),
     },
   ]
 }
@@ -494,7 +494,7 @@ pub async fn rename_project(id: String, name: String) -> ProjectActionResult {
 
 /// Remove a project. Forgets it by default; trashes the folder when `delete_files`.
 pub async fn remove_project(
-  _app: &AppHandle,
+  app: &AppHandle,
   state: &AppState,
   id: String,
   delete_files: bool,
@@ -506,12 +506,67 @@ pub async fn remove_project(
 
   if delete_files {
     if let Some(project) = store::find_project(&id) {
-      if Path::new(&project.path).exists() {
-        let _ = trash::delete(&project.path);
+      let path = project.path.clone();
+      if Path::new(&path).exists() {
+        // The trash move is blocking and can take a while for a project with a
+        // large node_modules, so run it off the async runtime and stream a live
+        // file count (delete:progress) so the delete never looks hung.
+        let app = app.clone();
+        let id = id.clone();
+        let _ =
+          tokio::task::spawn_blocking(move || count_and_trash(&app, &id, Path::new(&path))).await;
       }
     }
   }
   crate::commands::util::annotate_state(store::remove_project(&id))
+}
+
+/// Walk `root` streaming a throttled `delete:progress` file count, then move the
+/// whole tree to the system trash. The folder is trashed atomically (one
+/// `trash::delete`) so the user can still restore it; the up-front scan is purely
+/// to report a count (the OS move itself exposes no per-file progress).
+fn count_and_trash(app: &AppHandle, id: &str, root: &Path) {
+  emit_delete_progress(app, id, "scanning", 0, None);
+
+  let mut files: u64 = 0;
+  let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
+  let mut last_emit = Instant::now();
+  let mut last_count = 0u64;
+  while let Some(dir) = stack.pop() {
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+      continue;
+    };
+    for entry in entries.flatten() {
+      // `file_type()` doesn't follow symlinks, so symlinked directories aren't
+      // descended into (avoids cycles) — they count as a single entry.
+      if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+        stack.push(entry.path());
+      } else {
+        files += 1;
+        if files - last_count >= 300 || last_emit.elapsed() >= Duration::from_millis(90) {
+          last_count = files;
+          last_emit = Instant::now();
+          emit_delete_progress(app, id, "scanning", files, None);
+        }
+      }
+    }
+  }
+
+  emit_delete_progress(app, id, "trashing", files, Some(files));
+  let _ = trash::delete(root);
+}
+
+/// Emit one `delete:progress` event (file-count progress for a project delete).
+fn emit_delete_progress(app: &AppHandle, id: &str, phase: &str, processed: u64, total: Option<u64>) {
+  let _ = app.emit(
+    emit::DELETE_PROGRESS,
+    DeleteProgressEvent {
+      id: id.to_string(),
+      phase: phase.to_string(),
+      processed,
+      total,
+    },
+  );
 }
 
 #[cfg(test)]
@@ -588,7 +643,7 @@ entries:
     let names: Vec<&str> = bundled.iter().map(|t| t.name.as_str()).collect();
     // Only the two bundled Fabricator templates are offered as built-ins; the
     // upstream blankapp / gettingstartedauth entries are dropped.
-    assert_eq!(names, vec!["fabricator-dataapp", "fabricator-todoapp"]);
+    assert_eq!(names, vec!["fabricator-todoapp", "fabricator-dataapp"]);
     assert!(bundled
       .iter()
       .all(|t| !t.display_name.is_empty() && !t.description.is_empty()));

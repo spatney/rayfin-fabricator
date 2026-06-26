@@ -1,6 +1,26 @@
-import type { Dispatch, SetStateAction } from 'react'
+import { useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
+import { createPortal } from 'react-dom'
 import type { StudioProject } from '@shared/ipc'
 import logo from '../assets/logo.png'
+
+/** Width used to right-align the floating actions menu to its ⋯ button. */
+const MENU_WIDTH = 176
+
+/**
+ * Position the actions menu as a fixed overlay anchored to its ⋯ button. The menu
+ * is portaled to <body> so it can't be clipped by the recents list's
+ * `overflow-y: auto` scroll box (which also clips horizontally); it flips above
+ * the button when there isn't room below.
+ */
+function floatingMenuStyle(rect: DOMRect): CSSProperties {
+  const gap = 4
+  const estHeight = 124
+  const left = Math.max(8, Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8))
+  const below = rect.bottom + gap
+  const openUp = below + estHeight > window.innerHeight - 8
+  const top = openUp ? Math.max(8, rect.top - gap - estHeight) : below
+  return { position: 'fixed', top, left, right: 'auto' }
+}
 
 interface Props {
   /** All known projects, most-recently-used first. */
@@ -60,6 +80,8 @@ export default function HomeView({
   onOpenExisting,
   onChangeWorkspaceRoot
 }: Props): JSX.Element {
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null)
+
   return (
     <div className="home">
       <div className="home-inner">
@@ -138,27 +160,39 @@ export default function HomeView({
                       aria-label="Project actions"
                       onClick={(e) => {
                         e.stopPropagation()
-                        setMenuOpenId((cur) => (cur === p.id ? null : p.id))
+                        const next = menuOpenId === p.id ? null : p.id
+                        if (next) setAnchorRect(e.currentTarget.getBoundingClientRect())
+                        setMenuOpenId(next)
                       }}
                     >
                       ⋯
                     </button>
-                    {menuOpenId === p.id && (
-                      <div className="project-menu" onClick={(e) => e.stopPropagation()}>
-                        <button className="project-menu-item" onClick={() => onStartRename(p)}>
-                          Rename
-                        </button>
-                        <button className="project-menu-item" onClick={() => onRemoveFromList(p)}>
-                          Remove from list
-                        </button>
-                        <button
-                          className="project-menu-item project-menu-item--danger"
-                          onClick={() => onDeleteFromDisk(p)}
+                    {menuOpenId === p.id &&
+                      anchorRect &&
+                      createPortal(
+                        <div
+                          className="project-menu"
+                          style={floatingMenuStyle(anchorRect)}
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          Delete from disk…
-                        </button>
-                      </div>
-                    )}
+                          <button className="project-menu-item" onClick={() => onStartRename(p)}>
+                            Rename
+                          </button>
+                          <button
+                            className="project-menu-item"
+                            onClick={() => onRemoveFromList(p)}
+                          >
+                            Remove from list
+                          </button>
+                          <button
+                            className="project-menu-item project-menu-item--danger"
+                            onClick={() => onDeleteFromDisk(p)}
+                          >
+                            Delete from disk…
+                          </button>
+                        </div>,
+                        document.body
+                      )}
                   </div>
                 </div>
               ))}

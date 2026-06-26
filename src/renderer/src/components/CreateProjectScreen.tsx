@@ -375,7 +375,7 @@ export default function CreateProjectScreen({
                     className={`seg-btn${source === 'builtin' ? ' seg-btn--active' : ''}`}
                     onClick={() => setSource('builtin')}
                   >
-                    Built-in
+                    Featured
                   </button>
                   <button
                     type="button"

@@ -35,6 +35,18 @@ export interface UpdateProgress {
   total?: number
 }
 
+/** File-count progress while a project's files are moved to trash (mirrors the Rust `DeleteProgressEvent`). */
+export interface DeleteProgressEvent {
+  /** Project id being deleted (so the modal can match its own delete). */
+  id: string
+  /** `'scanning'` while counting files, `'trashing'` while the OS moves them. */
+  phase: 'scanning' | 'trashing'
+  /** Files counted so far (equals `total` once scanning completes). */
+  processed: number
+  /** Total files, known once the scan completes. */
+  total?: number
+}
+
 /* ------------------------------------------------------------------ *
  * Environment doctor
  * ------------------------------------------------------------------ */
@@ -1007,7 +1019,8 @@ export const IpcChannels = {
   advisorEvent: 'advisor:event',
   previewNav: 'preview:nav',
   previewAgent: 'preview:agent',
-  updateProgress: 'update:progress'
+  updateProgress: 'update:progress',
+  deleteProgress: 'delete:progress'
 } as const
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels]
@@ -1370,6 +1383,8 @@ export interface RayfinStudioApi {
 
   /** Subscribe to streamed process output. Returns an unsubscribe function. */
   onProcLog: (cb: (event: ProcLogEvent) => void) => () => void
+  /** Subscribe to project-delete file-count progress. Returns an unsubscribe function. */
+  onDeleteProgress: (cb: (event: DeleteProgressEvent) => void) => () => void
   /** Subscribe to streamed chat events. Returns an unsubscribe function. */
   onChatEvent: (cb: (envelope: ChatEventEnvelope) => void) => () => void
   /** Subscribe to streamed advisor events. Returns an unsubscribe function. */

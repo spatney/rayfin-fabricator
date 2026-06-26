@@ -23,6 +23,7 @@ import {
   type PreviewNavState,
   type PreviewAgentEvent,
   type ProcLogEvent,
+  type DeleteProgressEvent,
   type RayfinStudioApi,
   type ToolId,
   type UpdateProgress
@@ -204,6 +205,9 @@ export const api: RayfinStudioApi = {
 
   onProcLog: (cb: (event: ProcLogEvent) => void) =>
     subscribe<ProcLogEvent>(IpcChannels.procLog, cb),
+
+  onDeleteProgress: (cb: (event: DeleteProgressEvent) => void) =>
+    subscribe<DeleteProgressEvent>(IpcChannels.deleteProgress, cb),
 
   onChatEvent: (cb: (envelope: ChatEventEnvelope) => void) =>
     subscribe<ChatEventEnvelope>(IpcChannels.chatEvent, cb),
