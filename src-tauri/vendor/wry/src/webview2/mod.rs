@@ -294,7 +294,20 @@ impl InnerWebView {
     let additional_browser_args = pl_attrs.additional_browser_args.unwrap_or_else(|| {
       // remove "mini menu" - See https://github.com/tauri-apps/wry/issues/535
       // and "smart screen" - See https://github.com/tauri-apps/tauri/issues/1345
-      let default_args = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+      //
+      // [rayfin-desktop local patch] Also disable Chromium's native-window
+      // occlusion detection (CalculateNativeWinOcclusion) so WebView2 keeps
+      // rendering when the top-level window is minimized or fully occluded. The
+      // Fabricator agent screenshots the preview child silently while it is parked
+      // off-screen (see src/services/preview.rs `agent_capture`); without this, a
+      // capture taken while the app window is minimized returns a blank/stale frame
+      // or stalls `CapturePreview`. This is applied in the *shared default* (rather
+      // than per-webview) on purpose: the main window and the preview must keep
+      // IDENTICAL browser args, because WebView2 rejects environments with differing
+      // options that share a user-data folder (CreateCoreWebView2EnvironmentWithOptions
+      // fails with ERROR_INVALID_STATE / 0x8007139F). Re-apply this on wry updates.
+      let default_args =
+        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion";
       let mut arguments = String::from(default_args);
 
       if attributes.autoplay {

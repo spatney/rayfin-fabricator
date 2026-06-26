@@ -13,7 +13,7 @@
 //! of the project on disk, so a plain `copilot` CLI run sees none of them.
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use base64::Engine;
@@ -182,28 +182,14 @@ fn resolve_url(project_id: &str, input: &str) -> Result<String, String> {
   Ok(format!("{base}{path}"))
 }
 
-/// Ensure the preview webview exists and is on screen. Always asks the renderer
-/// to surface the preview (switch to the build view, un-collapse the pane) so the
-/// user watches what the agent is validating; then waits for the child webview to
-/// exist if this is the first time it is shown this session.
+/// Ensure the preview is ready for a capture. On **Windows** this is silent — the
+/// surface is prepared off-screen (built if it doesn't exist yet) and the user's
+/// current view is never changed, so the agent can screenshot the running app no
+/// matter which tab/modal/focus state the user is in (see
+/// [`preview::agent_ensure_preview`]). On other platforms it surfaces the preview
+/// to the user, as before.
 async fn ensure_preview(app: &AppHandle, url: &str) {
-  preview::request_preview_show(app, url);
-  if preview::is_preview_open(app) {
-    // Already created earlier (the renderer only hides it, never destroys it) —
-    // give the renderer a beat to re-show it at the host's bounds.
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    return;
-  }
-  // First-ever show: wait for the renderer's positioning loop to build it.
-  let start = Instant::now();
-  while start.elapsed() < SHOW_TIMEOUT {
-    tokio::time::sleep(Duration::from_millis(150)).await;
-    if preview::is_preview_open(app) {
-      // Give the first document a moment to paint before any capture.
-      tokio::time::sleep(Duration::from_millis(400)).await;
-      return;
-    }
-  }
+  preview::agent_ensure_preview(app, url, SHOW_TIMEOUT).await;
 }
 
 /// A successful `image/png` tool result the model can see.
@@ -303,7 +289,7 @@ impl ToolHandler for NavigateTool {
     // Brief settle for late SPA paints before grabbing the frame.
     tokio::time::sleep(Duration::from_millis(400)).await;
 
-    match preview::capture_preview_bytes(&self.app).await {
+    match preview::agent_capture(&self.app).await {
       Ok(png) => Ok(image_result(
         format!("Navigated to {target} and captured the running app."),
         png,
@@ -328,7 +314,7 @@ impl ToolHandler for ScreenshotTool {
     if let Some(url) = &live {
       ensure_preview(&self.app, url).await;
     }
-    match preview::capture_preview_bytes(&self.app).await {
+    match preview::agent_capture(&self.app).await {
       Ok(png) => {
         let where_ = live.map(|u| format!(" (showing {u})")).unwrap_or_default();
         Ok(image_result(
@@ -338,9 +324,9 @@ impl ToolHandler for ScreenshotTool {
         ))
       }
       Err(e) if live.is_some() => Ok(failure(format!(
-        "The app is deployed but the preview browser isn't ready to capture yet ({e}). It \
-         should appear in the Fabricator window momentarily — wait a moment and screenshot \
-         again, or use fabricator_navigate to open a specific route."
+        "The app is deployed but the preview browser isn't ready to capture yet ({e}). \
+         Wait a moment and screenshot again, or use fabricator_navigate to open a specific \
+         route."
       ))),
       Err(e) => Ok(failure(format!(
         "Couldn't capture the preview: {e}. Deploy the app first with \
@@ -391,10 +377,10 @@ impl ToolHandler for ScrollTool {
          fabricator_deploy_and_wait, then open a page with fabricator_navigate first.",
       ));
     }
-    // Only reveal the preview when it's actually hidden: re-showing can reset the
-    // page to the app root, so when it's already visible we scroll the exact page
-    // in place. Revealing (when hidden) goes through the renderer; the capture
-    // below refuses on a still-hidden surface, so there's no deadlock either way.
+    // When the preview is hidden, ensure it at least exists (Windows builds it
+    // off-screen if needed); the capture below reveals it off-screen, so we scroll
+    // the live page in place either way. When it's already visible we scroll the
+    // exact page the user sees — re-showing could reset it to the app root.
     if !preview::is_preview_visible(&self.app) {
       if let Some(url) = effective_base_url(&self.project_id) {
         ensure_preview(&self.app, &url).await;
@@ -406,15 +392,15 @@ impl ToolHandler for ScrollTool {
     }
     tokio::time::sleep(SCROLL_SETTLE).await;
 
-    match preview::capture_preview_bytes(&self.app).await {
+    match preview::agent_capture(&self.app).await {
       Ok(png) => Ok(image_result(
         format!("Scrolled {dir} and captured the preview."),
         png,
         format!("Preview after scrolling {dir}"),
       )),
       Err(e) => Ok(failure(format!(
-        "Scrolled {dir} but couldn't capture a screenshot: {e}. The preview may be hidden \
-         behind another tab — open a route with fabricator_navigate and try again."
+        "Scrolled {dir} but couldn't capture a screenshot: {e}. Wait a moment and try again, \
+         or open a route with fabricator_navigate first."
       ))),
     }
   }

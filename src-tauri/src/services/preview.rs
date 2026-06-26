@@ -33,8 +33,30 @@ const PREVIEW_NAV: &str = "preview:nav";
 /// Renderer event asking the UI to surface the preview at a URL on the agent's
 /// behalf (matches `IpcChannels.previewAgent`). Used by the Fabricator
 /// validation tools so a host-driven navigation/screenshot can reveal the
-/// preview pane even when another tab is focused.
+/// preview pane even when another tab is focused. Only used to *surface* the
+/// preview on non-Windows; on Windows the agent captures silently off-screen and
+/// never asks the UI to change the user's view (see [`agent_capture`]).
+#[cfg_attr(windows, allow(dead_code))]
 const PREVIEW_AGENT: &str = "preview:agent";
+
+/// Far-off-screen origin (logical px) used to park the preview for a *silent*
+/// agent capture: the surface is moved here — well outside any monitor — and made
+/// visible *there*, so WebView2 keeps rendering it (and `CapturePreview`
+/// completes) while it stays invisible to the user. See [`agent_capture`].
+#[cfg(windows)]
+const OFFSCREEN_COORD: f64 = 20_000.0;
+
+/// Viewport (logical px) used for a silent off-screen capture.
+#[cfg(windows)]
+const OFFSCREEN_SIZE: (f64, f64) = (1280.0, 800.0);
+
+/// Let a just-revealed off-screen surface produce a frame before capturing it.
+#[cfg(windows)]
+const OFFSCREEN_PAINT_SETTLE: Duration = Duration::from_millis(150);
+
+/// Let a freshly-built off-screen surface load/paint its first frame.
+#[cfg(windows)]
+const OFFSCREEN_BUILD_SETTLE: Duration = Duration::from_millis(400);
 
 /// Document-start script injected into the preview so the agent can later read
 /// the page's console output (see [`read_console`]). It mirrors `console.*`,
@@ -214,6 +236,12 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
     })
     .on_new_window(move |u, features| on_new_window(&popup_app, &u, features));
 
+  // The preview shares the default WebView2 user-data folder with the main window,
+  // so it MUST use the same browser arguments. Both inherit them from the vendored
+  // wry default (which disables native-window occlusion so the agent can capture the
+  // preview off-screen / while minimized — see vendor/wry/src/webview2/mod.rs and
+  // `agent_capture`). Do NOT set per-webview `additional_browser_args` here: a
+  // mismatch makes WebView2 fail creation with ERROR_INVALID_STATE (0x8007139F).
   window
     .add_child(builder, bounds.position(), bounds.size())
     .map_err(|e| AppError::Msg(format!("failed to create preview webview: {e}")))?;
@@ -489,23 +517,16 @@ pub async fn preview_capture(app: AppHandle) -> AppResult<String> {
   Ok(format!("data:image/png;base64,{b64}"))
 }
 
-/// Capture the current preview content as raw PNG bytes. Shared by the
-/// [`preview_capture`] command (which base64-encodes for the renderer) and the
-/// Fabricator `fabricator_screenshot`/`fabricator_navigate` tools (which return
-/// the bytes to the agent as an `image/png` tool result). Errors if the preview
-/// webview has not been created yet (the user has not opened a deployed app).
-pub(crate) async fn capture_preview_bytes(app: &AppHandle) -> AppResult<Vec<u8>> {
+/// Capture the current preview content as raw PNG bytes, **without** any
+/// visibility check. The caller MUST guarantee the surface is currently rendering
+/// (visible — possibly parked off-screen): WebView2's `CapturePreview` pumps the
+/// UI-thread message loop until completion, and on a hidden surface that signal
+/// never comes, freezing the whole app. The capture runs on the UI thread via
+/// [`tauri::webview::Webview::with_webview`]; the bytes come back over a oneshot.
+async fn capture_now(app: &AppHandle) -> AppResult<Vec<u8>> {
   let wv = app
     .get_webview(PREVIEW_LABEL)
     .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
-
-  // CapturePreview pumps the UI-thread message loop until WebView2 signals
-  // completion — but on a hidden surface that signal never comes, hanging the
-  // entire app (you can't even close the window). Refuse to capture unless the
-  // webview is currently shown; callers treat this as a soft failure.
-  if !app.state::<PreviewState>().inner.lock().unwrap().visible {
-    return Err(AppError::Msg("preview is not visible".into()));
-  }
 
   let (tx, rx) = oneshot::channel::<Result<Vec<u8>, String>>();
   wv.with_webview(move |platform| {
@@ -516,6 +537,94 @@ pub(crate) async fn capture_preview_bytes(app: &AppHandle) -> AppResult<Vec<u8>>
   rx.await
     .map_err(|_| AppError::Msg("preview capture was cancelled".into()))?
     .map_err(AppError::Msg)
+}
+
+/// Capture the current preview content as raw PNG bytes for the **renderer's own**
+/// annotate/capture flow ([`preview_capture`]). Refuses (soft failure) unless the
+/// surface is currently shown to the user, since the renderer only ever captures a
+/// visible preview. The Fabricator agent uses [`agent_capture`] instead, which can
+/// capture silently while the preview is hidden.
+pub(crate) async fn capture_preview_bytes(app: &AppHandle) -> AppResult<Vec<u8>> {
+  if app.get_webview(PREVIEW_LABEL).is_none() {
+    return Err(AppError::Msg("preview is not open".into()));
+  }
+  // CapturePreview pumps the UI-thread message loop until WebView2 signals
+  // completion — but on a hidden surface that signal never comes, hanging the
+  // entire app (you can't even close the window). Refuse to capture unless the
+  // webview is currently shown; callers treat this as a soft failure.
+  if !is_preview_visible(app) {
+    return Err(AppError::Msg("preview is not visible".into()));
+  }
+  capture_now(app).await
+}
+
+/// Capture the preview for a Fabricator agent tool **without disturbing the user's
+/// current view**.
+///
+/// If the preview is already on-screen, captures it in place (identical to the
+/// renderer path). Otherwise, on Windows, the surface is parked far off-screen and
+/// made visible *there* — invisible to the user — just long enough for
+/// `CapturePreview` to complete, then hidden again. The child keeps compositing
+/// while parked off-screen (and even while the whole app window is minimized)
+/// because Chromium's native-window occlusion detection is disabled for the shared
+/// WebView2 environment (see the `[rayfin-desktop local patch]` in
+/// `vendor/wry/src/webview2/mod.rs`), so the capture succeeds with no flicker and
+/// no view change — regardless of tab/modal/focus state or whether the window is
+/// minimized. On non-Windows the surface must be visible first (the macOS path
+/// surfaces it to the user, as before).
+pub(crate) async fn agent_capture(app: &AppHandle) -> AppResult<Vec<u8>> {
+  if app.get_webview(PREVIEW_LABEL).is_none() {
+    return Err(AppError::Msg("preview is not open".into()));
+  }
+  // Already on-screen → capture in place (no off-screen dance needed).
+  if is_preview_visible(app) {
+    return capture_now(app).await;
+  }
+
+  #[cfg(windows)]
+  {
+    let wv = app
+      .get_webview(PREVIEW_LABEL)
+      .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
+    // Move the (currently hidden) surface off-screen *before* revealing it, then
+    // show it there — so it never flashes at its old on-screen position. This
+    // mirrors `preview_show_url`'s proven set_bounds→show ordering. We drive
+    // `show()/hide()` directly and never touch `Inner.visible`, so the renderer
+    // stays the sole owner of user-facing visibility.
+    wv.set_bounds(offscreen_bounds().to_rect())
+      .map_err(|e| AppError::Msg(e.to_string()))?;
+    wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
+    tokio::time::sleep(OFFSCREEN_PAINT_SETTLE).await;
+    let result = capture_now(app).await;
+    // Restore the hidden state we borrowed — but only if the renderer still intends
+    // the preview hidden. If the user revealed it mid-capture (e.g. closed a
+    // covering modal), the renderer already set real bounds + `visible=true`; don't
+    // fight it by hiding. Leaving our off-screen bounds is otherwise fine: the
+    // renderer re-pushes real bounds on its next `showUrl`.
+    if !is_preview_visible(app) {
+      let _ = wv.hide();
+    }
+    result
+  }
+  #[cfg(not(windows))]
+  {
+    // macOS path unchanged: a hidden WKWebView can't be captured here. The agent's
+    // ensure step surfaces it to the user first; if it's still hidden, soft-fail.
+    Err(AppError::Msg("preview is not visible".into()))
+  }
+}
+
+/// Bounds used to park the preview far off-screen for a silent capture: a
+/// realistic desktop viewport positioned well outside any monitor, so the surface
+/// keeps rendering (and `CapturePreview` works) while staying invisible.
+#[cfg(windows)]
+fn offscreen_bounds() -> PreviewBounds {
+  PreviewBounds {
+    x: OFFSCREEN_COORD,
+    y: OFFSCREEN_COORD,
+    width: OFFSCREEN_SIZE.0,
+    height: OFFSCREEN_SIZE.1,
+  }
 }
 
 /// Whether the preview child webview currently exists (i.e. a deployed app has
@@ -628,11 +737,90 @@ fn build_scroll_js(direction: &str, amount: Option<f64>) -> String {
 }
 
 /// Ask the renderer to surface the preview pane and load `url` on the agent's
-/// behalf. Used when a validation tool needs the preview visible but another
-/// tab is focused (or the webview has not been created yet). The renderer owns
-/// positioning, so it calls back into [`preview_show_url`] with real bounds.
+/// behalf. Used on **non-Windows** when a validation tool needs the preview
+/// visible but another tab is focused (or the webview has not been created yet).
+/// The renderer owns positioning, so it calls back into [`preview_show_url`] with
+/// real bounds. On Windows the agent captures silently off-screen and never calls
+/// this (see [`agent_ensure_preview`] / [`agent_capture`]).
+#[cfg_attr(windows, allow(dead_code))]
 pub(crate) fn request_preview_show(app: &AppHandle, url: &str) {
   let _ = app.emit(PREVIEW_AGENT, serde_json::json!({ "action": "show", "url": url }));
+}
+
+/// Build the preview child webview **off-screen** (and leave it hidden) when it
+/// does not exist yet, using `url` as the initial page — so a first-ever agent
+/// capture needs no on-screen preview pane and never changes the user's view.
+/// No-op once the webview exists. Windows-only; the silent off-screen capture
+/// path ([`agent_capture`]) depends on it.
+#[cfg(windows)]
+async fn ensure_offscreen(app: &AppHandle, url: &str) {
+  if is_preview_open(app) {
+    return;
+  }
+  let parsed: Url = match url.parse() {
+    Ok(u) => u,
+    Err(_) => return,
+  };
+  // Atomically claim `created` so we don't race the renderer's own first build.
+  let state = app.state::<PreviewState>();
+  let need_build = {
+    let mut inner = state.inner.lock().unwrap();
+    if inner.created {
+      false
+    } else {
+      inner.created = true;
+      true
+    }
+  };
+  if !need_build {
+    return;
+  }
+  if build(app, parsed, offscreen_bounds()).is_err() {
+    state.inner.lock().unwrap().created = false;
+    return;
+  }
+  state.inner.lock().unwrap().reset_to(url);
+  // `add_child` creates the surface visible; normalize to hidden (it's off-screen
+  // already, so no flicker) so [`agent_capture`] owns visibility from here.
+  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    let _ = wv.hide();
+  }
+  // Give the first document a moment to load/paint before any capture.
+  tokio::time::sleep(OFFSCREEN_BUILD_SETTLE).await;
+}
+
+/// Make the preview ready for a Fabricator agent capture.
+///
+/// On **Windows** this is silent: the surface is ensured to exist off-screen and
+/// the user's current view is never touched. On other platforms it asks the
+/// renderer to surface the preview (as before) and waits up to `show_timeout` for
+/// a first-ever build to appear.
+pub(crate) async fn agent_ensure_preview(app: &AppHandle, url: &str, show_timeout: Duration) {
+  #[cfg(windows)]
+  {
+    let _ = show_timeout;
+    ensure_offscreen(app, url).await;
+  }
+  #[cfg(not(windows))]
+  {
+    request_preview_show(app, url);
+    if is_preview_open(app) {
+      // Already created earlier (the renderer only hides it, never destroys it) —
+      // give the renderer a beat to re-show it at the host's bounds.
+      tokio::time::sleep(Duration::from_millis(300)).await;
+      return;
+    }
+    // First-ever show: wait for the renderer's positioning loop to build it.
+    let start = std::time::Instant::now();
+    while start.elapsed() < show_timeout {
+      tokio::time::sleep(Duration::from_millis(150)).await;
+      if is_preview_open(app) {
+        // Give the first document a moment to paint before any capture.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        return;
+      }
+    }
+  }
 }
 
 /// Navigate the existing preview webview to `url` (without touching bounds or

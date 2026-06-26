@@ -1,21 +1,27 @@
-# Vendored `wry` patch — WebView2 device-compliance SSO
+# Vendored `wry` patches
 
-This repo ships a **vendored copy of the `wry` crate** with a **single one-line
-change** so that the embedded preview can sign in to apps protected by an Azure AD
-(Entra) **Conditional Access "require compliant / managed device" policy**.
+This repo ships a **vendored copy of the `wry` crate** with **two small local
+changes**, both in `src-tauri/vendor/wry/src/webview2/mod.rs`:
 
-Without the patch, signing in inside the preview fails with
-**"You can't get there from here"**, even though the same account signs in fine in
-Microsoft Edge on the same (compliant) device.
+1. **Device-compliance SSO** — enables the WebView2
+   `AllowSingleSignOnUsingOSPrimaryAccount` environment option so the embedded
+   preview can sign in to apps protected by an Azure AD (Entra) **Conditional
+   Access "require compliant / managed device" policy**. Without it, signing in
+   inside the preview fails with **"You can't get there from here"**, even though
+   the same account signs in fine in Microsoft Edge on the same (compliant) device.
+2. **Disable native-window occlusion** — adds `CalculateNativeWinOcclusion` to the
+   default list of disabled browser features so WebView2 keeps rendering when the
+   top-level window is minimized/occluded, letting the Fabricator agent screenshot
+   the preview while it is parked off-screen (and while the app is minimized).
 
 > **TL;DR for upgrades:** when you bump Tauri (which pins `wry`), re-vendor the
-> matching `wry` version and re-apply the one line described below, or drop the
-> whole patch if upstream wry ever exposes the option. See
-> [Re-applying on upgrade](#re-applying-the-patch-on-upgrade).
+> matching `wry` version and re-apply **both** changes described below, or drop a
+> change if upstream wry ever exposes it. See
+> [Re-applying on upgrade](#re-applying-the-patches-on-upgrade).
 
 ---
 
-## The change
+## Patch 1: device-compliance SSO
 
 **File:** `src-tauri/vendor/wry/src/webview2/mod.rs`
 **Where:** inside the `unsafe` block that builds `CoreWebView2EnvironmentOptions`
@@ -50,8 +56,39 @@ unsafe {
 }
 ```
 
-That is the **only** source change in the entire vendored tree. Everything else
-under `src-tauri/vendor/wry/` is a verbatim copy of the upstream crate.
+Everything else under `src-tauri/vendor/wry/` is a verbatim copy of the upstream
+crate, except for Patch 2 below.
+
+## Patch 2: disable native-window occlusion
+
+**File:** `src-tauri/vendor/wry/src/webview2/mod.rs`
+**Where:** inside `create_environment`, in the closure that computes the default
+`additional_browser_args` (search for `msSmartScreenProtection`).
+
+**Change:** append `,CalculateNativeWinOcclusion` to the default `--disable-features`
+list, so the default becomes:
+
+```rust
+let default_args =
+  "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion";
+```
+
+**Why:** the Fabricator agent screenshots the preview via WebView2 `CapturePreview`.
+To do this without disturbing the user, it parks the preview child **off-screen**
+while keeping it visible (see `src-tauri/src/services/preview.rs` → `agent_capture`).
+Chromium's native-window occlusion tracker suspends rendering when the **top-level**
+window is minimized/occluded, which makes `CapturePreview` return a blank/stale frame
+or stall. Disabling `CalculateNativeWinOcclusion` keeps the renderer alive so the
+capture succeeds even while the app window is minimized.
+
+**Why in the shared default (not per-webview):** WebView2 requires that all webviews
+sharing a **user-data folder** use **identical** environment options
+(`additionalBrowserArgs`, `scrollBarStyle`, …). The main window and the preview share
+the default folder, so giving only the preview a different arg makes
+`CreateCoreWebView2EnvironmentWithOptions` fail with **ERROR_INVALID_STATE
+(0x8007139F)**. Putting the flag in the shared wry default keeps both webviews'
+arguments identical — and preserves the conditional `--autoplay-policy` / proxy
+appends, since both still flow through the same default closure.
 
 ## How it's wired
 
@@ -101,7 +138,7 @@ downside for the rest of the app.
 
 ---
 
-## Re-applying the patch on upgrade
+## Re-applying the patches on upgrade
 
 When you upgrade Tauri (or otherwise change the pinned `wry` version), redo this:
 
@@ -120,13 +157,17 @@ When you upgrade Tauri (or otherwise change the pinned `wry` version), redo this
    - clear read-only attributes on the copied files, and
    - delete the cache marker `.cargo-ok` if present.
 
-3. **Re-apply the one line.** In `src-tauri/vendor/wry/src/webview2/mod.rs`, find
-   the `unsafe` block that builds `CoreWebView2EnvironmentOptions` (search for
-   `set_are_browser_extensions_enabled`) and add, right after it:
-   ```rust
-   options.set_allow_single_sign_on_using_os_primary_account(true);
-   ```
-   (Keep the explanatory comment block above it.)
+3. **Re-apply both changes** in `src-tauri/vendor/wry/src/webview2/mod.rs` (keep the
+   explanatory `[rayfin-desktop local patch]` comment blocks):
+   - **Patch 1 (SSO):** find the `unsafe` block that builds
+     `CoreWebView2EnvironmentOptions` (search for `set_are_browser_extensions_enabled`)
+     and add, right after it:
+     ```rust
+     options.set_allow_single_sign_on_using_os_primary_account(true);
+     ```
+   - **Patch 2 (occlusion):** find the default `additional_browser_args` (search for
+     `msSmartScreenProtection`) and append `,CalculateNativeWinOcclusion` to the
+     `--disable-features` list.
 
 4. **Confirm the setter still exists** on the `webview2-com` version now in the
    lockfile. If `webview2-com` renamed/removed it, adjust the call accordingly.
@@ -141,14 +182,25 @@ When you upgrade Tauri (or otherwise change the pinned `wry` version), redo this
 6. **Verify the override is live:** `src-tauri/Cargo.lock`'s `wry` entry should
    have **no `source = "registry+..."` line**.
 
-7. **Smoke-test sign-in** in the preview against a device-compliance–gated app.
+7. **Smoke-test both:** (1) sign in inside the preview against a
+   device-compliance–gated app, and (2) have the Fabricator agent take a screenshot
+   while the app window is on a different tab / minimized and confirm it returns a
+   real (non-blank) frame without freezing the app.
 
-### If upstream fixes this
+### If upstream fixes these
 
-If a future `wry` (or Tauri) exposes `AllowSingleSignOnUsingOSPrimaryAccount`
-directly (e.g. via a `WebViewBuilder` / attributes option), **delete the vendored
-tree, remove the `[patch.crates-io]` entry**, and set the option through the
-supported API instead.
+- **Patch 1:** if a future `wry` (or Tauri) exposes
+  `AllowSingleSignOnUsingOSPrimaryAccount` directly (e.g. via a `WebViewBuilder` /
+  attributes option), set it through the supported API instead.
+- **Patch 2:** the occlusion flag is just a Chromium feature switch, so it can also
+  be supplied through the supported `additionalBrowserArgs` — but **only if every
+  webview sharing the user-data folder passes the *same* string** (set it identically
+  on the main window via `tauri.conf.json` *and* the preview), otherwise WebView2
+  fails with `ERROR_INVALID_STATE`. The vendored default is used precisely to avoid
+  that footgun.
+
+If **both** patches become unnecessary, **delete the vendored tree and remove the
+`[patch.crates-io]` entry** from `src-tauri/Cargo.toml`.
 
 ## Notes
 

@@ -105,15 +105,21 @@ lto = true
 opt-level = "s"
 strip = true
 
-# Vendored copy of wry 0.55.1 with a single local change: it enables the WebView2
-# `AllowSingleSignOnUsingOSPrimaryAccount` environment option (see
-# vendor/wry/src/webview2/mod.rs). That lets the embedded preview present the
-# device's Entra identity (PRT / device certificate) to Azure AD, so deployed
-# apps behind a Conditional Access "require compliant/managed device" policy can
-# sign in inside the preview instead of failing with "You can't get there from
-# here". Upstream wry leaves this `false` and exposes no setter, so it must be
-# patched here. When bumping Tauri (which pins wry), re-vendor the matching wry
-# version and re-apply the one-line change, or drop this patch if upstream adds
-# the option. Full notes + upgrade steps: docs/VENDORED-WRY-PATCH.md.
+# Vendored copy of wry 0.55.1 with two local changes (see
+# vendor/wry/src/webview2/mod.rs):
+#   1. Enables the WebView2 `AllowSingleSignOnUsingOSPrimaryAccount` environment
+#      option so the embedded preview can present the device's Entra identity
+#      (PRT / device certificate) to Azure AD — deployed apps behind a Conditional
+#      Access "require compliant/managed device" policy then sign in inside the
+#      preview instead of failing with "You can't get there from here".
+#   2. Adds `CalculateNativeWinOcclusion` to the default disabled browser features
+#      so WebView2 keeps rendering when the window is minimized/occluded, letting
+#      the Fabricator agent screenshot the preview off-screen / while minimized.
+# Both live in the shared default/environment so the main window and the preview
+# keep identical options (WebView2 rejects mismatched options on a shared user-data
+# folder, failing with ERROR_INVALID_STATE / 0x8007139F). Upstream wry exposes no
+# setter for (1), so it must be patched here. When bumping Tauri (which pins wry),
+# re-vendor the matching wry version and re-apply both changes, or drop a change if
+# upstream supports it. Full notes + upgrade steps: docs/VENDORED-WRY-PATCH.md.
 [patch.crates-io]
 wry = { path = "vendor/wry" }
