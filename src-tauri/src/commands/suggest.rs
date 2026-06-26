@@ -21,8 +21,11 @@ use crate::services::{paths, store};
 use crate::state::AppState;
 use crate::types::{SuggestionRaw, SuggestionSet};
 
-/// 3 minute ceiling for a single suggestion-generation run.
-const RUN_TIMEOUT_MS: u64 = 3 * 60_000;
+/// 90-second ceiling for a single suggestion-generation run. The UI is never
+/// blocked on this (it shows instant heuristic suggestions and only swaps in the
+/// generated set once it lands), so this just bounds how long the throwaway
+/// session may live before we give up and keep the heuristics.
+const RUN_TIMEOUT_MS: u64 = 90_000;
 
 /// How many suggestions we keep (the welcome screen shows a 2x2 grid).
 const MAX_SUGGESTIONS: usize = 4;
@@ -195,7 +198,7 @@ pub async fn chat_suggest(
   let session = match state.copilot.transient_session(&project.path, None, None).await {
     Ok(s) => s,
     Err(_) => {
-      state.end_suggest(&project_id);
+      state.end_suggest(&project_id, &token);
       return Ok(SuggestionSet::default());
     }
   };
@@ -256,7 +259,7 @@ pub async fn chat_suggest(
 
   // The suggestion session is one-shot; disconnect it so it never accumulates.
   let _ = session.disconnect().await;
-  state.end_suggest(&project_id);
+  state.end_suggest(&project_id, &token);
 
   if cancelled {
     return Ok(SuggestionSet::default());

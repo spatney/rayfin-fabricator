@@ -271,11 +271,12 @@ function suggestionsFor(project: StudioProject): Suggestion[] {
 /**
  * Ask Copilot for starter suggestions grounded in the project's actual code. The
  * backend caches per project (reused until the code changes), so this is cheap to
- * call whenever the empty Build chat is shown. While a fresh set is generating we
- * surface `loading` (the welcome shows an animated placeholder); on any
- * failure/timeout `failed` is set and the caller falls back to the static
- * heuristic suggestions. The in-flight request is cancelled when the empty state
- * goes away (e.g. the user sends a message) so it never competes with a real turn.
+ * call whenever the empty Build chat is shown. The welcome screen shows the
+ * instant heuristic suggestions right away and only swaps in this generated set
+ * once it arrives, so `loading` never blocks the UI — it just drives a subtle
+ * "Tailoring ideas…" hint. On any failure/timeout the heuristic fallback simply
+ * stays. The in-flight request is cancelled when the empty state goes away (e.g.
+ * the user sends a message) so it never competes with a real turn.
  */
 function useGeneratedSuggestions(
   projectId: string,
@@ -2158,56 +2159,39 @@ export default function ChatPanel({
               Describe what you want in plain language — I’ll write the code and deploy it live. No
               coding required.
             </p>
-            {suggestionsLoading && !generatedSuggestions ? (
-              <>
-                <p className="chat-suggest-status">
-                  <SparkleIcon className="chat-suggest-status-icon" />
-                  Tailoring ideas to your app…
-                </p>
-                <div className="chat-suggestions" aria-busy="true">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="chat-suggestion chat-suggestion--skeleton"
-                      aria-hidden="true"
-                    >
-                      <span className="chat-suggestion-icon skeleton-block" />
-                      <span className="chat-suggestion-text">
-                        <span className="skeleton-line" />
-                        <span className="skeleton-line skeleton-line--short" />
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="chat-suggestions">
-                  {suggestions.map((s) => (
-                    <button
-                      key={s.text}
-                      className="chat-suggestion"
-                      onClick={() => applySuggestion(s.text)}
-                    >
-                      <span className="chat-suggestion-icon">{s.icon}</span>
-                      <span className="chat-suggestion-text">{s.text}</span>
-                      <span className="chat-suggestion-arrow">→</span>
-                    </button>
-                  ))}
-                </div>
-                {generatedSuggestions && (
-                  <button
-                    className="chat-suggest-refresh"
-                    onClick={refreshSuggestions}
-                    title="Generate fresh ideas from your app's code"
-                  >
-                    <span className="chat-suggest-refresh-icon" aria-hidden="true">
-                      ↻
-                    </span>
-                    Refresh ideas
-                  </button>
-                )}
-              </>
+            {suggestionsLoading && !generatedSuggestions && (
+              <p className="chat-suggest-status">
+                <SparkleIcon className="chat-suggest-status-icon" />
+                Tailoring ideas to your app…
+              </p>
+            )}
+            <div
+              className="chat-suggestions"
+              aria-busy={suggestionsLoading && !generatedSuggestions}
+            >
+              {suggestions.map((s) => (
+                <button
+                  key={s.text}
+                  className="chat-suggestion"
+                  onClick={() => applySuggestion(s.text)}
+                >
+                  <span className="chat-suggestion-icon">{s.icon}</span>
+                  <span className="chat-suggestion-text">{s.text}</span>
+                  <span className="chat-suggestion-arrow">→</span>
+                </button>
+              ))}
+            </div>
+            {generatedSuggestions && (
+              <button
+                className="chat-suggest-refresh"
+                onClick={refreshSuggestions}
+                title="Generate fresh ideas from your app's code"
+              >
+                <span className="chat-suggest-refresh-icon" aria-hidden="true">
+                  ↻
+                </span>
+                Refresh ideas
+              </button>
             )}
             <p className="chat-welcome-foot">Or just type your own idea below ↓</p>
           </div>

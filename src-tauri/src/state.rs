@@ -193,8 +193,13 @@ impl AppState {
   }
 
   /// Remove a suggestion run's cancel token (called when generation completes).
-  pub fn end_suggest(&self, project_id: &str) {
-    self.suggest_cancels.lock().unwrap().remove(project_id);
+  /// Only clears the slot when it still holds `token`, so a stale run finishing
+  /// up never evicts a newer run that already took the slot.
+  pub fn end_suggest(&self, project_id: &str, token: &CancelToken) {
+    let mut map = self.suggest_cancels.lock().unwrap();
+    if map.get(project_id).is_some_and(|t| t.same(token)) {
+      map.remove(project_id);
+    }
   }
 
   /// Cancel an in-flight suggestion generation, if one is running. Returns true

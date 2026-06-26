@@ -64,6 +64,13 @@ impl CancelToken {
     self.cancelled.load(Ordering::SeqCst)
   }
 
+  /// True when both handles refer to the *same* underlying token. Used by the
+  /// per-project cancel maps so a stale run that is finishing up can't clear a
+  /// newer run's slot (which would otherwise leave the newer run uncancellable).
+  pub fn same(&self, other: &CancelToken) -> bool {
+    Arc::ptr_eq(&self.cancelled, &other.cancelled)
+  }
+
   /// Resolves when this token is cancelled (or immediately if already
   /// cancelled). Lets async consumers `select!` on cancellation — e.g. the
   /// chat turn loop aborts the live Copilot session when the user hits stop.

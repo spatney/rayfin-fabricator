@@ -6374,61 +6374,6 @@ code {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-/* Shimmer placeholder cards rendered in the suggestions grid while generating. */
-.chat-suggestion--skeleton {
-  cursor: default;
-  pointer-events: none;
-}
-
-.chat-suggestion--skeleton .chat-suggestion-text {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.skeleton-block,
-.skeleton-line {
-  position: relative;
-  overflow: hidden;
-  background: var(--bg-elev-2);
-}
-
-.skeleton-block {
-  border-radius: 9px;
-}
-
-.skeleton-line {
-  display: block;
-  height: 9px;
-  width: 100%;
-  border-radius: 5px;
-}
-
-.skeleton-line--short {
-  width: 60%;
-}
-
-.skeleton-block::after,
-.skeleton-line::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--accent) 16%, transparent),
-    transparent
-  );
-  animation: shimmer 1.3s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  100% {
-    transform: translateX(100%);
-  }
-}
-
 /* "Refresh ideas" pill under the generated suggestions. */
 .chat-suggest-refresh {
   margin-top: 2px;
