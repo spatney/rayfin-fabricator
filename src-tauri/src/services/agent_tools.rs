@@ -38,6 +38,29 @@ const SCROLL_SETTLE: Duration = Duration::from_millis(450);
 /// the capture init script yet) rather than waiting indefinitely.
 const CONSOLE_TIMEOUT: Duration = Duration::from_secs(6);
 
+/// Terminal message returned by `fabricator_scroll` in the Fabric portal preview.
+/// The app runs inside the portal's cross-origin iframe, so there is nothing the
+/// tool can scroll — and, crucially, there is *no* standalone app URL to fall back
+/// to (a Fabric data app only renders inside the portal). The previous wording hinted
+/// at switching to the "direct app view", which sent the agent off navigating to the
+/// standalone URL, failing, and retrying — wasting a deploy/validate loop. This says
+/// the limit is permanent and tells the agent how to validate below-the-fold tiles
+/// without scrolling, so it stops looping.
+const FABRIC_EMBED_NO_SCROLL: &str =
+  "Scrolling isn't available in the Fabric portal preview: the app runs inside the \
+   portal's cross-origin iframe, so there's no page the tool can scroll, and there's no \
+   standalone app URL to fall back to (a Fabric data app only renders inside the portal). \
+   This is a permanent limitation of this view, not a transient error — don't retry \
+   scrolling or navigate elsewhere to work around it. To validate tiles below the fold, \
+   check their data with a DAX query and use fabricator_console for render errors; tiles \
+   built from the same spec/data path as the visible ones render the same way.";
+
+/// Short heads-up appended to screenshots taken in the Fabric portal preview, so the
+/// agent doesn't reach for `fabricator_scroll` when a tall dashboard looks cut off.
+const FABRIC_EMBED_SCROLL_NOTE: &str =
+  " Note: this is the Fabric portal embed — the app sits in a cross-origin iframe that \
+    can't be scrolled, so fabricator_scroll won't reveal more of the page here.";
+
 /// Build the Fabricator validation tool set for one project's chat session.
 pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
   vec![
@@ -90,7 +113,9 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
         "Scroll the page currently shown in Fabricator's built-in preview browser and return a \
          fresh screenshot, so you can see content below (or above) the fold — e.g. lower \
          dashboard tiles or the rest of a long table. Use this when a screenshot looks cut off \
-         at the bottom. Open a page first with fabricator_navigate.",
+         at the bottom. Only works on the direct app view: the Fabric portal preview embeds the \
+         app in a cross-origin iframe that can't be scrolled. Open a page first with \
+         fabricator_navigate.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -401,8 +426,13 @@ impl ToolHandler for ScreenshotTool {
     match preview::agent_capture(&self.app).await {
       Ok(png) => {
         let where_ = live.map(|u| format!(" (showing {u})")).unwrap_or_default();
+        let note = if is_fabric_embedded(&self.project_id) {
+          FABRIC_EMBED_SCROLL_NOTE
+        } else {
+          ""
+        };
         Ok(image_result(
-          format!("Screenshot of the running app{where_}."),
+          format!("Screenshot of the running app{where_}.{note}"),
           png,
           "Preview screenshot".to_string(),
         ))
@@ -441,13 +471,7 @@ impl ToolHandler for ScrollTool {
     // is no top-level page to scroll (and the iframe's own scroller is off-limits).
     // Disable the tool there and tell the agent how to see more.
     if is_fabric_embedded(&self.project_id) {
-      return Ok(failure(
-        "Scrolling isn't available while the preview is showing the app embedded in the \
-         Fabric portal — the app runs inside a cross-origin iframe, so there's no page to \
-         scroll. Use fabricator_screenshot to see the current view; to scroll the app, the \
-         user can switch the preview to the direct app view (turn the Fabric portal toggle \
-         off).",
-      ));
+      return Ok(failure(FABRIC_EMBED_NO_SCROLL));
     }
 
     let params: ScrollParams = invocation.params().unwrap_or_default();
