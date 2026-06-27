@@ -72,7 +72,7 @@ wrapped in `PageShell` + `KpiGrid`/`ChartGrid`/`BentoGrid`. Deploy + review ever
 Every tile follows the same shape:
 
 1. **Fetch** with `useSemanticModelQuery({ connection, query })` →
-   `{ data, isLoading, error }` (see the `query-design` + `fabric-sdk` skills).
+   `{ data, isLoading, error }` (see the `dax` + `fabric-data` skills).
 2. **Map** the DAX result into the shape the visual wants. Both helpers accept
    the query result, a raw `QueryTable`, or `undefined` — no `status` check:
    - **Charts** want **tidy/long rows** → `toChartData(result, options?)`.
@@ -327,7 +327,7 @@ const [range, setRange] = useState("30d");
 **Power BI-style slicers** — wire one **shared filter model**. Wrap the dashboard
 in `<FilterStateProvider>`; every slicer reads/writes the same selections. Then
 **apply** them with `applyFilters(rows, selections)` (instant, client-side) or
-`toDaxFilters(selections)` (re-query the model — see `query-design`).
+`toDaxFilters(selections)` (re-query the model — see `dax`).
 
 ```tsx
 <FilterStateProvider>

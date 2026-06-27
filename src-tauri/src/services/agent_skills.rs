@@ -75,7 +75,10 @@ not after the whole dashboard is finished.
 - Prefer screenshots over assumptions — verify visually that the change actually works in the
   deployed app.
 - For content below the fold, scroll with `fabricator_scroll` instead of assuming it renders —
-  e.g. to confirm the lower tiles of a dashboard or the rest of a long table.
+  e.g. to confirm the lower tiles of a dashboard or the rest of a long table. (Scrolling is
+  unavailable while the preview shows the app embedded in the Fabric portal — the Data App's
+  default view — because the app then runs inside a cross-origin iframe; the tool will say so.
+  Rely on the screenshot, or have the user switch the preview to the direct app view.)
 - When a screenshot can't explain a blank page, missing data, or a broken interaction, check
   `fabricator_console` for errors before guessing at the cause.
 - Never batch all changes into one final deploy; deploy + screenshot after the hero slice
@@ -187,6 +190,60 @@ version), go ahead — but warn them up front that it is experimental and may fa
 Fabric, then deploy and validate as usual so they see the real result.
 "#;
 
+/// Model-invoked skill for finding and wiring the Power BI / Fabric semantic
+/// model (dataset) behind a report or app, using the in-process locator/search
+/// tools (see [`crate::services::agent_tools`]).
+const CONNECT_MODEL_SKILL: &str = r#"---
+name: connect-semantic-model
+description: "Find and connect the Power BI / Fabric semantic model (dataset) behind a report or app. Use when this app needs to read data from an existing Power BI report, app, dataset, or semantic model — when the user pastes a Power BI link or id, or describes the data by name/topic and you need to locate the model and wire it into the app's data."
+metadata:
+  author: Rayfin Fabricator
+  version: 1.0.0
+---
+# Connect a Power BI / Fabric semantic model
+
+You are running inside **Rayfin Fabricator** and can locate the **semantic model (dataset)** behind
+a Power BI report or app, then wire it into this app's data — without the user having to dig up the
+model's URL or id. Use this whenever the app needs to read data from an existing Power BI / Fabric
+model.
+
+## Two tools
+
+- **`fabricator_locate_semantic_model`** — when you already have a **link or id**. Pass a Power BI
+  URL (a report, app, or dataset link) or a bare GUID as `target`. Returns the underlying model's
+  name, **workspace id**, and **item id**.
+- **`fabricator_search_semantic_models`** — when you only have a **description**. Pass
+  natural-language keywords as `query` (e.g. "sales pipeline", "finance revenue by region"). Returns
+  matching models with their workspace id and item id. (Requires Azure CLI sign-in, which the
+  Fabricator setup screen handles.)
+
+Prefer locate when the user gives you a link or id; fall back to search when they only describe the
+data.
+
+## Wire the model into the app
+
+A Power BI **dataset id is the same as the Fabric semantic-model item id**, so the tool output plugs
+straight into a data connection. Once you have a model's `workspaceId` and `itemId`:
+
+1. Add it as a data connection (see the **fabric-data** skill for the full command surface):
+   ```
+   fabric-app-data add <alias> -w <workspaceId> -i <itemId>
+   ```
+   Pick a short, meaningful `<alias>` (e.g. `sales`).
+2. Generate / build so the model's tables and measures become available to the app.
+3. Write your queries and visuals against that connection.
+
+## Notes
+
+- You do **not** need to ask the user for a workspace id or item id — locate/search return them.
+  Only ask for a report/app link, an id, or a description when you don't have one yet.
+- If a report matched but its model couldn't be resolved, the tool says so — the signed-in user may
+  lack access to the underlying model. Ask them to confirm access or share the workspace/model.
+- For an **app** link, consumers often can't enumerate the app's models directly; the tool surfaces
+  what it can and notes when admin access would be needed.
+- After wiring a connection, deploy and validate as usual (see the deploy-and-validate skill).
+"#;
+
 /// Write (or refresh) the injected skill + instruction files under the app data
 /// dir. Idempotent and best-effort: always overwrites so content updates ship
 /// with the app. Call once at startup, before any session opens.
@@ -203,6 +260,10 @@ fn write_all(root: &std::path::Path) -> std::io::Result<()> {
   let skill_dir = root.join("skills").join("deploy-and-validate");
   std::fs::create_dir_all(&skill_dir)?;
   std::fs::write(skill_dir.join("SKILL.md"), DEPLOY_VALIDATE_SKILL)?;
+
+  let connect_dir = root.join("skills").join("connect-semantic-model");
+  std::fs::create_dir_all(&connect_dir)?;
+  std::fs::write(connect_dir.join("SKILL.md"), CONNECT_MODEL_SKILL)?;
 
   let instr_dir = root.join("instructions");
   std::fs::create_dir_all(&instr_dir)?;
@@ -276,18 +337,38 @@ mod tests {
   }
 
   #[test]
+  fn connect_model_skill_documents_tools_and_wiring() {
+    assert!(CONNECT_MODEL_SKILL.starts_with("---\n"));
+    assert!(CONNECT_MODEL_SKILL.contains("name: connect-semantic-model"));
+    for tool in [
+      "fabricator_locate_semantic_model",
+      "fabricator_search_semantic_models",
+    ] {
+      assert!(CONNECT_MODEL_SKILL.contains(tool), "skill should mention {tool}");
+    }
+    // The skill must show the exact wiring command and the id-equivalence fact.
+    assert!(CONNECT_MODEL_SKILL.contains("fabric-app-data add <alias> -w <workspaceId> -i <itemId>"));
+    assert!(CONNECT_MODEL_SKILL.contains("dataset id is the same as the Fabric semantic-model item id"));
+    // ...and point at the fabric-data skill it builds on.
+    assert!(CONNECT_MODEL_SKILL.contains("fabric-data"));
+  }
+
+  #[test]
   fn write_all_creates_expected_layout() {
     let tmp = std::env::temp_dir().join(format!("fab-agent-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     write_all(&tmp).expect("write_all should succeed");
 
     let skill = tmp.join("skills").join("deploy-and-validate").join("SKILL.md");
+    let connect = tmp.join("skills").join("connect-semantic-model").join("SKILL.md");
     let instr = tmp.join("instructions").join("fabricator-validate.instructions.md");
     let stable = tmp.join("instructions").join("fabricator-stable-only.instructions.md");
     assert!(skill.is_file(), "SKILL.md should exist at {skill:?}");
+    assert!(connect.is_file(), "connect SKILL.md should exist at {connect:?}");
     assert!(instr.is_file(), "instructions file should exist at {instr:?}");
     assert!(stable.is_file(), "stable-only instructions should exist at {stable:?}");
     assert_eq!(std::fs::read_to_string(&skill).unwrap(), DEPLOY_VALIDATE_SKILL);
+    assert_eq!(std::fs::read_to_string(&connect).unwrap(), CONNECT_MODEL_SKILL);
     assert_eq!(std::fs::read_to_string(&stable).unwrap(), STABLE_ONLY_INSTRUCTIONS);
 
     let _ = std::fs::remove_dir_all(&tmp);

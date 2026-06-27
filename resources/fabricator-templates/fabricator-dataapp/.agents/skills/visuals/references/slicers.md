@@ -115,7 +115,7 @@ matchesSelection(
 );
 ```
 
-Server-side: turn selections into DAX fragments. See the `query-design` skill for
+Server-side: turn selections into DAX fragments. See the `dax` skill for
 where to splice these into `SUMMARIZECOLUMNS` vs. `CALCULATETABLE`.
 
 ```tsx

@@ -24,7 +24,7 @@ use serde::Deserialize;
 use tauri::AppHandle;
 
 use crate::commands::deploy;
-use crate::services::{preview, store};
+use crate::services::{preview, semantic_model, store};
 
 /// How long to wait for a navigated page to finish loading before capturing.
 const NAV_TIMEOUT: Duration = Duration::from_secs(20);
@@ -130,6 +130,67 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
       }))
       .with_skip_permission(true)
       .with_handler(Arc::new(ConsoleTool { app, project_id })),
+    Tool::new("fabricator_locate_semantic_model")
+      .with_description(
+        "Find the Power BI / Fabric semantic model (dataset) behind a report, app, or dataset \
+         when the user gives you a link or id. Pass a Power BI URL (a report, app, or dataset \
+         link) or a bare GUID as `target`. Returns the model's name, workspace id, and item id. \
+         A Power BI dataset id IS its Fabric semantic-model item id, so you can wire the model \
+         straight into this app's data with `fabric-app-data add <alias> -w <workspaceId> -i \
+         <itemId>` (see the fabric-data skill), then run a build. Use this to turn a report/app \
+         link the user pastes into the underlying model the app should connect to.",
+      )
+      .with_parameters(serde_json::json!({
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "A Power BI URL (report/app/dataset link) or a bare GUID to resolve."
+          },
+          "workspace": {
+            "type": "string",
+            "description": "Optional workspace-id hint to speed up / disambiguate the lookup."
+          },
+          "admin": {
+            "type": "boolean",
+            "description": "Optional: also try tenant-admin lookup paths (only works if you have admin rights)."
+          }
+        },
+        "required": ["target"]
+      }))
+      .with_skip_permission(true)
+      .with_handler(Arc::new(LocateSemanticModelTool)),
+    Tool::new("fabricator_search_semantic_models")
+      .with_description(
+        "Search Microsoft Fabric for semantic models (datasets) by description or keywords when \
+         you do NOT have a direct link or id. Pass natural-language keywords as `query` (e.g. \
+         \"sales pipeline\", \"finance revenue by region\"). Returns matching models with their \
+         workspace id and item id, ready to wire into this app's data with `fabric-app-data add \
+         <alias> -w <workspaceId> -i <itemId>` (see the fabric-data skill). If you already have a \
+         report/app link or id, use fabricator_locate_semantic_model instead. Requires Azure CLI \
+         sign-in (handled by the Fabricator setup screen).",
+      )
+      .with_parameters(serde_json::json!({
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Description or keywords to search for, e.g. \"customer churn\"."
+          },
+          "types": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optional item types to match (defaults to [\"report\", \"model\"]). Accepts report, model/dataset, lakehouse, warehouse, notebook."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Optional cap on the number of catalog hits to consider (default 30)."
+          }
+        },
+        "required": ["query"]
+      }))
+      .with_skip_permission(true)
+      .with_handler(Arc::new(SearchSemanticModelsTool)),
   ]
 }
 
@@ -156,6 +217,29 @@ fn effective_base_url(project_id: &str) -> Option<String> {
     }
   }
   deploy.url
+}
+
+/// Pure predicate behind [`is_fabric_embedded`]: the preview is showing the app
+/// embedded in the Fabric portal shell exactly when the fabric toggle is on **and**
+/// there is a real portal URL to embed. Mirrors the fabric branch of
+/// [`effective_base_url`] (which falls back to the direct app URL when the portal
+/// URL is missing/blank, where scrolling works normally).
+fn fabric_embedded(preview_mode: Option<&str>, portal_url: Option<&str>) -> bool {
+  preview_mode == Some("fabric") && portal_url.map(|s| !s.trim().is_empty()).unwrap_or(false)
+}
+
+/// Whether the user's preview is currently the app embedded in the Fabric portal —
+/// i.e. running inside the portal's cross-origin iframe. In that mode there is no
+/// top-level page scroller the agent can drive (the app's own scroller lives in an
+/// iframe we can't reach), so `fabricator_scroll` is a no-op and is disabled.
+fn is_fabric_embedded(project_id: &str) -> bool {
+  let Some(project) = store::find_project(project_id) else {
+    return false;
+  };
+  fabric_embedded(
+    project.preview_mode.as_deref(),
+    project.last_deploy.as_ref().and_then(|d| d.portal_url.as_deref()),
+  )
 }
 
 /// Resolve a user/agent-supplied target into an absolute URL. Absolute URLs pass
@@ -352,6 +436,20 @@ struct ScrollParams {
 #[async_trait]
 impl ToolHandler for ScrollTool {
   async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+    // Scrolling is meaningless while the preview shows the app embedded in the
+    // Fabric portal: the app runs inside the portal's cross-origin iframe, so there
+    // is no top-level page to scroll (and the iframe's own scroller is off-limits).
+    // Disable the tool there and tell the agent how to see more.
+    if is_fabric_embedded(&self.project_id) {
+      return Ok(failure(
+        "Scrolling isn't available while the preview is showing the app embedded in the \
+         Fabric portal — the app runs inside a cross-origin iframe, so there's no page to \
+         scroll. Use fabricator_screenshot to see the current view; to scroll the app, the \
+         user can switch the preview to the direct app view (turn the Fabric portal toggle \
+         off).",
+      ));
+    }
+
     let params: ScrollParams = invocation.params().unwrap_or_default();
     let raw = params
       .direction
@@ -526,9 +624,207 @@ fn format_console(json: &str, level_filter: Option<&str>) -> String {
   out.trim_end().to_string()
 }
 
+/* -------------------- semantic-model locator / search --------------------- */
+
+struct LocateSemanticModelTool;
+
+#[derive(Deserialize)]
+struct LocateParams {
+  #[serde(alias = "url", alias = "id", alias = "link", alias = "report", alias = "app")]
+  target: String,
+  #[serde(default)]
+  workspace: Option<String>,
+  #[serde(default)]
+  admin: Option<bool>,
+}
+
+#[async_trait]
+impl ToolHandler for LocateSemanticModelTool {
+  async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+    let params: LocateParams = match invocation.params() {
+      Ok(p) => p,
+      Err(e) => return Ok(failure(format!("Invalid arguments: {e}"))),
+    };
+    let target = params.target.trim();
+    if target.is_empty() {
+      return Ok(failure(
+        "Provide a report/app/dataset id or a Power BI URL as `target`.",
+      ));
+    }
+    let result = semantic_model::locate_semantic_model(
+      target,
+      params.workspace.as_deref(),
+      params.admin.unwrap_or(false),
+    )
+    .await;
+    Ok(render_semantic_model_result(&result))
+  }
+}
+
+struct SearchSemanticModelsTool;
+
+#[derive(Deserialize)]
+struct SearchParams {
+  #[serde(alias = "description", alias = "keywords", alias = "q", alias = "text")]
+  query: String,
+  #[serde(default)]
+  types: Option<Vec<String>>,
+  #[serde(default)]
+  limit: Option<u32>,
+}
+
+#[async_trait]
+impl ToolHandler for SearchSemanticModelsTool {
+  async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+    let params: SearchParams = match invocation.params() {
+      Ok(p) => p,
+      Err(e) => return Ok(failure(format!("Invalid arguments: {e}"))),
+    };
+    let query = params.query.trim();
+    if query.is_empty() {
+      return Ok(failure(
+        "Provide a description or keywords to search for as `query`.",
+      ));
+    }
+    let result = semantic_model::search_semantic_models(query, params.types.clone(), params.limit).await;
+    Ok(render_semantic_model_result(&result))
+  }
+}
+
+/// Render a [`semantic_model::SemanticModelResult`] (from either tool) into a
+/// compact text block the agent can act on, including the `fabric-app-data add`
+/// wiring command for the top match and any access/admin notes.
+fn render_semantic_model_result(r: &semantic_model::SemanticModelResult) -> ToolResult {
+  use std::fmt::Write as _;
+
+  if !r.ok {
+    let base = r
+      .error
+      .clone()
+      .unwrap_or_else(|| "The semantic-model lookup failed.".to_string());
+    if r.needs_az {
+      return failure(format!(
+        "Azure CLI isn't signed in, which is required to search the Fabric catalog. Run \
+         `az login` (or use the Fabricator setup screen), then try again. ({base})"
+      ));
+    }
+    if r.needs_login {
+      return failure(format!(
+        "Not signed in to Rayfin, so I couldn't query Power BI / Fabric. Sign in from the \
+         Fabricator setup screen, then try again. ({base})"
+      ));
+    }
+    return failure(base);
+  }
+
+  let mut out = String::new();
+
+  // What the target (locate) resolved through, for context.
+  if let Some(app) = &r.app {
+    let name = app.name.as_deref().unwrap_or("(app)");
+    let _ = write!(out, "Resolved app '{name}'");
+    if let Some(ws) = app.workspace_name.as_deref().or(app.workspace_id.as_deref()) {
+      let _ = write!(out, " in workspace {ws}");
+    }
+    out.push_str(".\n");
+  } else if let Some(rep) = &r.report {
+    let name = rep.name.as_deref().unwrap_or("(report)");
+    let _ = write!(out, "Resolved report '{name}'");
+    if let Some(ws) = rep.workspace_name.as_deref().or(rep.workspace_id.as_deref()) {
+      let _ = write!(out, " in workspace {ws}");
+    }
+    out.push_str(".\n");
+  }
+
+  if r.models.is_empty() {
+    out.push_str(if r.matched {
+      "Matched the target, but its semantic model couldn't be resolved (you may not have access to it).\n"
+    } else {
+      "No matching semantic model was found.\n"
+    });
+  } else {
+    let n = r.models.len();
+    let _ = writeln!(out, "Found {n} semantic model{}:", if n == 1 { "" } else { "s" });
+    for (i, m) in r.models.iter().enumerate() {
+      let name = m.name.as_deref().unwrap_or("(unnamed model)");
+      let item = m.item_id.as_deref().or(m.id.as_deref()).unwrap_or("?");
+      let ws_id = m.workspace_id.as_deref().unwrap_or("?");
+      let _ = writeln!(out, "{}. {name}", i + 1);
+      if let Some(wn) = m.workspace_name.as_deref() {
+        let _ = writeln!(out, "   workspace: {wn} ({ws_id})");
+      } else {
+        let _ = writeln!(out, "   workspace id: {ws_id}");
+      }
+      let _ = writeln!(out, "   item id (= dataset id): {item}");
+      if let Some(via) = m.matched_via.as_deref() {
+        let _ = writeln!(out, "   matched via: {via}");
+      }
+      if let Some(owner) = m.owner.as_deref() {
+        let _ = writeln!(out, "   owner: {owner}");
+      }
+      if let Some(url) = m.web_url.as_deref() {
+        let _ = writeln!(out, "   url: {url}");
+      }
+    }
+    let first = &r.models[0];
+    if let (Some(ws), Some(item)) = (
+      first.workspace_id.as_deref(),
+      first.item_id.as_deref().or(first.id.as_deref()),
+    ) {
+      let _ = write!(
+        out,
+        "\nTo connect this app to the first model, add it to the app's data with:\n  \
+         fabric-app-data add <alias> -w {ws} -i {item}\nthen run a build (see the fabric-data skill).\n"
+      );
+    }
+  }
+
+  if !r.other_matches.is_empty() {
+    out.push_str("\nOther catalog matches (not semantic models):\n");
+    for o in &r.other_matches {
+      let name = o.display_name.as_deref().unwrap_or("(item)");
+      let ty = o.r#type.as_deref().unwrap_or("item");
+      let ws = o
+        .workspace_name
+        .as_deref()
+        .or(o.workspace_id.as_deref())
+        .unwrap_or("?");
+      let _ = writeln!(out, "- {name} [{ty}] in {ws}");
+    }
+  }
+
+  if !r.notes.is_empty() {
+    out.push_str("\nNotes:\n");
+    for note in &r.notes {
+      let _ = writeln!(out, "- {note}");
+    }
+  }
+
+  // The helper sometimes returns a soft hint (ok:true) instead of a match.
+  if r.models.is_empty() {
+    if let Some(hint) = r.error.as_deref() {
+      let _ = write!(out, "\n{hint}");
+    }
+  }
+
+  ToolResult::Text(out.trim_end().to_string())
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn fabric_embedded_requires_toggle_and_real_portal() {
+    // Fabric toggle on + a real portal URL ⇒ the app is in the portal iframe.
+    assert!(fabric_embedded(Some("fabric"), Some("https://portal/embed")));
+    // Toggle off / direct ⇒ direct app view, scrolling works.
+    assert!(!fabric_embedded(None, Some("https://portal/embed")));
+    assert!(!fabric_embedded(Some("direct"), Some("https://portal/embed")));
+    // Fabric on but no usable portal URL ⇒ effective_base_url falls back to direct.
+    assert!(!fabric_embedded(Some("fabric"), None));
+    assert!(!fabric_embedded(Some("fabric"), Some("   ")));
+  }
 
   #[test]
   fn format_console_handles_empty_and_levels() {
@@ -566,5 +862,63 @@ mod tests {
     let out = format_console(&json, None);
     assert!(out.contains("latest 80 of 200 messages"));
     assert!(!out.contains("line\n"), "newlines should be collapsed");
+  }
+
+  fn text_of(r: &ToolResult) -> String {
+    match r {
+      ToolResult::Text(s) => s.clone(),
+      ToolResult::Expanded(e) => e.text_result_for_llm.clone(),
+      _ => String::new(),
+    }
+  }
+
+  #[test]
+  fn render_sm_needs_az_points_to_az_login() {
+    let r = semantic_model::SemanticModelResult {
+      ok: false,
+      needs_az: true,
+      error: Some("az account get-access-token failed".into()),
+      ..Default::default()
+    };
+    let t = text_of(&render_semantic_model_result(&r));
+    assert!(t.contains("az login"), "got: {t}");
+  }
+
+  #[test]
+  fn render_sm_lists_models_and_wiring_command() {
+    let m = semantic_model::SemanticModel {
+      name: Some("Sales".into()),
+      id: Some("ds-1".into()),
+      item_id: Some("ds-1".into()),
+      workspace_id: Some("ws-1".into()),
+      workspace_name: Some("Finance".into()),
+      ..Default::default()
+    };
+    let r = semantic_model::SemanticModelResult {
+      ok: true,
+      matched: true,
+      models: vec![m],
+      ..Default::default()
+    };
+    let t = text_of(&render_semantic_model_result(&r));
+    assert!(t.contains("Sales"), "got: {t}");
+    assert!(t.contains("item id (= dataset id): ds-1"), "got: {t}");
+    assert!(
+      t.contains("fabric-app-data add <alias> -w ws-1 -i ds-1"),
+      "got: {t}"
+    );
+  }
+
+  #[test]
+  fn render_sm_soft_no_match_surfaces_hint() {
+    let r = semantic_model::SemanticModelResult {
+      ok: true,
+      matched: false,
+      error: Some("That looks like a GUID — use the locate tool for direct id/URL lookups.".into()),
+      ..Default::default()
+    };
+    let t = text_of(&render_semantic_model_result(&r));
+    assert!(t.contains("No matching semantic model"), "got: {t}");
+    assert!(t.contains("use the locate tool"), "got: {t}");
   }
 }

@@ -91,8 +91,7 @@ const rows = [
 
 To emphasize a subset against the whole, model the two as one two-valued `series`
 field over aligned rows. Both come from aligned aggregations sharing the x key (the
-subset is a separate aligned DAX aggregation — see `query-design`'s
-`highlight-queries`). Stack or overlap them by toggling `stack`.
+subset is a separate aligned DAX aggregation — see the `dax` skill's design reference). Stack or overlap them by toggling `stack`.
 
 ```tsx
 // rows: [{ category: "A", band: "All", value: 120 },

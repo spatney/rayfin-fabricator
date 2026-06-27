@@ -15,9 +15,7 @@
 >    hero tile → deploy → review → expand. Don't front-load schema discovery or
 >    theming.
 >
-> **Agent context lives in `.agents/skills/`** (build-workflow, visuals,
-> app-design, query-design, dax-authoring, schema-discovery, fabric-cli,
-> fabric-sdk). Pull each skill in as its phase needs it — start at its **Fast
+> **Agent context lives in `.agents/skills/`** (build-workflow, visuals, app-design, dax, fabric-data). Pull each skill in as its phase needs it — start at its **Fast
 > path** and read deeper references only on demand.
 
 ---
@@ -71,7 +69,7 @@ hand-edit the generated file — edit `fabric.yaml`.
 .
 ├── AGENTS.md                       ← you are here
 ├── .agents/skills/                 ← build-workflow, visuals, app-design,
-│                                     query-design, dax-authoring, schema-discovery, …
+│                                     dax, fabric-data
 ├── fabric.yaml                     ← Fabric data connections (semantic model profiles)
 ├── rayfin/rayfin.yml               ← Fabric service config (auth + static hosting)
 ├── src/
@@ -163,9 +161,9 @@ Never hand-edit the generated file.
 | Add a chart | `visuals` skill — map data, author an Envy spec, drop into `<ChartCard spec={…}>` |
 | Add a KPI / metric tile | `visuals` skill → `KpiCard` (+ `deriveKpi`) |
 | Add a table | `visuals` skill → `DataTableCard` (+ `toDataTable`) |
-| Find a metric / explore the model | `schema-discovery` skill, then `dax-authoring` |
-| Write or fix a DAX query | `dax-authoring` + `query-design` skills |
-| Decide DAX vs. TypeScript for a transform | `query-design` skill (responsibility matrix) |
+| Find a metric / explore the model | `dax` skill (progressive discovery, then query authoring) |
+| Write or fix a DAX query | `dax` skill |
+| Decide DAX vs. TypeScript for a transform | `dax` skill (responsibility matrix) |
 | Make it look stunning / theme it | `app-design` skill + edit `src/global.css` tokens |
 | Add a lightweight filter / segmented control | `visuals` skill (Controls) — own the value in React state |
 | Add Power BI-style slicers (shared filter state) | `visuals` skill → **Slicers & shared filter state** (`FilterStateProvider` + `FilterBar`/`DropdownSlicer`/…) |
@@ -173,7 +171,7 @@ Never hand-edit the generated file.
 | Show many series / a target line | `visuals` skill → **Multi-series** (long rows + `encoding.series`; target = a constant series) |
 | Vary card sizes / non-uniform layout | `visuals` skill → `BentoGrid` / `BentoItem` |
 | Build a chart Envy lacks (radar/treemap/…) | `visuals` skill → **Gotchas** — re-express with the closest Envy type |
-| Wire/connect a semantic model | `fabric-cli` + `fabric-sdk` skills; edit `fabric.yaml` |
+| Wire/connect a semantic model | `fabric-data` skill; edit `fabric.yaml`. If only workspace + item id is known, use `fabric-app-data add <alias> -w <ws> -i <item>`. |
 | Deploy to test | `npm run rayfin:up` (or let Fabricator deploy + screenshot) |
 
 ---
@@ -185,10 +183,10 @@ Never hand-edit the generated file.
 - **`.agents/skills/visuals/SKILL.md`** — the spec model: map data → author an
   Envy `ChartSpec` → drop into a tile; the type-picker, recipes, gotchas,
   `KpiCard` / `DataGrid`, slicers, and formatting/color.
-- **`.agents/skills/query-design/SKILL.md`** — what belongs in DAX vs.
-  TypeScript vs. the spec.
+- **`.agents/skills/dax/SKILL.md`** — progressive schema discovery, DAX-vs-TypeScript ownership, query authoring/testing, filters, time intelligence, and anti-patterns.
+- **`.agents/skills/fabric-data/SKILL.md`** — semantic-model connection management, `fabric.yaml`/generated config, CLI query testing, and runtime query-result handling.
 - **`.agents/skills/app-design/SKILL.md`** — aesthetic direction, typography,
   layout, and the Final Audit.
 
 If your task is purely UI, this file + the `visuals` skill are enough. If you're
-touching DAX or data wiring, read `query-design` and `dax-authoring` first.
+touching DAX, read `dax`; if you're wiring data, read `fabric-data`.

@@ -15,7 +15,7 @@ re-render with the new rows.
    - `applyFilters(rows, selections)` — instant, client-side filtering of mapped
      rows.
    - `toDaxFilters(selections)` — rebuild a server-side DAX query (see
-     `query-design`).
+     `dax`).
 3. The affected `ChartCard` / `KpiCard` / `DataTableCard` gets new `data` and
    re-renders. No mark wiring required.
 

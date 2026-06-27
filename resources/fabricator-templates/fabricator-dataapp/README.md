@@ -55,7 +55,7 @@ so it is meant to be opened from a deployed Fabric workspace (not `localhost`).
 ├── AGENTS.md               # Orientation for coding agents — start here
 ├── .agents/
 │   └── skills/             # Copilot skills (build-workflow, visuals, app-design,
-│                           # query-design, dax-authoring, schema-discovery, …)
+│                           # dax, fabric-data)
 ├── rayfin/
 │   └── rayfin.yml          # Fabric service configuration (Fabric auth + static hosting)
 ├── fabric.yaml             # Fabric data connections (semantic model profiles)
@@ -71,7 +71,7 @@ so it is meant to be opened from a deployed Fabric workspace (not `localhost`).
 │   │   ├── use-theme.ts / theme.context.ts  # Light/dark theme
 │   │   └── use-semantic-model-query.ts      # Query the connected semantic model
 │   ├── lib/
-│   │   ├── fabric-client.ts        # Fabric data client (connections from fabric.generated.ts)
+│   │   ├── fabric client module     # connections from fabric.generated.ts
 │   │   ├── rayfin-client.ts        # Rayfin client singleton
 │   │   ├── to-chart-data.ts        # Map a query result → chart row objects
 │   │   ├── to-data-table.ts        # Map a query result → DataGrid DataTable
@@ -117,3 +117,4 @@ so it is meant to be opened from a deployed Fabric workspace (not `localhost`).
 | `npm run build:fabric` | Build for Fabric deployment (entrypoint for `rayfin up`) |
 | `npm run lint` | Lint with ESLint |
 | `npm run rayfin:up` | Deploy the app to a Fabric test workspace |
+

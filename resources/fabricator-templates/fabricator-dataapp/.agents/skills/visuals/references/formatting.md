@@ -90,7 +90,7 @@ const data = toDataTable(result, [
   full grouped values in tooltips and tables.
 - Currency → 2 decimals; counts → 0.
 - Never `FORMAT()` a measure to text in DAX — emit raw numerics. (See
-  `query-design`.)
+  `dax`.)
 
 ## Color & theme
 

@@ -12,6 +12,7 @@ pub mod fingerprint;
 pub mod history;
 pub mod paths;
 pub mod preview;
+pub mod semantic_model;
 pub mod store;
 pub mod telemetry;
 pub mod updater;

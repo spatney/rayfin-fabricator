@@ -4,7 +4,7 @@ description: >
   START HERE when building, modifying, or iterating on a data app or dashboard.
   Defines the fast, iterative "time to wow" workflow: ship one real hero visual
   first, deploy and review it, then expand breadth and polish. Orchestrates the
-  schema-discovery, dax-authoring, query-design, visuals, and app-design skills
+  dax, fabric-data, visuals, and app-design skills
   so you don't front-load all of them.
 ---
 
@@ -33,9 +33,9 @@ fast as possible.
 
 1. **Minimum schema scan** — discover just enough to find one compelling metric:
    one scope probe + the one or two tables/measures behind your hero visual.
-   Don't enumerate the whole model. (→ `schema-discovery`: Fast path)
+   Don't enumerate the whole model. (→ `dax`: Fast path)
 2. **One hero query** — write a single DAX query at the visual's grain,
-   quick-test it once, ship it. (→ `dax-authoring` + `query-design`: Fast path)
+   quick-test it once, ship it. (→ `dax`: Fast path)
 3. **One hero visual** — render it the simplest way: map the hero query with
    `toChartData`, author one Envy spec, and pass it to a `ChartCard` (or render a
    `KpiCard` / `DataTableCard`) — pass the mapped data + `loading`/`error`, don't
@@ -52,7 +52,7 @@ Stop and look at the deployed result before going further.
 Add the rest of what the user asked for — more KPIs, charts, a grid, filters.
 **Deploy + review every 1–2 additions**, not once at the end. Pull in
 interactivity (cross-filtering / cross-highlighting) only when the user actually
-needs it. (→ `query-design`, `visuals`)
+needs it. (→ `dax`, `visuals`)
 
 ### Phase 3 — Polish
 
@@ -62,7 +62,7 @@ Now refine, driven by what the running app actually shows:
 - Loading / empty / error states for every async visual.
 - Edge-case DAX correctness, number/date formatting, dark mode.
 
-(→ `app-design`, `query-design`, and `dax-authoring` reference files — read on demand.)
+(→ `app-design` and `dax` reference files — read on demand.)
 
 ## Rules
 
@@ -82,10 +82,10 @@ at its **Fast path** section until you genuinely need more.
 
 | When | Skill | How much |
 |---|---|---|
-| Phase 1 — find a metric | `schema-discovery` | Fast path only |
-| Phase 1 — write the hero query | `dax-authoring` + `query-design` | Fast path only |
+| Phase 1 — find a metric | `dax` | Fast path only |
+| Phase 1 — write the hero query | `dax` | Fast path only |
 | Phase 1 — render it | `visuals` | Fast path only |
 | Phase 1 — quick default look | `app-design` | Fast path only |
-| Phase 2 — breadth & interactivity | `query-design`, `visuals` | deeper sections |
-| Phase 3 — polish & correctness | `app-design`, `dax-authoring`, `query-design` | references, on demand |
-| Connections / data plumbing | `fabric-cli`, `fabric-sdk` | only if not already wired |
+| Phase 2 — breadth & interactivity | `dax`, `visuals` | deeper sections |
+| Phase 3 — polish & correctness | `app-design`, `dax` | references, on demand |
+| Connections / data plumbing | `fabric-data` | only if not already wired |
