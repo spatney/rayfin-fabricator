@@ -42,12 +42,21 @@ function App(): JSX.Element {
       const [d, a] = await Promise.all([window.api.doctor.check(), window.api.auth.status()])
       setDoctor(d)
       setAuth(a)
-      const ready = d.ready && a.copilot.signedIn && a.rayfin.signedIn
-      applyPhase(ready ? 'ready' : 'setup')
+      // Always land on the setup screen — even when every tool is installed and
+      // all accounts are signed in. Entering the workbench is an explicit choice
+      // the user makes from there (see `enter`), so re-checks and sign-outs keep
+      // us on setup rather than auto-advancing.
+      applyPhase('setup')
     } finally {
       setRefreshing(false)
     }
   }, [applyPhase])
+
+  // Explicit transition into the workbench, triggered by the setup screen's
+  // "Enter" button once every prerequisite is satisfied.
+  const enter = useCallback((): void => {
+    setPhase('ready')
+  }, [])
 
   useEffect(() => {
     void refresh()
@@ -91,7 +100,7 @@ function App(): JSX.Element {
   return (
     <>
       <UpdateBanner />
-      <SetupScreen doctor={doctor} auth={auth} refreshing={refreshing} onRefresh={refresh} />
+      <SetupScreen doctor={doctor} auth={auth} refreshing={refreshing} onRefresh={refresh} onEnter={enter} />
     </>
   )
 }

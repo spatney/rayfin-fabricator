@@ -14,7 +14,7 @@ use crate::services::emit::proc_streamer;
 use crate::services::exec::{self, RunOptions};
 use crate::services::paths;
 use crate::services::telemetry::{self, TelemetryIdentity};
-use crate::types::{AuthStatus, CopilotAuthStatus, ProcResult, RayfinAuthStatus};
+use crate::types::{AuthStatus, AzAuthStatus, CopilotAuthStatus, ProcResult, RayfinAuthStatus};
 
 /// Last-known signed-in identity, cached so telemetry can attach a stable hashed
 /// user without re-spawning the CLI.
@@ -153,14 +153,56 @@ pub async fn get_rayfin_auth() -> RayfinAuthStatus {
   }
 }
 
+/// Detect Azure CLI auth via the `az` CLI.
+///
+/// `az account show` reads the on-disk profile and keeps reporting a signed-in
+/// account even after the refresh token has expired (AADSTS700082), so it can't
+/// be trusted on its own. We first probe `az account get-access-token`, which
+/// actually exercises the token, and only then read `az account show` for the
+/// display name + tenant.
+pub async fn get_az_auth() -> AzAuthStatus {
+  let token = exec::run(
+    "az",
+    &["account", "get-access-token", "--output", "none"],
+    RunOptions::timeout(30_000),
+  )
+  .await;
+  if !token.ok {
+    return AzAuthStatus::default();
+  }
+
+  let show = exec::run(
+    "az",
+    &["account", "show", "--output", "json"],
+    RunOptions::timeout(30_000),
+  )
+  .await;
+  let (user, tenant) = serde_json::from_str::<serde_json::Value>(&show.stdout)
+    .ok()
+    .map(|v| {
+      let user = v["user"]["name"].as_str().map(|s| s.to_string());
+      let tenant = v["tenantId"].as_str().map(|s| s.to_string());
+      (user, tenant)
+    })
+    .unwrap_or((None, None));
+
+  AzAuthStatus {
+    signed_in: true,
+    user,
+    tenant,
+  }
+}
+
 #[tauri::command]
 pub async fn auth_status() -> AuthStatus {
   let copilot = get_copilot_auth();
-  let rayfin = get_rayfin_auth().await;
+  // Rayfin and Azure both shell out to their CLIs; run them concurrently so the
+  // startup check isn't the sum of two slow process spawns.
+  let (rayfin, az) = tokio::join!(get_rayfin_auth(), get_az_auth());
   if rayfin.signed_in && !STARTUP_SIGNIN_SENT.swap(true, Ordering::SeqCst) {
     telemetry::track_signin(cached_identity().as_ref(), "startup");
   }
-  AuthStatus { copilot, rayfin }
+  AuthStatus { copilot, rayfin, az }
 }
 
 #[tauri::command]
@@ -211,6 +253,26 @@ pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>) -> ProcRe
     get_rayfin_auth().await;
     telemetry::track_signin(cached_identity().as_ref(), "login");
   }
+  ProcResult {
+    ok: res.ok,
+    exit_code: res.exit_code,
+  }
+}
+
+#[tauri::command]
+pub async fn auth_login_az(app: AppHandle) -> ProcResult {
+  let on_data = proc_streamer(&app, "login:az");
+  on_data(exec::Stream::Stdout, "Starting Azure sign-in…\n");
+  let res = exec::run(
+    "az",
+    &["login"],
+    RunOptions {
+      on_data: Some(on_data),
+      timeout_ms: Some(5 * 60_000),
+      ..Default::default()
+    },
+  )
+  .await;
   ProcResult {
     ok: res.ok,
     exit_code: res.exit_code,

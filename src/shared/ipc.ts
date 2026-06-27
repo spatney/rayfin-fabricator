@@ -51,7 +51,7 @@ export interface DeleteProgressEvent {
  * Environment doctor
  * ------------------------------------------------------------------ */
 
-export type ToolId = 'node' | 'npm' | 'git' | 'rayfin' | 'copilot'
+export type ToolId = 'node' | 'npm' | 'git' | 'rayfin' | 'copilot' | 'az'
 
 export interface ToolStatus {
   id: ToolId
@@ -93,9 +93,16 @@ export interface RayfinAuthStatus {
   tenant?: string
 }
 
+export interface AzAuthStatus {
+  signedIn: boolean
+  user?: string
+  tenant?: string
+}
+
 export interface AuthStatus {
   copilot: CopilotAuthStatus
   rayfin: RayfinAuthStatus
+  az: AzAuthStatus
 }
 
 /** A Fabric workspace the signed-in user can access, with capacity details. */
@@ -953,6 +960,7 @@ export const IpcChannels = {
   authStatus: 'auth:status',
   authLoginCopilot: 'auth:loginCopilot',
   authLoginRayfin: 'auth:loginRayfin',
+  authLoginAz: 'auth:loginAz',
   authLogoutRayfin: 'auth:logoutRayfin',
 
   fabricWorkspaces: 'fabric:workspaces',
@@ -1081,6 +1089,7 @@ export interface RayfinStudioApi {
     status: () => Promise<AuthStatus>
     loginCopilot: () => Promise<ProcResult>
     loginRayfin: (tenant?: string) => Promise<ProcResult>
+    loginAz: () => Promise<ProcResult>
     logoutRayfin: () => Promise<ProcResult>
   }
 

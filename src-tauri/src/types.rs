@@ -98,9 +98,20 @@ pub struct RayfinAuthStatus {
 
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct AzAuthStatus {
+  pub signed_in: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub user: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub tenant: Option<String>,
+}
+
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthStatus {
   pub copilot: CopilotAuthStatus,
   pub rayfin: RayfinAuthStatus,
+  pub az: AzAuthStatus,
 }
 
 /* ----------------------------- fabric ----------------------------- */

@@ -93,6 +93,21 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       install_hint: "Required to sign in to Microsoft Fabric and deploy your apps.",
       install_url: Some("https://www.npmjs.com/package/@microsoft/rayfin-cli"),
     },
+    ToolDef {
+      id: "az",
+      name: "Azure CLI",
+      bin: "az",
+      version_args: &["version"],
+      required: true,
+      npm_package: None,
+      system: Some(SystemPkg {
+        winget: Some("Microsoft.AzureCLI"),
+        brew: Some("azure-cli"),
+      }),
+      min_version: None,
+      install_hint: "Required to sign in to Azure.",
+      install_url: Some("https://learn.microsoft.com/cli/azure/install-azure-cli"),
+    },
   ]
 });
 
@@ -200,6 +215,7 @@ pub async fn doctor_install(app: AppHandle, id: String) -> InstallResult {
     "npm" => "install:setup",
     "git" => "install:git",
     "rayfin" => "install:rayfin",
+    "az" => "install:az",
     _ => "install:setup",
   };
   let on_data = proc_streamer(&app, channel);
@@ -428,8 +444,9 @@ pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> In
     };
   }
 
-  // Phase 1 — system prerequisites (Node first so npm appears, then Git).
-  let system_missing: Vec<&ToolDef> = ["node", "git"]
+  // Phase 1 — system prerequisites (Node first so npm appears, then Git, then
+  // the Azure CLI). These all land on PATH and need a relaunch to be picked up.
+  let system_missing: Vec<&ToolDef> = ["node", "git", "az"]
     .iter()
     .filter_map(|id| tool_by_id(id))
     .filter(|def| missing.iter().any(|m| m == def.id) && system_installable(def))

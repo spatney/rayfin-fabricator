@@ -1,20 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
-import type {
-  AuthStatus,
-  DoctorReport,
-  InstallResult,
-  ProcLogEvent
-} from '@shared/ipc'
+import type { AuthStatus, DoctorReport, InstallResult, ProcLogEvent } from '@shared/ipc'
 import logo from '../assets/logo.png'
+import rayfinMark from '../assets/brands/rayfin.png'
+import nodeSvg from '../assets/brands/node.svg'
+import npmSvg from '../assets/brands/npm.svg'
+import gitSvg from '../assets/brands/git.svg'
+import azureSvg from '../assets/brands/azure.svg'
+import fabricSvg from '../assets/brands/fabric.svg'
+import { CopilotLogo } from '../components/brand-icons'
+import { CheckIcon, DownloadIcon, ReloadIcon, TerminalIcon } from '../components/icons'
+
+/** Official product logo (as an <img> src) for each tool, keyed by the doctor's tool id. */
+const TOOL_LOGOS: Record<string, string> = {
+  node: nodeSvg,
+  npm: npmSvg,
+  git: gitSvg,
+  rayfin: rayfinMark,
+  az: azureSvg
+}
 
 interface Props {
   doctor: DoctorReport | null
   auth: AuthStatus | null
   refreshing: boolean
   onRefresh: () => Promise<void> | void
+  onEnter: () => void
 }
 
-export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Props): JSX.Element {
+export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnter }: Props): JSX.Element {
   const [log, setLog] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [finalizing, setFinalizing] = useState(false)
@@ -79,22 +92,36 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
 
   const tools = doctor?.tools ?? []
   const needsAuto = tools.filter((t) => t.required && !t.satisfied && t.autoInstallable)
+  const toolsSatisfied = tools.filter((t) => t.satisfied).length
 
-  // Fabric sign-in shells out to the global `rayfin` CLI, so it can't work until
-  // the Rayfin CLI (and its Node runtime) are installed. Gate the card on that.
+  // Fabric / Azure sign-in shell out to the global `rayfin` / `az` CLIs, so they
+  // can't work until those CLIs are installed. Gate the cards on that.
   const rayfinReady = tools.find((t) => t.id === 'rayfin')?.satisfied ?? false
+  const azReady = tools.find((t) => t.id === 'az')?.satisfied ?? false
 
-  const allReady =
-    (doctor?.ready ?? false) &&
-    (auth?.copilot.signedIn ?? false) &&
-    (auth?.rayfin.signedIn ?? false)
+  const providers = [
+    auth?.copilot.signedIn ?? false,
+    auth?.rayfin.signedIn ?? false,
+    auth?.az.signedIn ?? false
+  ]
+  const signedInCount = providers.filter(Boolean).length
+
+  const allReady = (doctor?.ready ?? false) && signedInCount === providers.length
+
+  const totalSteps = tools.length + providers.length
+  const doneSteps = toolsSatisfied + signedInCount
+  const pct = totalSteps ? Math.round((doneSteps / totalSteps) * 100) : 0
+  const remaining = totalSteps - doneSteps
 
   const loginProvider =
     busy === 'login:copilot'
       ? 'GitHub Copilot'
       : busy === 'login:rayfin'
         ? 'Microsoft Fabric'
-        : null
+        : busy === 'login:az'
+          ? 'Azure'
+          : null
+
   // Show only the meaningful tail of the process output in the sign-in overlay:
   // drop our own "› <label>" echo lines and blank lines so it reads as clean
   // status rather than a raw terminal dump.
@@ -107,41 +134,49 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
 
   return (
     <div className="setup">
-      <div className="setup-inner">
-        <header className="setup-header">
-          <div className="brand">
-            <img className="brand-mark" src={logo} alt="" />
-            <span className="brand-name">Rayfin Fabricator</span>
-          </div>
-          <p className="setup-sub">
-            Build and ship Rayfin apps by chatting with an AI agent. Let&apos;s get your
-            environment ready.
-          </p>
-        </header>
+      <div className="setup-scroll">
+        <div className="setup-inner">
+          <header className="setup-hero">
+            <div className="setup-hero-mark">
+              <img src={logo} alt="" />
+            </div>
+            <div className="setup-hero-copy">
+              <span className="setup-eyebrow">Welcome to</span>
+              <h1 className="setup-hero-title">Rayfin Fabricator</h1>
+              <p className="setup-hero-tagline">
+                Build and ship Rayfin apps by chatting with an AI agent.
+              </p>
+            </div>
+          </header>
 
-        <section className="setup-card">
-          <div className="setup-card-head">
-            <h2 className="setup-card-title">1 · Tools</h2>
-            {needsAuto.length > 0 && (
-              <button
-                className="btn btn--primary btn--sm"
-                disabled={busy !== null}
-                onClick={() =>
-                  runInstall('install:all', 'Install everything', () =>
-                    window.api.doctor.installAll()
-                  )
-                }
-              >
-                {busy === 'install:all' ? 'Installing…' : 'Install everything'}
-              </button>
-            )}
+          <div className={`setup-meter ${allReady ? 'setup-meter--done' : ''}`}>
+            <div className="setup-meter-head">
+              <span className="setup-meter-label">
+                {allReady ? (
+                  <>
+                    <span className="setup-meter-check">
+                      <CheckIcon />
+                    </span>
+                    You’re all set — everything’s installed and you’re signed in.
+                  </>
+                ) : (
+                  'Getting your environment ready'
+                )}
+              </span>
+              <span className="setup-meter-count">
+                {doneSteps}/{totalSteps}
+              </span>
+            </div>
+            <div className="setup-meter-track">
+              <span className="setup-meter-fill" style={{ width: `${pct}%` }} />
+            </div>
           </div>
 
           {needsRelaunch && (
             <div className="setup-relaunch">
               <div className="setup-relaunch-text">
-                <strong>Almost there.</strong> Restart to finish setting up the tools that
-                were just installed.
+                <strong>Almost there.</strong> Restart to finish setting up the tools that were
+                just installed.
               </div>
               <button className="btn btn--primary btn--sm" onClick={() => window.api.relaunch()}>
                 Restart now
@@ -149,122 +184,227 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
             </div>
           )}
 
-          <ul className="tool-list">
-            {tools.map((t) => (
-              <li key={t.id} className="tool-row">
-                <span className={`status-dot ${t.satisfied ? 'status-dot--ok' : 'status-dot--bad'}`} />
-                <span className="tool-name">{t.name}</span>
-                <span className="tool-version">
-                  {t.satisfied
-                    ? t.version
-                    : t.found
-                      ? `${t.version} · update to ${t.minVersion}+ needed`
-                      : t.installHint}
-                </span>
-                <span className="tool-action">
-                  {t.satisfied ? (
-                    <span className="tag tag--ok">installed</span>
-                  ) : t.autoInstallable ? (
+          <div className="setup-grid">
+            <section className="setup-card">
+              <div className="setup-card-head">
+                <div className="setup-card-heading">
+                  <span className="setup-step">1</span>
+                  <div className="setup-card-headings">
+                    <h2 className="setup-card-title">Tools</h2>
+                    <p className="setup-card-note">Command-line tools Fabricator needs locally</p>
+                  </div>
+                </div>
+                <div className="setup-card-head-right">
+                  <span
+                    className={`setup-count ${
+                      tools.length > 0 && toolsSatisfied === tools.length ? 'setup-count--ok' : ''
+                    }`}
+                  >
+                    {toolsSatisfied}/{tools.length}
+                  </span>
+                  {needsAuto.length > 0 && (
                     <button
-                      className="btn btn--sm"
+                      className="btn btn--primary btn--sm"
                       disabled={busy !== null}
                       onClick={() =>
-                        runInstall(
-                          `install:${t.id}`,
-                          `${t.found ? 'Update' : 'Install'} ${t.name}`,
-                          () => window.api.doctor.install(t.id)
+                        runInstall('install:all', 'Install everything', () =>
+                          window.api.doctor.installAll()
                         )
                       }
                     >
-                      {busy === `install:${t.id}`
-                        ? t.found
-                          ? 'Updating…'
-                          : 'Installing…'
-                        : t.found
-                          ? 'Update'
-                          : 'Install'}
+                      {busy === 'install:all' ? 'Installing…' : 'Install all'}
                     </button>
-                  ) : (
-                    <a className="btn btn--sm btn--link" href={t.installUrl} target="_blank" rel="noreferrer">
-                      Get it
-                    </a>
                   )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+                </div>
+              </div>
 
-        <section className="setup-card">
-          <h2 className="setup-card-title">2 · Sign in</h2>
-          <div className="auth-grid">
-            <AuthCard
-              title="GitHub Copilot"
-              subtitle="The AI agent that writes your code"
-              signedIn={auth?.copilot.signedIn ?? false}
-              detail={auth?.copilot.user}
-              disabled={busy !== null}
-              busy={busy === 'login:copilot'}
-              onSignIn={() =>
-                runAction('login:copilot', 'Sign in to GitHub Copilot', () =>
-                  window.api.auth.loginCopilot()
-                )
-              }
-            />
-            <AuthCard
-              title="Microsoft Fabric"
-              subtitle="Where your Rayfin apps deploy"
-              signedIn={auth?.rayfin.signedIn ?? false}
-              detail={auth?.rayfin.user}
-              extra={auth?.rayfin.tenant ? `Tenant ${auth.rayfin.tenant}` : undefined}
-              disabled={busy !== null || !rayfinReady}
-              disabledReason={
-                !rayfinReady ? 'Install the Rayfin CLI above to enable Fabric sign-in.' : undefined
-              }
-              busy={busy === 'login:rayfin'}
-              onSignIn={() =>
-                runAction('login:rayfin', 'Sign in to Fabric / Rayfin', () =>
-                  window.api.auth.loginRayfin()
-                )
-              }
-            />
-          </div>
-        </section>
+              <ul className="tool-list">
+                {tools.map((t) => {
+                  const logoSrc = TOOL_LOGOS[t.id]
+                  const state = t.satisfied ? 'ok' : t.found ? 'warn' : 'bad'
+                  return (
+                    <li key={t.id} className="tool-row" data-state={state}>
+                      <span className="tool-ico">
+                        {logoSrc ? (
+                          <img className="brand-glyph" src={logoSrc} alt="" />
+                        ) : (
+                          <TerminalIcon />
+                        )}
+                      </span>
+                      <div className="tool-main">
+                        <span className="tool-name">{t.name}</span>
+                        <span className="tool-meta">
+                          {t.satisfied
+                            ? t.version
+                            : t.found
+                              ? `${t.version} · update to ${t.minVersion}+ needed`
+                              : t.installHint}
+                        </span>
+                      </div>
+                      <div className="tool-action">
+                        {t.satisfied ? (
+                          <span className="tool-chip">
+                            <CheckIcon className="tool-chip-ico" />
+                            Installed
+                          </span>
+                        ) : t.autoInstallable ? (
+                          <button
+                            className="btn btn--sm"
+                            disabled={busy !== null}
+                            onClick={() =>
+                              runInstall(
+                                `install:${t.id}`,
+                                `${t.found ? 'Update' : 'Install'} ${t.name}`,
+                                () => window.api.doctor.install(t.id)
+                              )
+                            }
+                          >
+                            {busy === `install:${t.id}` ? (
+                              t.found ? (
+                                'Updating…'
+                              ) : (
+                                'Installing…'
+                              )
+                            ) : (
+                              <>
+                                <DownloadIcon className="btn-ico" />
+                                {t.found ? 'Update' : 'Install'}
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <a
+                            className="btn btn--sm"
+                            href={t.installUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Get it
+                          </a>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
 
-        <footer className="setup-footer">
-          <button className="btn btn--ghost" onClick={() => setShowLog((s) => !s)}>
-            {showLog ? 'Hide' : 'Show'} log
-          </button>
-          <div className="setup-footer-right">
-            <button className="btn btn--ghost" disabled={refreshing || busy !== null} onClick={() => onRefresh()}>
-              {refreshing ? 'Checking…' : 'Re-check'}
-            </button>
-            <button
-              className="btn btn--primary"
-              disabled={!allReady || busy !== null}
-              onClick={() => onRefresh()}
-            >
-              Enter Rayfin Fabricator →
-            </button>
+            <section className="setup-card">
+              <div className="setup-card-head">
+                <div className="setup-card-heading">
+                  <span className="setup-step">2</span>
+                  <div className="setup-card-headings">
+                    <h2 className="setup-card-title">Sign in</h2>
+                    <p className="setup-card-note">Accounts Fabricator builds and deploys with</p>
+                  </div>
+                </div>
+                <div className="setup-card-head-right">
+                  <span
+                    className={`setup-count ${
+                      signedInCount === providers.length ? 'setup-count--ok' : ''
+                    }`}
+                  >
+                    {signedInCount}/{providers.length}
+                  </span>
+                </div>
+              </div>
+
+              <ul className="auth-list">
+                <AuthRow
+                  icon={<CopilotLogo />}
+                  title="GitHub Copilot"
+                  subtitle="The AI agent that writes your code"
+                  signedIn={auth?.copilot.signedIn ?? false}
+                  detail={auth?.copilot.user}
+                  disabled={busy !== null}
+                  busy={busy === 'login:copilot'}
+                  onSignIn={() =>
+                    runAction('login:copilot', 'Sign in to GitHub Copilot', () =>
+                      window.api.auth.loginCopilot()
+                    )
+                  }
+                />
+                <AuthRow
+                  icon={<img className="brand-glyph" src={fabricSvg} alt="" />}
+                  title="Microsoft Fabric"
+                  subtitle="Where your Rayfin apps deploy"
+                  signedIn={auth?.rayfin.signedIn ?? false}
+                  detail={auth?.rayfin.user}
+                  extra={auth?.rayfin.tenant}
+                  disabled={busy !== null || !rayfinReady}
+                  disabledReason={!rayfinReady ? 'Install the Rayfin CLI first' : undefined}
+                  busy={busy === 'login:rayfin'}
+                  onSignIn={() =>
+                    runAction('login:rayfin', 'Sign in to Fabric / Rayfin', () =>
+                      window.api.auth.loginRayfin()
+                    )
+                  }
+                />
+                <AuthRow
+                  icon={<img className="brand-glyph" src={azureSvg} alt="" />}
+                  title="Azure CLI"
+                  subtitle="Access your Azure resources"
+                  signedIn={auth?.az.signedIn ?? false}
+                  detail={auth?.az.user}
+                  extra={auth?.az.tenant}
+                  disabled={busy !== null || !azReady}
+                  disabledReason={!azReady ? 'Install the Azure CLI first' : undefined}
+                  busy={busy === 'login:az'}
+                  onSignIn={() =>
+                    runAction('login:az', 'Sign in to Azure', () => window.api.auth.loginAz())
+                  }
+                />
+              </ul>
+            </section>
           </div>
-        </footer>
+        </div>
       </div>
 
       {showLog && (
         <div className="setup-logwrap">
-          <pre ref={logRef} className="setup-log">
-            {log.trim() || 'Process output will appear here.'}
-          </pre>
+          <div className="setup-logwrap-inner">
+            <pre ref={logRef} className="setup-log">
+              {log.trim() || 'Process output will appear here.'}
+            </pre>
+          </div>
         </div>
       )}
 
+      <div className="setup-actionbar">
+        <div className="setup-actionbar-inner">
+          <button className="btn btn--ghost btn--sm" onClick={() => setShowLog((s) => !s)}>
+            {showLog ? 'Hide log' : 'Show log'}
+          </button>
+          <div className="setup-actionbar-right">
+            <span className="setup-actionbar-status">
+              {allReady
+                ? 'All checks passed'
+                : `${remaining} ${remaining === 1 ? 'step' : 'steps'} left`}
+            </span>
+            <button
+              className="btn btn--ghost"
+              disabled={refreshing || busy !== null}
+              onClick={() => onRefresh()}
+            >
+              <ReloadIcon className={`btn-ico ${refreshing ? 'icon-spin' : ''}`} />
+              {refreshing ? 'Checking…' : 'Re-check'}
+            </button>
+            <button
+              className="btn btn--primary setup-enter"
+              disabled={!allReady || busy !== null}
+              onClick={() => onEnter()}
+            >
+              Enter Rayfin Fabricator
+              <span className="setup-enter-arrow" aria-hidden="true">
+                →
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {loginProvider && (
-        <div
-          className="signin-overlay"
-          role="alertdialog"
-          aria-busy="true"
-          aria-label="Signing in"
-        >
+        <div className="signin-overlay" role="alertdialog" aria-busy="true" aria-label="Signing in">
           <div className="signin-card">
             <div className="signin-mark">
               <img src={logo} alt="" />
@@ -286,7 +426,8 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh }: Pro
   )
 }
 
-interface AuthCardProps {
+interface AuthRowProps {
+  icon: JSX.Element
   title: string
   subtitle: string
   signedIn: boolean
@@ -298,27 +439,39 @@ interface AuthCardProps {
   onSignIn: () => void
 }
 
-function AuthCard(props: AuthCardProps): JSX.Element {
+function AuthRow(props: AuthRowProps): JSX.Element {
   return (
-    <div className={`auth-card ${props.signedIn ? 'auth-card--ok' : ''}`}>
-      <div className="auth-card-head">
-        <span className="auth-card-title">{props.title}</span>
-        <span className={`status-dot ${props.signedIn ? 'status-dot--ok' : 'status-dot--bad'}`} />
+    <li className={`auth-row ${props.signedIn ? 'auth-row--ok' : ''}`}>
+      <span className="auth-ico">{props.icon}</span>
+      <div className="auth-row-main">
+        <span className="auth-row-title">{props.title}</span>
+        {props.signedIn ? (
+          <span className="auth-row-meta auth-row-meta--ok">
+            {props.detail ?? 'Signed in'}
+            {props.extra ? ` · ${props.extra}` : ''}
+          </span>
+        ) : props.disabledReason ? (
+          <span className="auth-row-meta auth-row-meta--warn">{props.disabledReason}</span>
+        ) : (
+          <span className="auth-row-meta">{props.subtitle}</span>
+        )}
       </div>
-      <p className="auth-card-sub">{props.subtitle}</p>
-      {props.signedIn ? (
-        <div className="auth-card-detail">
-          <div className="auth-card-user">{props.detail ?? 'Signed in'}</div>
-          {props.extra && <div className="auth-card-extra">{props.extra}</div>}
-        </div>
-      ) : (
-        <button className="btn btn--primary btn--block" disabled={props.disabled} onClick={props.onSignIn}>
-          {props.busy ? 'Waiting for sign-in…' : 'Sign in'}
-        </button>
-      )}
-      {!props.signedIn && props.disabledReason && (
-        <p className="auth-card-hint">{props.disabledReason}</p>
-      )}
-    </div>
+      <div className="auth-row-action">
+        {props.signedIn ? (
+          <span className="tool-chip">
+            <CheckIcon className="tool-chip-ico" />
+            Connected
+          </span>
+        ) : (
+          <button
+            className="btn btn--primary btn--sm"
+            disabled={props.disabled}
+            onClick={props.onSignIn}
+          >
+            {props.busy ? 'Waiting…' : 'Sign in'}
+          </button>
+        )}
+      </div>
+    </li>
   )
 }

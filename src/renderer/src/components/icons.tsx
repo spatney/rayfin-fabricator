@@ -336,3 +336,66 @@ export function GlobeIcon(props: IconProps): JSX.Element {
     </Icon>
   )
 }
+
+/** Checkmark — a satisfied / completed state. */
+export function CheckIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <polyline points="20 6 9 17 4 12" />
+    </Icon>
+  )
+}
+
+/** Down arrow into a tray — install / download. */
+export function DownloadIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M12 3v12" />
+      <polyline points="7 11 12 16 17 11" />
+      <path d="M5 19h14" />
+    </Icon>
+  )
+}
+
+/** Cloud — Azure / cloud resources. */
+export function CloudIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M7 18a4 4 0 0 1-.5-7.97 5.5 5.5 0 0 1 10.6 1.02A3.5 3.5 0 0 1 16.5 18Z" />
+    </Icon>
+  )
+}
+
+/** Isometric cube — Node.js runtime. */
+export function CubeIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7Z" />
+      <path d="M3.7 7.2 12 12l8.3-4.8" />
+      <path d="M12 12v9.5" />
+    </Icon>
+  )
+}
+
+/** Shipping box — an npm package. */
+export function PackageIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7Z" />
+      <path d="M3.7 7.2 12 12l8.3-4.8" />
+      <path d="M12 12v9.5" />
+      <path d="M7.8 4.7 16 9.4" />
+    </Icon>
+  )
+}
+
+/** Terminal — a command-line tool. */
+export function TerminalIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="m7 9 3 3-3 3" />
+      <path d="M13 15h4" />
+    </Icon>
+  )
+}
