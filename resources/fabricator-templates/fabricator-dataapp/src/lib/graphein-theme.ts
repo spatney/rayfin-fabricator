@@ -30,20 +30,35 @@ const PALETTE_VARS = [
     "--color-chart-4",
     "--color-chart-5",
     "--color-chart-6",
+    "--color-chart-7",
+    "--color-chart-8",
+    "--color-chart-9",
+    "--color-chart-10",
 ] as const;
 
-/** Dark-ish fallback used before styles resolve (SSR / first paint). */
+/** Graphein-default fallback used before styles resolve (SSR / first paint). */
 const FALLBACK_COLORS: ThemeColors = {
-    background: "#101216",
-    surface: "#161a20",
-    text: "#e6e8ec",
-    textMuted: "#9aa3b2",
-    axis: "#6b7380",
-    grid: "rgba(230, 232, 236, 0.06)",
-    border: "#1f242c",
-    accent: "#bef264",
-    palette: ["#bef264", "#e6e8ec", "#a3e635", "#a78bfa", "#34d399", "#f87171"],
-    positive: "#34d399",
+    background: "#111a2e",
+    surface: "#16223c",
+    text: "#f1f5f9",
+    textMuted: "#94a3b8",
+    axis: "#334155",
+    grid: "#1c2740",
+    border: "#1e293b",
+    accent: "#2dd4bf",
+    palette: [
+        "#3b82f6",
+        "#14b8a6",
+        "#f59e0b",
+        "#ef4444",
+        "#8b5cf6",
+        "#ec4899",
+        "#10b981",
+        "#f97316",
+        "#6366f1",
+        "#84cc16",
+    ],
+    positive: "#22c55e",
     negative: "#f87171",
 };
 

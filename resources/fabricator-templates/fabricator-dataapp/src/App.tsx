@@ -9,7 +9,11 @@ import {
     Card,
     ChartCard,
     DashboardGrid,
+    DateRangeSlicer,
+    DropdownSlicer,
     EmptyTile,
+    FilterBar,
+    FilterStateProvider,
     PageShell,
     Section,
     Stat,
@@ -24,42 +28,67 @@ import {
  * Every visual is one **Graphein `ChartSpec`** (a single JSON object) dropped into a
  * `<ChartCard spec={…} />`. The card owns the theme, axes, tooltips, number
  * formatting, dark mode, and loading/empty/error states — so you author data +
- * a spec, never chart code.
+ * a spec, never chart code. The look is **Graphein-native by default** (teal
+ * accent, slate neutrals, the 10-hue palette) — rebrand by editing the tokens in
+ * `src/global.css`, not by coloring specs.
  *
  * The layout below is the golden path — copy its shape, then swap in your data:
  *
  *   - **`PageShell`** — the page frame (editorial masthead: eyebrow + title +
- *     actions; add a `toolbar` row for filters). Use `SidebarShell` for a
- *     filter-heavy app with a persistent rail.
+ *     actions) with a `toolbar` row that already holds the **slicers**. Use
+ *     `SidebarShell` for a filter-heavy app with a persistent rail.
+ *   - **`FilterStateProvider` + `FilterBar` + slicers** — one shared filter
+ *     model every tile can read; ships wired by default.
  *   - **`StatStrip` + `Stat`** — one hairline-divided metric band (not four
  *     look-alike KPI boxes).
  *   - **`DashboardGrid` + `Tile size="…"`** — a 12-col canvas; vary tile sizes
  *     (`sm` `md` `lg` `wide` `hero` `full`) for an editorial, non-uniform layout
  *     instead of a uniform grid.
  *
- * The template ships no mock data, so the tiles start empty. To build your app:
+ * The template ships no mock data, so the tiles start empty and the slicers show
+ * no options. To build your app:
  *
  *   1. Declare a connection in `fabric.yaml` and run `npm run build:fabric`.
  *   2. Add a DAX query, fetch it with `useSemanticModelQuery(...)`, and map the
  *      result to rows with `toChartData(...)`.
  *   3. Author a `ChartSpec` per tile and pass it to `<ChartCard spec={…}>`
  *      (KPIs → `StatStrip`/`Stat` or `KpiCard`, tabular → `DataTableCard`).
+ *   4. Populate the slicers with `useSlicerOptions(...)` and apply the shared
+ *      selections with `applyFilters(rows, selections)` (or `toDaxFilters`).
  *
  * See `AGENTS.md` and the `app-design` / `visuals` skills for the full recipe +
  * spec reference. A wired copy-paste version of this exact layout is at the
  * bottom of this file.
  */
-function App() {
+function Dashboard() {
     return (
         <PageShell
             eyebrow="Your workspace"
             title="Your data app"
-            subtitle="A starter canvas — one JSON spec per visual"
+            subtitle="A starter canvas — one JSON spec per visual, Graphein-themed"
             actions={<ThemeToggle />}
+            toolbar={
+                // Slicers ship wired to shared filter state. Swap options={[]}
+                // for useSlicerOptions({ connection, field }) once a model is
+                // connected; the same selections drive every tile.
+                <FilterBar>
+                    <DropdownSlicer
+                        label="Region"
+                        field="Geography[Region]"
+                        options={[]}
+                    />
+                    <DropdownSlicer
+                        label="Category"
+                        field="Product[Category]"
+                        options={[]}
+                    />
+                    <DateRangeSlicer label="Date" field="Date[Date]" />
+                </FilterBar>
+            }
         >
             {/* Onboarding hero — flat feature surface with an accent spine.
                 Delete once you start building. */}
-            <Card variant="feature" accent="chart-1" className="overflow-hidden">
+            <Card variant="feature" accent="brand" className="overflow-hidden">
                 <div className="flex flex-col gap-5">
                     <div className="flex flex-col gap-2">
                         <span className="w-fit font-mono text-[11px] uppercase tracking-[0.18em] text-primary-strong">
@@ -70,11 +99,13 @@ function App() {
                             hand-code it.
                         </h2>
                         <p className="max-w-2xl text-sm text-muted-foreground">
-                            Each chart is a single JSON spec rendered by Graphein. Map
+                            Each chart is a single JSON spec rendered by Graphein and
+                            themed straight from the tokens in src/global.css. Map
                             your semantic-model data to rows, write the spec, and
                             drop it into a card — the card owns the theme, axes,
                             tooltips, number formatting, dark mode, and
-                            loading/empty states.
+                            loading/empty states. The toolbar slicers above already
+                            share one filter model.
                         </p>
                     </div>
 
@@ -173,24 +204,33 @@ const STEPS = [
         body: "Fetch rows with useSemanticModelQuery(...) and shape them via toChartData(...).",
     },
     {
-        title: "Author a spec",
-        body: "Write one Graphein ChartSpec per visual and drop it into <ChartCard spec={…}/>; use StatStrip/Stat for KPIs and DataTableCard for tables.",
+        title: "Author & filter",
+        body: "Write one Graphein ChartSpec per visual, drop it into <ChartCard spec={…}/>, and let the toolbar slicers filter every tile via shared state.",
     },
 ] as const;
 
 const KPI_PLACEHOLDERS = [
     { label: "Metric one", accent: "chart-1" },
-    { label: "Metric two", accent: "chart-4" },
-    { label: "Metric three", accent: "chart-5" },
-    { label: "Metric four", accent: "chart-6" },
+    { label: "Metric two", accent: "chart-2" },
+    { label: "Metric three", accent: "chart-3" },
+    { label: "Metric four", accent: "chart-4" },
 ] as const;
+
+function App() {
+    return (
+        <FilterStateProvider>
+            <Dashboard />
+        </FilterStateProvider>
+    );
+}
 
 /*
  * ───────────────────────────────────────────────────────────────────────────
- * COPY-PASTE STARTER: the golden-path layout, fully wired (fetch → map → spec).
- * Replace the `App` above with this, then swap the connection alias, DAX, and
- * column names for your model's. The cards own the loading / empty / error
- * states; vary `Tile size` for an editorial layout instead of a uniform grid.
+ * COPY-PASTE STARTER: the golden-path layout, fully wired (fetch → map → spec)
+ * with slicers over shared filter state. Replace the `Dashboard`/`App` above
+ * with this, then swap the connection alias, DAX, and column names for your
+ * model's. The cards own the loading / empty / error states; vary `Tile size`
+ * for an editorial layout instead of a uniform grid.
  *
  * Keep DAX results LONG (tidy): one row per category/time point. For multiple
  * series, add a category column and set `encoding.series` — no client-side
@@ -198,10 +238,13 @@ const KPI_PLACEHOLDERS = [
  * full spec reference and examples.
  * ───────────────────────────────────────────────────────────────────────────
  *
+ * import { useMemo } from "react";
  * import { useSemanticModelQuery } from "@/hooks/use-semantic-model-query";
  * import {
  *   PageShell, ThemeToggle, StatStrip, Stat,
- *   DashboardGrid, Tile, ChartCard, DataTableCard, toChartData,
+ *   DashboardGrid, Tile, ChartCard, toChartData,
+ *   FilterStateProvider, FilterBar, DropdownSlicer, DateRangeSlicer,
+ *   useFilterState, useSlicerOptions, applyFilters, // toDaxFilters,
  * } from "@/components/dashboard";
  *
  * const REVENUE_BY_MONTH = `
@@ -214,29 +257,39 @@ const KPI_PLACEHOLDERS = [
  *   ORDER BY 'Date'[Month]
  * `;
  *
- * function App() {
+ * function Dashboard() {
+ *   const filters = useFilterState();
+ *   // Populate slicer options from the model (distinct values per field):
+ *   const region = useSlicerOptions({ connection: "sales", field: "Geography[Region]" });
+ *
  *   const { data, isLoading, error, refetch } = useSemanticModelQuery({
  *     connection: "sales",                 // a profile from fabric.yaml
  *     query: REVENUE_BY_MONTH,
+ *     // Re-query server-side as slicers change: filters: toDaxFilters(filters.selections),
  *   });
  *
  *   // Map once; the specs reference these names. Explicit aliases = stable keys.
  *   const rows = toChartData(data, {
  *     columns: { month: "Date[Month]", revenue: "Revenue", orders: "Orders" },
  *   });
+ *   // …or filter client-side instead of re-querying:
+ *   const view = useMemo(() => applyFilters(rows, filters.selections), [rows, filters.selections]);
  *
  *   return (
- *     <PageShell eyebrow="Sales" title="Revenue overview" subtitle="FY24" actions={<ThemeToggle />}>
+ *     <PageShell
+ *       eyebrow="Sales" title="Revenue overview" subtitle="FY24"
+ *       actions={<ThemeToggle />}
+ *       toolbar={
+ *         <FilterBar>
+ *           <DropdownSlicer label="Region" field="Geography[Region]"
+ *             options={region.options} isLoading={region.isLoading} error={region.error} />
+ *           <DateRangeSlicer label="Date" field="Date[Date]" />
+ *         </FilterBar>
+ *       }
+ *     >
  *       <StatStrip>
- *         <Stat
- *           label="Revenue"
- *           data={rows}
- *           valueKey="revenue"
- *           valueFormat="currency"
- *           accent="chart-1"
- *           loading={isLoading}
- *         />
- *         <Stat label="Orders" data={rows} valueKey="orders" loading={isLoading} />
+ *         <Stat label="Revenue" data={view} valueKey="revenue" valueFormat="currency" accent="chart-1" loading={isLoading} />
+ *         <Stat label="Orders" data={view} valueKey="orders" loading={isLoading} />
  *       </StatStrip>
  *
  *       <DashboardGrid>
@@ -249,7 +302,7 @@ const KPI_PLACEHOLDERS = [
  *             onRetry={refetch}
  *             spec={{
  *               type: "line",
- *               data: rows,
+ *               data: view,
  *               encoding: {
  *                 x: { field: "month", type: "temporal" },
  *                 y: { field: "revenue", type: "quantitative", format: "$,.0f" },
@@ -265,7 +318,7 @@ const KPI_PLACEHOLDERS = [
  *             onRetry={refetch}
  *             spec={{
  *               type: "bar",
- *               data: rows,
+ *               data: view,
  *               encoding: {
  *                 x: { field: "month" },
  *                 y: { field: "orders", type: "quantitative" },
@@ -275,6 +328,14 @@ const KPI_PLACEHOLDERS = [
  *         </Tile>
  *       </DashboardGrid>
  *     </PageShell>
+ *   );
+ * }
+ *
+ * function App() {
+ *   return (
+ *     <FilterStateProvider>
+ *       <Dashboard />
+ *     </FilterStateProvider>
  *   );
  * }
  */

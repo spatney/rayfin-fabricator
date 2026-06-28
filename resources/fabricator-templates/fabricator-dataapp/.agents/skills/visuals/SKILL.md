@@ -403,10 +403,12 @@ const [range, setRange] = useState("30d");
 
 `SegmentedControl<T>` (single-select pills) · `FilterChips<T>` (multi-select chips).
 
-**Power BI-style slicers** — wire one **shared filter model**. Wrap the dashboard
-in `<FilterStateProvider>`; every slicer reads/writes the same selections. Then
-**apply** them with `applyFilters(rows, selections)` (instant, client-side) or
-`toDaxFilters(selections)` (re-query the model — see `dax`).
+**Power BI-style slicers** — wire one **shared filter model**. **The starter
+already mounts a `FilterBar` of slicers in the `PageShell` toolbar, wrapped in
+`<FilterStateProvider>`** — feed real options and apply the selections; you
+rarely need to add the provider yourself. Every slicer reads/writes the same
+selections. **Apply** them with `applyFilters(rows, selections)` (instant,
+client-side) or `toDaxFilters(selections)` (re-query the model — see `dax`).
 
 ```tsx
 <FilterStateProvider>
@@ -436,7 +438,7 @@ Slicers: `DropdownSlicer`, `ListSlicer`, `SearchSlicer`, `DateRangeSlicer`,
 - **Table/matrix:** column/value `format` plus `conditionalFormat` (`bar`, `icon`,
   `colorScale`, `rules`).
 - **Color/theme:** never put hex in a spec — `ChartCard` themes every chart from
-  `src/global.css` tokens (`--color-chart-1..6`, accent, dark mode). Restyle by
+  `src/global.css` tokens (`--color-chart-1..10`, accent, dark mode). Restyle by
   editing those tokens. See [formatting & color](references/formatting.md).
 
 ## State tiles

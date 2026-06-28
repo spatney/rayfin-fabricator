@@ -14,7 +14,6 @@ import { ThemeContext } from "@/hooks/theme.context";
 import { Gallery } from "./Gallery";
 
 import "@fontsource-variable/inter";
-import "@fontsource-variable/space-grotesk";
 import "@fontsource-variable/jetbrains-mono";
 import "../global.css";
 

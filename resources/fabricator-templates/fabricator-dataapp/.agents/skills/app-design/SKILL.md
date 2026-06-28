@@ -30,7 +30,7 @@ Then match your execution to your direction — a maximalist direction needs lay
 
 ### Typography
 
-Pick fonts that set the app's character — this is one of the strongest signals of intentional design. At minimum choose a characterful `--font-display` paired with a complementary `--font-sans`, ideally from the same foundry or design family. Update `--font-mono` and `--font-numeric` if necessary. Avoid generic defaults like Arial, Inter, or Roboto.
+Pick fonts that set the app's character — this is one of the strongest signals of intentional design. At minimum choose a characterful `--font-display` paired with a complementary `--font-sans`, ideally from the same foundry or design family. Update `--font-mono` and `--font-numeric` if necessary. The starter default is **Inter** (matching Graphein's native theme) — a clean, neutral base; pick a more distinctive display face when the app calls for personality, and otherwise avoid generic defaults like Arial or Roboto.
 
 Load fonts via Google Fonts (or another CDN) as `<link>` tags in `index.html`, then update the font family tokens in the `@theme` block of `global.css`.
 
@@ -38,7 +38,7 @@ Load fonts via Google Fonts (or another CDN) as `<link>` tags in `index.html`, t
 
 Start by customizing `src/global.css` — this is the single source of truth for the app's visual identity. Every component uses these tokens, so setting them first means the entire UI shifts together.
 
-1. **Colors**: Update the semantic color tokens (`--color-primary`, `--color-background`, `--color-card`, `--color-border`, etc.) in both the `@theme` block and the `.dark` override to match the aesthetic direction. The defaults are neutral lime/chartreuse — make them yours.
+1. **Colors**: Update the semantic color tokens (`--color-primary`, `--color-background`, `--color-card`, `--color-border`, etc.) in both the `@theme` block and the `.dark` override to match the aesthetic direction. The defaults mirror **Graphein's native theme** (teal accent, slate neutrals, a 10-hue chart palette) so charts and chrome ship unified out of the box — make them yours.
 2. **Radius**: Adjust `--radius` (the base radius) and the radius scale to match the tone — sharp/geometric (lower values), soft/rounded (higher values), or pill-shaped (`--radius-full`).
 3. **Fonts**: Update the font family tokens as described in the Typography section above.
 4. **Then build components.** Focus component-level styling on layout, spacing, and element-specific details — not re-specifying colors and radii that the tokens already handle.
@@ -74,24 +74,40 @@ import {
   StatStrip, Stat,
   DashboardGrid, Tile,
   ChartCard, KpiCard, DataTableCard,
+  FilterStateProvider, FilterBar, DropdownSlicer, DateRangeSlicer,
 } from "@/components/dashboard";
 
-<PageShell eyebrow="Sales" title="Revenue overview" subtitle="FY24" actions={<ThemeToggle />}>
-  {/* 1. Metric band — one strip, not four look-alike boxes */}
-  <StatStrip>
-    <Stat label="Revenue" data={rows} valueKey="revenue" valueFormat="currency" accent="chart-1" delta={12.4} />
-    <Stat label="Orders"  data={rows} valueKey="orders"  delta={3.1} />
-    <Stat label="Avg order" value={84.2} valueFormat="currency" delta={-1.2} />
-  </StatStrip>
+// Wrap the app once so every tile shares one filter model.
+<FilterStateProvider>
+  <PageShell
+    eyebrow="Sales" title="Revenue overview" subtitle="FY24"
+    actions={<ThemeToggle />}
+    toolbar={
+      // Slicers ship in the toolbar by default. Feed options from
+      // useSlicerOptions({ connection, field }); selections drive every tile.
+      <FilterBar>
+        <DropdownSlicer label="Region" field="Geography[Region]" options={regionOptions} />
+        <DropdownSlicer label="Category" field="Product[Category]" options={categoryOptions} />
+        <DateRangeSlicer label="Date" field="Date[Date]" />
+      </FilterBar>
+    }
+  >
+    {/* 1. Metric band — one strip, not four look-alike boxes */}
+    <StatStrip>
+      <Stat label="Revenue" data={rows} valueKey="revenue" valueFormat="currency" accent="chart-1" delta={12.4} />
+      <Stat label="Orders"  data={rows} valueKey="orders"  delta={3.1} />
+      <Stat label="Avg order" value={84.2} valueFormat="currency" delta={-1.2} />
+    </StatStrip>
 
-  {/* 2. Varied grid — mix Tile sizes for editorial rhythm (NOT a uniform grid) */}
-  <DashboardGrid>
-    <Tile size="hero"><ChartCard title="Revenue trend" className="h-full" spec={lineSpec} /></Tile>
-    <Tile size="md"><ChartCard title="By region" spec={barSpec} /></Tile>
-    <Tile size="md"><ChartCard title="Channel mix" spec={pieSpec} /></Tile>
-    <Tile size="full"><DataTableCard title="Detail" spec={tableSpec} /></Tile>
-  </DashboardGrid>
-</PageShell>
+    {/* 2. Varied grid — mix Tile sizes for editorial rhythm (NOT a uniform grid) */}
+    <DashboardGrid>
+      <Tile size="hero"><ChartCard title="Revenue trend" className="h-full" spec={lineSpec} /></Tile>
+      <Tile size="md"><ChartCard title="By region" spec={barSpec} /></Tile>
+      <Tile size="md"><ChartCard title="Channel mix" spec={pieSpec} /></Tile>
+      <Tile size="full"><DataTableCard title="Detail" spec={tableSpec} /></Tile>
+    </DashboardGrid>
+  </PageShell>
+</FilterStateProvider>
 ```
 
 ### Page Structure

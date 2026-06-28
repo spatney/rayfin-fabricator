@@ -147,21 +147,25 @@ spec** with Graphein's format mini-language (axis/label `format: "$,.0f"`, `".1%
 `"%b %Y"`), use `KpiCard`'s `valueFormat`, and use table/matrix column/value
 `format` plus `conditionalFormat` for tabular visuals. **Don't put `theme` or
 per-series colors in a spec** — `ChartCard` auto-bridges the app theme, so recolor
-by editing `--color-chart-1..6` in `src/global.css`. See the `visuals` skill's
+by editing `--color-chart-1..10` in `src/global.css`. See the `visuals` skill's
 `formatting.md`.
 
 ### Interactivity is additive
 React slicers + shared filter state + server-side DAX re-query are the primary
-filter path. Graphein 0.3 selections can also cross-highlight via a shared
-`store`, or bridge chart clicks into the same slicer/DAX path with
-`useSelectionFilterBridge`.
+filter path. **The starter already ships a `FilterBar` of slicers in the
+`PageShell` toolbar, wrapped in `FilterStateProvider`** — populate their options
+and every tile reads the same selections. Graphein 0.3 selections can also
+cross-highlight via a shared `store`, or bridge chart clicks into the same
+slicer/DAX path with `useSelectionFilterBridge`.
 
 ### Theming is token-driven
 `src/global.css` is the single source of truth: a semantic palette,
-`--color-chart-1..6`, display/sans/mono fonts, a radius scale, dark-mode
-overrides under `.dark`. The accent is one swappable family
-(`--color-primary` + `--color-chart-1` + `--color-brand` + `--color-ring`).
-Restyle by editing tokens, not by hardcoding values in components or specs.
+`--color-chart-1..10`, display/sans/mono fonts, a radius scale, dark-mode
+overrides under `.dark`. The defaults mirror **Graphein's native theme** (teal
+accent, slate neutrals, Inter, the 10-hue palette) so chrome and charts ship
+unified. The accent is one swappable family (`--color-primary` +
+`--color-chart-1` + `--color-brand` + `--color-ring`). Restyle by editing
+tokens, not by hardcoding values in components or specs.
 
 ### Connection IDs have one source
 Edit `fabric.yaml`; let `build:fabric` regenerate `src/fabric.generated.ts`.

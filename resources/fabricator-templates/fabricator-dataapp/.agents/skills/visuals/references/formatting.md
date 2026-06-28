@@ -123,7 +123,7 @@ by editing the tokens; put light values in the base scope and dark overrides und
 | What to change | CSS variable(s) |
 |---|---|
 | Accent (recolors charts/links/focus) | `--color-primary`, `--color-chart-1`, `--color-brand`, `--color-ring` |
-| Series palette (every chart follows) | `--color-chart-1` … `--color-chart-6` |
+| Series palette (every chart follows) | `--color-chart-1` … `--color-chart-10` |
 | Chart axes / grid | `--color-chart-axis`, `--color-chart-grid` |
 | Text | `--color-foreground`, `--color-foreground-secondary`, `--color-foreground-muted` |
 | Surfaces / borders | `--color-background`, `--color-card`, `--color-popover`, `--color-border` |
@@ -137,7 +137,7 @@ can derive ramps, area fills, and hover tints.
 
 For the **`KpiCard` accent dot** and the small set of places that still take a
 color name (`accent` / `seriesColor`), reference a token, never raw hex:
-`"chart-1"`…`"chart-6"`, a role (`"success" | "danger" | "warning" | "info" |
+`"chart-1"`…`"chart-10"`, a role (`"success" | "danger" | "warning" | "info" |
 "brand" | "neutral"`), `var(--…)`, or a hex string (avoid — won't re-theme).
 
 ### Accessibility

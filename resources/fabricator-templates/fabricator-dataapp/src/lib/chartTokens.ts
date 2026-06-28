@@ -24,6 +24,10 @@ export const CHART_SERIES_VARS = [
     "--color-chart-4",
     "--color-chart-5",
     "--color-chart-6",
+    "--color-chart-7",
+    "--color-chart-8",
+    "--color-chart-9",
+    "--color-chart-10",
 ] as const;
 
 /** Semantic chart roles → CSS variable name (without `var()`). */
@@ -63,7 +67,7 @@ export function roleColor(role: ChartRole): string {
 /**
  * Resolve a caller-supplied color token into a usable CSS color string.
  * Accepts a raw CSS color or `var(...)`, a `--color-*` variable name, a
- * `chart-1`..`chart-6` shorthand, or a {@link ChartRole}. Falls back to the
+ * `chart-1`..`chart-10` shorthand, or a {@link ChartRole}. Falls back to the
  * Nth series color when nothing is supplied.
  */
 export function resolveColor(input?: string, fallbackIndex = 0): string {
@@ -71,7 +75,7 @@ export function resolveColor(input?: string, fallbackIndex = 0): string {
     if (input.startsWith("var(") || input.startsWith("#") || input.includes("("))
         return input;
     if (input.startsWith("--")) return cssVar(input);
-    if (/^chart-[1-6]$/.test(input)) return cssVar(`--color-${input}`);
+    if (/^chart-(?:[1-9]|10)$/.test(input)) return cssVar(`--color-${input}`);
     if (input in ROLE_VARS) return roleColor(input as ChartRole);
     return input;
 }

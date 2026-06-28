@@ -5,10 +5,13 @@
 /* ------------------------------------------------------------------
  * Dashboard design tokens — single source of truth for the look.
  *
- * Direction: modern, flat, lime-accented analytics dashboard — a vivid
- * chartreuse brand accent on near-neutral surfaces, rounded geometry,
- * hairline borders and NO shadows. Display font for hero/KPI numbers,
- * mono for axis ticks + tooltip timestamps.
+ * Direction: Graphein-native analytics dashboard — these tokens mirror
+ * Graphein's built-in default theme (a teal accent on slate-neutral
+ * surfaces, the 10-hue categorical chart palette, Inter typography),
+ * with flat hierarchy, hairline borders and NO shadows. Because the app
+ * tokens equal Graphein's defaults, every chart renders Graphein-native
+ * out of the box; recolor one token and the app chrome and the charts
+ * move together.
  *
  * Components must reference these tokens via Tailwind utilities
  * (`bg-card`, `text-foreground`, `border-border`) or the chart helpers
@@ -16,8 +19,8 @@
  *
  * The whole palette lives in `@theme static` so every `--color-*` is
  * emitted as a real CSS variable (not tree-shaken). This is required:
- * the custom SVG charts read `var(--color-chart-n)` straight from the SVG, the
- * chart helpers read the vars via `getComputedStyle`.
+ * the chart helpers read the vars via `getComputedStyle`, and
+ * `lib/graphein-theme.ts` bridges the same vars into the Graphein runtime.
  * `.dark` then flips every token.
  *
  * Accent is a single swappable token — recolor `--color-primary*`
@@ -28,11 +31,13 @@
   /* ---------- Fonts (bundled via @fontsource-variable in main.tsx) ---------- */
   --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui,
     -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Space Grotesk Variable", "Space Grotesk", "Inter Variable",
-    ui-sans-serif, system-ui, sans-serif;
+  /* Graphein-native default: Inter for display + sans alike. Swap
+     --font-display to a characterful face in the polish pass to rebrand. */
+  --font-display: "Inter Variable", "Inter", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace,
     "SF Mono", Menlo, Consolas, monospace;
-  --font-numeric: var(--font-display);
+  --font-numeric: var(--font-sans);
   /* Back-compat aliases (font-heading / font-base / font-monospace utilities) */
   --font-heading: var(--font-display);
   --font-base: var(--font-sans);
@@ -40,52 +45,52 @@
 
   /* ---------- Radius scale ---------- */
   --radius-none: 0;
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.875rem;
-  --radius-xl: 1.25rem;
-  --radius-2xl: 1.5rem;
-  --radius-3xl: 1.75rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
   --radius-full: 9999px;
-  --radius: 0.875rem;
+  --radius: 0.5rem;
 
-  /* ---------- Light mode palette (default) ---------- */
-  /* Surfaces — near-pure white with the faintest warm tint */
-  --color-background: #fafaf8;
+  /* ---------- Light mode palette (default) — Graphein's built-in light theme ---------- */
+  /* Surfaces — slate canvas with white cards (Graphein background / surface) */
+  --color-background: #f8fafc;
   --color-surface-1: #ffffff;
-  --color-surface-2: #f3f3f0;
+  --color-surface-2: #f1f5f9;
   --color-card: #ffffff;
-  --color-card-foreground: #0a0e16;
+  --color-card-foreground: #0f172a;
   --color-popover: #ffffff;
-  --color-popover-foreground: #0a0e16;
-  --color-muted: #f3f3f0;
-  --color-muted-foreground: #5b6472;
-  --color-accent: #edeeea;
-  --color-accent-foreground: #0a0e16;
+  --color-popover-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-accent: #f1f5f9;
+  --color-accent-foreground: #0f172a;
 
-  /* Text */
-  --color-foreground: #0a0e16;
-  --color-foreground-secondary: #475569;
+  /* Text — Graphein text / textMuted */
+  --color-foreground: #0f172a;
+  --color-foreground-secondary: #64748b;
   --color-foreground-muted: #94a3b8;
 
-  /* Borders / inputs / focus */
-  --color-border: #e6e7e2;
-  --color-border-strong: #d4d6cf;
-  --color-input: #e6e7e2;
-  --color-ring: #84cc16;
+  /* Borders / inputs / focus — Graphein border + axis */
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-input: #e2e8f0;
+  --color-ring: #0d9488;
 
-  /* Brand — vivid lime / chartreuse accent. Lime is too bright for white
-     text, so the foreground token is near-black to keep contrast at AA. */
-  --color-primary: #bef264;
-  --color-primary-foreground: #0a0e16;
-  --color-primary-soft: rgba(190, 242, 100, 0.2);
-  --color-primary-strong: #a3e635;
+  /* Brand — Graphein's teal accent (#0d9488). White-on-teal for fills;
+     -strong is a deeper teal for accent text/labels that need AA on white. */
+  --color-primary: #0d9488;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: rgba(13, 148, 136, 0.14);
+  --color-primary-strong: #0f766e;
 
   /* Secondary surfaces (button / chip backgrounds) */
-  --color-secondary: #eef0e8;
-  --color-secondary-foreground: #0a0e16;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
 
-  /* State colors */
+  /* State colors — Graphein positive / negative */
   --color-success: #16a34a;
   --color-success-soft: rgba(22, 163, 74, 0.14);
   --color-warning: #b45309;
@@ -96,20 +101,23 @@
   --color-info: #0e7490;
   --color-info-soft: rgba(14, 116, 144, 0.12);
 
-  /* Chart palette — calibrated for light surfaces (AA on white).
-     chart-1 mirrors the brand; the rest form a friendly companion
-     palette (neutral, lime-strong, violet, emerald, rose). Recolor to
-     rebrand — components reference these by index via `seriesColor(n)`. */
-  --color-chart-1: #bef264; /* brand lime */
-  --color-chart-2: #0a0e16; /* high-contrast neutral */
-  --color-chart-3: #a3e635; /* lime-strong */
-  --color-chart-4: #7c3aed; /* violet */
-  --color-chart-5: #16a34a; /* emerald */
-  --color-chart-6: #dc2626; /* rose */
-  --color-chart-track: rgba(10, 14, 22, 0.08);
-  --color-chart-grid: rgba(10, 14, 22, 0.06);
-  --color-chart-axis: #94a3b8;
-  --color-chart-cursor: rgba(10, 14, 22, 0.08);
+  /* Chart palette — Graphein's 10-hue categorical palette (identical in
+     light + dark). Components reference these by index via `seriesColor(n)`;
+     the Graphein bridge feeds the same hues to every chart. */
+  --color-chart-1: #3b82f6; /* blue */
+  --color-chart-2: #14b8a6; /* teal */
+  --color-chart-3: #f59e0b; /* amber */
+  --color-chart-4: #ef4444; /* red */
+  --color-chart-5: #8b5cf6; /* violet */
+  --color-chart-6: #ec4899; /* pink */
+  --color-chart-7: #10b981; /* emerald */
+  --color-chart-8: #f97316; /* orange */
+  --color-chart-9: #6366f1; /* indigo */
+  --color-chart-10: #84cc16; /* lime */
+  --color-chart-track: rgba(15, 23, 42, 0.08);
+  --color-chart-grid: #eef2f6;
+  --color-chart-axis: #cbd5e1;
+  --color-chart-cursor: rgba(15, 23, 42, 0.08);
 
   /* ---------- Spacing — 4px baseline grid (p-*, m-*, gap-*) ----------
      NOTE: do NOT add a `--spacing-none` key here. Tailwind v4 folds the
@@ -170,61 +178,65 @@
 
 /* ---------- Dark mode override ---------- */
 .dark {
-  /* Surfaces — cool zinc layers */
-  --color-background: #08090b;
-  --color-surface-1: #101216;
-  --color-surface-2: #161a20;
-  --color-card: #101216;
-  --color-card-foreground: #e6e8ec;
-  --color-popover: #161a20;
-  --color-popover-foreground: #e6e8ec;
-  --color-muted: #161a20;
-  --color-muted-foreground: #9aa3b2;
-  --color-accent: #1c2129;
-  --color-accent-foreground: #e6e8ec;
+  /* Surfaces — Graphein dark background / surface layers */
+  --color-background: #0b1220;
+  --color-surface-1: #111a2e;
+  --color-surface-2: #16223c;
+  --color-card: #111a2e;
+  --color-card-foreground: #f1f5f9;
+  --color-popover: #16223c;
+  --color-popover-foreground: #f1f5f9;
+  --color-muted: #1c2740;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #1e293b;
+  --color-accent-foreground: #f1f5f9;
 
-  /* Text */
-  --color-foreground: #e6e8ec;
-  --color-foreground-secondary: #9aa3b2;
-  --color-foreground-muted: #6b7380;
+  /* Text — Graphein dark text / textMuted */
+  --color-foreground: #f1f5f9;
+  --color-foreground-secondary: #94a3b8;
+  --color-foreground-muted: #64748b;
 
-  /* Borders */
-  --color-border: #1f242c;
-  --color-border-strong: #2a313b;
-  --color-input: #1f242c;
-  --color-ring: #a3e635;
+  /* Borders — Graphein dark border + axis */
+  --color-border: #1e293b;
+  --color-border-strong: #334155;
+  --color-input: #1e293b;
+  --color-ring: #2dd4bf;
 
-  /* Brand — softer lime on dark for legibility on near-black surfaces. */
-  --color-primary: #d9f99d;
-  --color-primary-foreground: #08090b;
-  --color-primary-soft: rgba(217, 249, 157, 0.16);
-  --color-primary-strong: #bef264;
+  /* Brand — Graphein's dark teal accent (#2dd4bf); dark ink for fills. */
+  --color-primary: #2dd4bf;
+  --color-primary-foreground: #0b1220;
+  --color-primary-soft: rgba(45, 212, 191, 0.16);
+  --color-primary-strong: #5eead4;
 
-  --color-secondary: #1c2129;
-  --color-secondary-foreground: #e6e8ec;
+  --color-secondary: #1e293b;
+  --color-secondary-foreground: #f1f5f9;
 
-  /* State colors (brighter on dark for legibility) */
-  --color-success: #4ade80;
-  --color-success-soft: rgba(74, 222, 128, 0.14);
+  /* State colors — Graphein dark positive / negative */
+  --color-success: #22c55e;
+  --color-success-soft: rgba(34, 197, 94, 0.14);
   --color-warning: #fbbf24;
   --color-warning-soft: rgba(251, 191, 36, 0.1);
   --color-destructive: #f87171;
-  --color-destructive-foreground: #08090b;
+  --color-destructive-foreground: #0b1220;
   --color-destructive-soft: rgba(248, 113, 113, 0.12);
   --color-info: #22d3ee;
   --color-info-soft: rgba(34, 211, 238, 0.12);
 
-  /* Chart palette — calibrated for dark surfaces */
-  --color-chart-1: #d9f99d; /* brand lime */
-  --color-chart-2: #fafaf8; /* high-contrast neutral */
-  --color-chart-3: #bef264; /* lime-strong */
-  --color-chart-4: #a78bfa; /* violet */
-  --color-chart-5: #4ade80; /* emerald */
-  --color-chart-6: #f87171; /* rose */
-  --color-chart-track: rgba(230, 232, 236, 0.08);
-  --color-chart-grid: rgba(230, 232, 236, 0.06);
-  --color-chart-axis: #6b7380;
-  --color-chart-cursor: rgba(230, 232, 236, 0.08);
+  /* Chart palette — Graphein's 10-hue palette (identical to light). */
+  --color-chart-1: #3b82f6; /* blue */
+  --color-chart-2: #14b8a6; /* teal */
+  --color-chart-3: #f59e0b; /* amber */
+  --color-chart-4: #ef4444; /* red */
+  --color-chart-5: #8b5cf6; /* violet */
+  --color-chart-6: #ec4899; /* pink */
+  --color-chart-7: #10b981; /* emerald */
+  --color-chart-8: #f97316; /* orange */
+  --color-chart-9: #6366f1; /* indigo */
+  --color-chart-10: #84cc16; /* lime */
+  --color-chart-track: rgba(241, 245, 249, 0.08);
+  --color-chart-grid: #1c2740;
+  --color-chart-axis: #334155;
+  --color-chart-cursor: rgba(241, 245, 249, 0.08);
 }
 
 @utility icon-size-* {

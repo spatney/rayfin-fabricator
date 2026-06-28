@@ -26,7 +26,7 @@ Kit components and the chart theme bridge read these variables at runtime — ed
 
 The important tokens are `--color-primary`, `--color-primary-soft`,
 `--color-background`, `--color-card`, `--color-border`, `--color-ring`,
-`--color-brand`, `--color-chart-1` through `--color-chart-6`, `--font-display`,
+`--color-brand`, `--color-chart-1` through `--color-chart-10`, `--font-display`,
 `--font-sans`, `--font-mono`, and the radius scale (`--radius-sm` through
 `--radius-3xl`, plus `--radius-full`).
 
@@ -54,7 +54,7 @@ import { ChartCard, toChartData } from "@/components/dashboard";
 />;
 ```
 
-Series colors come from `--color-chart-1` through `--color-chart-6` **in series
+Series colors come from `--color-chart-1` through `--color-chart-10` **in series
 order** (first series → `--color-chart-1`, and so on). To recolor charts, edit
 those tokens in `global.css` (and the `.dark` block) — don't hardcode colors in
 the spec. The accent is a single swappable family: recolor `--color-primary`,
@@ -64,7 +64,7 @@ the spec. The accent is a single swappable family: recolor `--color-primary`,
 ### Color that carries meaning (KPIs)
 
 `KpiCard` accents and semantic roles still take named colors. Prefer chart
-tokens (`"chart-1"`…`"chart-6"`) for ordered metrics and semantic roles
+tokens (`"chart-1"`…`"chart-10"`) for ordered metrics and semantic roles
 (`"success"`, `"warning"`, `"info"`, `"brand"`, `"neutral"`) when the color
 carries meaning — never raw hex.
 
@@ -203,7 +203,7 @@ raw values.
 
 | Convention | Where | Effect |
 |---|---|---|
-| `--color-chart-1`…`--color-chart-6` (token order) | Chart series | Series take palette colors by order; recolor by editing tokens |
+| `--color-chart-1`…`--color-chart-10` (token order) | Chart series | Series take palette colors by order; recolor by editing tokens |
 | `accent="chart-1"` / `"success"` / `"warning"` | `KpiCard` | Tokenized accent dot / semantic meaning |
 | `valueFormat="currency"` / `"percent"` / `"ratio"` / `"compact"` | `KpiCard` | Centralized KPI number formatting |
 | `format: "$,.0f"` / `".1%"` / `"%b %Y"` | Spec axis/label channels | Graphein format mini-language (see `visuals` → `formatting.md`) |

@@ -21,7 +21,6 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
-    "@fontsource-variable/space-grotesk": "^5.2.10",
     "@microsoft/fabric-app-data": "1.1.0",
     "@microsoft/fabric-app-data-embed-client": "1.0.0",
     "@microsoft/fabric-app-data-proxy": "1.0.0",
