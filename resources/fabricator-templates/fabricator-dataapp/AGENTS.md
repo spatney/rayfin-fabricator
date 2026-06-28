@@ -8,16 +8,17 @@
 >
 > **Two things to internalize before writing code:**
 > 1. **Author a spec, don't hand-write a chart.** A chart is one JSON
->    `ChartSpec` (the `graphein` npm package, `^0.3.0`) passed to
+>    `ChartSpec` (the `graphein` npm package, `^0.6.0`) passed to
 >    `<ChartCard spec={…} />`. Map your DAX result into rows, author the spec,
 >    drop it in. Hand-writing SVG/JSX or wiring a chart library yourself is the
 >    slow, expensive path. The spec model is the `visuals` skill — read it first.
 > 2. **Ship fast, then iterate.** Follow the `build-workflow` skill: one real
->    hero tile → deploy → review → expand. Don't front-load schema discovery or
->    theming.
+>    hero tile → preview → deploy → review → expand. Don't front-load schema
+>    discovery or theming.
 >
-> **Agent context lives in `.agents/skills/`** (build-workflow, visuals, app-design, dax, fabric-data). Pull each skill in as its phase needs it — start at its **Fast
-> path** and read deeper references only on demand.
+> **Agent context lives in `.agents/skills/`** (build-workflow, visuals,
+> headless-preview, app-design, dax, fabric-data). Pull each skill in as its phase
+> needs it — start at its **Fast path** and read deeper references only on demand.
 
 ---
 
@@ -26,9 +27,15 @@
 A read-only analytics dashboard over a Power BI semantic model. It authenticates
 through Fabric and renders **inside the Fabric portal shell** — it is meant to be
 opened from a deployed Fabric workspace, not `localhost`. There is **no local
-backend, dev server, or test harness**: you build, deploy to a Fabric test
-workspace, and review the running app. In Rayfin Fabricator that deploy +
-screenshot loop is fast and automatic — use it constantly.
+backend or dev server**: you build, deploy to a Fabric test workspace, and review
+the running app. In Rayfin Fabricator that deploy + screenshot loop is fast and
+automatic — use it constantly.
+
+For a single visual, there **is** a local harness: `npm run preview` renders a
+Graphein chart spec **headlessly against live data** (via `fabric-app-data query`)
+to a PNG + a machine-readable report, so you can check presentation before
+deploying. Use it as the inner loop; deploy is still the integration checkpoint
+(auth, shell, slicers, KPI/table/matrix). See the `headless-preview` skill.
 
 > **Never ship mock/fake data or "under construction" tiles.** A tile with no
 > data shows the card's empty state. Real data or an honest empty/loading/error
@@ -71,8 +78,8 @@ hand-edit the generated file — edit `fabric.yaml`.
 ```
 .
 ├── AGENTS.md                       ← you are here
-├── .agents/skills/                 ← build-workflow, visuals, app-design,
-│                                     dax, fabric-data
+├── .agents/skills/                 ← build-workflow, visuals, headless-preview,
+│                                     app-design, dax, fabric-data
 ├── fabric.yaml                     ← Fabric data connections (semantic model profiles)
 ├── rayfin/rayfin.yml               ← Fabric service config (auth + static hosting)
 ├── src/
@@ -116,13 +123,15 @@ slicers + filter helpers, `validateSpec` + the `ChartSpec` type (re-exported fro
 
 ```bash
 npm run build:fabric    # fabric-app-data generate + tsc + vite build (deploy entrypoint)
+npm run preview -- --spec <file>   # render a chart spec headlessly → PNG + report (see headless-preview)
 npm run lint            # ESLint
 npm run gallery         # dev-only component gallery (visual validation, no Fabric)
 npm run rayfin:up       # deploy the app to a Fabric test workspace
 ```
 
 There is no meaningful `npm run dev` workflow — outside the Fabric embed the app
-has no auth host and KPIs render error tiles. Deploy and review instead.
+has no auth host and KPIs render error tiles. For per-visual presentation checks
+use `npm run preview` (headless, against live data); otherwise deploy and review.
 
 ---
 
@@ -154,7 +163,7 @@ by editing `--color-chart-1..10` in `src/global.css`. See the `visuals` skill's
 React slicers + shared filter state + server-side DAX re-query are the primary
 filter path. **The starter already ships a `FilterBar` of slicers in the
 `PageShell` toolbar, wrapped in `FilterStateProvider`** — populate their options
-and every tile reads the same selections. Graphein 0.3 selections can also
+and every tile reads the same selections. Graphein selections can also
 cross-highlight via a shared `store`, or bridge chart clicks into the same
 slicer/DAX path with `useSelectionFilterBridge`.
 
@@ -189,13 +198,16 @@ Never hand-edit the generated file.
 | Add a lightweight filter / segmented control | `visuals` skill (Controls) — own the value in React state |
 | Add Power BI-style slicers (shared filter state) | `visuals` skill → **Slicers & shared filter state** (`FilterStateProvider` + `FilterBar`/`DropdownSlicer`/…) |
 | Add chart-click cross-highlight/filter | `visuals` skill → **Interactivity** (`SelectionStoreProvider` + `useSelectionFilterBridge`) |
-| Preview/validate visuals locally without Fabric | run the dev-only component gallery (`npm run gallery`) |
-| Show many series / a target line | `visuals` skill → **Multi-series** (long rows + `encoding.series`; target = a constant series) |
+| Preview/critique a chart vs live data (no deploy) | `headless-preview` skill — `npm run preview` renders a spec to a PNG + report |
+| Validate/repair a spec | `visuals` skill — `validateSpec` / `repairSpec` (graphein 0.6); or `npm run preview` (does it for you) |
+| Visually validate kit components without Fabric | run the dev-only component gallery (`npm run gallery`) |
+| Show many series / a target line | `visuals` skill → **Multi-series** (long rows + `encoding.series`; target line = `annotations: [{ type:"line", value }]`) |
+| Show two measures on different scales | `visuals` skill → `combo` (dual-axis) |
 | Add a page frame | `app-design` skill → `PageShell` (or `SidebarShell` for filter-heavy analytics) |
 | Vary card sizes / non-uniform layout | `visuals` skill → `DashboardGrid` + `Tile size="…"` (`hero` cards need `className="h-full"`) |
 | Break a long dashboard into zones | `app-design` skill → `SectionBand` |
 | Update legacy uniform grids | Replace `KpiGrid`/`ChartGrid`/`BentoGrid` with `StatStrip` and `DashboardGrid` + `Tile` where practical |
-| Build a chart Graphein lacks (radar/treemap/…) | `visuals` skill → **Gotchas** — re-express with the closest Graphein type |
+| Build a chart Graphein lacks (radar/sunburst/…) | `visuals` skill → **Gotchas** + `custom-charts` ref — re-express with the closest type (0.6 adds treemap/gauge/bullet/waterfall/funnel/combo/…) |
 | Wire/connect a semantic model | `fabric-data` skill; edit `fabric.yaml`. If only workspace + item id is known, use `fabric-app-data add <alias> -w <ws> -i <item>`. |
 | Deploy to test | `npm run rayfin:up` (or let Fabricator deploy + screenshot) |
 
@@ -206,8 +218,12 @@ Never hand-edit the generated file.
 - **`.agents/skills/build-workflow/SKILL.md`** — START HERE; the fast,
   iterative "time to wow" loop that orchestrates the other skills.
 - **`.agents/skills/visuals/SKILL.md`** — the spec model: map data → author a
-  Graphein `ChartSpec` → drop into a tile; the type-picker, recipes, gotchas,
+  Graphein `ChartSpec` → drop into a tile; the type-picker, recipes, declarative
+  features (transform/annotations/insights/trendline/facet), gotchas,
   `KpiCard` / table-matrix visuals, slicers, interactivity, and formatting/color.
+- **`.agents/skills/headless-preview/SKILL.md`** — render one spec headlessly
+  against live data (`npm run preview`) → PNG + report; the query→render→critique
+  inner loop, reading the report, and validate→repair.
 - **`.agents/skills/dax/SKILL.md`** — progressive schema discovery, DAX-vs-TypeScript ownership, query authoring/testing, filters, time intelligence, and anti-patterns.
 - **`.agents/skills/fabric-data/SKILL.md`** — semantic-model connection management, `fabric.yaml`/generated config, CLI query testing, and runtime query-result handling.
 - **`.agents/skills/app-design/SKILL.md`** — aesthetic direction, typography,

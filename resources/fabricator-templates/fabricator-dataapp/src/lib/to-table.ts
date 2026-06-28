@@ -13,7 +13,7 @@ import { toChartData } from "./to-chart-data";
 /**
  * Build a Graphein `table` spec from a DAX query result.
  *
- * Graphein 0.3's `table` is the kit's single table engine (the Fabric `DataGrid` was
+ * Graphein's `table` is the kit's single table engine (the Fabric `DataGrid` was
  * retired): virtualized + sortable, with rich conditional formatting (data bars,
  * icons, color scales, value rules), column groups, totals, and number/date
  * formatting — all declared in the spec. Map a DAX result here, then drop the

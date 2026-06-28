@@ -18,7 +18,7 @@ import {
 /**
  * Bridge Graphein's chart-side selection model into the app's shared slicer state.
  *
- * Graphein 0.3 charts publish a {@link SelectionValue} when clicked/brushed; the
+ * Graphein charts publish a {@link SelectionValue} when clicked/brushed; the
  * app's slicers drive **server-side DAX** re-queries via `toDaxFilters`. This
  * module maps between the two so a chart click can re-query the model just like
  * moving a slicer — keeping per-tile DAX + server-side filtering as the source of

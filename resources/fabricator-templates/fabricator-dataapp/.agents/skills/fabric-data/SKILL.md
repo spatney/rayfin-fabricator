@@ -58,6 +58,11 @@ All commands except `init` walk up from the current directory until they find `f
 
 The CLI caps output at 1000 rows. Trimmed JSON includes `_cliWarning`; refine the DAX with filters or aggregation instead of trying to pull more rows for a visual.
 
+> **Feeds the headless preview.** A saved `query` result (`… --file q.dax > rows.json`)
+> can be piped straight into `npm run preview -- --spec s.json --data rows.json` to
+> render a chart against this live data, or the preview script can run the query
+> itself (`--query <alias> --dax-file q.dax`). See the `headless-preview` skill.
+
 ## `fabric.yaml`
 
 ```yaml

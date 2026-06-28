@@ -42,7 +42,7 @@ export interface UseChartOptions {
  * Pass a *stable* (memoized or module-constant) `spec`; a fresh object every
  * render replays the entrance/crossfade animation.
  *
- * Interactivity (Graphein 0.3+): author `params` / `highlight` / `filter` on the
+ * Interactivity (Graphein): author `params` / `highlight` / `filter` on the
  * spec and pass a shared `store` so several charts cross-interact. Subscribe to
  * changes with `onSelectionChange`, or bridge them into the app's slicer state
  * with `useSelectionFilterBridge`.

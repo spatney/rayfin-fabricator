@@ -5,9 +5,11 @@ functions, colors, or callbacks). You author it and drop it into
 `<ChartCard spec={…} />` or `<DataTableCard spec={…} />`. This file is the
 field-by-field reference; the `visuals` SKILL has the workflow and recipes.
 
-> Adapted for Graphein 0.3. The template depends on `graphein` from npm
-> (`^0.3.0`). `validateSpec(spec)` (re-exported from `@/components/dashboard`)
-> checks a spec against the real schema.
+> Adapted for Graphein 0.6. The template depends on `graphein` from npm
+> (`^0.6.0`). `validateSpec(spec)` (re-exported from `@/components/dashboard`)
+> checks a spec against the real schema; `repairSpec(spec)` auto-fixes many
+> mistakes. Render a spec headlessly against live data with `npm run preview`
+> (see the **headless-preview** skill).
 
 ## The one rule
 
@@ -42,7 +44,8 @@ columns. To compare groups, add a `series` channel (`"series": { "field": "regio
   `toChartData(result)` rows.
 - **Horizontal bars are not honored** in this version: `BarSpec` types an
   `orientation` field but the runtime ignores it (bars always render vertical).
-  For ranked/top-N, sort rows by value and use a vertical bar.
+  For ranked/top-N, sort rows by value and use a vertical bar; for a horizontal
+  two-point comparison, use a `dumbbell`.
 
 ## Common fields (`BaseSpec`)
 
@@ -51,6 +54,11 @@ Shared by all chart/table specs.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `data` | `Array<Record<string, unknown>>` | **Required.** Row-oriented records. |
+| `transform` | `Transform[]` | In-spec pipeline run before the chart builds — `aggregate`, `bin`, `filter`, `fold`, `timeUnit`, `calculate`. Reshape data inside the spec. |
+| `annotations` | `Annotation[]` | Reference lines/bands/zones + point callouts overlaid on cartesian plots. |
+| `insights` | `boolean \| InsightOptions` | Auto-mark notable points (`true` = max + min; opt into `outliers`). |
+| `trendline` | `boolean \| TrendlineConfig` | Linear line of best fit (line/scatter). |
+| `facet` | `{ field, columns?, … }` | Split into a trellis of small multiples, one panel per category. |
 | `title` | `string \| { text, subtitle?, align? }` | Chart title. |
 | `legend` | `boolean \| { show?, position?, title? }` | `position`: `top \| right \| bottom \| left`. Auto by default. |
 | `tooltip` | `boolean \| { show? }` | Hover tooltips, on by default. |
@@ -63,21 +71,36 @@ Shared by all chart/table specs.
 
 `AxisConfig`: `{ show?, title?, grid?, ticks?, tickValues?, format?, labels? }`.
 
+`Annotation`: `{ type?: "line" | "band" | "zone" | "point", axis?: "x" | "y",
+value?, from?, to?, x?, y?, label?, color?, strokeWidth?, strokeDash?,
+fillOpacity?, labelPosition? }` — a `y` line uses `value`, a band uses `from`/`to`,
+a point uses `x`+`y`.
+
+`Transform` (one of): `{ aggregate: [{ op, field, as }], groupby }`,
+`{ bin: { field, as, maxbins?, step? } }`, `{ filter: <predicate> }`,
+`{ fold: [cols], as? }`, `{ timeUnit: { field, unit, as } }`,
+`{ calculate: <expr>, as }`.
+
 ## Encoding & `FieldDef`
 
-Cartesian charts (`line`/`area`/`bar`/`scatter`) plus `pie`/`heatmap`/`funnel` map
-columns onto channels via `encoding`.
+Cartesian charts (`line`/`area`/`bar`/`scatter`) plus `pie`/`heatmap`/`funnel`/
+`treemap`/`waterfall`/`calendarHeatmap`/`dumbbell`/`slope`/`combo` map columns onto
+channels via `encoding` (`gauge`/`bullet` use a top-level `value` instead).
 
 | Channel | Used by | Purpose |
 | --- | --- | --- |
-| `x` | line, area, bar, scatter, heatmap | Horizontal position. |
-| `y` | line, area, bar, scatter, heatmap | Vertical position. |
-| `series` | line, area, bar | Split into multiple series (multi-line, grouped/stacked bars/areas). |
+| `x` | line, area, bar, scatter, heatmap, histogram, combo, slope, calendarHeatmap | Horizontal position / bin field. |
+| `y` | line, area, bar, scatter, heatmap, slope | Vertical position. |
+| `series` | line, area, bar, slope | Split into multiple series (multi-line, grouped/stacked bars/areas). |
 | `size` | scatter | Bubble radius. |
-| `color` | heatmap, pie | Continuous color (heatmap) or slice category (pie). |
+| `color` | heatmap, pie, treemap, calendarHeatmap | Continuous color or slice/tile category. |
 | `theta` | pie | Slice value. |
-| `stage` | funnel | Ordered funnel stage. |
-| `value` | funnel | Stage value. |
+| `stage` | funnel, waterfall | Ordered stage along the x-axis. |
+| `value` | funnel, waterfall | Stage value (waterfall = signed change). |
+| `category` | treemap, dumbbell | Leaf/category identity. |
+| `value` (enc.) | treemap, dumbbell | Numeric measure (tile area / dot position). |
+| `group` | treemap, dumbbell | Parent grouping (treemap) / the 2+ points per category (dumbbell). |
+| `date` | calendarHeatmap | Date field → one cell per day. |
 
 **`FieldDef`** — `{ field, type?, aggregate?, title?, format?, scale? }`:
 
@@ -153,6 +176,51 @@ groups). Hover focuses the nearest point.
 { "type": "funnel", "data": rows, "percent": "previous", "labels": true,
   "encoding": { "stage": { "field": "stage" }, "value": { "field": "users", "format": ",d" } } }
 ```
+
+### combo (dual-axis)
+Two or more measures sharing one `x` but plotted on independent left/right axes.
+`encoding`: requires `x`. `layers: ComboLayer[]`, each
+`{ mark: "bar" | "line" | "area", encoding: { y: FieldDef }, axis?: "left" | "right", curve?, points? }`.
+
+```jsonc
+{ "type": "combo", "data": rows,
+  "encoding": { "x": { "field": "month", "type": "temporal" } },
+  "layers": [
+    { "mark": "bar",  "axis": "left",  "encoding": { "y": { "field": "revenue", "format": "$,.0f" } } },
+    { "mark": "line", "axis": "right", "encoding": { "y": { "field": "margin",  "format": ".0%" } } } ] }
+```
+
+### histogram
+Distribution of one numeric field; auto-bins the values.
+`encoding`: requires `x` (the measure). `bin?: { maxbins?, step? }`.
+
+### treemap
+Nested part-to-whole as area-sized tiles.
+`encoding`: requires `category` + `value`; optional `group` (one level of parent
+tiles) and `color`.
+
+### waterfall
+Running total of signed changes (a bridge chart).
+`encoding`: requires `stage` + `value` (signed). `totals?: string[]` — stage labels
+drawn as absolute running-total bars from the baseline.
+
+### gauge / bullet
+A single value against a range. Both use a top-level `value` (`{ field }`), **not**
+`encoding`. `gauge`: `min?`, `max?`. `bullet`: `target?` (`{ field }`) +
+`encoding.label` for the row label.
+
+### calendarHeatmap
+One colored cell per day.
+`encoding`: requires `date` + `color`. `scheme?` — sequential ramp.
+
+### slope
+Rank/value change between exactly two x positions.
+`encoding`: requires `x` (two values), `y`, `series`.
+
+### dumbbell
+Two points per category joined by a connector (e.g. before/after).
+`encoding`: requires `category` + `value` + `group` (the group provides the 2+
+points per category). Reads on a horizontal value axis.
 
 ### table
 A virtualized, sortable detail table.

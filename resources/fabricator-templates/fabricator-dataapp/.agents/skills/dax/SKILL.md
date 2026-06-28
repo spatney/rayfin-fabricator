@@ -19,7 +19,7 @@ Use this skill for every data-shape decision: find the model objects, decide the
    ```
 2. **Pick one visual grain** — one DAX query should return exactly the rows the hero visual needs.
 3. **Prefer model measures** — use `[Measure]` before re-aggregating raw columns.
-4. **Write and quick-test one query** — `npx fabric-app-data query <alias> --query '<DAX>'`; fix blocking syntax/data-shape errors only.
+4. **Write and quick-test one query** — `npx fabric-app-data query <alias> --query '<DAX>'`; fix blocking syntax/data-shape errors only. The same result JSON feeds `npm run preview` to render a visual against this live data before deploying (→ `headless-preview`).
 5. **Map in TypeScript** — DAX computes/fetches; `toChartData` / `toTable` maps positional rows; the visual spec handles display.
 
 Do not enumerate the whole model, implement full interaction strategy, or perfect edge-case time intelligence before the first deployed visual.

@@ -214,3 +214,5 @@ Examples:
 Treat this as a Phase 3 polish-pass activity after the dashboard is built, deployed, and reviewed — not before the first deploy.
 
 After assembling a layout, audit each element in its actual context — not in isolation. A component may look correct on its own but break the visual rhythm of the page. Check: Is every text legible? Are labels proportional to their controls? Are toolbar rows aligned on a shared edge? Do charts fill their containers? Do repeated elements (badges in tables, icons in lists) maintain appropriate visual weight for their density? Fix anything that fails.
+
+For individual charts, let Graphein critique itself: `npm run preview` renders a spec headlessly and returns a **report** that flags clipping, label/axis overlap, low contrast, and excess colors (`ok: false` + `diagnostics`). Use it to catch per-visual presentation issues fast — then do the whole-page audit on the deployed app, where layout rhythm, the Fabric shell, and DOM-only visuals (KPIs/tables/slicers) are visible. (→ `headless-preview`)

@@ -5,8 +5,11 @@ description: >
   Charts are authored as Graphein chart specs — one chart = one JSON `ChartSpec`
   (type + tidy `data` + `encoding`) dropped into `<ChartCard spec={…} />`, which
   owns loading / empty / error and the app theme. Covers the spec model and the
-  per-type recipes (line/area/bar/scatter/pie/heatmap/funnel/table/matrix), the
-  DAX→rows helpers (toChartData / toTable / topN / deriveKpi), `KpiCard`,
+  per-type recipes (line/area/bar/scatter/pie/heatmap/funnel/combo/histogram/
+  treemap/gauge/bullet/waterfall/calendarHeatmap/slope/dumbbell/table/matrix),
+  declarative features (transform/annotations/insights/trendline/facet), the
+  validate→repair→report self-check (graphein 0.6), headless preview against live
+  data, the DAX→rows helpers (toChartData / toTable / topN / deriveKpi), `KpiCard`,
   `DataTableCard` (Graphein table/matrix), slicers (dropdown/list/search/date-range/range + FilterBar)
   with shared filter state, interactivity, layout, value formatting, and color tokens.
 ---
@@ -19,6 +22,15 @@ library. You (1) map your DAX result into plain rows, (2) author a single Graphe
 array, and an `encoding` that names the columns — and (3) drop it into
 `<ChartCard spec={…} />`. The card owns the loading / empty / error states and
 bridges the app theme, so a spec never needs a color or a size.
+
+> **Charts are `graphein` 0.6.** That means a broad chart catalog (combo/dual-axis,
+> histogram, treemap, gauge, bullet, waterfall, calendar-heatmap, slope, dumbbell
+> on top of the classics), in-spec **transforms** and **annotations** (reference
+> lines), and a **self-correcting loop** — `validateSpec` → `repairSpec` →
+> `summarize` plus a render **report**. You can also render a spec **headlessly
+> against live data** to a PNG + report before deploying: see the
+> **headless-preview** skill. Use it to check each visual's real presentation in
+> the inner loop; deploy stays the integration checkpoint.
 
 Three things are React surfaces around Graphein specs or state:
 
@@ -128,11 +140,15 @@ A spec is a plain JSON object — no functions, no colors, no sizes:
 ```
 
 - **`encoding` is required** for `line`/`area`/`bar`/`scatter` (`x`+`y`), `pie`
-  (`theta`+`color`), `heatmap` (`x`+`y`+`color`), and `funnel` (`stage`+`value`).
+  (`theta`+`color`), `heatmap` (`x`+`y`+`color`), `funnel`/`waterfall`
+  (`stage`/`value`), `treemap` (`category`+`value`), `calendarHeatmap`
+  (`date`+`color`), `dumbbell` (`category`+`value`+`group`), and `combo` (`x` +
+  per-layer `y`). `gauge`/`bullet` take a `value` (not `encoding`).
   `FieldDef.type` is `quantitative | temporal | ordinal | nominal` (inferred when omitted).
-- **Validate before render** in tricky cases: `validateSpec(spec)` →
-  `{ valid, errors, warnings }` (re-exported from the barrel). `ChartCard`
-  renders whatever you pass, so catch field-name typos here.
+- **Validate → repair → render.** `validateSpec(spec)` → `{ valid, errors, warnings }`
+  catches field-name typos and bad shapes; `repairSpec(spec)` auto-fixes many of
+  them (returns the patched spec). Both are re-exported from the barrel. See
+  **Self-check** below and the **headless-preview** skill.
 - **Don't author `theme`.** `ChartCard` injects the app's CSS-token theme (brand
   color + dark mode) automatically. Recolor via `src/global.css` tokens, never
   per-spec hex.
@@ -144,16 +160,25 @@ A spec is a plain JSON object — no functions, no colors, no sizes:
 | Trend over time | `line` (`area` to emphasize volume) | `x` temporal, `y`, optional `series`; `points`, `curve` |
 | Part-to-whole over time | `area` + `stack: true` | `x`, `y`, `series` |
 | Compare categories | `bar` | `x` category, `y`, optional `series`; `stack` or grouped |
-| Stage conversion | `funnel` | `stage`, `value`, optional `percent: "first" | "previous"` |
+| Two measures, different scales | `combo` (dual-axis) | `encoding.x` + `layers[]` each `{ mark, encoding.y, axis: "left"\|"right" }` |
+| Stage conversion | `funnel` | `stage`, `value`, optional `percent: "first" \| "previous"` |
+| Running total / bridge | `waterfall` | `stage`, `value` (signed); `totals` for absolute bars |
 | Composition of a total | `bar` + `stack`, or `pie`/donut | bar: `series`; pie: `theta` + `color`, `donut`, `labels` |
-| Correlation / 3rd dim | `scatter` | `x`, `y`, optional `size`, `series` |
+| Nested part-to-whole | `treemap` | `category`, `value`, optional `group`, `color` |
+| Correlation / 3rd dim | `scatter` | `x`, `y`, optional `size`, `series`; `trendline` |
+| Distribution of one measure | `histogram` | `x` (binned); `bin` controls |
 | Density across two categories | `heatmap` | `x`, `y`, `color`, `scheme` |
+| Value over a calendar | `calendarHeatmap` | `date`, `color`, `scheme` |
+| Single value vs target/range | `gauge` / `bullet` | `value` (+ `min`/`max`; bullet adds `target`) |
+| Before/after, two points per row | `dumbbell` | `category`, `value`, `group` (2 levels) |
+| Rank change between two periods | `slope` | `x` (2 values), `y`, `series` |
 | Headline metric | **`KpiCard`** (React) | not a Graphein chart spec — see Cards |
 | Raw / detail records | **`DataTableCard`** with `table` spec | `toTable(result, { columns })`; see Cards |
 | Pivot / cross-tab | **`DataTableCard`** with `matrix` spec | `rows`, `columns`, `values`, totals, conditional formatting |
 
 Rules of thumb: prefer `bar` over `pie` beyond ~6 slices; `stack` for
-part-to-whole, grouped bars for direct comparison.
+part-to-whole, grouped bars for direct comparison; `combo` only when two measures
+genuinely share an x but need different y-scales (don't reach for it by default).
 
 ### Recipes (mirror the gallery)
 
@@ -207,19 +232,95 @@ part-to-whole, grouped bars for direct comparison.
 { "type": "heatmap", "data": rows, "scheme": "teal",
   "encoding": { "x": { "field": "quarter" }, "y": { "field": "region" },
                 "color": { "field": "revenue", "type": "quantitative", "format": "$,.2s" } } }
+
+// Combo (dual-axis) — bars on the left scale, a line on the right
+{ "type": "combo", "data": rows,
+  "encoding": { "x": { "field": "month", "type": "temporal" } },
+  "layers": [
+    { "mark": "bar",  "axis": "left",  "encoding": { "y": { "field": "revenue", "format": "$,.0f" } } },
+    { "mark": "line", "axis": "right", "encoding": { "y": { "field": "margin",  "format": ".0%" } } } ] }
+
+// Histogram — distribution of one measure (auto-binned)
+{ "type": "histogram", "data": rows, "bin": { "maxbins": 20 },
+  "encoding": { "x": { "field": "orderValue", "type": "quantitative", "format": "$,.0f" } } }
+
+// Treemap — nested part-to-whole (group → category sized by value)
+{ "type": "treemap", "data": rows,
+  "encoding": { "category": { "field": "product" }, "value": { "field": "revenue", "format": "$,.0f" },
+                "group": { "field": "category" } } }
+
+// Waterfall — running total of signed changes; mark absolute bars with `totals`
+{ "type": "waterfall", "data": rows, "totals": ["Start", "End"],
+  "encoding": { "stage": { "field": "stage" }, "value": { "field": "delta", "format": "$,.0f" } } }
+
+// Gauge / bullet — a single value vs a max (bullet adds a target)
+{ "type": "gauge",  "data": [row], "min": 0, "max": 100, "value": { "field": "score" } }
+{ "type": "bullet", "data": [row], "value": { "field": "actual" }, "target": { "field": "goal" },
+  "encoding": { "label": { "field": "metric" } } }
+
+// Dumbbell — two points per category (e.g. last year vs this year)
+{ "type": "dumbbell", "data": rows,
+  "encoding": { "category": { "field": "region" }, "value": { "field": "revenue", "format": "$,.0f" },
+                "group": { "field": "year" } } }
+
+// Reference line + auto-insights (declarative, no extra data)
+{ "type": "line", "data": rows, "insights": true,
+  "annotations": [ { "type": "line", "value": 100, "label": "Target" } ],
+  "encoding": { "x": { "field": "month", "type": "temporal" },
+                "y": { "field": "revenue", "type": "quantitative", "format": "$,.0f" } } }
 ```
 
 Full field-by-field docs + every channel/option:
 [Graphein spec reference](references/graphein-spec-reference.md).
 
+### Declarative features (graphein 0.6)
+
+Reshape and enrich a chart **inside the spec** — no pre-massaging the data, no
+second chart. All are plain JSON and render headlessly:
+
+- **`transform`** — an in-spec pipeline run before the chart builds: `aggregate`
+  (group + sum/mean/…), `bin`, `filter`, `fold` (wide→long), `timeUnit`,
+  `calculate`. Lets encodings reference fields the pipeline produces.
+  ```jsonc
+  { "type": "bar", "data": rows,
+    "transform": [{ "aggregate": [{ "op": "sum", "field": "revenue", "as": "total" }], "groupby": ["region"] }],
+    "encoding": { "x": { "field": "region" }, "y": { "field": "total", "format": "$,.0f" } } }
+  ```
+- **`annotations`** — reference **lines**, **bands**, threshold **zones**, and
+  **point** callouts overlaid on the plot. A `y`-axis line uses `value` (a `band`
+  uses `from`/`to`; a `point` uses `x`+`y`):
+  `"annotations": [{ "type": "line", "value": 100, "label": "Target" }]`.
+- **`insights: true`** — auto-mark the notable points (max/min; opt into
+  `outliers`) so you never hardcode where the peak is.
+- **`trendline: true`** — overlay a linear line of best fit (on `scatter`/`line`).
+- **`facet: { field }`** — split into a trellis of small multiples, one panel per
+  category, on shared scales.
+
+### Self-check before deploy
+
+Graphein 0.6 can critique its own specs — use it to iterate without a deploy:
+
+- **`validateSpec(spec)` → `{ valid, errors, warnings }`** — path-pointed errors +
+  soft warnings. **`repairSpec(spec)` → `{ spec, applied, remaining }`** auto-fixes
+  many mistakes (apply `applied` to your source). **`summarize(spec)` → string** —
+  a one-line read of what the chart says (sanity-check the trend).
+- **Render it against live data** — `npm run preview -- --spec s.json --query <alias>
+  --dax-file q.dax` writes a themed PNG **and** a report (`ok`, `diagnostics` for
+  clipping/overlap/contrast, mark/series/color counts). View the PNG, read the
+  report, fix, repeat — then drop the spec into a `<ChartCard>`. Full loop +
+  flags: the **headless-preview** skill. (DOM-only `kpi`/`table`/`matrix`/slicers
+  have no headless form — preview those by deploying.)
+
 ### Gotchas
 
-- **Horizontal bars aren't available** in this Graphein version. `BarSpec` *types*
-  an `orientation` field, but the runtime ignores it — bars always render
-  vertical. For "top N" / ranked breakdowns, use a **vertical** bar and sort the
-  rows by value (`topN(rows, key, n)`); don't set `orientation`.
-- **No dual-axis / combo chart.** Split it across two stacked `ChartCard`s, or use
-  a `line` with `points` over the same x when one axis is enough.
+- **Horizontal bars still aren't honored.** `BarSpec` *types* an `orientation`
+  field and `validateSpec` accepts it, but the renderer ignores it — bars always
+  render vertical. For "top N" / ranked breakdowns, use a **vertical** bar and
+  sort rows by value (`topN(rows, key, n)`). For a horizontal category comparison
+  of two points (e.g. before/after), use a **`dumbbell`** instead.
+- **Reference lines & combo charts now exist** (0.6). Use `annotations: [{ type:
+  "line", value }]` for a target/threshold line, and the `combo` type for two
+  measures on different y-scales — don't fake either with stacked `ChartCard`s.
 - **Temporal fields are ISO strings** (`"2024-01"`, `"2024-01-15"`) or epoch ms —
   JSON has no `Date`. Mark the field `type: "temporal"` for a time axis.
 - **Empty `data` → empty tile.** A spec with `data: []` makes `ChartCard` show

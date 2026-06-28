@@ -24,7 +24,7 @@ import {
 } from "graphein";
 
 /**
- * Shared Graphein selection bus (Graphein 0.3+).
+ * Shared Graphein selection bus (Graphein).
  *
  * A *selection* is the unit of cross-chart interactivity: a named, JSON value a
  * visual publishes (clicking a mark, brushing) that other visuals consume as a

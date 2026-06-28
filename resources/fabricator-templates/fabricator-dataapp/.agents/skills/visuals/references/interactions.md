@@ -1,6 +1,6 @@
 # Interactions & interactivity
 
-Graphein 0.3 adds a declarative selection model: charts and tables can publish
+Graphein adds a declarative selection model: charts and tables can publish
 named selections, and other specs can consume them with `highlight` or `filter`.
 In this app, that is an additive layer. The primary filter path remains React
 slicers → shared filter state → `applyFilters` or server-side DAX re-query via

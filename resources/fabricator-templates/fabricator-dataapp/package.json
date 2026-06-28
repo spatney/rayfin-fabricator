@@ -16,6 +16,7 @@
     "build:fabric": "npx fabric-app-data generate -o src/fabric.generated.ts && tsc -b --noCheck && vite build",
     "lint": "eslint .",
     "gallery": "vite",
+    "preview": "node scripts/preview-visual.mjs",
     "rayfin:up": "rayfin up"
   },
   "dependencies": {
@@ -32,7 +33,7 @@
     "@tailwindcss/vite": "^4.3.0",
     "clsx": "^2.1.1",
     "framer-motion": "^12.40.0",
-    "graphein": "^0.3.0",
+    "graphein": "^0.6.0",
     "lucide-react": "^1.17.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
+    "@graphein/node": "^0.6.0",
     "@microsoft/fabric-app-data-cli": "1.1.0",
     "@microsoft/fabric-app-data-cli-proxy": "1.0.0",
     "@microsoft/rayfin-cli": "^1.33.1",

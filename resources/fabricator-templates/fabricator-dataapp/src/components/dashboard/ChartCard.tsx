@@ -57,7 +57,7 @@ export interface ChartCardProps extends ChartCardCommonProps {
     /** Force the empty state (defaults to detecting an empty `spec.data`). */
     isEmpty?: boolean;
     /**
-     * Shared selection bus (Graphein 0.3+). Pass the same store to several cards (via
+     * Shared selection bus (Graphein). Pass the same store to several cards (via
      * `SelectionStoreProvider` / `useSelectionStore`) so clicking a mark in one
      * cross-highlights / cross-filters the others. Only meaningful in spec mode.
      */

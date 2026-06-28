@@ -28,7 +28,7 @@ export interface DataTableCardProps extends ChartCardCommonProps {
     height?: number;
     /** Force the empty state (defaults to detecting empty `spec.data`). */
     isEmpty?: boolean;
-    /** Shared selection bus for cross-interaction (Graphein 0.3+). */
+    /** Shared selection bus for cross-interaction (Graphein). */
     store?: SelectionStore;
     /** Fired whenever a selection this table publishes or consumes changes. */
     onSelectionChange?: SelectionChangeListener;

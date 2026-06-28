@@ -169,7 +169,7 @@ const heatmapSpec: ChartSpec = {
     },
 };
 
-/* ---------------------- Interactivity (Graphein 0.3) -------------------- *
+/* ---------------------- Interactivity (Graphein) -------------------- *
  * `params` PUBLISH a selection on click; `highlight` CONSUMES one (emphasize
  * matches, dim the rest). Sibling cards sharing one `SelectionStore` cross-
  * interact. Here the bar publishes `region`; both the bar (self) and the
@@ -207,7 +207,7 @@ const seededRegion: SelectionValue = {
     tuples: [["North America"]],
 };
 
-/* -------------------- Formatting (Graphein 0.3) ------------------------- *
+/* -------------------- Formatting (Graphein) ------------------------- *
  * A funnel (native), pie callout labels, a `table` with conditional
  * formatting (data bar / color scale / icon), and a pivot `matrix`.
  * ------------------------------------------------------------------------ */

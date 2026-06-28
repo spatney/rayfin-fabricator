@@ -26,7 +26,7 @@ import { useChart } from "./use-chart";
  * own it; recolor via `src/global.css` tokens, not per-spec hex. (Set
  * `spec.theme` yourself only as a deliberate escape hatch.)
  *
- * Interactivity (Graphein 0.3+): pass a shared `store` so several charts
+ * Interactivity (Graphein): pass a shared `store` so several charts
  * cross-highlight / cross-filter (see `SelectionStoreProvider`), and
  * `onSelectionChange` to observe selections (e.g. bridge them into slicer state).
  */
