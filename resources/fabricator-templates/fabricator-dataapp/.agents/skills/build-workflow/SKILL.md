@@ -38,6 +38,10 @@ big-bang build every time.
 Get ONE compelling, real visual wired to live data, previewed, and on screen —
 as fast as possible.
 
+0. **Pick an archetype** — decide the dashboard's shape from the request: executive
+   summary, operational monitoring, or analytical deep-dive. This frames the hero
+   tile and the breadth that follows. Default to executive summary when unsure.
+   (→ `app-design`: Dashboard archetypes)
 1. **Minimum schema scan** — discover just enough to find one compelling metric:
    one scope probe + the one or two tables/measures behind your hero visual.
    Don't enumerate the whole model. (→ `dax`: Fast path)
@@ -96,6 +100,7 @@ at its **Fast path** section until you genuinely need more.
 
 | When | Skill | How much |
 |---|---|---|
+| Phase 1 — pick a shape | `app-design` | Dashboard archetypes |
 | Phase 1 — find a metric | `dax` | Fast path only |
 | Phase 1 — write the hero query | `dax` | Fast path only |
 | Phase 1 — render it | `visuals` | Fast path only |

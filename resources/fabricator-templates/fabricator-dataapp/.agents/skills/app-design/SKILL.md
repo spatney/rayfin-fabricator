@@ -54,6 +54,7 @@ Keep these principles in mind:
 - Ensure all interactive elements are keyboard-accessible with visible focus indicators and appropriate disabled states.
 
 Read these reference files on demand during Phase 2–3 iteration, when refining a specific element — they include "Make it yours" prompts that tie back to the aesthetic direction above:
+- [Dashboard Archetypes](references/dashboard-archetypes.md) — pick a layout shape (executive / operational / analytical) before composing tiles; per-archetype recipes, rhythm, and pitfalls.
 - [UI Style Recipes](references/ui-style-recipes.md) — per-element styling guidance for buttons, cards, inputs, dialogs, tabs, tooltips, tables, and more.
 - [Visual Style Recipes](references/visual-style-recipes.md) — dashboard kit theming, chart/table recipes, dark mode support, and token-driven styling.
 
@@ -64,6 +65,13 @@ Read these reference files on demand during Phase 2–3 iteration, when refining
 These are good defaults for app structure. Adapt them to the specific app's needs.
 
 ### Golden path — default dashboard layout
+
+**First, pick an archetype.** A strong dashboard takes a recognizable shape for one
+audience: **executive summary** (KPI band + hero trend + breakdowns), **operational
+monitoring** (dense uniform status grid), or **analytical deep-dive** (filter rail +
+cross-filtered exploration). Choose one before placing tiles — it sets the frame, KPI
+treatment, grid rhythm, and what to omit. Default to executive summary when unsure.
+→ [Dashboard archetypes](references/dashboard-archetypes.md) for shapes, recipes, and pitfalls.
 
 Copy this first, then swap in your queries/specs. It gives the model one clear path:
 one metric band, one varied 12-col canvas, flat hierarchy via surfaces/borders/accent edges/typography — **no gradients or shadows**.

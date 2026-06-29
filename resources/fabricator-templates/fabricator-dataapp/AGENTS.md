@@ -186,6 +186,7 @@ Never hand-edit the generated file.
 | Task | Start here |
 |---|---|
 | Build a dashboard from scratch | `build-workflow` skill (preview one hero tile, then ship and iterate) |
+| Pick a dashboard layout / shape | `app-design` skill → **Dashboard archetypes** (executive / operational / analytical) |
 | Add a chart | `visuals` skill — map data, author a Graphein spec, drop into `<ChartCard spec={…}>` |
 | Add a KPI header / metric strip | `visuals` skill → `StatStrip` + `Stat` (one band, 2–5 metrics) |
 | Add a standalone KPI / metric tile | `visuals` skill → `KpiCard` (+ `deriveKpi`) |
