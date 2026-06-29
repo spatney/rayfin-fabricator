@@ -32,11 +32,17 @@ export interface UpdateApi {
   status: UpdateStatus
   info: AppUpdateInfo | null
   progress: UpdateProgress | null
+  /**
+   * True once a mandatory (startup) update is found and is downloading,
+   * installing, or ready: the app must block all UI behind it until it applies.
+   * Stays false for the optional Settings-driven flow and when offline/up to date.
+   */
+  blocking: boolean
   /** Manually check, and download in the background if an update is found. */
-  checkNow: () => Promise<void>
+  checkNow: (opts?: { mandatory?: boolean }) => Promise<void>
   /** Install the downloaded update and restart the app. */
   install: () => Promise<void>
-  /** Hide the banner for now (until the next check finds an update). */
+  /** Hide the banner for now (until the next check finds an update). No-op while mandatory. */
   dismiss: () => void
 }
 
@@ -46,10 +52,27 @@ export function UpdateProvider({ children }: { children: ReactNode }): JSX.Eleme
   const [status, setStatus] = useState<UpdateStatus>('idle')
   const [info, setInfo] = useState<AppUpdateInfo | null>(null)
   const [progress, setProgress] = useState<UpdateProgress | null>(null)
+  const [mandatory, setMandatory] = useState(false)
+  const mandatoryRef = useRef(false)
   const dismissed = useRef(false)
   const startedAutoCheck = useRef(false)
 
   useEffect(() => window.api.updates.onProgress((p) => setProgress(p)), [])
+
+  const install = useCallback(async (): Promise<void> => {
+    setStatus('installing')
+    try {
+      await window.api.updates.install()
+      // On success the app restarts, so nothing else runs here.
+    } catch (err) {
+      console.error('[update] install failed', err)
+      // A failed install can't hard-lock the app: drop the mandatory gate so the
+      // user can keep working and retry later.
+      mandatoryRef.current = false
+      setMandatory(false)
+      setStatus('error')
+    }
+  }, [])
 
   const download = useCallback(async (): Promise<void> => {
     setStatus('downloading')
@@ -60,60 +83,68 @@ export function UpdateProvider({ children }: { children: ReactNode }): JSX.Eleme
       if (found) {
         setInfo(found)
         setStatus('ready')
+        // Mandatory startup updates install themselves the moment they're ready.
+        if (mandatoryRef.current) void install()
       } else {
         setStatus('idle')
       }
     } catch (err) {
       console.error('[update] download failed', err)
+      // Don't trap the user offline: release the gate and let them proceed.
+      mandatoryRef.current = false
+      setMandatory(false)
       if (!dismissed.current) setStatus('error')
     }
-  }, [])
+  }, [install])
 
-  const checkNow = useCallback(async (): Promise<void> => {
-    dismissed.current = false
-    setStatus('checking')
-    try {
-      const found = await window.api.updates.check()
-      if (!found) {
-        setInfo(null)
-        setStatus('idle')
-        return
+  const checkNow = useCallback(
+    async (opts?: { mandatory?: boolean }): Promise<void> => {
+      dismissed.current = false
+      mandatoryRef.current = opts?.mandatory ?? false
+      setMandatory(opts?.mandatory ?? false)
+      setStatus('checking')
+      try {
+        const found = await window.api.updates.check()
+        if (!found) {
+          mandatoryRef.current = false
+          setMandatory(false)
+          setInfo(null)
+          setStatus('idle')
+          return
+        }
+        setInfo(found)
+        await download()
+      } catch (err) {
+        console.error('[update] check failed', err)
+        mandatoryRef.current = false
+        setMandatory(false)
+        setStatus('error')
       }
-      setInfo(found)
-      await download()
-    } catch (err) {
-      console.error('[update] check failed', err)
-      setStatus('error')
-    }
-  }, [download])
-
-  const install = useCallback(async (): Promise<void> => {
-    setStatus('installing')
-    try {
-      await window.api.updates.install()
-      // On success the app restarts, so nothing else runs here.
-    } catch (err) {
-      console.error('[update] install failed', err)
-      setStatus('error')
-    }
-  }, [])
+    },
+    [download]
+  )
 
   const dismiss = useCallback(() => {
+    // Mandatory updates can't be dismissed — they block until applied.
+    if (mandatoryRef.current) return
     dismissed.current = true
     setStatus('idle')
   }, [])
 
   // Automatic background check + download once on startup. Skipped in dev, where
-  // there is no published `latest.json` endpoint to hit. Uses `checkNow` (silent
-  // 'checking' state) so up-to-date launches never flash the banner; it only
-  // appears once an update is actually found and downloading.
+  // there is no published `latest.json` endpoint to hit. Marked mandatory so a
+  // found update blocks the app and installs itself; up-to-date or offline
+  // launches clear the gate and proceed.
   useEffect(() => {
     if (import.meta.env.DEV || startedAutoCheck.current) return
     startedAutoCheck.current = true
-    void checkNow()
+    void checkNow({ mandatory: true })
   }, [checkNow])
 
-  const value: UpdateApi = { status, info, progress, checkNow, install, dismiss }
+  const blocking =
+    mandatory && (status === 'downloading' || status === 'ready' || status === 'installing')
+
+  const value: UpdateApi = { status, info, progress, blocking, checkNow, install, dismiss }
   return <UpdateContext.Provider value={value}>{children}</UpdateContext.Provider>
 }
 

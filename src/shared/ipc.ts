@@ -927,6 +927,8 @@ export interface ChatMessage {
    * turn completes normally.
    */
   interrupted?: boolean
+  /** Wall-clock duration of the assistant turn, in ms. Set when the turn finishes. */
+  elapsedMs?: number
 }
 
 /* ------------------------------------------------------------------ *

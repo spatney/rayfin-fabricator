@@ -11,7 +11,10 @@ function formatBytes(n: number): string {
  * downloaded, is ready to install, or is installing — otherwise nothing.
  */
 export default function UpdateBanner(): JSX.Element | null {
-  const { status, info, progress, install, dismiss } = useUpdates()
+  const { status, info, progress, blocking, install, dismiss } = useUpdates()
+
+  // The mandatory full-screen ForcedUpdateScreen takes over while blocking.
+  if (blocking) return null
 
   if (status !== 'downloading' && status !== 'ready' && status !== 'installing') {
     return null

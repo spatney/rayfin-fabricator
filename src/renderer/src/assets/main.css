@@ -6903,6 +6903,28 @@ code {
   letter-spacing: 0.2px;
 }
 
+/* Finished-turn duration stamp, right-aligned in the turn header. */
+.turn-time {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-time-ico {
+  width: 12px;
+  height: 12px;
+  opacity: 0.8;
+}
+
+/* When a copy button is also present, it takes the right edge; the time sits beside it. */
+.turn-time + .turn-copy {
+  margin-left: 8px;
+}
+
 .msg-text {
   line-height: 1.6;
   word-break: break-word;
@@ -8660,6 +8682,78 @@ code {
   100% {
     margin-left: 100%;
   }
+}
+
+/* ── Mandatory startup update: full-screen blocker ───────────────────────────── */
+.forced-update {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.forced-update__card {
+  width: min(420px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 28px 24px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.32);
+  text-align: center;
+}
+
+.forced-update__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 5px var(--accent-soft);
+}
+
+.forced-update__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.forced-update__meta {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.forced-update__bar {
+  width: 100%;
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--bg-elev-3);
+  overflow: hidden;
+}
+
+.forced-update__bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.forced-update__bar-fill--indet {
+  width: 35%;
+  animation: update-banner-indet 1.1s ease-in-out infinite;
+}
+
+.forced-update__note {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-dim);
 }
 
 /* ── Chat polish: jump-to-latest, copy answer, syntax theme ──────────────────── */

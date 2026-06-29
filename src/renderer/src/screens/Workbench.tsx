@@ -60,7 +60,7 @@ function toUi(m: ChatMessage): UIChatMessage {
  *  keeps the marker until it's resumed (which removes the message). */
 function toStored(messages: UIChatMessage[]): ChatMessage[] {
   return messages.map(
-    ({ id, role, text, tools, segments, error, attachments, attachmentThumbs, pending, interrupted }) => ({
+    ({ id, role, text, tools, segments, error, attachments, attachmentThumbs, pending, interrupted, elapsedMs }) => ({
       id,
       role,
       text,
@@ -69,6 +69,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       error,
       attachments,
       attachmentThumbs,
+      elapsedMs,
       interrupted: (role === 'assistant' && pending) || interrupted ? true : undefined
     })
   )

@@ -3,8 +3,10 @@ import type { AppSettings, AuthStatus, DoctorReport } from '@shared/ipc'
 import SetupScreen from './screens/SetupScreen'
 import Workbench from './screens/Workbench'
 import UpdateBanner from './components/UpdateBanner'
+import ForcedUpdateScreen from './components/ForcedUpdateScreen'
 import SplashScreen from './components/SplashScreen'
 import { applyUiScale, watchTheme } from './theme'
+import { useUpdates } from './update'
 
 type Phase = 'loading' | 'setup' | 'ready'
 
@@ -19,6 +21,7 @@ function App(): JSX.Element {
   const [auth, setAuth] = useState<AuthStatus | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const { blocking } = useUpdates()
 
   // Don't leave the splash before its minimum showtime has elapsed (first load only).
   const gateUntilRef = useRef(
@@ -74,6 +77,12 @@ function App(): JSX.Element {
   const updateSettings = useCallback(async (patch: Partial<AppSettings>): Promise<void> => {
     setSettings(await window.api.settings.set(patch))
   }, [])
+
+  // A mandatory startup update blocks the entire app behind a forced-update screen
+  // until it installs and restarts. Offline / up-to-date launches never set this.
+  if (blocking) {
+    return <ForcedUpdateScreen />
+  }
 
   if (phase === 'loading') {
     return (

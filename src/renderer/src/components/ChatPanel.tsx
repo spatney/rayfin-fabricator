@@ -35,6 +35,7 @@ import {
   StopIcon,
   ImageIcon,
   ChevronRightIcon,
+  ClockIcon,
   Codicon
 } from './icons'
 import logo from '../assets/logo.png'
@@ -990,6 +991,15 @@ function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
+/** Compact, human-readable turn duration: "<1s", "12s", "1m 23s". */
+function formatTurnDuration(ms: number): string {
+  if (ms < 1000) return '<1s'
+  const total = Math.round(ms / 1000)
+  if (total < 60) return `${total}s`
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return s ? `${m}m ${s}s` : `${m}m`
+}
 /**
  * Plan-mode approval card: shows the proposed plan summary (with an expandable
  * full plan) and the continuation choices. Buttons disable once the plan is
@@ -1191,9 +1201,20 @@ function reduce(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
     case 'notice':
       return { ...msg, notice: ev.text }
     case 'error':
-      return { ...msg, error: ev.text, pending: false, notice: undefined }
+      return {
+        ...msg,
+        error: ev.text,
+        pending: false,
+        notice: undefined,
+        elapsedMs: msg.startedAt ? Date.now() - msg.startedAt : msg.elapsedMs
+      }
     case 'result':
-      return { ...msg, pending: false, notice: undefined }
+      return {
+        ...msg,
+        pending: false,
+        notice: undefined,
+        elapsedMs: msg.startedAt ? Date.now() - msg.startedAt : msg.elapsedMs
+      }
     case 'plan-proposed':
       return {
         ...msg,
@@ -1323,6 +1344,12 @@ const MessageRow = memo(function MessageRow({
           {m.role === 'user' ? <UserIcon /> : <img src={logo} alt="" />}
         </div>
         <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
+        {m.role === 'assistant' && !m.pending && m.elapsedMs != null && (
+          <span className="turn-time" title="Time this turn took">
+            <ClockIcon className="turn-time-ico" />
+            {formatTurnDuration(m.elapsedMs)}
+          </span>
+        )}
         {m.role === 'assistant' && Boolean(m.text) && !m.pending && (
           <CopyButton text={m.text} className="turn-copy" />
         )}
@@ -1840,7 +1867,13 @@ export default function ChatPanel({
         shots.map((s) => s.path),
         mode
       )
-      onChange((prev) => prev.map((m) => (m.turnId === turnId ? { ...m, pending: false } : m)))
+      onChange((prev) =>
+        prev.map((m) =>
+          m.turnId === turnId
+            ? { ...m, pending: false, elapsedMs: m.elapsedMs ?? (m.startedAt ? Date.now() - m.startedAt : undefined) }
+            : m
+        )
+      )
       onTurnComplete?.(result)
     } finally {
       setSending(false)
@@ -1884,7 +1917,13 @@ export default function ChatPanel({
     setSending(true)
     try {
       const result = await window.api.chat.send(project.id, turnId, user.text, [], mode)
-      onChange((prev) => prev.map((m) => (m.turnId === turnId ? { ...m, pending: false } : m)))
+      onChange((prev) =>
+        prev.map((m) =>
+          m.turnId === turnId
+            ? { ...m, pending: false, elapsedMs: m.elapsedMs ?? (m.startedAt ? Date.now() - m.startedAt : undefined) }
+            : m
+        )
+      )
       onTurnComplete?.(result)
     } finally {
       setSending(false)
