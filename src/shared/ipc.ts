@@ -438,6 +438,8 @@ export type ThemePreference = 'dark' | 'light' | 'system'
 export interface AppSettings {
   /** UI theme; 'system' follows the OS dark/light setting. */
   theme: ThemePreference
+  /** UI zoom factor (1 = 100%). Scales the whole interface for large monitors. */
+  uiScale?: number
   /** Experimental, opt-in features (off by default). */
   experiments?: ExperimentFlags
 }

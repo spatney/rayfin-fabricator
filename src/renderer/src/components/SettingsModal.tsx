@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import type { AppSettings, AppVersions, ThemePreference } from '@shared/ipc'
-import { applyTheme } from '../theme'
+import { applyTheme, applyUiScale, UI_SCALES } from '../theme'
 import { useSuppressPreview } from '../overlay'
 import { useUpdates } from '../update'
 import ConfirmModal from './ConfirmModal'
@@ -87,6 +87,12 @@ export default function SettingsModal({
     onChange({ theme })
   }
 
+  // Preview the UI scale immediately so the whole window resizes as you pick.
+  function pickScale(uiScale: number): void {
+    applyUiScale(uiScale)
+    onChange({ uiScale })
+  }
+
   async function changeRoot(): Promise<void> {
     const next = await window.api.projects.pickWorkspaceRoot()
     setWorkspaceRoot(next.workspaceRoot)
@@ -143,6 +149,23 @@ export default function SettingsModal({
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="field">
+              <span className="field-label">Text size</span>
+              <div className="seg">
+                {UI_SCALES.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`seg-btn${(settings.uiScale ?? 1) === s ? ' seg-btn--active' : ''}`}
+                    onClick={() => pickScale(s)}
+                  >
+                    {Math.round(s * 100)}%
+                  </button>
+                ))}
+              </div>
+              <span className="field-hint">Scale the whole interface — handy on large monitors.</span>
             </div>
 
             <label className="field">

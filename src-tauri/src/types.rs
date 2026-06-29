@@ -442,6 +442,10 @@ pub struct ExperimentFlags {
 pub struct AppSettings {
   #[serde(default = "default_theme")]
   pub theme: String,
+  /// UI zoom factor (1.0 = 100%). Scales the whole interface so text is legible
+  /// on large/high-DPI monitors. Clamped to 0.8–2.0 when applied.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub ui_scale: Option<f64>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub experiments: Option<ExperimentFlags>,
 }

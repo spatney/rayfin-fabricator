@@ -5752,7 +5752,9 @@ code {
 .modal {
   width: 100%;
   max-width: 560px;
-  max-height: 90vh;
+  /* `zoom` multiplies vh, so divide the cap back out to keep the modal — and its
+     footer — within the real viewport at large text sizes. */
+  max-height: calc(90vh / var(--ui-scale, 1));
   display: flex;
   flex-direction: column;
   background: var(--bg-elev);

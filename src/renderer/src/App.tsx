@@ -4,7 +4,7 @@ import SetupScreen from './screens/SetupScreen'
 import Workbench from './screens/Workbench'
 import UpdateBanner from './components/UpdateBanner'
 import SplashScreen from './components/SplashScreen'
-import { watchTheme } from './theme'
+import { applyUiScale, watchTheme } from './theme'
 
 type Phase = 'loading' | 'setup' | 'ready'
 
@@ -67,6 +67,7 @@ function App(): JSX.Element {
   // and follow the OS when set to 'system'.
   useEffect(() => {
     if (!settings) return
+    applyUiScale(settings.uiScale)
     return watchTheme(settings.theme)
   }, [settings])
 

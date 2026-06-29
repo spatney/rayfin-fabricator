@@ -33,6 +33,7 @@ fn default_state() -> ProjectsState {
 fn default_settings() -> AppSettings {
   AppSettings {
     theme: "dark".to_string(),
+    ui_scale: Some(1.0),
     experiments: Some(ExperimentFlags {
       advisor_auto_run: Some(false),
       compatibility_rendering: Some(false),
@@ -116,10 +117,17 @@ pub fn get_settings() -> AppSettings {
 }
 
 /// Patch fields of the settings (deep-merging experiment flags) and persist.
-pub fn set_settings(theme: Option<String>, experiments: Option<ExperimentFlags>) -> AppSettings {
+pub fn set_settings(
+  theme: Option<String>,
+  ui_scale: Option<f64>,
+  experiments: Option<ExperimentFlags>,
+) -> AppSettings {
   with_cache(|c| {
     if let Some(t) = theme {
       c.settings.theme = t;
+    }
+    if let Some(s) = ui_scale {
+      c.settings.ui_scale = Some(s.clamp(0.8, 2.0));
     }
     if let Some(patch) = experiments {
       let current = c.settings.experiments.get_or_insert(ExperimentFlags {

@@ -25,3 +25,15 @@ export function watchTheme(pref: ThemePreference): () => void {
   mq.addEventListener('change', onChange)
   return () => mq.removeEventListener('change', onChange)
 }
+
+/** Available UI zoom presets, smallest to largest (1 = 100%). */
+export const UI_SCALES = [1, 1.1, 1.25, 1.5] as const
+
+/** Apply a UI zoom factor to the whole interface, clamped to a sane range. */
+export function applyUiScale(scale: number | undefined): void {
+  const value = Math.min(2, Math.max(0.8, scale || 1))
+  document.documentElement.style.zoom = String(value)
+  // `zoom` also multiplies vh units, so expose the factor for layouts that cap
+  // their height to the viewport (e.g. modals) to divide it back out.
+  document.documentElement.style.setProperty('--ui-scale', String(value))
+}
