@@ -1697,13 +1697,11 @@ export default function ChatPanel({
     setJumpNew(false)
   }
 
-  // Auto-grow the composer textarea with its content (capped).
-  useEffect(() => {
-    const ta = taRef.current
-    if (!ta) return
-    ta.style.height = 'auto'
-    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
-  }, [input])
+  // Composer auto-grow is handled purely in CSS via `.composer-input-sizer`
+  // (a hidden replica in the same grid cell). We deliberately avoid a
+  // JS `scrollHeight` measurement here: reading it on every keystroke forced a
+  // synchronous full-page reflow whose cost scaled with the conversation DOM,
+  // producing typing latency that grew with session length.
 
   // Stage one or more images (from the file picker, paste, or drag-drop) as chat
   // attachments — re-encoded to PNG and saved to a temp file, reusing the same
@@ -2115,6 +2113,38 @@ export default function ChatPanel({
     onOutboundConsumed?.()
   }, [outbound?.id])
 
+  // Precompute the conversation rows so a keystroke in the composer (which only
+  // touches local `input` state) doesn't re-run `messages.map` and re-create N
+  // <MessageRow> elements. Deps are all stable while typing, so this recomputes
+  // only when the conversation actually changes — keeping per-keystroke cost
+  // independent of session length.
+  const messageList = useMemo(
+    () =>
+      messages.map((m, i) => {
+        const prevUser = m.role === 'assistant' && i > 0 ? messages[i - 1] : undefined
+        const rerunnable =
+          !sending &&
+          prevUser?.role === 'user' &&
+          !prevUser.attachments &&
+          prevUser.text !== '(screenshot)'
+        const canRetry = Boolean(m.error) && rerunnable
+        const canResume = Boolean(m.interrupted) && !m.pending && rerunnable
+        return (
+          <MessageRow
+            key={m.id}
+            message={m}
+            projectPath={project.path}
+            canRetry={canRetry}
+            onRetry={onRetry}
+            canResume={canResume}
+            onResume={onResume}
+            onResolvePlan={onResolvePlan}
+          />
+        )
+      }),
+    [messages, sending, project.path, onRetry, onResume, onResolvePlan]
+  )
+
   return (
     <div className="chat">
       <div className="chat-toolbar">
@@ -2195,28 +2225,7 @@ export default function ChatPanel({
           </div>
         )}
 
-        {messages.map((m, i) => {
-          const prevUser = m.role === 'assistant' && i > 0 ? messages[i - 1] : undefined
-          const rerunnable =
-            !sending &&
-            prevUser?.role === 'user' &&
-            !prevUser.attachments &&
-            prevUser.text !== '(screenshot)'
-          const canRetry = Boolean(m.error) && rerunnable
-          const canResume = Boolean(m.interrupted) && !m.pending && rerunnable
-          return (
-            <MessageRow
-              key={m.id}
-              message={m}
-              projectPath={project.path}
-              canRetry={canRetry}
-              onRetry={onRetry}
-              canResume={canResume}
-              onResume={onResume}
-              onResolvePlan={onResolvePlan}
-            />
-          )
-        })}
+        {messageList}
         {showJump && (
           <button
             type="button"
@@ -2320,22 +2329,24 @@ export default function ChatPanel({
               ))}
             </div>
           )}
-          <textarea
-            ref={taRef}
-            className="composer-input"
-            placeholder={
-              deployLock
-                ? 'Deploy your app to start chatting…'
-                : `Message Fabricator about ${project.name}…`
-            }
-            value={input}
-            rows={1}
-            disabled={deployLock}
-            onChange={onComposerChange}
-            onSelect={onComposerSelect}
-            onKeyDown={onKeyDown}
-            onPaste={onComposerPaste}
-          />
+          <div className="composer-input-sizer" data-replicated-value={input}>
+            <textarea
+              ref={taRef}
+              className="composer-input"
+              placeholder={
+                deployLock
+                  ? 'Deploy your app to start chatting…'
+                  : `Message Fabricator about ${project.name}…`
+              }
+              value={input}
+              rows={1}
+              disabled={deployLock}
+              onChange={onComposerChange}
+              onSelect={onComposerSelect}
+              onKeyDown={onKeyDown}
+              onPaste={onComposerPaste}
+            />
+          </div>
           <div className="composer-actions">
             <div className="composer-left">
               <div

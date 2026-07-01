@@ -7835,6 +7835,35 @@ code {
   }
 }
 
+/* Auto-growing composer. An invisible replica of the text lives in the same
+   grid cell as the textarea and drives the height, so the field grows through
+   normal CSS layout. This avoids reading `scrollHeight` on every keystroke,
+   which forces a synchronous full-page reflow that gets progressively slower as
+   the conversation DOM grows. */
+.composer-input-sizer {
+  display: grid;
+  width: 100%;
+}
+
+.composer-input-sizer::after {
+  content: attr(data-replicated-value) ' ';
+  visibility: hidden;
+  overflow: hidden;
+}
+
+.composer-input-sizer > .composer-input,
+.composer-input-sizer::after {
+  grid-area: 1 / 1 / 2 / 2;
+  width: 100%;
+  font: inherit;
+  line-height: 1.5;
+  padding: 4px 0;
+  max-height: 200px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
 .composer-input {
   width: 100%;
   resize: none;
