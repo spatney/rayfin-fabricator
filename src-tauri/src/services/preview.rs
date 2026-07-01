@@ -25,6 +25,8 @@ use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
 use crate::error::{AppError, AppResult};
+use crate::services::crashlog;
+use crate::services::watchdog::{self, Activity};
 
 /// Label of the single reusable preview child webview.
 const PREVIEW_LABEL: &str = "preview";
@@ -395,6 +397,7 @@ pub fn preview_navigate(
   url: String,
   bounds: PreviewBounds,
 ) -> AppResult<()> {
+  let _guard = watchdog::activity(Activity::PreviewNavigate);
   let parsed: Url = url
     .parse()
     .map_err(|e| AppError::Msg(format!("invalid preview url {url:?}: {e}")))?;
@@ -411,6 +414,7 @@ pub fn preview_navigate(
 /// from the renderer (rAF-throttled), so it stays a lightweight sync command.
 #[tauri::command]
 pub fn preview_set_bounds(app: AppHandle, bounds: PreviewBounds) -> AppResult<()> {
+  let _guard = watchdog::activity(Activity::PreviewSetBounds);
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
     wv.set_bounds(bounds.to_rect())
       .map_err(|e| AppError::Msg(e.to_string()))?;
@@ -421,6 +425,7 @@ pub fn preview_set_bounds(app: AppHandle, bounds: PreviewBounds) -> AppResult<()
 /// Hide the preview (it floats above HTML, so it must hide when covered).
 #[tauri::command]
 pub fn preview_hide(app: AppHandle) -> AppResult<()> {
+  let _guard = watchdog::activity(Activity::PreviewHide);
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
     wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
     app.state::<PreviewState>().inner.lock().unwrap().visible = false;
@@ -431,6 +436,7 @@ pub fn preview_hide(app: AppHandle) -> AppResult<()> {
 /// Reload the current page.
 #[tauri::command]
 pub fn preview_reload(app: AppHandle) -> AppResult<()> {
+  let _guard = watchdog::activity(Activity::PreviewReload);
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
     wv.reload().map_err(|e| AppError::Msg(e.to_string()))?;
   }
@@ -495,6 +501,7 @@ pub fn preview_forward(app: AppHandle, state: State<'_, PreviewState>) -> AppRes
 }
 
 fn navigate_to(app: &AppHandle, target: Option<String>) {
+  let _guard = watchdog::activity(Activity::PreviewHistory);
   if let (Some(url), Some(wv)) = (target, app.get_webview(PREVIEW_LABEL)) {
     if let Ok(parsed) = url.parse::<Url>() {
       let _ = wv.navigate(parsed);
@@ -530,17 +537,32 @@ async fn capture_now(app: &AppHandle) -> AppResult<Vec<u8>> {
 
   let (tx, rx) = oneshot::channel::<Result<Vec<u8>, String>>();
   wv.with_webview(move |platform| {
+    // On the UI thread now: label it so a hang here names CapturePreview.
+    let _guard = watchdog::activity(Activity::PreviewCapture);
     let _ = tx.send(capture_png(&platform));
   })
   .map_err(|e| AppError::Msg(format!("failed to access preview webview: {e}")))?;
 
   // Belt-and-suspenders: `capture_png` already bounds its own UI-thread pump, but
   // cap the whole round-trip too so a stalled dispatch can never wedge the caller.
-  match tokio::time::timeout(Duration::from_secs(10), rx).await {
+  let out = match tokio::time::timeout(Duration::from_secs(10), rx).await {
     Ok(Ok(res)) => res.map_err(AppError::Msg),
     Ok(Err(_)) => Err(AppError::Msg("preview capture was cancelled".into())),
     Err(_) => Err(AppError::Msg("preview capture timed out".into())),
+  };
+  // A capture timeout means CapturePreview never signalled and the UI thread was
+  // blocked up to ~5s — a near-hang worth a breadcrumb (the watchdog only fires
+  // past 10s, so these would otherwise go unrecorded).
+  if let Err(ref e) = out {
+    let msg = e.to_string();
+    if msg.contains("timed out") {
+      crashlog::log_error(
+        "preview",
+        &format!("{msg} — CapturePreview blocked the UI thread up to ~5s (slow/absent GPU signal)"),
+      );
+    }
   }
+  out
 }
 
 /// Capture the current preview content as raw PNG bytes for the **renderer's own**

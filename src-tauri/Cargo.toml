@@ -1,6 +1,6 @@
 [package]
 name = "rayfin-fabricator"
-version = "0.47.0"
+version = "0.48.0"
 description = "Rayfin Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
 authors = ["Rayfin Fabricator"]
 license = "MIT"
@@ -69,6 +69,8 @@ windows = { version = "0.61", features = [
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Memory",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Threading",
 ] }
 
 # macOS-only: capture the native WKWebView preview to a PNG via

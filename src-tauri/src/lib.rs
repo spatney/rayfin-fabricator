@@ -110,8 +110,10 @@ pub fn run() {
       // app-data so chat sessions can inject them (never written into the repo).
       services::agent_skills::ensure_materialized();
 
-      // Watch for main-thread freezes (Parallels/VM hangs) and record them.
-      services::watchdog::start();
+      // Watch for main-thread freezes (Parallels/VM hangs) and record them. The
+      // monitor actively probes the main thread, so an idle (event-starved) loop
+      // is never mistaken for a hang.
+      services::watchdog::start(app.handle().clone());
 
       Ok(())
     })
