@@ -3,7 +3,7 @@
 A **Fabric Analytics** React + Vite app: connect a Power BI semantic model,
 query it with DAX, and **compose stunning dashboards from a pre-built component
 kit** powered by Graphein specs (charts plus `table` / `matrix`) — tuned for the
-**Rayfin Fabricator** deploy-to-test workflow.
+**Fabricator** deploy-to-test workflow.
 
 > This is a Fabricator template: there is **no local backend, dev server, or
 > test harness**. You build your app and deploy it to a Fabric test workspace —

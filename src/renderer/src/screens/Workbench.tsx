@@ -424,7 +424,7 @@ export default function Workbench({
       `Details: ${finding.detail}\n\n` +
       `Suggested fix: ${finding.recommendation}\n\n` +
       'Apply the fix in the code, keeping the app building and following Rayfin conventions. ' +
-      'Do not run `rayfin up` or deploy — Rayfin Fabricator redeploys automatically.'
+      'Do not run `rayfin up` or deploy — Fabricator redeploys automatically.'
     setViewMode('build')
     setFocusPane(null)
     setChatOutbound({
@@ -453,7 +453,7 @@ export default function Workbench({
     const prompt =
       `The Advisor review found ${findings.length} issues in this app. Please fix all of ` +
       'them, most severe first. Keep the app building and follow Rayfin conventions. ' +
-      'Do not run `rayfin up` or deploy — Rayfin Fabricator redeploys automatically.\n\n' +
+      'Do not run `rayfin up` or deploy — Fabricator redeploys automatically.\n\n' +
       `${lines}`
     setViewMode('build')
     setFocusPane(null)
@@ -520,7 +520,7 @@ export default function Workbench({
   // instance per project can tell them apart in the taskbar / Alt-Tab. The
   // project name leads so it stays visible when the title is truncated.
   useEffect(() => {
-    const base = 'Rayfin Fabricator'
+    const base = 'Fabricator'
     const title = active?.name ? `${active.name} — ${base}` : base
     void getCurrentWindow().setTitle(title)
   }, [active?.name])
@@ -672,7 +672,7 @@ export default function Workbench({
       '1. ',
       '',
       '### Environment',
-      `- App: Rayfin Fabricator ${versions?.app ?? 'unknown'}`,
+      `- App: Fabricator ${versions?.app ?? 'unknown'}`,
       `- Tauri: ${versions?.tauri ?? 'unknown'}`,
       `- WebView2: ${versions?.webview2 ?? 'unknown'}`,
       `- Copilot CLI: ${versions?.copilot ?? 'unknown'}`,
@@ -687,7 +687,7 @@ export default function Workbench({
       <header className="titlebar">
         <div className="brand">
           <img className="brand-mark" src={logo} alt="" />
-          <span className="brand-name">Rayfin Fabricator</span>
+          <span className="brand-name">Fabricator</span>
         </div>
         <div className="titlebar-status">
           <div
@@ -978,7 +978,7 @@ export default function Workbench({
             <span className="statusbar-sep">·</span>
           </>
         )}
-        <span className="statusbar-item">Rayfin Fabricator v{versions?.app ?? '—'}</span>
+        <span className="statusbar-item">Fabricator v{versions?.app ?? '—'}</span>
         <span className="statusbar-sep">·</span>
         <span
           className="statusbar-item"

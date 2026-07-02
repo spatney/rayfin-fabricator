@@ -1,8 +1,8 @@
 [package]
 name = "rayfin-fabricator"
-version = "0.50.0"
-description = "Rayfin Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
-authors = ["Rayfin Fabricator"]
+version = "0.51.0"
+description = "Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
+authors = ["Fabricator"]
 license = "MIT"
 repository = "https://github.com/spatney/rayfin-fabricator"
 edition = "2021"

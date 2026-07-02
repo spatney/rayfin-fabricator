@@ -1,6 +1,6 @@
 # Security Policy
 
-Rayfin Fabricator is a personal, best-effort project. Only the latest release is supported for security fixes.
+Fabricator is a personal, best-effort project. Only the latest release is supported for security fixes.
 
 ## Reporting a vulnerability
 

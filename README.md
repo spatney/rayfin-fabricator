@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="./logo.png" alt="Rayfin Fabricator logo" width="120" />
+  <img src="./logo.png" alt="Fabricator logo" width="120" />
 
-  <h1>Rayfin Fabricator</h1>
+  <h1>Fabricator</h1>
 
   <p><strong>The all-in-one workbench for building Rayfin apps — chat to build, preview inline, and ship to Microsoft Fabric, all in one window. No CLI wrangling, no new account: just your GitHub Copilot sign-in.</strong></p>
 
   <p>
-    <a href="https://github.com/spatney/rayfin-fabricator/releases/latest"><img alt="Download Rayfin Fabricator" src="https://img.shields.io/badge/Download-Rayfin%20Fabricator-0078D4?style=for-the-badge" /></a>
+    <a href="https://github.com/spatney/rayfin-fabricator/releases/latest"><img alt="Download Fabricator" src="https://img.shields.io/badge/Download-Fabricator-0078D4?style=for-the-badge" /></a>
   </p>
 
   <p>
@@ -18,15 +18,15 @@
 
 <div align="center">
   <a href="https://github.com/spatney/rayfin-fabricator/releases/latest">
-    <img src="./docs/app-preview.svg" alt="The Rayfin Fabricator workbench: chat to build a Rayfin app on the left, with a live inline preview of the deployed app on the right." width="100%" />
+    <img src="./docs/app-preview.svg" alt="The Fabricator workbench: chat to build a Rayfin app on the left, with a live inline preview of the deployed app on the right." width="100%" />
   </a>
   <p><sub>Build, preview, and ship — all in one window. <em>(Representative UI.)</em></sub></p>
 </div>
 
 > **Personal project disclaimer**
-> Rayfin Fabricator is a personal project built by Sachin Patney in his own free time. The author works at Microsoft, but this is not a Microsoft product and is not affiliated with, endorsed by, sponsored by, or supported by Microsoft.
+> Fabricator is a personal project built by Sachin Patney in his own free time. The author works at Microsoft, but this is not a Microsoft product and is not affiliated with, endorsed by, sponsored by, or supported by Microsoft.
 
-Building a Rayfin app usually means living in your terminal: scaffold with one CLI, prompt the Copilot CLI, run `rayfin up` to deploy, wrangle git, flip to a browser to check it, repeat. Rayfin Fabricator folds all of that into a single desktop app.
+Building a Rayfin app usually means living in your terminal: scaffold with one CLI, prompt the Copilot CLI, run `rayfin up` to deploy, wrangle git, flip to a browser to check it, repeat. Fabricator folds all of that into a single desktop app.
 
 You chat, the app gets built, you watch it come together inline, and you manage every deployment from one panel. No commands to memorize, no terminal tabs to juggle.
 
@@ -36,7 +36,7 @@ Best of all, it runs on the **GitHub Copilot account you already have**. Nothing
 
 Rayfin is Microsoft's **Backend-as-a-Service for the agentic era**. You define your data model with TypeScript decorators and the platform provisions and manages the database, authentication, data APIs, storage, and hosting for you — all on Microsoft Fabric, with enterprise-grade governance built in. Learn more at [microsoft/rayfin](https://github.com/microsoft/rayfin) and the [Rayfin docs](https://aka.ms/rayfin/docs).
 
-Rayfin Fabricator is the desktop shell that makes building those apps effortless.
+Fabricator is the desktop shell that makes building those apps effortless.
 
 ## Everything in one window
 
@@ -48,7 +48,7 @@ Rayfin Fabricator is the desktop shell that makes building those apps effortless
 
 ## Download
 
-Rayfin Fabricator runs on **Windows 10/11** and **macOS (Apple Silicon)**.
+Fabricator runs on **Windows 10/11** and **macOS (Apple Silicon)**.
 
 > **[⬇️ Download the latest release](https://github.com/spatney/rayfin-fabricator/releases/latest)**
 
@@ -92,7 +92,7 @@ Want to build from source instead? Jump to [Build from source](#build-from-sourc
 flowchart TD
   User["Developer"]
 
-  subgraph Desktop["Rayfin Fabricator desktop app"]
+  subgraph Desktop["Fabricator desktop app"]
     Renderer["React 18 + TypeScript renderer<br/>Vite UI"]
     Core["Tauri v2 Rust core<br/>IPC commands + services"]
     Editor["Monaco code editor"]
@@ -231,8 +231,8 @@ Report security issues per [`SECURITY.md`](./SECURITY.md). Please don't open pub
 
 ## License
 
-Rayfin Fabricator is released under the [MIT License](./LICENSE).
+Fabricator is released under the [MIT License](./LICENSE).
 
 ## Disclaimer
 
-This is a personal project built by [Sachin Patney](https://github.com/spatney) in his own free time. The author works at Microsoft, but Rayfin Fabricator is not a Microsoft product and is not affiliated with, endorsed by, sponsored by, or supported by Microsoft.
+This is a personal project built by [Sachin Patney](https://github.com/spatney) in his own free time. The author works at Microsoft, but Fabricator is not a Microsoft product and is not affiliated with, endorsed by, sponsored by, or supported by Microsoft.

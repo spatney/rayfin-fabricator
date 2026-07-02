@@ -1,7 +1,7 @@
 # Todo App
 
 A polished, Fabric-authenticated todo app built on React + Vite and Rayfin data,
-tuned for the **Rayfin Fabricator** deploy-to-test workflow. Each user gets their
+tuned for the **Fabricator** deploy-to-test workflow. Each user gets their
 own todos via row-level security on a Rayfin data model — sign in with Microsoft,
 add tasks, and they're persisted to Fabric.
 

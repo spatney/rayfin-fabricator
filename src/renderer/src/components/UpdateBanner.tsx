@@ -32,7 +32,7 @@ export default function UpdateBanner(): JSX.Element | null {
     meta = pct !== null ? `${pct}%` : progress ? formatBytes(progress.downloaded) : 'Starting…'
   } else if (status === 'ready') {
     title = `Update ${info?.version ?? ''} is ready to install`.replace('  ', ' ')
-    meta = 'Rayfin Fabricator will restart to apply it.'
+    meta = 'Fabricator will restart to apply it.'
   } else {
     title = 'Installing update…'
   }

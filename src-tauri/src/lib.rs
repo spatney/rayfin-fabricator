@@ -1,4 +1,4 @@
-//! Rayfin Fabricator — Tauri application entry point.
+//! Fabricator — Tauri application entry point.
 //!
 //! Declares the Rust module tree (ported from the former Electron main process),
 //! wires up plugins + managed state, and registers every `#[tauri::command]`

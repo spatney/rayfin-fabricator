@@ -87,7 +87,7 @@ export default function HomeView({
       <div className="home-inner">
         <header className="home-head">
           <img className="home-mark" src={logo} alt="" />
-          <h1 className="home-title">Welcome to Rayfin Fabricator</h1>
+          <h1 className="home-title">Welcome to Fabricator</h1>
           <p className="home-sub">
             Create a new Rayfin app or open an existing project to start building with chat.
           </p>

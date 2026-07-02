@@ -309,7 +309,7 @@ async fn init_git_repo(dir: &Path, summary: &str, on: &OnData) {
   let email = run("git", &["config", "user.email"], run_in(dir, None)).await;
   if email.stdout.trim().is_empty() {
     run("git", &["config", "user.email", "fabricator@rayfin.local"], run_in(dir, None)).await;
-    run("git", &["config", "user.name", "Rayfin Fabricator"], run_in(dir, None)).await;
+    run("git", &["config", "user.name", "Fabricator"], run_in(dir, None)).await;
   }
   run("git", &["commit", "-m", summary], run_in(dir, Some(on.clone()))).await;
 }

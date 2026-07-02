@@ -1,12 +1,12 @@
-# Contributing to Rayfin Fabricator
+# Contributing to Fabricator
 
-Thanks for your interest in contributing to Rayfin Fabricator. This is a personal, free-time project maintained by Sachin Patney (GitHub [@spatney](https://github.com/spatney)). The author works at Microsoft, but this is **not** a Microsoft product and is not affiliated with, endorsed by, or supported by Microsoft. Maintenance is best-effort.
+Thanks for your interest in contributing to Fabricator. This is a personal, free-time project maintained by Sachin Patney (GitHub [@spatney](https://github.com/spatney)). The author works at Microsoft, but this is **not** a Microsoft product and is not affiliated with, endorsed by, or supported by Microsoft. Maintenance is best-effort.
 
 Repository: https://github.com/spatney/rayfin-fabricator
 
 ## What this project is
 
-Rayfin Fabricator is a Windows desktop app for building "Rayfin apps" via chat. It uses Tauri v2 with a Rust backend and a React 18 + TypeScript renderer built with Vite. It wraps the GitHub Copilot CLI for authoring and the Rayfin CLI (`rayfin up`) for deploy, preview, debug, and validation on Microsoft Fabric.
+Fabricator is a Windows desktop app for building "Rayfin apps" via chat. It uses Tauri v2 with a Rust backend and a React 18 + TypeScript renderer built with Vite. It wraps the GitHub Copilot CLI for authoring and the Rayfin CLI (`rayfin up`) for deploy, preview, debug, and validation on Microsoft Fabric.
 
 You author locally, but deploy, preview, debug, and validate remotely on Microsoft Fabric.
 

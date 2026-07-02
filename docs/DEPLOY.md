@@ -1,4 +1,4 @@
-# Rayfin Fabricator deployment
+# Fabricator deployment
 
 `deploy.ps1` provisions the Azure telemetry infrastructure for the app and wires the Application Insights GitHub Actions secret. Binary distribution is handled by GitHub Releases via CI.
 

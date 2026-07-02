@@ -1,4 +1,4 @@
-// The Rayfin Fabricator mark is a set of rounded-rect tiles that form an "F". We recreate
+// The Fabricator mark is a set of rounded-rect tiles that form an "F". We recreate
 // it as inline SVG (one element per tile) so each block can glide itself into place — a
 // slick "the logo builds itself" splash. Geometry is sampled from assets/logo.png (428×424)
 // so the assembled mark matches the real logo exactly.
@@ -87,7 +87,7 @@ export default function SplashScreen(): JSX.Element {
           <BuildingLogo />
         </div>
         <div className="splash-wordmark">
-          <span className="splash-word">Rayfin Fabricator</span>
+          <span className="splash-word">Fabricator</span>
           <span className="splash-sub">Setting up your workspace…</span>
         </div>
       </div>

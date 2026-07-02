@@ -1,4 +1,4 @@
-# Rayfin Fabricator analytics queries
+# Fabricator analytics queries
 
 These queries run in Azure Portal → the `rayfin-fabricator-insights` Application Insights resource (or the `rayfin-fabricator-logs` Log Analytics workspace) → **Logs** blade. Paste one query from `queries.kql`, then select **Run**. The Logs time-range picker applies to queries without their own `timestamp` filter; queries that include filters such as `timestamp > ago(30d)` use the query's filter and effectively override the picker for that result.
 

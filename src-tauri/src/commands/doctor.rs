@@ -309,7 +309,7 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
           emit(
             &on_data,
             Stream::Stdout,
-            &format!("\nInstalled {}. Restart Rayfin Fabricator to finish setup.\n", def.name),
+            &format!("\nInstalled {}. Restart Fabricator to finish setup.\n", def.name),
           );
           return InstallResult {
             ok: true,
@@ -353,7 +353,7 @@ async fn install_system_tool(app: &AppHandle, def: &ToolDef, on_data: Option<OnD
           emit(
             &on_data,
             Stream::Stdout,
-            &format!("\nInstalled {}. Restart Rayfin Fabricator to finish setup.\n", def.name),
+            &format!("\nInstalled {}. Restart Fabricator to finish setup.\n", def.name),
           );
           return InstallResult {
             ok: true,

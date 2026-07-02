@@ -1,4 +1,4 @@
-// Semantic-model locator/search helper for Rayfin Fabricator.
+// Semantic-model locator/search helper for Fabricator.
 //
 // Reuses the globally-installed Rayfin CLI's MSAL token cache (the same approach
 // as src-tauri/src/commands/fabric.rs) to mint Fabric + Power BI tokens silently,

@@ -1,5 +1,5 @@
 //! Product-scoped agent guidance injected only when Copilot runs **inside
-//! Rayfin Fabricator**.
+//! Fabricator**.
 //!
 //! Unlike the per-project skills under `.agents/skills/` (which are committed to
 //! the user's repo and visible to a plain `copilot` CLI), these files live under
@@ -39,12 +39,12 @@ const VALIDATE_HEADLESS_SKILL: &str = r#"---
 name: validate-headless
 description: "Validate this Rayfin data app's visuals fast with headless Graphein preview. Use after editing the app, or whenever the user wants to validate, verify, test, check, see, preview, or debug how a chart looks or behaves ('does it work', 'make sure it looks right'). Renders one spec against live DAX data to a PNG + report — no deploy or screenshot needed; Fabricator auto-deploys after the turn."
 metadata:
-  author: Rayfin Fabricator
+  author: Fabricator
   version: 2.0.0
 ---
 # Validate visuals headlessly — no deploy + screenshot
 
-You are running inside **Rayfin Fabricator**. Validate your work by rendering each
+You are running inside **Fabricator**. Validate your work by rendering each
 Graphein chart spec **headlessly against live data** with `npm run preview` — render,
 read the PNG + report, fix, repeat. There is no deploy-and-screenshot loop: Fabricator
 auto-deploys the app after the turn, so shipping is automatic. Spend your time getting
@@ -79,9 +79,9 @@ the visuals right, not deploying. Deploy early and iterate on each hero visual.
 const VALIDATE_INSTRUCTIONS: &str = r#"---
 applyTo: '**'
 ---
-# Validate visuals headlessly, never run the app locally (Rayfin Fabricator)
+# Validate visuals headlessly, never run the app locally (Fabricator)
 
-You are the coding agent inside **Rayfin Fabricator**. The development loop here is
+You are the coding agent inside **Fabricator**. The development loop here is
 **edit → preview the visual headlessly → fix**. Fabricator auto-deploys this Rayfin app
 after the turn, so shipping is automatic; you do not deploy or screenshot to validate.
 
@@ -125,9 +125,9 @@ still fine; what is off-limits is running, serving, or test-executing the app lo
 const STABLE_ONLY_INSTRUCTIONS: &str = r#"---
 applyTo: '**'
 ---
-# Build with stable, Fabric-supported Rayfin features (Rayfin Fabricator)
+# Build with stable, Fabric-supported Rayfin features (Fabricator)
 
-You are the coding agent inside **Rayfin Fabricator**. Apps built here are deployed to Microsoft
+You are the coding agent inside **Fabricator**. Apps built here are deployed to Microsoft
 Fabric. **Experimental / preview Rayfin features are usually incomplete and often do not deploy on
 Fabric** — for example, anonymous data access is documented as *"not currently supported on
 Fabric,"* and applying such a schema fails today. Reaching for these on your own wastes your
@@ -173,12 +173,12 @@ const CONNECT_MODEL_SKILL: &str = r#"---
 name: connect-semantic-model
 description: "Find and connect the Power BI / Fabric semantic model (dataset) behind a report or app. Use when this app needs to read data from an existing Power BI report, app, dataset, or semantic model — when the user pastes a Power BI link or id, or describes the data by name/topic and you need to locate the model and wire it into the app's data."
 metadata:
-  author: Rayfin Fabricator
+  author: Fabricator
   version: 1.0.0
 ---
 # Connect a Power BI / Fabric semantic model
 
-You are running inside **Rayfin Fabricator** and can locate the **semantic model (dataset)** behind
+You are running inside **Fabricator** and can locate the **semantic model (dataset)** behind
 a Power BI report or app, then wire it into this app's data — without the user having to dig up the
 model's URL or id. Use this whenever the app needs to read data from an existing Power BI / Fabric
 model.

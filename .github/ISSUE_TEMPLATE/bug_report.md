@@ -1,6 +1,6 @@
 ---
 name: "Bug report"
-about: "Report a reproducible problem with Rayfin Fabricator"
+about: "Report a reproducible problem with Fabricator"
 title: "Bug: "
 labels: bug
 ---

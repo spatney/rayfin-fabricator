@@ -35,7 +35,7 @@ export default class ErrorBoundary extends Component<Props, State> {
         <img className="brand-mark" src={logo} alt="" />
         <h1>Something went wrong</h1>
         <p className="crash-sub">
-          Rayfin Fabricator hit an unexpected error. Reloading usually fixes it; your projects and
+          Fabricator hit an unexpected error. Reloading usually fixes it; your projects and
           chat history are saved.
         </p>
         <pre className="crash-detail">{error.message}</pre>

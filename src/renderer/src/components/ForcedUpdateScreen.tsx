@@ -25,7 +25,7 @@ export default function ForcedUpdateScreen(): JSX.Element {
     ? `Installing update${info ? ` ${info.version}` : ''}…`
     : `Downloading update${info ? ` ${info.version}` : ''}…`
   const meta = installing
-    ? 'Rayfin Fabricator will restart automatically.'
+    ? 'Fabricator will restart automatically.'
     : pct !== null
       ? `${pct}%`
       : progress

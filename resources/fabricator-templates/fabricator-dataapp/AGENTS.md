@@ -28,7 +28,7 @@ A read-only analytics dashboard over a Power BI semantic model. It authenticates
 through Fabric and renders **inside the Fabric portal shell** — it is meant to be
 opened from a deployed Fabric workspace, not `localhost`. There is **no local
 backend or dev server** for app validation: preview every visual headlessly, then
-let Rayfin Fabricator's automatic after-turn deploy ship the app for user review.
+let Fabricator's automatic after-turn deploy ship the app for user review.
 
 For every visual, `npm run preview` renders a Graphein chart spec
 **headlessly against live data** (via `fabric-app-data query`) to a PNG + a

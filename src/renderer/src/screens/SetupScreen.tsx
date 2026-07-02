@@ -142,7 +142,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
             </div>
             <div className="setup-hero-copy">
               <span className="setup-eyebrow">Welcome to</span>
-              <h1 className="setup-hero-title">Rayfin Fabricator</h1>
+              <h1 className="setup-hero-title">Fabricator</h1>
               <p className="setup-hero-tagline">
                 Build and ship Rayfin apps by chatting with an AI agent.
               </p>
@@ -394,7 +394,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
               disabled={!allReady || busy !== null}
               onClick={() => onEnter()}
             >
-              Enter Rayfin Fabricator
+              Enter Fabricator
               <span className="setup-enter-arrow" aria-hidden="true">
                 →
               </span>

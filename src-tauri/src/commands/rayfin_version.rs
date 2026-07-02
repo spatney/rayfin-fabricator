@@ -2,7 +2,7 @@
 //! CLI and SDK packages pinned in its package.json — and whether a newer stable
 //! release is available on npm.
 //!
-//! The app never upgrades these itself: when an update exists, Rayfin Fabricator
+//! The app never upgrades these itself: when an update exists, Fabricator
 //! hands a prepared prompt to the Copilot agent (which edits package.json and runs
 //! `npm install`). This module just supplies the "from X → to Y" facts.
 //!

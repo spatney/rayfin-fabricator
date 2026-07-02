@@ -20,7 +20,7 @@ const GIT_WORKING_REF: &str = "WORKING";
 /// Identity used for Studio's own commits to user projects (matches deploys).
 const COMMIT_IDENT: [&str; 4] = [
   "-c",
-  "user.name=Rayfin Fabricator",
+  "user.name=Fabricator",
   "-c",
   "user.email=fabricator@rayfin.local",
 ];
@@ -132,7 +132,7 @@ pub async fn git_commit(id: String, message: String) -> GitCommitResult {
   let email = git(&dir, &["config", "user.email"]).await;
   if !email.ok || email.stdout.trim().is_empty() {
     git(&dir, &["config", "user.email", "fabricator@rayfin.local"]).await;
-    git(&dir, &["config", "user.name", "Rayfin Fabricator"]).await;
+    git(&dir, &["config", "user.name", "Fabricator"]).await;
   }
 
   let add = git(&dir, &["add", "-A"]).await;

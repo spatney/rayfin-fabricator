@@ -245,7 +245,7 @@ export default function SettingsModal({
           <div className="modal-footer settings-footer">
             <span className="settings-version">
               {versions
-                ? `Rayfin Fabricator ${versions.app} · Tauri ${versions.tauri} · WebView2 ${versions.webview2} · Copilot CLI ${versions.copilot ?? 'unknown'}`
+                ? `Fabricator ${versions.app} · Tauri ${versions.tauri} · WebView2 ${versions.webview2} · Copilot CLI ${versions.copilot ?? 'unknown'}`
                 : ''}
             </span>
             <button className="btn btn--primary" onClick={onClose}>
@@ -258,7 +258,7 @@ export default function SettingsModal({
       {restartPrompt && (
         <ConfirmModal
           title="Restart required"
-          message="Compatibility rendering only changes after a restart. Rayfin Fabricator will restart now to apply it."
+          message="Compatibility rendering only changes after a restart. Fabricator will restart now to apply it."
           confirmLabel="Restart now"
           cancelLabel="Cancel"
           onConfirm={() => void window.api.relaunch()}

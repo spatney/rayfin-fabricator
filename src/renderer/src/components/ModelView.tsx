@@ -197,7 +197,7 @@ export default function ModelView({
         '`@role`/`@authenticated` decorator with a row-level `policy` that scopes rows to their ' +
         'owner (typically by matching a `*_id` field against `claims.sub`), or keep `@anonymous` ' +
         'only if the data is genuinely public. Explain the change you make. Keep the app building ' +
-        'and do not run `rayfin up` or deploy — Rayfin Fabricator redeploys automatically.'
+        'and do not run `rayfin up` or deploy — Fabricator redeploys automatically.'
       onSendToChat(`Harden access on ${entity.name}`, prompt)
     },
     [onSendToChat]
