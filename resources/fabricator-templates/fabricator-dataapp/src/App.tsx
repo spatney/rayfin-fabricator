@@ -5,104 +5,37 @@
 // </copyright>
 //-----------------------------------------------------------------------
 
-import {
-    Card,
-    ChartCard,
-    DashboardGrid,
-    DateRangeSlicer,
-    EmptyTile,
-    FilterBar,
-    FilterStateProvider,
-    PageShell,
-    SelectionStoreProvider,
-    Stat,
-    StatStrip,
-    ThemeToggle,
-    Tile,
-} from "@/components/dashboard";
+import { FilterStateProvider, SelectionStoreProvider } from "@/components/dashboard";
+
+import { DemoDashboard } from "./demo/DemoDashboard";
 
 /**
- * Starter dashboard — your canvas, kept deliberately simple.
+ * App entry.
  *
- * It models the **executive-summary** archetype: a small KPI band, one hero trend,
- * two breakdowns. Each visual is one Graphein `ChartSpec` dropped into
- * `<ChartCard spec={…} />`; the card owns theme, axes, formatting, dark mode, and
- * loading/empty/error states. Tiles start empty (no mock data) — wire a query, map
- * it with `toChartData`, author a spec, drop it in. Rebrand via `src/global.css`.
+ * The scaffold ships a complete, interactive **demo dashboard built entirely from
+ * Graphein specs** on a bundled real public dataset (Gapminder — life expectancy,
+ * income, population by country × year). See `src/demo/DemoDashboard.tsx` and
+ * `src/demo/global-development.ts`. It renders with **no data connection**, so a
+ * freshly scaffolded app looks alive immediately and demonstrates the golden path:
+ * one Graphein `ChartSpec` per tile (KPIs, line, scatter, horizontal bar, donut,
+ * table), slicers over shared filter state, and Power BI-style click cross-filtering.
  *
- * One slicer ships wired to shared filter state; add more from `useSlicerOptions`.
- * Switch archetypes (operational / analytical) via the commented examples below.
- * Full recipe: `AGENTS.md` + the `app-design` / `visuals` skills.
+ * To build YOUR app: delete `src/demo/**`, connect a Power BI semantic model in
+ * `fabric.yaml`, query it with DAX, map the result with `toChartData` / `toTable`,
+ * and author one spec per tile. The demo's structure is exactly the pattern you'll
+ * use — only the data source changes (static import → DAX query). The fully-wired
+ * real-data reference lives in the comment block below and in `AGENTS.md` + the
+ * `app-design` / `visuals` / `build-workflow` skills.
+ *
+ * Validate every visual **headlessly** with `npm run preview` (Graphein renders via
+ * `@graphein/node`, no browser) — before AND after you switch to real data. See the
+ * `headless-preview` skill.
  */
-function Dashboard() {
-    return (
-        <PageShell
-            eyebrow="Your workspace"
-            title="Your data app"
-            subtitle="One JSON spec per visual — wire your model, drop in tiles"
-            actions={<ThemeToggle />}
-            toolbar={
-                // One slicer to start. Swap options={[]} for
-                // useSlicerOptions({ connection, field }); selections drive every tile.
-                <FilterBar>
-                    <DateRangeSlicer label="Date" field="Date[Date]" />
-                </FilterBar>
-            }
-        >
-            {/* One-line starter hint — delete once you wire real tiles. */}
-            <Card variant="feature" accent="brand">
-                <p className="text-sm text-muted-foreground">
-                    Connect a model in <code className="font-mono">fabric.yaml</code>,
-                    query it with DAX, then author a Graphein spec per tile. The cards
-                    below stay empty until you pass them <code className="font-mono">spec</code>.
-                </p>
-            </Card>
-
-            {/* Metric band — one strip, not four look-alike boxes. */}
-            <StatStrip>
-                {KPI_PLACEHOLDERS.map((kpi) => (
-                    <Stat key={kpi.label} label={kpi.label} value="—" accent={kpi.accent} />
-                ))}
-            </StatStrip>
-
-            {/* Varied grid — one hero + two breakdowns. Add a `full` table tile later. */}
-            <DashboardGrid>
-                <Tile size="hero">
-                    <ChartCard
-                        title="Trend"
-                        accent="chart-1"
-                        className="h-full"
-                        bodyClassName="flex flex-1 flex-col"
-                    >
-                        <EmptyTile message="Pass a line/area spec" className="flex-1" />
-                    </ChartCard>
-                </Tile>
-                <Tile size="md">
-                    <ChartCard title="Breakdown">
-                        <EmptyTile message="Pass a bar spec" height={200} />
-                    </ChartCard>
-                </Tile>
-                <Tile size="md">
-                    <ChartCard title="Composition">
-                        <EmptyTile message="Pass a pie spec" height={200} />
-                    </ChartCard>
-                </Tile>
-            </DashboardGrid>
-        </PageShell>
-    );
-}
-
-const KPI_PLACEHOLDERS = [
-    { label: "Metric one", accent: "chart-1" },
-    { label: "Metric two", accent: "chart-2" },
-    { label: "Metric three", accent: "chart-3" },
-] as const;
-
 function App() {
     return (
         <FilterStateProvider>
             <SelectionStoreProvider>
-                <Dashboard />
+                <DemoDashboard />
             </SelectionStoreProvider>
         </FilterStateProvider>
     );
@@ -110,11 +43,13 @@ function App() {
 
 /*
  * ───────────────────────────────────────────────────────────────────────────
- * COPY-PASTE STARTER: the golden-path layout, fully wired (fetch → map → spec)
- * with slicers over shared filter state AND Power BI–style cross-filtering on by
- * default — clicking a bar dims that chart's unpicked marks while every OTHER
- * tile re-queries (server-side DAX) for the click. Replace the connection alias,
- * DAX, and column names for your model's. The cards own loading/empty/error.
+ * REAL-DATA GOLDEN PATH (replaces the bundled `DemoDashboard`): the same layout,
+ * fully wired (fetch → map → spec) against a Power BI semantic model, with slicers
+ * over shared filter state AND Power BI–style cross-filtering on by default —
+ * clicking a bar dims that chart's unpicked marks while every OTHER tile re-queries
+ * (server-side DAX) for the click. Replace the connection alias, DAX, and column
+ * names with your model's, then render <Dashboard /> instead of <DemoDashboard />.
+ * The cards own loading/empty/error.
  *
  * Keep DAX results LONG (tidy): one row per category/time point. For multiple
  * series, add a category column and set `encoding.series` — no client-side

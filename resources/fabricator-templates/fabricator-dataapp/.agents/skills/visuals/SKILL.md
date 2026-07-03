@@ -324,7 +324,9 @@ Graphein 0.13 can critique its own specs — use it to iterate before ship:
 - **Temporal fields are ISO strings** (`"2024-01"`, `"2024-01-15"`) or epoch ms —
   JSON has no `Date`. Mark the field `type: "temporal"` for a time axis.
 - **Empty `data` → empty tile.** A spec with `data: []` makes `ChartCard` show
-  its empty state. Never ship mock/placeholder rows.
+  its empty state. Never ship mock/placeholder rows in the real app — the one
+  exception is the clearly-labeled bundled demo under `src/demo/**`, which you
+  delete when you wire the real model.
 
 ## Cards
 

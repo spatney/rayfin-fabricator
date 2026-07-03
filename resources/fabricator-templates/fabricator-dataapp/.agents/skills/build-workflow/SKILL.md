@@ -57,9 +57,11 @@ as fast as possible.
    rasterize to PNG too, so preview them before shipping. (→ `headless-preview`)
 5. **Sensible default theme** — pick a characterful font pairing + a primary
    color and move on. Do **not** perfect theming yet. (→ `app-design`: Fast path)
-6. **Drop the hero tile into `src/App.tsx`** — replace the starter placeholder
-   grid with your hero visual. Fabricator automatically deploys after the turn
-   for user review.
+6. **Drop the hero tile into `src/App.tsx`** — the scaffold renders a bundled
+   all-Graphein demo (`src/demo/`) so a fresh app is never blank; **delete
+   `src/demo/**` and replace `<DemoDashboard />`** with your hero visual (its
+   providers + slicers + cross-filter wiring are the pattern to copy). Fabricator
+   automatically deploys after the turn for user review.
 
 Stop after the hero slice and use user feedback before going further.
 

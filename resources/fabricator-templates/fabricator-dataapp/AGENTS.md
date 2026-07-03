@@ -30,15 +30,35 @@ opened from a deployed Fabric workspace, not `localhost`. There is **no local
 backend or dev server** for app validation: preview every visual headlessly, then
 let Fabricator's automatic after-turn deploy ship the app for user review.
 
-For every visual, `npm run preview` renders a Graphein chart spec
-**headlessly against live data** (via `fabric-app-data query`) to a PNG + a
-machine-readable report. KPI/table/matrix/slicers/dashboard rasterize to PNG too,
-so preview-validate every visual before shipping. See the `headless-preview`
-skill.
+**The scaffold ships a complete, interactive demo dashboard** (`src/demo/`,
+rendered by `App.tsx`) built **entirely from Graphein specs** on a small bundled
+**real public dataset** (Gapminder — life expectancy, income, population). It
+needs no data connection, so a fresh app is alive on first run and demonstrates
+the golden path end to end: one spec per tile (KPIs, line, scatter, horizontal
+bar, donut, table), slicers over shared filter state, and click cross-filtering.
+**When you build the real app, delete `src/demo/**` and replace `<DemoDashboard/>`
+with your own page wired to the semantic model** (the wiring pattern is identical
+— only the data source changes from a static import to a DAX query).
 
-> **Never ship mock/fake data or "under construction" tiles.** A tile with no
-> data shows the card's empty state. Real data or an honest empty/loading/error
-> state — nothing in between.
+**Graphein renders headlessly** — the same engine that draws in the browser also
+rasterizes a spec to a PNG in Node (`@graphein/node`), so `npm run preview -- --spec
+<file>` renders any Graphein chart spec to a **PNG + a machine-readable report**
+(clipping / overlap / contrast / counts) with **no browser and no Fabric**:
+
+> - **Offline (inlined `spec.data`)** — validates the bundled demo specs, and any
+>   spec whose rows you paste in. This is how you eyeball a visual right now.
+> - **Live (`--query` / `--data`)** — injects rows from a real `fabric-app-data
+>   query` before rendering, to validate visuals once you're on the model.
+
+KPI/table/matrix/slicers/dashboard rasterize to PNG too. **Preview-validate every
+visual this way** — the demo specs today, your real specs after you swap the data.
+See the `headless-preview` skill.
+
+> **Never ship mock/fake data or "under construction" tiles in the real app.** The
+> only sanctioned placeholder is the clearly-labeled starter data under
+> `src/demo/**`, shipped so the template looks alive on first run — **delete it when
+> you wire real data.** After that it's real data or an honest empty/loading/error
+> state, nothing in between. A tile with no data shows the card's empty state.
 
 ---
 
@@ -82,7 +102,9 @@ hand-edit the generated file — edit `fabric.yaml`.
 ├── fabric.yaml                     ← Fabric data connections (semantic model profiles)
 ├── rayfin/rayfin.yml               ← Fabric service config (auth + static hosting)
 ├── src/
-│   ├── App.tsx                     ← your dashboard (ships a spec-first starter)
+│   ├── App.tsx                     ← your dashboard (renders the src/demo/ starter; replace it)
+│   ├── demo/                       ← bundled all-Graphein demo on real public data
+│   │                                 (Gapminder) — delete when you wire the real model
 │   ├── main.tsx                    ← entry: fonts, theme, auth provider, auth gate
 │   ├── global.css                  ← design system: tokens, palette, fonts, dark mode
 │   ├── components/dashboard/       ← THE KIT — PageShell, StatStrip, DashboardGrid,
@@ -122,7 +144,7 @@ slicers + filter helpers, `validateSpec` + the `ChartSpec` type (re-exported fro
 
 ```bash
 npm run build:fabric    # fabric-app-data generate + tsc + vite build
-npm run preview -- --spec <file>   # render a visual spec headlessly → PNG + report (see headless-preview)
+npm run preview -- --spec <file>   # render a spec headlessly → PNG + report — offline (inlined data) or --query/--data for live (see headless-preview)
 npm run lint            # ESLint
 npm run gallery         # dev-only component gallery (visual validation, no Fabric)
 ```
@@ -159,12 +181,13 @@ by editing `--color-chart-1..10` in `src/global.css`. See the `visuals` skill's
 
 ### Interactivity is additive
 React slicers + shared filter state + server-side DAX re-query are the primary
-filter path. **The starter already ships a `FilterBar` of slicers in the
-`PageShell` toolbar, wrapped in `FilterStateProvider`** — populate their options
-and every tile reads the same selections. Graphein selections can also
-cross-highlight via a shared `store`, or bridge chart clicks into the same
-slicer/DAX path with `useSelectionFilterBridge` — or, simplest, `useCrossHighlight`
-(Power BI–style: the clicked source dims its own marks, the page filters).
+filter path. **The bundled demo (`src/demo/DemoDashboard.tsx`) is a complete,
+working example** — slicers over shared filter state in the `PageShell` toolbar
+(wrapped in `FilterStateProvider`) plus Power BI–style click cross-filtering; copy
+its wiring, then point the rows at your model. Graphein selections cross-highlight
+via a shared `store`, and `useSelectionFilterBridge` bridges chart clicks into the
+same slicer/DAX path — or, simplest, `useCrossHighlight` (the clicked source dims
+its own marks while the page filters).
 
 ### Theming is token-driven
 `src/global.css` is the single source of truth: a semantic palette,

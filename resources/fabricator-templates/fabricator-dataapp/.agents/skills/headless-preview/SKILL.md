@@ -29,6 +29,12 @@ type or encoding, catching clipping/overlap/contrast/wrong grain, and tuning
 formatting, labels, `series`, sort, or transforms. KPI/table/matrix/slicers/
 dashboard rasterize to PNG too, so preview-validate them before shipping.
 
+**Graphein renders headlessly by design** (the same engine draws in the browser
+and in Node via `@graphein/node`), so this works with **no data connection**: the
+bundled demo dashboard (`src/demo/`) is all Graphein specs over inlined rows —
+render any of them straight from `spec.data` (offline) to eyeball the starter, and
+use the same loop with `--query`/`--data` once you've swapped in the real model.
+
 ## The loop
 
 ```

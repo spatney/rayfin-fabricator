@@ -37,6 +37,28 @@ write *data + specs*, not chart code. Start at the kit catalog skill
 `graphein` (`^0.13.0`); the app uses its own thin React `<Chart>` wrapper instead
 of `@graphein/react`.
 
+## What ships out of the box
+
+The scaffold isn't empty — `src/App.tsx` renders a complete, interactive **demo
+dashboard built entirely from Graphein specs** (`src/demo/`), powered by a small
+bundled **real public dataset** (Gapminder: life expectancy, income, and
+population by country and year). It needs no data connection, so a freshly created
+app is alive on first run and shows the golden path: KPI scorecards, a regional
+trend line, a classic Gapminder bubble `scatter`, a horizontal `bar` ranking, a
+population `pie`/donut, and a detail `table` — with year/region slicers and
+click-to-cross-filter. **When you build your own app, delete `src/demo/**` and
+replace `<DemoDashboard />`**; the wiring is identical, only the data source
+changes from a static import to a DAX query.
+
+### Validate visuals headlessly
+
+**Graphein renders headlessly** (via `@graphein/node`): `npm run preview -- --spec
+<file>` rasterizes any chart spec to a **PNG + a machine-readable report**
+(clipping / overlap / contrast / counts) with no browser and no Fabric. Use it to
+eyeball a visual **offline** (the bundled demo specs, or any spec with inlined
+`data`) and, once you're on the model, against **live** rows (`--query <alias>
+--dax <DAX>` or `--data <result.json>`). See the `headless-preview` skill.
+
 ## Getting started
 
 In Fabricator, just describe the dashboard you want. The agent ships with skills
@@ -63,7 +85,8 @@ so it is meant to be opened from a deployed Fabric workspace (not `localhost`).
 ├── fabric.yaml             # Fabric data connections (semantic model profiles)
 ├── src/
 │   ├── main.tsx            # Entry point: fonts, theme, auth provider, auth gate
-│   ├── App.tsx             # Your dashboard — ships a kit-composed starter
+│   ├── App.tsx             # Your dashboard — renders the src/demo/ starter (replace it)
+│   ├── demo/               # Bundled all-Graphein demo on real public data (Gapminder) — delete for real apps
 │   ├── global.css          # Design system: tokens, palette, fonts, dark mode
 │   ├── components/
 │   │   ├── dashboard/      # The dashboard kit (cards, Graphein wrapper, layout, states)
@@ -97,8 +120,10 @@ so it is meant to be opened from a deployed Fabric workspace (not `localhost`).
 4. **Compose the kit** — map each result with `toChartData` (charts) or
    `toTable` (tables), then drop the spec into a kit card inside `PageShell` +
    `KpiGrid` / `ChartGrid`. Pass specs and query state, not chart code.
-5. **Make `src/App.tsx` yours** — replace the starter placeholder grid with your
-   real tiles.
+5. **Make `src/App.tsx` yours** — delete `src/demo/**` and replace
+   `<DemoDashboard />` with your real tiles. Its structure — providers, slicers
+   over shared filter state, and click cross-filtering — is the pattern to copy;
+   only the data source changes (static import → DAX query).
 
 `npm run build:fabric` runs `fabric-app-data generate` to produce
 `src/fabric.generated.ts` (typed connection aliases) before the Vite build.
@@ -119,5 +144,7 @@ so it is meant to be opened from a deployed Fabric workspace (not `localhost`).
 |---------|-------------|
 | `npm run build` | Production build |
 | `npm run build:fabric` | Build for Fabric deployment (entrypoint for `rayfin up`) |
+| `npm run preview -- --spec <file>` | Render a Graphein spec headlessly → PNG + report (offline, or `--query`/`--data` for live) |
+| `npm run gallery` | Dev-only component gallery (visual check, no Fabric) |
 | `npm run lint` | Lint with ESLint |
 | `npm run rayfin:up` | Deploy the app to a Fabric test workspace |

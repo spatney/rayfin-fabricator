@@ -300,7 +300,8 @@ A small subset of d3-format (numbers) plus strftime-style dates.
 - **Don't pre-pivot** — pass tidy rows and split with `series`.
 - **Everything is plain JSON** — no functions, no DOM nodes, no `Date` objects.
 - A spec with **empty `data`** makes `ChartCard` show its empty state — never ship
-  placeholder rows.
+  placeholder rows in the real app (the labeled `src/demo/**` starter is the sole
+  exception; delete it when wiring real data).
 
 ## Lifecycle (for reference)
 
