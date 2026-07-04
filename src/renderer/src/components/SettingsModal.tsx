@@ -53,6 +53,7 @@ export default function SettingsModal({
   useSuppressPreview()
   const { status: updateStatus, info: updateInfo, checkNow } = useUpdates()
   const [checkedUpdates, setCheckedUpdates] = useState(false)
+  const [showExperiments, setShowExperiments] = useState(false)
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
   const titleId = useId()
   // Compatibility rendering is applied at startup, so any change only takes effect
@@ -190,21 +191,37 @@ export default function SettingsModal({
             </div>
 
             <div className="field">
-              <span className="field-label">
-                Experiments <span className="settings-beta">Beta</span>
-              </span>
-              <ToggleRow
-                label="Auto-refresh the Advisor"
-                hint="Re-run a stale review automatically when you open the Advisor."
-                checked={Boolean(settings.experiments?.advisorAutoRun)}
-                onChange={(v) => onChange({ experiments: { advisorAutoRun: v } })}
-              />
-              <ToggleRow
-                label="Chat mode selector"
-                hint="Show the Agent / Plan / Autopilot dropdown in the composer. Off runs every turn in Agent mode."
-                checked={Boolean(settings.experiments?.chatModeSelector)}
-                onChange={(v) => onChange({ experiments: { chatModeSelector: v } })}
-              />
+              <button
+                type="button"
+                className={`settings-disclosure${showExperiments ? ' settings-disclosure--open' : ''}`}
+                aria-expanded={showExperiments}
+                onClick={() => setShowExperiments((s) => !s)}
+              >
+                <span
+                  className="codicon codicon-chevron-right settings-disclosure-caret"
+                  aria-hidden="true"
+                />
+                <span className="field-label">
+                  Experiments <span className="settings-beta">Beta</span>
+                </span>
+              </button>
+              {showExperiments && (
+                <div className="settings-disclosure-body">
+                  <div className="settings-warn" role="note">
+                    <span className="codicon codicon-warning" aria-hidden="true" />
+                    <span>
+                      These features are experimental and off by default. They may be unstable,
+                      change, or be removed in a future update.
+                    </span>
+                  </div>
+                  <ToggleRow
+                    label="Chat mode selector"
+                    hint="Show the Agent / Plan / Autopilot dropdown in the composer. Off runs every turn in Agent mode."
+                    checked={Boolean(settings.experiments?.chatModeSelector)}
+                    onChange={(v) => onChange({ experiments: { chatModeSelector: v } })}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="field">

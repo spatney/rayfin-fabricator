@@ -32,11 +32,6 @@ interface Props {
    * stays available since it runs on its own throwaway session.
    */
   chatBusy?: boolean
-  /**
-   * When true, automatically re-run the review on open if the saved analysis has
-   * gone stale (code changed since), instead of just flagging it. Opt-in.
-   */
-  autoRun?: boolean
 }
 
 interface FindingGroup {
@@ -209,8 +204,7 @@ export default function AdvisorView({
   project,
   onFix,
   onFixAll,
-  chatBusy = false,
-  autoRun = false
+  chatBusy = false
 }: Props): JSX.Element {
   const [snapshot, setSnapshot] = useState<AdvisorSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
@@ -230,8 +224,6 @@ export default function AdvisorView({
   const startedAtRef = useRef(0)
   const stepSeq = useRef(0)
   const feedRef = useRef<HTMLDivElement>(null)
-  // Guards the stale auto-refresh so it fires at most once per project visit.
-  const autoRanRef = useRef(false)
 
   useEffect(() => {
     mountedRef.current = true
@@ -258,7 +250,6 @@ export default function AdvisorView({
     setError(null)
     setSteps([])
     setRunning(false)
-    autoRanRef.current = false
     resetExplains()
     window.api.advisor
       .load(project.id)
@@ -405,18 +396,6 @@ export default function AdvisorView({
     },
     [project.id]
   )
-
-  // Opt-in: when a saved review has gone stale, refresh it automatically on open
-  // instead of waiting for the user to click Re-run. Fires at most once per visit
-  // (autoRanRef), and only for a previously-successful, now-stale analysis — so it
-  // never kicks off a first-ever review or loops on a failing one.
-  useEffect(() => {
-    if (!autoRun || loading || running || autoRanRef.current) return
-    if (snapshot?.report.ok && snapshot.stale) {
-      autoRanRef.current = true
-      void run()
-    }
-  }, [autoRun, loading, running, snapshot, run])
 
   const report = snapshot?.report ?? null
   const issueCount = report?.ok ? report.findings.length : 0

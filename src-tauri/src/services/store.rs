@@ -35,7 +35,6 @@ fn default_settings() -> AppSettings {
     theme: "dark".to_string(),
     ui_scale: Some(1.0),
     experiments: Some(ExperimentFlags {
-      advisor_auto_run: Some(false),
       compatibility_rendering: Some(false),
       chat_mode_selector: Some(false),
     }),
@@ -132,13 +131,9 @@ pub fn set_settings(
     }
     if let Some(patch) = experiments {
       let current = c.settings.experiments.get_or_insert(ExperimentFlags {
-        advisor_auto_run: Some(false),
         compatibility_rendering: Some(false),
         chat_mode_selector: Some(false),
       });
-      if let Some(v) = patch.advisor_auto_run {
-        current.advisor_auto_run = Some(v);
-      }
       if let Some(v) = patch.compatibility_rendering {
         current.compatibility_rendering = Some(v);
       }

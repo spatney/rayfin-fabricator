@@ -6489,6 +6489,73 @@ code {
   color: var(--text-dim);
 }
 
+/* Collapsible section header (Experiments) — keeps risky toggles tucked away. */
+.settings-disclosure {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.settings-disclosure:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.settings-disclosure-caret {
+  font-size: 14px;
+  color: var(--text-faint);
+  transition: transform 0.15s ease;
+}
+.settings-disclosure--open .settings-disclosure-caret {
+  transform: rotate(90deg);
+}
+/* Center the Beta pill against the uppercase label (vertical-align is unreliable
+   next to all-caps text). */
+.settings-disclosure .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.settings-disclosure .settings-beta {
+  margin-left: 0;
+}
+.settings-disclosure-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  animation: settings-disclosure-in 160ms ease both;
+}
+@keyframes settings-disclosure-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.settings-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--pending) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pending) 34%, transparent);
+}
+.settings-warn .codicon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  font-size: 14px;
+  color: var(--pending);
+}
+
 .field-input {
   font: inherit;
   color: var(--text);
@@ -8200,6 +8267,20 @@ code {
   color: var(--text-faint);
 }
 
+/* Icon in the @-mention file picker. */
+.mention-ico {
+  font-size: 13px;
+  color: var(--text-faint);
+  align-self: center;
+  flex-shrink: 0;
+}
+
+/* Active/toggled ghost button (e.g. the Advisor's Explain toggle). */
+.btn.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mention-menu {
     animation: none;
@@ -8223,6 +8304,7 @@ code {
 }
 
 .composer-input-sizer > .composer-input,
+.composer-input-sizer > .composer-highlight,
 .composer-input-sizer::after {
   grid-area: 1 / 1 / 2 / 2;
   width: 100%;
@@ -8240,7 +8322,10 @@ code {
   resize: none;
   border: none;
   background: none;
-  color: var(--text);
+  color: transparent;
+  caret-color: var(--text);
+  position: relative;
+  z-index: 1;
   font: inherit;
   line-height: 1.5;
   max-height: 200px;
@@ -8254,6 +8339,52 @@ code {
 
 .composer-input::placeholder {
   color: var(--text-dim);
+}
+
+/* Visible text layer behind the (transparent-text) textarea — same metrics, so
+   the caret + selection still line up. It renders @-mentions as chips. */
+.composer-highlight {
+  color: var(--text);
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Composer chip: background + color only, with padding cancelled by a matching
+   negative margin so glyph advance (and thus caret alignment) is unchanged. */
+.composer-mention {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 2px;
+  margin: 0 -2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Message chip: no alignment constraint, so a fuller pill. */
+.chat-mention {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+  border-radius: 6px;
+  padding: 0 6px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.chat-mention--link {
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.chat-mention--link:hover {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  border-color: var(--accent);
+}
+.chat-mention--link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 .composer-actions {

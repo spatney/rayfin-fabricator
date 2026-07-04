@@ -426,9 +426,6 @@ pub struct ProjectsState {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExperimentFlags {
-  /// Auto-refresh the Advisor review when its results go stale (opt-in).
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub advisor_auto_run: Option<bool>,
   /// Force WebView2 software/compatibility rendering (disables GPU acceleration).
   /// Fixes freezing/hangs in VMs such as Parallels where the virtualized GPU
   /// misbehaves. Read at startup and applied before the window is created, so a

@@ -488,6 +488,14 @@ export default function Workbench({
     setViewMode('code')
   }, [])
 
+  // Open a file referenced by an @-mention chip in chat (in the Code tab).
+  const openMention = useCallback(
+    (ref: string): void => {
+      openFileInCode(ref.replace(/^@/, '').trim())
+    },
+    [openFileInCode]
+  )
+
   // Hand a Model-tab prompt to the Build chat. `stage` drops the text in the
   // composer (for open-ended asks) instead of sending it immediately.
   const sendModelToChat = useCallback(
@@ -880,6 +888,7 @@ export default function Workbench({
                       deploying={Boolean(deploys[active.id]?.running)}
                       onRequestDeploy={() => setCreateMode('deploy')}
                       modeSelectorEnabled={Boolean(settings?.experiments?.chatModeSelector)}
+                      onOpenMention={openMention}
                     />
                   </section>
                   {!focusPane && (
@@ -928,7 +937,6 @@ export default function Workbench({
                     chatBusy={(chats[active.id] ?? []).some(
                       (m) => m.role === 'assistant' && m.pending
                     )}
-                    autoRun={Boolean(settings?.experiments?.advisorAutoRun)}
                   />
                 </div>
               )}

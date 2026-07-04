@@ -52,14 +52,6 @@ const OFFSCREEN_COORD: f64 = 20_000.0;
 #[cfg(windows)]
 const OFFSCREEN_SIZE: (f64, f64) = (1280.0, 800.0);
 
-/// Let a just-revealed off-screen surface produce a frame before capturing it.
-#[cfg(windows)]
-const OFFSCREEN_PAINT_SETTLE: Duration = Duration::from_millis(150);
-
-/// Let a freshly-built off-screen surface load/paint its first frame.
-#[cfg(windows)]
-const OFFSCREEN_BUILD_SETTLE: Duration = Duration::from_millis(400);
-
 /// Document-start script injected into the preview so the agent can later read
 /// the page's console output (see [`read_console`]). It mirrors `console.*`,
 /// `window.onerror`, and `unhandledrejection` into a small bounded ring buffer on
@@ -109,17 +101,6 @@ const CONSOLE_INIT_JS: &str = r#";(function () {
     });
   } catch (e) {}
 })();"#;
-
-/// Reads the captured console ring buffer back out (newest entries last). Returns
-/// a JSON array of `{level, text, t}`; the host JSON-parses it (see
-/// `agent_tools::format_console`).
-const READ_CONSOLE_JS: &str = r#"(function () {
-  try {
-    var c = window.__fabricatorConsole;
-    if (!c || !c.entries) return [];
-    return c.entries.slice(-120);
-  } catch (e) { return []; }
-})()"#;
 
 /// Logical-pixel rectangle reported by the renderer (its host element's bounds,
 /// relative to the window client area — i.e. `getBoundingClientRect()`).
@@ -428,10 +409,18 @@ pub fn preview_set_bounds(app: AppHandle, bounds: PreviewBounds) -> AppResult<()
 }
 
 /// Hide the preview (it floats above HTML, so it must hide when covered).
+///
+/// On Windows `Webview::hide()` on a child WebView2 is unreliable — the surface
+/// can keep compositing above the page even after a successful `hide()`, which
+/// would let the preview occlude another tab's HTML (e.g. the Design canvas). So
+/// we ALSO park it far off-screen; that guarantees it can't cover anything even
+/// if the OS ignores `hide()`. The next `preview_show_url` resets real bounds.
 #[tauri::command]
 pub fn preview_hide(app: AppHandle) -> AppResult<()> {
   let _guard = watchdog::activity(Activity::PreviewHide);
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    #[cfg(windows)]
+    let _ = wv.set_bounds(offscreen_bounds().to_rect());
     wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
     app.state::<PreviewState>().inner.lock().unwrap().visible = false;
   }
@@ -581,62 +570,6 @@ pub(crate) async fn capture_preview_bytes(app: &AppHandle) -> AppResult<Vec<u8>>
   capture_now(app).await
 }
 
-/// Capture the preview for a Fabricator agent tool **without disturbing the user's
-/// current view**.
-///
-/// If the preview is already on-screen, captures it in place (identical to the
-/// renderer path). Otherwise, on Windows, the surface is parked far off-screen and
-/// made visible *there* — invisible to the user — just long enough for
-/// `CapturePreview` to complete, then hidden again. The child keeps compositing
-/// while parked off-screen (and even while the whole app window is minimized)
-/// because Chromium's native-window occlusion detection is disabled for the shared
-/// WebView2 environment (see the `[rayfin-desktop local patch]` in
-/// `vendor/wry/src/webview2/mod.rs`), so the capture succeeds with no flicker and
-/// no view change — regardless of tab/modal/focus state or whether the window is
-/// minimized. On non-Windows the surface must be visible first (the macOS path
-/// surfaces it to the user, as before).
-pub(crate) async fn agent_capture(app: &AppHandle) -> AppResult<Vec<u8>> {
-  if app.get_webview(PREVIEW_LABEL).is_none() {
-    return Err(AppError::Msg("preview is not open".into()));
-  }
-  // Already on-screen → capture in place (no off-screen dance needed).
-  if is_preview_visible(app) {
-    return capture_now(app).await;
-  }
-
-  #[cfg(windows)]
-  {
-    let wv = app
-      .get_webview(PREVIEW_LABEL)
-      .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
-    // Move the (currently hidden) surface off-screen *before* revealing it, then
-    // show it there — so it never flashes at its old on-screen position. This
-    // mirrors `preview_show_url`'s proven set_bounds→show ordering. We drive
-    // `show()/hide()` directly and never touch `Inner.visible`, so the renderer
-    // stays the sole owner of user-facing visibility.
-    wv.set_bounds(offscreen_bounds().to_rect())
-      .map_err(|e| AppError::Msg(e.to_string()))?;
-    wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
-    tokio::time::sleep(OFFSCREEN_PAINT_SETTLE).await;
-    let result = capture_now(app).await;
-    // Restore the hidden state we borrowed — but only if the renderer still intends
-    // the preview hidden. If the user revealed it mid-capture (e.g. closed a
-    // covering modal), the renderer already set real bounds + `visible=true`; don't
-    // fight it by hiding. Leaving our off-screen bounds is otherwise fine: the
-    // renderer re-pushes real bounds on its next `showUrl`.
-    if !is_preview_visible(app) {
-      let _ = wv.hide();
-    }
-    result
-  }
-  #[cfg(not(windows))]
-  {
-    // macOS path unchanged: a hidden WKWebView can't be captured here. The agent's
-    // ensure step surfaces it to the user first; if it's still hidden, soft-fail.
-    Err(AppError::Msg("preview is not visible".into()))
-  }
-}
-
 /// Bounds used to park the preview far off-screen for a silent capture: a
 /// realistic desktop viewport positioned well outside any monitor, so the surface
 /// keeps rendering (and `CapturePreview` works) while staying invisible.
@@ -650,228 +583,11 @@ fn offscreen_bounds() -> PreviewBounds {
   }
 }
 
-/// Whether the preview child webview currently exists (i.e. a deployed app has
-/// been shown at least once this session).
-pub(crate) fn is_preview_open(app: &AppHandle) -> bool {
-  app.get_webview(PREVIEW_LABEL).is_some()
-}
-
 /// Whether the preview child webview is currently shown (not hidden behind
 /// another tab/overlay). Callers that need to reveal it can skip the (route-
 /// resetting) re-show when this is already `true`.
 pub(crate) fn is_preview_visible(app: &AppHandle) -> bool {
   app.state::<PreviewState>().inner.lock().unwrap().visible
-}
-
-/// Scroll the preview's main scrollable surface. `direction` is one of
-/// `down` / `up` / `top` / `bottom`; `amount` (px) overrides the step for
-/// `up`/`down`. Fire-and-forget through [`Webview::eval`], which queues the
-/// script on the webview without pumping the UI-thread message loop, so — unlike
-/// `CapturePreview` — it is safe even if the surface is hidden. No-op error if
-/// the preview has not been created yet.
-pub(crate) fn scroll(app: &AppHandle, direction: &str, amount: Option<f64>) -> AppResult<()> {
-  let wv = app
-    .get_webview(PREVIEW_LABEL)
-    .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
-  wv.eval(build_scroll_js(direction, amount))
-    .map_err(|e| AppError::Msg(e.to_string()))
-}
-
-/// Read the preview page's captured console output (see [`CONSOLE_INIT_JS`]) as a
-/// JSON array string.
-///
-/// Uses [`Webview::eval_with_callback`], which delivers the script result
-/// asynchronously through wry's event loop **without** pumping the UI-thread
-/// message loop (the Windows `ICoreWebView2::ExecuteScript` / macOS
-/// `evaluateJavaScript` completion handlers fire on their own) — so, unlike the
-/// `CapturePreview`-based screenshot path, it cannot deadlock the app on a hidden
-/// surface. The `timeout` is a belt-and-suspenders guard: if the callback never
-/// fires (e.g. the page hasn't yet run the init script), the read resolves to a
-/// timeout error instead of hanging the tool.
-pub(crate) async fn read_console(app: &AppHandle, timeout: Duration) -> AppResult<String> {
-  let wv = app
-    .get_webview(PREVIEW_LABEL)
-    .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
-  let (tx, rx) = oneshot::channel::<String>();
-  let tx = Mutex::new(Some(tx));
-  wv.eval_with_callback(READ_CONSOLE_JS, move |json| {
-    if let Ok(mut guard) = tx.lock() {
-      if let Some(tx) = guard.take() {
-        let _ = tx.send(json);
-      }
-    }
-  })
-  .map_err(|e| AppError::Msg(e.to_string()))?;
-  match tokio::time::timeout(timeout, rx).await {
-    Ok(Ok(json)) => Ok(json),
-    Ok(Err(_)) => Err(AppError::Msg("console read was cancelled".into())),
-    Err(_) => Err(AppError::Msg("timed out reading the preview console".into())),
-  }
-}
-
-/// Build the scroll script for [`scroll`]. Targets the largest scrollable element
-/// (the viewport scroller, or an inner `overflow:auto/scroll` container if one is
-/// meaningfully taller), and sets `scrollTop` directly so it lands instantly on
-/// every engine (no `behavior` keyword required) — the caller settles briefly,
-/// then screenshots.
-fn build_scroll_js(direction: &str, amount: Option<f64>) -> String {
-  let dir = match direction {
-    "up" => "up",
-    "top" => "top",
-    "bottom" => "bottom",
-    _ => "down",
-  };
-  let amt = match amount {
-    Some(n) if n.is_finite() && n > 0.0 => n.to_string(),
-    _ => "null".to_string(),
-  };
-  format!(
-    r#"(function () {{
-  try {{
-    var dir = "{dir}";
-    var amt = {amt};
-    function scroller() {{
-      var doc = document.scrollingElement || document.documentElement || document.body;
-      var best = doc, bestOver = doc ? (doc.scrollHeight - doc.clientHeight) : 0;
-      var nodes = document.querySelectorAll('*');
-      var limit = Math.min(nodes.length, 4000);
-      for (var i = 0; i < limit; i++) {{
-        var el = nodes[i], s;
-        try {{ s = getComputedStyle(el); }} catch (e) {{ continue; }}
-        if (!s) continue;
-        if (s.overflowY === 'auto' || s.overflowY === 'scroll') {{
-          var over = el.scrollHeight - el.clientHeight;
-          if (over > bestOver + 8 && el.clientHeight > 40) {{ best = el; bestOver = over; }}
-        }}
-      }}
-      return best || doc;
-    }}
-    var el = scroller();
-    if (!el) return;
-    var view = el.clientHeight || window.innerHeight || 600;
-    var step = (amt != null && !isNaN(amt)) ? amt : Math.max(160, Math.round(view * 0.85));
-    if (dir === 'top') el.scrollTop = 0;
-    else if (dir === 'bottom') el.scrollTop = el.scrollHeight;
-    else if (dir === 'up') el.scrollTop = Math.max(0, el.scrollTop - step);
-    else el.scrollTop = el.scrollTop + step;
-  }} catch (e) {{}}
-}})();"#
-  )
-}
-
-/// Ask the renderer to surface the preview pane and load `url` on the agent's
-/// behalf. Used on **non-Windows** when a validation tool needs the preview
-/// visible but another tab is focused (or the webview has not been created yet).
-/// The renderer owns positioning, so it calls back into [`preview_show_url`] with
-/// real bounds. On Windows the agent captures silently off-screen and never calls
-/// this (see [`agent_ensure_preview`] / [`agent_capture`]).
-#[cfg_attr(windows, allow(dead_code))]
-pub(crate) fn request_preview_show(app: &AppHandle, url: &str) {
-  let _ = app.emit(PREVIEW_AGENT, serde_json::json!({ "action": "show", "url": url }));
-}
-
-/// Build the preview child webview **off-screen** (and leave it hidden) when it
-/// does not exist yet, using `url` as the initial page — so a first-ever agent
-/// capture needs no on-screen preview pane and never changes the user's view.
-/// No-op once the webview exists. Windows-only; the silent off-screen capture
-/// path ([`agent_capture`]) depends on it.
-#[cfg(windows)]
-async fn ensure_offscreen(app: &AppHandle, url: &str) {
-  if is_preview_open(app) {
-    return;
-  }
-  let parsed: Url = match url.parse() {
-    Ok(u) => u,
-    Err(_) => return,
-  };
-  // Atomically claim `created` so we don't race the renderer's own first build.
-  let state = app.state::<PreviewState>();
-  let need_build = {
-    let mut inner = state.inner.lock().unwrap();
-    if inner.created {
-      false
-    } else {
-      inner.created = true;
-      true
-    }
-  };
-  if !need_build {
-    return;
-  }
-  if build(app, parsed, offscreen_bounds()).is_err() {
-    state.inner.lock().unwrap().created = false;
-    return;
-  }
-  state.inner.lock().unwrap().reset_to(url);
-  // `add_child` creates the surface visible; normalize to hidden (it's off-screen
-  // already, so no flicker) so [`agent_capture`] owns visibility from here.
-  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    let _ = wv.hide();
-  }
-  // Give the first document a moment to load/paint before any capture.
-  tokio::time::sleep(OFFSCREEN_BUILD_SETTLE).await;
-}
-
-/// Make the preview ready for a Fabricator agent capture.
-///
-/// On **Windows** this is silent: the surface is ensured to exist off-screen and
-/// the user's current view is never touched. On other platforms it asks the
-/// renderer to surface the preview (as before) and waits up to `show_timeout` for
-/// a first-ever build to appear.
-pub(crate) async fn agent_ensure_preview(app: &AppHandle, url: &str, show_timeout: Duration) {
-  #[cfg(windows)]
-  {
-    let _ = show_timeout;
-    ensure_offscreen(app, url).await;
-  }
-  #[cfg(not(windows))]
-  {
-    request_preview_show(app, url);
-    if is_preview_open(app) {
-      // Already created earlier (the renderer only hides it, never destroys it) —
-      // give the renderer a beat to re-show it at the host's bounds.
-      tokio::time::sleep(Duration::from_millis(300)).await;
-      return;
-    }
-    // First-ever show: wait for the renderer's positioning loop to build it.
-    let start = std::time::Instant::now();
-    while start.elapsed() < show_timeout {
-      tokio::time::sleep(Duration::from_millis(150)).await;
-      if is_preview_open(app) {
-        // Give the first document a moment to paint before any capture.
-        tokio::time::sleep(Duration::from_millis(400)).await;
-        return;
-      }
-    }
-  }
-}
-
-/// Navigate the existing preview webview to `url` (without touching bounds or
-/// visibility) and wait for the document to finish loading, up to `timeout`.
-/// Resets the back/forward history to the new URL. Returns `Ok` even if the
-/// load times out (the page may still be usable for a screenshot).
-pub(crate) async fn navigate_and_wait(app: &AppHandle, url: &str, timeout: Duration) -> AppResult<()> {
-  let parsed: Url = url
-    .parse()
-    .map_err(|e| AppError::Msg(format!("invalid preview url {url:?}: {e}")))?;
-  let wv = app
-    .get_webview(PREVIEW_LABEL)
-    .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
-
-  let rx = {
-    let state = app.state::<PreviewState>();
-    let mut inner = state.inner.lock().unwrap();
-    let (tx, rx) = oneshot::channel::<()>();
-    inner.load_waiters.push(tx);
-    inner.reset_to(url);
-    rx
-  };
-
-  wv.navigate(parsed).map_err(|e| AppError::Msg(e.to_string()))?;
-
-  // Best-effort: a finished load resolves `rx`; otherwise fall through on timeout.
-  let _ = tokio::time::timeout(timeout, rx).await;
-  Ok(())
 }
 
 /// Hard ceiling on how long the Windows capture may pump the UI-thread message

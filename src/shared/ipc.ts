@@ -447,12 +447,6 @@ export interface AppSettings {
 /** Opt-in experimental feature flags (Settings → Experiments). */
 export interface ExperimentFlags {
   /**
-   * Advisor auto-refresh: when the Advisor tab is opened and its saved analysis
-   * has gone stale (the code changed since the last review), automatically
-   * re-run the review instead of just flagging it as stale.
-   */
-  advisorAutoRun?: boolean
-  /**
    * Compatibility rendering: force WebView2 software rendering (disable GPU
    * acceleration). Fixes freezing/hangs in VMs such as Parallels where the
    * virtualized GPU misbehaves. Applied at startup, so a change needs a relaunch.

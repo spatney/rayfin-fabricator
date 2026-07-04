@@ -17,14 +17,15 @@ import {
   type ChatSegment,
   type ChatToolCall,
   type ChatTurnResult,
-  type CopilotModel,
   type FileNode,
   type ReasoningEffort,
   type StudioProject,
   type Suggestion
 } from '@shared/ipc'
+import { useCopilotModels } from '@renderer/copilotModels'
 import type { PendingShot } from './PreviewPane'
 import Markdown from './Markdown'
+import { MentionText, splitMentions } from './MentionText'
 import { highlightCode, langFromPath } from '../syntax'
 import {
   SparkleIcon,
@@ -118,60 +119,14 @@ interface Props {
   /** Experimental: show the Agent / Plan / Autopilot mode selector in the composer.
    * When false (the default), the selector is hidden and every turn runs in Agent mode. */
   modeSelectorEnabled?: boolean
+  /** Open a file referenced by an @-mention chip (path without the leading @). */
+  onOpenMention?: (ref: string) => void
 }
 
 /** Reasoning efforts shown when the engine's per-model list is unavailable
  * (offline / pre-fetch / signed-out). Also defines the canonical display order. */
 const EFFORT_OPTIONS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 const EFFORT_ORDER: ReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max']
-
-// Module-level cache so the per-user model list is fetched once and shared across
-// every ChatPanel instance, rather than re-queried on each open.
-let modelsCache: CopilotModel[] | null = null
-let modelsPromise: Promise<CopilotModel[]> | null = null
-
-function loadCopilotModels(): Promise<CopilotModel[]> {
-  if (modelsCache) return Promise.resolve(modelsCache)
-  if (!modelsPromise) {
-    modelsPromise = window.api.chat
-      .listModels()
-      .then((list) => {
-        modelsCache = list
-        return list
-      })
-      .catch((err) => {
-        modelsPromise = null // allow a retry on the next popover open
-        throw err
-      })
-  }
-  return modelsPromise
-}
-
-/** Fetch the available models once `enabled` (the picker is open), keeping the
- * static fallback until they arrive (or if the engine can't be reached). */
-function useCopilotModels(enabled: boolean): { models: CopilotModel[]; loading: boolean } {
-  const [models, setModels] = useState<CopilotModel[]>(modelsCache ?? [])
-  const [loading, setLoading] = useState(false)
-  useEffect(() => {
-    if (!enabled || modelsCache) return
-    let cancelled = false
-    setLoading(true)
-    loadCopilotModels()
-      .then((list) => {
-        if (!cancelled) setModels(list)
-      })
-      .catch(() => {
-        /* keep the static fallback */
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [enabled])
-  return { models, loading }
-}
 
 /** Words to drop when guessing what an app is "about" from its name. */
 const STOP_WORDS = new Set([
@@ -1351,7 +1306,8 @@ const MessageRow = memo(function MessageRow({
   onRetry,
   canResume,
   onResume,
-  onResolvePlan
+  onResolvePlan,
+  onOpenMention
 }: {
   message: UIChatMessage
   projectPath: string
@@ -1360,6 +1316,7 @@ const MessageRow = memo(function MessageRow({
   canResume: boolean
   onResume: (id: string) => void
   onResolvePlan: (msgId: string, requestId: string, action: string, feedback?: string) => void
+  onOpenMention?: (ref: string) => void
 }): JSX.Element {
   return (
     <div className={`turn turn--${m.role}`}>
@@ -1385,7 +1342,11 @@ const MessageRow = memo(function MessageRow({
         {m.role === 'assistant' ? (
           <AssistantBody message={m} projectPath={projectPath} />
         ) : (
-          m.text && <div className="msg-text">{m.text}</div>
+          m.text && (
+            <div className="msg-text">
+              <MentionText text={m.text} onOpen={onOpenMention} />
+            </div>
+          )
         )}
         {m.role === 'assistant' && !m.pending && !m.error && m.tools.length > 0 && (
           <TurnSummary tools={m.tools} />
@@ -1474,7 +1435,8 @@ export default function ChatPanel({
   deployLock = false,
   deploying = false,
   onRequestDeploy,
-  modeSelectorEnabled = false
+  modeSelectorEnabled = false,
+  onOpenMention
 }: Props): JSX.Element {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -1528,6 +1490,7 @@ export default function ChatPanel({
   const [atDismissed, setAtDismissed] = useState(false)
   const pendingCaret = useRef<number | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  const highlightRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [attaching, setAttaching] = useState(false)
 
@@ -2037,10 +2000,10 @@ export default function ChatPanel({
     evalAt()
   }
 
-  const atMatches = useMemo(
-    () => (atOpen && fileList ? rankFiles(fileList, atQuery) : []),
-    [atOpen, fileList, atQuery]
-  )
+  const atMatches = useMemo(() => {
+    if (!atOpen) return []
+    return fileList ? rankFiles(fileList, atQuery) : []
+  }, [atOpen, fileList, atQuery])
   const atLoading = atOpen && fileList == null
   const atCapture = atOpen && atMatches.length > 0
   const atSel = Math.max(0, Math.min(atIdx, atMatches.length - 1))
@@ -2143,10 +2106,11 @@ export default function ChatPanel({
             canResume={canResume}
             onResume={onResume}
             onResolvePlan={onResolvePlan}
+            onOpenMention={onOpenMention}
           />
         )
       }),
-    [messages, sending, project.path, onRetry, onResume, onResolvePlan]
+    [messages, sending, project.path, onRetry, onResume, onResolvePlan, onOpenMention]
   )
 
   return (
@@ -2327,6 +2291,7 @@ export default function ChatPanel({
                     pickFile(f.path)
                   }}
                 >
+                  <span className="codicon codicon-file mention-ico" aria-hidden="true" />
                   <span className="mention-name">{f.name}</span>
                   <span className="mention-path">{f.path}</span>
                 </button>
@@ -2334,6 +2299,18 @@ export default function ChatPanel({
             </div>
           )}
           <div className="composer-input-sizer" data-replicated-value={input}>
+            <div className="composer-highlight" ref={highlightRef} aria-hidden="true">
+              {splitMentions(input).map((p, i) =>
+                p.mention ? (
+                  <mark key={i} className="composer-mention">
+                    {p.text}
+                  </mark>
+                ) : (
+                  <span key={i}>{p.text}</span>
+                )
+              )}
+              {' '}
+            </div>
             <textarea
               ref={taRef}
               className="composer-input"
@@ -2349,6 +2326,9 @@ export default function ChatPanel({
               onSelect={onComposerSelect}
               onKeyDown={onKeyDown}
               onPaste={onComposerPaste}
+              onScroll={(e) => {
+                if (highlightRef.current) highlightRef.current.scrollTop = e.currentTarget.scrollTop
+              }}
             />
           </div>
           <div className="composer-actions">
