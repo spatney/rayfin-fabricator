@@ -247,7 +247,7 @@ contribution-to-total rather than side-by-side comparison.
 
 Use `line` for precise trend comparison; set `area: true` when the filled shape
 helps emphasize volume. For a goal/threshold, add `annotations: [{ type: "line",
-value: target }]` (graphein 0.15); or state it in the card `footer`.
+value: target }]` (graphein 0.16); or state it in the card `footer`.
 
 ```tsx
 <ChartCard
@@ -322,7 +322,7 @@ const table = toTable(data, {
 
 There is **no custom-chart escape hatch**. If a visualization is not a Graphein type
 (radar, sunburst…), re-express the *insight* with the closest supported type —
-Graphein 0.15 ships `line`, `area`, `bar`, `scatter`, `combo`
+Graphein 0.16 ships `line`, `area`, `bar`, `scatter`, `combo`
 (dual-axis), `histogram`, `pie`/donut, `heatmap`, `calendarHeatmap`, `funnel`,
 `box`, `sankey`, `choropleth`, `treemap`, `gauge`, `bullet`, `waterfall`, `slope`,
 `dumbbell`, plus `table`/`matrix` (KPIs use `KpiCard`). See `visuals` → Gotchas and

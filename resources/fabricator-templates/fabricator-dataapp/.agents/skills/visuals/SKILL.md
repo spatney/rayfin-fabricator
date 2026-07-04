@@ -8,7 +8,7 @@ description: >
   per-type recipes (line/area/bar/scatter/pie/heatmap/funnel/combo/histogram/
   treemap/gauge/bullet/waterfall/calendarHeatmap/slope/dumbbell/table/matrix),
   declarative features (transform/annotations/insights/trendline/facet), the
-  validate→repair→report self-check (graphein 0.15), headless preview against live
+  validate→repair→report self-check (graphein 0.16), headless preview against live
   data, the DAX→rows helpers (toChartData / toTable / topN / deriveKpi), `KpiCard`,
   `DataTableCard` (Graphein table/matrix), slicers (dropdown/list/search/date-range/range + FilterBar)
   with shared filter state, interactivity, layout, value formatting, and color tokens.
@@ -23,7 +23,7 @@ array, and an `encoding` that names the columns — and (3) drop it into
 `<ChartCard spec={…} />`. The card owns the loading / empty / error states and
 bridges the app theme, so a spec never needs a color or a size.
 
-> **Charts are `graphein` 0.15.** That means a broad chart catalog (combo/dual-axis,
+> **Charts are `graphein` 0.16.** That means a broad chart catalog (combo/dual-axis,
 > histogram, treemap, gauge, bullet, waterfall, calendar-heatmap, slope, dumbbell
 > on top of the classics), in-spec **transforms** and **annotations** (reference
 > lines), and a **self-correcting loop** — `validateSpec` → `repairSpec` →
@@ -273,7 +273,7 @@ genuinely share an x but need different y-scales (don't reach for it by default)
 Full field-by-field docs + every channel/option:
 [Graphein spec reference](references/graphein-spec-reference.md).
 
-### Declarative features (graphein 0.15)
+### Declarative features (graphein 0.16)
 
 Reshape and enrich a chart **inside the spec** — no pre-massaging the data, no
 second chart. All are plain JSON and render headlessly:
@@ -298,7 +298,7 @@ second chart. All are plain JSON and render headlessly:
 
 ### Self-check before ship
 
-Graphein 0.15 can critique its own specs — use it to iterate before ship:
+Graphein 0.16 can critique its own specs — use it to iterate before ship:
 
 - **`validateSpec(spec)` → `{ valid, errors, warnings }`** — path-pointed errors +
   soft warnings. **`repairSpec(spec)` → `{ spec, applied, remaining }`** auto-fixes

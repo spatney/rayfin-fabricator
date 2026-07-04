@@ -8,7 +8,7 @@
 >
 > **Two things to internalize before writing code:**
 > 1. **Author a spec, don't hand-write a chart.** A chart is one JSON
->    `ChartSpec` (the `graphein` npm package, `^0.15.0`) passed to
+>    `ChartSpec` (the `graphein` npm package, `^0.16.0`) passed to
 >    `<ChartCard spec={…} />`. Map your DAX result into rows, author the spec,
 >    drop it in. Hand-writing SVG/JSX or wiring a chart library yourself is the
 >    slow, expensive path. The spec model is the `visuals` skill — read it first.
@@ -222,7 +222,7 @@ Never hand-edit the generated file.
 | Add Power BI-style slicers (shared filter state) | `visuals` skill → **Slicers & shared filter state** (`FilterStateProvider` + `FilterBar`/`DropdownSlicer`/…) |
 | Add chart-click cross-highlight/filter | `visuals` skill → **Interactivity** — Power BI–style by default (`useCrossHighlight` + `crossHighlightParams`: source dims, page filters) |
 | Preview/critique a visual vs live data (no deploy) | `headless-preview` skill — `npm run preview` renders a spec to a PNG + report |
-| Validate/repair a spec | `visuals` skill — `validateSpec` / `repairSpec` (graphein 0.15); or `npm run preview` (does it for you) |
+| Validate/repair a spec | `visuals` skill — `validateSpec` / `repairSpec` (graphein 0.16); or `npm run preview` (does it for you) |
 | Visually validate kit components without Fabric | run the dev-only component gallery (`npm run gallery`) |
 | Show many series / a target line | `visuals` skill → **Multi-series** (long rows + `encoding.series`; target line = `annotations: [{ type:"line", value }]`) |
 | Show two measures on different scales | `visuals` skill → `combo` (dual-axis) |
