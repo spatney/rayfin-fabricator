@@ -286,14 +286,14 @@
     '.tb .shape{color:' + TXT_DIM + ';padding:5px 7px;border-radius:6px;font-size:12px}',
     '.tb .shape.on{background:' + PANEL_BG2 + ';color:' + TXT + '}',
     // inspector (right dock)
-    '.insp{position:fixed;right:12px;top:64px;bottom:12px;width:270px;z-index:2147483645;display:flex;flex-direction:column;background:' + PANEL_BG + ';border:1px solid ' + BORDER + ';border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.55);pointer-events:auto;color:' + TXT + ';overflow:hidden}',
+    '.insp{position:fixed;right:12px;top:64px;max-height:calc(100vh - 76px);width:270px;z-index:2147483645;display:flex;flex-direction:column;background:' + PANEL_BG + ';border:1px solid ' + BORDER + ';border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.55);pointer-events:auto;color:' + TXT + ';overflow:hidden}',
     '.insp-head{padding:10px 12px;border-bottom:1px solid ' + BORDER + ';cursor:move}',
     '.crumb{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:11px;color:' + TXT_DIM + '}',
     '.crumb button{color:' + TXT_DIM + ';padding:1px 4px;border-radius:4px}',
     '.crumb button:hover{background:' + PANEL_BG2 + ';color:' + TXT + '}',
     '.crumb .cur{color:' + TEAL + ';font-weight:600}',
     '.insp-sz{font-size:11px;color:' + TXT_DIM + ';margin-top:4px}',
-    '.insp-body{flex:1;overflow:auto;padding:6px 12px 12px}',
+    '.insp-body{flex:1;min-height:0;overflow:auto;padding:6px 12px 12px}',
     '.grp{margin-top:12px}',
     '.grp>h5{margin:0 0 6px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:' + TXT_DIM + ';font-weight:700}',
     '.row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0}',
@@ -308,6 +308,9 @@
     '.insp .mini:hover{color:' + TXT + '}',
     '.insp .mini.danger:hover{background:#5b1a1a;color:#fff}',
     '.insp-actions{display:flex;gap:6px;padding:8px 12px;border-top:1px solid ' + BORDER + '}',
+    '.ai-btn{width:100%;margin-top:8px;font-size:12px;font-weight:600;color:' + TEAL + ';background:transparent;border:1px solid ' + TEAL + '66;border-radius:7px;padding:7px 10px;text-align:center}',
+    '.ai-btn:hover{background:' + TEAL + '1f;color:' + TEAL_HI + '}',
+    '.ai-note{margin-top:6px;font-size:10px;color:' + TXT_DIM + ';line-height:1.45}',
     // toolbar actions (count / undo / discard / send)
     '.tb-sep{width:1px;align-self:stretch;background:' + BORDER + ';margin:0 2px}',
     '.tb-count{font-size:11px;color:' + TXT_DIM + ';padding:0 4px;white-space:nowrap}',
@@ -364,7 +367,7 @@
       .forEach(function (n) { root.appendChild(n); });
 
     makeDraggable(elToolbar, false);
-    makeDraggable(elInspector, true);
+    makeDraggable(elInspector, false);
     buildToolbar();
     if (!localStorageFlag()) showLegend();
   }
@@ -579,6 +582,7 @@
     var body = h('div', { class: 'insp-body' });
     elInspector.appendChild(body);
 
+    if (isPlaceholder(el)) body.appendChild(aiGroup(el));
     if (chartRoot(el)) body.appendChild(chartGroup(chartRoot(el)));
 
     // Layout & spacing
@@ -617,6 +621,24 @@
     return g;
   }
   function px(v) { var n = parseFloat(v); return isNaN(n) ? 0 : Math.round(n); }
+
+  // Subtle "Generate with AI" section shown at the top of a placeholder's
+  // inspector: describe the component → a fast model draws HTML/CSS into the box.
+  function aiGroup(ph) {
+    var g = h('div', { class: 'grp' }, [h('h5', { text: '✨ Generate with AI' })]);
+    var generating = ph.getAttribute('data-rayfin-gen') === '1';
+    var entry = findInsertEntry(ph);
+    var hasGen = !!(entry && entry.generatedHtml);
+    var ta = h('textarea', { placeholder: 'Describe this component — e.g. “a KPI card showing total revenue with a small up-trend”', text: phDesc(ph) });
+    ta.oninput = function () { ph.setAttribute('data-rayfin-desc', ta.value); };
+    g.appendChild(ta);
+    var btn = h('button', { class: 'ai-btn', text: generating ? '✨ Generating…' : (hasGen ? 'Regenerate' : '✨ Generate with AI') });
+    if (generating) { btn.style.opacity = '.6'; btn.style.pointerEvents = 'none'; }
+    btn.onclick = function (e) { e.stopPropagation(); requestAiGenerate(ph, ta.value); };
+    g.appendChild(btn);
+    g.appendChild(h('div', { class: 'ai-note', text: hasGen ? 'Preview generated — sent to chat as the starting point.' : 'HTML/CSS only, rendered into the box + sent to chat as a starting point.' }));
+    return g;
+  }
 
   // Apply an inline style change + record it (revert restores the pre-select
   // inline value snapshot for that property).
@@ -660,6 +682,7 @@
     return h('div', { class: 'row' }, [h('label', { text: label }), inp]);
   }
   function textContentRow(el) {
+    if (isPlaceholder(el)) return null; // placeholders use the AI describe box instead
     if (!el.children.length && (el.textContent || '').trim().length && (el.textContent || '').length < 200) {
       var beforeHtml = el.innerHTML, fromText = el.textContent;
       var ta = h('textarea', { text: el.textContent });
@@ -989,8 +1012,13 @@
   }
 
   // ---- insert placeholder --------------------------------------------------
+  var phSeq = 0;
   function isPlaceholder(el) { return !!(el && el.getAttribute && el.getAttribute('data-rayfin-placeholder') === '1'); }
   function findInsertEntry(el) { for (var i = 0; i < state.changes.length; i++) if (state.changes[i].kind === 'insert' && state.changes[i].el === el) return state.changes[i]; return null; }
+  function placeholderById(id) { try { return root && document.querySelector('[data-rayfin-ph-id="' + id + '"]'); } catch (e) { return null; } }
+  function phDesc(ph) { return (ph && ph.getAttribute('data-rayfin-desc')) || ''; }
+  var PH_BASE = 'margin:8px 0;border:2px dashed ' + TEAL + ';border-radius:12px;background:' + TEAL + '14;box-sizing:border-box;';
+  var PH_EMPTY = PH_BASE + 'min-height:96px;display:flex;align-items:center;justify-content:center;text-align:center;color:' + TEAL + ';font:600 13px ui-sans-serif,system-ui;padding:14px;';
 
   // Live description of where a placeholder currently sits (robust to later moves).
   function insertLoc(el) {
@@ -1021,8 +1049,9 @@
     var before = at ? at.before : true, parent = ref.parentNode;
     var ph = document.createElement('div');
     ph.setAttribute('data-rayfin-placeholder', '1');
-    ph.setAttribute('style', 'min-height:96px;margin:8px 0;border:2px dashed ' + TEAL + ';border-radius:12px;background:' + TEAL + '14;display:flex;align-items:center;justify-content:center;text-align:center;color:' + TEAL + ';font:600 13px ui-sans-serif,system-ui;padding:14px;box-sizing:border-box;');
-    ph.textContent = 'New component — double-click to describe';
+    ph.setAttribute('data-rayfin-ph-id', 'ph' + (++phSeq));
+    ph.setAttribute('style', PH_EMPTY);
+    ph.textContent = 'New component';
     if (before) parent.insertBefore(ph, ref); else parent.insertBefore(ph, ref.nextSibling);
     elInsert.style.display = 'none'; state.insertAt = null;
     record({
@@ -1032,8 +1061,100 @@
     });
     setTool('select');
     select(ph);
-    showHint('Resize it, double-click to describe, or sketch inside it');
-    setTimeout(function () { if (state.selected === ph) hideHint(); }, 2600);
+    showHint('Describe it (with AI ✨) or resize + sketch inside it');
+    setTimeout(function () { if (state.selected === ph) hideHint(); }, 2800);
+  }
+
+  // Preserve any user-set inline width/height when we rewrite a placeholder's
+  // full style attribute (resize handles set them and we don't want to lose them).
+  function phSize(ph) { return (ph.style.width ? 'width:' + ph.style.width + ';' : '') + (ph.style.height ? 'height:' + ph.style.height + ';' : ''); }
+
+  // Kick off an AI generation for a placeholder from the inspector (the host
+  // poll drains the request, generates the HTML, and calls applyGenerated).
+  function requestAiGenerate(ph, description) {
+    var desc = (description || '').trim();
+    if (!ph || !desc) { showHint('Describe the component first'); return; }
+    ph.setAttribute('data-rayfin-desc', desc);
+    var id = ph.getAttribute('data-rayfin-ph-id');
+    var r = ph.getBoundingClientRect();
+    var sz = phSize(ph);
+    ph.setAttribute('data-rayfin-gen', '1');
+    ph.setAttribute('style', PH_EMPTY + sz);
+    ph.textContent = '✨ Generating…';
+    state.aiRequest = { id: id, description: desc, width: Math.max(1, Math.round(r.width)), height: Math.max(1, Math.round(r.height)) };
+    bump();
+    renderInspector();
+  }
+
+  // Inject AI-generated HTML into the placeholder (empty html = failed → restore
+  // the describe state). Sanitizes, renders live, and records it on the insert
+  // entry so the agent gets it as a starting point.
+  function applyGenerated(id, html) {
+    var ph = placeholderById(id);
+    if (!ph) return;
+    var sz = phSize(ph);
+    ph.removeAttribute('data-rayfin-gen');
+    var clean = html ? sanitizeHtml(html) : '';
+    if (!clean) {
+      // Failure — return to the describe state.
+      ph.setAttribute('style', PH_EMPTY + sz);
+      ph.textContent = phDesc(ph) || 'New component';
+      showHint('Couldn’t generate — try a different description');
+      if (state.selected === ph) renderInspector();
+      bump();
+      return;
+    }
+    ph.setAttribute('style', PH_BASE + 'min-height:96px;padding:0;overflow:hidden;position:relative;display:block;' + sz);
+    ph.innerHTML = clean;
+    var entry = findInsertEntry(ph);
+    if (entry) entry.generatedHtml = clean;
+    bump();
+    if (state.selected === ph) { renderInspector(); reposition(); }
+  }
+
+  // DOM-based sanitizer for model-generated markup before it's injected into the
+  // live app: drop script/frame/external-resource elements, strip event-handler
+  // attributes, and neutralize javascript:/external URLs (in attrs, `style`
+  // attrs, and <style> blocks). Keeps inline CSS + data: images. Returns the
+  // cleaned innerHTML.
+  function cleanCss(css) {
+    return String(css)
+      .replace(/@import[^;]*;?/gi, '')
+      .replace(/url\s*\(\s*['"]?\s*(?:https?:|\/\/)[^)]*\)/gi, 'none')
+      .replace(/expression\s*\([^)]*\)/gi, '');
+  }
+  function sanitizeHtml(html) {
+    var tpl;
+    try {
+      tpl = document.createElement('div');
+      tpl.innerHTML = String(html);
+    } catch (e) { return ''; }
+    var BAD = { SCRIPT: 1, IFRAME: 1, OBJECT: 1, EMBED: 1, LINK: 1, META: 1, BASE: 1, NOSCRIPT: 1, TEMPLATE: 1 };
+    var URL_ATTRS = { src: 1, href: 1, 'xlink:href': 1, action: 1, formaction: 1, background: 1, poster: 1, data: 1, ping: 1 };
+    var EXT = /^\s*(javascript:|data:text\/html|vbscript:|https?:|\/\/)/i;
+    var nodes = tpl.querySelectorAll('*');
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (!n.tagName) continue;
+      // Normalize case: SVG/MathML (foreign-content) elements report a lowercase
+      // tagName, so an inline <svg><style>/<script> would otherwise bypass this.
+      var tag = n.tagName.toUpperCase();
+      if (BAD[tag]) { if (n.parentNode) n.parentNode.removeChild(n); continue; }
+      if (tag === 'STYLE') { n.textContent = cleanCss(n.textContent || ''); continue; }
+      var attrs = n.attributes;
+      for (var j = attrs.length - 1; j >= 0; j--) {
+        var raw = attrs[j].name, name = raw.toLowerCase(), val = attrs[j].value || '';
+        if (name.indexOf('on') === 0) { n.removeAttribute(raw); continue; }
+        if (name === 'srcset') {
+          // Comma-separated candidate list — drop if ANY candidate is external.
+          if (val.split(',').some(function (c) { return EXT.test(c.trim()); })) n.removeAttribute(raw);
+          continue;
+        }
+        if (URL_ATTRS[name] && EXT.test(val)) { n.removeAttribute(raw); continue; }
+        if (name === 'style') n.setAttribute('style', cleanCss(val));
+      }
+    }
+    return tpl.innerHTML;
   }
 
   // ---- handoff -------------------------------------------------------------
@@ -1080,7 +1201,11 @@
       if (c.region) item.region = c.region;
       if (c.box) item.box = c.box;
       if (c.kind === 'chart') { item.specBefore = c.before; item.specAfter = c.after; }
-      if (c.kind === 'insert' && c.el) { item.intent = shortText(c.el); item.location = insertLoc(c.el); }
+      if (c.kind === 'insert' && c.el) {
+        item.intent = phDesc(c.el) || shortText(c.el);
+        item.location = insertLoc(c.el);
+        if (c.generatedHtml) item.generatedHtml = c.generatedHtml;
+      }
       items.push(item);
     }
     return items;
@@ -1101,7 +1226,8 @@
       else if (c.kind === 'annotation') lines.push(n + 'Sketch (' + c.property + ') ' + (c.region ? 'on ' + c.region : '') + ' — see the screenshot marker.');
       else if (c.kind === 'insert') {
         var pr = c.el && c.el.isConnected ? c.el.getBoundingClientRect() : null;
-        lines.push(n + 'Add a NEW UI component ' + insertLoc(c.el) + (pr ? ', ~' + Math.round(pr.width) + '×' + Math.round(pr.height) + 'px' : '') + '. Intended: “' + (c.el ? shortText(c.el) : '') + '” (see the placeholder/marker in the screenshot).');
+        var desc = c.el ? (phDesc(c.el) || shortText(c.el)) : '';
+        lines.push(n + 'Add a NEW UI component ' + insertLoc(c.el) + (pr ? ', ~' + Math.round(pr.width) + '×' + Math.round(pr.height) + 'px' : '') + '. Intended: “' + desc + '”.' + (c.generatedHtml ? ' A generated HTML/CSS starting point is in the change-set (`generatedHtml`) — use it as the base.' : ' (see the placeholder/marker in the screenshot).'));
       }
       else lines.push(n + c.label + ' — set ' + c.property + ' to ' + c.to + '.');
     }
@@ -1240,7 +1366,7 @@
     __v: VERSION,
     enable: function () { try { enable(); } catch (e) {} },
     disable: function () { try { disable(); } catch (e) {} },
-    peek: function () { return { enabled: state.enabled, version: state.version, changeCount: state.changes.length, handoffReady: !!state.handoff }; },
+    peek: function () { return { enabled: state.enabled, version: state.version, changeCount: state.changes.length, handoffReady: !!state.handoff, aiPending: !!state.aiRequest }; },
     drain: function () {
       var hf = state.handoff; if (!hf) return null;
       state.handoff = null;
@@ -1251,6 +1377,15 @@
       if (elToolbar) { elToolbar.style.display = 'flex'; renderBar(); }
       bump();
       return out;
-    }
+    },
+    // Drain a pending "Generate with AI" request (host then generates + applies).
+    drainAi: function () {
+      var r = state.aiRequest; if (!r) return null;
+      state.aiRequest = null; bump();
+      return { id: r.id, description: r.description, width: r.width, height: r.height };
+    },
+    // Inject AI-generated HTML into placeholder `id` (empty html = generation
+    // failed → restore the describe state).
+    applyGenerated: function (id, html) { try { applyGenerated(id, html); } catch (e) {} }
   };
 })();

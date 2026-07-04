@@ -994,6 +994,20 @@ export interface PreviewDesignStatus {
   changeCount: number
   /** True once the user hit "Send to chat"; the renderer then captures + drains. */
   handoffReady: boolean
+  /** True once the user asked to "Generate with AI" on a placeholder. */
+  aiPending?: boolean
+}
+
+/**
+ * A drained "Generate with AI" request from an inserted placeholder: the target
+ * placeholder id and the natural-language description + box size the renderer
+ * feeds to the fast model.
+ */
+export interface PreviewDesignAiRequest {
+  id: string
+  description: string
+  width: number
+  height: number
 }
 
 /**
@@ -1479,6 +1493,23 @@ export interface RayfinStudioApi {
       poll: () => Promise<PreviewDesignStatus | null>
       /** Drain a pending "Send to chat" hand-off (call after capturing a shot). */
       drain: () => Promise<PreviewDesignHandoff | null>
+      /** Drain a pending "Generate with AI" request from a placeholder. */
+      drainAi: () => Promise<PreviewDesignAiRequest | null>
+      /** Inject AI-generated HTML into the placeholder `id` (controller sanitizes it). */
+      applyGenerated: (id: string, html: string) => Promise<void>
+      /**
+       * Generate a self-contained HTML/CSS snippet for a placeholder from a
+       * description, on a transient fast-model session. Returns the raw HTML
+       * (the controller sanitizes before injecting). `model` defaults to a fast
+       * model; omit for the engine default.
+       */
+      generateHtml: (
+        projectId: string,
+        description: string,
+        width: number,
+        height: number,
+        model?: string
+      ) => Promise<string>
     }
   }
 

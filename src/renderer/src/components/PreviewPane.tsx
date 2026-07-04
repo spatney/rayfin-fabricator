@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   DeployResult,
   PreviewBounds,
+  PreviewDesignAiRequest,
   PreviewDesignHandoff,
   PreviewMode,
   StudioProject
 } from '@shared/ipc'
+import { loadCopilotModels, pickFastModel } from '../copilotModels'
 import { usePreviewSuppressed } from '../overlay'
 import AnnotateOverlay from './AnnotateOverlay'
 import {
@@ -472,6 +474,61 @@ export default function PreviewPane({
   const [designBusy, setDesignBusy] = useState(false)
   const [designCount, setDesignCount] = useState(0)
   const handoffRef = useRef(false)
+  // AI placeholder generation: a re-entrancy guard + the resolved fast model id
+  // (picked once from the model list; `undefined` → engine default).
+  const aiRef = useRef(false)
+  const fastModelRef = useRef<string | undefined>(undefined)
+
+  // Resolve a fast model once design mode is on, for the placeholder "Generate
+  // with AI" flow (best-effort — falls back to the engine default).
+  useEffect(() => {
+    if (!designActive || fastModelRef.current) return
+    let cancelled = false
+    void loadCopilotModels()
+      .then((models) => {
+        if (!cancelled) fastModelRef.current = pickFastModel(models)
+      })
+      .catch(() => {
+        /* leave undefined → engine default */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [designActive])
+
+  // Generate an HTML/CSS component for a placeholder and inject it. Best-effort:
+  // on any failure, `applyGenerated(id, '')` tells the controller to restore the
+  // describe state, so the poll's `aiRef` guard is always cleared.
+  const runAiGenerate = useCallback(async (): Promise<void> => {
+    let req: PreviewDesignAiRequest | null = null
+    try {
+      req = await window.api.preview.design.drainAi()
+    } catch {
+      req = null
+    }
+    if (!req) return
+    let html = ''
+    try {
+      html = await window.api.preview.design.generateHtml(
+        project.id,
+        req.description,
+        req.width,
+        req.height,
+        fastModelRef.current
+      )
+    } catch {
+      html = ''
+    }
+    try {
+      await window.api.preview.design.applyGenerated(req.id, html)
+    } catch {
+      // ignore — the controller self-heals its generating state on next select
+    }
+  }, [project.id])
+  const aiGenRef = useRef(runAiGenerate)
+  useEffect(() => {
+    aiGenRef.current = runAiGenerate
+  }, [runAiGenerate])
 
   const toggleDesign = useCallback((): void => {
     setDesignActive((prev) => {
@@ -536,6 +593,14 @@ export default function PreviewPane({
         const status = await window.api.preview.design.poll()
         if (cancelled) return
         if (status) setDesignCount(status.changeCount)
+        if (status?.aiPending && !aiRef.current) {
+          aiRef.current = true
+          try {
+            await aiGenRef.current()
+          } finally {
+            aiRef.current = false
+          }
+        }
         if (status?.handoffReady && !handoffRef.current) {
           handoffRef.current = true
           try {

@@ -121,6 +121,11 @@ const DESIGN_POLL_JS: &str =
 const DESIGN_DRAIN_JS: &str =
   "(function(){try{return window.__rayfinDesign?window.__rayfinDesign.drain():null}catch(e){return null}})()";
 
+/// JS that drains a pending "Generate with AI" request from a placeholder (returns
+/// `{id, description, width, height}` once, then clears it), or `null`.
+const DESIGN_DRAIN_AI_JS: &str =
+  "(function(){try{return window.__rayfinDesign?window.__rayfinDesign.drainAi():null}catch(e){return null}})()";
+
 /// Logical-pixel rectangle reported by the renderer (its host element's bounds,
 /// relative to the window client area — i.e. `getBoundingClientRect()`).
 #[derive(Debug, Clone, Copy, serde::Deserialize)]
@@ -524,6 +529,10 @@ pub struct DesignStatus {
   /// True once the user hit "Send to chat" — the renderer then captures a
   /// (highlighted) screenshot and drains the handoff.
   pub handoff_ready: bool,
+  /// True once the user asked to "Generate with AI" on a placeholder — the
+  /// renderer then drains the request, generates the HTML, and applies it.
+  #[serde(default)]
+  pub ai_pending: bool,
 }
 
 /// A drained "Send to chat" handoff: the composed instruction + change count.
@@ -533,6 +542,18 @@ pub struct DesignStatus {
 pub struct DesignHandoff {
   pub instruction: String,
   pub change_count: u32,
+}
+
+/// A drained "Generate with AI" request from a placeholder. Mirrors
+/// `window.__rayfinDesign.drainAi()`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignAiRequest {
+  /// Stable placeholder id (`data-rayfin-ph-id`) to target with the result.
+  pub id: String,
+  pub description: String,
+  pub width: u32,
+  pub height: u32,
 }
 
 /// The controller source plus a guarded `enable()` call, evaluated to (re)install
@@ -608,6 +629,29 @@ pub async fn preview_design_poll(app: AppHandle) -> AppResult<Option<DesignStatu
 #[tauri::command]
 pub async fn preview_design_drain(app: AppHandle) -> AppResult<Option<DesignHandoff>> {
   design_eval(&app, DESIGN_DRAIN_JS).await
+}
+
+/// Drain a pending "Generate with AI" request from a placeholder (clearing it).
+/// The renderer then generates HTML and applies it via [`preview_design_apply_generated`].
+#[tauri::command]
+pub async fn preview_design_drain_ai(app: AppHandle) -> AppResult<Option<DesignAiRequest>> {
+  design_eval(&app, DESIGN_DRAIN_AI_JS).await
+}
+
+/// Inject AI-generated HTML into the placeholder `id` (the controller sanitizes
+/// it before rendering and records it on the placeholder's `insert` change). Both
+/// arguments are JSON-encoded so arbitrary markup rides safely into the eval.
+#[tauri::command]
+pub fn preview_design_apply_generated(app: AppHandle, id: String, html: String) -> AppResult<()> {
+  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    let js = format!(
+      "try{{window.__rayfinDesign&&window.__rayfinDesign.applyGenerated({},{})}}catch(e){{}}",
+      serde_json::to_string(&id).unwrap_or_else(|_| "\"\"".into()),
+      serde_json::to_string(&html).unwrap_or_else(|_| "\"\"".into()),
+    );
+    wv.eval(js).map_err(|e| AppError::Msg(e.to_string()))?;
+  }
+  Ok(())
 }
 
 /// Capture the current preview content as a PNG and return it as a `data:` URL.

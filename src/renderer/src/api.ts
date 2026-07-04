@@ -211,7 +211,17 @@ export const api: RayfinStudioApi = {
     design: {
       setEnabled: (enabled: boolean) => invoke('preview_design_set', { enabled }),
       poll: () => invoke('preview_design_poll'),
-      drain: () => invoke('preview_design_drain')
+      drain: () => invoke('preview_design_drain'),
+      drainAi: () => invoke('preview_design_drain_ai'),
+      applyGenerated: (id: string, html: string) =>
+        invoke('preview_design_apply_generated', { id, html }),
+      generateHtml: (
+        projectId: string,
+        description: string,
+        width: number,
+        height: number,
+        model?: string
+      ) => invoke('design_generate_html', { projectId, description, width, height, model })
     }
   },
 
