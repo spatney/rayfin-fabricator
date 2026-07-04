@@ -34,7 +34,7 @@ Everything is exported from one barrel: `@/components/dashboard`. Each card owns
 its theme, axes, tooltip, dark mode, and loading/empty/error states — so you
 write *data + specs*, not chart code. Start at the kit catalog skill
 (`.agents/skills/visuals/SKILL.md`). Graphein is installed from npm as
-`graphein` (`^0.16.0`); the app uses its own thin React `<Chart>` wrapper instead
+`graphein` (`^0.16.1`); the app uses its own thin React `<Chart>` wrapper instead
 of `@graphein/react`.
 
 ## What ships out of the box

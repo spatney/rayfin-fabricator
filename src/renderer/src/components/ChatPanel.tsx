@@ -1631,16 +1631,30 @@ export default function ChatPanel({
   // scroll write is deferred to an animation frame so it batches with the browser's
   // layout instead of forcing a synchronous reflow on every (coalesced) update.
   useEffect(() => {
-    if (!stick.current) {
-      setShowJump(true)
-      setJumpNew(true)
-      return
-    }
-    setShowJump(false)
-    setJumpNew(false)
     const el = scrollRef.current
     if (!el) return
     const raf = requestAnimationFrame(() => {
+      // Nothing to scroll through — the empty welcome state, a freshly cleared
+      // thread, or a conversation short enough to fit — means there is no
+      // "latest" to jump to. Re-pin and hide the affordance so a stale
+      // scrolled-up state (`stick` left false by a previous conversation, which
+      // "Clear" can't reset because the panel instance survives an emptied
+      // `messages`) can't strand a phantom "New messages" pill over the welcome
+      // screen. The 80px slack mirrors the near-bottom test in onScrollChat.
+      const scrollable = messages.length > 0 && el.scrollHeight - el.clientHeight > 80
+      if (!scrollable) {
+        stick.current = true
+        setShowJump(false)
+        setJumpNew(false)
+        return
+      }
+      if (!stick.current) {
+        setShowJump(true)
+        setJumpNew(true)
+        return
+      }
+      setShowJump(false)
+      setJumpNew(false)
       el.scrollTop = el.scrollHeight
     })
     return () => cancelAnimationFrame(raf)
@@ -2194,7 +2208,7 @@ export default function ChatPanel({
         )}
 
         {messageList}
-        {showJump && (
+        {showJump && messages.length > 0 && (
           <button
             type="button"
             className={`chat-jump${jumpNew ? ' chat-jump--new' : ''}`}

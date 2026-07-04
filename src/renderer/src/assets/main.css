@@ -6510,6 +6510,24 @@ code {
 .settings-disclosure--open .settings-disclosure-caret {
   transform: rotate(90deg);
 }
+/* Once open, the whole Experiments section becomes a bordered, tinted panel so
+   it's obvious which controls are experimental — the section now sits at the
+   very bottom of the list, just above the footer, and the container keeps its
+   toggles from blending into the plain settings rows above. Collapsed, it reads
+   as a plain header with no chrome. */
+.settings-experiments {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+.settings-experiments--open {
+  gap: 10px;
+  padding: 12px;
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
 /* Center the Beta pill against the uppercase label (vertical-align is unreliable
    next to all-caps text). */
 .settings-disclosure .field-label {

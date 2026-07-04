@@ -191,46 +191,6 @@ export default function SettingsModal({
             </div>
 
             <div className="field">
-              <button
-                type="button"
-                className={`settings-disclosure${showExperiments ? ' settings-disclosure--open' : ''}`}
-                aria-expanded={showExperiments}
-                onClick={() => setShowExperiments((s) => !s)}
-              >
-                <span
-                  className="codicon codicon-chevron-right settings-disclosure-caret"
-                  aria-hidden="true"
-                />
-                <span className="field-label">
-                  Experiments <span className="settings-beta">Beta</span>
-                </span>
-              </button>
-              {showExperiments && (
-                <div className="settings-disclosure-body">
-                  <div className="settings-warn" role="note">
-                    <span className="codicon codicon-warning" aria-hidden="true" />
-                    <span>
-                      These features are experimental and off by default. They may be unstable,
-                      change, or be removed in a future update.
-                    </span>
-                  </div>
-                  <ToggleRow
-                    label="Chat mode selector"
-                    hint="Show the Agent / Plan / Autopilot dropdown in the composer. Off runs every turn in Agent mode."
-                    checked={Boolean(settings.experiments?.chatModeSelector)}
-                    onChange={(v) => onChange({ experiments: { chatModeSelector: v } })}
-                  />
-                  <ToggleRow
-                    label="Preview design mode"
-                    hint="Click elements in the live preview to tweak them (move, resize, color, text, chart specs), then hand the changes to chat for review."
-                    checked={Boolean(settings.experiments?.previewDesignMode)}
-                    onChange={(v) => onChange({ experiments: { previewDesignMode: v } })}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="field">
               <span className="field-label">Performance</span>
               <ToggleRow
                 label="Compatibility rendering"
@@ -268,6 +228,48 @@ export default function SettingsModal({
                   Open logs folder
                 </button>
               </div>
+            </div>
+
+            <div
+              className={`field settings-experiments${showExperiments ? ' settings-experiments--open' : ''}`}
+            >
+              <button
+                type="button"
+                className={`settings-disclosure${showExperiments ? ' settings-disclosure--open' : ''}`}
+                aria-expanded={showExperiments}
+                onClick={() => setShowExperiments((s) => !s)}
+              >
+                <span
+                  className="codicon codicon-chevron-right settings-disclosure-caret"
+                  aria-hidden="true"
+                />
+                <span className="field-label">
+                  Experiments <span className="settings-beta">Beta</span>
+                </span>
+              </button>
+              {showExperiments && (
+                <div className="settings-disclosure-body">
+                  <div className="settings-warn" role="note">
+                    <span className="codicon codicon-warning" aria-hidden="true" />
+                    <span>
+                      These features are experimental and off by default. They may be unstable,
+                      change, or be removed in a future update.
+                    </span>
+                  </div>
+                  <ToggleRow
+                    label="Chat mode selector"
+                    hint="Show the Agent / Plan / Autopilot dropdown in the composer. Off runs every turn in Agent mode."
+                    checked={Boolean(settings.experiments?.chatModeSelector)}
+                    onChange={(v) => onChange({ experiments: { chatModeSelector: v } })}
+                  />
+                  <ToggleRow
+                    label="Preview design mode"
+                    hint="Click elements in the live preview to tweak them (move, resize, color, text, chart specs), then hand the changes to chat for review."
+                    checked={Boolean(settings.experiments?.previewDesignMode)}
+                    onChange={(v) => onChange({ experiments: { previewDesignMode: v } })}
+                  />
+                </div>
+              )}
             </div>
           </div>
 

@@ -6,7 +6,7 @@ functions, colors, or callbacks). You author it and drop it into
 field-by-field reference; the `visuals` SKILL has the workflow and recipes.
 
 > Adapted for Graphein 0.16. The template depends on `graphein` from npm
-> (`^0.16.0`). `validateSpec(spec)` (re-exported from `@/components/dashboard`)
+> (`^0.16.1`). `validateSpec(spec)` (re-exported from `@/components/dashboard`)
 > checks a spec against the real schema; `repairSpec(spec)` auto-fixes many
 > mistakes. Render a spec headlessly against live data with `npm run preview`
 > (see the **headless-preview** skill).

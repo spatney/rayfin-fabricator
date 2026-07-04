@@ -8,7 +8,7 @@
 >
 > **Two things to internalize before writing code:**
 > 1. **Author a spec, don't hand-write a chart.** A chart is one JSON
->    `ChartSpec` (the `graphein` npm package, `^0.16.0`) passed to
+>    `ChartSpec` (the `graphein` npm package, `^0.16.1`) passed to
 >    `<ChartCard spec={…} />`. Map your DAX result into rows, author the spec,
 >    drop it in. Hand-writing SVG/JSX or wiring a chart library yourself is the
 >    slow, expensive path. The spec model is the `visuals` skill — read it first.
