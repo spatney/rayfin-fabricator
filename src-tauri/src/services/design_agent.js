@@ -251,6 +251,7 @@
     if (!entry) return;
     revertEntry(entry);
     if (state.selected && !state.selected.isConnected) deselect();
+    if (state.selected && state.selected.isConnected) renderInspector();
     bump(); reposition(); renderBar();
   }
 
@@ -752,21 +753,44 @@
   }
   function textContentRow(el) {
     if (isPlaceholder(el)) return null; // placeholders use the AI describe box instead
-    if (!el.children.length && (el.textContent || '').trim().length && (el.textContent || '').length < 200) {
-      var beforeHtml = el.innerHTML, fromText = el.textContent;
-      var ta = h('textarea', { text: el.textContent });
-      ta.onchange = function () {
-        el.textContent = ta.value;
-        if (isPlaceholder(el)) return; // captured by the insert entry
-        record({
-          kind: 'text', property: 'text', selector: cssPath(el), label: describe(el), el: el,
-          from: (fromText || '').trim(), to: ta.value.trim(),
-          revert: function () { el.innerHTML = beforeHtml; }
-        });
-      };
-      return h('div', { class: 'row', style: 'display:block' }, [h('label', { text: 'Content' }), ta]);
+    // The element's "own" text = the concatenation of its direct text-node
+    // children. Editing only those lets a button/heading/link that also holds a
+    // child element (e.g. an icon <svg> or a badge) still have its label changed
+    // without clobbering that child.
+    function directText() {
+      var s = '';
+      for (var i = 0; i < el.childNodes.length; i++) { if (el.childNodes[i].nodeType === 3) s += el.childNodes[i].nodeValue; }
+      return s;
     }
-    return null;
+    var trimmed = directText().replace(/\s+/g, ' ').trim();
+    if (!trimmed.length || trimmed.length >= 200) return null;
+    var ta = h('textarea', { text: trimmed });
+    ta.onchange = function () {
+      var beforeHtml = el.innerHTML;
+      var fromTxt = directText().replace(/\s+/g, ' ').trim();
+      var nodes = [];
+      for (var i = 0; i < el.childNodes.length; i++) { if (el.childNodes[i].nodeType === 3) nodes.push(el.childNodes[i]); }
+      var nonWs = nodes.filter(function (n) { return n.nodeValue.trim().length; });
+      if (nonWs.length) {
+        // Reuse the first meaningful text node (keeps the label's position
+        // relative to any icon) and preserve its surrounding whitespace/gap.
+        var first = nonWs[0];
+        var lead = first.nodeValue.match(/^\s*/)[0], trail = first.nodeValue.match(/\s*$/)[0];
+        first.nodeValue = lead + ta.value + trail;
+        for (var j = 1; j < nonWs.length; j++) nonWs[j].nodeValue = '';
+      } else if (nodes.length) {
+        nodes[0].nodeValue = ta.value;
+      } else {
+        el.appendChild(document.createTextNode(ta.value));
+      }
+      record({
+        kind: 'text', property: 'text', selector: cssPath(el), label: describe(el), el: el,
+        from: fromTxt, to: ta.value.trim(),
+        revert: function () { el.innerHTML = beforeHtml; }
+      });
+      reposition();
+    };
+    return h('div', { class: 'row', style: 'display:block' }, [h('label', { text: 'Content' }), ta]);
   }
   function cssName(jsProp) { return jsProp.replace(/[A-Z]/g, function (m) { return '-' + m.toLowerCase(); }); }
 
