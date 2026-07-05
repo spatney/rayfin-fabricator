@@ -222,11 +222,22 @@ define_class!(
             // controller.
             window.setReleasedWhenClosed(false);
 
+            // [rayfin-desktop local patch] Inherit the opener's custom user
+            // agent onto the auth popup. The macOS preview presents a stock
+            // Safari UA (see src/services/preview.rs → PREVIEW_MACOS_USER_AGENT)
+            // so Entra offers modern / passwordless sign-in; a freshly-created
+            // popup WKWebView would otherwise revert to the default embedded UA
+            // and Entra would degrade to password / certificate only. Captured
+            // from the opener before `webview` is shadowed by the new popup
+            // below. See docs/VENDORED-WRY-PATCH.md (Patch 3).
+            let opener_user_agent = webview.customUserAgent();
+
             let webview = objc2_web_kit::WKWebView::initWithFrame_configuration(
               mtm.alloc::<objc2_web_kit::WKWebView>(),
               window.frame(),
               configuration,
             );
+            webview.setCustomUserAgent(opener_user_agent.as_deref());
 
             let new_windows = self.ivars().new_windows.clone();
             let window_id = Retained::as_ptr(&window) as usize;

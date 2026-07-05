@@ -1,7 +1,13 @@
 # Vendored `wry` patches
 
-This repo ships a **vendored copy of the `wry` crate** with **two small local
-changes**, both in `src-tauri/vendor/wry/src/webview2/mod.rs`:
+This repo ships a **vendored copy of the `wry` crate** with **three small local
+changes**:
+
+- **Patches 1 & 2** are in `src-tauri/vendor/wry/src/webview2/mod.rs` (Windows /
+  WebView2).
+- **Patch 3** is in
+  `src-tauri/vendor/wry/src/wkwebview/class/wry_web_view_ui_delegate.rs`
+  (macOS / WKWebView).
 
 1. **Device-compliance SSO** — enables the WebView2
    `AllowSingleSignOnUsingOSPrimaryAccount` environment option so the embedded
@@ -13,10 +19,15 @@ changes**, both in `src-tauri/vendor/wry/src/webview2/mod.rs`:
    default list of disabled browser features so WebView2 keeps rendering when the
    top-level window is minimized/occluded, letting the Fabricator agent screenshot
    the preview while it is parked off-screen (and while the app is minimized).
+3. **macOS auth-popup user agent** — copies the preview's (Safari) custom user
+   agent onto the `window.open(...)` auth popup so Entra offers modern /
+   passwordless sign-in inside the popup instead of degrading to the "password /
+   certificate or smart card" picker. Without it, passwordless accounts can't sign
+   in to a previewed app on macOS ([#4](https://github.com/spatney/rayfin-fabricator/issues/4)).
 
 > **TL;DR for upgrades:** when you bump Tauri (which pins `wry`), re-vendor the
-> matching `wry` version and re-apply **both** changes described below, or drop a
-> change if upstream wry ever exposes it. See
+> matching `wry` version and re-apply **all three** changes described below, or drop
+> a change if upstream wry ever exposes it. See
 > [Re-applying on upgrade](#re-applying-the-patches-on-upgrade).
 
 ---
@@ -57,7 +68,7 @@ unsafe {
 ```
 
 Everything else under `src-tauri/vendor/wry/` is a verbatim copy of the upstream
-crate, except for Patch 2 below.
+crate, except for Patches 2 and 3 below.
 
 ## Patch 2: disable native-window occlusion
 
@@ -89,6 +100,55 @@ the default folder, so giving only the preview a different arg makes
 (0x8007139F)**. Putting the flag in the shared wry default keeps both webviews'
 arguments identical — and preserves the conditional `--autoplay-policy` / proxy
 appends, since both still flow through the same default closure.
+
+## Patch 3: macOS auth-popup user agent (WKWebView)
+
+**File:** `src-tauri/vendor/wry/src/wkwebview/class/wry_web_view_ui_delegate.rs`
+**Where:** inside `create_web_view_for_navigation_action` (the `WKUIDelegate`
+`createWebViewWithConfiguration:` handler), in the `NewWindowResponse::Allow` arm,
+around the `WKWebView::initWithFrame_configuration` call that builds the popup web
+view.
+
+**Change:** capture the opener's `customUserAgent` *before* the `webview` binding is
+shadowed by the new popup, then copy it onto the popup web view:
+
+```rust
+// [rayfin-desktop local patch] Inherit the opener's custom user agent onto the
+// auth popup. See docs/VENDORED-WRY-PATCH.md (Patch 3).
+let opener_user_agent = webview.customUserAgent();
+
+let webview = objc2_web_kit::WKWebView::initWithFrame_configuration(
+  mtm.alloc::<objc2_web_kit::WKWebView>(),
+  window.frame(),
+  configuration,
+);
+webview.setCustomUserAgent(opener_user_agent.as_deref());
+```
+
+**Why:** a deployed Rayfin app signs in by calling `window.open(<Fabric broker
+URL>)` and then waiting for a `postMessage` / `BroadcastChannel` **handoff** from
+that popup (see `@microsoft/rayfin-auth-provider-fabric` → `initiateFabricLogin`).
+The popup therefore **must stay in-process** — routing it to the system browser
+would break the handoff, so it can't complete auth. On macOS the preview is a
+WKWebView, and `src/services/preview.rs` gives it a **stock Safari user agent**
+(`PREVIEW_MACOS_USER_AGENT`) so Entra surfaces modern / passwordless methods
+(Microsoft Authenticator / phone / passkey) instead of degrading to "Use my
+password" / "Use a certificate or smart card" — a dead end for passwordless
+accounts (and WKWebView can't service the client-certificate keychain challenge
+either). But a popup WKWebView created via `createWebViewWithConfiguration:` does
+**not** inherit the opener's custom UA, so without this patch the sign-in popup
+reverts to the default embedded UA and Entra degrades again. Upstream wry never
+sets a UA on the popup and exposes no hook for it, hence the vendored patch.
+
+**Windows note:** this file is macOS-only (`#[cfg(target_os = "macos")]`). WebView2
+popups already share the environment/browser identity (Edge) and the device-PRT SSO
+from Patch 1, so there is no Windows equivalent and Windows keeps its native UA.
+
+**Setter/getter availability:** `objc2_web_kit::WKWebView` exposes both
+`customUserAgent()` and `setCustomUserAgent(_)` (the shipped upstream
+`set_user_agent` in `wkwebview/mod.rs` already calls the setter). Both are `unsafe`
+methods and the delegate method is an `unsafe fn`, so no extra `unsafe` block is
+needed.
 
 ## How it's wired
 
@@ -157,20 +217,27 @@ When you upgrade Tauri (or otherwise change the pinned `wry` version), redo this
    - clear read-only attributes on the copied files, and
    - delete the cache marker `.cargo-ok` if present.
 
-3. **Re-apply both changes** in `src-tauri/vendor/wry/src/webview2/mod.rs` (keep the
-   explanatory `[rayfin-desktop local patch]` comment blocks):
-   - **Patch 1 (SSO):** find the `unsafe` block that builds
-     `CoreWebView2EnvironmentOptions` (search for `set_are_browser_extensions_enabled`)
-     and add, right after it:
+3. **Re-apply all three changes** (keep the explanatory `[rayfin-desktop local
+   patch]` comment blocks):
+   - **Patch 1 (SSO)** in `src-tauri/vendor/wry/src/webview2/mod.rs`: find the
+     `unsafe` block that builds `CoreWebView2EnvironmentOptions` (search for
+     `set_are_browser_extensions_enabled`) and add, right after it:
      ```rust
      options.set_allow_single_sign_on_using_os_primary_account(true);
      ```
-   - **Patch 2 (occlusion):** find the default `additional_browser_args` (search for
-     `msSmartScreenProtection`) and append `,CalculateNativeWinOcclusion` to the
-     `--disable-features` list.
+   - **Patch 2 (occlusion)** in `src-tauri/vendor/wry/src/webview2/mod.rs`: find the
+     default `additional_browser_args` (search for `msSmartScreenProtection`) and
+     append `,CalculateNativeWinOcclusion` to the `--disable-features` list.
+   - **Patch 3 (macOS popup UA)** in
+     `src-tauri/vendor/wry/src/wkwebview/class/wry_web_view_ui_delegate.rs`: in
+     `create_web_view_for_navigation_action` (search for
+     `initWithFrame_configuration`), capture `let opener_user_agent =
+     webview.customUserAgent();` before the popup `webview` is created, then add
+     `webview.setCustomUserAgent(opener_user_agent.as_deref());` right after it.
 
 4. **Confirm the setter still exists** on the `webview2-com` version now in the
-   lockfile. If `webview2-com` renamed/removed it, adjust the call accordingly.
+   lockfile (Patch 1). If `webview2-com` renamed/removed it, adjust the call
+   accordingly.
 
 5. **Confirm the `[patch.crates-io]` path** in `src-tauri/Cargo.toml` still points
    at `vendor/wry` (it shouldn't need changes), then build:
@@ -182,10 +249,12 @@ When you upgrade Tauri (or otherwise change the pinned `wry` version), redo this
 6. **Verify the override is live:** `src-tauri/Cargo.lock`'s `wry` entry should
    have **no `source = "registry+..."` line**.
 
-7. **Smoke-test both:** (1) sign in inside the preview against a
-   device-compliance–gated app, and (2) have the Fabricator agent take a screenshot
-   while the app window is on a different tab / minimized and confirm it returns a
-   real (non-blank) frame without freezing the app.
+7. **Smoke-test all three:** (1) [Windows] sign in inside the preview against a
+   device-compliance–gated app; (2) [Windows] have the Fabricator agent take a
+   screenshot while the app window is on a different tab / minimized and confirm it
+   returns a real (non-blank) frame without freezing the app; and (3) [macOS] sign
+   in to a previewed app with a **passwordless** account and confirm Entra offers
+   Microsoft Authenticator / phone / passkey (not just password / certificate).
 
 ### If upstream fixes these
 
@@ -198,6 +267,9 @@ When you upgrade Tauri (or otherwise change the pinned `wry` version), redo this
   on the main window via `tauri.conf.json` *and* the preview), otherwise WebView2
   fails with `ERROR_INVALID_STATE`. The vendored default is used precisely to avoid
   that footgun.
+- **Patch 3:** if a future `wry` inherits the opener's `customUserAgent` onto the
+  popup web view (or exposes a hook on the new-window response to set it), drop the
+  patch and rely on that instead.
 
 If **both** patches become unnecessary, **delete the vendored tree and remove the
 `[patch.crates-io]` entry** from `src-tauri/Cargo.toml`.

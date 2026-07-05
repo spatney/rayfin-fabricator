@@ -52,6 +52,20 @@ const OFFSCREEN_COORD: f64 = 20_000.0;
 #[cfg(windows)]
 const OFFSCREEN_SIZE: (f64, f64) = (1280.0, 800.0);
 
+/// Stock Safari user agent presented by the **macOS** preview (and the auth
+/// popups it spawns). WKWebView's default UA omits the `Version/… Safari/…`
+/// token, so Entra classifies the preview as an *embedded* webview and offers
+/// only the "Use my password" / "Use a certificate or smart card" methods — a
+/// dead end for passwordless accounts (and WKWebView can't service the
+/// client-certificate keychain challenge either). Presenting Safari's UA makes
+/// Entra surface the modern methods (Microsoft Authenticator / phone / passkey).
+/// Windows/WebView2 is already recognized as Edge and relies on the device PRT
+/// via the vendored SSO patch, so this is macOS-only. The auth popup inherits
+/// this UA via a companion vendored-wry patch — see `docs/VENDORED-WRY-PATCH.md`
+/// (Patch 3).
+#[cfg(target_os = "macos")]
+const PREVIEW_MACOS_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15";
+
 /// Document-start script injected into the preview so the agent can later read
 /// the page's console output (see [`read_console`]). It mirrors `console.*`,
 /// `window.onerror`, and `unhandledrejection` into a small bounded ring buffer on
@@ -236,7 +250,8 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
   let load_app = app.clone();
   let popup_app = app.clone();
 
-  let builder = WebviewBuilder::new(PREVIEW_LABEL, WebviewUrl::External(url))
+  #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
+  let mut builder = WebviewBuilder::new(PREVIEW_LABEL, WebviewUrl::External(url))
     .focused(false)
     // Expose the web inspector on the preview so users can right-click → Inspect
     // to open browser devtools for their deployed app. Devtools default to on in
@@ -255,6 +270,17 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
       on_page_load(&load_app, payload.event(), payload.url());
     })
     .on_new_window(move |u, features| on_new_window(&popup_app, &u, features));
+
+  // macOS: present a stock Safari UA so Entra offers modern / passwordless
+  // sign-in inside the preview and the auth popups it spawns, instead of
+  // degrading to the password / certificate picker (see
+  // [`PREVIEW_MACOS_USER_AGENT`]). Windows/WebView2 must keep its native (Edge)
+  // UA — it relies on the device PRT via the vendored SSO patch — so this is
+  // macOS-only.
+  #[cfg(target_os = "macos")]
+  {
+    builder = builder.user_agent(PREVIEW_MACOS_USER_AGENT);
+  }
 
   // The preview shares the default WebView2 user-data folder with the main window,
   // so it MUST use the same browser arguments. Both inherit them from the vendored
