@@ -183,6 +183,9 @@ export default function Workbench({
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
   /** Region screenshots staged per project for the next chat message. */
   const [shots, setShots] = useState<Record<string, PendingShot[]>>({})
+  /** Composer drafts staged per project — a typed-but-unsent prompt persists here
+   * so it survives ChatPanel unmounting when switching tabs (Build ⇄ Code). */
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
   /** The project whose `rayfin up` is currently streaming (routes deploy:run logs). */
   const deployingIdRef = useRef<string | null>(null)
   /** Latest chats snapshot, for reading inside async callbacks / save timers. */
@@ -219,6 +222,10 @@ export default function Workbench({
 
   const clearShots = useCallback((key: string): void => {
     setShots((all) => ({ ...all, [key]: [] }))
+  }, [])
+
+  const setDraftFor = useCallback((key: string, value: string): void => {
+    setDrafts((all) => ({ ...all, [key]: value }))
   }, [])
 
   const setMessagesFor = useCallback(
@@ -897,6 +904,8 @@ export default function Workbench({
                       onRequestDeploy={() => setCreateMode('deploy')}
                       modeSelectorEnabled={Boolean(settings?.experiments?.chatModeSelector)}
                       onOpenMention={openMention}
+                      draft={drafts[active.id] ?? ''}
+                      onDraftChange={(value) => setDraftFor(active.id, value)}
                     />
                   </section>
                   {!focusPane && (
