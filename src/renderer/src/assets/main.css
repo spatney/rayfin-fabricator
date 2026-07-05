@@ -408,6 +408,36 @@ code {
   background: var(--bg-elev-2);
 }
 
+.statusbar-zoom {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 4px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.statusbar-zoom:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.statusbar-zoom:focus-visible {
+  outline: none;
+  border-color: var(--accent-ring);
+}
+
+.statusbar-zoom option {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+
 .statusbar-report svg {
   width: 13px;
   height: 13px;

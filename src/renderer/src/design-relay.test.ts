@@ -61,7 +61,7 @@ describe('design controller cross-frame relay', () => {
 
   it('is v3 and runs the top frame as a relay (no local editor UI)', () => {
     const d = installController()
-    expect(d.__v).toBe(3)
+    expect(d.__v).toBe(4)
 
     d.enable('relay', APP_ORIGIN)
     // The relay (Fabric shell) must NOT build the in-page editor chrome — that

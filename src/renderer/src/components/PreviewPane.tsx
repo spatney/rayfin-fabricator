@@ -3,7 +3,10 @@ import type {
   DeployResult,
   PreviewBounds,
   PreviewDesignAiRequest,
+  PreviewDesignAiEditRequest,
   PreviewDesignHandoff,
+  PreviewDesignRestylePatch,
+  PreviewDesignTheme,
   PreviewMode,
   StudioProject
 } from '@shared/ipc'
@@ -39,6 +42,28 @@ export interface PendingShot {
 
 /** localStorage key persisting the design-mode AI model choice across sessions. */
 const DESIGN_MODEL_KEY = 'rayfin.design.aiModel'
+
+/**
+ * Read Fabricator's own theme (accent / surfaces / text / border) + UI zoom from
+ * the renderer's CSS tokens so the in-preview design tools can match the host
+ * app's look and scale (the tools are Fabricator UI, not the previewed app's).
+ * Falls back to the dark-teal defaults if a token is missing.
+ */
+function readFabricatorTheme(): PreviewDesignTheme {
+  const cs = getComputedStyle(document.documentElement)
+  const v = (n: string): string => cs.getPropertyValue(n).trim()
+  const scale = Number(v('--ui-scale') || document.documentElement.style.zoom) || 1
+  return {
+    accent: v('--accent') || '#34b4ba',
+    accentHi: v('--accent-2') || undefined,
+    panel: v('--bg-elev') || '#12161f',
+    panel2: v('--bg-elev-2') || undefined,
+    border: v('--border') || undefined,
+    txt: v('--text') || '#eceff5',
+    txtDim: v('--text-dim') || undefined,
+    scale
+  }
+}
 
 /** How long the frozen still-frame lingers as a backstop after the native preview
  *  is revealed again (an overlay closed). The live surface is opaque and paints
@@ -658,12 +683,24 @@ export default function PreviewPane({
   const designModelRef = useRef<string | null>(
     typeof localStorage !== 'undefined' ? localStorage.getItem(DESIGN_MODEL_KEY) : null
   )
+  // Signature of the last Fabricator theme pushed to the controller, so the poll
+  // re-pushes only when the theme/zoom actually changes (or after a reload).
+  const lastThemeSigRef = useRef('')
 
   // Resolve a fast model once design mode is on, and push the model list to the
   // controller's placeholder AI picker (fast models first), preselecting the
-  // persisted choice when present. Best-effort.
+  // persisted choice when present. Also push Fabricator's theme so the tools
+  // match the host look + zoom. Best-effort.
   useEffect(() => {
     if (!designActive) return
+    // Push the current Fabricator theme (accent/surfaces/text/border + UI scale).
+    try {
+      const theme = readFabricatorTheme()
+      lastThemeSigRef.current = JSON.stringify(theme)
+      void window.api.preview.design.setTheme(theme)
+    } catch {
+      /* non-fatal — the controller falls back to its default palette */
+    }
     let cancelled = false
     void loadCopilotModels()
       .then((models) => {
@@ -703,7 +740,7 @@ export default function PreviewPane({
         req.description,
         req.width,
         req.height,
-        req.model || fastModelRef.current
+        req.model || undefined
       )
     } catch {
       html = ''
@@ -718,6 +755,40 @@ export default function PreviewPane({
   useEffect(() => {
     aiGenRef.current = runAiGenerate
   }, [runAiGenerate])
+
+  // Restyle a selected element from a natural-language change and apply it live.
+  // Best-effort: on any failure, `applyRestyle(id, empty)` clears the controller's
+  // "Applying…" busy state, and the poll's `aiEditRef` guard is always released.
+  const runAiEdit = useCallback(async (): Promise<void> => {
+    let req: PreviewDesignAiEditRequest | null = null
+    try {
+      req = await window.api.preview.design.drainAiEdit()
+    } catch {
+      req = null
+    }
+    if (!req) return
+    let patch: PreviewDesignRestylePatch = { styles: {} }
+    try {
+      patch = await window.api.preview.design.restyleElement(
+        project.id,
+        req.description,
+        req.context,
+        req.model || undefined
+      )
+    } catch {
+      patch = { styles: {} }
+    }
+    try {
+      await window.api.preview.design.applyRestyle(req.id, patch)
+    } catch {
+      // ignore — the controller clears its busy state on the next select
+    }
+  }, [project.id])
+  const aiEditRef = useRef(false)
+  const runAiEditRef = useRef(runAiEdit)
+  useEffect(() => {
+    runAiEditRef.current = runAiEdit
+  }, [runAiEdit])
 
   const toggleDesign = useCallback((): void => {
     setDesignActive((prev) => {
@@ -802,12 +873,30 @@ export default function PreviewPane({
             designModelRef.current ?? undefined
           )
         }
+        // Keep the tools on Fabricator's theme: re-push after a reload (the
+        // controller lost it) or whenever the theme/UI-zoom changed live.
+        if (status) {
+          const theme = readFabricatorTheme()
+          const sig = JSON.stringify(theme)
+          if (status.hasTheme === false || sig !== lastThemeSigRef.current) {
+            lastThemeSigRef.current = sig
+            void window.api.preview.design.setTheme(theme)
+          }
+        }
         if (status?.aiPending && !aiRef.current) {
           aiRef.current = true
           try {
             await aiGenRef.current()
           } finally {
             aiRef.current = false
+          }
+        }
+        if (status?.aiEditPending && !aiEditRef.current) {
+          aiEditRef.current = true
+          try {
+            await runAiEditRef.current()
+          } finally {
+            aiEditRef.current = false
           }
         }
         if (status?.handoffReady && !handoffRef.current) {

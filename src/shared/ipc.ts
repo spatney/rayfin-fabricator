@@ -993,6 +993,10 @@ export interface PreviewDesignStatus {
   hasModels?: boolean
   /** The AI picker's currently selected model id — persisted by the renderer. */
   aiModel?: string | null
+  /** True once the user hit "Apply" on an element's "Edit with AI" card. */
+  aiEditPending?: boolean
+  /** Whether the controller currently holds the Fabricator theme (re-pushed if not). */
+  hasTheme?: boolean
 }
 
 /**
@@ -1016,6 +1020,64 @@ export interface PreviewDesignAiRequest {
 export interface PreviewDesignHandoff {
   instruction: string
   changeCount: number
+}
+
+/**
+ * Compact element context the controller sends with an "Edit with AI" restyle
+ * request; forwarded verbatim to `design.restyleElement`.
+ */
+export interface PreviewDesignRestyleContext {
+  tag: string
+  text?: string
+  classes?: string
+  component?: string
+  /** Current (relevant) computed styles, keyed by CSS property. */
+  styles: Record<string, string>
+  isChart: boolean
+  chartType?: string
+  /** Current Graphein spec (data omitted) for charts. */
+  spec?: unknown
+  /** Notable descendants the model can target via `rules`. */
+  children?: { tag: string; classes?: string; text?: string }[]
+}
+
+/**
+ * A drained "Edit with AI" restyle request for a selected element: the target
+ * element id (`data-rayfin-edit-id`), the natural-language change, the chosen
+ * model, and the element context the renderer forwards to the model.
+ */
+export interface PreviewDesignAiEditRequest {
+  id: string
+  description: string
+  model?: string
+  context: PreviewDesignRestyleContext
+}
+
+/**
+ * Fabricator's own theme pushed into the design controller so the tools match
+ * the host app's look + zoom (built by the renderer from its CSS tokens +
+ * `uiScale`). Colors are CSS color strings; `scale` is the UI zoom (1 = 100%).
+ */
+export interface PreviewDesignTheme {
+  accent: string
+  accentHi?: string
+  panel: string
+  panel2?: string
+  border?: string
+  txt: string
+  txtDim?: string
+  scale?: number
+}
+
+/**
+ * The structured restyle patch returned by `design.restyleElement`: whitelisted
+ * inline CSS property→value pairs, plus an optional Graphein spec patch (charts).
+ */
+export interface PreviewDesignRestylePatch {
+  styles: Record<string, string>
+  graphein?: unknown
+  /** Descendant rules: whitelisted CSS applied to elements matching `selector`. */
+  rules?: { selector: string; styles: Record<string, string> }[]
 }
 
 /* ------------------------------------------------------------------ *
@@ -1510,6 +1572,12 @@ export interface RayfinStudioApi {
       /** Supply the placeholder AI model picker with the available models. */
       setModels: (models: { id: string; name: string; fast: boolean }[], preferred?: string) => Promise<void>
       /**
+       * Push Fabricator's own theme (accent/surfaces/text/border + UI scale) so
+       * the design tools match the host app's look and zoom. Re-sent after a
+       * preview reload (when `poll().hasTheme` is false) and on theme/scale change.
+       */
+      setTheme: (theme: PreviewDesignTheme) => Promise<void>
+      /**
        * Generate a self-contained HTML/CSS snippet for a placeholder from a
        * description, on a transient fast-model session. Returns the raw HTML
        * (the controller sanitizes before injecting). `model` defaults to a fast
@@ -1522,6 +1590,21 @@ export interface RayfinStudioApi {
         height: number,
         model?: string
       ) => Promise<string>
+      /** Drain a pending "Edit with AI" restyle request for a selected element. */
+      drainAiEdit: () => Promise<PreviewDesignAiEditRequest | null>
+      /** Apply a restyle patch to the element tagged `id` (controller records it). */
+      applyRestyle: (id: string, patch: PreviewDesignRestylePatch) => Promise<void>
+      /**
+       * Restyle an existing element from a natural-language change, on a transient
+       * fast-model session. Returns a structured patch (whitelisted inline CSS +
+       * optional Graphein spec patch) the controller applies via `applyRestyle`.
+       */
+      restyleElement: (
+        projectId: string,
+        description: string,
+        context: PreviewDesignRestyleContext,
+        model?: string
+      ) => Promise<PreviewDesignRestylePatch>
     }
   }
 

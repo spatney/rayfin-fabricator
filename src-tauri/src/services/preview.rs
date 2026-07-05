@@ -130,6 +130,11 @@ const DESIGN_DRAIN_JS: &str =
 const DESIGN_DRAIN_AI_JS: &str =
   "(function(){try{return window.__rayfinDesign?window.__rayfinDesign.drainAi():null}catch(e){return null}})()";
 
+/// JS that drains a pending "Edit with AI" restyle request for a selected element
+/// (returns `{id, description, model, context}` once, then clears it), or `null`.
+const DESIGN_DRAIN_AI_EDIT_JS: &str =
+  "(function(){try{return window.__rayfinDesign?window.__rayfinDesign.drainAiEdit():null}catch(e){return null}})()";
+
 /// Logical-pixel rectangle reported by the renderer (its host element's bounds,
 /// relative to the window client area — i.e. `getBoundingClientRect()`).
 #[derive(Debug, Clone, Copy, serde::Deserialize)]
@@ -618,6 +623,10 @@ pub struct DesignStatus {
   /// persists this so the choice survives across sessions). `None` when unset.
   #[serde(default)]
   pub ai_model: Option<String>,
+  /// True once the user hit "Apply" on an element's "Edit with AI" card — the
+  /// renderer then drains the request, restyles via the model, and applies it.
+  #[serde(default)]
+  pub ai_edit_pending: bool,
 }
 
 /// A drained "Send to chat" handoff: the composed instruction + change count.
@@ -642,6 +651,25 @@ pub struct DesignAiRequest {
   /// Model id chosen in the picker (`None` → the fast model resolved by the host).
   #[serde(default)]
   pub model: Option<String>,
+}
+
+/// A drained "Edit with AI" restyle request for a selected element. Mirrors
+/// `window.__rayfinDesign.drainAiEdit()`. `context` is opaque here — the renderer
+/// forwards it straight to `design_restyle_element` (which decodes it into a
+/// `RestyleContext`); the resulting patch is applied back via
+/// [`preview_design_apply_restyle`] targeting `id`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignAiEditRequest {
+  /// Stable element id (`data-rayfin-edit-id`) to target with the patch.
+  pub id: String,
+  pub description: String,
+  /// Model id chosen in the picker (`None` → the fast model resolved by the host).
+  #[serde(default)]
+  pub model: Option<String>,
+  /// Compact element context (tag/text/classes/component/styles/chart spec).
+  #[serde(default)]
+  pub context: serde_json::Value,
 }
 
 /// Build the JS that enables the (already document-start-injected) design
@@ -765,6 +793,14 @@ pub async fn preview_design_drain_ai(app: AppHandle) -> AppResult<Option<DesignA
   design_eval(&app, DESIGN_DRAIN_AI_JS).await
 }
 
+/// Drain a pending "Edit with AI" restyle request for a selected element (clearing
+/// it). The renderer forwards `context` to `design_restyle_element` and applies the
+/// resulting patch via [`preview_design_apply_restyle`].
+#[tauri::command]
+pub async fn preview_design_drain_ai_edit(app: AppHandle) -> AppResult<Option<DesignAiEditRequest>> {
+  design_eval(&app, DESIGN_DRAIN_AI_EDIT_JS).await
+}
+
 /// Inject AI-generated HTML into the placeholder `id` (the controller sanitizes
 /// it before rendering and records it on the placeholder's `insert` change). Both
 /// arguments are JSON-encoded so arbitrary markup rides safely into the eval.
@@ -781,7 +817,26 @@ pub fn preview_design_apply_generated(app: AppHandle, id: String, html: String) 
   Ok(())
 }
 
-/// A model choice for the placeholder AI picker (mirrors the renderer's list).
+/// Apply an AI restyle `patch` to the element tagged `id` (`data-rayfin-edit-id`).
+/// `patch` is the JSON `RestylePatch` from `design_restyle_element`; the controller
+/// applies each whitelisted style prop (and any Graphein spec patch) as revertable
+/// change-set entries. Both arguments are JSON-encoded into the eval.
+#[tauri::command]
+pub fn preview_design_apply_restyle(
+  app: AppHandle,
+  id: String,
+  patch: serde_json::Value,
+) -> AppResult<()> {
+  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    let js = format!(
+      "try{{window.__rayfinDesign&&window.__rayfinDesign.applyRestyle({},{})}}catch(e){{}}",
+      serde_json::to_string(&id).unwrap_or_else(|_| "\"\"".into()),
+      serde_json::to_string(&patch).unwrap_or_else(|_| "null".into()),
+    );
+    wv.eval(js).map_err(|e| AppError::Msg(e.to_string()))?;
+  }
+  Ok(())
+}
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesignModel {
@@ -806,6 +861,21 @@ pub fn preview_design_set_models(
     let js = format!(
       "try{{window.__rayfinDesign&&window.__rayfinDesign.setModels({json},{pref})}}catch(e){{}}"
     );
+    wv.eval(js).map_err(|e| AppError::Msg(e.to_string()))?;
+  }
+  Ok(())
+}
+
+/// Push Fabricator's own theme into the design controller so the tools match the
+/// host app's look + zoom (the tools are Fabricator UI, not the previewed app's).
+/// `theme` is an opaque JSON object the renderer builds from its CSS tokens
+/// (`--accent` / `--bg-elev` / `--text` / `--border` …) plus the UI scale.
+#[tauri::command]
+pub fn preview_design_set_theme(app: AppHandle, theme: serde_json::Value) -> AppResult<()> {
+  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    let json = serde_json::to_string(&theme).unwrap_or_else(|_| "null".into());
+    let js =
+      format!("try{{window.__rayfinDesign&&window.__rayfinDesign.setTheme({json})}}catch(e){{}}");
     wv.eval(js).map_err(|e| AppError::Msg(e.to_string()))?;
   }
   Ok(())

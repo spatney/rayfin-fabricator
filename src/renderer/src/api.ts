@@ -23,6 +23,9 @@ import {
   type PreviewBounds,
   type PreviewNavState,
   type PreviewAgentEvent,
+  type PreviewDesignRestylePatch,
+  type PreviewDesignRestyleContext,
+  type PreviewDesignTheme,
   type ProcLogEvent,
   type DeleteProgressEvent,
   type RayfinStudioApi,
@@ -223,13 +226,23 @@ export const api: RayfinStudioApi = {
         invoke('preview_design_apply_generated', { id, html }),
       setModels: (models: { id: string; name: string; fast: boolean }[], preferred?: string) =>
         invoke('preview_design_set_models', { models, preferred: preferred ?? null }),
+      setTheme: (theme: PreviewDesignTheme) => invoke('preview_design_set_theme', { theme }),
       generateHtml: (
         projectId: string,
         description: string,
         width: number,
         height: number,
         model?: string
-      ) => invoke('design_generate_html', { projectId, description, width, height, model })
+      ) => invoke('design_generate_html', { projectId, description, width, height, model }),
+      drainAiEdit: () => invoke('preview_design_drain_ai_edit'),
+      applyRestyle: (id: string, patch: PreviewDesignRestylePatch) =>
+        invoke('preview_design_apply_restyle', { id, patch }),
+      restyleElement: (
+        projectId: string,
+        description: string,
+        context: PreviewDesignRestyleContext,
+        model?: string
+      ) => invoke('design_restyle_element', { projectId, description, context, model })
     }
   },
 

@@ -226,9 +226,13 @@ pub fn run() {
       services::preview::preview_design_poll,
       services::preview::preview_design_drain,
       services::preview::preview_design_drain_ai,
+      services::preview::preview_design_drain_ai_edit,
       services::preview::preview_design_apply_generated,
+      services::preview::preview_design_apply_restyle,
       services::preview::preview_design_set_models,
+      services::preview::preview_design_set_theme,
       commands::design::design_generate_html,
+      commands::design::design_restyle_element,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

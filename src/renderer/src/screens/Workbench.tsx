@@ -25,6 +25,7 @@ import HomeView from '../components/HomeView'
 import DeleteProjectModal from '../components/DeleteProjectModal'
 import ConfirmModal from '../components/ConfirmModal'
 import SettingsModal from '../components/SettingsModal'
+import { applyUiScale, UI_SCALES } from '../theme'
 import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../components/ChatPanel'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 import DeploymentsControl from '../components/DeploymentsControl'
@@ -1038,6 +1039,24 @@ export default function Workbench({
           </>
         )}
         <span className="statusbar-spacer" />
+        <select
+          className="statusbar-zoom"
+          value={String(settings?.uiScale ?? 1)}
+          onChange={(e) => {
+            const uiScale = Number(e.target.value)
+            applyUiScale(uiScale)
+            onSettingsChange({ uiScale })
+          }}
+          title="Interface zoom — scales the whole UI (and the design tools)"
+          aria-label="Interface zoom"
+        >
+          {UI_SCALES.map((s) => (
+            <option key={s} value={String(s)}>
+              {Math.round(s * 100)}%
+            </option>
+          ))}
+        </select>
+        <span className="statusbar-sep">·</span>
         <span className="statusbar-item" title="Rayfin Fabricator version">
           v{versions?.app ?? '—'}
         </span>

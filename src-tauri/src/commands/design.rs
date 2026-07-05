@@ -24,6 +24,104 @@ use crate::state::AppState;
 /// falls back gracefully on timeout).
 const RUN_TIMEOUT_MS: u64 = 60_000;
 
+/// CSS properties the "Edit with AI" restyle path is allowed to set on a live
+/// element. Deliberately a safe, layout/typography/appearance-only subset — the
+/// model can only return values for these (anything else is dropped), and the
+/// in-page controller applies them as ordinary inline-style change-set entries.
+const ALLOWED_RESTYLE_PROPS: &[&str] = &[
+    "color",
+    "background",
+    "background-color",
+    "background-image",
+    "border",
+    "border-color",
+    "border-width",
+    "border-style",
+    "border-radius",
+    "padding",
+    "padding-top",
+    "padding-right",
+    "padding-bottom",
+    "padding-left",
+    "margin",
+    "margin-top",
+    "margin-right",
+    "margin-bottom",
+    "margin-left",
+    "font-size",
+    "font-weight",
+    "font-style",
+    "line-height",
+    "letter-spacing",
+    "text-align",
+    "text-transform",
+    "text-decoration",
+    "opacity",
+    "box-shadow",
+    "width",
+    "height",
+    "min-width",
+    "min-height",
+    "max-width",
+    "max-height",
+    "display",
+    "gap",
+    "align-items",
+    "justify-content",
+    "flex-direction",
+];
+
+/// Compact element context the renderer sends with a restyle request: enough for
+/// the model to make a good local edit without shipping the whole DOM.
+#[derive(serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RestyleContext {
+    #[serde(default)]
+    pub tag: String,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub classes: Option<String>,
+    #[serde(default)]
+    pub component: Option<String>,
+    /// Current (relevant) computed styles, keyed by CSS property.
+    #[serde(default)]
+    pub styles: HashMap<String, String>,
+    #[serde(default)]
+    pub is_chart: bool,
+    #[serde(default)]
+    pub chart_type: Option<String>,
+    /// Current Graphein spec (data omitted by the renderer) for charts.
+    #[serde(default)]
+    pub spec: Option<Value>,
+    /// Compact summary of notable descendants ({tag, classes, text}) so the model
+    /// can target children via `rules`.
+    #[serde(default)]
+    pub children: Option<Value>,
+}
+
+/// The structured patch returned to the renderer: whitelisted CSS property→value
+/// pairs applied inline, plus an optional Graphein spec patch (for charts) merged
+/// over the current spec. The controller applies each as a revertable change-set
+/// entry (see `applyRestyle` in `design_agent.js`).
+#[derive(serde::Serialize, Default, PartialEq, Debug)]
+pub struct RestylePatch {
+    pub styles: HashMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graphein: Option<Value>,
+    /// Descendant rules: each applies whitelisted CSS to elements matching
+    /// `selector` inside the selected element (so an edit can reach children).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<RestyleRule>,
+}
+
+/// A restyle rule targeting descendants of the selected element.
+#[derive(serde::Serialize, Default, PartialEq, Debug)]
+pub struct RestyleRule {
+    pub selector: String,
+    pub styles: HashMap<String, String>,
+}
+
 /// Build the constrained instruction. Deliberately narrow: one self-contained
 /// HTML snippet, inline CSS only, no JavaScript and no external resources — so
 /// any model can produce it and the result is safe to drop into the live page.
@@ -108,6 +206,237 @@ fn extract_html(text: &str) -> String {
     String::new()
 }
 
+/// Pull the last fenced code block (or widest `{…}` span) and parse it as JSON.
+/// Mirrors [`extract_html`] but for the restyle path's JSON object output.
+fn extract_json(text: &str) -> Option<Value> {
+    // Prefer the body of the last non-empty fenced block (strip a short language
+    // tag like ```json).
+    let parts: Vec<&str> = text.split("```").collect();
+    let mut blocks: Vec<String> = Vec::new();
+    let mut i = 1;
+    while i < parts.len() {
+        let mut block = parts[i];
+        if let Some(nl) = block.find('\n') {
+            let first = block[..nl].trim();
+            if !first.contains('{') && first.len() <= 12 {
+                block = &block[nl + 1..];
+            }
+        }
+        blocks.push(block.trim().to_string());
+        i += 2;
+    }
+    for block in blocks.into_iter().rev() {
+        if block.is_empty() {
+            continue;
+        }
+        if let Ok(v) = serde_json::from_str::<Value>(&block) {
+            return Some(v);
+        }
+    }
+    // No usable fenced block — fall back to the widest `{ … }` span.
+    if let (Some(start), Some(end)) = (text.find('{'), text.rfind('}')) {
+        if end > start {
+            if let Ok(v) = serde_json::from_str::<Value>(&text[start..=end]) {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+/// Collect whitelisted CSS property→value pairs from a JSON object, dropping any
+/// property not in [`ALLOWED_RESTYLE_PROPS`] and any value carrying an external
+/// resource / script vector (defense-in-depth; the controller also sanitizes).
+fn collect_styles(map: &serde_json::Map<String, Value>, out: &mut HashMap<String, String>) {
+    for (k, v) in map {
+        let key = k.trim().to_lowercase();
+        if !ALLOWED_RESTYLE_PROPS.contains(&key.as_str()) {
+            continue;
+        }
+        let val = match v {
+            Value::String(s) => s.trim().to_string(),
+            Value::Number(n) => n.to_string(),
+            _ => continue,
+        };
+        if val.is_empty() {
+            continue;
+        }
+        let low = val.to_lowercase();
+        if low.contains("url(")
+            || low.contains("expression(")
+            || low.contains("javascript:")
+            || low.contains("@import")
+        {
+            continue;
+        }
+        out.insert(key, val);
+    }
+}
+
+/// Turn the model's JSON into a [`RestylePatch`]. Accepts either a flat object of
+/// CSS props, a `{ "styles": {…} }` wrapper, and/or a `{ "graphein"/"spec": {…} }`
+/// chart patch. `allow_chart` gates the Graphein patch.
+fn to_patch(val: Value, allow_chart: bool) -> RestylePatch {
+    let mut patch = RestylePatch::default();
+    let Value::Object(map) = val else {
+        return patch;
+    };
+    if let Some(Value::Object(styles)) = map.get("styles") {
+        collect_styles(styles, &mut patch.styles);
+    }
+    if allow_chart {
+        let g = map
+            .get("graphein")
+            .or_else(|| map.get("spec"))
+            .cloned()
+            .unwrap_or_else(|| {
+                // A bare object with no wrapper keys is treated as the spec patch
+                // itself (minus a `styles` sibling / a forbidden `data` key).
+                let mut m = map.clone();
+                m.remove("styles");
+                m.remove("data");
+                Value::Object(m)
+            });
+        if let Value::Object(obj) = &g {
+            if !obj.is_empty() {
+                patch.graphein = Some(g);
+            }
+        }
+    } else if patch.styles.is_empty() && !map.contains_key("styles") {
+        // Flat object of CSS props (no wrapper).
+        collect_styles(&map, &mut patch.styles);
+    }
+    // Descendant rules (non-chart): [{ selector, styles }]. The selector is a
+    // plain CSS selector; reject anything that could break out of a selector.
+    if !allow_chart {
+        if let Some(Value::Array(arr)) = map.get("rules") {
+            for r in arr {
+                let Value::Object(ro) = r else { continue };
+                let sel = ro.get("selector").and_then(|v| v.as_str()).unwrap_or("").trim();
+                if sel.is_empty()
+                    || sel.len() > 100
+                    || sel.contains(['{', '}', '<', '@', '"'])
+                {
+                    continue;
+                }
+                let mut styles = HashMap::new();
+                if let Some(Value::Object(s)) = ro.get("styles") {
+                    collect_styles(s, &mut styles);
+                }
+                if !styles.is_empty() {
+                    patch.rules.push(RestyleRule { selector: sel.to_string(), styles });
+                }
+            }
+        }
+    }
+    patch
+}
+
+/// Build the restyle instruction. For charts we ask for a partial Graphein spec
+/// patch; otherwise a flat JSON object of whitelisted CSS props.
+fn build_restyle_prompt(description: &str, ctx: &RestyleContext) -> String {
+    let desc = description.trim();
+    let comp = ctx
+        .component
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(|s| format!(" (React component <{s}>)"))
+        .unwrap_or_default();
+
+    if ctx.is_chart {
+        let spec = ctx
+            .spec
+            .as_ref()
+            .and_then(|s| serde_json::to_string_pretty(s).ok())
+            .unwrap_or_else(|| "{}".to_string());
+        let kind = ctx
+            .chart_type
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .map(|s| format!("{s} "))
+            .unwrap_or_default();
+        format!(
+            "You are editing a Graphein {kind}chart{comp} in a live app. Current spec (data omitted):\n\
+```json\n{spec}\n```\n\n\
+Apply this change: \"{desc}\"\n\n\
+Return ONLY a single fenced ```json code block containing a JSON object with the \
+spec fields to change — a partial patch merged over the current spec. Include ONLY \
+changed keys and NEVER a `data` key. Example: {{\"type\":\"line\",\"title\":\"Revenue\"}}. \
+Return nothing else."
+        )
+    } else {
+        let mut el = format!("<{}", ctx.tag);
+        if let Some(c) = ctx.classes.as_deref().filter(|s| !s.trim().is_empty()) {
+            el.push_str(&format!(" class=\"{}\"", c.trim()));
+        }
+        el.push('>');
+        let text = ctx
+            .text
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| format!("\nIts visible text: \"{}\".", s.trim()))
+            .unwrap_or_default();
+        let mut styles = String::new();
+        let mut keys: Vec<&String> = ctx.styles.keys().collect();
+        keys.sort();
+        for k in keys {
+            styles.push_str(&format!("  {}: {};\n", k, ctx.styles[k]));
+        }
+        if styles.is_empty() {
+            styles.push_str("  (none provided)\n");
+        }
+        // Compact list of descendants the model may target via `rules`.
+        let mut kids = String::new();
+        if let Some(Value::Array(arr)) = &ctx.children {
+            for c in arr.iter().take(40) {
+                let Value::Object(o) = c else { continue };
+                let tag = o.get("tag").and_then(|v| v.as_str()).unwrap_or("");
+                if tag.is_empty() {
+                    continue;
+                }
+                let cls = o
+                    .get("classes")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.split_whitespace().next())
+                    .map(|s| format!(".{s}"))
+                    .unwrap_or_default();
+                let txt = o
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| format!(" \"{s}\""))
+                    .unwrap_or_default();
+                kids.push_str(&format!("  <{tag}{cls}>{txt}\n"));
+            }
+        }
+        let children_section = if kids.is_empty() {
+            String::new()
+        } else {
+            format!("Elements INSIDE it you can also target via `rules`:\n{kids}\n")
+        };
+        let allowed = ALLOWED_RESTYLE_PROPS.join(", ");
+        format!(
+            "You are restyling a component{comp} in a live web app.\n\
+Element: {el}{text}\n\
+Current (relevant) computed styles:\n{styles}\n\
+{children_section}\
+Apply this visual change: \"{desc}\"\n\n\
+Return ONLY a single fenced ```json code block with this exact shape:\n\
+{{ \"styles\": {{ /* CSS prop -> value for THIS element */ }}, \"rules\": [ {{ \"selector\": \"h1\", \"styles\": {{ /* CSS prop -> value */ }} }} ] }}\n\
+- `styles` restyles the selected element itself; `rules` restyle its DESCENDANTS — \
+each `selector` is a simple CSS selector relative to the element (e.g. \"h1\", \".btn\", \"p button\"). \
+Use `rules` whenever the change should reach children (e.g. \"make the headings bigger\").\n\
+- IMPORTANT: to change MANY inner elements (e.g. \"make all the numbers green\", \"recolor every \
+button\"), you MUST target them with `rules` — setting a property like `color` on the parent will \
+NOT affect descendants that define their own value. Match them by the classes/tags listed above.\n\
+- Allowed properties ONLY (for both `styles` and each rule's `styles`): {allowed}.\n\
+- Concrete CSS values only. NO url(), external resources, @import, or JavaScript.\n\
+- Include ONLY what you are changing; omit `rules` (or `styles`) if not needed.\n\
+Return nothing else."
+        )
+    }
+}
+
 /// Generate a self-contained HTML/CSS snippet for a placeholder from a natural
 /// description. Runs on a transient session (defaulting to a fast `model`);
 /// returns the extracted HTML (the renderer sanitizes before injecting). Returns
@@ -175,6 +504,77 @@ pub async fn design_generate_html(
     Ok(html)
 }
 
+/// Restyle an existing element from a natural-language instruction ("Edit with
+/// AI"). Runs on a transient session (defaulting to a fast `model`) and returns a
+/// structured [`RestylePatch`] — whitelisted inline CSS props (+ an optional
+/// Graphein spec patch for charts) — which the in-page controller applies as
+/// revertable change-set entries. Returns an error string surfaced as a soft
+/// failure.
+#[tauri::command]
+pub async fn design_restyle_element(
+    state: State<'_, AppState>,
+    project_id: String,
+    description: String,
+    context: RestyleContext,
+    model: Option<String>,
+) -> Result<RestylePatch, String> {
+    if description.trim().is_empty() {
+        return Err("Describe the change first.".into());
+    }
+    let Some(project) = store::find_project(&project_id) else {
+        return Err("Project not found.".into());
+    };
+
+    // Transient, uncached session (fast model) — never lands in chat history.
+    let session = state
+        .copilot
+        .transient_session(&project.path, model, None)
+        .await
+        .map_err(|_| "Couldn't reach the model.".to_string())?;
+
+    let mut st = GenState::default();
+    let mut sub = session.subscribe();
+    let prompt = build_restyle_prompt(&description, &context);
+    let sent = session.send(MessageOptions::new(prompt)).await.is_ok();
+
+    if sent {
+        let drain = async {
+            loop {
+                match sub.recv().await {
+                    Ok(ev) => {
+                        if map_event(&ev.event_type, &ev.data, &mut st) {
+                            break;
+                        }
+                    }
+                    Err(err) => match err.kind() {
+                        RecvErrorKind::Lagged(_) => {}
+                        _ => break,
+                    },
+                }
+            }
+        };
+        if tokio::time::timeout(Duration::from_millis(RUN_TIMEOUT_MS), drain)
+            .await
+            .is_err()
+        {
+            let _ = session.abort().await;
+        }
+    }
+    let _ = session.disconnect().await;
+
+    if !sent {
+        return Err("Couldn't send the request to the model.".into());
+    }
+    let Some(val) = extract_json(&st.assistant) else {
+        return Err("The model didn't return a usable change.".into());
+    };
+    let patch = to_patch(val, context.is_chart);
+    if patch.styles.is_empty() && patch.graphein.is_none() && patch.rules.is_empty() {
+        return Err("The model didn't suggest any applicable changes.".into());
+    }
+    Ok(patch)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +600,127 @@ mod tests {
     #[test]
     fn extract_html_empty_when_no_markup() {
         assert_eq!(extract_html("just prose, no tags"), "");
+    }
+
+    #[test]
+    fn extract_json_prefers_last_fenced_block() {
+        let text = "first:\n```json\n{\"color\":\"red\"}\n```\nbut actually:\n```json\n{\"color\":\"blue\"}\n```";
+        let v = extract_json(text).expect("json");
+        assert_eq!(v["color"], "blue");
+    }
+
+    #[test]
+    fn extract_json_falls_back_to_brace_span() {
+        let text = "no fences but {\"border-radius\":\"8px\"} here";
+        let v = extract_json(text).expect("json");
+        assert_eq!(v["border-radius"], "8px");
+    }
+
+    #[test]
+    fn extract_json_none_when_no_object() {
+        assert!(extract_json("just prose, no json").is_none());
+    }
+
+    #[test]
+    fn collect_styles_keeps_only_whitelisted_props() {
+        let map = serde_json::json!({
+            "color": "#fff",
+            "background-color": "#0f766e",
+            "position": "absolute",
+            "onclick": "evil()"
+        });
+        let mut out = HashMap::new();
+        collect_styles(map.as_object().unwrap(), &mut out);
+        assert_eq!(out.get("color").map(String::as_str), Some("#fff"));
+        assert_eq!(out.get("background-color").map(String::as_str), Some("#0f766e"));
+        assert!(!out.contains_key("position"));
+        assert!(!out.contains_key("onclick"));
+    }
+
+    #[test]
+    fn collect_styles_rejects_external_and_script_values() {
+        let map = serde_json::json!({
+            "background-image": "url(https://evil.example/x.png)",
+            "background": "expression(alert(1))",
+            "color": "javascript:alert(1)",
+            "border-radius": "9999px"
+        });
+        let mut out = HashMap::new();
+        collect_styles(map.as_object().unwrap(), &mut out);
+        assert!(!out.contains_key("background-image"));
+        assert!(!out.contains_key("background"));
+        assert!(!out.contains_key("color"));
+        assert_eq!(out.get("border-radius").map(String::as_str), Some("9999px"));
+    }
+
+    #[test]
+    fn to_patch_flat_styles_object() {
+        let v = serde_json::json!({ "color": "#fff", "font-size": "18px" });
+        let patch = to_patch(v, false);
+        assert_eq!(patch.styles.len(), 2);
+        assert!(patch.graphein.is_none());
+    }
+
+    #[test]
+    fn to_patch_styles_wrapper() {
+        let v = serde_json::json!({ "styles": { "opacity": "0.5" } });
+        let patch = to_patch(v, false);
+        assert_eq!(patch.styles.get("opacity").map(String::as_str), Some("0.5"));
+    }
+
+    #[test]
+    fn to_patch_chart_bare_object_is_spec_patch() {
+        let v = serde_json::json!({ "type": "line", "title": "Revenue" });
+        let patch = to_patch(v, true);
+        assert!(patch.styles.is_empty());
+        let g = patch.graphein.expect("graphein");
+        assert_eq!(g["type"], "line");
+        assert_eq!(g["title"], "Revenue");
+    }
+
+    #[test]
+    fn to_patch_chart_wrapper_and_strips_data() {
+        let v = serde_json::json!({ "graphein": { "palette": "bright" }, "data": [1, 2, 3] });
+        let patch = to_patch(v, true);
+        let g = patch.graphein.expect("graphein");
+        assert_eq!(g["palette"], "bright");
+    }
+
+    #[test]
+    fn to_patch_chart_bare_object_drops_data_key() {
+        let v = serde_json::json!({ "type": "bar", "data": [1, 2] });
+        let patch = to_patch(v, true);
+        let g = patch.graphein.expect("graphein");
+        assert_eq!(g["type"], "bar");
+        assert!(g.get("data").is_none());
+    }
+
+    #[test]
+    fn to_patch_parses_descendant_rules() {
+        let v = serde_json::json!({
+            "styles": { "border-radius": "16px" },
+            "rules": [
+                { "selector": "h1", "styles": { "font-size": "32px", "position": "absolute" } },
+                { "selector": ".btn", "styles": { "background-color": "#0f766e" } }
+            ]
+        });
+        let patch = to_patch(v, false);
+        assert_eq!(patch.styles.get("border-radius").map(String::as_str), Some("16px"));
+        assert_eq!(patch.rules.len(), 2);
+        assert_eq!(patch.rules[0].selector, "h1");
+        assert_eq!(patch.rules[0].styles.get("font-size").map(String::as_str), Some("32px"));
+        assert!(!patch.rules[0].styles.contains_key("position")); // whitelist applies to rules too
+    }
+
+    #[test]
+    fn to_patch_rejects_dangerous_rule_selectors() {
+        let v = serde_json::json!({
+            "rules": [
+                { "selector": "h1 { } body", "styles": { "color": "#fff" } },
+                { "selector": "p", "styles": {} }
+            ]
+        });
+        let patch = to_patch(v, false);
+        assert!(patch.rules.is_empty()); // bad selector dropped, empty-styles rule dropped
     }
 }
