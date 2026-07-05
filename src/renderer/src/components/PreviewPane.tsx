@@ -57,6 +57,24 @@ const FADE_MS = 260
  *  transition to the reveal), so a fast switch doesn't blink it in and out. */
 const MIN_LOADING_MS = 400
 
+/** The URL the singleton native preview surface was last revealed at. Tracked at
+ *  MODULE scope because the surface persists (parked, still rendering) across
+ *  PreviewPane unmounts — a Build→Code/Model/Advisor tab switch unmounts the pane
+ *  but keeps the OS webview alive. So a *fresh mount* can face a surface still
+ *  showing a different project. Used to decide the first-load path:
+ *    • `null`            → no surface yet (true first load)   → direct show.
+ *    • same as previewUrl → Build-tab re-entry, same project  → pure re-show.
+ *    • different url      → switched project while on another → run a load
+ *      transition (park + navigate + reveal-on-load) so the "Loading…" overlay
+ *      shows and the previous project's frame never flashes. */
+let surfaceShownUrl: string | null = null
+
+/** Test-only: clear the module-scoped surface tracking so each test starts as a
+ *  fresh app with no preview surface shown. */
+export function __resetPreviewSurfaceState(): void {
+  surfaceShownUrl = null
+}
+
 interface Props {
   project: StudioProject
   deploy: DeployUiState | undefined
@@ -338,9 +356,23 @@ export default function PreviewPane({
   // builds it via showUrl; `loadedUrlRef` stays null until then.
   useEffect(() => {
     if (!showWebview || !previewUrl) return
-    if (loadedUrlRef.current === null) return // first load builds via positioning effect
-    if (loadedUrlRef.current === previewUrl) return // already revealed
+    if (loadedUrlRef.current === previewUrl) return // already revealed (this mount)
     if (pendingUrlRef.current === previewUrl) return // already loading it
+    if (loadedUrlRef.current === null) {
+      // Fresh mount (a Build-tab re-entry, or a project switch made from another
+      // view that jumped back to Build). The native surface is a singleton that
+      // survives unmounts, so it may still be showing a *different* project — run
+      // a load transition so the "Loading…" overlay shows and that stale frame
+      // never flashes. A same-url re-entry (pure re-show) or a never-shown
+      // surface (true first load) falls through to the positioning effect's
+      // direct showUrl.
+      if (surfaceShownUrl !== null && surfaceShownUrl !== previewUrl) {
+        beginTransition(previewUrl)
+        const b = measureHost()
+        void window.api.preview.navigate(previewUrl, b ?? { x: 0, y: 0, width: 1, height: 1 })
+      }
+      return
+    }
     beginTransition(previewUrl)
     const b = measureHost()
     void window.api.preview.navigate(previewUrl, b ?? { x: 0, y: 0, width: 1, height: 1 })
@@ -433,11 +465,14 @@ export default function PreviewPane({
     }
 
     // Becoming visible again — record that this URL is the one now revealed (so a
-    // later re-show after an overlay is a pure show, never a reload). The frozen
-    // still frame is deliberately NOT dropped here: it stays as a backstop until
-    // the native surface has repainted on-screen (the deferred clear after
+    // later re-show after an overlay is a pure show, never a reload). Also record
+    // it at module scope so a later fresh mount (Build-tab re-entry / cross-view
+    // project switch) knows what the singleton surface is currently showing. The
+    // frozen still frame is deliberately NOT dropped here: it stays as a backstop
+    // until the native surface has repainted on-screen (the deferred clear after
     // showUrl below), so the HTML→native handoff never exposes a bare host.
     loadedUrlRef.current = previewUrl
+    surfaceShownUrl = previewUrl
 
     let raf = 0
     let clearFrozenTimer = 0
@@ -936,8 +971,12 @@ export default function PreviewPane({
               <button
                 className={`seg-btn ${designActive ? 'seg-btn--on' : ''}`}
                 onClick={toggleDesign}
-                disabled={!showWebview || transitioning || designBusy}
-                title="Design mode — click elements in the preview to tweak them (move, resize, color, text, chart specs), then send the changes to chat"
+                disabled={!showWebview || transitioning || designBusy || previewMode === 'fabric'}
+                title={
+                  previewMode === 'fabric'
+                    ? "Design mode isn't available in the Fabric portal view — switch to the direct app view to edit"
+                    : 'Design mode — click elements in the preview to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
+                }
               >
                 <DesignIcon />
                 <span className="seg-btn-label">
@@ -949,15 +988,17 @@ export default function PreviewPane({
                 </span>
               </button>
             )}
-            <button
-              className="seg-btn"
-              onClick={() => void startAnnotate()}
-              disabled={!showWebview || capturing || transitioning}
-              title="Take a screenshot of the preview, draw on it, and attach it to your message"
-            >
-              <AnnotateIcon />
-              <span className="seg-btn-label">{capturing ? 'Capturing…' : 'Annotate'}</span>
-            </button>
+            {!(designModeEnabled && previewMode !== 'fabric') && (
+              <button
+                className="seg-btn"
+                onClick={() => void startAnnotate()}
+                disabled={!showWebview || capturing || transitioning}
+                title="Take a screenshot of the preview, draw on it, and attach it to your message"
+              >
+                <AnnotateIcon />
+                <span className="seg-btn-label">{capturing ? 'Capturing…' : 'Annotate'}</span>
+              </button>
+            )}
             <button
               className={`seg-btn seg-btn--icon ${focused ? 'seg-btn--on' : ''}`}
               onClick={onToggleFocus}

@@ -586,10 +586,13 @@ export default function Workbench({
     if (viewMode === 'advisor') setAdvisorMounted(true)
   }, [viewMode])
 
-  // Re-gate per project: opening a *different* project unmounts Advisor until its
-  // tab is opened again (so the opt-in stale auto-run never fires for a project
-  // whose Advisor tab the user hasn't visited) and dismisses the launcher overlay.
+  // Re-gate per project: opening a *different* project resets to the Build view,
+  // unmounts Advisor until its tab is opened again (so the opt-in stale auto-run
+  // never fires for a project whose Advisor tab the user hasn't visited), and
+  // dismisses the launcher overlay. Keyed on active.id, so re-opening the project
+  // that's already active (no id change) preserves whatever view it was left on.
   useEffect(() => {
+    setViewMode('build')
     setAdvisorMounted(false)
     setShowHome(false)
   }, [active?.id])

@@ -2705,6 +2705,51 @@ code {
   padding-top: 4px;
 }
 
+.advisor-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 6px 0 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+}
+
+.advisor-model:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.advisor-model-ico {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+
+.advisor-model-select {
+  height: 30px;
+  max-width: 190px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 0;
+  outline: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Native popup options inherit the select's color scheme; set them explicitly so
+   the list stays readable in the dark theme (a transparent select background
+   makes Chromium fall back to a light popup). */
+.advisor-model-select option {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
 /* ---------------------------------- loading -------------------------------- */
 .advisor-loading {
   display: flex;

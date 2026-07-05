@@ -264,6 +264,7 @@ pub async fn advisor_run(
   app: AppHandle,
   state: State<'_, AppState>,
   project_id: String,
+  model: Option<String>,
 ) -> Result<AdvisorSnapshot, String> {
   let Some(project) = store::find_project(&project_id) else {
     return Err("Project not found.".into());
@@ -276,8 +277,8 @@ pub async fn advisor_run(
   let started = Instant::now();
 
   // A transient, uncached session keeps the review out of the project's chat
-  // history; the default model is used (matching the previous behaviour).
-  let session = match state.copilot.transient_session(&project.path, None, None).await {
+  // history; the chosen model is used (or the engine default when None).
+  let session = match state.copilot.transient_session(&project.path, model, None).await {
     Ok(s) => s,
     Err(e) => {
       state.end_advisor(&project_id);
@@ -500,6 +501,7 @@ pub async fn advisor_explain(
   project_id: String,
   explain_id: String,
   finding: AdvisorFinding,
+  model: Option<String>,
 ) -> Result<String, String> {
   let Some(project) = store::find_project(&project_id) else {
     return Err("Project not found.".into());
@@ -518,7 +520,7 @@ pub async fn advisor_explain(
     );
   };
 
-  let session = match state.copilot.transient_session(&project.path, None, None).await {
+  let session = match state.copilot.transient_session(&project.path, model, None).await {
     Ok(s) => s,
     Err(e) => {
       state.end_explain(&project_id, &token);

@@ -135,11 +135,11 @@ export const api: RayfinStudioApi = {
   },
 
   advisor: {
-    run: (projectId: string) => invoke('advisor_run', { projectId }),
+    run: (projectId: string, model?: string) => invoke('advisor_run', { projectId, model }),
     cancel: (projectId: string) => invoke('advisor_cancel', { projectId }),
     load: (projectId: string) => invoke('advisor_load', { projectId }),
-    explain: (projectId: string, explainId: string, finding: AdvisorFinding) =>
-      invoke('advisor_explain', { projectId, explainId, finding }),
+    explain: (projectId: string, explainId: string, finding: AdvisorFinding, model?: string) =>
+      invoke('advisor_explain', { projectId, explainId, finding, model }),
     explainCancel: (projectId: string) => invoke('advisor_explain_cancel', { projectId }),
     onEvent: (cb: (envelope: AdvisorEventEnvelope) => void) =>
       subscribe<AdvisorEventEnvelope>(IpcChannels.advisorEvent, cb)

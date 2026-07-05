@@ -15,7 +15,12 @@ import {
   StopIcon
 } from './icons'
 import Markdown from './Markdown'
+import { useCopilotModels } from '../copilotModels'
 import type { AdvisorFinding, AdvisorSnapshot, StudioProject } from '@shared/ipc'
+
+/** localStorage key persisting the Advisor's Copilot model choice across sessions. */
+const ADVISOR_MODEL_KEY = 'rayfin.advisor.aiModel'
+
 
 /** A monochrome line-icon component (auth/shield, data/database, …). */
 type IconCmp = (props: { className?: string }) => JSX.Element
@@ -213,6 +218,26 @@ export default function AdvisorView({
   const [error, setError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
 
+  // The Copilot model the review (and inline explanations) run on. `null` = the
+  // engine default ("Auto"). Persisted across sessions so the choice sticks.
+  const [model, setModel] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(ADVISOR_MODEL_KEY)
+    } catch {
+      return null
+    }
+  })
+  const { models } = useCopilotModels(true)
+  const setModelChoice = useCallback((next: string | null) => {
+    setModel(next)
+    try {
+      if (next) localStorage.setItem(ADVISOR_MODEL_KEY, next)
+      else localStorage.removeItem(ADVISOR_MODEL_KEY)
+    } catch {
+      /* storage unavailable — keep the in-memory choice */
+    }
+  }, [])
+
   // Inline "Explain this finding" state, keyed by finding key.
   const [explains, setExplains] = useState<Record<string, ExplainState>>({})
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set())
@@ -314,7 +339,7 @@ export default function AdvisorView({
     setRunning(true)
     resetExplains()
     try {
-      const snap = await window.api.advisor.run(project.id)
+      const snap = await window.api.advisor.run(project.id, model ?? undefined)
       if (!mountedRef.current || cancelledRef.current) return
       if (snap.report.ok) {
         setSnapshot(snap)
@@ -328,7 +353,7 @@ export default function AdvisorView({
     } finally {
       if (mountedRef.current) setRunning(false)
     }
-  }, [project.id, resetExplains])
+  }, [project.id, resetExplains, model])
 
   const cancel = useCallback(() => {
     cancelledRef.current = true
@@ -345,7 +370,7 @@ export default function AdvisorView({
       setExplainingKey(key)
       setExplains((prev) => ({ ...prev, [key]: { status: 'loading', text: '' } }))
       window.api.advisor
-        .explain(project.id, key, finding)
+        .explain(project.id, key, finding, model ?? undefined)
         .then((full) => {
           if (!mountedRef.current) return
           setExplains((prev) => ({ ...prev, [key]: { status: 'done', text: full } }))
@@ -370,7 +395,7 @@ export default function AdvisorView({
           }
         })
     },
-    [project.id]
+    [project.id, model]
   )
 
   const toggleExplain = useCallback(
@@ -420,6 +445,30 @@ export default function AdvisorView({
             </div>
           </div>
           <div className="advisor-actions">
+            {!running && (
+              <label
+                className="advisor-model"
+                title="Choose the Copilot model used for the review"
+              >
+                <SparkleIcon className="advisor-model-ico" />
+                <select
+                  className="advisor-model-select"
+                  value={model ?? ''}
+                  onChange={(e) => setModelChoice(e.target.value || null)}
+                  aria-label="Advisor model"
+                >
+                  <option value="">Auto</option>
+                  {model && !models.some((m) => m.id === model) && (
+                    <option value={model}>{model}</option>
+                  )}
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {running ? (
               <button className="btn btn--sm btn--ghost" onClick={cancel}>
                 <StopIcon className="btn-ico" /> Cancel

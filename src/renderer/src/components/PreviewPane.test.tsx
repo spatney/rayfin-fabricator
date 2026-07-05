@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { act, cleanup, render } from '@testing-library/react'
 import type { StudioProject } from '@shared/ipc'
 import { OverlayProvider, SuppressPreview } from '../overlay'
-import PreviewPane, { type DeployUiState } from './PreviewPane'
+import PreviewPane, { type DeployUiState, __resetPreviewSurfaceState } from './PreviewPane'
 import { installPreviewEnv, makeProject, type PreviewEnv } from '../../test/harness'
 
 /**
@@ -52,6 +52,9 @@ async function settle(e: PreviewEnv): Promise<void> {
 let e: PreviewEnv
 
 beforeEach(() => {
+  // The surface-shown-url tracker is module-scoped (the native surface outlives a
+  // PreviewPane mount); reset it so each test starts as a fresh app.
+  __resetPreviewSurfaceState()
   e = installPreviewEnv()
 })
 
@@ -211,6 +214,43 @@ describe('PreviewPane visibility', () => {
     expect(reveal).not.toBeNull()
     expect(reveal!.index).toBeGreaterThanOrEqual(mark)
     expect(reveal!.url).toBe('https://p1.example.app/')
+    expect(reveal!.bounds.width).toBeGreaterThan(0)
+  })
+
+  it('runs a load transition (not a bare reveal) when Build is re-entered on a different project', async () => {
+    // Show p1, then leave Build — unmounting parks the singleton surface, which
+    // keeps rendering p1 off-screen.
+    const first = render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+    first.unmount()
+
+    // Re-enter Build on a DIFFERENT project (a project switch made from another
+    // view that jumps back to Build). The surface still shows p1, so p2 must NOT
+    // be revealed immediately — it should navigate + park (the "Loading…" overlay
+    // shows) and reveal only once p2 has loaded, so the stale p1 frame never
+    // flashes.
+    const mark = e.calls.length
+    render(<Harnessed project={makeProject('p2')} suppressed={false} />)
+    await settle(e)
+
+    const during = e.methodsAfter(mark)
+    expect(during).toContain('navigate')
+    expect(during).toContain('suppress')
+    expect(during, 'must not reveal p2 before it has loaded').not.toContain('showUrl')
+
+    // p2 finishes loading → now it reveals at host bounds.
+    await act(async () => {
+      e.emitNav({ url: 'https://p2.example.app/', loading: true })
+    })
+    await act(async () => {
+      e.emitNav({ url: 'https://p2.example.app/', loading: false })
+    })
+    await settle(e)
+
+    const reveal = lastShowUrl(e)
+    expect(reveal, 'p2 was never revealed after the Build re-entry').not.toBeNull()
+    expect(reveal!.index).toBeGreaterThanOrEqual(mark)
+    expect(reveal!.url).toBe('https://p2.example.app/')
     expect(reveal!.bounds.width).toBeGreaterThan(0)
   })
 

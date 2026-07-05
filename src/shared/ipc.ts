@@ -1312,7 +1312,7 @@ export interface RayfinStudioApi {
      * review never lands in the project's Build chat history. A successful review
      * is persisted and can be reloaded with {@link load}.
      */
-    run: (projectId: string) => Promise<AdvisorSnapshot>
+    run: (projectId: string, model?: string) => Promise<AdvisorSnapshot>
     /** Cancel the in-flight review for a project. Resolves true if one was running. */
     cancel: (projectId: string) => Promise<boolean>
     /**
@@ -1329,7 +1329,8 @@ export interface RayfinStudioApi {
     explain: (
       projectId: string,
       explainId: string,
-      finding: AdvisorFinding
+      finding: AdvisorFinding,
+      model?: string
     ) => Promise<string>
     /** Cancel the in-flight inline explanation for a project. Resolves true if one was running. */
     explainCancel: (projectId: string) => Promise<boolean>

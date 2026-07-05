@@ -37,6 +37,11 @@
   var BORDER = '#26303b';
   var TXT = '#e6e8eb';
   var TXT_DIM = '#98a2b0';
+  // Translucent panel fill (a little of the app shows through, softened by a
+  // blur) for the floating chrome — toolbar, inspector, legend, comment popover.
+  // Inner form fields keep the opaque PANEL_BG2 so inputs stay legible.
+  var PANEL_GLASS = 'rgba(15,20,25,.84)';
+  var GLASS_FX = 'backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%)';
 
   // ---- state ---------------------------------------------------------------
   var state = {
@@ -280,28 +285,30 @@
     '.pins{position:fixed;inset:0;z-index:2147483643;pointer-events:none}',
     '.pin{position:fixed;transform:translate(-50%,-100%);z-index:2147483643;pointer-events:auto;cursor:pointer;width:22px;height:22px;line-height:20px;text-align:center;background:' + AMBER + ';color:#241a04;font-size:11px;font-weight:800;border:2px solid #fff;border-radius:50% 50% 50% 2px;box-shadow:0 2px 6px rgba(0,0,0,.5)}',
     // toolbar (top-center)
-    '.tb{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483646;display:flex;flex-wrap:wrap;justify-content:center;max-width:94vw;align-items:center;gap:6px;padding:6px;background:' + PANEL_BG + ';border:1px solid ' + BORDER + ';border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto;cursor:move}',
+    '.tb{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483646;display:flex;flex-wrap:wrap;justify-content:center;max-width:94vw;align-items:center;gap:4px;padding:4px;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:11px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto;cursor:move}',
     '.seg{display:flex;background:' + PANEL_BG2 + ';border-radius:8px;padding:2px;gap:2px}',
-    '.seg button{display:flex;align-items:center;gap:6px;color:' + TXT_DIM + ';font-size:12px;font-weight:500;padding:6px 10px;border-radius:6px}',
+    '.seg button{display:flex;align-items:center;gap:6px;color:' + TXT_DIM + ';font-size:12px;font-weight:500;padding:6px 8px;border-radius:6px}',
     '.seg button:hover{color:' + TXT + '}',
     '.seg button.on{background:' + TEAL + ';color:#04211f}',
-    '.tb .swatches{display:flex;gap:4px;align-items:center;padding-left:4px;border-left:1px solid ' + BORDER + '}',
-    '.tb .sw{width:18px;height:18px;border-radius:5px;border:2px solid transparent}',
-    '.tb .sw.on{border-color:#fff}',
+    '.tb .swatches{display:flex;gap:4px;align-items:center;padding-left:6px;border-left:1px solid ' + BORDER + '}',
+    '.tb .sw-picker{width:26px;height:26px;padding:0;border:1px solid ' + BORDER + ';border-radius:7px;background:none;cursor:pointer}',
+    '.tb .sw-picker:hover{border-color:' + TXT_DIM + '}',
+    '.tb .sw-picker::-webkit-color-swatch-wrapper{padding:2px}',
+    '.tb .sw-picker::-webkit-color-swatch{border:none;border-radius:5px}',
     '.tb .shape{color:' + TXT_DIM + ';padding:5px 7px;border-radius:6px;font-size:12px}',
     '.tb .shape.on{background:' + PANEL_BG2 + ';color:' + TXT + '}',
     // inspector (right dock)
-    '.insp{position:fixed;right:12px;top:64px;max-height:calc(100vh - 76px);width:270px;z-index:2147483645;display:flex;flex-direction:column;background:' + PANEL_BG + ';border:1px solid ' + BORDER + ';border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.55);pointer-events:auto;color:' + TXT + ';overflow:hidden}',
-    '.insp-head{padding:10px 12px;border-bottom:1px solid ' + BORDER + ';cursor:move}',
+    '.insp{position:fixed;right:12px;top:58px;max-height:calc(100vh - 70px);width:248px;z-index:2147483645;display:flex;flex-direction:column;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:11px;box-shadow:0 10px 40px rgba(0,0,0,.55);pointer-events:auto;color:' + TXT + ';overflow:hidden}',
+    '.insp-head{padding:9px 11px;border-bottom:1px solid ' + BORDER + ';cursor:move}',
     '.crumb{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:11px;color:' + TXT_DIM + '}',
     '.crumb button{color:' + TXT_DIM + ';padding:1px 4px;border-radius:4px}',
     '.crumb button:hover{background:' + PANEL_BG2 + ';color:' + TXT + '}',
     '.crumb .cur{color:' + TEAL + ';font-weight:600}',
     '.insp-sz{font-size:11px;color:' + TXT_DIM + ';margin-top:4px}',
-    '.insp-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:6px 12px 12px}',
-    '.grp{margin-top:14px}',
+    '.insp-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:5px 11px 11px}',
+    '.grp{margin-top:11px}',
     '.grp>h5{margin:0 0 6px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:' + TXT_DIM + ';font-weight:700}',
-    '.row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0;min-width:0}',
+    '.row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:5px 0;min-width:0}',
     '.row label{font-size:12px;color:#c7ccd3;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.row .ctl{display:flex;align-items:center;gap:6px;flex:none}',
     '.insp input[type=text],.insp input[type=number],.insp select,.insp textarea{background:' + PANEL_BG2 + ';color:' + TXT + ';border:1px solid ' + BORDER + ';border-radius:6px;padding:5px 7px;font-size:12px;width:124px;max-width:58%}',
@@ -312,7 +319,7 @@
     '.insp .mini{color:' + TXT_DIM + ';font-size:11px;font-weight:600;padding:4px 8px;border-radius:6px;background:' + PANEL_BG2 + '}',
     '.insp .mini:hover{color:' + TXT + '}',
     '.insp .mini.danger:hover{background:#5b1a1a;color:#fff}',
-    '.insp-actions{display:flex;gap:6px;padding:8px 12px;border-top:1px solid ' + BORDER + '}',
+    '.insp-actions{display:flex;gap:6px;padding:7px 11px;border-top:1px solid ' + BORDER + '}',
     // AI generate card
     '.ai-card{margin:2px 0 4px;padding:11px 12px 12px;border:1px solid ' + TEAL + '3d;border-radius:11px;background:linear-gradient(155deg,' + TEAL + '1f,rgba(20,184,186,0) 72%)}',
     '.ai-card h5{margin:0 0 8px;color:' + TEAL_HI + ';font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}',
@@ -328,20 +335,21 @@
     '.ai-note{margin-top:9px;font-size:10px;color:' + TXT_DIM + ';line-height:1.45}',
     // toolbar actions (count / undo / discard / send)
     '.tb-sep{width:1px;align-self:stretch;background:' + BORDER + ';margin:0 2px}',
-    '.tb-count{font-size:11px;color:' + TXT_DIM + ';padding:0 4px;white-space:nowrap}',
+    '.tb-count{font-size:11px;font-weight:700;color:#04211f;background:' + TEAL + ';border-radius:999px;padding:1px 7px;min-width:8px;text-align:center;white-space:nowrap}',
     '.tb-act{font-size:12px;color:' + TXT_DIM + ';padding:6px 9px;border-radius:7px}',
     '.tb-act:hover{color:#fff;background:' + PANEL_BG2 + '}',
+    '.tb-ico{display:flex;align-items:center;padding:6px 7px}',
     '.tb-send{font-size:12px;font-weight:600;background:' + TEAL + ';color:#04211f;padding:6px 12px;border-radius:7px}',
     '.tb-send:hover{background:' + TEAL_HI + '}',
     // hint / legend
     '.hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147483647;background:' + TEAL + ';color:#04211f;font-weight:600;font-size:12px;padding:6px 14px;border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none}',
-    '.legend{position:fixed;left:12px;bottom:14px;z-index:2147483646;width:220px;padding:12px;background:' + PANEL_BG + ';border:1px solid ' + BORDER + ';border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto;color:' + TXT + ';font-size:12px}',
+    '.legend{position:fixed;left:12px;bottom:14px;z-index:2147483646;width:220px;padding:12px;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto;color:' + TXT + ';font-size:12px}',
     '.legend h5{margin:0 0 8px;font-size:12px;color:' + TEAL + '}',
     '.legend div{color:' + TXT_DIM + ';margin:3px 0}',
     '.legend kbd{background:' + PANEL_BG2 + ';border:1px solid ' + BORDER + ';border-radius:4px;padding:0 4px;color:' + TXT + '}',
     '.legend .close{position:absolute;top:8px;right:10px;color:' + TXT_DIM + '}',
     // comment editor
-    '.cmt{position:fixed;z-index:2147483647;width:220px;padding:8px;background:' + PANEL_BG + ';border:1px solid ' + BORDER + ';border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto}',
+    '.cmt{position:fixed;z-index:2147483647;width:220px;padding:8px;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto}',
     '.cmt textarea{width:100%;min-height:56px;background:' + PANEL_BG2 + ';color:' + TXT + ';border:1px solid ' + BORDER + ';border-radius:6px;padding:6px;font-size:12px;resize:vertical}',
     '.cmt .r{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}',
     '.cmt button{font-size:12px;padding:5px 10px;border-radius:6px;color:' + TXT_DIM + '}',
@@ -392,7 +400,9 @@
       cursor: '<path d="M4 3l15 8-6 1.5L10 20 4 3z"/>',
       comment: '<path d="M4 5h16v10H9l-4 4v-4H4z"/>',
       frame: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 9v6M9 12h6"/>',
-      pen: '<path d="M14 4l6 6L9 21l-6 1 1-6z"/>'
+      pen: '<path d="M14 4l6 6L9 21l-6 1 1-6z"/>',
+      undo: '<path d="M4 9h11a5 5 0 0 1 0 10h-4"/><path d="M4 9l4-4M4 9l4 4"/>',
+      trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>'
     }[name] || '';
     return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
   }
@@ -461,7 +471,7 @@
     elToolbar.textContent = '';
     var tools = h('div', { class: 'seg' });
     [['select', 'cursor', 'Select', 'V'], ['comment', 'comment', 'Comment', 'C'], ['insert', 'frame', 'Insert', 'I'], ['draw', 'pen', 'Draw', 'D']].forEach(function (t) {
-      var b = h('button', { class: state.tool === t[0] ? 'on' : '', html: icon(t[1]) + '<span>' + t[2] + '</span>', title: t[2] + ' (' + t[3] + ')' });
+      var b = h('button', { class: state.tool === t[0] ? 'on' : '', html: icon(t[1]), title: t[2] + ' (' + t[3] + ')', 'aria-label': t[2] });
       b.onclick = function (e) { e.stopPropagation(); setTool(t[0]); };
       tools.appendChild(b);
     });
@@ -475,21 +485,22 @@
         shapes.appendChild(b);
       });
       elToolbar.appendChild(shapes);
+      // A single colour well — click it to open the OS colour wheel/picker.
       var sw = h('div', { class: 'swatches' });
-      [AMBER, '#ef4444', TEAL, '#3b82f6', '#111827', '#ffffff'].forEach(function (c) {
-        var b = h('button', { class: 'sw' + (state.drawColor === c ? ' on' : ''), style: 'background:' + c, title: 'Colour' });
-        b.onclick = function (e) { e.stopPropagation(); state.drawColor = c; buildToolbar(); };
-        sw.appendChild(b);
-      });
+      var picker = h('input', { type: 'color', class: 'sw-picker', title: 'Stroke colour', 'aria-label': 'Stroke colour' });
+      picker.value = state.drawColor;
+      picker.oninput = function (e) { state.drawColor = e.target.value; };
+      picker.onclick = function (e) { e.stopPropagation(); };
+      sw.appendChild(picker);
       elToolbar.appendChild(sw);
     }
 
     elToolbar.appendChild(h('div', { class: 'tb-sep' }));
     elCount = h('span', { class: 'tb-count' });
     elToolbar.appendChild(elCount);
-    btnUndo = h('button', { class: 'tb-act', text: 'Undo', title: 'Undo (Ctrl/Cmd+Z)' });
+    btnUndo = h('button', { class: 'tb-act tb-ico', html: icon('undo'), title: 'Undo (Ctrl/Cmd+Z)', 'aria-label': 'Undo' });
     btnUndo.onclick = function (e) { e.stopPropagation(); undoLast(); };
-    btnDiscard = h('button', { class: 'tb-act', text: 'Discard' });
+    btnDiscard = h('button', { class: 'tb-act tb-ico', html: icon('trash'), title: 'Discard all changes', 'aria-label': 'Discard' });
     btnDiscard.onclick = function (e) { e.stopPropagation(); discardAll(); };
     btnSend = h('button', { class: 'tb-send', text: 'Send to chat' });
     btnSend.onclick = function (e) { e.stopPropagation(); beginHandoff(); };
@@ -539,7 +550,11 @@
   // ---- toolbar action state (count + enabled) ------------------------------
   function renderBar() {
     var count = state.changes.length;
-    if (elCount) elCount.textContent = count + (count === 1 ? ' change' : ' changes');
+    if (elCount) {
+      elCount.textContent = String(count);
+      elCount.title = count + (count === 1 ? ' change' : ' changes');
+      elCount.style.display = count > 0 ? '' : 'none';
+    }
     [btnUndo, btnDiscard, btnSend].forEach(function (b) {
       if (!b) return;
       var off = count === 0;
