@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Rayfin Fabricator",
-  "version": "0.63.2",
+  "version": "0.63.3",
   "identifier": "com.rayfin.fabricator",
   "build": {
     "frontendDist": "../dist",
