@@ -46,20 +46,12 @@ Review for these categories of issues:
 2) category "policy" — database policies too permissive:
    - Entities granting broad CRUD on user-scoped data WITHOUT a row-level `policy: (claims, item) => claims.sub.eq(item.user_id)` (or equivalent), so any signed-in user can read or modify other users' rows.
    - `@authenticated` or `@role` grants that are broader than the data warrants.
-   - Sensitive fields exposed to clients that should be hidden via `exclude: [...]`.
 
 3) category "version" — stale Rayfin CLI or SDK:
    - Look at the project's `package.json` (and `package-lock.json`) for its Rayfin dependencies: the Rayfin CLI plus the SDK/runtime packages — e.g. `@microsoft/rayfin-cli`, `@microsoft/rayfin-sdk`, and any other `@microsoft/rayfin*` package the project depends on.
    - For each, determine the version the project currently uses, then look up the latest published version (run a read-only command such as `npm view <package> version`; you may also use `npx rayfin --version` for the CLI). Do NOT install, update, or modify anything.
    - Flag a finding when the project is meaningfully behind the latest release. Severity: "high" if a MAJOR version behind (risks missing security or breaking fixes), "medium" if a minor version behind, "low" if only patch versions behind. State the current and latest versions in the detail and recommend the upgrade (e.g. `npm install <package>@latest`, or `npm create @microsoft/rayfin@latest` to refresh the project scaffold).
    - If you cannot determine the latest published version (for example there is no network access), do NOT raise anything for this category.
-
-4) category "data-modeling" — Rayfin data-model best practices (read `rayfin/data/schema.ts` and the entity files under `rayfin/data/` it imports):
-   - Foreign-key / lookup fields (typically `*_id` columns the app filters or joins on) that have no index, which will slow queries as data grows. Recommend an index.
-   - Fields missing sensible constraints or validation (e.g. `@text` with no `min`/`max` where bounded input is expected, or a field left optional/nullable that the app always requires).
-   - Sensitive or internal fields returned to clients that should be hidden from reads via `exclude: [...]` (e.g. tokens, internal flags, another user's identifiers).
-   - Duplicated/denormalized data across entities that can drift out of sync, where a relation would be safer.
-   Severity: "high" for sensitive data exposure; "medium" for missing indexes/constraints that will bite at scale; "low" for minor cleanups.
 
 5) category "performance" — runtime / query performance:
    - List queries that fetch entire tables with no pagination or limit (will degrade as data grows), or obvious N+1 query patterns in the frontend data access.
