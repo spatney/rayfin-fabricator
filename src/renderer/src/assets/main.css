@@ -5735,19 +5735,35 @@ code {
   pointer-events: none;
 }
 
-/* Centered loading spinner shown over the dark host while a fresh page loads
-   (a redeploy, a deployment / project switch, or the Fabric toggle), so the
-   previous app never flashes before the new one paints. The native webview is
-   hidden during this window, so the spinner shows through. */
-.preview-spinner {
+/* Project-load overlay, rendered at the Workbench level so it centers over the
+   whole build view (chat + preview) — a project switch reloads both. Shown while a
+   fresh page loads (project switch / redeploy / Fabric toggle); the native webview
+   renders the new page OFF-SCREEN meanwhile, then this overlay fades out (opacity
+   → 0) as the live webview is revealed. Distinctly named (not `.preview-*`) to
+   avoid clashing with the toolbar's `.preview-loading` text. */
+.project-loading {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 14px;
+  background: var(--bg);
+  opacity: 1;
+  transition: opacity 260ms ease;
   pointer-events: none;
+  z-index: 5;
 }
-.preview-spinner-ring {
+.project-loading--out {
+  opacity: 0;
+}
+.project-loading-label {
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: var(--text-dim);
+}
+.project-loading-spinner {
   width: 28px;
   height: 28px;
   border: 3px solid var(--border);

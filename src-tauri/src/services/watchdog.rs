@@ -68,6 +68,7 @@ pub enum Activity {
   PreviewReload = 4,
   PreviewHide = 5,
   PreviewHistory = 6,
+  PreviewSuppress = 7,
 }
 
 impl Activity {
@@ -80,6 +81,7 @@ impl Activity {
       Activity::PreviewReload => "preview reload",
       Activity::PreviewHide => "preview hide",
       Activity::PreviewHistory => "preview back/forward",
+      Activity::PreviewSuppress => "preview suppress (park off-screen)",
     }
   }
 
@@ -91,6 +93,7 @@ impl Activity {
       4 => Activity::PreviewReload,
       5 => Activity::PreviewHide,
       6 => Activity::PreviewHistory,
+      7 => Activity::PreviewSuppress,
       _ => Activity::Idle,
     }
   }

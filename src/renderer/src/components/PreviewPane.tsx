@@ -42,6 +42,21 @@ export interface PendingShot {
 /** localStorage key persisting the design-mode AI model choice across sessions. */
 const DESIGN_MODEL_KEY = 'rayfin.design.aiModel'
 
+/** How long the frozen still-frame lingers as a backstop after the native preview
+ *  is revealed again (an overlay closed). The live surface is opaque and paints
+ *  above the HTML, so an identical still underneath is invisible — this only has
+ *  to outlast the surface's on-screen reposition/present so the HTML→native
+ *  handoff never flashes a bare host. */
+const FROZEN_CLEAR_MS = 150
+
+/** Duration of the project-load overlay's fade-out. MUST match the CSS opacity
+ *  transition on `.project-loading`. */
+const FADE_MS = 260
+
+/** Minimum time the "Loading <project>…" overlay stays up (from the start of a
+ *  transition to the reveal), so a fast switch doesn't blink it in and out. */
+const MIN_LOADING_MS = 400
+
 interface Props {
   project: StudioProject
   deploy: DeployUiState | undefined
@@ -60,6 +75,11 @@ interface Props {
   /** Hand a composed design-mode instruction (+ optional highlighted screenshot)
    *  to the chat composer for review. Fired when the user hits "Send to chat". */
   onDesignHandoff?: (instruction: string, shot?: PendingShot) => void
+  /** Report the project-load overlay state so the parent can render a centered
+   *  "Loading <name>…" over the whole build view (a project switch reloads the
+   *  chat + preview, so the indicator belongs at the content level, not the
+   *  preview pane). `null` when not loading. */
+  onLoadingChange?: (state: { name: string; fading: boolean } | null) => void
 }
 
 function statusLabel(running: boolean, status: string | undefined): string {
@@ -126,7 +146,8 @@ export default function PreviewPane({
   onToggleFocus,
   onPreviewModeChanged,
   designModeEnabled,
-  onDesignHandoff
+  onDesignHandoff,
+  onLoadingChange
 }: Props): JSX.Element {
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
@@ -157,6 +178,11 @@ export default function PreviewPane({
   // While an HTML overlay suppresses the native preview, `frozen` holds a PNG of
   // the last visible frame so the placeholder shows that still image, not black.
   const [frozen, setFrozen] = useState<string | null>(null)
+  // While a load transition is in flight, `loaderVisible` keeps the (Workbench-
+  // level, centered) loading overlay mounted; `loaderOut` fades it out over the
+  // reveal. Reported to the parent via `onLoadingChange`.
+  const [loaderVisible, setLoaderVisible] = useState(false)
+  const [loaderOut, setLoaderOut] = useState(false)
 
   // While a fresh page load is in flight (a redeploy, a deployment / project
   // switch, or the Fabric toggle) we hide the native webview and show a spinner,
@@ -173,7 +199,18 @@ export default function PreviewPane({
   const pendingUrlRef = useRef<string | null>(null)
   const loadedUrlRef = useRef<string | null>(null)
   const sawLoadingRef = useRef(false)
+  // The last real (on-screen) bounds the surface was shown at. On unmount (a tab
+  // switch to Code/Model/Advisor, or teardown) we park it off-screen at this size
+  // — keeping it rendering — so returning to Build is a flash-free pure move
+  // rather than a hide→show repaint. `null` until first shown (hard-hide then).
+  const lastBoundsRef = useRef<PreviewBounds | null>(null)
   const watchdogRef = useRef<number | null>(null)
+  // Bumped whenever a new transition starts; a running reveal/dissolve sequence
+  // checks it after each await and bails if a newer transition superseded it.
+  const revealTokenRef = useRef(0)
+  // Timestamp (ms) the current transition started, so the reveal can enforce a
+  // minimum "Loading…" beat (see MIN_LOADING_MS) and not blink the overlay away.
+  const transitionStartRef = useRef(0)
 
   const clearWatchdog = useCallback((): void => {
     if (watchdogRef.current !== null) {
@@ -182,25 +219,54 @@ export default function PreviewPane({
     }
   }, [])
 
-  // Reveal the webview again: record the loaded URL and drop the transition.
+  // Reveal sequence for a finished load. The new page rendered OFF-SCREEN (parked)
+  // while the loading overlay was up; a project switch / redeploy needs no
+  // screenshot of the old page — we keep the loading overlay up for a minimum beat,
+  // then reveal the live webview (now painted) and fade the overlay out over it.
+  // `revealTokenRef` aborts the sequence if a newer transition supersedes it.
+  const revealSeq = useCallback(async (): Promise<void> => {
+    const token = revealTokenRef.current
+    // Keep the "Loading <project>…" overlay up for a minimum beat so a fast switch
+    // doesn't blink it in and out — a deliberate loading moment reads smoother.
+    const elapsed = performance.now() - transitionStartRef.current
+    if (elapsed < MIN_LOADING_MS) {
+      await new Promise<void>((r) => window.setTimeout(r, MIN_LOADING_MS - elapsed))
+      if (token !== revealTokenRef.current) return
+    }
+    // Reveal the live webview (positioning effect) and fade the loading overlay out
+    // over it; the overlay stays mounted through the fade to cover the handoff.
+    transitioningRef.current = false
+    setTransitioning(false)
+    setLoaderOut(true)
+    await new Promise<void>((r) => window.setTimeout(r, FADE_MS))
+    if (token !== revealTokenRef.current) return
+    setLoaderVisible(false)
+    setLoaderOut(false)
+  }, [])
+
+  // A finished load reveals the webview via the sequence above. Records the loaded
+  // URL and clears the pending/loading bookkeeping first.
   const endTransition = useCallback((): void => {
     if (pendingUrlRef.current) loadedUrlRef.current = pendingUrlRef.current
     pendingUrlRef.current = null
     sawLoadingRef.current = false
     clearWatchdog()
-    transitioningRef.current = false
-    setTransitioning(false)
-  }, [clearWatchdog])
+    void revealSeq()
+  }, [clearWatchdog, revealSeq])
 
   // Begin hiding the preview for a fresh load of `url`; the caller then triggers
   // the actual load (reload() for a redeploy, navigate() for a switch). A watchdog
   // reveals anyway if the load never reports completion, so we never stay blank.
   const beginTransition = useCallback(
     (url: string): void => {
+      revealTokenRef.current += 1 // cancel any in-flight reveal/dissolve sequence
+      transitionStartRef.current = performance.now()
       pendingUrlRef.current = url
       sawLoadingRef.current = false
       transitioningRef.current = true
       setTransitioning(true)
+      setLoaderVisible(true)
+      setLoaderOut(false)
       clearWatchdog()
       watchdogRef.current = window.setTimeout(() => {
         watchdogRef.current = null
@@ -289,41 +355,92 @@ export default function PreviewPane({
       showWebview && !suppressed && !transitioningRef.current && Boolean(deployedUrl)
     const host = hostRef.current
     if (!visible || !host || !deployedUrl || !previewUrl) {
-      // An HTML overlay (a dropdown/menu/modal) covering a live preview suppresses
-      // the native webview, which would otherwise paint over it. Rather than blank
-      // the pane to black, freeze the last visible frame to a PNG and paint it into
-      // the placeholder so the overlay appears to float over a still preview.
-      if (suppressed && showWebview && deployedUrl) {
+      // An HTML overlay covering a live preview suppresses the native webview,
+      // which paints above ALL HTML and would otherwise cover the overlay. Two
+      // cases, handled differently (only while the preview is otherwise STABLE —
+      // during a load `transitioningRef` we skip this and use the transition park
+      // further below, so we never capture/park mid-navigation):
+      //
+      //   • FULL-SCREEN overlay (the launcher hides the whole pane → host is 0×0):
+      //     park OFF-SCREEN immediately. No screenshot — the host isn't visible —
+      //     and instant park stops the webview covering the launcher for a beat.
+      //   • PARTIAL overlay (dropdown/menu/modal over the visible preview): SNAPSHOT
+      //     the live frame FIRST and paint it as a backstop, THEN park — so the
+      //     overlay floats over a still preview and the pane never flashes bare.
+      if (suppressed && showWebview && deployedUrl && !transitioningRef.current) {
+        const hostBounds = measureHost()
+        if (!hostBounds) {
+          void window.api.preview.suppress(
+            lastBoundsRef.current ?? { x: 0, y: 0, width: 1, height: 1 }
+          )
+          return
+        }
         let cancelled = false
+        let rafId = 0
         void (async () => {
+          let frame: string | null = null
           try {
-            const frame = await window.api.preview.capture()
-            if (!cancelled) setFrozen(frame)
+            frame = await window.api.preview.capture()
           } catch {
             // Capture can fail (e.g. no surface yet) — fall back to a blank pane.
-          } finally {
-            // Skip the hide if the overlay closed mid-capture: the visible branch
-            // has already re-shown the webview and cleared the frozen frame, and a
-            // late hide() here would wrongly blank the now-visible preview.
-            if (!cancelled) void window.api.preview.hide()
           }
+          if (cancelled) return
+          if (frame) {
+            // Pre-decode so painting the <img> is instant (no half-drawn still).
+            try {
+              const probe = new Image()
+              probe.src = frame
+              if (probe.decode) await probe.decode()
+            } catch {
+              /* decode unsupported/failed — the raw set still works */
+            }
+            if (cancelled) return
+            setFrozen(frame)
+          }
+          // Park only AFTER the still has painted (double rAF ⇒ past a paint) so the
+          // overlay floats over the still, never a bare host. Skip if the overlay
+          // closed mid-capture (the visible branch already re-showed the webview).
+          rafId = requestAnimationFrame(() => {
+            if (cancelled) return
+            rafId = requestAnimationFrame(() => {
+              if (cancelled) return
+              void window.api.preview.suppress(measureHost() ?? hostBounds)
+            })
+          })
         })()
         return () => {
           cancelled = true
+          if (rafId !== 0) cancelAnimationFrame(rafId)
         }
       }
       setFrozen(null)
-      void window.api.preview.hide()
+      if (transitioningRef.current && deployedUrl) {
+        // A fresh page is loading (project switch / redeploy / Fabric toggle): park
+        // the surface OFF-SCREEN but keep it RENDERING (at host size) so it paints
+        // the new page before we reveal it. A hard-hidden (IsVisible=false) webview
+        // stops rendering and, when re-shown, flashes its stale last frame — the
+        // OLD project — for a beat. The host shows the spinner meanwhile; the reveal
+        // (showUrl) is then a pure move onto the freshly-painted page.
+        const b = measureHost() ?? lastBoundsRef.current
+        if (b) void window.api.preview.suppress(b)
+        else void window.api.preview.hide()
+      } else {
+        // Not loading — a covering modal (handled above), a collapsed (0×0) pane, or
+        // an undeployed project: a plain hide is correct.
+        void window.api.preview.hide()
+      }
       return
     }
 
-    // Becoming visible again — drop any frozen frame so the live webview shows
-    // through, and record that this URL is the one now revealed (so a later
-    // re-show after an overlay is a pure show, never a reload).
-    setFrozen(null)
+    // Becoming visible again — record that this URL is the one now revealed (so a
+    // later re-show after an overlay is a pure show, never a reload). The frozen
+    // still frame is deliberately NOT dropped here: it stays as a backstop until
+    // the native surface has repainted on-screen (the deferred clear after
+    // showUrl below), so the HTML→native handoff never exposes a bare host.
     loadedUrlRef.current = previewUrl
 
     let raf = 0
+    let clearFrozenTimer = 0
     // `shownKey` is the bounds key the webview is currently shown at; '' means
     // the webview is hidden. The webview is a separate OS surface, so after it
     // has been hidden (e.g. the pane collapsed to 0×0 when chat is focused) it
@@ -359,6 +476,7 @@ export default function PreviewPane({
         return false
       }
       const key = keyOf(b)
+      lastBoundsRef.current = b
       if (shownKey === '') {
         // Was hidden → show + position (showUrl re-shows the surface).
         shownKey = key
@@ -420,25 +538,68 @@ export default function PreviewPane({
     const initial = measure()
     if (initial) {
       shownKey = keyOf(initial)
+      lastBoundsRef.current = initial
       void window.api.preview.showUrl(previewUrl, initial)
     }
     startTracking()
+
+    // The native surface has been repositioned on-screen; clear the frozen
+    // backstop after a short delay. The surface is opaque and paints above the
+    // HTML, so an identical still lingering underneath is invisible — clearing it
+    // too early (before the surface presents) is what would flash the bare host.
+    // setFrozen(null) is a no-op when there was no backstop.
+    clearFrozenTimer = window.setTimeout(() => setFrozen(null), FROZEN_CLEAR_MS)
 
     return () => {
       window.removeEventListener('resize', onResize)
       ro.disconnect()
       io.disconnect()
       if (raf !== 0) cancelAnimationFrame(raf)
+      if (clearFrozenTimer !== 0) window.clearTimeout(clearFrozenTimer)
     }
-  }, [deployedUrl, previewUrl, showWebview, suppressed, transitioning])
+  }, [deployedUrl, previewUrl, showWebview, suppressed, transitioning, measureHost])
 
   // The positioning effect hides the webview whenever a dependency change makes it
-  // not-visible (and its rAF loop hides it when the host collapses to 0×0); this
-  // hides it once more when the pane itself unmounts.
-  useEffect(() => () => void window.api.preview.hide(), [])
+  // not-visible (and its rAF loop hides it when the host collapses to 0×0). On the
+  // pane's own unmount (a tab switch to Code/Model/Advisor, or teardown) park the
+  // surface off-screen at its last bounds but keep it rendering, so returning to
+  // Build is a flash-free pure move; hard-hide only if it was never shown.
+  useEffect(
+    () => () => {
+      const b = lastBoundsRef.current
+      if (b) void window.api.preview.suppress(b)
+      else void window.api.preview.hide()
+    },
+    []
+  )
 
   // Cancel a pending reveal watchdog on unmount.
   useEffect(() => clearWatchdog, [clearWatchdog])
+
+  // Report the loading-overlay state up so the parent renders a centered
+  // "Loading <name>…" over the whole build view (see Props.onLoadingChange).
+  useEffect(() => {
+    onLoadingChange?.(loaderVisible ? { name: project.name, fading: loaderOut } : null)
+  }, [loaderVisible, loaderOut, project.name, onLoadingChange])
+
+  // Ensure the parent clears the overlay if the pane unmounts mid-load.
+  useEffect(() => () => onLoadingChange?.(null), [onLoadingChange])
+
+  // Warm the WebView2 CapturePreview pipeline once, shortly after the preview is
+  // first shown. Its cold first use is slow and pumps the UI thread, which is what
+  // made the FIRST overlay (dropdown/modal) laggy — the live surface sat over the
+  // overlay until that slow capture finished. Warming off the critical path (and
+  // never mid-load) makes the first real overlay screenshot fast.
+  const warmedRef = useRef(false)
+  useEffect(() => {
+    if (warmedRef.current || !showWebview) return
+    const t = window.setTimeout(() => {
+      if (transitioningRef.current || suppressed) return // don't capture mid-load / while parked
+      warmedRef.current = true
+      void window.api.preview.capture().catch(() => {})
+    }, 600)
+    return () => window.clearTimeout(t)
+  }, [showWebview, suppressed])
 
   const reload = useCallback((): void => {
     void window.api.preview.reload()
@@ -833,14 +994,11 @@ export default function PreviewPane({
             <div className="preview-stage">
               {/* Placeholder the native WebView2 child is positioned over. When an
                   overlay suppresses the native child, `frozen` paints the last frame
-                  here so the overlay floats over a still preview instead of black. */}
+                  here so the overlay floats over a still preview instead of black.
+                  The project-load overlay is rendered at the Workbench level (so it
+                  centers over the whole build view), not here. */}
               <div className="preview-webview-host" ref={hostRef}>
                 {frozen && <img className="preview-frozen" src={frozen} alt="" draggable={false} />}
-                {transitioning && (
-                  <div className="preview-spinner" role="status" aria-label="Loading preview">
-                    <span className="preview-spinner-ring" />
-                  </div>
-                )}
               </div>
             </div>
           </div>

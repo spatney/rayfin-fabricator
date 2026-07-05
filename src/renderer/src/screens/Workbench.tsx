@@ -143,6 +143,11 @@ export default function Workbench({
   const [codeOpen, setCodeOpen] = useState<{ path: string; nonce: number } | null>(null)
   /** Build-view focus: expand a single pane to fill the area (null = split). */
   const [focusPane, setFocusPane] = useState<'chat' | 'preview' | null>(null)
+  /** Project-load overlay state, reported by PreviewPane, rendered centered over
+   *  the whole build view (a project switch reloads chat + preview). */
+  const [previewLoading, setPreviewLoading] = useState<{ name: string; fading: boolean } | null>(
+    null
+  )
   /** Chat's share of the build split (0..1); the rest goes to the preview. */
   const [chatFrac, setChatFrac] = useState<number>(() => {
     const v = parseFloat(localStorage.getItem('rayfin.splitFrac') ?? '')
@@ -928,6 +933,7 @@ export default function Workbench({
                           stage: true
                         })
                       }}
+                      onLoadingChange={setPreviewLoading}
                     />
                   </section>
                   {resizing && (
@@ -937,6 +943,18 @@ export default function Workbench({
                       onMouseUp={endResize}
                       onMouseLeave={endResize}
                     />
+                  )}
+                  {previewLoading && (
+                    <div
+                      className={`project-loading${previewLoading.fading ? ' project-loading--out' : ''}`}
+                      role="status"
+                      aria-label="Loading project"
+                    >
+                      <span className="project-loading-spinner" />
+                      <span className="project-loading-label">
+                        Loading {previewLoading.name}…
+                      </span>
+                    </div>
                   )}
                 </div>
               ) : null}

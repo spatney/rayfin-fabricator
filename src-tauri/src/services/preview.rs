@@ -452,9 +452,15 @@ pub fn preview_set_bounds(app: AppHandle, bounds: PreviewBounds) -> AppResult<()
 ///
 /// On Windows `Webview::hide()` on a child WebView2 is unreliable — the surface
 /// can keep compositing above the page even after a successful `hide()`, which
-/// would let the preview occlude another tab's HTML (e.g. the Design canvas). So
-/// we ALSO park it far off-screen; that guarantees it can't cover anything even
-/// if the OS ignores `hide()`. The next `preview_show_url` resets real bounds.
+/// would let the preview occlude another tab's HTML (e.g. the Code / Model /
+/// Advisor tab). So we ALSO park it far off-screen; that guarantees it can't
+/// cover anything even if the OS ignores `hide()`. The next `preview_show_url`
+/// resets real bounds.
+///
+/// Used for a *durable* hide — a tab switch, the pane collapsing to 0×0, or the
+/// pane unmounting. A transient HTML overlay (dropdown / menu / modal) instead
+/// uses [`preview_suppress`], which keeps the surface rendering so the reveal is
+/// flash-free.
 #[tauri::command]
 pub fn preview_hide(app: AppHandle) -> AppResult<()> {
   let _guard = watchdog::activity(Activity::PreviewHide);
@@ -463,6 +469,54 @@ pub fn preview_hide(app: AppHandle) -> AppResult<()> {
     let _ = wv.set_bounds(offscreen_bounds().to_rect());
     wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
     app.state::<PreviewState>().inner.lock().unwrap().visible = false;
+  }
+  Ok(())
+}
+
+/// Suppress the preview for a *transient* HTML overlay (dropdown / menu / modal)
+/// covering the build view, **without** stopping the surface from rendering.
+///
+/// Unlike [`preview_hide`], this does not toggle WebView2 visibility off. On
+/// Windows it parks the surface far off-screen — **at the same size as its host**
+/// — while keeping it shown, so it keeps compositing live content (the same trick
+/// the silent agent capture uses; see [`offscreen_bounds`]). Keeping the size
+/// unchanged means the reveal (a [`preview_show_url`] `set_bounds` back to the
+/// host rect) is a pure *move*, not a resize: WebView2 doesn't relayout/repaint,
+/// so the composited frame reappears instantly with no blank repaint-on-show
+/// flash. Parked far outside any monitor it also can't occlude the overlay; if
+/// the off-screen move fails we fall back to a hard `hide()` so it can never
+/// cover the overlay. Elsewhere (macOS) there is no off-screen park, so this is a
+/// plain hide.
+#[tauri::command]
+pub fn preview_suppress(app: AppHandle, bounds: PreviewBounds) -> AppResult<()> {
+  let _guard = watchdog::activity(Activity::PreviewSuppress);
+  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    #[cfg(windows)]
+    {
+      // Park it off-screen at the host's CURRENT size, keeping it shown. Same
+      // size ⇒ the reveal is a pure move (no viewport resize, no repaint), so the
+      // live frame reappears instantly. If parking fails, fall back to a hard
+      // hide so it can't occlude the overlay.
+      let parked = PreviewBounds {
+        x: OFFSCREEN_COORD,
+        y: OFFSCREEN_COORD,
+        width: bounds.width.max(1.0),
+        height: bounds.height.max(1.0),
+      };
+      if wv.set_bounds(parked.to_rect()).is_ok() {
+        wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
+        app.state::<PreviewState>().inner.lock().unwrap().visible = true;
+      } else {
+        wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
+        app.state::<PreviewState>().inner.lock().unwrap().visible = false;
+      }
+    }
+    #[cfg(not(windows))]
+    {
+      let _ = bounds;
+      wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
+      app.state::<PreviewState>().inner.lock().unwrap().visible = false;
+    }
   }
   Ok(())
 }

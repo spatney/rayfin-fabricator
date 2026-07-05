@@ -1465,6 +1465,11 @@ export interface RayfinStudioApi {
     setBounds: (bounds: PreviewBounds) => Promise<void>
     /** Hide the preview (call whenever the host is covered or unmounted). */
     hide: () => Promise<void>
+    /** Suppress the preview for a transient HTML overlay (dropdown / menu /
+     *  modal) without stopping it rendering, so the reveal on close is
+     *  flash-free. Parks it off-screen at `bounds`' size so the reveal is a pure
+     *  move. Use {@link hide} for durable hides (tab switch / unmount). */
+    suppress: (bounds: PreviewBounds) => Promise<void>
     /** Reload the current page. */
     reload: () => Promise<void>
     /** Navigate back one entry in the preview's history. */

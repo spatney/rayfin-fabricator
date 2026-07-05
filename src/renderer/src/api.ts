@@ -200,6 +200,7 @@ export const api: RayfinStudioApi = {
     navigate: (url: string, bounds: PreviewBounds) => invoke('preview_navigate', { url, bounds }),
     setBounds: (bounds: PreviewBounds) => invoke('preview_set_bounds', { bounds }),
     hide: () => invoke('preview_hide'),
+    suppress: (bounds: PreviewBounds) => invoke('preview_suppress', { bounds }),
     reload: () => invoke('preview_reload'),
     back: () => invoke('preview_back'),
     forward: () => invoke('preview_forward'),
