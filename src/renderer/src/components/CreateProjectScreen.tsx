@@ -356,6 +356,9 @@ export default function CreateProjectScreen({
                   value={name}
                   autoFocus
                   placeholder="My Rayfin App"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   disabled={busy}
                   onChange={(e) => setName(e.target.value)}
                 />
