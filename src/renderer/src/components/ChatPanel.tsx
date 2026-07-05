@@ -121,6 +121,12 @@ interface Props {
   modeSelectorEnabled?: boolean
   /** Open a file referenced by an @-mention chip (path without the leading @). */
   onOpenMention?: (ref: string) => void
+  /** The current composer draft. Persisted by the parent (keyed by project) so a
+   * typed-but-unsent prompt survives this panel unmounting — e.g. switching to the
+   * Code tab and back to Build tears down ChatPanel (issue #9). */
+  draft?: string
+  /** Called whenever the composer draft changes so the parent can persist it. */
+  onDraftChange?: (value: string) => void
 }
 
 /** Reasoning efforts shown when the engine's per-model list is unavailable
@@ -1436,9 +1442,25 @@ export default function ChatPanel({
   deploying = false,
   onRequestDeploy,
   modeSelectorEnabled = false,
-  onOpenMention
+  onOpenMention,
+  draft,
+  onDraftChange
 }: Props): JSX.Element {
-  const [input, setInput] = useState('')
+  // The composer draft is seeded from — and mirrored back to — the parent so a
+  // typed-but-unsent prompt survives this panel unmounting. Switching to the Code
+  // tab and back to Build tears down ChatPanel, and local state alone would be
+  // lost (issue #9). The parent keys the draft by project, so each project keeps
+  // its own pending prompt.
+  const onDraftChangeRef = useRef(onDraftChange)
+  onDraftChangeRef.current = onDraftChange
+  const [input, setInputState] = useState(draft ?? '')
+  const setInput = useCallback((next: string | ((prev: string) => string)): void => {
+    setInputState((prev) => {
+      const value = typeof next === 'function' ? next(prev) : next
+      onDraftChangeRef.current?.(value)
+      return value
+    })
+  }, [])
   const [sending, setSending] = useState(false)
   // Recover the in-flight state when the panel remounts mid-turn — switching
   // workbench tabs/projects or a dev hot-reload tears down this component while
