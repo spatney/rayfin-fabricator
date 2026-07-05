@@ -42,6 +42,7 @@ Review for these categories of issues:
    - Rayfin data entities (in `rayfin/data/schema.ts` and any files it imports) that are MISSING an explicit permission decorator. An entity without one silently defaults to `authenticated: *` (full CRUD for ANY signed-in user). Flag each such entity.
    - Entities decorated `@anonymous` (reachable without signing in) — especially when writable or holding non-public data.
    - Frontend pages/routes (in `src/`, e.g. React Router routes or pages reached from `App.tsx` / `src/pages`) that render protected content WITHOUT an auth guard (no check for a signed-in session before rendering).
+   - If app is entirely public, flag that too (no auth guard anywhere).
 
 2) category "policy" — database policies too permissive:
    - Entities granting broad CRUD on user-scoped data WITHOUT a row-level `policy: (claims, item) => claims.sub.eq(item.user_id)` (or equivalent), so any signed-in user can read or modify other users' rows.

@@ -1030,23 +1030,6 @@ export default function Workbench({
               onSynced={() => setGitRefresh((n) => n + 1)}
             />
             <span className="statusbar-sep">·</span>
-          </>
-        )}
-        <span className="statusbar-item">Fabricator v{versions?.app ?? '—'}</span>
-        <span className="statusbar-sep">·</span>
-        <span
-          className="statusbar-item"
-          title={
-            auth.copilot.signedIn
-              ? `Copilot CLI signed in${auth.copilot.user ? ` as ${auth.copilot.user}` : ''}`
-              : 'Copilot CLI not signed in'
-          }
-        >
-          Copilot {versions?.copilot ?? (auth.copilot.signedIn ? '✓' : '—')}
-        </span>
-        {active && (
-          <>
-            <span className="statusbar-sep">·</span>
             <RayfinVersionControl info={rayfinVer} onUpdate={requestRayfinUpdate} />
           </>
         )}
@@ -1057,6 +1040,10 @@ export default function Workbench({
           </>
         )}
         <span className="statusbar-spacer" />
+        <span className="statusbar-item" title="Rayfin Fabricator version">
+          v{versions?.app ?? '—'}
+        </span>
+        <span className="statusbar-sep">·</span>
         <button
           className="statusbar-report"
           onClick={reportIssue}
