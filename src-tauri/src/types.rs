@@ -437,12 +437,6 @@ pub struct ExperimentFlags {
   /// runs in the standard Agent mode. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub chat_mode_selector: Option<bool>,
-  /// Preview design mode: enable the in-preview click-to-edit "design mode" —
-  /// select live elements and edit them (move / resize / recolor / text, plus a
-  /// structured Graphein chart-spec editor), then hand the collected changes to
-  /// the chat composer as a structured instruction. Opt-in (off by default).
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub preview_design_mode: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

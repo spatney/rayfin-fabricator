@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { StudioProject } from '@shared/ipc'
 import { OverlayProvider, SuppressPreview } from '../overlay'
 import PreviewPane, { type DeployUiState, __resetPreviewSurfaceState } from './PreviewPane'
@@ -27,7 +27,6 @@ function Harnessed({
       <PreviewPane
         project={project}
         deploy={deploy}
-        onCapture={() => {}}
         focused={false}
         onToggleFocus={() => {}}
       />
@@ -299,6 +298,57 @@ describe('PreviewPane visibility', () => {
     expect(reveal).not.toBeNull()
     expect(reveal!.index).toBeGreaterThanOrEqual(mark)
     expect(reveal!.url).toBe('https://p1.example.app/')
+  })
+})
+
+/** A Fabric-view project fixture: a direct app URL plus the portal deep link. */
+function fabricProject(id = 'p1'): StudioProject {
+  return makeProject(id, {
+    previewMode: 'fabric',
+    lastDeploy: {
+      url: `https://${id}.example.app/`,
+      status: 'success',
+      portalUrl: `https://app.fabric.microsoft.com/groups/ws/appbackends/${id}`
+    }
+  })
+}
+
+describe('PreviewPane design mode', () => {
+  // Regression: design mode used to be hard-disabled in the Fabric portal view
+  // (the app runs in a cross-origin iframe the top-frame editor couldn't reach).
+  // It must now be enabled and drive the app iframe through the top-frame relay.
+  it('enables the Design button in the Fabric-embedded view and drives the relay', async () => {
+    render(<Harnessed project={fabricProject('p1')} suppressed={false} />)
+    await settle(e)
+
+    const designBtn = screen.getByRole('button', { name: /design/i }) as HTMLButtonElement
+    expect(designBtn.disabled).toBe(false)
+
+    fireEvent.click(designBtn)
+
+    // Toggling on passes embedded=true + the direct app URL so the host can find
+    // and drive the cross-origin app iframe from the top-frame relay.
+    const call = e.calls.find((c) => c.method === 'design.setEnabled')
+    expect(call, 'design.setEnabled was not called').toBeTruthy()
+    expect(call!.args).toEqual([true, true, 'https://p1.example.app/'])
+  })
+
+  it('drives the direct view with embedded=false', async () => {
+    render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+
+    const designBtn = screen.getByRole('button', { name: /design/i }) as HTMLButtonElement
+    expect(designBtn.disabled).toBe(false)
+    fireEvent.click(designBtn)
+
+    const call = e.calls.find((c) => c.method === 'design.setEnabled')
+    expect(call!.args).toEqual([true, false, 'https://p1.example.app/'])
+  })
+
+  it('no longer renders an Annotate button (design mode replaced it)', async () => {
+    render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+    expect(screen.queryByRole('button', { name: /annotate/i })).toBeNull()
   })
 })
 

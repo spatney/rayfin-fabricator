@@ -926,13 +926,11 @@ export default function Workbench({
                     <PreviewPane
                       project={active}
                       deploy={deploys[active.id]}
-                      onCapture={(shot) => addShot(active.id, shot)}
                       focused={focusPane === 'preview'}
                       onToggleFocus={() =>
                         setFocusPane((f) => (f === 'preview' ? null : 'preview'))
                       }
                       onPreviewModeChanged={() => void refreshProjects()}
-                      designModeEnabled={Boolean(settings?.experiments?.previewDesignMode)}
                       onDesignHandoff={(instruction, shot) => {
                         if (shot) addShot(active.id, shot)
                         // Make the composer visible (design mode may have focused

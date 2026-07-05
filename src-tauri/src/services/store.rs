@@ -37,7 +37,6 @@ fn default_settings() -> AppSettings {
     experiments: Some(ExperimentFlags {
       compatibility_rendering: Some(false),
       chat_mode_selector: Some(false),
-      preview_design_mode: Some(false),
     }),
   }
 }
@@ -134,16 +133,12 @@ pub fn set_settings(
       let current = c.settings.experiments.get_or_insert(ExperimentFlags {
         compatibility_rendering: Some(false),
         chat_mode_selector: Some(false),
-        preview_design_mode: Some(false),
       });
       if let Some(v) = patch.compatibility_rendering {
         current.compatibility_rendering = Some(v);
       }
       if let Some(v) = patch.chat_mode_selector {
         current.chat_mode_selector = Some(v);
-      }
-      if let Some(v) = patch.preview_design_mode {
-        current.preview_design_mode = Some(v);
       }
     }
     persist(c);

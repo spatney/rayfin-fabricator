@@ -1,9 +1,10 @@
 /*
- * Rayfin preview "design mode" controller (v2).
+ * Rayfin preview "design mode" controller (v3).
  *
- * Injected into the preview webview (the user's deployed app) on demand — see
- * `preview.rs` (`DESIGN_AGENT_JS`, evaluated by `preview_design_set`). A
- * Figma-like, click-to-edit layer over the LIVE app:
+ * Injected at document-start into EVERY frame of the preview webview (see
+ * `preview.rs` `DESIGN_AGENT_JS` / `initialization_script_for_all_frames`). Stays
+ * dormant until `preview_design_set` calls `enable(...)`. A Figma-like,
+ * click-to-edit layer over the LIVE app:
  *   - Select tool: pick any element and edit it in a docked inspector (size,
  *     spacing, typography, appearance, text) with always-on move/resize handles
  *     and arrow-key nudge; a structured Graphein spec editor for charts.
@@ -14,6 +15,15 @@
  * numbered instruction + a fenced JSON change-set and marks the elements so the
  * host can capture a screenshot whose numbered badges match the list.
  *
+ * Frames / roles: the host (Rust) can only `eval` in the TOP frame. In the direct
+ * view the top frame IS the app, so it runs the full controller locally
+ * (role `direct`). In the Fabric-embedded view the app runs in a CROSS-ORIGIN
+ * iframe inside the Fabric portal; the top (Fabric shell) frame then runs as a
+ * `relay` and the app iframe runs the full controller as role `app`. The relay
+ * bridges the host API (`enable/disable/peek/drain/drainAi/applyGenerated/
+ * setModels`) to the app frame over `postMessage`, discovered via a namespaced
+ * hello/enable handshake and origin-gated to the deployed app's origin.
+ *
  * Design constraints:
  *   - The native webview paints above all HTML, so ALL UI lives INSIDE this page,
  *     in a Shadow DOM attached to <html> (isolated from the app's CSS; survives
@@ -23,7 +33,7 @@
  */
 (function () {
   var NS = '__rayfinDesign';
-  var VERSION = 2;
+  var VERSION = 3;
   if (window[NS] && window[NS].__v === VERSION) return;
 
   var HOST_ID = '__rayfin_design_host';
@@ -101,7 +111,7 @@
       if (c != null) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
     }
   }
-  function bump() { state.version++; }
+  function bump() { state.version++; if (frameRole === 'app') postStatus(); }
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
   function isOurs(node) { return !!(node && (node === host || (node.closest && node.closest('#' + HOST_ID)))); }
 
@@ -1493,50 +1503,263 @@
     return '#' + x(m[1]) + x(m[2]) + x(m[3]);
   }
 
+  // ---- local (in-frame) controller API -------------------------------------
+  // These operate on THIS frame's live controller. In the direct view and inside
+  // the app iframe they are the real implementation; the relay (top frame of the
+  // embedded view) serves cached copies and forwards mutations to the app iframe.
+  function localPeek() {
+    return {
+      enabled: state.enabled,
+      version: state.version,
+      changeCount: state.changes.length,
+      handoffReady: !!state.handoff,
+      aiPending: !!state.aiRequest,
+      hasModels: !!(state.models && state.models.length),
+      aiModel: state.aiModel || null
+    };
+  }
+  function localDrain() {
+    var hf = state.handoff; if (!hf) return null;
+    state.handoff = null;
+    var out = { instruction: hf.instruction, changeCount: hf.changeCount };
+    // Clean up: clear change-set (entries hold the undo closures), markup, and
+    // markers; restore chrome (host typically disables next).
+    state.changes = []; clearMarkers(); clearPins(); clearDrawings();
+    if (elToolbar) { elToolbar.style.display = 'flex'; renderBar(); }
+    bump();
+    return out;
+  }
+  function localDrainAi() {
+    var r = state.aiRequest; if (!r) return null;
+    state.aiRequest = null; bump();
+    return { id: r.id, description: r.description, width: r.width, height: r.height, model: r.model };
+  }
+  function localSetModels(list, preferred) {
+    try {
+      state.models = Array.isArray(list) ? list : null;
+      var ids = (state.models || []).map(function (m) { return m.id; });
+      // Preselect: keep the current pick if still offered; otherwise the
+      // caller's preferred (persisted) model; otherwise the first fast / first.
+      if (!state.aiModel || ids.indexOf(state.aiModel) < 0) {
+        if (preferred && ids.indexOf(preferred) >= 0) {
+          state.aiModel = preferred;
+        } else if (state.models && state.models.length) {
+          var fast = state.models.filter(function (m) { return m.fast; })[0];
+          state.aiModel = (fast || state.models[0]).id;
+        }
+      }
+      if (state.selected && isPlaceholder(state.selected)) renderInspector();
+    } catch (e) {}
+  }
+
+  // ---- frame roles + cross-frame relay -------------------------------------
+  // The host only evals in the TOP frame. When the app is embedded in a
+  // cross-origin iframe (Fabric portal), the top frame runs as a `relay` that
+  // bridges the host API to the app frame over postMessage; the app frame runs
+  // the real controller as role `app`. In the direct view the top frame IS the
+  // app (role `direct`) and everything is local.
+  var MSG = 'rayfin-design';
+  var frameRole = 'idle'; // 'idle' | 'direct' | 'relay' | 'app'
+  var isTop = true;
+  try { isTop = (window.top === window.self); } catch (e) { isTop = true; }
+
+  // Relay side (top frame, embedded view): the app frame's window + expected
+  // origin, whether design is active, buffered pre-enable hellos, the mirrored
+  // status cache, and the last models pushed by the host.
+  var relayActive = false, relayAppWin = null, relayAppOrigin = null;
+  var pendingHellos = [];
+  var cache = { status: null, handoff: null, aiRequest: null };
+  var relayModels = null, relayPreferred = null;
+  var pingTimer = 0, pingCount = 0;
+
+  // App side (the embedded iframe): the top frame's origin, the upward-sync
+  // timer, and whether the relay has acknowledged us (stops the hello retries).
+  var topOrigin = '*', syncTimer = 0, helloAcked = false;
+
+  function postToApp(msg) {
+    try { if (relayAppWin && relayAppOrigin) relayAppWin.postMessage(msg, relayAppOrigin); } catch (e) {}
+  }
+  function sendEnableToApp() {
+    postToApp({ ns: MSG, cmd: 'enable', models: relayModels, preferred: relayPreferred });
+  }
+  function adoptPendingHellos() {
+    for (var i = 0; i < pendingHellos.length; i++) {
+      if (pendingHellos[i].origin === relayAppOrigin) relayAppWin = pendingHellos[i].source;
+    }
+    pendingHellos = [];
+  }
+  // The relay can't reliably enumerate deeply-nested cross-origin frames, so it
+  // also pings its direct children (origin-gated) to prompt a hello — covers the
+  // case where design mode is toggled long after the page settled.
+  function stopPing() { if (pingTimer) { clearTimeout(pingTimer); pingTimer = 0; } }
+  function pingChildrenForApp() {
+    stopPing(); pingCount = 0;
+    (function tick() {
+      if (!relayActive || relayAppWin) { stopPing(); return; }
+      try {
+        var frames = window.frames;
+        for (var i = 0; i < frames.length; i++) {
+          try { frames[i].postMessage({ ns: MSG, cmd: 'ping' }, relayAppOrigin || '*'); } catch (e) {}
+        }
+      } catch (e) {}
+      if (++pingCount >= 10) { stopPing(); return; }
+      pingTimer = setTimeout(tick, 500);
+    })();
+  }
+  function relayPeek() {
+    if (cache.status) return cache.status;
+    return {
+      enabled: relayActive, version: 0, changeCount: 0, handoffReady: false,
+      aiPending: false, hasModels: !!(relayModels && relayModels.length),
+      aiModel: relayPreferred || null
+    };
+  }
+  function relayDrain() {
+    var hf = cache.handoff; if (!hf) return null;
+    cache.handoff = null;
+    postToApp({ ns: MSG, cmd: 'drainCommit' });
+    return { instruction: hf.instruction, changeCount: hf.changeCount };
+  }
+  function relayDrainAi() {
+    var r = cache.aiRequest; if (!r) return null;
+    cache.aiRequest = null;
+    postToApp({ ns: MSG, cmd: 'drainAiCommit' });
+    return { id: r.id, description: r.description, width: r.width, height: r.height, model: r.model };
+  }
+
+  // Host entry points (called from the TOP frame by `preview_design_set`).
+  function hostEnable(mode, appOrigin) {
+    if (mode === 'relay') {
+      frameRole = 'relay';
+      relayActive = true;
+      relayAppOrigin = appOrigin || null;
+      adoptPendingHellos();
+      if (relayAppWin) sendEnableToApp();
+      pingChildrenForApp();
+    } else {
+      frameRole = 'direct';
+      enable();
+    }
+  }
+  function hostDisable() {
+    if (frameRole === 'relay') {
+      relayActive = false;
+      postToApp({ ns: MSG, cmd: 'disable' });
+      cache = { status: null, handoff: null, aiRequest: null };
+      stopPing();
+    } else {
+      disable();
+    }
+  }
+
+  // App side: mirror status up to the relay, and react to relay commands.
+  function postStatus() {
+    if (isTop) return;
+    try {
+      window.top.postMessage({
+        ns: MSG, evt: 'status', status: localPeek(),
+        handoff: state.handoff || null, aiRequest: state.aiRequest || null
+      }, topOrigin || '*');
+    } catch (e) {}
+  }
+  function startAppSync() { stopAppSync(); syncTimer = setInterval(postStatus, 250); }
+  function stopAppSync() { if (syncTimer) { clearInterval(syncTimer); syncTimer = 0; } }
+  function sayHello() {
+    if (isTop) return;
+    try { window.top.postMessage({ ns: MSG, evt: 'hello' }, '*'); } catch (e) {}
+  }
+  function scheduleHellos() {
+    if (isTop) return;
+    [0, 250, 750, 1500, 3000, 6000].forEach(function (ms) {
+      setTimeout(function () { if (!helloAcked) sayHello(); }, ms);
+    });
+    try {
+      document.addEventListener('DOMContentLoaded', function () { if (!helloAcked) sayHello(); });
+      window.addEventListener('load', function () { if (!helloAcked) sayHello(); });
+    } catch (e) {}
+  }
+  function onRelayCommand(d, e) {
+    topOrigin = e.origin || '*';
+    helloAcked = true;
+    switch (d.cmd) {
+      case 'ping': sayHello(); break;
+      case 'enable':
+        frameRole = 'app';
+        if (d.models) localSetModels(d.models, d.preferred);
+        enable();
+        startAppSync();
+        postStatus();
+        break;
+      case 'disable': disable(); stopAppSync(); postStatus(); break;
+      case 'setModels': localSetModels(d.list, d.preferred); postStatus(); break;
+      case 'applyGenerated': applyGenerated(d.id, d.html); break;
+      case 'drainCommit': localDrain(); postStatus(); break;
+      case 'drainAiCommit': localDrainAi(); postStatus(); break;
+    }
+  }
+  function onMessage(e) {
+    var d = e && e.data;
+    if (!d || d.ns !== MSG) return;
+    if (isTop) {
+      // Relay side: app frames announce themselves and mirror their status.
+      if (d.evt === 'hello') {
+        if (frameRole === 'direct') return; // top frame is the app; ignore child hellos
+        if (relayAppOrigin) {
+          if (e.origin === relayAppOrigin) { relayAppWin = e.source; if (relayActive) sendEnableToApp(); }
+        } else {
+          pendingHellos.push({ source: e.source, origin: e.origin });
+          if (pendingHellos.length > 12) pendingHellos.shift();
+        }
+      } else if (d.evt === 'status' && frameRole === 'relay') {
+        cache.status = d.status || null;
+        cache.handoff = d.handoff || null;
+        cache.aiRequest = d.aiRequest || null;
+      }
+    } else if (d.cmd) {
+      // App side: only accept commands from the top (relay) frame.
+      var fromTop = false;
+      try { fromTop = (e.source === window.top); } catch (err) { fromTop = false; }
+      if (fromTop) onRelayCommand(d, e);
+    }
+  }
+
   // ---- public API ----------------------------------------------------------
+  // Host calls always land in the TOP frame; each method dispatches by role so a
+  // relay bridges to the app iframe while direct/app frames act locally.
   window[NS] = {
     __v: VERSION,
-    enable: function () { try { enable(); } catch (e) {} },
-    disable: function () { try { disable(); } catch (e) {} },
-    peek: function () { return { enabled: state.enabled, version: state.version, changeCount: state.changes.length, handoffReady: !!state.handoff, aiPending: !!state.aiRequest, hasModels: !!(state.models && state.models.length), aiModel: state.aiModel || null }; },
-    drain: function () {
-      var hf = state.handoff; if (!hf) return null;
-      state.handoff = null;
-      var out = { instruction: hf.instruction, changeCount: hf.changeCount };
-      // Clean up: clear change-set (entries hold the undo closures), markup, and
-      // markers; restore chrome (host typically disables next).
-      state.changes = []; clearMarkers(); clearPins(); clearDrawings();
-      if (elToolbar) { elToolbar.style.display = 'flex'; renderBar(); }
-      bump();
-      return out;
-    },
-    // Drain a pending "Generate with AI" request (host then generates + applies).
-    drainAi: function () {
-      var r = state.aiRequest; if (!r) return null;
-      state.aiRequest = null; bump();
-      return { id: r.id, description: r.description, width: r.width, height: r.height, model: r.model };
-    },
+    // `mode`: 'direct' (top frame is the app) or 'relay' (top = Fabric shell,
+    // drive the app iframe at `appOrigin`). Legacy no-arg call → 'direct'.
+    enable: function (mode, appOrigin) { try { hostEnable(mode, appOrigin); } catch (e) {} },
+    disable: function () { try { hostDisable(); } catch (e) {} },
+    peek: function () { try { return frameRole === 'relay' ? relayPeek() : localPeek(); } catch (e) { return null; } },
+    drain: function () { try { return frameRole === 'relay' ? relayDrain() : localDrain(); } catch (e) { return null; } },
+    drainAi: function () { try { return frameRole === 'relay' ? relayDrainAi() : localDrainAi(); } catch (e) { return null; } },
     // Inject AI-generated HTML into placeholder `id` (empty html = generation
     // failed → restore the describe state).
-    applyGenerated: function (id, html) { try { applyGenerated(id, html); } catch (e) {} },
+    applyGenerated: function (id, html) {
+      try {
+        if (frameRole === 'relay') postToApp({ ns: MSG, cmd: 'applyGenerated', id: id, html: html });
+        else applyGenerated(id, html);
+      } catch (e) {}
+    },
     // Supply the model list for the placeholder AI picker (host resolves it);
     // `[{id,name,fast}]`. Defaults the selection to the first fast model.
     setModels: function (list, preferred) {
       try {
-        state.models = Array.isArray(list) ? list : null;
-        var ids = (state.models || []).map(function (m) { return m.id; });
-        // Preselect: keep the current pick if still offered; otherwise the
-        // caller's preferred (persisted) model; otherwise the first fast / first.
-        if (!state.aiModel || ids.indexOf(state.aiModel) < 0) {
-          if (preferred && ids.indexOf(preferred) >= 0) {
-            state.aiModel = preferred;
-          } else if (state.models && state.models.length) {
-            var fast = state.models.filter(function (m) { return m.fast; })[0];
-            state.aiModel = (fast || state.models[0]).id;
-          }
+        if (frameRole === 'relay') {
+          relayModels = Array.isArray(list) ? list : null;
+          relayPreferred = preferred || null;
+          postToApp({ ns: MSG, cmd: 'setModels', list: relayModels, preferred: relayPreferred });
+        } else {
+          localSetModels(list, preferred);
         }
-        if (state.selected && isPlaceholder(state.selected)) renderInspector();
       } catch (e) {}
     }
   };
+
+  // Every frame listens; non-top frames also announce themselves so the relay
+  // (the top frame, once enabled) can find and drive the app iframe.
+  try { window.addEventListener('message', onMessage, false); } catch (e) {}
+  scheduleHellos();
 })();

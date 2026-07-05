@@ -103,12 +103,16 @@ const CONSOLE_INIT_JS: &str = r#";(function () {
 })();"#;
 
 /// The in-page "design mode" controller (see `services/design_agent.js`).
-/// Evaluated on demand by [`preview_design_set`] (never bundled into the
-/// document-start script, so the deployed app stays untouched unless the user
-/// opens design mode). Idempotent: defines `window.__rayfinDesign` once. Combined
-/// with a trailing `.enable()` when turning design mode on; re-evaluated on every
-/// finished page load while a design session is active so it survives SPA
-/// navigations and reloads.
+/// Injected at document-start into **all frames**
+/// ([`WebviewBuilder::initialization_script_for_all_frames`]) so it is present in
+/// the deployed app even when the app is embedded in a *cross-origin* iframe inside
+/// the Fabric portal — the top-frame `wv.eval` used for the direct view can't reach
+/// a cross-origin iframe. The controller stays dormant (defines
+/// `window.__rayfinDesign` + a passive `postMessage` listener) until
+/// [`preview_design_set`] enables it. In the Fabric-embedded view the top (Fabric
+/// shell) frame runs as a *relay* that bridges host calls to the app iframe over
+/// `postMessage`; in the direct view the app is the top frame and runs the full
+/// controller locally. Idempotent: defines `window.__rayfinDesign` once.
 const DESIGN_AGENT_JS: &str = include_str!("design_agent.js");
 
 /// JS that reads the design controller's lightweight status (returns an object or
@@ -199,6 +203,11 @@ struct Inner {
   /// of the design controller on every finished page load (so it survives SPA
   /// navigations / reloads) — see [`preview_design_set`] and [`on_page_load`].
   design_active: bool,
+  /// When the active design session targets the Fabric-embedded view, the origin
+  /// of the deployed app (the cross-origin iframe inside the Fabric portal). The
+  /// top frame is then re-enabled as a `relay` for that origin on every finished
+  /// page load; `None` means the direct view (top frame is the app itself).
+  design_relay: Option<String>,
 }
 
 impl Inner {
@@ -220,6 +229,7 @@ impl Inner {
     // toggle) is a different app — end any active design session so the
     // controller isn't re-injected into it (see `on_page_load`).
     self.design_active = false;
+    self.design_relay = None;
   }
 }
 
@@ -247,6 +257,12 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
     // them back later via `fabricator_console`. Must be set before the webview
     // is created so it runs at document start on every page.
     .initialization_script(CONSOLE_INIT_JS)
+    // The design-mode controller is baked in at document-start into ALL frames
+    // (dormant until `preview_design_set` enables it). This is the only way to
+    // reach the app when it is embedded in a cross-origin iframe inside the
+    // Fabric portal, since `wv.eval` only runs in the top frame. See
+    // [`DESIGN_AGENT_JS`].
+    .initialization_script_for_all_frames(DESIGN_AGENT_JS)
     .on_navigation(move |u| {
       on_navigation(&nav_app, u);
       true
@@ -294,7 +310,7 @@ fn on_navigation(app: &AppHandle, u: &Url) {
 fn on_page_load(app: &AppHandle, event: PageLoadEvent, u: &Url) {
   let loading = matches!(event, PageLoadEvent::Started);
   let state = app.state::<PreviewState>();
-  let (can_back, can_fwd, design_active) = {
+  let (can_back, can_fwd, design_active, design_relay) = {
     let mut inner = state.inner.lock().unwrap();
     // A finished load releases anyone blocked in `navigate_and_wait`.
     if !loading {
@@ -302,14 +318,21 @@ fn on_page_load(app: &AppHandle, event: PageLoadEvent, u: &Url) {
         let _ = tx.send(());
       }
     }
-    (inner.can_back(), inner.can_forward(), inner.design_active)
+    (
+      inner.can_back(),
+      inner.can_forward(),
+      inner.design_active,
+      inner.design_relay.clone(),
+    )
   };
-  // Re-inject + re-enable the design controller after a finished load so an
-  // active design session survives SPA navigations and reloads (eval'd code,
-  // unlike an initialization_script, does not persist across page loads).
+  // Re-enable the design controller after a finished load so an active design
+  // session survives SPA navigations and reloads. The controller itself is a
+  // document-start init script (present in every frame after each load); this
+  // only re-arms the top frame — in relay mode it re-adopts the app iframe via
+  // the postMessage handshake.
   if !loading && design_active {
     if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-      let _ = wv.eval(design_enable_js());
+      let _ = wv.eval(design_enable_js(design_relay.as_deref()));
     }
   }
   emit_nav(app, &u.to_string(), loading, can_back, can_fwd);
@@ -621,10 +644,32 @@ pub struct DesignAiRequest {
   pub model: Option<String>,
 }
 
-/// The controller source plus a guarded `enable()` call, evaluated to (re)install
-/// and turn on design mode.
-fn design_enable_js() -> String {
-  format!("{DESIGN_AGENT_JS}\n;try{{window.__rayfinDesign&&window.__rayfinDesign.enable()}}catch(e){{}}")
+/// Build the JS that enables the (already document-start-injected) design
+/// controller in the top frame. In the direct view the top frame *is* the app and
+/// runs the controller locally (`enable('direct')`); in the Fabric-embedded view
+/// the top frame becomes a relay for the app iframe at `relay_origin`
+/// (`enable('relay', "<origin>")`), which bridges host calls over `postMessage`.
+fn design_enable_js(relay_origin: Option<&str>) -> String {
+  match relay_origin {
+    Some(origin) => format!(
+      "try{{window.__rayfinDesign&&window.__rayfinDesign.enable('relay',{})}}catch(e){{}}",
+      serde_json::to_string(origin).unwrap_or_else(|_| "\"\"".into())
+    ),
+    None => {
+      "try{window.__rayfinDesign&&window.__rayfinDesign.enable('direct')}catch(e){}".to_string()
+    }
+  }
+}
+
+/// The scheme://host:port origin of `url` (e.g. `https://app.example.com`), or
+/// `None` if it can't be parsed / has an opaque origin. Used to tell the design
+/// relay which cross-origin iframe (the deployed app) to drive inside the Fabric
+/// portal shell.
+fn url_origin(url: &str) -> Option<String> {
+  match Url::parse(url).map(|u| u.origin()) {
+    Ok(origin) if origin.is_tuple() => Some(origin.ascii_serialization()),
+    _ => None,
+  }
 }
 
 /// Evaluate `js` on the preview webview and return its JSON completion value
@@ -659,19 +704,36 @@ async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) 
   }
 }
 
-/// Turn the in-preview "design mode" on/off. Evaluates (and, when enabling,
-/// re-installs) the design controller in the preview webview and records the
-/// session state so the controller is re-injected on subsequent page loads.
+/// Turn the in-preview "design mode" on/off. Enables (or disables) the design
+/// controller — which is already injected at document-start into every frame — and
+/// records the session so it is re-armed on subsequent page loads. `embedded` +
+/// `app_url` select the mode: when the app is shown embedded in the Fabric portal
+/// (`embedded == true`), the top (Fabric shell) frame runs as a relay for the app
+/// iframe at `app_url`'s origin; otherwise the top frame is the app and runs the
+/// controller directly.
 #[tauri::command]
 pub fn preview_design_set(
   app: AppHandle,
   state: State<'_, PreviewState>,
   enabled: bool,
+  embedded: Option<bool>,
+  app_url: Option<String>,
 ) -> AppResult<()> {
-  state.inner.lock().unwrap().design_active = enabled;
+  // Relay mode only when enabling an embedded (Fabric) view for which we can
+  // resolve the app's origin; anything else is the direct (top-frame) view.
+  let relay_origin = if enabled && embedded.unwrap_or(false) {
+    app_url.as_deref().and_then(url_origin)
+  } else {
+    None
+  };
+  {
+    let mut inner = state.inner.lock().unwrap();
+    inner.design_active = enabled;
+    inner.design_relay = relay_origin.clone();
+  }
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
     let js = if enabled {
-      design_enable_js()
+      design_enable_js(relay_origin.as_deref())
     } else {
       "try{window.__rayfinDesign&&window.__rayfinDesign.disable()}catch(e){}".to_string()
     };

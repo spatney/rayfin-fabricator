@@ -458,13 +458,6 @@ export interface ExperimentFlags {
    * in the standard Agent mode.
    */
   chatModeSelector?: boolean
-  /**
-   * Preview design mode: enable the in-preview click-to-edit "design mode" —
-   * select live elements and edit them (move / resize / recolor / text, plus a
-   * structured Graphein chart-spec editor), then hand the collected changes to
-   * the chat composer as a structured instruction for review.
-   */
-  previewDesignMode?: boolean
 }
 
 export interface CreateProjectInput {
@@ -1493,14 +1486,19 @@ export interface RayfinStudioApi {
      */
     onAgentPreview: (cb: (event: PreviewAgentEvent) => void) => () => void
     /**
-     * In-preview "design mode" (experiment, `previewDesignMode`). Injects a
-     * click-to-edit controller into the preview webview so the user can tweak
-     * live elements (move / resize / recolor / text + a Graphein spec editor),
-     * then hand the collected changes to the chat composer.
+     * In-preview "design mode". Injects a click-to-edit controller into the
+     * preview webview so the user can tweak live elements (move / resize /
+     * recolor / text + a Graphein spec editor), then hand the collected changes
+     * to the chat composer. Works in both the direct and Fabric-embedded views.
      */
     design: {
-      /** Turn design mode on/off (installs + enables/disables the controller). */
-      setEnabled: (enabled: boolean) => Promise<void>
+      /**
+       * Turn design mode on/off (enables/disables the controller). `embedded`
+       * marks the Fabric-embedded view, where the app is a cross-origin iframe;
+       * `appUrl` (the direct app URL) supplies the origin the top-frame relay
+       * uses to find and drive that iframe.
+       */
+      setEnabled: (enabled: boolean, embedded?: boolean, appUrl?: string) => Promise<void>
       /** Read the controller status (change count + handoff-ready). Polled while on. */
       poll: () => Promise<PreviewDesignStatus | null>
       /** Drain a pending "Send to chat" hand-off (call after capturing a shot). */

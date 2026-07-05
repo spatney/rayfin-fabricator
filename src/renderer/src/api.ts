@@ -210,7 +210,12 @@ export const api: RayfinStudioApi = {
     onAgentPreview: (cb: (event: PreviewAgentEvent) => void) =>
       subscribe<PreviewAgentEvent>(IpcChannels.previewAgent, cb),
     design: {
-      setEnabled: (enabled: boolean) => invoke('preview_design_set', { enabled }),
+      setEnabled: (enabled: boolean, embedded?: boolean, appUrl?: string) =>
+        invoke('preview_design_set', {
+          enabled,
+          embedded: embedded ?? false,
+          appUrl: appUrl ?? null
+        }),
       poll: () => invoke('preview_design_poll'),
       drain: () => invoke('preview_design_drain'),
       drainAi: () => invoke('preview_design_drain_ai'),

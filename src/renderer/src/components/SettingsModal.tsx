@@ -262,12 +262,6 @@ export default function SettingsModal({
                     checked={Boolean(settings.experiments?.chatModeSelector)}
                     onChange={(v) => onChange({ experiments: { chatModeSelector: v } })}
                   />
-                  <ToggleRow
-                    label="Preview design mode"
-                    hint="Click elements in the live preview to tweak them (move, resize, color, text, chart specs), then hand the changes to chat for review."
-                    checked={Boolean(settings.experiments?.previewDesignMode)}
-                    onChange={(v) => onChange({ experiments: { previewDesignMode: v } })}
-                  />
                 </div>
               )}
             </div>
