@@ -38,7 +38,7 @@ import AdvisorView, { categoryMeta } from '../components/AdvisorView'
 import ModelView from '../components/ModelView'
 import { useToast } from '../toast'
 import { InfoIcon, GearIcon, SignOutIcon, CompareIcon } from '../components/icons'
-import logo from '../assets/logo.png'
+import { FabricatorMark } from '../components/FabricatorMark'
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
@@ -714,7 +714,7 @@ export default function Workbench({
     <div className="app-shell">
       <header className="titlebar">
         <div className="brand">
-          <img className="brand-mark" src={logo} alt="" />
+          <FabricatorMark className="brand-mark" />
           <span className="brand-name">Fabricator</span>
         </div>
         <div className="titlebar-status">
@@ -1160,7 +1160,7 @@ export default function Workbench({
           <SuppressPreview />
           <div className="signout-card">
             <div className="signout-mark">
-              <img src={logo} alt="" />
+              <FabricatorMark />
               <span className="signout-ring" />
             </div>
             <div className="signout-text">

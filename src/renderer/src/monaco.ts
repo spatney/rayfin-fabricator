@@ -57,10 +57,15 @@ monaco.editor.defineTheme('rayfin-light', {
   colors: {
     'editor.background': '#ffffff',
     'editorGutter.background': '#ffffff',
-    'editorLineNumber.foreground': '#aab2c0',
-    'editorLineNumber.activeForeground': '#5b6472',
-    'editor.lineHighlightBackground': '#f1f4f9',
-    'editor.lineHighlightBorder': '#00000000'
+    'editorLineNumber.foreground': '#9aa3b2',
+    'editorLineNumber.activeForeground': '#4a5361',
+    'editor.lineHighlightBackground': '#f3f5f9',
+    'editor.lineHighlightBorder': '#00000000',
+    'editorWidget.background': '#ffffff',
+    'editorWidget.border': '#d5dce6',
+    'editorIndentGuide.background1': '#e7ebf2',
+    'editor.selectionBackground': '#c7e5e7',
+    'scrollbarSlider.background': '#9aa3b280'
   }
 })
 

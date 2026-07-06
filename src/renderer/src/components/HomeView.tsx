@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react'
 import { createPortal } from 'react-dom'
 import type { StudioProject } from '@shared/ipc'
-import logo from '../assets/logo.png'
+import { FabricatorMark } from './FabricatorMark'
 
 /** Width used to right-align the floating actions menu to its ⋯ button. */
 const MENU_WIDTH = 176
@@ -100,7 +100,7 @@ export default function HomeView({
     <div className="home">
       <div className="home-inner">
         <header className="home-head">
-          <img className="home-mark" src={logo} alt="" />
+          <FabricatorMark className="home-mark" />
           <h1 className="home-title">Welcome to Fabricator</h1>
           <p className="home-sub">
             Create a new Rayfin app or open an existing project to start building with chat.

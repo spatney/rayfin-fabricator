@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AuthStatus, DoctorReport, InstallResult, ProcLogEvent } from '@shared/ipc'
-import logo from '../assets/logo.png'
+import { FabricatorMark } from '../components/FabricatorMark'
 import rayfinMark from '../assets/brands/rayfin.png'
 import nodeSvg from '../assets/brands/node.svg'
 import npmSvg from '../assets/brands/npm.svg'
@@ -138,7 +138,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
         <div className="setup-inner">
           <header className="setup-hero">
             <div className="setup-hero-mark">
-              <img src={logo} alt="" />
+              <FabricatorMark />
             </div>
             <div className="setup-hero-copy">
               <span className="setup-eyebrow">Welcome to</span>
@@ -407,7 +407,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
         <div className="signin-overlay" role="alertdialog" aria-busy="true" aria-label="Signing in">
           <div className="signin-card">
             <div className="signin-mark">
-              <img src={logo} alt="" />
+              <FabricatorMark />
               <span className="signin-ring" />
             </div>
             <div className="signin-text">

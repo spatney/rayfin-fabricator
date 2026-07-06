@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import logo from '../assets/logo.png'
+import { FabricatorMark } from './FabricatorMark'
 
 interface Props {
   children: ReactNode
@@ -32,7 +32,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className="crash">
-        <img className="brand-mark" src={logo} alt="" />
+        <FabricatorMark className="brand-mark" />
         <h1>Something went wrong</h1>
         <p className="crash-sub">
           Fabricator hit an unexpected error. Reloading usually fixes it; your projects and

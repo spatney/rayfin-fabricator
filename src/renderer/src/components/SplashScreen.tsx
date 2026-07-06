@@ -1,33 +1,22 @@
 // The Fabricator mark is a set of rounded-rect tiles that form an "F". We recreate
 // it as inline SVG (one element per tile) so each block can glide itself into place — a
-// slick "the logo builds itself" splash. Geometry is sampled from assets/logo.png (428×424)
-// so the assembled mark matches the real logo exactly.
-const TEAL = '#76c2c5'
-const GRAY = '#e3e4e0'
-const TILE_RX = 16
-const BRACKET_RX = 5
-
-type Tile = { cls: string; x: number; y: number; w: number; h: number; fill: string }
-type Bracket = { cls: string; rects: Array<[number, number, number, number]> }
-
-const TILES: Tile[] = [
-  { cls: 'tile--topbar', x: 164, y: 38, w: 251, h: 98, fill: TEAL },
-  { cls: 'tile--stem', x: 40, y: 38, w: 118, h: 218, fill: TEAL },
-  { cls: 'tile--mid', x: 164, y: 156, w: 193, h: 100, fill: GRAY },
-  { cls: 'tile--botleft', x: 40, y: 262, w: 117, h: 158, fill: GRAY },
-  { cls: 'tile--square', x: 164, y: 262, w: 91, h: 97, fill: TEAL }
-]
-
-const BRACKETS: Bracket[] = [
-  { cls: 'bracket--tl', rects: [[3, 2, 54, 15], [3, 2, 15, 53]] },
-  { cls: 'bracket--br', rects: [[372, 369, 52, 15], [409, 330, 15, 54]] }
-]
+// slick "the logo builds itself" splash. The tile/bracket geometry is shared with the
+// static <FabricatorMark> so the assembled mark matches the real logo exactly.
+import {
+  MARK_BRACKET_RX,
+  MARK_BRACKETS,
+  MARK_TEAL,
+  MARK_TILE_RX,
+  MARK_TILES,
+  MARK_VIEWBOX,
+  markFill
+} from './FabricatorMark'
 
 function BuildingLogo(): JSX.Element {
   return (
     <svg
       className="splash-logo"
-      viewBox="0 0 428 424"
+      viewBox={MARK_VIEWBOX}
       aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
     >
@@ -38,19 +27,19 @@ function BuildingLogo(): JSX.Element {
           <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
         </linearGradient>
         <clipPath id="splash-logo-clip">
-          {TILES.map((t) => (
-            <rect key={t.cls} x={t.x} y={t.y} width={t.w} height={t.h} rx={TILE_RX} />
+          {MARK_TILES.map((t) => (
+            <rect key={t.cls} x={t.x} y={t.y} width={t.w} height={t.h} rx={MARK_TILE_RX} />
           ))}
-          {BRACKETS.flatMap((b) =>
+          {MARK_BRACKETS.flatMap((b) =>
             b.rects.map((r, i) => (
-              <rect key={`${b.cls}-${i}`} x={r[0]} y={r[1]} width={r[2]} height={r[3]} rx={BRACKET_RX} />
+              <rect key={`${b.cls}-${i}`} x={r[0]} y={r[1]} width={r[2]} height={r[3]} rx={MARK_BRACKET_RX} />
             ))
           )}
         </clipPath>
       </defs>
 
       <g className="splash-logo-inner">
-        {TILES.map((t) => (
+        {MARK_TILES.map((t) => (
           <rect
             key={t.cls}
             className={`tile ${t.cls}`}
@@ -58,14 +47,14 @@ function BuildingLogo(): JSX.Element {
             y={t.y}
             width={t.w}
             height={t.h}
-            rx={TILE_RX}
-            fill={t.fill}
+            rx={MARK_TILE_RX}
+            fill={markFill(t.fill)}
           />
         ))}
-        {BRACKETS.map((b) => (
-          <g key={b.cls} className={`tile bracket ${b.cls}`} fill={TEAL}>
+        {MARK_BRACKETS.map((b) => (
+          <g key={b.cls} className={`tile bracket ${b.cls}`} fill={MARK_TEAL}>
             {b.rects.map((r, i) => (
-              <rect key={i} x={r[0]} y={r[1]} width={r[2]} height={r[3]} rx={BRACKET_RX} />
+              <rect key={i} x={r[0]} y={r[1]} width={r[2]} height={r[3]} rx={MARK_BRACKET_RX} />
             ))}
           </g>
         ))}

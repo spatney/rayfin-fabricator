@@ -25,6 +25,9 @@
   --accent-ring: color-mix(in srgb, var(--accent) 38%, transparent);
   --on-accent: #042220;
 
+  /* Brand mark: gray tiles read this. Light theme darkens it so it doesn't wash out. */
+  --logo-gray: #e3e4e0;
+
   --ok: #3ddc84;
   --pending: #f5c451;
   --danger: #ff6058;
@@ -62,34 +65,39 @@
 
 /* Light theme (applied via <html data-theme="light">). */
 [data-theme='light'] {
-  --bg: #f5f7fa;
+  /* Cool-tinted grey canvas so white surfaces lift, with a real elevation ladder:
+     recessed wells (elev-2) are greyer than the canvas, white cards (elev) sit above
+     it, and nested hovers (elev-3) get a subtle tint. Borders carry the separation. */
+  --bg: #eceff4;
   --bg-elev: #ffffff;
-  --bg-elev-2: #eef1f6;
-  --bg-elev-3: #ffffff;
-  --border: #e3e8f0;
-  --border-soft: #edf0f6;
-  --text: #131720;
-  --text-dim: #586173;
-  --text-faint: #8b95a7;
+  --bg-elev-2: #e7ebf2;
+  --bg-elev-3: #f3f5f9;
+  --border: #d5dce6;
+  --border-soft: #e6eaf1;
+  --text: #12161d;
+  --text-dim: #4a5361;
+  --text-faint: #767f91;
 
   --accent: #0e8187;
   --accent-2: #2bacb2;
-  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
-  --accent-ring: color-mix(in srgb, var(--accent) 28%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-ring: color-mix(in srgb, var(--accent) 32%, transparent);
   --on-accent: #ffffff;
 
-  --ok: #16a55c;
-  --pending: #b9810b;
-  --danger: #e0473c;
+  --ok: #1a8a54;
+  --pending: #a9750a;
+  --danger: #d93a30;
 
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.07);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08);
   --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.1);
   --shadow-lg: 0 20px 48px rgba(16, 24, 40, 0.16);
 
-  --code-inline-bg: #eef1f6;
+  --code-inline-bg: #e7ebf2;
   --code-inline-text: #1f2733;
 
   /* Code blocks stay dark in light mode, so syntax tokens keep the dark palette. */
+
+  --logo-gray: #aeb6c0;
 
   color-scheme: light;
 }
@@ -185,6 +193,11 @@ code {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* The brand mark (inline SVG) — sizing comes from the class each call site passes. */
+.fab-mark {
+  display: block;
 }
 
 .brand-mark {
@@ -1119,7 +1132,7 @@ code {
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
 }
 
-.setup-hero-mark img {
+.setup-hero-mark .fab-mark {
   width: 32px;
   height: 32px;
   object-fit: contain;
@@ -7211,7 +7224,7 @@ code {
   margin-bottom: 2px;
 }
 
-.chat-welcome-badge img {
+.chat-welcome-badge .fab-mark {
   width: 34px;
   height: 34px;
   object-fit: contain;
@@ -7426,7 +7439,7 @@ code {
   border: 1px solid var(--border);
 }
 
-.turn-avatar img {
+.turn-avatar .fab-mark {
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -8942,7 +8955,7 @@ code {
   place-items: center;
 }
 
-.signout-mark img {
+.signout-mark .fab-mark {
   width: 36px;
   height: 36px;
   object-fit: contain;
@@ -9028,7 +9041,7 @@ code {
   place-items: center;
 }
 
-.signin-mark img {
+.signin-mark .fab-mark {
   width: 36px;
   height: 36px;
   object-fit: contain;
@@ -9101,7 +9114,7 @@ code {
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-md);
 }
 
 .update-banner__row {
@@ -9195,7 +9208,7 @@ code {
   background: var(--bg-elev-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.32);
+  box-shadow: var(--shadow-lg);
   text-align: center;
 }
 

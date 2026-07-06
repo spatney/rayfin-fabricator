@@ -39,7 +39,7 @@ import {
   ClockIcon,
   Codicon
 } from './icons'
-import logo from '../assets/logo.png'
+import { FabricatorMark } from './FabricatorMark'
 
 export interface UIChatMessage extends ChatMessage {
   /** Correlates streamed events to the active assistant bubble (live only). */
@@ -1328,7 +1328,7 @@ const MessageRow = memo(function MessageRow({
     <div className={`turn turn--${m.role}`}>
       <div className="turn-head">
         <div className={`turn-avatar${m.pending ? ' turn-avatar--pending' : ''}`}>
-          {m.role === 'user' ? <UserIcon /> : <img src={logo} alt="" />}
+          {m.role === 'user' ? <UserIcon /> : <FabricatorMark />}
         </div>
         <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
         {m.role === 'assistant' && !m.pending && m.elapsedMs != null && (
@@ -2184,7 +2184,7 @@ export default function ChatPanel({
         {messages.length === 0 && (
           <div className="chat-welcome">
             <div className="chat-welcome-badge">
-              <img src={logo} alt="" />
+              <FabricatorMark />
             </div>
             <h2 className="chat-welcome-title">Let’s build {project.name}</h2>
             <p className="chat-welcome-sub">
