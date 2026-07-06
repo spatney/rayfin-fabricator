@@ -20,6 +20,7 @@ interface DesignApi {
   enable: (mode?: string, appOrigin?: string) => void
   disable: () => void
   peek: () => Record<string, unknown> | null
+  drain: () => Record<string, unknown> | null
   setTheme: (theme: Record<string, unknown>) => void
   setModels: (list: { id: string; name: string; fast?: boolean }[], preferred?: string) => void
   applyRestyle: (id: string, patch: Record<string, unknown>) => void
@@ -28,6 +29,9 @@ interface DesignApi {
 function install(): DesignApi {
   new Function(SRC)()
   return (window as unknown as { __rayfinDesign: DesignApi }).__rayfinDesign
+}
+function shadow(): ShadowRoot | null | undefined {
+  return document.getElementById(HOST_ID)?.shadowRoot
 }
 function styleText(): string {
   const host = document.getElementById(HOST_ID)
@@ -119,5 +123,41 @@ describe('design controller — theme + AI restyle', () => {
     expect(el.style.position).toBe('') // not whitelisted → dropped
     expect(el.style.color).toBeTruthy()
     expect(d.peek()).toMatchObject({ changeCount: 1 })
+  })
+
+  it('strips inserted-placeholder chrome from the handoff capture, then restores it', () => {
+    // An inserted+generated placeholder keeps its dashed "drop-zone" border + tint;
+    // the "Send to chat" screenshot must not capture that (the agent would read it
+    // as intended design). beginHandoff() should neutralize it — but keep the
+    // numbered marker — and drain() should restore it afterwards.
+    const ph = document.createElement('div')
+    ph.setAttribute('data-rayfin-placeholder', '1')
+    ph.setAttribute('data-rayfin-edit-id', 'p1')
+    ph.setAttribute('style', 'border:2px dashed rgb(52, 180, 186);background:rgba(52, 180, 186, 0.08);')
+    ph.innerHTML = '<div class="generated">Chart</div>'
+    document.body.appendChild(ph)
+    const d = install()
+    d.enable('direct')
+    // A recorded change is required for beginHandoff() to proceed.
+    d.applyRestyle('p1', { styles: { 'border-radius': '10px' } })
+    const before = ph.getAttribute('style') || ''
+
+    // Trigger the handoff via the toolbar Send button (its real code path).
+    const send = shadow()?.querySelector('.tb-send') as HTMLElement | null
+    expect(send).toBeTruthy()
+    send!.click()
+
+    // Capture-time: dashed border + tint neutralized, changes panel hidden, but
+    // the numbered marker (referenced by the instruction) is kept.
+    expect(ph.style.borderColor).toBe('transparent')
+    expect(ph.style.background).toBe('transparent')
+    expect((shadow()?.querySelector('.changes') as HTMLElement | null)?.style.display).toBe('none')
+    expect(shadow()?.querySelector('.marker')).toBeTruthy()
+    expect(d.peek()).toMatchObject({ handoffReady: true })
+
+    // Drain (host captured) restores the placeholder's original inline style.
+    d.drain()
+    expect(ph.getAttribute('style')).toBe(before)
+    expect(ph.style.borderColor).not.toBe('transparent')
   })
 })

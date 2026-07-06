@@ -1870,6 +1870,41 @@
     }
   }
 
+  // Neutralize design-only visuals before the "Send to chat" screenshot so the
+  // agent reads the real result, not our chrome: hide the changes panel, guides
+  // and morph overlays, and make inserted placeholders' dashed "drop-zone" border
+  // + tint transparent (kept in the layout so the numbered markers stay aligned;
+  // the generated content is left visible). The numbered markers stay — they're
+  // intentional and referenced by the instruction. Restored on drain.
+  function stripCaptureAffordances() {
+    if (elChanges) elChanges.style.display = 'none';
+    clearGuides();
+    if (elMorph) { elMorph.textContent = ''; elMorph.style.display = 'none'; }
+    try {
+      var phs = document.querySelectorAll('[data-rayfin-placeholder="1"]');
+      for (var i = 0; i < phs.length; i++) {
+        var ph = phs[i];
+        if (ph.getAttribute('data-rayfin-ph-restore') == null) ph.setAttribute('data-rayfin-ph-restore', ph.getAttribute('style') || '');
+        ph.style.borderColor = 'transparent';
+        ph.style.background = 'transparent';
+        ph.style.boxShadow = 'none';
+        // Not-yet-generated placeholders only hold our teal "New component" hint
+        // (no real element children) — hide that text too so it isn't captured.
+        if (!ph.querySelector('*')) ph.style.color = 'transparent';
+      }
+    } catch (e) {}
+  }
+  function restoreCaptureAffordances() {
+    try {
+      var phs = document.querySelectorAll('[data-rayfin-ph-restore]');
+      for (var i = 0; i < phs.length; i++) {
+        var ph = phs[i], s = ph.getAttribute('data-rayfin-ph-restore');
+        ph.removeAttribute('data-rayfin-ph-restore');
+        if (s != null) ph.setAttribute('style', s);
+      }
+    } catch (e) {}
+  }
+
   function beginHandoff() {
     if (state.changes.length === 0) return;
     if (state.editingText) commitText();
@@ -1878,7 +1913,8 @@
     elHover.style.display = 'none'; elLabel.style.display = 'none';
     elToolbar.style.display = 'none'; elInspector.style.display = 'none';
     if (elLegend) elLegend.style.display = 'none';
-    drawMarkers();
+    stripCaptureAffordances(); // remove design-only chrome from the capture
+    drawMarkers(); // (after stripping, so numbered badges anchor to final positions)
     state.handoff = { instruction: composeInstruction(), changeCount: state.changes.length };
     bump();
   }
@@ -2161,6 +2197,7 @@
     // Clean up: clear change-set (entries hold the undo closures), markup, and
     // markers; restore chrome (host typically disables next).
     state.changes = []; state.redo = []; clearMarkers(); clearPins(); clearDrawings();
+    restoreCaptureAffordances(); // undo the pre-capture placeholder/overlay neutralization
     if (elChanges) elChanges.style.display = 'none';
     if (elToolbar) { elToolbar.style.display = 'flex'; renderBar(); }
     bump();
