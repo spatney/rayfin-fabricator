@@ -160,4 +160,55 @@ describe('design controller — theme + AI restyle', () => {
     expect(ph.getAttribute('style')).toBe(before)
     expect(ph.style.borderColor).not.toBe('transparent')
   })
+
+  it('drags freely with a live translate offset and records a revertable move', () => {
+    // Freeform move: the element follows the cursor via transform: translate();
+    // the offset is kept + recorded on release, and Ctrl+Z reverts it. (jsdom has
+    // no hit-testing, so we stub elementFromPoint and drive the real pointer path.)
+    const el = document.createElement('div')
+    el.textContent = 'Card'
+    document.body.appendChild(el)
+    const d = install()
+    d.enable('direct')
+    const origEFP = document.elementFromPoint
+    document.elementFromPoint = (() => el) as typeof document.elementFromPoint
+    try {
+      const down = (): boolean =>
+        el.dispatchEvent(new MouseEvent('pointerdown', { clientX: 10, clientY: 10, bubbles: true, cancelable: true }))
+      down() // first press selects
+      down() // second press on the selection begins the move gesture
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, clientY: 30, buttons: 1 }))
+      window.dispatchEvent(new MouseEvent('pointerup', { clientX: 50, clientY: 30 }))
+      expect(el.style.transform).toContain('translate(40px, 20px)')
+      expect(d.peek()).toMatchObject({ changeCount: 1 })
+      // Ctrl+Z reverts the move (revert closure restores the original transform).
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }))
+      expect(el.style.transform).toBe('')
+      expect(d.peek()).toMatchObject({ changeCount: 0 })
+    } finally {
+      document.elementFromPoint = origEFP
+    }
+  })
+
+  it('cancels an in-progress freeform drag on Esc (restores the transform, records nothing)', () => {
+    const el = document.createElement('div')
+    document.body.appendChild(el)
+    const d = install()
+    d.enable('direct')
+    const origEFP = document.elementFromPoint
+    document.elementFromPoint = (() => el) as typeof document.elementFromPoint
+    try {
+      const down = (): boolean =>
+        el.dispatchEvent(new MouseEvent('pointerdown', { clientX: 10, clientY: 10, bubbles: true, cancelable: true }))
+      down()
+      down()
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 60, clientY: 10, buttons: 1 }))
+      expect(el.style.transform).toContain('translate(50px, 0px)')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(el.style.transform).toBe('') // restored
+      expect(d.peek()).toMatchObject({ changeCount: 0 }) // nothing recorded
+    } finally {
+      document.elementFromPoint = origEFP
+    }
+  })
 })

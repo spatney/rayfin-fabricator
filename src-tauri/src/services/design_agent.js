@@ -329,7 +329,7 @@
 
   // ---- Shadow-DOM UI -------------------------------------------------------
   var host, root;
-  var elHover, elLabel, elSel, elSels, elBadges, elHandles, elInsert, elToolbar, elInspector, elDraw, elPins, elLegend, elCommentEditor, elStyle;
+  var elHover, elLabel, elSel, elSels, elBadges, elHandles, elInsert, elToolbar, elInspector, elDraw, elPins, elLegend, elCommentEditor, elStyle, elMoveTip;
   var elCount, btnUndo, btnRedo, btnDiscard, btnSend, btnChanges, elChanges, elGuides, elMorph;
   // Smart guides: snap resized edges to nearby sibling/parent edges + centers.
   var SNAP_THR = 6, snapOn = true;
@@ -452,6 +452,7 @@
     '.guide{position:fixed;background:' + GUIDE + ';box-shadow:0 0 4px ' + GUIDE + '}',
     '.guide.v{top:0;width:1px;height:100vh}',
     '.guide.hz{left:0;height:1px;width:100vw}',
+    '.move-tip{z-index:2147483645;box-shadow:0 2px 8px rgba(0,0,0,.4)}',
     '.tb-ico.snap-on{color:' + TEAL + ';background:' + PANEL_BG2 + '}',
     // AI "transforming" overlay (shown over each element being restyled)
     '@keyframes rfMorphSweep{0%{transform:translateX(-130%) skewX(-12deg)}100%{transform:translateX(130%) skewX(-12deg)}}',
@@ -545,7 +546,8 @@
     elChanges = h('div', { class: 'changes', style: 'display:none' });
     elGuides = h('div', { class: 'guides' });
     elMorph = h('div', { class: 'morphs', style: 'display:none' });
-    [elDraw, elPins, elGuides, elMorph, elHover, elLabel, elSels, elSel, elBadges, elInsert, elHandles, elToolbar, elInspector, elChanges]
+    elMoveTip = h('div', { class: 'badge move-tip', style: 'display:none' });
+    [elDraw, elPins, elGuides, elMorph, elHover, elLabel, elSels, elSel, elBadges, elInsert, elHandles, elMoveTip, elToolbar, elInspector, elChanges]
       .forEach(function (n) { root.appendChild(n); });
 
     makeDraggable(elToolbar, false);
@@ -668,7 +670,7 @@
     elLegend.appendChild(close);
     elLegend.appendChild(h('h5', { text: 'Design mode' }));
     [
-      'Select (V) — click to pick, drag to move, handles to resize, arrows to nudge',
+      'Select (V) — click to pick, drag to reposition (snaps to guides), handles to resize, arrows to nudge',
       'Insert (I) — drop a placeholder where a new component goes',
       'Comment (C) — pin a note · Draw (D) — sketch over it',
       'Undo Ctrl/Cmd+Z · Remove Del · Deselect Esc · drag the toolbar to move it'
@@ -1211,13 +1213,13 @@
   }
 
   // ---- smart guides (snap resized edges to sibling/parent edges + centers) --
-  function collectSnapLines(el) {
+  function collectSnapLines(el, exclude) {
     var xs = [], ys = [];
     function add(rect) { if (!rect) return; xs.push(rect.left, rect.right, (rect.left + rect.right) / 2); ys.push(rect.top, rect.bottom, (rect.top + rect.bottom) / 2); }
     var p = el.parentElement;
     if (p) add(p.getBoundingClientRect());
     var sibs = p ? p.children : [];
-    for (var i = 0; i < sibs.length; i++) { if (sibs[i] !== el && !isOurs(sibs[i])) add(sibs[i].getBoundingClientRect()); }
+    for (var i = 0; i < sibs.length; i++) { if (sibs[i] !== el && !isOurs(sibs[i]) && !(exclude && exclude.indexOf(sibs[i]) >= 0)) add(sibs[i].getBoundingClientRect()); }
     return { xs: xs, ys: ys };
   }
   function nearestLine(val, lines, thr) {
@@ -1275,74 +1277,116 @@
     state.resizing = null; renderInspector();
   }
 
-  // ---- move (drop-indicator, applied on release) ---------------------------
-  // The dragged element gets a subtle "lifted" look and stays put while a glowing
-  // drop bar tracks where it will land; the reparent + record happen on release
-  // (Esc cancels). Live reflow felt jumpy, so the layout only changes once.
-  function beginPendingMove(e, el, downTarget) {
+  // ---- move (freeform drag: live translate + alignment guides) -------------
+  // Dragging repositions the element(s) with a live `transform: translate()` that
+  // follows the cursor and snaps to nearby sibling/parent edges + centers (shared
+  // guide system; magnet toggle, Ctrl/Cmd bypasses). The offset is kept on release
+  // and recorded as a revertable `move`; Esc (or disabling) restores it. A multi-
+  // selection drags every selected element by the same delta (snapping on the
+  // grabbed one). A plain click (no drag) on a child drills in.
+  function parseTranslate(t) { var m = /translate\(\s*(-?\d+(?:\.\d+)?)px\s*,\s*(-?\d+(?:\.\d+)?)px\s*\)/.exec(t || ''); return m ? { x: Math.round(parseFloat(m[1])), y: Math.round(parseFloat(m[2])) } : { x: 0, y: 0 }; }
+  function stripTranslate(t) { return (t || '').replace(/translate\([^)]*\)/, '').replace(/\s{2,}/g, ' ').trim(); }
+  function beginPendingMove(e, anchorEl, downTarget) {
+    var sel = (state.selection && state.selection.length) ? state.selection.filter(function (x) { return x && x.isConnected; }) : [];
+    if (sel.indexOf(anchorEl) < 0) sel = [anchorEl]; // grabbed outside the selection → move just it
+    var items = sel.map(function (x) {
+      var t0 = parseTranslate(x.style.transform);
+      return { el: x, baseNoT: stripTranslate(x.style.transform), cx0: t0.x, cy0: t0.y, origTransform: x.style.transform, oOpacity: x.style.opacity, oShadow: x.style.boxShadow, oTransition: x.style.transition };
+    });
     state.move = {
-      el: el, downTarget: downTarget, startX: e.clientX, startY: e.clientY, active: false,
-      origParent: el.parentNode, origNext: el.nextElementSibling, origOpacity: el.style.opacity,
-      origShadow: el.style.boxShadow, origTransition: el.style.transition, drop: null
+      el: anchorEl, items: items, anchor: null, downTarget: downTarget,
+      startX: e.clientX, startY: e.clientY, active: false, dx: 0, dy: 0, note: '',
+      startRect: anchorEl.getBoundingClientRect(), snapLines: collectSnapLines(anchorEl, sel)
     };
+    for (var i = 0; i < items.length; i++) if (items[i].el === anchorEl) state.move.anchor = items[i];
     window.addEventListener('pointermove', onMoveMove, true);
     window.addEventListener('pointerup', onMoveUp, true);
   }
+  function liftMove(g) {
+    for (var i = 0; i < g.items.length; i++) {
+      var el = g.items[i].el;
+      el.style.transition = 'box-shadow .15s ease, opacity .15s ease';
+      el.style.opacity = '0.85';
+      el.style.boxShadow = '0 10px 28px -8px rgba(0,0,0,.45), 0 0 0 1px ' + TEAL + '99';
+    }
+  }
   function endMoveVisuals(g) {
-    g.el.style.opacity = g.origOpacity || '';
-    g.el.style.boxShadow = g.origShadow || '';
-    g.el.style.transition = g.origTransition || '';
-    g.el.style.pointerEvents = '';
-    if (elInsert) elInsert.style.display = 'none';
-    showHint('');
+    for (var i = 0; i < g.items.length; i++) {
+      var it = g.items[i];
+      it.el.style.opacity = it.oOpacity || ''; it.el.style.boxShadow = it.oShadow || ''; it.el.style.transition = it.oTransition || '';
+    }
+    clearGuides();
+    if (elMoveTip) elMoveTip.style.display = 'none';
+  }
+  function applyMoveTransform(g) {
+    for (var i = 0; i < g.items.length; i++) {
+      var it = g.items[i];
+      it.el.style.transform = (it.baseNoT ? it.baseNoT + ' ' : '') + 'translate(' + (it.cx0 + g.dx) + 'px, ' + (it.cy0 + g.dy) + 'px)';
+    }
+  }
+  function showMoveTip(g) {
+    if (!elMoveTip || !g.anchor) return;
+    var r = g.el.getBoundingClientRect();
+    elMoveTip.textContent = (g.anchor.cx0 + g.dx) + ', ' + (g.anchor.cy0 + g.dy) + ' px' + (g.note ? ' · ' + g.note : '');
+    elMoveTip.style.left = clamp(r.left, 2, window.innerWidth - 130) + 'px';
+    elMoveTip.style.top = clamp(r.top - 22, 2, window.innerHeight - 20) + 'px';
+    elMoveTip.style.display = 'block';
   }
   function onMoveMove(e) {
     var g = state.move; if (!g || !state.enabled) return;
     if (e.buttons === 0) { onMoveUp(); return; }
     if (!g.active) {
       if (Math.abs(e.clientX - g.startX) < 4 && Math.abs(e.clientY - g.startY) < 4) return;
-      g.active = true;
-      g.el.style.transition = 'box-shadow .15s ease, opacity .15s ease';
-      g.el.style.opacity = '0.55';
-      g.el.style.boxShadow = '0 8px 24px -6px rgba(0,0,0,.3), 0 0 0 1px ' + TEAL + '99';
-      showHint('Drag to a new spot — release to drop · Esc to cancel');
+      g.active = true; liftMove(g);
+      showHint('Drag to reposition · release to drop · Esc to cancel');
     }
-    g.el.style.pointerEvents = 'none';
-    var under = document.elementFromPoint(e.clientX, e.clientY);
-    g.el.style.pointerEvents = '';
-    if (!under || isOurs(under) || under === g.el || g.el.contains(under)) { elInsert.style.display = 'none'; g.drop = null; return; }
-    var r = under.getBoundingClientRect(), before = e.clientY < r.top + r.height / 2;
-    g.drop = { ref: under, before: before };
-    elInsert.style.display = 'block'; elInsert.style.height = '3px';
-    elInsert.style.left = r.left + 'px'; elInsert.style.width = r.width + 'px';
-    elInsert.style.top = (before ? r.top - 1 : r.bottom - 1) + 'px';
+    var dx = e.clientX - g.startX, dy = e.clientY - g.startY, note = '';
+    // Snap the moving box's edges/centers to nearby lines + draw the guides.
+    if (snapOn && !e.ctrlKey && !e.metaKey && g.snapLines) {
+      var guides = [], r = g.startRect;
+      var xC = [['left', r.left], ['right', r.right], ['center', (r.left + r.right) / 2]], bx = null;
+      for (var xi = 0; xi < xC.length; xi++) { var lx = nearestLine(xC[xi][1] + dx, g.snapLines.xs, SNAP_THR); if (lx != null) { var dxd = Math.abs(lx - (xC[xi][1] + dx)); if (!bx || dxd < bx.d) bx = { adj: lx - (xC[xi][1] + dx), line: lx, label: xC[xi][0], d: dxd }; } }
+      if (bx) { dx += bx.adj; guides.push({ x: bx.line }); note += bx.label; }
+      var yC = [['top', r.top], ['bottom', r.bottom], ['middle', (r.top + r.bottom) / 2]], by = null;
+      for (var yi = 0; yi < yC.length; yi++) { var ly = nearestLine(yC[yi][1] + dy, g.snapLines.ys, SNAP_THR); if (ly != null) { var dyd = Math.abs(ly - (yC[yi][1] + dy)); if (!by || dyd < by.d) by = { adj: ly - (yC[yi][1] + dy), line: ly, label: yC[yi][0], d: dyd }; } }
+      if (by) { dy += by.adj; guides.push({ y: by.line }); note += (note ? '+' : '') + by.label; }
+      drawGuides(guides);
+    } else clearGuides();
+    g.dx = Math.round(dx); g.dy = Math.round(dy); g.note = note;
+    applyMoveTransform(g);
+    reposition();
+    showMoveTip(g);
   }
   function cancelMove() {
     var g = state.move; if (!g) return;
     window.removeEventListener('pointermove', onMoveMove, true);
     window.removeEventListener('pointerup', onMoveUp, true);
-    if (g.active) endMoveVisuals(g);
+    if (g.active) { for (var i = 0; i < g.items.length; i++) g.items[i].el.style.transform = g.items[i].origTransform; endMoveVisuals(g); reposition(); }
     state.move = null;
   }
   function onMoveUp() {
     var g = state.move; if (!g) return;
     window.removeEventListener('pointermove', onMoveMove, true);
     window.removeEventListener('pointerup', onMoveUp, true);
-    if (g.active) endMoveVisuals(g);
     state.move = null;
-    if (g.active && g.drop && g.drop.ref && g.drop.ref.parentNode) {
-      var ref = g.drop.ref, parent = ref.parentNode, movedEl = g.el, origParent = g.origParent, origNext = g.origNext;
-      if (g.drop.before) parent.insertBefore(movedEl, ref); else parent.insertBefore(movedEl, ref.nextSibling);
-      if (isPlaceholder(movedEl)) { reposition(); return; } // insert entry captures its live position
-      record({
-        kind: 'move', property: 'position', selector: cssPath(movedEl), label: describe(movedEl), el: movedEl,
-        from: 'original position', to: (g.drop.before ? 'before ' : 'after ') + describe(ref),
-        target: { parentSelector: cssPath(parent), refSelector: cssPath(ref), position: g.drop.before ? 'before' : 'after' },
-        revert: function () { if (origNext && origNext.parentNode === origParent) origParent.insertBefore(movedEl, origNext); else if (origParent) origParent.appendChild(movedEl); },
-        reapply: function () { if (ref.parentNode) { if (g.drop.before) ref.parentNode.insertBefore(movedEl, ref); else ref.parentNode.insertBefore(movedEl, ref.nextSibling); } }
-      });
-      reposition();
-    } else if (!g.active && g.downTarget && g.downTarget !== state.selected && !isOurs(g.downTarget) && g.downTarget.isConnected) {
+    if (g.active) {
+      endMoveVisuals(g);
+      if (g.dx || g.dy) {
+        for (var i = 0; i < g.items.length; i++) {
+          if (isPlaceholder(g.items[i].el)) continue; // insert entry captures its live position
+          (function (it) {
+            var afterT = it.el.style.transform, beforeT = it.origTransform;
+            record({
+              kind: 'move', property: 'offset', selector: cssPath(it.el), label: describe(it.el), el: it.el,
+              from: 'original position', to: (it.cx0 + g.dx) + ', ' + (it.cy0 + g.dy) + 'px' + (g.note ? ' (' + g.note + ' aligned)' : ''), after: afterT,
+              revert: function () { it.el.style.transform = beforeT; },
+              reapply: function () { it.el.style.transform = afterT; }
+            });
+          })(g.items[i]);
+        }
+        reposition();
+      }
+    } else if (g.downTarget && g.downTarget !== state.selected && !isOurs(g.downTarget) && g.downTarget.isConnected) {
       // A click (no drag) on a child of the selection drills in and selects it.
       select(chartRoot(g.downTarget) || g.downTarget);
     }
@@ -1365,8 +1409,8 @@
     if (!isPlaceholder(el)) {
       var afterTransform = el.style.transform;
       record({
-        kind: 'move', property: 'nudge', selector: cssPath(el), label: describe(el), el: el,
-        from: 'original position', to: 'nudged (' + cx + ', ' + cy + ')px',
+        kind: 'move', property: 'offset', selector: cssPath(el), label: describe(el), el: el,
+        from: 'original position', to: cx + ', ' + cy + 'px',
         revert: function () { el.style.transform = before; },
         reapply: function () { el.style.transform = afterTransform; }
       });
@@ -1935,7 +1979,7 @@
     for (var i = 0; i < state.changes.length; i++) {
       var c = state.changes[i], n = (i + 1) + '. ';
       if (c.kind === 'chart') lines.push(n + c.label + ' — update the Graphein spec (before→after in the JSON below).');
-      else if (c.kind === 'move') lines.push(n + c.label + ' — move it ' + c.to + (c.target ? ' (inside ' + c.target.parentSelector + ')' : '') + '.');
+      else if (c.kind === 'move') lines.push(n + c.label + ' — reposition it to a translate offset of ' + c.to + ' from its natural layout position.');
       else if (c.kind === 'text') lines.push(n + c.label + ' — change text from “' + c.from + '” to “' + c.to + '”.');
       else if (c.kind === 'resize') lines.push(n + c.label + ' — resize from ' + c.from + ' to ' + c.to + ' px.');
       else if (c.kind === 'remove') lines.push(n + c.label + ' — remove this element.');
@@ -1986,7 +2030,10 @@
     // select mode
     e.preventDefault(); e.stopPropagation();
     if (e.shiftKey || e.ctrlKey || e.metaKey) { toggleSelect(el); return; } // add/remove from multi-selection
-    if (state.selected && (el === state.selected || state.selected.contains(target) || state.selected === target)) {
+    var inSel = !!(state.selection && state.selection.length && state.selection.indexOf(el) >= 0);
+    if (inSel) {
+      beginPendingMove(e, el, target); // grab any selected element → drag the whole selection
+    } else if (state.selected && (el === state.selected || state.selected.contains(target) || state.selected === target)) {
       beginPendingMove(e, state.selected, target); // drag the selection to move; click a child to drill in
     } else {
       select(el);
@@ -2115,7 +2162,7 @@
     if (state.editingText) commitText();
     if (state.panelDragUp) { try { state.panelDragUp(); } catch (e) {} state.panelDragUp = null; }
     if (state.resizing) { window.removeEventListener('pointermove', onResizeMove, true); window.removeEventListener('pointerup', onResizeUp, true); state.resizing = null; }
-    if (state.move) { window.removeEventListener('pointermove', onMoveMove, true); window.removeEventListener('pointerup', onMoveUp, true); if (state.move.active) { if (state.move.origNext && state.move.origNext.parentNode === state.move.origParent) state.move.origParent.insertBefore(state.move.el, state.move.origNext); else if (state.move.origParent) state.move.origParent.appendChild(state.move.el); unliftMove(state.move); } state.move = null; }
+    if (state.move) { window.removeEventListener('pointermove', onMoveMove, true); window.removeEventListener('pointerup', onMoveUp, true); if (state.move.active) { for (var mi = 0; mi < state.move.items.length; mi++) state.move.items[mi].el.style.transform = state.move.items[mi].origTransform; endMoveVisuals(state.move); } state.move = null; }
     if (state.drawing) { window.removeEventListener('pointermove', onDrawMove, true); window.removeEventListener('pointerup', onDrawUp, true); state.drawing = null; }
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('pointerdown', onPointerDown, true);
