@@ -125,11 +125,11 @@ describe('design controller — theme + AI restyle', () => {
     expect(d.peek()).toMatchObject({ changeCount: 1 })
   })
 
-  it('strips inserted-placeholder chrome from the handoff capture, then restores it', () => {
+  it('strips inserted-placeholder chrome + draws no markers in the handoff capture, then restores', () => {
     // An inserted+generated placeholder keeps its dashed "drop-zone" border + tint;
-    // the "Send to chat" screenshot must not capture that (the agent would read it
-    // as intended design). beginHandoff() should neutralize it — but keep the
-    // numbered marker — and drain() should restore it afterwards.
+    // the "Send to chat" screenshot must not capture that (nor an amber numbered
+    // marker over the design) — the agent would read them as intended UI. The
+    // screenshot should be the clean result; drain() restores the design chrome.
     const ph = document.createElement('div')
     ph.setAttribute('data-rayfin-placeholder', '1')
     ph.setAttribute('data-rayfin-edit-id', 'p1')
@@ -147,12 +147,12 @@ describe('design controller — theme + AI restyle', () => {
     expect(send).toBeTruthy()
     send!.click()
 
-    // Capture-time: dashed border + tint neutralized, changes panel hidden, but
-    // the numbered marker (referenced by the instruction) is kept.
+    // Capture-time: dashed border + tint neutralized, changes panel hidden, and
+    // NO amber marker overlaid on the design.
     expect(ph.style.borderColor).toBe('transparent')
     expect(ph.style.background).toBe('transparent')
     expect((shadow()?.querySelector('.changes') as HTMLElement | null)?.style.display).toBe('none')
-    expect(shadow()?.querySelector('.marker')).toBeTruthy()
+    expect(shadow()?.querySelector('.marker')).toBeFalsy()
     expect(d.peek()).toMatchObject({ handoffReady: true })
 
     // Drain (host captured) restores the placeholder's original inline style.

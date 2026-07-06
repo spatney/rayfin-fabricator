@@ -351,7 +351,6 @@
     '.label{position:fixed;pointer-events:none;z-index:2147483644;background:' + TEAL + ';color:' + ON_ACCENT + ';font-size:var(--fs-small);font-weight:600;padding:2px 6px;border-radius:4px;white-space:nowrap}',
     '.badge{position:fixed;pointer-events:none;z-index:2147483644;background:' + TEAL + ';color:' + ON_ACCENT + ';font-size:var(--fs-micro);font-weight:700;padding:1px 5px;border-radius:4px}',
     '.ring{position:fixed;pointer-events:none;z-index:2147483639;border:2px solid ' + AMBER + ';border-radius:4px;box-shadow:0 0 0 2px ' + AMBER + '44}',
-    '.marker{position:fixed;pointer-events:none;z-index:2147483645;min-width:18px;height:18px;line-height:18px;text-align:center;background:' + AMBER + ';color:' + ON_AMBER + ';font-size:var(--fs-small);font-weight:800;border-radius:9px;padding:0 4px;box-shadow:0 1px 4px rgba(0,0,0,.5)}',
     '.insert{position:fixed;pointer-events:none;z-index:2147483643;background:' + TEAL + ';box-shadow:0 0 6px ' + TEAL + '}',
     '.hnd{position:fixed;width:12px;height:12px;background:' + TEAL + ';border:2px solid #fff;border-radius:3px;z-index:2147483643;pointer-events:auto;box-shadow:0 1px 5px rgba(0,0,0,.45)}',
     '.hnd:hover{background:' + TEAL_HI + ';transform:scale(1.18)}',
@@ -1854,28 +1853,15 @@
   }
 
   // ---- handoff -------------------------------------------------------------
-  var markers = [];
-  function clearMarkers() { for (var i = 0; i < markers.length; i++) markers[i].remove(); markers = []; }
-  function drawMarkers() {
-    clearMarkers();
-    for (var i = 0; i < state.changes.length; i++) {
-      var c = state.changes[i], anchor = null;
-      if (c.el && c.el.isConnected) { var r = c.el.getBoundingClientRect(); anchor = { x: r.left, y: r.top }; }
-      else if (c.node) { var rb = c.node.getBoundingClientRect(); anchor = { x: rb.left, y: rb.top }; }
-      if (!anchor) continue;
-      var m = h('div', { class: 'marker', text: String(i + 1) });
-      m.style.left = clamp(anchor.x - 6, 2, window.innerWidth - 24) + 'px';
-      m.style.top = clamp(anchor.y - 6, 2, window.innerHeight - 20) + 'px';
-      root.appendChild(m); markers.push(m);
-    }
-  }
 
   // Neutralize design-only visuals before the "Send to chat" screenshot so the
-  // agent reads the real result, not our chrome: hide the changes panel, guides
-  // and morph overlays, and make inserted placeholders' dashed "drop-zone" border
-  // + tint transparent (kept in the layout so the numbered markers stay aligned;
-  // the generated content is left visible). The numbered markers stay — they're
-  // intentional and referenced by the instruction. Restored on drain.
+  // agent reads the real result, not our tooling chrome. We hide the changes
+  // panel, guides and morph overlays, and make inserted placeholders' dashed
+  // "drop-zone" border + tint transparent (kept in the layout, generated content
+  // left visible). We deliberately draw NO numbered markers over the design —
+  // they read as UI badges to the agent; the change-set below carries each item's
+  // selector/text/component for source mapping instead. User annotations that ARE
+  // meant for the agent (comment pins, sketches) are left in. Restored on drain.
   function stripCaptureAffordances() {
     if (elChanges) elChanges.style.display = 'none';
     clearGuides();
@@ -1913,8 +1899,7 @@
     elHover.style.display = 'none'; elLabel.style.display = 'none';
     elToolbar.style.display = 'none'; elInspector.style.display = 'none';
     if (elLegend) elLegend.style.display = 'none';
-    stripCaptureAffordances(); // remove design-only chrome from the capture
-    drawMarkers(); // (after stripping, so numbered badges anchor to final positions)
+    stripCaptureAffordances(); // keep the screenshot to the clean design result
     state.handoff = { instruction: composeInstruction(), changeCount: state.changes.length };
     bump();
   }
@@ -1945,7 +1930,7 @@
 
   function composeInstruction() {
     var lines = [];
-    lines.push('I made these visual tweaks directly in the live preview (numbers match the highlighted markers in the attached screenshot). Please apply the equivalent changes to the app’s source:');
+    lines.push('I made these visual tweaks directly in the live preview — the attached screenshot shows the intended result. Please apply the equivalent changes to the app’s source (use each item’s `context`/selector in the change-set below to locate the element):');
     lines.push('');
     for (var i = 0; i < state.changes.length; i++) {
       var c = state.changes[i], n = (i + 1) + '. ';
@@ -1955,11 +1940,11 @@
       else if (c.kind === 'resize') lines.push(n + c.label + ' — resize from ' + c.from + ' to ' + c.to + ' px.');
       else if (c.kind === 'remove') lines.push(n + c.label + ' — remove this element.');
       else if (c.kind === 'comment') lines.push(n + 'Note on ' + c.label + ': ' + (c.note || '(no text)'));
-      else if (c.kind === 'annotation') lines.push(n + 'Sketch (' + c.property + ') ' + (c.region ? 'on ' + c.region : '') + ' — see the screenshot marker.');
+      else if (c.kind === 'annotation') lines.push(n + 'Sketch (' + c.property + ') ' + (c.region ? 'on ' + c.region : '') + ' — see the sketch in the screenshot.');
       else if (c.kind === 'insert') {
         var pr = c.el && c.el.isConnected ? c.el.getBoundingClientRect() : null;
         var desc = c.el ? (phDesc(c.el) || shortText(c.el)) : '';
-        lines.push(n + 'Add a NEW UI component ' + insertLoc(c.el) + (pr ? ', ~' + Math.round(pr.width) + '×' + Math.round(pr.height) + 'px' : '') + '. Intended: “' + desc + '”.' + (c.generatedHtml ? ' A generated HTML/CSS starting point is in the change-set (`generatedHtml`) — use it as the base.' : ' (see the placeholder/marker in the screenshot).'));
+        lines.push(n + 'Add a NEW UI component ' + insertLoc(c.el) + (pr ? ', ~' + Math.round(pr.width) + '×' + Math.round(pr.height) + 'px' : '') + '. Intended: “' + desc + '”.' + (c.generatedHtml ? ' A generated HTML/CSS starting point is in the change-set (`generatedHtml`) — use it as the base.' : ' (see the new component in the screenshot).'));
       }
       else lines.push(n + c.label + ' — set ' + c.property + ' to ' + c.to + '.');
     }
@@ -2140,7 +2125,7 @@
     window.removeEventListener('scroll', reposition, true);
     window.removeEventListener('resize', reposition, true);
     if (rafId) cancelAnimationFrame(rafId); rafId = 0;
-    clearMarkers();
+    restoreCaptureAffordances(); // undo any un-drained pre-capture neutralization
     // Reset any placeholder left mid-"building" (its animation style is about to
     // be removed) so it doesn't sit as a static half-state in the app.
     try {
@@ -2194,9 +2179,9 @@
     var hf = state.handoff; if (!hf) return null;
     state.handoff = null;
     var out = { instruction: hf.instruction, changeCount: hf.changeCount };
-    // Clean up: clear change-set (entries hold the undo closures), markup, and
-    // markers; restore chrome (host typically disables next).
-    state.changes = []; state.redo = []; clearMarkers(); clearPins(); clearDrawings();
+    // Clean up: clear the change-set (entries hold the undo closures) and any
+    // user markup (pins/sketches); restore chrome (host typically disables next).
+    state.changes = []; state.redo = []; clearPins(); clearDrawings();
     restoreCaptureAffordances(); // undo the pre-capture placeholder/overlay neutralization
     if (elChanges) elChanges.style.display = 'none';
     if (elToolbar) { elToolbar.style.display = 'flex'; renderBar(); }
