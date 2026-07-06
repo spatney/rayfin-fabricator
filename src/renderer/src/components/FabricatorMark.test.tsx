@@ -1,17 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
-import {
-  FabricatorMark,
-  MARK_GRAY,
-  MARK_TEAL,
-  MARK_TILES
-} from './FabricatorMark'
+import { FabricatorMark, MARK_GRADIENT_STOPS, MARK_TILES } from './FabricatorMark'
 
 /**
- * The brand mark replaced a static logo.png so its gray tiles could follow the
- * theme. These guard that: (1) the gray tiles paint from the --logo-gray var (the
- * fix for the washed-out light theme), (2) teal tiles keep the fixed brand teal,
- * and (3) sizing classes + decorative/labelled a11y wiring survive.
+ * The brand mark replaced a static logo.png so it could carry one blue→cyan→green
+ * gradient that reads on both light and dark backgrounds. These guard that: (1) the
+ * gradient stops render, (2) every tile + bracket is painted from that gradient (so
+ * the fill flows continuously across the mark), (3) each instance gets a unique
+ * gradient id, and (4) sizing classes + decorative/labelled a11y wiring survive.
  */
 describe('FabricatorMark', () => {
   afterEach(cleanup)
@@ -29,24 +25,38 @@ describe('FabricatorMark', () => {
     expect(svg.classList.contains('brand-mark')).toBe(true)
   })
 
-  it('paints gray tiles from the theme-aware --logo-gray var', () => {
+  it('renders the blue→cyan→green gradient stops', () => {
     const svg = renderMark()
-    const grayTiles = MARK_TILES.filter((t) => t.fill === 'gray')
-    expect(grayTiles.length).toBeGreaterThan(0)
-    for (const t of grayTiles) {
+    const grad = svg.querySelector('linearGradient')
+    expect(grad).not.toBeNull()
+    const stops = grad ? Array.from(grad.querySelectorAll('stop')) : []
+    expect(stops).toHaveLength(MARK_GRADIENT_STOPS.length)
+    stops.forEach((stop, i) => {
+      expect(stop.getAttribute('offset')).toBe(MARK_GRADIENT_STOPS[i].offset)
+      expect(stop.getAttribute('stop-color')).toBe(MARK_GRADIENT_STOPS[i].color)
+    })
+  })
+
+  it('paints every tile from the shared gradient', () => {
+    const svg = renderMark()
+    const gid = svg.querySelector('linearGradient')?.getAttribute('id')
+    expect(gid).toBeTruthy()
+    for (const t of MARK_TILES) {
       const rect = svg.querySelector(`rect.${t.cls}`)
-      expect(rect?.getAttribute('fill')).toBe(MARK_GRAY)
-      expect(MARK_GRAY).toContain('--logo-gray')
+      expect(rect?.getAttribute('fill')).toBe(`url(#${gid})`)
     }
   })
 
-  it('paints teal tiles with the fixed brand teal', () => {
-    const svg = renderMark()
-    const tealTiles = MARK_TILES.filter((t) => t.fill === 'teal')
-    for (const t of tealTiles) {
-      const rect = svg.querySelector(`rect.${t.cls}`)
-      expect(rect?.getAttribute('fill')).toBe(MARK_TEAL)
-    }
+  it('gives each instance a unique gradient id', () => {
+    const { container } = render(
+      <>
+        <FabricatorMark />
+        <FabricatorMark />
+      </>
+    )
+    const ids = Array.from(container.querySelectorAll('linearGradient')).map((g) => g.id)
+    expect(ids).toHaveLength(2)
+    expect(ids[0]).not.toBe(ids[1])
   })
 
   it('is decorative (aria-hidden) by default and labelled when a title is given', () => {

@@ -8,7 +8,8 @@
 }
 
 :root {
-  /* Dark theme (default) — deep, slightly cool neutrals + a teal accent (from the logo). */
+  /* Dark theme (default) — deep, slightly cool neutrals + an azure accent (from the
+     logo's blue→cyan→green gradient). */
   --bg: #0b0e14;
   --bg-elev: #12161f;
   --bg-elev-2: #1a1f2b;
@@ -19,14 +20,11 @@
   --text-dim: #9aa4b8;
   --text-faint: #6b7488;
 
-  --accent: #34b4ba;
-  --accent-2: #76c2c5;
+  --accent: #35a3ea;
+  --accent-2: #46ccb0;
   --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --accent-ring: color-mix(in srgb, var(--accent) 38%, transparent);
-  --on-accent: #042220;
-
-  /* Brand mark: gray tiles read this. Light theme darkens it so it doesn't wash out. */
-  --logo-gray: #e3e4e0;
+  --on-accent: #04273f;
 
   --ok: #3ddc84;
   --pending: #f5c451;
@@ -78,8 +76,8 @@
   --text-dim: #4a5361;
   --text-faint: #767f91;
 
-  --accent: #0e8187;
-  --accent-2: #2bacb2;
+  --accent: #0f6cbd;
+  --accent-2: #1aa1be;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
   --accent-ring: color-mix(in srgb, var(--accent) 32%, transparent);
   --on-accent: #ffffff;
@@ -96,8 +94,6 @@
   --code-inline-text: #1f2733;
 
   /* Code blocks stay dark in light mode, so syntax tokens keep the dark palette. */
-
-  --logo-gray: #aeb6c0;
 
   color-scheme: light;
 }

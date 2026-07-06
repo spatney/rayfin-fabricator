@@ -64,7 +64,7 @@ monaco.editor.defineTheme('rayfin-light', {
     'editorWidget.background': '#ffffff',
     'editorWidget.border': '#d5dce6',
     'editorIndentGuide.background1': '#e7ebf2',
-    'editor.selectionBackground': '#c7e5e7',
+    'editor.selectionBackground': '#cfe3f7',
     'scrollbarSlider.background': '#9aa3b280'
   }
 })

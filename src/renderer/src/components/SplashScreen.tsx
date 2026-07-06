@@ -1,18 +1,20 @@
 // The Fabricator mark is a set of rounded-rect tiles that form an "F". We recreate
 // it as inline SVG (one element per tile) so each block can glide itself into place — a
-// slick "the logo builds itself" splash. The tile/bracket geometry is shared with the
-// static <FabricatorMark> so the assembled mark matches the real logo exactly.
+// slick "the logo builds itself" splash. The tile/bracket geometry + blue→cyan→green
+// gradient are shared with the static <FabricatorMark> so the mark matches exactly.
+import { useId } from 'react'
 import {
   MARK_BRACKET_RX,
   MARK_BRACKETS,
-  MARK_TEAL,
   MARK_TILE_RX,
   MARK_TILES,
   MARK_VIEWBOX,
-  markFill
+  MarkGradient
 } from './FabricatorMark'
 
 function BuildingLogo(): JSX.Element {
+  const gid = 'splash-mark-' + useId().replace(/:/g, '')
+  const fill = `url(#${gid})`
   return (
     <svg
       className="splash-logo"
@@ -21,6 +23,7 @@ function BuildingLogo(): JSX.Element {
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
+        <MarkGradient id={gid} />
         <linearGradient id="splash-sheen-grad" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stopColor="#ffffff" stopOpacity="0" />
           <stop offset="0.5" stopColor="#ffffff" stopOpacity="0.65" />
@@ -48,11 +51,11 @@ function BuildingLogo(): JSX.Element {
             width={t.w}
             height={t.h}
             rx={MARK_TILE_RX}
-            fill={markFill(t.fill)}
+            fill={fill}
           />
         ))}
         {MARK_BRACKETS.map((b) => (
-          <g key={b.cls} className={`tile bracket ${b.cls}`} fill={MARK_TEAL}>
+          <g key={b.cls} className={`tile bracket ${b.cls}`} fill={fill}>
             {b.rects.map((r, i) => (
               <rect key={i} x={r[0]} y={r[1]} width={r[2]} height={r[3]} rx={MARK_BRACKET_RX} />
             ))}
