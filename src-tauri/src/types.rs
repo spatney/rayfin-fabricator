@@ -453,7 +453,7 @@ pub struct AppSettings {
 }
 
 fn default_theme() -> String {
-  "dark".to_string()
+  "system".to_string()
 }
 
 #[derive(Deserialize, Clone)]

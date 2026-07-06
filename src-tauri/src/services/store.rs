@@ -32,7 +32,7 @@ fn default_state() -> ProjectsState {
 
 fn default_settings() -> AppSettings {
   AppSettings {
-    theme: "dark".to_string(),
+    theme: "system".to_string(),
     ui_scale: Some(1.0),
     experiments: Some(ExperimentFlags {
       compatibility_rendering: Some(false),
