@@ -639,18 +639,15 @@ export default function ModelView({
           </span>
         </div>
         <div className="model-legend" aria-hidden="true">
+          <span className="model-legend-label">Access</span>
           <span className="model-legend-item">
-            <span className="model-badge-dot model-badge-dot--ok">●</span> Row‑scoped
+            <span className="model-legend-dot model-legend-dot--ok" /> Row‑scoped
           </span>
           <span className="model-legend-item">
-            <span className="model-badge-dot model-badge-dot--warn">●</span> Any signed‑in
+            <span className="model-legend-dot model-legend-dot--warn" /> Any signed‑in
           </span>
           <span className="model-legend-item">
-            <span className="model-badge-dot model-badge-dot--danger">●</span> Public
-          </span>
-          <span className="model-legend-sep" />
-          <span className="model-legend-item">
-            <span className="model-legend-crow">⪝</span> to‑many
+            <span className="model-legend-dot model-legend-dot--danger" /> Public
           </span>
         </div>
       </div>

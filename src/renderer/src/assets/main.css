@@ -9532,41 +9532,40 @@ code {
 .model-legend {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   flex: none;
+}
+
+.model-legend-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .model-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: 11px;
   color: var(--text-dim);
 }
 
-.model-badge-dot {
-  font-size: 9px;
-  line-height: 1;
+.model-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
 }
-.model-badge-dot--ok {
-  color: var(--ok);
+.model-legend-dot--ok {
+  background: var(--ok);
 }
-.model-badge-dot--warn {
-  color: var(--pending);
+.model-legend-dot--warn {
+  background: var(--pending);
 }
-.model-badge-dot--danger {
-  color: var(--danger);
-}
-.model-legend-sep {
-  width: 1px;
-  align-self: stretch;
-  margin: 2px 2px;
-  background: var(--border);
-}
-.model-legend-crow {
-  color: var(--accent);
-  font-size: 12px;
-  line-height: 1;
+.model-legend-dot--danger {
+  background: var(--danger);
 }
 
 /* ── Model toolbar (search / focus / collapse / zoom / fit / reset) ───────── */
