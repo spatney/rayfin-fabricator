@@ -1513,9 +1513,91 @@ export default function ChatPanel({
   const pendingCaret = useRef<number | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const highlightRef = useRef<HTMLDivElement>(null)
+  const sizerRef = useRef<HTMLDivElement>(null)
+  const revealRaf = useRef<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [attaching, setAttaching] = useState(false)
 
+  // Keep the caret in view inside the composer's single scrollport
+  // (`.composer-input-sizer`). The textarea is sized to its full content height so
+  // it never scrolls internally — that is what makes text and the highlight
+  // overlay impossible to desync (issue #13). The trade-off is that the browser no
+  // longer auto-reveals the caret: it only scrolls a control's own scrollport, not
+  // an ancestor. So we nudge the shared scrollport ourselves. This only moves where
+  // that one scrollport sits; both layers live inside it, so they always stay
+  // aligned. The measurement is batched into an animation frame and gated on the
+  // composer actually overflowing, so short prompts pay nothing and fast typing
+  // forces at most one reflow per frame.
+  const revealCaretSoon = useCallback((): void => {
+    if (revealRaf.current != null) return
+    revealRaf.current = requestAnimationFrame(() => {
+      revealRaf.current = null
+      const ta = taRef.current
+      const hl = highlightRef.current
+      const sizer = sizerRef.current
+      if (!ta || !hl || !sizer) return
+      if (sizer.scrollHeight - sizer.clientHeight <= 1) return
+      const caret = ta.selectionEnd ?? ta.value.length
+      // The highlight mirrors the textarea text with identical metrics; mentions
+      // add <mark> children, so walk every text node in order to map the caret
+      // index (into the raw value) onto a DOM position we can measure.
+      const walker = document.createTreeWalker(hl, NodeFilter.SHOW_TEXT)
+      let remaining = caret
+      let node = walker.nextNode()
+      let target: Text | null = null
+      let targetOffset = 0
+      while (node) {
+        const len = node.nodeValue?.length ?? 0
+        if (remaining <= len) {
+          target = node as Text
+          targetOffset = remaining
+          break
+        }
+        remaining -= len
+        const next = walker.nextNode()
+        if (!next) {
+          target = node as Text
+          targetOffset = len
+          break
+        }
+        node = next
+      }
+      if (!target) return
+      const range = document.createRange()
+      range.setStart(target, targetOffset)
+      range.setEnd(target, targetOffset)
+      let rect = range.getBoundingClientRect()
+      if (rect.height === 0) {
+        // A collapsed range can report an empty rect; measure an adjacent glyph.
+        const len = target.nodeValue?.length ?? 0
+        if (targetOffset < len) range.setEnd(target, targetOffset + 1)
+        else if (targetOffset > 0) range.setStart(target, targetOffset - 1)
+        rect = range.getBoundingClientRect()
+      }
+      const sr = sizer.getBoundingClientRect()
+      const top = rect.top - sr.top + sizer.scrollTop
+      const bottom = rect.bottom - sr.top + sizer.scrollTop
+      const viewTop = sizer.scrollTop
+      const viewBottom = viewTop + sizer.clientHeight
+      if (bottom > viewBottom) sizer.scrollTop = bottom - sizer.clientHeight
+      // Snap to the true top when the caret sits on the first line so the field's
+      // top padding shows rather than a sliver-scrolled first line.
+      else if (top < viewTop) sizer.scrollTop = top <= 12 ? 0 : top
+    })
+  }, [])
+
+  // Re-reveal after any value change (typing, paste, @-mention insert) — the
+  // effect runs once the highlight DOM reflects the new text.
+  useEffect(() => {
+    revealCaretSoon()
+  }, [input, revealCaretSoon])
+
+  useEffect(
+    () => () => {
+      if (revealRaf.current != null) cancelAnimationFrame(revealRaf.current)
+    },
+    []
+  )
   const fallbackSuggestions = useMemo(
     () => suggestionsFor(project),
     [project.id, project.name, project.template]
@@ -1701,10 +1783,9 @@ export default function ChatPanel({
   }
 
   // Composer auto-grow is handled purely in CSS via `.composer-input-sizer`
-  // (a hidden replica in the same grid cell). We deliberately avoid a
-  // JS `scrollHeight` measurement here: reading it on every keystroke forced a
-  // synchronous full-page reflow whose cost scaled with the conversation DOM,
-  // producing typing latency that grew with session length.
+  // (a hidden replica in the same grid cell). That container is also the single
+  // scrollport shared by the textarea and the highlight overlay, so the two can
+  // never scroll out of sync; `revealCaretSoon` (above) keeps the caret visible.
 
   // Stage one or more images (from the file picker, paste, or drag-drop) as chat
   // attachments — re-encoded to PNG and saved to a temp file, reusing the same
@@ -2032,6 +2113,7 @@ export default function ChatPanel({
   }
 
   function onComposerSelect(): void {
+    revealCaretSoon()
     if (atDismissed) return
     evalAt()
   }
@@ -2334,7 +2416,7 @@ export default function ChatPanel({
               ))}
             </div>
           )}
-          <div className="composer-input-sizer" data-replicated-value={input}>
+          <div className="composer-input-sizer" ref={sizerRef} data-replicated-value={input}>
             <div className="composer-highlight" ref={highlightRef} aria-hidden="true">
               {splitMentions(input).map((p, i) =>
                 p.mention ? (
@@ -2362,9 +2444,7 @@ export default function ChatPanel({
               onSelect={onComposerSelect}
               onKeyDown={onKeyDown}
               onPaste={onComposerPaste}
-              onScroll={(e) => {
-                if (highlightRef.current) highlightRef.current.scrollTop = e.currentTarget.scrollTop
-              }}
+              onFocus={revealCaretSoon}
             />
           </div>
           <div className="composer-actions">
