@@ -8450,6 +8450,13 @@ code {
 .composer-input-sizer {
   display: grid;
   width: 100%;
+  /* The single scrollport for the composer. Both the textarea and the visible
+     highlight layer grow to full content height inside this cell, so scrolling
+     happens here — moving both layers together. This makes caret/text drift
+     structurally impossible (no per-layer scroll to fall out of sync). */
+  max-height: 200px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .composer-input-sizer::after {
@@ -8466,7 +8473,6 @@ code {
   font: inherit;
   line-height: 1.5;
   padding: 4px 0;
-  max-height: 200px;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -8483,8 +8489,10 @@ code {
   z-index: 1;
   font: inherit;
   line-height: 1.5;
-  max-height: 200px;
-  overflow-y: auto;
+  /* Grow to full content height; the shared .composer-input-sizer owns the
+     scroll. The textarea must not scroll internally or it would create a second
+     scroll offset that could drift from the highlight overlay. */
+  overflow: hidden;
   padding: 4px 0;
 }
 

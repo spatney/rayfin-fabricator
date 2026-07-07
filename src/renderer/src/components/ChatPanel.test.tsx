@@ -126,3 +126,92 @@ describe('ChatPanel composer draft', () => {
     expect(ta.value).toBe('')
   })
 })
+
+/**
+ * Guards issue #13: on a long prompt the caret drifted from the typed text
+ * ("typing occurs below the cursor line") because the transparent textarea and
+ * the `.composer-highlight` overlay scrolled independently and were reconciled
+ * only by the textarea's `onScroll`. The composer now shares a single scrollport
+ * (`.composer-input-sizer`) so the two layers can never desync; because the
+ * textarea can no longer scroll internally, ChatPanel scrolls that shared
+ * scrollport itself to keep the caret visible.
+ *
+ * jsdom performs no layout, so real scroll geometry is faked: the scrollport is
+ * made to overflow and the caret's measured rect is stubbed below the viewport.
+ */
+describe('ChatPanel composer scrollport (issue #13)', () => {
+  const rect = (top: number, bottom: number): DOMRect =>
+    ({
+      top,
+      bottom,
+      left: 0,
+      right: 0,
+      width: 1,
+      height: bottom - top,
+      x: 0,
+      y: top,
+      toJSON: () => ({})
+    }) as DOMRect
+
+  it('renders the textarea and highlight overlay inside one shared scrollport', async () => {
+    await act(async () => {
+      render(
+        <ChatPanel project={makeProject('p1')} messages={[]} onChange={() => {}} draft="" />
+      )
+    })
+    const sizer = document.querySelector('.composer-input-sizer')
+    const textarea = document.querySelector('.composer-input')
+    const highlight = document.querySelector('.composer-highlight')
+    expect(sizer).not.toBeNull()
+    expect(textarea).not.toBeNull()
+    expect(highlight).not.toBeNull()
+    // Both visible layers live in the same scroll container — the invariant that
+    // makes caret/text drift structurally impossible.
+    expect(sizer?.contains(textarea)).toBe(true)
+    expect(sizer?.contains(highlight)).toBe(true)
+  })
+
+  it('scrolls the shared scrollport to reveal the caret when a long prompt overflows', async () => {
+    const longPrompt = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n')
+    await act(async () => {
+      render(
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={[]}
+          onChange={() => {}}
+          draft={longPrompt}
+        />
+      )
+    })
+    const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    const sizer = document.querySelector('.composer-input-sizer') as HTMLElement
+
+    // Drain the reveal frame queued on mount (it early-returns with no layout),
+    // so the only trigger left is re-entering the field below.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+
+    // Fake an overflowing scrollport whose visible band is 100px tall.
+    Object.defineProperty(sizer, 'clientHeight', { value: 100, configurable: true })
+    Object.defineProperty(sizer, 'scrollHeight', { value: 400, configurable: true })
+    sizer.getBoundingClientRect = () => rect(0, 100)
+    // jsdom's Range has no getBoundingClientRect; report the caret ~380px down in
+    // content space (below the visible band) so the reveal has to scroll.
+    const proto = Range.prototype as unknown as { getBoundingClientRect?: () => DOMRect }
+    const origRangeRect = proto.getBoundingClientRect
+    proto.getBoundingClientRect = () => rect(380 - sizer.scrollTop, 396 - sizer.scrollTop)
+
+    sizer.scrollTop = 0
+    ta.setSelectionRange(longPrompt.length, longPrompt.length)
+    // Re-enter the field (the issue's repro) and let the queued frame run.
+    await act(async () => {
+      fireEvent.focus(ta)
+      await new Promise((r) => setTimeout(r, 50))
+    })
+
+    // Scrolled so the caret's bottom (396) sits at the viewport bottom: 396 - 100.
+    expect(sizer.scrollTop).toBe(296)
+    proto.getBoundingClientRect = origRangeRect
+  })
+})
