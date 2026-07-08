@@ -6873,25 +6873,55 @@ code {
 }
 
 .template-card {
+  position: relative;
   text-align: left;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px;
-  border-radius: 10px;
+  gap: 6px;
+  padding: 14px 36px 15px 14px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--bg-elev-2);
   cursor: pointer;
   color: var(--text);
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease;
+}
+
+/* Radio-style selection indicator in the top-right corner of each card. */
+.template-card::after {
+  content: '';
+  position: absolute;
+  top: 15px;
+  right: 14px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-faint);
+  box-sizing: border-box;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease;
 }
 
 .template-card:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-elev-2));
+}
+
+.template-card:hover:not(:disabled)::after {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--text-faint));
 }
 
 .template-card--active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
+}
+
+.template-card--active::after {
+  border-color: var(--accent);
+  background: radial-gradient(circle at center, var(--accent) 0 3.5px, transparent 4px);
 }
 
 .template-card:disabled {
@@ -6907,6 +6937,15 @@ code {
   font-size: 12px;
   color: var(--text-dim);
   line-height: 1.4;
+}
+
+/* Short explainer under the Featured / Community source toggle. */
+.template-caption {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  max-width: 64ch;
 }
 
 /* Indicator on a built-in card whose template opens embedded in the Fabric view. */
@@ -6928,6 +6967,9 @@ code {
   pointer-events: none;
   gap: 8px;
   min-height: 78px;
+}
+.template-card--skel::after {
+  display: none;
 }
 .skel-line {
   display: block;

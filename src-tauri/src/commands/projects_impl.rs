@@ -35,15 +35,25 @@ pub fn fabricator_default_preview_mode(template: &str) -> Option<String> {
   }
 }
 
-/// The built-in template set shown in New Project: the two bundled Fabricator
-/// variants (`fabricator-todoapp` / `fabricator-dataapp`,
+/// The built-in template set shown in New Project: the three bundled Fabricator
+/// variants (`fabricator-blankapp` / `fabricator-todoapp` / `fabricator-dataapp`,
 /// under `resources/fabricator-templates`), which strip the local-testing surface
 /// for the deploy-to-test workflow. Their metadata ships with the app, so the list
 /// is constant — no registry / `--list-templates` discovery is needed, and New
-/// Project opens instantly and offline. The Data App carries
+/// Project opens instantly and offline. Order matters: the first entry is the
+/// default selection, so the Blank App leads as the clean starting point (it bundles
+/// Graphein plus a `graphein-visuals` skill). The Data App carries
 /// `default_preview_mode = "fabric"` so it opens in the embedded Fabric portal preview.
 fn bundled_templates() -> Vec<TemplateInfo> {
   vec![
+    TemplateInfo {
+      name: "fabricator-blankapp".into(),
+      display_name: "Blank App".into(),
+      description:
+        "Start from scratch — a minimal Fabric-authenticated React + Vite app with Graphein wired in for charts. Build anything, then deploy to Fabric."
+          .into(),
+      default_preview_mode: fabricator_default_preview_mode("fabricator-blankapp"),
+    },
     TemplateInfo {
       name: "fabricator-todoapp".into(),
       display_name: "Todo App".into(),
@@ -368,7 +378,7 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   //     it against its bundled set).
   let is_fabricator = matches!(
     template.as_str(),
-    "fabricator-dataapp" | "fabricator-todoapp"
+    "fabricator-dataapp" | "fabricator-todoapp" | "fabricator-blankapp"
   );
   let template_source = if is_fabricator {
     let tmpl_dir = crate::services::paths::fabricator_templates_dir(app).join(&template);
@@ -644,9 +654,15 @@ entries:
   fn bundled_templates_lists_only_the_fabricator_variants() {
     let bundled = bundled_templates();
     let names: Vec<&str> = bundled.iter().map(|t| t.name.as_str()).collect();
-    // Only the two bundled Fabricator templates are offered as built-ins; the
-    // upstream blankapp / gettingstartedauth entries are dropped.
-    assert_eq!(names, vec!["fabricator-todoapp", "fabricator-dataapp"]);
+    // The three bundled Fabricator templates are offered as built-ins; the
+    // upstream gettingstartedauth entry is dropped and the upstream `blankapp`
+    // is replaced by our Graphein-equipped `fabricator-blankapp`. Order is
+    // meaningful: the first entry is the default selection in New Project, so the
+    // Blank App leads.
+    assert_eq!(
+      names,
+      vec!["fabricator-blankapp", "fabricator-todoapp", "fabricator-dataapp"]
+    );
     assert!(bundled
       .iter()
       .all(|t| !t.display_name.is_empty() && !t.description.is_empty()));
@@ -657,16 +673,19 @@ entries:
     let bundled = bundled_templates();
     let data = bundled.iter().find(|t| t.name == "fabricator-dataapp").unwrap();
     let todo = bundled.iter().find(|t| t.name == "fabricator-todoapp").unwrap();
+    let blank = bundled.iter().find(|t| t.name == "fabricator-blankapp").unwrap();
     // The Data App opens embedded in the Fabric portal shell by default…
     assert_eq!(data.default_preview_mode.as_deref(), Some("fabric"));
-    // …while the Todo App uses the direct app view.
+    // …while the Todo App and Blank App use the direct app view.
     assert_eq!(todo.default_preview_mode, None);
+    assert_eq!(blank.default_preview_mode, None);
   }
 
   #[test]
   fn fabricator_default_preview_mode_only_fabric_for_data_app() {
     assert_eq!(fabricator_default_preview_mode("fabricator-dataapp").as_deref(), Some("fabric"));
     assert_eq!(fabricator_default_preview_mode("fabricator-todoapp"), None);
+    assert_eq!(fabricator_default_preview_mode("fabricator-blankapp"), None);
     assert_eq!(fabricator_default_preview_mode("blankapp"), None);
     assert_eq!(fabricator_default_preview_mode("anything-else"), None);
   }

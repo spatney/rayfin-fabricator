@@ -1,0 +1,18 @@
+{
+  "templateId": "blankapp",
+  "icon": "blank-app",
+  "services": {
+    "auth": true,
+    "data": true,
+    "storage": false,
+    "staticHosting": true
+  },
+  "hasDabSchema": false,
+  "tokens": [
+    "__RAYFIN_API_URL__",
+    "__RAYFIN_PK__",
+    "__FABRIC_ITEM_ID__",
+    "__FABRIC_WORKSPACE_ID__",
+    "__FABRIC_PORTAL_URL__"
+  ]
+}

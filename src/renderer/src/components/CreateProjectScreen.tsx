@@ -390,10 +390,16 @@ export default function CreateProjectScreen({
                   </button>
                 </div>
 
+                <p className="template-caption">
+                  {source === 'builtin'
+                    ? 'Curated, ready-to-run starting points — each deploys straight to a Fabric test workspace, then you keep building with chat.'
+                    : 'Start from any community template published in an awesome-rayfin GitHub repo.'}
+                </p>
+
                 {source === 'builtin' ? (
                   loadingTemplates ? (
                     <div className="template-grid" aria-busy="true">
-                      {Array.from({ length: 4 }).map((_, i) => (
+                      {Array.from({ length: 3 }).map((_, i) => (
                         <div key={i} className="template-card template-card--skel">
                           <span className="skel-line skel-line--title" />
                           <span className="skel-line" />

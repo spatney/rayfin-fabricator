@@ -1,0 +1,11 @@
+apiVersion: v1
+metadata:
+  name: fabricator-blankapp
+  displayName: Blank App
+  description: >-
+    A bare-bones Fabric-authenticated React + Vite app with Graphein wired in for
+    data-viz — sign-in, routing, and a placeholder home page. Built for the
+    Fabricator deploy-to-test loop, with no local backend or test harness.
+entries:
+  - path: .
+    name: fabricator-blankapp

@@ -1,0 +1,43 @@
+{
+  "name": "fabricator-blankapp",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "template": {
+    "name": "fabricator-blankapp",
+    "displayName": "Blank App",
+    "description": "Bare-bones Fabric-authenticated React + Vite app with Graphein for data-viz — sign-in, routing, and a placeholder home page, ready to build charts and deploy to Fabric."
+  },
+  "scripts": {
+    "prebuild": "rayfin env --framework vite",
+    "build": "tsc -b && vite build",
+    "build:fabric": "tsc -b && vite build",
+    "lint": "eslint .",
+    "rayfin:up": "rayfin up"
+  },
+  "dependencies": {
+    "@microsoft/rayfin-auth-provider-fabric": "^1.33.2",
+    "@microsoft/rayfin-client": "^1.33.2",
+    "@microsoft/rayfin-core": "^1.33.2",
+    "@tailwindcss/vite": "^4.1.11",
+    "graphein": "^0.17.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "@microsoft/rayfin-cli": "^1.33.2",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react-swc": "^4.2.2",
+    "eslint": "^9.28.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^16.0.0",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0",
+    "vite": "^7.3.2"
+  }
+}
