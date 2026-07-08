@@ -9,7 +9,9 @@
     "description": "Bare-bones Fabric-authenticated React + Vite app with Graphein for data-viz — sign-in, routing, and a placeholder home page, ready to build charts and deploy to Fabric."
   },
   "scripts": {
+    "predev": "rayfin env --framework vite",
     "prebuild": "rayfin env --framework vite",
+    "dev": "rayfin up --exclude-services staticHosting && vite",
     "build": "tsc -b && vite build",
     "build:fabric": "tsc -b && vite build",
     "lint": "eslint .",

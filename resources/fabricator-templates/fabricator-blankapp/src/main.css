@@ -26,3 +26,286 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* ── Blank App landing ──────────────────────────────────────────────────────
+   A branded hero with a recolorable "Rayfin" wordmark and a playful light-bulb
+   pull toggle. Light theme is the default; `.dark` on <html> flips it to the
+   moody dark theme. Replace this page with your own once you start building. */
+.rayfin-hero {
+  /* Light theme (lights on) */
+  --hero-fg: #0c4a4d;
+  --hero-wordmark: #0d6d71;
+  --hero-hint: rgba(12, 74, 76, 0.72);
+  --hero-hint-bg: rgba(12, 74, 76, 0.05);
+  --hero-hint-border: rgba(12, 74, 76, 0.14);
+  --hero-dot: rgba(12, 90, 92, 0.11);
+  --hero-signout: rgba(10, 60, 62, 0.5);
+  --hero-signout-hover: #0c4a4d;
+  --wm-glow: rgba(20, 170, 168, 0.28);
+  --hero-bg: radial-gradient(700px 400px at 50% 4%, rgba(255, 214, 120, 0.4), transparent 62%),
+    radial-gradient(150% 120% at 50% 0%, #ffffff 0%, #e6f7f5 46%, #c6ecea 100%);
+
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 24px;
+  color: var(--hero-fg);
+  background: var(--hero-bg);
+  transition:
+    background 0.5s ease,
+    color 0.5s ease;
+}
+
+.dark .rayfin-hero {
+  /* Dark theme (lights off) */
+  --hero-fg: #eafffe;
+  --hero-wordmark: #dcfbfb;
+  --hero-hint: rgba(255, 255, 255, 0.78);
+  --hero-hint-bg: rgba(255, 255, 255, 0.07);
+  --hero-hint-border: rgba(255, 255, 255, 0.14);
+  --hero-dot: rgba(255, 255, 255, 0.09);
+  --hero-signout: rgba(255, 255, 255, 0.6);
+  --hero-signout-hover: #ffffff;
+  --wm-glow: rgba(150, 245, 245, 0.5);
+  --hero-bg: radial-gradient(760px 460px at 50% 40%, rgba(70, 212, 205, 0.16), transparent 60%),
+    radial-gradient(150% 120% at 50% 0%, #16585b 0%, #0c3538 48%, #061e20 100%);
+}
+
+/* faint dot-grid "canvas", fading out toward the edges */
+.rayfin-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(var(--hero-dot) 1px, transparent 1.5px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(72% 62% at 50% 44%, #000 36%, transparent 80%);
+  mask-image: radial-gradient(72% 62% at 50% 44%, #000 36%, transparent 80%);
+  pointer-events: none;
+}
+
+/* subtle vignette for depth (dark theme only) */
+.dark .rayfin-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(125% 100% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.28));
+  pointer-events: none;
+}
+
+.rayfin-hero-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 22px;
+  max-width: 100%;
+  animation: rayfin-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.rayfin-wordmark {
+  width: clamp(260px, 44vw, 500px);
+  height: auto;
+  color: var(--hero-wordmark);
+  user-select: none;
+  filter: drop-shadow(0 0 14px var(--wm-glow));
+  transition:
+    color 0.5s ease,
+    filter 0.5s ease;
+}
+
+.rayfin-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--hero-hint);
+  background: var(--hero-hint-bg);
+  border: 1px solid var(--hero-hint-border);
+  border-radius: 999px;
+  transition:
+    color 0.5s ease,
+    background 0.5s ease,
+    border-color 0.5s ease;
+}
+
+/* blinking terminal-style caret after the hint */
+.rayfin-hint::after {
+  content: '';
+  width: 7px;
+  height: 15px;
+  background: currentColor;
+  border-radius: 1px;
+  opacity: 0.85;
+  animation: rayfin-blink 1.15s step-end infinite;
+}
+
+.rayfin-signout {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  z-index: 2;
+  border: 0;
+  background: transparent;
+  color: var(--hero-signout);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.rayfin-signout:hover {
+  color: var(--hero-signout-hover);
+}
+
+/* ── Light-bulb pull toggle ─────────────────────────────────────────────── */
+.lightpull {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  /* only the chain's grab target is interactive; empty space clicks through */
+  pointer-events: none;
+  animation: rayfin-drop 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  -webkit-tap-highlight-color: transparent;
+}
+.lightpull:focus-visible {
+  outline: none;
+}
+.lightpull:focus-visible .glass {
+  stroke-width: 2.2;
+}
+
+.lightpull-svg {
+  display: block;
+  width: 106px;
+  height: auto;
+  overflow: visible;
+}
+
+/* the chain's grab handle (invisible, generous hit area) */
+.lightpull .chain-hit {
+  pointer-events: auto;
+  cursor: grab;
+}
+.lightpull .chain-hit:active {
+  cursor: grabbing;
+}
+
+.lightpull .glass,
+.lightpull .filament,
+.lightpull .halo {
+  transition:
+    fill 0.4s ease,
+    stroke 0.4s ease,
+    opacity 0.4s ease;
+}
+
+/* Lit (light theme) */
+.lightpull .halo {
+  opacity: 1;
+}
+.lightpull .glass {
+  fill: url(#lp-warm);
+  stroke: #ffcf76;
+  filter: drop-shadow(0 0 7px rgba(255, 205, 90, 0.85));
+}
+.lightpull .filament {
+  stroke: #fff3c4;
+}
+.lightpull .cap {
+  fill: #b9a06a;
+}
+.lightpull .cord {
+  stroke: rgba(90, 78, 45, 0.5);
+}
+.lightpull .chain-cord {
+  stroke: #b6a06c;
+  stroke-width: 1.2;
+}
+.lightpull .chain-bead {
+  fill: #c3a86e;
+}
+.lightpull .chain-knob {
+  fill: #e9c877;
+}
+
+/* Off (dark theme) */
+.dark .lightpull .halo {
+  opacity: 0;
+}
+.dark .lightpull .glass {
+  fill: rgba(210, 235, 235, 0.14);
+  stroke: rgba(255, 255, 255, 0.4);
+  filter: none;
+}
+.dark .lightpull .filament {
+  stroke: rgba(255, 255, 255, 0.35);
+}
+.dark .lightpull .cap {
+  fill: rgba(255, 255, 255, 0.32);
+}
+.dark .lightpull .cord {
+  stroke: rgba(255, 255, 255, 0.28);
+}
+.dark .lightpull .chain-cord {
+  stroke: rgba(255, 255, 255, 0.4);
+}
+.dark .lightpull .chain-bead {
+  fill: rgba(255, 255, 255, 0.45);
+}
+.dark .lightpull .chain-knob {
+  fill: rgba(255, 255, 255, 0.62);
+}
+
+@keyframes rayfin-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rayfin-drop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -22px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes rayfin-blink {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rayfin-hero-inner,
+  .lightpull {
+    animation: none;
+  }
+  .rayfin-hint::after {
+    animation: none;
+  }
+}
