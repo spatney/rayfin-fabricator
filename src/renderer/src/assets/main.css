@@ -10326,6 +10326,13 @@ code {
   gap: 18px;
 }
 
+/* Hide the name / template inputs while a project is being created so the
+   progress status sits at the top instead of below the (now-irrelevant)
+   template picker. */
+.create-field-hidden {
+  display: none;
+}
+
 .create-foot {
   display: flex;
   justify-content: flex-end;

@@ -316,7 +316,9 @@ export default function CreateProjectScreen({
   const sub =
     step === 'deploy'
       ? `Publish ${createdName || 'your app'} to a Fabric workspace to start building with chat.`
-      : 'Name your app and pick a template to start from.'
+      : busy
+        ? `Setting up ${name.trim() || 'your app'}…`
+        : 'Name your app and pick a template to start from.'
   const skipLabel = mode === 'deploy' ? 'Maybe later' : 'Continue without deploying →'
 
   return (
@@ -348,7 +350,7 @@ export default function CreateProjectScreen({
         {step === 'details' ? (
           <>
             <div className="create-body">
-              <label className="field">
+              <label className={`field${busy ? ' create-field-hidden' : ''}`}>
                 <span className="field-label">Project name</span>
                 <input
                   className="field-input"
@@ -369,7 +371,7 @@ export default function CreateProjectScreen({
                 )}
               </label>
 
-              <div className="field">
+              <div className={`field${busy ? ' create-field-hidden' : ''}`}>
                 <span className="field-label">Template</span>
                 <div className="seg">
                   <button
