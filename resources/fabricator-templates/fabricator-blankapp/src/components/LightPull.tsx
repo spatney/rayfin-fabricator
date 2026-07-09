@@ -9,14 +9,17 @@ import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react
 
 const N = 10; // chain nodes (node 0 is pinned to the bulb)
 const SEG = 5.5; // rest length between beads (SVG units)
-const GRAVITY = 0.9;
-const FRICTION = 0.99;
+const GRAVITY = 0.35; // pull on each bead — lower feels heavier, less snappy
+const FRICTION = 0.99; // velocity kept per frame (momentum / follow-through)
+const MAX_V = 10; // safety cap on per-frame bead speed (stops flick blow-ups)
 const ITER = 16; // constraint relaxation passes
 const ANCHOR = { x: 22, y: 101 }; // where the chain meets the bulb cap
 const REST_END_Y = ANCHOR.y + (N - 1) * SEG;
 const MAX_REACH = (N - 1) * SEG * 1.7;
 const PULL_TOGGLE = 22; // pull the knob this far below rest to switch
-const SLEEP = 0.05; // motion below this settles the simulation
+const SLEEP = 0.05; // per-frame motion below this counts as calm
+const REST_EPS = 1.5; // horizontal drift from vertical that still reads as straight
+const SETTLE_FRAMES = 8; // calm + straight frames in a row before the chain sleeps
 
 type Node = { x: number; y: number; px: number; py: number };
 
@@ -48,14 +51,20 @@ export function LightPull({
     let raf = 0;
     let sleeping = false;
     let stopped = false;
+    let settled = 0;
 
     function step() {
       const ns = nodes.current;
       for (let i = 1; i < N; i++) {
         if (drag.current.active && i === N - 1) continue;
         const n = ns[i];
-        const vx = (n.x - n.px) * FRICTION;
-        const vy = (n.y - n.py) * FRICTION;
+        let vx = (n.x - n.px) * FRICTION;
+        let vy = (n.y - n.py) * FRICTION;
+        // cap speed so an over-enthusiastic flick can't detonate the chain
+        if (vx > MAX_V) vx = MAX_V;
+        else if (vx < -MAX_V) vx = -MAX_V;
+        if (vy > MAX_V) vy = MAX_V;
+        else if (vy < -MAX_V) vy = -MAX_V;
         n.px = n.x;
         n.py = n.y;
         n.x += vx;
@@ -71,8 +80,15 @@ export function LightPull({
           dx = (dx / d) * MAX_REACH;
           dy = (dy / d) * MAX_REACH;
         }
-        ns[N - 1].x = ANCHOR.x + dx;
-        ns[N - 1].y = ANCHOR.y + dy;
+        const knob = ns[N - 1];
+        // Track the knob's previous spot while it's pinned. Without this its
+        // px/py stay frozen where the drag began, so releasing turns the whole
+        // drag distance into a single frame of velocity and flings it upward
+        // (the "jumps to the top" pop).
+        knob.px = knob.x;
+        knob.py = knob.y;
+        knob.x = ANCHOR.x + dx;
+        knob.y = ANCHOR.y + dy;
       }
       for (let k = 0; k < ITER; k++) {
         for (let i = 0; i < N - 1; i++) {
@@ -135,11 +151,27 @@ export function LightPull({
       return e;
     }
 
+    // How far the chain leans off its vertical rest pose. Near zero only when it
+    // hangs straight, so the sim never falls asleep frozen at an angle.
+    function offRest() {
+      const ns = nodes.current;
+      let d = 0;
+      for (let i = 1; i < N; i++) d += Math.abs(ns[i].x - ANCHOR.x);
+      return d;
+    }
+
     function loop() {
       step();
       draw();
-      if (!drag.current.active && motion() < SLEEP) {
+      // Sleep only once the chain is calm AND hanging straight for a few frames.
+      // Checking motion alone would freeze it mid-lean at the top of a swing,
+      // where velocity momentarily drops to zero.
+      const calm =
+        !drag.current.active && motion() < SLEEP && offRest() < REST_EPS;
+      settled = calm ? settled + 1 : 0;
+      if (settled >= SETTLE_FRAMES) {
         sleeping = true;
+        settled = 0;
         return;
       }
       raf = requestAnimationFrame(loop);
