@@ -26,6 +26,8 @@ interface Props {
   onContinueWithoutDeploy: () => void
   /** True while a `rayfin up` is already streaming for this project (disables the submit). */
   deploying?: boolean
+  /** Notify the parent that a Fabric sign-in just succeeded (refresh app auth). */
+  onSignedIn?: () => void
 }
 
 const keyOf = (t: { path?: string; name: string }): string => t.path || t.name
@@ -114,6 +116,7 @@ export default function CreateProjectScreen({
   onCreated,
   onDeploy,
   onContinueWithoutDeploy,
+  onSignedIn,
   deploying = false
 }: Props): JSX.Element {
   // The native preview webview floats above HTML; suppress it while this covers the body.
@@ -627,6 +630,7 @@ export default function CreateProjectScreen({
                 wsResult={wsResult}
                 loadingWs={loadingWs}
                 onReload={() => void loadWorkspaces()}
+                onSignedIn={onSignedIn}
                 running={deploying}
                 submitLabel="Deploy app"
                 busyLabel="Deploying…"

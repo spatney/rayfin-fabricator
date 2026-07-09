@@ -235,6 +235,28 @@ pub fn global_rayfin_auth_module() -> Option<PathBuf> {
   candidates.into_iter().find(|p| p.exists())
 }
 
+/// Resolve the Fabric auth entry module (`dist/auth/index.js`), preferring a
+/// project's *locally-installed* `@microsoft/rayfin-cli` so Fabric auth no longer
+/// requires a global CLI. Falls back to [`global_rayfin_auth_module`] when the
+/// project has no local copy (or `project_dir` is `None`), keeping existing global
+/// installs working. The MSAL token cache is shared across installs, so a
+/// project-local module reads the same signed-in session.
+pub fn project_rayfin_auth_module(project_dir: Option<&Path>) -> Option<PathBuf> {
+  if let Some(dir) = project_dir {
+    let local = dir
+      .join("node_modules")
+      .join("@microsoft")
+      .join("rayfin-cli")
+      .join("dist")
+      .join("auth")
+      .join("index.js");
+    if local.exists() {
+      return Some(local);
+    }
+  }
+  global_rayfin_auth_module()
+}
+
 /// Build the `node <script>` invocation for a project's locally-installed Rayfin
 /// CLI (the `npx rayfin` equivalent, honoring the project-pinned version).
 /// Falls back to the global `rayfin` shim, then to `npx`.
@@ -441,5 +463,39 @@ fn version_from(res: RunResult) -> Option<String> {
     None
   } else {
     Some(out.to_string())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn project_rayfin_auth_module_prefers_local_then_falls_back() {
+    // A project with the CLI installed locally resolves to its own auth module.
+    let dir = std::env::temp_dir().join(format!("rayfin-auth-{}", uuid::Uuid::new_v4()));
+    let module = dir
+      .join("node_modules")
+      .join("@microsoft")
+      .join("rayfin-cli")
+      .join("dist")
+      .join("auth")
+      .join("index.js");
+    std::fs::create_dir_all(module.parent().unwrap()).unwrap();
+    std::fs::write(&module, "// stub").unwrap();
+    assert_eq!(project_rayfin_auth_module(Some(&dir)), Some(module));
+
+    // A project without a local copy (or no project at all) falls back to the
+    // global resolver — deterministically identical to calling it directly.
+    let empty = std::env::temp_dir().join(format!("rayfin-empty-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&empty).unwrap();
+    assert_eq!(
+      project_rayfin_auth_module(Some(&empty)),
+      global_rayfin_auth_module()
+    );
+    assert_eq!(project_rayfin_auth_module(None), global_rayfin_auth_module());
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&empty);
   }
 }

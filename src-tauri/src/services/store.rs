@@ -217,3 +217,12 @@ pub fn mutate_project(id: &str, f: impl FnOnce(&mut StudioProject)) -> ProjectsS
 pub fn find_project(id: &str) -> Option<StudioProject> {
   with_cache(|c| c.state.projects.iter().find(|p| p.id == id).cloned())
 }
+
+/// The currently-active project (resolved from `active_project_id`), if any. Used
+/// to locate the project-local Rayfin CLI for Fabric auth / REST calls.
+pub fn active_project() -> Option<StudioProject> {
+  with_cache(|c| {
+    let id = c.state.active_project_id.clone()?;
+    c.state.projects.iter().find(|p| p.id == id).cloned()
+  })
+}

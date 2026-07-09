@@ -55,6 +55,10 @@ function App(): JSX.Element {
     }
   }, [applyPhase])
 
+  const refreshAuth = useCallback(async (): Promise<void> => {
+    setAuth(await window.api.auth.status())
+  }, [])
+
   // Explicit transition into the workbench, triggered by the setup screen's
   // "Enter" button once every prerequisite is satisfied.
   const enter = useCallback((): void => {
@@ -100,6 +104,7 @@ function App(): JSX.Element {
         <Workbench
           auth={auth}
           onSignOut={refresh}
+          onAuthChanged={refreshAuth}
           settings={settings}
           onSettingsChange={updateSettings}
         />

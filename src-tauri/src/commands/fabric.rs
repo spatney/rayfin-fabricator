@@ -319,7 +319,8 @@ fn failure_error(res: &exec::RunResult, out: &str) -> (bool, String) {
 /// capacity SKU and whether that capacity is eligible to host a Rayfin app.
 #[tauri::command]
 pub async fn fabric_workspaces() -> FabricWorkspacesResult {
-  let auth_path = match exec::global_rayfin_auth_module() {
+  let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
+  let auth_path = match exec::project_rayfin_auth_module(project_dir.as_deref()) {
     Some(p) => p,
     None => {
       return FabricWorkspacesResult {
@@ -327,7 +328,7 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
         workspaces: None,
         needs_login: None,
         error: Some(
-          "Could not locate the Rayfin CLI to list Fabric workspaces. Make sure the rayfin CLI is installed."
+          "Could not locate the Rayfin CLI. Open a project and install its dependencies to list Fabric workspaces."
             .to_string(),
         ),
       }
@@ -403,7 +404,8 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
 /// (eligible F-SKU / P-SKU only; PPU and non-Active excluded).
 #[tauri::command]
 pub async fn fabric_capacities() -> FabricCapacitiesResult {
-  let auth_path = match exec::global_rayfin_auth_module() {
+  let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
+  let auth_path = match exec::project_rayfin_auth_module(project_dir.as_deref()) {
     Some(p) => p,
     None => {
       return FabricCapacitiesResult {
@@ -411,7 +413,7 @@ pub async fn fabric_capacities() -> FabricCapacitiesResult {
         capacities: None,
         needs_login: None,
         error: Some(
-          "Could not locate the Rayfin CLI to list Fabric capacities. Make sure the rayfin CLI is installed."
+          "Could not locate the Rayfin CLI. Open a project and install its dependencies to list Fabric capacities."
             .to_string(),
         ),
       }
@@ -463,7 +465,8 @@ pub async fn fabric_capacities() -> FabricCapacitiesResult {
 /// inherited from the capacity. Returns the new workspace id on success.
 #[tauri::command]
 pub async fn fabric_create_workspace(name: String, capacity_id: String) -> FabricCreateWorkspaceResult {
-  let auth_path = match exec::global_rayfin_auth_module() {
+  let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
+  let auth_path = match exec::project_rayfin_auth_module(project_dir.as_deref()) {
     Some(p) => p,
     None => {
       return FabricCreateWorkspaceResult {
@@ -471,7 +474,7 @@ pub async fn fabric_create_workspace(name: String, capacity_id: String) -> Fabri
         workspace_id: None,
         needs_login: None,
         error: Some(
-          "Could not locate the Rayfin CLI to reach Fabric. Make sure the rayfin CLI is installed."
+          "Could not locate the Rayfin CLI. Open a project and install its dependencies to reach Fabric."
             .to_string(),
         ),
       }
@@ -559,7 +562,8 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
     };
   }
 
-  let auth_path = match exec::global_rayfin_auth_module() {
+  let project_dir = store::find_project(&project_id).map(|p| PathBuf::from(p.path));
+  let auth_path = match exec::project_rayfin_auth_module(project_dir.as_deref()) {
     Some(p) => p,
     None => {
       return FabricDeleteResult {
@@ -568,7 +572,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
         failures: vec![],
         needs_login: None,
         error: Some(
-          "Could not locate the Rayfin CLI to reach Fabric. Make sure the rayfin CLI is installed."
+          "Could not locate the Rayfin CLI. Install the project's dependencies to reach Fabric."
             .to_string(),
         ),
       }

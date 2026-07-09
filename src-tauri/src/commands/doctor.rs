@@ -1,12 +1,12 @@
 //! Environment doctor — the Rust port of `src/main/services/doctor.ts`.
 //! Detects the external prerequisites the user must provide (Node, npm, Git, and
-//! the Rayfin CLI) and can auto-install them — the system ones via winget
-//! (Windows) / brew (macOS) falling back to the official installer, and the
-//! Rayfin CLI globally via npm. The Rayfin CLI is required because Fabric
-//! sign-in and deploys shell out to the global `rayfin` command. The Copilot CLI
-//! is intentionally *not* listed here — it ships bundled with the app (embedded
-//! by the SDK, self-extracted on first use), so it needs no install, only a
-//! one-time sign-in (tracked separately by `auth_status`).
+//! the Azure CLI) and can auto-install them via winget (Windows) / brew (macOS),
+//! falling back to the official installer. Fabric sign-in and deploys use each
+//! project's locally-installed `@microsoft/rayfin-cli` (installed with the
+//! project), so no global Rayfin CLI is required here. The Copilot CLI is
+//! intentionally *not* listed either — it ships bundled with the app (embedded by
+//! the SDK, self-extracted on first use), so it needs no install, only a one-time
+//! sign-in (tracked separately by `auth_status`).
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -31,7 +31,6 @@ struct ToolDef {
   /// reported unsatisfied so the doctor offers to upgrade. `None` = any version.
   min_version: Option<&'static str>,
   required: bool,
-  npm_package: Option<&'static str>,
   system: Option<SystemPkg>,
   install_hint: &'static str,
   install_url: Option<&'static str>,
@@ -45,7 +44,6 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       bin: "node",
       version_args: &["--version"],
       required: true,
-      npm_package: None,
       system: Some(SystemPkg {
         winget: Some("OpenJS.NodeJS.LTS"),
         brew: Some("node"),
@@ -60,7 +58,6 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       bin: "npm",
       version_args: &["--version"],
       required: true,
-      npm_package: None,
       system: None,
       min_version: None,
       install_hint: "npm ships with Node.js.",
@@ -72,7 +69,6 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       bin: "git",
       version_args: &["--version"],
       required: true,
-      npm_package: None,
       system: Some(SystemPkg {
         winget: Some("Git.Git"),
         brew: Some("git"),
@@ -82,24 +78,11 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       install_url: Some("https://git-scm.com/downloads"),
     },
     ToolDef {
-      id: "rayfin",
-      name: "Rayfin CLI",
-      bin: "rayfin",
-      version_args: &["--version"],
-      required: true,
-      npm_package: Some("@microsoft/rayfin-cli"),
-      system: None,
-      min_version: Some("1.32"),
-      install_hint: "Required to sign in to Microsoft Fabric and deploy your apps.",
-      install_url: Some("https://www.npmjs.com/package/@microsoft/rayfin-cli"),
-    },
-    ToolDef {
       id: "az",
       name: "Azure CLI",
       bin: "az",
       version_args: &["version"],
       required: true,
-      npm_package: None,
       system: Some(SystemPkg {
         winget: Some("Microsoft.AzureCLI"),
         brew: Some("azure-cli"),
@@ -114,7 +97,6 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       bin: "gh",
       version_args: &["--version"],
       required: false,
-      npm_package: None,
       system: Some(SystemPkg {
         winget: Some("GitHub.cli"),
         brew: Some("gh"),
@@ -154,7 +136,7 @@ fn system_installable(def: &ToolDef) -> bool {
 }
 
 fn is_auto_installable(def: &ToolDef) -> bool {
-  def.npm_package.is_some() || system_installable(def)
+  system_installable(def)
 }
 
 static VERSION_RE: Lazy<Regex> =
@@ -229,7 +211,6 @@ pub async fn doctor_install(app: AppHandle, id: String) -> InstallResult {
     "node" => "install:node",
     "npm" => "install:setup",
     "git" => "install:git",
-    "rayfin" => "install:rayfin",
     "az" => "install:az",
     "gh" => "install:gh",
     _ => "install:setup",
@@ -247,49 +228,6 @@ pub async fn doctor_install_all(app: AppHandle) -> InstallResult {
 fn emit(on_data: &Option<OnData>, stream: Stream, msg: &str) {
   if let Some(cb) = on_data {
     cb(stream, msg);
-  }
-}
-
-async fn install_npm_tool(def: &ToolDef, on_data: Option<OnData>) -> InstallResult {
-  let pkg = def.npm_package.unwrap();
-  emit(&on_data, Stream::Stdout, &format!("Installing {pkg} globally via npm…\n"));
-  let res = exec::run(
-    "npm",
-    &["install", "-g", pkg],
-    RunOptions {
-      on_data: on_data.clone(),
-      timeout_ms: Some(5 * 60_000),
-      ..Default::default()
-    },
-  )
-  .await;
-  if res.not_found {
-    emit(
-      &on_data,
-      Stream::Stderr,
-      "\nnpm was not found. Install Node.js first, then restart.\n",
-    );
-    return InstallResult {
-      ok: false,
-      exit_code: res.exit_code,
-      requires_relaunch: Some(true),
-      manual: None,
-    };
-  }
-  if res.ok {
-    emit(&on_data, Stream::Stdout, &format!("\nInstalled {pkg}.\n"));
-  } else {
-    emit(
-      &on_data,
-      Stream::Stderr,
-      &format!("\nInstall failed (exit {:?}).\n", res.exit_code),
-    );
-  }
-  InstallResult {
-    ok: res.ok,
-    exit_code: res.exit_code,
-    requires_relaunch: None,
-    manual: None,
   }
 }
 
@@ -421,9 +359,6 @@ pub async fn install_tool(app: &AppHandle, id: &str, on_data: Option<OnData>) ->
       manual: None,
     };
   };
-  if def.npm_package.is_some() {
-    return install_npm_tool(def, on_data).await;
-  }
   if system_installable(def) {
     return install_system_tool(app, def, on_data).await;
   }
@@ -460,47 +395,27 @@ pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> In
     };
   }
 
-  // Phase 1 — system prerequisites (Node first so npm appears, then Git, then
-  // the Azure CLI). These all land on PATH and need a relaunch to be picked up.
+  // All auto-installable prerequisites are system packages (Node first so npm
+  // appears, then Git, then the Azure CLI). They land on PATH and need a relaunch
+  // to be picked up.
   let system_missing: Vec<&ToolDef> = ["node", "git", "az"]
     .iter()
     .filter_map(|id| tool_by_id(id))
     .filter(|def| missing.iter().any(|m| m == def.id) && system_installable(def))
     .collect();
 
-  if !system_missing.is_empty() {
-    let mut all_ok = true;
-    for def in system_missing {
-      emit(&on_data, Stream::Stdout, &format!("\n\u{203a} Installing {}\n", def.name));
-      let res = install_system_tool(app, def, on_data.clone()).await;
-      all_ok = all_ok && res.ok;
-    }
-    return InstallResult {
-      ok: all_ok,
-      exit_code: if all_ok { Some(0) } else { None },
-      requires_relaunch: Some(true),
-      manual: None,
-    };
-  }
-
-  // Phase 2 — npm CLIs (Node present). Install the Rayfin CLI.
   let mut all_ok = true;
-  let mut last_exit: Option<i32> = Some(0);
-  for def in TOOLS
-    .iter()
-    .filter(|t| t.npm_package.is_some() && missing.iter().any(|m| m == t.id))
-  {
+  let mut installed_any = false;
+  for def in system_missing {
     emit(&on_data, Stream::Stdout, &format!("\n\u{203a} Installing {}\n", def.name));
-    let res = install_npm_tool(def, on_data.clone()).await;
+    installed_any = true;
+    let res = install_system_tool(app, def, on_data.clone()).await;
     all_ok = all_ok && res.ok;
-    if !res.ok {
-      last_exit = res.exit_code;
-    }
   }
   InstallResult {
     ok: all_ok,
-    exit_code: last_exit,
-    requires_relaunch: None,
+    exit_code: if all_ok { Some(0) } else { None },
+    requires_relaunch: if installed_any { Some(true) } else { None },
     manual: None,
   }
 }
@@ -533,18 +448,17 @@ mod tests {
   }
 
   #[test]
-  fn rayfin_tool_has_minimum_and_is_npm_installable() {
-    let rayfin = tool_by_id("rayfin").expect("rayfin tool def");
-    assert_eq!(rayfin.min_version, Some("1.32"));
-    assert_eq!(rayfin.npm_package, Some("@microsoft/rayfin-cli"));
-    assert!(rayfin.required);
+  fn doctor_no_longer_requires_a_global_rayfin_cli() {
+    // Fabric sign-in / deploys use each project's locally-installed CLI, so the
+    // global Rayfin CLI is no longer an environment prerequisite.
+    assert!(tool_by_id("rayfin").is_none());
+    assert!(TOOLS.iter().all(|t| t.id != "rayfin"));
   }
 
   #[test]
-  fn node_requires_20_so_it_gates_before_the_rayfin_cli() {
-    // The Rayfin CLI's npm package requires Node >=20; on Node 18 `npm i -g`
-    // only warns while `rayfin --version` fails, leaving the rayfin gate stuck.
-    // Flagging Node here upgrades it (and relaunches) before the npm phase.
+  fn node_requires_20() {
+    // The project-local Rayfin CLI / SDK packages require Node >=20; flag an older
+    // Node so the doctor upgrades it (and relaunches) before anything else.
     let node = tool_by_id("node").expect("node tool def");
     assert_eq!(node.min_version, Some("20"));
     assert!(!meets_min_version(Some("18.20.4"), node.min_version.unwrap()));

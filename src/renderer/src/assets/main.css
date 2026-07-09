@@ -5469,6 +5469,276 @@ code {
   text-align: left;
 }
 
+/* ============================================================
+   Deploy view (DeployStage.tsx) — a flat, modern take on Fabricator's
+   self-building splash mark, shown while a deploy streams. Scoped
+   `.dstage-*`; solid fills only (no glow/bloom/shadow), color from
+   --accent / --accent-2 so it tracks both themes.
+   ============================================================ */
+.dstage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.dstage-scene {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(22px, 5vh, 46px);
+  padding: 24px;
+}
+
+/* The self-building mark — clean, no glow/shadow */
+.dstage-mark {
+  width: clamp(112px, 26vh, 164px);
+  aspect-ratio: 428 / 424;
+}
+.dstage-logo {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.dstage-brick {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation:
+    dstage-assemble 0.8s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0s) both,
+    dstage-shimmer 4s ease-in-out calc(var(--d, 0s) + 1s) infinite;
+}
+@keyframes dstage-assemble {
+  from {
+    opacity: 0;
+    transform: translate(var(--tx, 0), var(--ty, 0)) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+/* Gentle idle shimmer once assembled — a soft brightness wave across the mark
+   (opacity only, so adjacent tiles never seam apart). */
+@keyframes dstage-shimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+/* ---- Status block ---- */
+.dstage-hud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 11px;
+  text-align: center;
+}
+.dstage-eyebrow {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.dstage-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.dstage-title b {
+  font-weight: 650;
+  color: var(--text);
+}
+.dstage-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.dstage-phase-label {
+  display: inline-block;
+  animation: dstage-phase-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes dstage-phase-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.dstage-phase-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dstage-dot 1.5s ease-in-out infinite;
+}
+@keyframes dstage-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.dstage-phase-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+.dstage-steps {
+  display: flex;
+  gap: 6px;
+  width: min(300px, 74vw);
+}
+.dstage-step {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 14%, var(--border));
+  transition: background 0.4s ease;
+}
+.dstage-step[data-state='done'] {
+  background: var(--accent);
+}
+.dstage-step-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 1s linear;
+  animation: dstage-fill-pulse 1.7s ease-in-out infinite;
+}
+@keyframes dstage-fill-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ---- Footer: telemetry ticker + logs toggle ---- */
+.dstage-timer {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+.dstage-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.dstage-ticker {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.dstage-ticker-caret {
+  color: var(--accent);
+  font-weight: 700;
+}
+.dstage-ticker-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dstage-ticker-cursor {
+  width: 6px;
+  height: 13px;
+  flex: none;
+  background: var(--accent);
+  animation: dstage-cursor 1s steps(1) infinite;
+}
+@keyframes dstage-cursor {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+.dstage-logbtn {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+.dstage-logbtn:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.dstage-fulllog {
+  max-height: 168px;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+/* Reduced motion: show the assembled mark, no motion */
+@media (prefers-reduced-motion: reduce) {
+  .dstage-brick,
+  .dstage-phase-dot,
+  .dstage-phase-label,
+  .dstage-step-fill,
+  .dstage-ticker-cursor {
+    animation: none !important;
+  }
+  .dstage-brick {
+    opacity: 1;
+    transform: none;
+  }
+  .dstage-step-fill {
+    transition: none;
+  }
+}
+
 .preview-loading {
   font-size: 11px;
   color: var(--text-dim);

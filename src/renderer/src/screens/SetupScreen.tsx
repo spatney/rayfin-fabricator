@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AuthStatus, DoctorReport, InstallResult, ProcLogEvent } from '@shared/ipc'
 import { FabricatorMark } from '../components/FabricatorMark'
-import rayfinMark from '../assets/brands/rayfin.png'
 import nodeSvg from '../assets/brands/node.svg'
 import npmSvg from '../assets/brands/npm.svg'
 import gitSvg from '../assets/brands/git.svg'
 import azureSvg from '../assets/brands/azure.svg'
-import fabricSvg from '../assets/brands/fabric.svg'
 import { CopilotLogo } from '../components/brand-icons'
 import { CheckIcon, DownloadIcon, ReloadIcon, TerminalIcon } from '../components/icons'
 
@@ -15,7 +13,6 @@ const TOOL_LOGOS: Record<string, string> = {
   node: nodeSvg,
   npm: npmSvg,
   git: gitSvg,
-  rayfin: rayfinMark,
   az: azureSvg
 }
 
@@ -55,8 +52,8 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
       setLog((p) => `${p}\n[error] ${String(err)}\n`)
     } finally {
       // Keep the sign-in overlay up through the auth re-check and the screen swap
-      // so the setup screen never flashes its pre-sign-in state (e.g. Fabric still
-      // showing "Sign in") before the workbench takes over.
+      // so the setup screen never flashes its pre-sign-in state before the
+      // workbench takes over.
       setFinalizing(true)
       try {
         await onRefresh()
@@ -94,14 +91,12 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
   const needsAuto = tools.filter((t) => t.required && !t.satisfied && t.autoInstallable)
   const toolsSatisfied = tools.filter((t) => t.satisfied).length
 
-  // Fabric / Azure sign-in shell out to the global `rayfin` / `az` CLIs, so they
-  // can't work until those CLIs are installed. Gate the cards on that.
-  const rayfinReady = tools.find((t) => t.id === 'rayfin')?.satisfied ?? false
+  // Azure sign-in shells out to the global `az` CLI, so it can't work until that
+  // CLI is installed. Gate the card on that.
   const azReady = tools.find((t) => t.id === 'az')?.satisfied ?? false
 
   const providers = [
     auth?.copilot.signedIn ?? false,
-    auth?.rayfin.signedIn ?? false,
     auth?.az.signedIn ?? false
   ]
   const signedInCount = providers.filter(Boolean).length
@@ -116,11 +111,9 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
   const loginProvider =
     busy === 'login:copilot'
       ? 'GitHub Copilot'
-      : busy === 'login:rayfin'
-        ? 'Microsoft Fabric'
-        : busy === 'login:az'
-          ? 'Azure'
-          : null
+      : busy === 'login:az'
+        ? 'Azure'
+        : null
 
   // Show only the meaningful tail of the process output in the sign-in overlay:
   // drop our own "› <label>" echo lines and blank lines so it reads as clean
@@ -321,22 +314,6 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
                   onSignIn={() =>
                     runAction('login:copilot', 'Sign in to GitHub Copilot', () =>
                       window.api.auth.loginCopilot()
-                    )
-                  }
-                />
-                <AuthRow
-                  icon={<img className="brand-glyph" src={fabricSvg} alt="" />}
-                  title="Microsoft Fabric"
-                  subtitle="Where your Rayfin apps deploy"
-                  signedIn={auth?.rayfin.signedIn ?? false}
-                  detail={auth?.rayfin.user}
-                  extra={auth?.rayfin.tenant}
-                  disabled={busy !== null || !rayfinReady}
-                  disabledReason={!rayfinReady ? 'Install the Rayfin CLI first' : undefined}
-                  busy={busy === 'login:rayfin'}
-                  onSignIn={() =>
-                    runAction('login:rayfin', 'Sign in to Fabric / Rayfin', () =>
-                      window.api.auth.loginRayfin()
                     )
                   }
                 />

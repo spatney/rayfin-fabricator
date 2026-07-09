@@ -21,6 +21,7 @@ import {
   ExpandIcon,
   CollapseIcon
 } from './icons'
+import DeployStage from './DeployStage'
 
 export interface DeployUiState {
   running: boolean
@@ -199,7 +200,6 @@ export default function PreviewPane({
   const needsWorkspace = !running && outcome === 'needs-workspace'
 
   const hostRef = useRef<HTMLDivElement>(null)
-  const logRef = useRef<HTMLPreElement>(null)
   const prevRunningRef = useRef(running)
   const [displayUrl, setDisplayUrl] = useState(deployedUrl ?? '')
   const [loading, setLoading] = useState(false)
@@ -343,10 +343,6 @@ export default function PreviewPane({
   useEffect(() => {
     if (deployedUrl) setDisplayUrl(deployedUrl)
   }, [deployedUrl])
-
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [deploy?.log])
 
   // Subscribe to navigation state pushed from the native webview (Rust side).
   useEffect(() => {
@@ -1077,9 +1073,7 @@ export default function PreviewPane({
 
       <div className="preview-body">
         {running ? (
-          <pre className="deploy-log" ref={logRef}>
-            {deploy?.log.join('') || 'Starting deploy…'}
-          </pre>
+          <DeployStage log={deploy?.log ?? []} name={project.name} />
         ) : showWebview ? (
           <div className="preview-canvas">
             <div className="preview-stage">

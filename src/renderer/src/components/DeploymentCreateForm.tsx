@@ -49,6 +49,8 @@ interface Props {
   reauthing?: boolean
   /** Re-fetch the workspace list (the error-state "Retry"). */
   onReload: () => void
+  /** Notify the parent that a Fabric sign-in just succeeded (refresh app auth). */
+  onSignedIn?: () => void
   /** True while a `rayfin up` is streaming (disables submit). */
   running?: boolean
   /** Primary button label (idle). */
@@ -78,6 +80,7 @@ export default function DeploymentCreateForm({
   loadingWs,
   reauthing = false,
   onReload,
+  onSignedIn,
   running = false,
   submitLabel = 'Create & deploy',
   busyLabel = 'Deploying…',
@@ -98,6 +101,7 @@ export default function DeploymentCreateForm({
   const [selectedCap, setSelectedCap] = useState<string>('')
   const [creatingBusy, setCreatingBusy] = useState(false)
   const [createErr, setCreateErr] = useState<string | null>(null)
+  const [signingIn, setSigningIn] = useState(false)
 
   async function loadCaps(): Promise<void> {
     setLoadingCaps(true)
@@ -133,6 +137,19 @@ export default function DeploymentCreateForm({
       if (res.workspaceId) setSelectedWs(res.workspaceId)
     } finally {
       setCreatingBusy(false)
+    }
+  }
+
+  async function signInToFabric(): Promise<void> {
+    setSigningIn(true)
+    try {
+      const res = await window.api.auth.loginRayfin()
+      if (res.ok) {
+        onSignedIn?.()
+        onReload()
+      }
+    } finally {
+      setSigningIn(false)
     }
   }
 
@@ -423,14 +440,29 @@ export default function DeploymentCreateForm({
           </div>
         ) : (
           <div className="ws-empty">
-            <p className="ws-empty-sub">
-              {wsResult?.needsLogin
-                ? 'Your Fabric session has expired — sign out and back in to list workspaces.'
-                : `Couldn’t load workspaces${wsResult?.error ? `: ${wsResult.error}` : '.'}`}
-            </p>
-            <button className="btn btn--xs btn--ghost" onClick={onReload}>
-              Retry
-            </button>
+            {wsResult?.needsLogin ? (
+              <>
+                <p className="ws-empty-sub">
+                  Sign in to Microsoft Fabric to list your workspaces.
+                </p>
+                <button
+                  className="btn btn--xs btn--primary"
+                  disabled={signingIn}
+                  onClick={() => void signInToFabric()}
+                >
+                  {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="ws-empty-sub">
+                  Couldn’t load workspaces{wsResult?.error ? `: ${wsResult.error}` : '.'}
+                </p>
+                <button className="btn btn--xs btn--ghost" onClick={onReload}>
+                  Retry
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

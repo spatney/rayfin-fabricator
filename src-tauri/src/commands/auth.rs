@@ -1,8 +1,10 @@
 //! Authentication — the Rust port of `src/main/services/auth.ts`.
 //! Copilot auth is a cheap, non-interactive probe of `~/.copilot/config.json`
-//! (JSONC); Fabric/Rayfin auth runs `rayfin login status`. Login/logout stream
-//! their CLI output to the renderer.
+//! (JSONC); Fabric/Rayfin auth runs `rayfin login status` via the active
+//! project's locally-installed CLI (falling back to a global `rayfin` on PATH).
+//! Login/logout stream their CLI output to the renderer.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
@@ -13,6 +15,7 @@ use tauri::AppHandle;
 use crate::services::emit::proc_streamer;
 use crate::services::exec::{self, RunOptions};
 use crate::services::paths;
+use crate::services::store;
 use crate::services::telemetry::{self, TelemetryIdentity};
 use crate::types::{AuthStatus, AzAuthStatus, CopilotAuthStatus, ProcResult, RayfinAuthStatus};
 
@@ -125,9 +128,20 @@ static SIGNED_IN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)signed\s+in").u
 static USER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)User:\s*(.+)").unwrap());
 static TENANT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)Tenant:\s*(.+)").unwrap());
 
+/// Run the Rayfin CLI for Fabric auth, preferring the active project's
+/// locally-installed CLI (so no global install is required) and falling back to a
+/// global `rayfin` on PATH when there's no active project. The MSAL token cache is
+/// shared across installs, so either resolves the same signed-in session.
+async fn run_rayfin(args: &[&str], opts: RunOptions) -> exec::RunResult {
+  match store::active_project() {
+    Some(project) => exec::run_project_rayfin(Path::new(&project.path), args, opts).await,
+    None => exec::run("rayfin", args, opts).await,
+  }
+}
+
 /// Detect Fabric/Rayfin auth via `rayfin login status`.
 pub async fn get_rayfin_auth() -> RayfinAuthStatus {
-  let res = exec::run("rayfin", &["login", "status"], RunOptions::timeout(30_000)).await;
+  let res = run_rayfin(&["login", "status"], RunOptions::timeout(30_000)).await;
   let text = format!("{}\n{}", res.stdout, res.stderr);
   let signed_in = res.ok && !NOT_SIGNED_IN_RE.is_match(&text) && SIGNED_IN_RE.is_match(&text);
   if !signed_in {
@@ -239,8 +253,7 @@ pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>) -> ProcRe
     args.push(t.to_string());
   }
   let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-  let res = exec::run(
-    "rayfin",
+  let res = run_rayfin(
     &arg_refs,
     RunOptions {
       on_data: Some(on_data),
@@ -282,8 +295,7 @@ pub async fn auth_login_az(app: AppHandle) -> ProcResult {
 #[tauri::command]
 pub async fn auth_logout_rayfin(app: AppHandle) -> ProcResult {
   let on_data = proc_streamer(&app, "logout:rayfin");
-  let res = exec::run(
-    "rayfin",
+  let res = run_rayfin(
     &["logout"],
     RunOptions {
       on_data: Some(on_data),

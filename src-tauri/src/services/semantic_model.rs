@@ -27,6 +27,7 @@ use serde::Deserialize;
 
 use crate::services::exec::{self, RunOptions};
 use crate::services::paths;
+use crate::services::store;
 
 /// Generous upper bound: a `locate` may fan out a bounded parallel scan across
 /// every workspace the user can see, and a `search` resolves each matched
@@ -139,11 +140,12 @@ fn write_helper() -> std::io::Result<PathBuf> {
 /// every failure path returns an `ok: false` [`SemanticModelResult`] the caller
 /// can render.
 async fn run_helper(request: &serde_json::Value) -> SemanticModelResult {
-  let auth_path = match exec::global_rayfin_auth_module() {
+  let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
+  let auth_path = match exec::project_rayfin_auth_module(project_dir.as_deref()) {
     Some(p) => p,
     None => {
       return SemanticModelResult::failure(
-        "Could not locate the Rayfin CLI. Make sure the rayfin CLI is installed.".to_string(),
+        "Could not locate the Rayfin CLI. Open a project and install its dependencies to reach Fabric.".to_string(),
       )
     }
   };

@@ -24,6 +24,8 @@ interface Props {
   onSwitch: (workspace: string, byId: boolean) => Promise<DeployResult>
   /** Refresh the project list after a rename / switch. */
   onChanged: () => void
+  /** Notify the parent that a Fabric sign-in just succeeded (refresh app auth). */
+  onSignedIn?: () => void
 }
 
 /** "F-SKU · F2" style label for a workspace's capacity. */
@@ -48,7 +50,8 @@ export default function DeploymentsControl({
   onCreate,
   onRedeploy,
   onSwitch,
-  onChanged
+  onChanged,
+  onSignedIn
 }: Props): JSX.Element {
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -82,7 +85,10 @@ export default function DeploymentsControl({
         setReauthing(true)
         try {
           const login = await window.api.auth.loginRayfin()
-          if (login.ok) res = await window.api.fabric.listWorkspaces()
+          if (login.ok) {
+            onSignedIn?.()
+            res = await window.api.fabric.listWorkspaces()
+          }
         } finally {
           setReauthing(false)
         }
@@ -231,6 +237,7 @@ export default function DeploymentsControl({
               loadingWs={loadingWs}
               reauthing={reauthing}
               onReload={() => void loadWorkspaces()}
+              onSignedIn={onSignedIn}
               running={running}
               onCancel={() => setCreating(false)}
               onSubmit={(name, workspaceId) => {

@@ -88,6 +88,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
 interface Props {
   auth: AuthStatus
   onSignOut: () => Promise<void> | void
+  onAuthChanged: () => Promise<void> | void
   settings: AppSettings | null
   onSettingsChange: (patch: Partial<AppSettings>) => void
 }
@@ -95,12 +96,14 @@ interface Props {
 export default function Workbench({
   auth,
   onSignOut,
+  onAuthChanged,
   settings,
   onSettingsChange
 }: Props): JSX.Element {
   const toast = useToast()
   const [versions, setVersions] = useState<AppVersions | null>(null)
   const [signingOut, setSigningOut] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [projects, setProjects] = useState<ProjectsState | null>(null)
   /** Fullscreen create/deploy flow: 'create' = new-project wizard, 'deploy' = first-deploy gate CTA. */
@@ -325,6 +328,9 @@ export default function Workbench({
           toast.error(result.error ?? 'The deployment did not complete.', { title: 'Deploy failed' })
         }
         await refreshProjects()
+        // A completed deploy proves Fabric sign-in (and may have signed the user
+        // in via the not-signed-in retry above), so refresh the titlebar auth.
+        void onAuthChanged()
       } finally {
         deployingIdRef.current = null
         setGitRefresh((n) => n + 1)
@@ -337,7 +343,7 @@ export default function Workbench({
         }
       }
     },
-    [refreshProjects, refreshRayfinVer, toast]
+    [refreshProjects, refreshRayfinVer, toast, onAuthChanged]
   )
   runDeployRef.current = (projectId: string) => void runDeploy(projectId)
 
@@ -542,6 +548,11 @@ export default function Workbench({
     void refreshRayfinVer(id)
   }, [projects?.activeProjectId, refreshRayfinVer])
 
+  useEffect(() => {
+    if (!active?.id) return
+    void onAuthChanged()
+  }, [active?.id, onAuthChanged])
+
   // Reflect the active project in the OS window title so users running one
   // instance per project can tell them apart in the taskbar / Alt-Tab. The
   // project name leads so it stays visible when the title is truncated.
@@ -688,6 +699,16 @@ export default function Workbench({
     }
   }
 
+  async function signIn(): Promise<void> {
+    setSigningIn(true)
+    try {
+      await window.api.auth.loginRayfin()
+      await onAuthChanged()
+    } finally {
+      setSigningIn(false)
+    }
+  }
+
   // Open a prefilled GitHub issue (app + system info) in the browser so bug
   // reports arrive with the version/environment details already filled in. A
   // diagnostics bundle is exported first (best-effort) and referenced in the
@@ -710,22 +731,30 @@ export default function Workbench({
           <span className="brand-name">Fabricator</span>
         </div>
         <div className="titlebar-status">
-          <div
-            className="who-avatar"
-            title={auth.rayfin.user ?? 'Signed in'}
-            aria-label={auth.rayfin.user ? `Signed in as ${auth.rayfin.user}` : 'Signed in'}
-          >
-            {avatarInitials(auth.rayfin.user)}
-          </div>
+          {auth.rayfin.signedIn && (
+            <div
+              className="who-avatar"
+              title={auth.rayfin.user ?? 'Signed in'}
+              aria-label={auth.rayfin.user ? `Signed in as ${auth.rayfin.user}` : 'Signed in'}
+            >
+              {avatarInitials(auth.rayfin.user)}
+            </div>
+          )}
           <div className="seg seg--toolbar">
             <button className="seg-btn" onClick={() => setShowSettings(true)} title="Settings">
               <GearIcon />
               Settings
             </button>
-            <button className="seg-btn" disabled={signingOut} onClick={signOut} title="Sign out">
-              <SignOutIcon />
-              {signingOut ? 'Signing out…' : 'Sign out'}
-            </button>
+            {auth.rayfin.signedIn ? (
+              <button className="seg-btn" disabled={signingOut} onClick={signOut} title="Sign out">
+                <SignOutIcon />
+                {signingOut ? 'Signing out…' : 'Sign out'}
+              </button>
+            ) : (
+              <button className="seg-btn" disabled={signingIn} onClick={signIn}>
+                {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -745,6 +774,7 @@ export default function Workbench({
           deploying={Boolean(active && deploys[active.id]?.running)}
           onCancel={() => setCreateMode(null)}
           onCreated={() => void refreshProjects()}
+          onSignedIn={() => void onAuthChanged()}
           onDeploy={(depName, workspaceId) => {
             if (!active) {
               setCreateMode(null)
@@ -841,6 +871,7 @@ export default function Workbench({
                     }}
                     onSwitch={(workspace, byId) => switchDeployment(active.id, workspace, byId)}
                     onChanged={() => void refreshProjects()}
+                    onSignedIn={() => void onAuthChanged()}
                   />
                 </div>
               </div>
