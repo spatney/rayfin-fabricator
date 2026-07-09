@@ -22,7 +22,7 @@
     "@microsoft/rayfin-client": "^1.33.2",
     "@microsoft/rayfin-core": "^1.33.2",
     "@tailwindcss/vite": "^4.1.11",
-    "graphein": "^0.17.0",
+    "graphein": ">=0.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.1"
