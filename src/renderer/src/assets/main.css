@@ -2561,6 +2561,13 @@ code {
   padding: 5px 12px;
 }
 
+.skills-head-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .skills-notice {
   margin-bottom: 14px;
   padding: 10px 14px;
@@ -2649,6 +2656,11 @@ code {
   gap: 8px;
 }
 
+/* Separate the primary Add/Remove toggle from the secondary manage actions. */
+.skill-row-toggle {
+  margin-left: 6px;
+}
+
 .skill-flag {
   font-size: 9.5px;
   font-weight: 700;
@@ -2666,11 +2678,6 @@ code {
 .skill-flag--on {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.skill-flag--custom {
-  color: var(--accent-2);
-  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
 }
 
 .skill-locked {
@@ -2697,6 +2704,10 @@ code {
 }
 
 .skills-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 8px;
 }
 
@@ -2707,6 +2718,22 @@ code {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-dim);
+}
+
+.skills-group-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+/* The reusable custom-skill library gets a subtly distinct, accented panel so it
+   reads as its own section (the home for skills you reuse across apps). */
+.skills-group--library {
+  padding: 14px 14px 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 
 /* ── Advisor tab: Copilot-driven security review ─────────────────────────── */
@@ -3726,6 +3753,254 @@ code {
   flex: 1;
   min-height: 0;
   height: 100%;
+}
+
+/* Custom-skill authoring / upload modal (scoped names to avoid cascade clashes). */
+.skill-delete:hover:not(:disabled) {
+  color: var(--danger, #d9534f);
+  border-color: color-mix(in srgb, var(--danger, #d9534f) 45%, transparent);
+}
+
+.custom-skill-modal {
+  display: flex;
+  flex-direction: column;
+}
+
+.custom-skill-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.custom-skill-tab {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.custom-skill-tab:hover {
+  color: var(--text);
+}
+
+.custom-skill-tab--on {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.modal-body.custom-skill-body {
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.custom-skill-error {
+  flex: none;
+  margin-bottom: 14px;
+}
+
+.custom-skill-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.custom-skill-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.custom-skill-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Only fields inside the Title/Icon row grow horizontally; a standalone field
+   (e.g. Short description) must not flex-grow vertically inside the column form. */
+.custom-skill-fields > .custom-skill-field {
+  flex: 1;
+}
+
+.custom-skill-field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.custom-skill-field input {
+  height: 40px;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+}
+
+.custom-skill-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.custom-skill-fields > .custom-skill-field--icon {
+  flex: none;
+  width: 60px;
+}
+
+.custom-skill-field--icon input {
+  text-align: center;
+  font-size: 18px;
+  padding: 0;
+}
+
+.custom-skill-editor-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.custom-skill-editor {
+  flex: 1;
+  min-height: 180px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.custom-skill-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.custom-skill-hint code,
+.custom-skill-upload code {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.custom-skill-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.custom-skill-upload-lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.custom-skill-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.custom-skill-preview-card {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+}
+
+.custom-skill-preview-icon {
+  font-size: 22px;
+  line-height: 1.1;
+  flex: none;
+}
+
+.custom-skill-preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.custom-skill-preview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.custom-skill-preview-desc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.custom-skill-preview-refs {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.custom-skill-library-opt {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.custom-skill-library-opt:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.custom-skill-library-opt--on {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev-2));
+}
+
+.custom-skill-library-opt-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.custom-skill-library-opt-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.custom-skill-library-opt-hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
 }
 
 .icon-btn {
@@ -5217,7 +5492,6 @@ code {
 .code-editor-hint-x:hover {
   color: var(--text);
 }
-
 
 /* Preview pane (deploy controls + embedded app) */
 .preview {
@@ -7715,7 +7989,6 @@ code {
   margin-bottom: 0;
 }
 
-
 .turn {
   display: flex;
   flex-direction: column;
@@ -8857,7 +9130,9 @@ code {
 }
 .chat-mention--link {
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 .chat-mention--link:hover {
   background: color-mix(in srgb, var(--accent) 26%, transparent);

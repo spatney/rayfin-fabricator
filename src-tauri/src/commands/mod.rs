@@ -5,6 +5,7 @@
 pub mod advisor;
 pub mod auth;
 pub mod chat;
+pub mod custom_skills;
 pub mod deploy;
 pub mod design;
 pub mod diagnostics;

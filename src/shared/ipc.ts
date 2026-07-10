@@ -787,7 +787,6 @@ export type ChatSegment =
   | { kind: 'tool'; id: string }
   | { kind: 'interjection'; text: string; thumbs?: string[] }
 
-
 /**
  * Streamed chat events sent from main -> renderer during a turn. The renderer
  * appends 'delta' text to the active assistant bubble and tracks tool calls by id.
@@ -896,6 +895,12 @@ export interface SkillInfo {
   category?: string
   /** True for an on-disk skill that isn't part of our curated catalog. */
   custom?: boolean
+  /**
+   * True when this custom skill comes from the global, reusable custom-skill
+   * library (vs. a project-local, agent-authored skill). Library skills can be
+   * edited or deleted from the library, and toggled into any project.
+   */
+  library?: boolean
 }
 
 /** Result of toggling a skill: ok plus the refreshed skill list. */
@@ -916,6 +921,68 @@ export interface SkillSource {
   content?: string
   /** Set when ok is false. */
   error?: string
+}
+
+/**
+ * One entry in the global, reusable custom-skill library (stored under the app
+ * data dir). Presentation fields come from the library folder's `meta.json`.
+ */
+export interface CustomSkillInfo {
+  /** Stable slug id, e.g. 'team-brand'. */
+  id: string
+  /** Human title shown on the card. */
+  title: string
+  /** Short one-line description for the card. */
+  description: string
+  /** Emoji/glyph for the card. */
+  icon: string
+  /** True when the library skill ships extra files under `references/`. */
+  hasReferences: boolean
+}
+
+/** Payload to create or edit a library skill from the in-app authoring form. */
+export interface CustomSkillSaveInput {
+  /** Present when editing an existing library skill; omit to create a new one. */
+  id?: string
+  /** Human title (also slugified into the id on create). */
+  title: string
+  /** Short card description; falls back to the frontmatter description when empty. */
+  description: string
+  /** Emoji/glyph; defaults to a puzzle piece when empty. */
+  icon?: string
+  /** The full SKILL.md the user authored/edited (frontmatter + body). */
+  content: string
+}
+
+/** Result of a library mutation (save/import/remove): ok plus the refreshed library. */
+export interface CustomSkillActionResult {
+  ok: boolean
+  /** The id created or edited, when ok. */
+  id?: string
+  /** The refreshed custom-skill library. */
+  library: CustomSkillInfo[]
+  /** Set when ok is false and it was a real failure (absent on a cancelled dialog). */
+  error?: string
+}
+
+/**
+ * A read-only preview of a picked skill folder / `.md` / `.zip`, shown before the
+ * user commits to adding it.
+ */
+export interface CustomSkillPreview {
+  ok: boolean
+  /** True when the user dismissed the picker (a no-op, not an error). */
+  cancelled: boolean
+  error?: string
+  /** Absolute path of the picked folder/file, passed back to install on confirm. */
+  sourcePath?: string
+  /** The picked SKILL.md content. */
+  content?: string
+  title?: string
+  description?: string
+  icon?: string
+  /** How many `references/*.md` files would come along. */
+  referenceCount: number
 }
 
 /**
@@ -986,7 +1053,6 @@ export interface AdvisorEventEnvelope {
   projectId: string
   event: AdvisorEvent
 }
-
 
 /** Per-project chat configuration (model + reasoning effort). */
 export interface ChatOptions {
@@ -1514,6 +1580,41 @@ export interface RayfinStudioApi {
     source: (id: string, skillId: string) => Promise<SkillSource>
   }
 
+  /**
+   * Your reusable custom-skill **library** (stored under the app data dir). Adding
+   * or uploading a skill installs it into the given project's `.agents/skills/`;
+   * pass `toLibrary: true` to also save it to the library for reuse in other apps.
+   */
+  customSkills: {
+    /** The current custom-skill library. */
+    list: () => Promise<CustomSkillInfo[]>
+    /** Read the raw SKILL.md of a library skill, for the authoring/preview editor. */
+    source: (id: string) => Promise<SkillSource>
+    /**
+     * Create a skill in `projectId` (with `id` unset), or edit an existing library
+     * skill in place (with `id` set). `toLibrary` also saves a new skill to the library.
+     */
+    save: (
+      input: CustomSkillSaveInput,
+      projectId: string,
+      toLibrary: boolean
+    ) => Promise<CustomSkillActionResult>
+    /** Pick a skill folder and return a read-only preview (no install yet). */
+    pickFolderPreview: () => Promise<CustomSkillPreview>
+    /** Pick a SKILL.md or `.zip` bundle and return a read-only preview (no install yet). */
+    pickFilePreview: () => Promise<CustomSkillPreview>
+    /** Confirm a previewed upload: install the skill at `sourcePath` into the app. */
+    addFromPath: (
+      projectId: string,
+      sourcePath: string,
+      toLibrary: boolean
+    ) => Promise<CustomSkillActionResult>
+    /** Save a skill that's only in this app into the reusable library. */
+    promote: (projectId: string, id: string) => Promise<CustomSkillActionResult>
+    /** Remove a skill from the library (installed app copies are kept). */
+    remove: (id: string) => Promise<CustomSkillActionResult>
+  }
+
   /** Advisor: a Copilot-driven, read-only security review of the app. */
   advisor: {
     /**
@@ -1571,11 +1672,7 @@ export interface RayfinStudioApi {
      * feedback) and resolves with `{ steered: true }`. When nothing is running it
      * resolves with `{ steered: false }`, so the caller sends it as a new turn.
      */
-    steer: (
-      projectId: string,
-      text: string,
-      attachments?: string[]
-    ) => Promise<SteerResult>
+    steer: (projectId: string, text: string, attachments?: string[]) => Promise<SteerResult>
     /** Cancel the in-flight turn for a project. */
     cancel: (projectId: string) => Promise<void>
     /** Start a fresh conversation (drops the persisted Copilot session id). */
@@ -1726,7 +1823,10 @@ export interface RayfinStudioApi {
       /** Inject AI-generated HTML into the placeholder `id` (controller sanitizes it). */
       applyGenerated: (id: string, html: string) => Promise<void>
       /** Supply the placeholder AI model picker with the available models. */
-      setModels: (models: { id: string; name: string; fast: boolean }[], preferred?: string) => Promise<void>
+      setModels: (
+        models: { id: string; name: string; fast: boolean }[],
+        preferred?: string
+      ) => Promise<void>
       /**
        * Push Fabricator's own theme (accent/surfaces/text/border + UI scale) so
        * the design tools match the host app's look and zoom. Re-sent after a

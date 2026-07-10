@@ -194,6 +194,15 @@ pub fn run() {
       commands::skills::skills_list,
       commands::skills::skills_set,
       commands::skills::skills_source,
+      // custom-skill library
+      commands::custom_skills::custom_skills_list,
+      commands::custom_skills::custom_skills_source,
+      commands::custom_skills::custom_skills_save,
+      commands::custom_skills::custom_skills_pick_folder_preview,
+      commands::custom_skills::custom_skills_pick_file_preview,
+      commands::custom_skills::custom_skills_add_from_path,
+      commands::custom_skills::custom_skills_promote,
+      commands::custom_skills::custom_skills_remove,
       // advisor
       commands::advisor::advisor_run,
       commands::advisor::advisor_cancel,

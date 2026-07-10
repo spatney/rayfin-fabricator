@@ -881,6 +881,10 @@ pub struct SkillInfo {
   pub category: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub custom: Option<bool>,
+  /// True when this custom skill comes from the global, reusable custom-skill
+  /// library (as opposed to a project-local, agent-authored skill).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub library: Option<bool>,
 }
 
 #[derive(Serialize, Clone)]
@@ -901,6 +905,60 @@ pub struct SkillSource {
   pub content: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
+}
+
+/* ------------------------- custom-skill library ------------------------- */
+
+/// One entry in the global, reusable custom-skill library (stored under the app
+/// data dir). Presentation fields come from the library folder's `meta.json`.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomSkillInfo {
+  pub id: String,
+  pub title: String,
+  pub description: String,
+  pub icon: String,
+  /// True when the library skill ships extra files under `references/`.
+  pub has_references: bool,
+}
+
+/// Result of a library mutation (save/import/remove): ok plus the refreshed
+/// library, and the affected id when a skill was created or edited.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomSkillActionResult {
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub id: Option<String>,
+  pub library: Vec<CustomSkillInfo>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// A read-only preview of a picked skill folder / `.md` / `.zip`, shown before the
+/// user commits to adding it. Carries the validated SKILL.md plus the source path
+/// to install from on confirm.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomSkillPreview {
+  pub ok: bool,
+  /// True when the user dismissed the picker (a no-op, not an error).
+  pub cancelled: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  /// Absolute path of the picked folder / file, passed back to install on confirm.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub source_path: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub content: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub title: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub description: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub icon: Option<String>,
+  /// How many `references/*.md` files would come along.
+  pub reference_count: u32,
 }
 
 /* ----------------------------- advisor ----------------------------- */

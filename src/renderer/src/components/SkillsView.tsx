@@ -1,8 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { SkillInfo, StudioProject } from '@shared/ipc'
+import type { CustomSkillActionResult, SkillInfo, StudioProject } from '@shared/ipc'
 
-// Lazy so Monaco (pulled in by the preview modal) stays out of the main bundle.
+// Lazy so Monaco (pulled in by the preview / author modals) stays out of the main bundle.
 const SkillPreviewModal = lazy(() => import('./SkillPreviewModal'))
+const CustomSkillModal = lazy(() => import('./CustomSkillModal'))
+const ConfirmModal = lazy(() => import('./ConfirmModal'))
 
 interface Props {
   project: StudioProject
@@ -14,13 +16,22 @@ interface SkillGroup {
   /** Stable key for the group. */
   key: string
   title: string
+  /** Optional explanatory line under the group title. */
+  hint?: string
+  /** The reusable custom-skill library section (rendered even when empty). */
+  library?: boolean
   skills: SkillInfo[]
 }
 
-/** Bucket the flat skill list into display groups: always-on, categories, custom. */
+/**
+ * Bucket the flat skill list into display groups: always-on, catalog categories,
+ * the reusable custom-skill **library** (its own always-visible section), then any
+ * skills the builder authored directly in this app.
+ */
 function groupSkills(skills: SkillInfo[]): SkillGroup[] {
   const base = skills.filter((s) => s.base)
-  const custom = skills.filter((s) => s.custom)
+  const library = skills.filter((s) => s.library)
+  const localCustom = skills.filter((s) => s.custom && !s.library)
   const catalog = skills.filter((s) => !s.base && !s.custom)
 
   const groups: SkillGroup[] = []
@@ -39,8 +50,24 @@ function groupSkills(skills: SkillInfo[]): SkillGroup[] {
     group.skills.push(skill)
   }
 
-  if (custom.length) {
-    groups.push({ key: '__custom', title: 'Your custom skills', skills: custom })
+  // Your reusable library — a dedicated section for skills you've saved to reuse.
+  if (library.length) {
+    groups.push({
+      key: '__library',
+      title: 'Your skill library',
+      hint: 'Custom skills you saved to reuse across apps. Turn one on to use it in this app.',
+      library: true,
+      skills: library
+    })
+  }
+
+  if (localCustom.length) {
+    groups.push({
+      key: '__custom',
+      title: 'Added in this app',
+      hint: 'Skills the builder created directly in this app.',
+      skills: localCustom
+    })
   }
   return groups
 }
@@ -58,6 +85,12 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [preview, setPreview] = useState<SkillInfo | null>(null)
+  /** null = closed; new (with a library default) = create; edit = edit a skill. */
+  const [authoring, setAuthoring] = useState<
+    { kind: 'new'; toLibrary: boolean } | { kind: 'edit'; skill: SkillInfo } | null
+  >(null)
+  const [deleting, setDeleting] = useState<SkillInfo | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async () => {
@@ -118,17 +151,88 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
   const groups = useMemo(() => (skills ? groupSkills(skills) : []), [skills])
   const activeCount = skills?.filter((s) => s.active).length ?? 0
 
+  // After a save/import/promote, refresh this project's list. When editing a skill
+  // that's already active here, re-copy it so the project's copy picks up the edit.
+  const handleSaved = useCallback(
+    async (result: CustomSkillActionResult) => {
+      const editedId = result.id
+      const wasActive = editedId ? skills?.find((s) => s.id === editedId)?.active : false
+      if (editedId && wasActive) {
+        try {
+          await window.api.skills.set(project.id, editedId, true)
+        } catch {
+          /* best-effort re-sync */
+        }
+      }
+      onChanged()
+      await load()
+      flash('Saved to your skills.')
+    },
+    [skills, project.id, load, onChanged, flash]
+  )
+
+  const promote = useCallback(
+    async (skill: SkillInfo) => {
+      if (busy) return
+      setBusy(skill.id)
+      setError(null)
+      try {
+        const result = await window.api.customSkills.promote(project.id, skill.id)
+        if (result.ok) {
+          flash(`Saved “${skill.title}” to your skill library.`)
+          await load()
+        } else if (result.error) {
+          setError(result.error)
+        }
+      } catch (err) {
+        setError(String(err))
+      } finally {
+        setBusy(null)
+      }
+    },
+    [busy, project.id, flash, load]
+  )
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleting) return
+    setDeleteBusy(true)
+    setError(null)
+    try {
+      const result = await window.api.customSkills.remove(deleting.id)
+      if (result.ok) {
+        flash(`Deleted “${deleting.title}” from your custom skills.`)
+        setDeleting(null)
+        await load()
+      } else if (result.error) {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setDeleteBusy(false)
+    }
+  }, [deleting, load, flash])
+
   return (
     <div className="skills">
       <div className="skills-head">
         <div>
           <h2 className="skills-title">Skills</h2>
           <p className="skills-sub">
-            Skills teach your app builder good habits. Turn one on and it applies to
-            everything you build next — no code required.
+            Skills teach your app builder good habits. Turn one on and it applies to everything you
+            build next — no code required.
           </p>
         </div>
-        {skills && <span className="skills-count">{activeCount} active</span>}
+        <div className="skills-head-actions">
+          {skills && <span className="skills-count">{activeCount} active</span>}
+          <button
+            className="btn btn--sm"
+            onClick={() => setAuthoring({ kind: 'new', toLibrary: false })}
+            title="Add or upload your own custom skill"
+          >
+            + Add custom skill
+          </button>
+        </div>
       </div>
 
       {notice && <div className="skills-notice">{notice}</div>}
@@ -139,10 +243,14 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
       ) : (
         <div className="skills-groups">
           {groups.map((group) => (
-            <section className="skills-group" key={group.key}>
+            <section
+              className={`skills-group${group.library ? ' skills-group--library' : ''}`}
+              key={group.key}
+            >
               <div className="skills-group-head">
                 <h3 className="skills-group-title">{group.title}</h3>
               </div>
+              {group.hint && <p className="skills-group-hint">{group.hint}</p>}
               <div className="skills-grid">
                 {group.skills.map((skill) => {
                   const isBusy = busy === skill.id
@@ -163,18 +271,46 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
                       <div className="skill-row-actions">
                         {skill.base ? (
                           <span className="skill-flag skill-flag--base">Always on</span>
-                        ) : skill.custom ? (
-                          <span className="skill-flag skill-flag--custom">Custom</span>
                         ) : skill.active ? (
                           <span className="skill-flag skill-flag--on">Active</span>
                         ) : null}
-                        <button
-                          className="btn btn--xs btn--ghost"
-                          onClick={() => setPreview(skill)}
-                          title="View the raw SKILL.md"
-                        >
-                          Preview
-                        </button>
+                        {!skill.library && (
+                          <button
+                            className="btn btn--xs btn--ghost"
+                            onClick={() => setPreview(skill)}
+                            title="View the raw SKILL.md"
+                          >
+                            Preview
+                          </button>
+                        )}
+                        {skill.library && (
+                          <>
+                            <button
+                              className="btn btn--xs btn--ghost"
+                              onClick={() => setAuthoring({ kind: 'edit', skill })}
+                              title="View or edit this skill's SKILL.md"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="btn btn--xs btn--ghost skill-delete"
+                              onClick={() => setDeleting(skill)}
+                              title="Delete this skill from your library"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+                        {skill.custom && !skill.library && (
+                          <button
+                            className="btn btn--xs btn--ghost"
+                            onClick={() => void promote(skill)}
+                            disabled={isBusy}
+                            title="Save this skill to your library so you can use it in other apps"
+                          >
+                            Save to library
+                          </button>
+                        )}
                         {skill.base ? (
                           <span
                             className="skill-locked"
@@ -184,7 +320,9 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
                           </span>
                         ) : (
                           <button
-                            className={`btn btn--xs${skill.active ? '' : ' btn--primary'}`}
+                            className={`btn btn--xs skill-row-toggle${
+                              skill.active ? '' : ' btn--primary'
+                            }`}
                             onClick={() => void toggle(skill)}
                             disabled={isBusy}
                           >
@@ -207,6 +345,47 @@ export default function SkillsView({ project, onChanged }: Props): JSX.Element {
             projectId={project.id}
             skill={preview}
             onClose={() => setPreview(null)}
+          />
+        </Suspense>
+      )}
+
+      {authoring && (
+        <Suspense fallback={null}>
+          <CustomSkillModal
+            projectId={project.id}
+            editing={
+              authoring.kind === 'edit'
+                ? {
+                    id: authoring.skill.id,
+                    title: authoring.skill.title,
+                    description: authoring.skill.description,
+                    icon: authoring.skill.icon
+                  }
+                : null
+            }
+            defaultToLibrary={authoring.kind === 'new' ? authoring.toLibrary : false}
+            onClose={() => setAuthoring(null)}
+            onSaved={handleSaved}
+          />
+        </Suspense>
+      )}
+
+      {deleting && (
+        <Suspense fallback={null}>
+          <ConfirmModal
+            title="Delete custom skill?"
+            message={
+              <>
+                Delete “{deleting.title}” from your skill library? Apps that already use it keep
+                their copy — this only removes it from your reusable library.
+              </>
+            }
+            confirmLabel="Delete"
+            danger
+            busy={deleteBusy}
+            busyLabel="Deleting…"
+            onConfirm={() => void confirmDelete()}
+            onCancel={() => (deleteBusy ? undefined : setDeleting(null))}
           />
         </Suspense>
       )}

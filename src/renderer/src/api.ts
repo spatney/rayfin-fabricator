@@ -20,6 +20,7 @@ import {
   type ChatMode,
   type ChatOptions,
   type CreateProjectInput,
+  type CustomSkillSaveInput,
   type PreviewBounds,
   type PreviewNavState,
   type PreviewAgentEvent,
@@ -111,8 +112,7 @@ export const api: RayfinStudioApi = {
     rename: (id: string, name: string) => invoke('projects_rename', { id, name }),
     setWorkspace: (id: string, workspace?: string, workspaceName?: string) =>
       invoke('projects_set_workspace', { id, workspace, workspaceName }),
-    setPreviewMode: (id: string, mode: string) =>
-      invoke('projects_set_preview_mode', { id, mode }),
+    setPreviewMode: (id: string, mode: string) => invoke('projects_set_preview_mode', { id, mode }),
     remove: (id: string, deleteFiles?: boolean) => invoke('projects_remove', { id, deleteFiles }),
     git: {
       status: (id: string) => invoke('projects_git_status', { id }),
@@ -149,6 +149,19 @@ export const api: RayfinStudioApi = {
     source: (id: string, skillId: string) => invoke('skills_source', { id, skillId })
   },
 
+  customSkills: {
+    list: () => invoke('custom_skills_list'),
+    source: (id: string) => invoke('custom_skills_source', { id }),
+    save: (input: CustomSkillSaveInput, projectId: string, toLibrary: boolean) =>
+      invoke('custom_skills_save', { projectId, input, toLibrary }),
+    pickFolderPreview: () => invoke('custom_skills_pick_folder_preview'),
+    pickFilePreview: () => invoke('custom_skills_pick_file_preview'),
+    addFromPath: (projectId: string, sourcePath: string, toLibrary: boolean) =>
+      invoke('custom_skills_add_from_path', { projectId, sourcePath, toLibrary }),
+    promote: (projectId: string, id: string) => invoke('custom_skills_promote', { projectId, id }),
+    remove: (id: string) => invoke('custom_skills_remove', { id })
+  },
+
   advisor: {
     run: (projectId: string, model?: string) => invoke('advisor_run', { projectId, model }),
     cancel: (projectId: string) => invoke('advisor_cancel', { projectId }),
@@ -168,11 +181,8 @@ export const api: RayfinStudioApi = {
       attachments?: string[],
       mode?: ChatMode
     ) => invoke('chat_send', { projectId, turnId, text, attachments, mode }),
-    steer: (
-      projectId: string,
-      text: string,
-      attachments?: string[]
-    ) => invoke('chat_steer', { projectId, text, attachments }),
+    steer: (projectId: string, text: string, attachments?: string[]) =>
+      invoke('chat_steer', { projectId, text, attachments }),
     cancel: (projectId: string) => invoke('chat_cancel', { projectId }),
     reset: (projectId: string) => invoke('chat_reset', { projectId }),
     resolvePlan: (requestId: string, action: string, feedback?: string) =>
@@ -193,8 +203,7 @@ export const api: RayfinStudioApi = {
   },
 
   deploy: {
-    run: (projectId: string, workspace?: string) =>
-      invoke('deploy_run', { projectId, workspace }),
+    run: (projectId: string, workspace?: string) => invoke('deploy_run', { projectId, workspace }),
     list: (projectId: string) => invoke('deploy_list', { projectId }),
     switch: (projectId: string, workspace: string, byId?: boolean) =>
       invoke('deploy_switch', { projectId, workspace, byId }),

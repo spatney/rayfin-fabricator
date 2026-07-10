@@ -3144,6 +3144,7 @@ dependencies = [
  "webview2-com",
  "which",
  "windows 0.61.3",
+ "zip 2.4.2",
 ]
 
 [[package]]

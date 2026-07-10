@@ -62,6 +62,10 @@ trash = "5"
 thiserror = "2"
 anyhow = "1"
 
+# Extract user-uploaded custom-skill `.zip` bundles (see commands/custom_skills.rs).
+# `enclosed_name()` is used on entries to guard against zip-slip path traversal.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
 # Windows-only: capture the native WebView2 preview to a PNG (ICoreWebView2::CapturePreview).
 # webview2-com / windows versions are pinned to what the vendored wry (and tauri) resolve to,
 # so Cargo unifies them rather than pulling a second copy. See services/preview.rs.
