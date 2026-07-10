@@ -411,6 +411,11 @@ pub struct StudioProject {
   /// honour the same view the user is looking at.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub preview_mode: Option<String>,
+  /// Agent tools explicitly disabled for this project, including Fabricator and
+  /// built-in Copilot capabilities. Missing means every current and newly
+  /// discovered tool is enabled.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub disabled_agent_tools: Option<Vec<String>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub missing: Option<bool>,
 }
@@ -694,13 +699,51 @@ pub enum ChatToolState {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatToolMedia {
+  pub r#type: String,
+  pub path: String,
+  pub mime_type: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub description: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatToolCall {
   pub id: String,
   pub name: String,
   pub title: String,
   pub state: ChatToolState,
   #[serde(skip_serializing_if = "Option::is_none")]
+  pub arguments: Option<serde_json::Value>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub output: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub media: Option<Vec<ChatToolMedia>>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentToolCatalogItem {
+  pub id: String,
+  pub label: String,
+  pub description: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentToolCatalogGroup {
+  pub id: String,
+  pub label: String,
+  pub description: String,
+  pub tools: Vec<AgentToolCatalogItem>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentToolSettings {
+  pub groups: Vec<AgentToolCatalogGroup>,
+  pub enabled_tool_ids: Vec<String>,
 }
 
 /// One chronological slice of an assistant turn (prose or a tool call), used to
@@ -730,6 +773,8 @@ pub enum ChatEvent {
     state: ChatToolState,
     #[serde(skip_serializing_if = "Option::is_none")]
     output: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    media: Option<Vec<ChatToolMedia>>,
   },
   #[serde(rename = "notice")]
   Notice { text: String },

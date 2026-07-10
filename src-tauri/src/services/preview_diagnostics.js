@@ -355,7 +355,18 @@
     }
   }
 
-  function snapshot(rootSelector) {
+  function matchesQuery(value, query) {
+    if (!query) return true
+    try {
+      return JSON.stringify(value).toLowerCase().indexOf(String(query).toLowerCase()) >= 0
+    } catch (_error) {
+      return String(value).toLowerCase().indexOf(String(query).toLowerCase()) >= 0
+    }
+  }
+
+  function snapshot(options) {
+    options = typeof options === 'string' ? { selector: options } : options || {}
+    var rootSelector = options.selector
     var root = document.body
     if (rootSelector) {
       try {
@@ -370,9 +381,15 @@
       'a[href],button,input,select,textarea,[contenteditable="true"],[role],h1,h2,h3,h4,nav,main,form,[data-testid]'
     var candidates = Array.prototype.slice.call(root.querySelectorAll(semanticSelector))
     if (root.matches && root.matches(semanticSelector)) candidates.unshift(root)
+    var limit = Math.max(1, Math.min(Number(options.limit) || 100, 200))
     var elements = []
-    for (var index = 0; index < candidates.length && elements.length < 200; index += 1) {
-      if (isVisible(candidates[index])) elements.push(describeElement(candidates[index]))
+    var totalMatches = 0
+    for (var index = 0; index < candidates.length; index += 1) {
+      if (!isVisible(candidates[index])) continue
+      var described = describeElement(candidates[index])
+      if (!matchesQuery(described, options.query)) continue
+      totalMatches += 1
+      if (elements.length < limit) elements.push(described)
     }
 
     return {
@@ -395,9 +412,10 @@
         scroll: { x: Math.round(window.scrollX), y: Math.round(window.scrollY) }
       },
       rootSelector: rootSelector || 'body',
-      bodyText: safeVisibleText(root, MAX_TEXT_LENGTH),
+      bodyText: options.includeBodyText === false ? undefined : safeVisibleText(root, MAX_TEXT_LENGTH),
       elements: elements,
-      truncated: candidates.length > elements.length
+      totalMatches: totalMatches,
+      truncated: totalMatches > elements.length
     }
   }
 
@@ -553,11 +571,14 @@
   function readConsole(options) {
     options = options || {}
     var level = options.level
-    var entries = level
-      ? consoleEntries.filter(function (entry) {
-          return entry.level === level
-        })
-      : consoleEntries.slice()
+    var since = Number(options.since) || 0
+    var entries = consoleEntries.filter(function (entry) {
+      return (
+        (!level || entry.level === level) &&
+        (!since || entry.timestamp >= since) &&
+        matchesQuery(entry, options.query)
+      )
+    })
     var limit = Math.max(1, Math.min(Number(options.limit) || 100, MAX_CONSOLE_ENTRIES))
     var result = entries.slice(-limit)
     if (options.clear) consoleEntries.splice(0, consoleEntries.length)
@@ -566,11 +587,25 @@
 
   function readNetwork(options) {
     options = options || {}
-    var entries = options.errorsOnly
-      ? networkEntries.filter(function (entry) {
-          return entry.ok === false || (entry.status != null && entry.status >= 400)
-        })
-      : networkEntries.slice()
+    var since = Number(options.since) || 0
+    var method = options.method ? String(options.method).toUpperCase() : ''
+    var resourceType = options.resourceType ? String(options.resourceType).toLowerCase() : ''
+    var urlIncludes = options.urlIncludes ? String(options.urlIncludes).toLowerCase() : ''
+    var statusMin = options.statusMin == null ? null : Number(options.statusMin)
+    var statusMax = options.statusMax == null ? null : Number(options.statusMax)
+    var entries = networkEntries.filter(function (entry) {
+      var failed = entry.ok === false || (entry.status != null && entry.status >= 400)
+      return (
+        (!options.errorsOnly || failed) &&
+        (!since || entry.timestamp >= since) &&
+        (!method || entry.method === method) &&
+        (!resourceType || String(entry.type || '').toLowerCase() === resourceType) &&
+        (!urlIncludes || String(entry.url || '').toLowerCase().indexOf(urlIncludes) >= 0) &&
+        (statusMin == null || (entry.status != null && entry.status >= statusMin)) &&
+        (statusMax == null || (entry.status != null && entry.status <= statusMax)) &&
+        matchesQuery(entry, options.query)
+      )
+    })
     var limit = Math.max(1, Math.min(Number(options.limit) || 100, MAX_NETWORK_ENTRIES))
     var result = entries.slice(-limit)
     if (options.clear) networkEntries.splice(0, networkEntries.length)

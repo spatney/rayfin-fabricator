@@ -11,7 +11,7 @@ interface DiagnosticsApi {
   readConsole: (options?: Record<string, unknown>) => Record<string, unknown>[]
   readNetwork: (options?: Record<string, unknown>) => Record<string, unknown>[]
   errors: () => Record<string, unknown>[]
-  snapshot: (selector?: string) => Record<string, unknown>
+  snapshot: (options?: string | Record<string, unknown>) => Record<string, unknown>
   interact: (options: Record<string, unknown>) => Record<string, unknown>
 }
 
@@ -45,6 +45,7 @@ afterEach(() => {
 describe('preview diagnostics bridge', () => {
   it('captures safe console/network diagnostics and supports bounded DOM operations', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 10,
       y: 20,
@@ -76,17 +77,25 @@ describe('preview diagnostics bridge', () => {
     `
 
     const api = diagnostics()
+    const capturedAfter = Date.now()
+    console.warn('layout warning')
     console.error('render failed')
     await window.fetch('https://example.test/data?token=secret&view=main', { method: 'POST' })
 
     const consoleEntries = api.readConsole({ level: 'error' })
     expect(consoleEntries).toHaveLength(1)
     expect(consoleEntries[0]).toMatchObject({ level: 'error', text: 'render failed' })
+    expect(api.readConsole({ query: 'render', since: capturedAfter })).toHaveLength(1)
+    expect(api.readConsole({ query: 'does-not-exist' })).toHaveLength(0)
 
     const requests = api.readNetwork({ errorsOnly: true })
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({ type: 'fetch', method: 'POST', status: 500, ok: false })
     expect(String(requests[0].url)).not.toContain('secret')
+    expect(api.readNetwork({ method: 'GET' })).toHaveLength(0)
+    expect(api.readNetwork({ urlIncludes: '/data', statusMin: 500, statusMax: 599 })).toHaveLength(
+      1
+    )
     expect(api.errors()).toHaveLength(2)
 
     const snapshot = api.snapshot()
@@ -95,6 +104,13 @@ describe('preview diagnostics bridge', () => {
     expect(JSON.stringify(snapshot)).not.toContain('must-not-leak')
     expect(JSON.stringify(snapshot)).not.toContain('textarea-secret')
     expect(JSON.stringify(snapshot)).not.toContain('hidden-secret')
+    const filteredSnapshot = api.snapshot({
+      query: 'refresh',
+      limit: 1,
+      includeBodyText: false
+    })
+    expect(filteredSnapshot.elements).toHaveLength(1)
+    expect(filteredSnapshot.bodyText).toBeUndefined()
 
     const filled = api.interact({ action: 'fill', selector: '#name', value: 'Chris' })
     expect(filled.ok).toBe(true)

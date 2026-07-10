@@ -267,6 +267,7 @@ fn register_project(dir: &Path, display_name: Option<&str>) -> StudioProject {
     model: None,
     effort: None,
     preview_mode: None,
+    disabled_agent_tools: None,
     missing: None,
   };
   store::upsert_project(project.clone());

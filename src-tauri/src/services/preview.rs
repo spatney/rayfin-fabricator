@@ -813,11 +813,15 @@ async fn runtime_diagnostics(app: &AppHandle) -> AppResult<Vec<RuntimeDiagnostic
 pub(crate) async fn read_console(
   app: &AppHandle,
   level: Option<&str>,
+  query: Option<&str>,
+  since: Option<u64>,
   limit: usize,
   clear: bool,
 ) -> AppResult<serde_json::Value> {
   let options = serde_json::json!({
     "level": level,
+    "query": query,
+    "since": since,
     "limit": limit.clamp(1, 200),
     "clear": clear,
   });
@@ -835,11 +839,25 @@ pub(crate) async fn read_console(
 pub(crate) async fn read_network(
   app: &AppHandle,
   errors_only: bool,
+  query: Option<&str>,
+  url_includes: Option<&str>,
+  method: Option<&str>,
+  resource_type: Option<&str>,
+  status_min: Option<u16>,
+  status_max: Option<u16>,
+  since: Option<u64>,
   limit: usize,
   clear: bool,
 ) -> AppResult<serde_json::Value> {
   let options = serde_json::json!({
     "errorsOnly": errors_only,
+    "query": query,
+    "urlIncludes": url_includes,
+    "method": method,
+    "resourceType": resource_type,
+    "statusMin": status_min,
+    "statusMax": status_max,
+    "since": since,
     "limit": limit.clamp(1, 300),
     "clear": clear,
   });
@@ -857,10 +875,19 @@ pub(crate) async fn read_network(
 pub(crate) async fn inspect_page(
   app: &AppHandle,
   selector: Option<&str>,
+  query: Option<&str>,
+  limit: usize,
+  include_body_text: bool,
 ) -> AppResult<serde_json::Value> {
-  let selector = serde_json::to_string(&selector).unwrap_or_else(|_| "null".into());
+  let options = serde_json::json!({
+    "selector": selector,
+    "query": query,
+    "limit": limit.clamp(1, 200),
+    "includeBodyText": include_body_text,
+  });
   let script = format!(
-    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.snapshot({selector}) : {{ok:false,error:'Diagnostics bridge is unavailable'}}"
+    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.snapshot({}) : {{ok:false,error:'Diagnostics bridge is unavailable'}}",
+    serde_json::to_string(&options).unwrap_or_else(|_| "{}".into())
   );
   Ok(
     eval_json::<serde_json::Value>(app, &script, EVAL_TIMEOUT)

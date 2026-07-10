@@ -22,9 +22,60 @@ function installApi(): void {
       suggest: vi.fn(() => Promise.resolve({ ok: false, suggestions: [] })),
       cancelSuggest: vi.fn(() => Promise.resolve(true)),
       setOptions: vi.fn(() => Promise.resolve(undefined)),
+      toolSettings: vi.fn(() =>
+        Promise.resolve({
+          groups: [
+            {
+              id: 'diagnostics',
+              label: 'Diagnostics',
+              description: 'Inspect the live app.',
+              tools: [
+                {
+                  id: 'fabricator_preview_screenshot',
+                  label: 'Screenshot',
+                  description: 'Capture the live page.'
+                },
+                {
+                  id: 'fabricator_preview_console',
+                  label: 'Console',
+                  description: 'Read console messages.'
+                }
+              ]
+            }
+          ],
+          enabledToolIds: ['fabricator_preview_screenshot', 'fabricator_preview_console']
+        })
+      ),
+      setToolSettings: vi.fn((_projectId: string, enabledToolIds: string[]) =>
+        Promise.resolve({
+          groups: [
+            {
+              id: 'diagnostics',
+              label: 'Diagnostics',
+              description: 'Inspect the live app.',
+              tools: [
+                {
+                  id: 'fabricator_preview_screenshot',
+                  label: 'Screenshot',
+                  description: 'Capture the live page.'
+                },
+                {
+                  id: 'fabricator_preview_console',
+                  label: 'Console',
+                  description: 'Read console messages.'
+                }
+              ]
+            }
+          ],
+          enabledToolIds
+        })
+      ),
+      readToolImage: vi.fn(() => Promise.resolve('data:image/png;base64,AAAA')),
       listModels: vi.fn(() => Promise.resolve([]))
     },
-    projects: { files: { tree: vi.fn(() => Promise.resolve({ path: '', name: '', children: [] })) } },
+    projects: {
+      files: { tree: vi.fn(() => Promise.resolve({ path: '', name: '', children: [] })) }
+    },
     screenshot: { save: vi.fn(() => Promise.resolve('C:/tmp/shot.png')) }
   }
 }
@@ -167,6 +218,116 @@ describe('ChatPanel proactive diagnostics', () => {
   })
 })
 
+describe('ChatPanel agent tools', () => {
+  it('toggles an individual capability from the composer tool manager', async () => {
+    render(<ChatPanel project={makeProject('p1')} messages={[]} onChange={() => {}} />)
+    await waitFor(() => expect(window.api.chat.toolSettings).toHaveBeenCalledWith('p1'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage agent tools' }))
+    const consoleTool = screen.getByRole('checkbox', { name: /Console/i })
+    expect((consoleTool as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(consoleTool)
+
+    await waitFor(() =>
+      expect(window.api.chat.setToolSettings).toHaveBeenCalledWith('p1', [
+        'fabricator_preview_screenshot'
+      ])
+    )
+  })
+
+  it('toggles an entire capability group', async () => {
+    render(<ChatPanel project={makeProject('p1')} messages={[]} onChange={() => {}} />)
+    await waitFor(() => expect(window.api.chat.toolSettings).toHaveBeenCalledWith('p1'))
+    fireEvent.click(screen.getByRole('button', { name: 'Manage agent tools' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Diagnostics/i }))
+    await waitFor(() => expect(window.api.chat.setToolSettings).toHaveBeenCalledWith('p1', []))
+  })
+
+  it('renders a screenshot result as the captured image', async () => {
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            text: '',
+            pending: false,
+            segments: [{ kind: 'tool', id: 'tool-1' }],
+            tools: [
+              {
+                id: 'tool-1',
+                name: 'fabricator_preview_screenshot',
+                title: 'Current deployed page',
+                state: 'success',
+                output: JSON.stringify({
+                  ok: true,
+                  summary: 'Captured the current live deployed page.',
+                  artifact: {
+                    path: 'C:\\session\\files\\fabricator-diagnostics\\shot.png',
+                    mimeType: 'image/png',
+                    bytes: 1024,
+                    format: 'png'
+                  }
+                }),
+                media: [
+                  {
+                    type: 'image',
+                    path: 'C:\\session\\files\\fabricator-diagnostics\\shot.png',
+                    mimeType: 'image/png',
+                    description: 'Captured the current live deployed page.'
+                  }
+                ]
+              }
+            ]
+          }
+        ]}
+        onChange={() => {}}
+      />
+    )
+
+    const image = await screen.findByRole('img', {
+      name: 'Captured the current live deployed page.'
+    })
+    expect((image as HTMLImageElement).src).toBe('data:image/png;base64,AAAA')
+    expect(window.api.chat.readToolImage).toHaveBeenCalledWith(
+      'C:\\session\\files\\fabricator-diagnostics\\shot.png'
+    )
+  })
+
+  it('summarizes console JSON before technical details', async () => {
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            text: '',
+            pending: false,
+            segments: [{ kind: 'tool', id: 'tool-1' }],
+            tools: [
+              {
+                id: 'tool-1',
+                name: 'fabricator_preview_console',
+                title: 'Recent console messages',
+                state: 'success',
+                output: JSON.stringify([
+                  { id: 'c1', level: 'error', text: 'Render failed', timestamp: 1 }
+                ])
+              }
+            ]
+          }
+        ]}
+        onChange={() => {}}
+      />
+    )
+    fireEvent.click(screen.getByText('Reading the console'))
+    expect(screen.queryByText('1 console message')).not.toBeNull()
+    expect(screen.queryByText('Render failed')).not.toBeNull()
+  })
+})
+
 /**
  * Guards issue #13: on a long prompt the caret drifted from the typed text
  * ("typing occurs below the cursor line") because the transparent textarea and
@@ -195,9 +356,7 @@ describe('ChatPanel composer scrollport (issue #13)', () => {
 
   it('renders the textarea and highlight overlay inside one shared scrollport', async () => {
     await act(async () => {
-      render(
-        <ChatPanel project={makeProject('p1')} messages={[]} onChange={() => {}} draft="" />
-      )
+      render(<ChatPanel project={makeProject('p1')} messages={[]} onChange={() => {}} draft="" />)
     })
     const sizer = document.querySelector('.composer-input-sizer')
     const textarea = document.querySelector('.composer-input')

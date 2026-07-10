@@ -12,6 +12,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import {
   IpcChannels,
+  type AgentToolSettings,
   type AppSettings,
   type AdvisorEventEnvelope,
   type AdvisorFinding,
@@ -110,8 +111,7 @@ export const api: RayfinStudioApi = {
     rename: (id: string, name: string) => invoke('projects_rename', { id, name }),
     setWorkspace: (id: string, workspace?: string, workspaceName?: string) =>
       invoke('projects_set_workspace', { id, workspace, workspaceName }),
-    setPreviewMode: (id: string, mode: string) =>
-      invoke('projects_set_preview_mode', { id, mode }),
+    setPreviewMode: (id: string, mode: string) => invoke('projects_set_preview_mode', { id, mode }),
     remove: (id: string, deleteFiles?: boolean) => invoke('projects_remove', { id, deleteFiles }),
     git: {
       status: (id: string) => invoke('projects_git_status', { id }),
@@ -167,11 +167,8 @@ export const api: RayfinStudioApi = {
       attachments?: string[],
       mode?: ChatMode
     ) => invoke('chat_send', { projectId, turnId, text, attachments, mode }),
-    steer: (
-      projectId: string,
-      text: string,
-      attachments?: string[]
-    ) => invoke('chat_steer', { projectId, text, attachments }),
+    steer: (projectId: string, text: string, attachments?: string[]) =>
+      invoke('chat_steer', { projectId, text, attachments }),
     cancel: (projectId: string) => invoke('chat_cancel', { projectId }),
     reset: (projectId: string) => invoke('chat_reset', { projectId }),
     resolvePlan: (requestId: string, action: string, feedback?: string) =>
@@ -181,6 +178,11 @@ export const api: RayfinStudioApi = {
       invoke('chat_save_history', { projectId, messages }),
     setOptions: (projectId: string, options: ChatOptions) =>
       invoke('chat_set_options', { projectId, options }),
+    toolSettings: (projectId: string) =>
+      invoke<AgentToolSettings>('chat_tool_settings', { projectId }),
+    setToolSettings: (projectId: string, enabledToolIds: string[]) =>
+      invoke<AgentToolSettings>('chat_set_tool_settings', { projectId, enabledToolIds }),
+    readToolImage: (path: string) => invoke<string>('chat_read_tool_image', { path }),
     listModels: () => invoke('chat_models'),
     suggest: (projectId: string) => invoke('chat_suggest', { projectId }),
     cancelSuggest: (projectId: string) => invoke('chat_suggest_cancel', { projectId })
@@ -192,8 +194,7 @@ export const api: RayfinStudioApi = {
   },
 
   deploy: {
-    run: (projectId: string, workspace?: string) =>
-      invoke('deploy_run', { projectId, workspace }),
+    run: (projectId: string, workspace?: string) => invoke('deploy_run', { projectId, workspace }),
     list: (projectId: string) => invoke('deploy_list', { projectId }),
     switch: (projectId: string, workspace: string, byId?: boolean) =>
       invoke('deploy_switch', { projectId, workspace, byId }),

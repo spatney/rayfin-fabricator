@@ -11,11 +11,13 @@ import {
   type DragEvent
 } from 'react'
 import {
+  type AgentToolSettings,
   type ChatEvent,
   type ChatMessage,
   type ChatMode,
   type ChatSegment,
   type ChatToolCall,
+  type ChatToolMedia,
   type ChatTurnResult,
   type FileNode,
   type ReasoningEffort,
@@ -263,7 +265,10 @@ function useGeneratedSuggestions(
     setLoading(true)
     setFailed(false)
     // A forced refresh should regenerate even if the code is unchanged.
-    const p = nonce > 0 ? window.api.chat.cancelSuggest(projectId).catch(() => false) : Promise.resolve(false)
+    const p =
+      nonce > 0
+        ? window.api.chat.cancelSuggest(projectId).catch(() => false)
+        : Promise.resolve(false)
     void p.then(() =>
       window.api.chat
         .suggest(projectId)
@@ -315,8 +320,11 @@ function toolKind(name: string): ToolKind {
   // Fabricator's own tools first — their names ("fabricator_…") contain the
   // substring "cat", which would otherwise be misread as a file "cat"/read.
   if (n.includes('screenshot')) return 'screenshot'
-  if (n.includes('navigate')) return 'navigate'
+  if (n.includes('navigate') || n.includes('interact')) return 'navigate'
   if (n.includes('deploy')) return 'deploy'
+  if (n.includes('console') || n.includes('network') || n.includes('inspect')) return 'search'
+  if (n.includes('semantic_model')) return 'search'
+  if (n.includes('evaluate') || n.includes('cdp')) return 'run'
   if (n.includes('powershell') || n.includes('bash') || n.includes('shell')) return 'run'
   if (n.includes('create')) return 'create'
   if (n.includes('edit') || n.includes('replace') || n.includes('str_replace')) return 'edit'
@@ -342,6 +350,21 @@ const KIND_LABEL: Record<ToolKind, string> = {
 
 /** Friendly, non-jargon label for a Copilot tool call (for non-coders). */
 function friendlyTool(name: string): string {
+  const label: Record<string, string> = {
+    fabricator_deployment_status: 'Checking deployment',
+    fabricator_deploy: 'Deploying the app',
+    fabricator_preview_navigate: 'Navigating the preview',
+    fabricator_preview_screenshot: 'Capturing a screenshot',
+    fabricator_preview_console: 'Reading the console',
+    fabricator_preview_network: 'Inspecting network traffic',
+    fabricator_preview_inspect: 'Inspecting the page',
+    fabricator_preview_interact: 'Operating the page',
+    fabricator_preview_evaluate: 'Running page JavaScript',
+    fabricator_preview_cdp: 'Using the browser debugger',
+    fabricator_locate_semantic_model: 'Locating a semantic model',
+    fabricator_search_semantic_models: 'Searching Fabric data'
+  }
+  if (label[name]) return label[name]
   return KIND_LABEL[toolKind(name)]
 }
 
@@ -679,44 +702,329 @@ function parseNumbered(text: string): { nums: (number | null)[]; code: string } 
   return { nums, code: codes.join('\n') }
 }
 
-/**
- * Renders a tool's output. File reads (the `N. <code>` format) get a line-number
- * gutter + syntax highlighting; everything else (commands, errors) stays plain.
- */
-function ToolOutput({
-  name,
-  title,
-  output
-}: {
-  name: string
-  title: string
-  output: string
-}): JSX.Element {
-  const numbered = useMemo(() => parseNumbered(output), [output])
-  const kind = toolKind(name)
-  const lang =
-    kind === 'read' || kind === 'edit' || kind === 'create' ? langFromPath(title) : undefined
-  const hl = useMemo(
-    () => (numbered ? highlightCode(numbered.code, lang) : null),
-    [numbered, lang]
-  )
+type JsonObject = Record<string, unknown>
 
-  if (!numbered) return <pre className="tool-call-output">{output}</pre>
+function jsonObject(value: unknown): JsonObject | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as JsonObject)
+    : null
+}
+
+function parseJsonResult(output: string): unknown {
+  try {
+    return JSON.parse(output)
+  } catch {
+    return null
+  }
+}
+
+function asText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function formatBytes(bytes: unknown): string {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function ToolImage({ media }: { media: ChatToolMedia }): JSX.Element {
+  const [src, setSrc] = useState<string>()
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    setSrc(undefined)
+    setFailed(false)
+    void window.api.chat.readToolImage(media.path).then(
+      (value) => {
+        if (active) setSrc(value)
+      },
+      () => {
+        if (active) setFailed(true)
+      }
+    )
+    return () => {
+      active = false
+    }
+  }, [media.path])
 
   return (
-    <div className="tool-code">
-      <div className="tool-code-gutter" aria-hidden="true">
-        {numbered.nums.map((n, i) => (
-          <span key={i}>{n ?? ''}</span>
-        ))}
+    <div className="tool-image">
+      {src ? (
+        <img src={src} alt={media.description ?? 'Live app screenshot'} />
+      ) : (
+        <div className={`tool-image-state${failed ? ' tool-image-state--error' : ''}`}>
+          {failed ? 'Screenshot could not be loaded.' : 'Loading screenshot...'}
+        </div>
+      )}
+      <div className="tool-image-caption">
+        <span>{media.description ?? 'Live app screenshot'}</span>
+        <span title={media.path}>{media.path.split(/[\\/]/).pop()}</span>
       </div>
-      <pre className="tool-code-pre">
-        {hl ? (
-          <code className="hljs" dangerouslySetInnerHTML={{ __html: hl.html }} />
-        ) : (
-          <code className="hljs">{numbered.code}</code>
+    </div>
+  )
+}
+
+function ArtifactResult({ value }: { value: JsonObject }): JSX.Element | null {
+  const artifact = jsonObject(value.artifact)
+  if (!artifact) return null
+  const path = asText(artifact.path)
+  if (!path) return null
+  return (
+    <div className="tool-artifact">
+      <span className="tool-artifact-icon" aria-hidden="true">
+        <Codicon name="file" />
+      </span>
+      <span className="tool-artifact-copy">
+        <strong>{asText(value.summary) ?? 'Full result saved to the session'}</strong>
+        <span title={path}>{path}</span>
+        <small>
+          {[formatBytes(artifact.bytes), asText(artifact.format)?.toUpperCase()]
+            .filter(Boolean)
+            .join(' · ')}
+        </small>
+      </span>
+    </div>
+  )
+}
+
+function ConsoleResult({ entries }: { entries: unknown[] }): JSX.Element {
+  return (
+    <div className="tool-friendly-result">
+      <div className="tool-result-heading">
+        {entries.length} console {entries.length === 1 ? 'message' : 'messages'}
+      </div>
+      <div className="tool-console-list">
+        {entries.map((entry, index) => {
+          const item = jsonObject(entry) ?? {}
+          const level = asText(item.level) ?? 'log'
+          return (
+            <div className="tool-console-row" key={asText(item.id) ?? index}>
+              <span className={`tool-console-level tool-console-level--${level}`}>{level}</span>
+              <span>{asText(item.text) ?? JSON.stringify(entry)}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function NetworkResult({ entries }: { entries: unknown[] }): JSX.Element {
+  return (
+    <div className="tool-friendly-result">
+      <div className="tool-result-heading">
+        {entries.length} network {entries.length === 1 ? 'request' : 'requests'}
+      </div>
+      <div className="tool-network-list">
+        {entries.map((entry, index) => {
+          const item = jsonObject(entry) ?? {}
+          const status =
+            typeof item.status === 'number' ? item.status : item.ok === false ? 'Failed' : '—'
+          return (
+            <div className="tool-network-row" key={asText(item.id) ?? index}>
+              <span className="tool-network-method">
+                {asText(item.method) ?? asText(item.type) ?? 'GET'}
+              </span>
+              <span
+                className={
+                  item.ok === false ? 'tool-network-status is-error' : 'tool-network-status'
+                }
+              >
+                {status}
+              </span>
+              <span className="tool-network-url" title={asText(item.url)}>
+                {asText(item.url) ?? 'Unknown URL'}
+              </span>
+              {typeof item.durationMs === 'number' && (
+                <span className="tool-network-duration">{item.durationMs} ms</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function InspectResult({ value }: { value: JsonObject }): JSX.Element {
+  const page = jsonObject(value.page) ?? {}
+  const elements = Array.isArray(value.elements) ? value.elements : []
+  return (
+    <div className="tool-friendly-result">
+      <div className="tool-result-heading">
+        {asText(page.title) ?? 'Live page'} · {elements.length}{' '}
+        {elements.length === 1 ? 'element' : 'elements'}
+      </div>
+      {asText(page.url) && <div className="tool-result-subtle">{asText(page.url)}</div>}
+      {asText(value.bodyText) && <p className="tool-page-text">{asText(value.bodyText)}</p>}
+    </div>
+  )
+}
+
+function FriendlyJsonResult({
+  tool,
+  value
+}: {
+  tool: ChatToolCall
+  value: unknown
+}): JSX.Element | null {
+  if (tool.name === 'fabricator_preview_console' && Array.isArray(value)) {
+    return <ConsoleResult entries={value} />
+  }
+  if (tool.name === 'fabricator_preview_network' && Array.isArray(value)) {
+    return <NetworkResult entries={value} />
+  }
+  const object = jsonObject(value)
+  if (!object) return null
+  if (tool.name === 'fabricator_preview_inspect' && object.page) {
+    return <InspectResult value={object} />
+  }
+  const artifact = <ArtifactResult value={object} />
+  if (object.artifact) return artifact
+
+  if (tool.name === 'fabricator_deployment_status') {
+    const status = jsonObject(object.status)
+    const deployed = status?.deployed === true
+    return (
+      <div className="tool-friendly-result">
+        <div className="tool-result-heading">
+          {deployed ? 'The app is deployed' : 'The app has not been deployed'}
+        </div>
+        {deployed && asText(status?.url) && (
+          <div className="tool-result-subtle">{asText(status?.url)}</div>
         )}
-      </pre>
+      </div>
+    )
+  }
+
+  if (tool.name === 'fabricator_preview_evaluate') {
+    const exception = jsonObject(object.exceptionDetails)
+    const remote = jsonObject(object.result)
+    const resultValue =
+      asText(exception?.text) ??
+      asText(remote?.description) ??
+      (remote?.value === undefined ? undefined : JSON.stringify(remote.value))
+    return (
+      <div className="tool-friendly-result">
+        <div className="tool-result-heading">
+          {exception ? 'Page JavaScript threw an exception' : 'Page JavaScript completed'}
+        </div>
+        {resultValue && <div className="tool-result-subtle">{resultValue}</div>}
+      </div>
+    )
+  }
+
+  if (tool.name === 'fabricator_preview_cdp') {
+    const fields = Object.keys(object)
+    return (
+      <div className="tool-friendly-result">
+        <div className="tool-result-heading">{tool.title} completed</div>
+        <div className="tool-result-subtle">
+          {fields.length
+            ? `${fields.length} response ${fields.length === 1 ? 'field' : 'fields'}: ${fields.join(', ')}`
+            : 'The browser returned an empty response.'}
+        </div>
+      </div>
+    )
+  }
+
+  const summary =
+    asText(object.summary) ??
+    (typeof object.ok === 'boolean'
+      ? object.ok
+        ? 'Completed successfully'
+        : 'The operation failed'
+      : undefined)
+  if (!summary) return null
+  return (
+    <div className="tool-friendly-result">
+      <div className="tool-result-heading">{summary}</div>
+    </div>
+  )
+}
+
+function ToolTechnicalDetails({
+  tool,
+  output,
+  initiallyOpen
+}: {
+  tool: ChatToolCall
+  output: string
+  initiallyOpen: boolean
+}): JSX.Element {
+  const [open, setOpen] = useState(initiallyOpen)
+  return (
+    <details
+      className="tool-technical"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>Technical details</summary>
+      {tool.arguments !== undefined && (
+        <>
+          <div className="tool-technical-label">Input</div>
+          <pre>{JSON.stringify(tool.arguments, null, 2)}</pre>
+        </>
+      )}
+      {output && (
+        <>
+          <div className="tool-technical-label">Result</div>
+          <pre>{output}</pre>
+        </>
+      )}
+    </details>
+  )
+}
+
+/**
+ * Renders a tool result for people first. Known diagnostic payloads get concise
+ * cards, screenshots render as images, and exact JSON remains available under
+ * "Technical details" rather than being the only UI.
+ */
+function ToolOutput({ tool }: { tool: ChatToolCall }): JSX.Element {
+  const output = tool.output ?? ''
+  const numbered = useMemo(() => parseNumbered(output), [output])
+  const parsed = useMemo(() => parseJsonResult(output), [output])
+  const kind = toolKind(tool.name)
+  const lang =
+    kind === 'read' || kind === 'edit' || kind === 'create' ? langFromPath(tool.title) : undefined
+  const hl = useMemo(() => (numbered ? highlightCode(numbered.code, lang) : null), [numbered, lang])
+  const friendly = parsed !== null ? <FriendlyJsonResult tool={tool} value={parsed} /> : null
+  const hasTechnical = Boolean(output || tool.arguments)
+
+  return (
+    <div className="tool-result">
+      {tool.media?.map((media) => (
+        <ToolImage key={media.path} media={media} />
+      ))}
+      {friendly}
+      {numbered ? (
+        <div className="tool-code">
+          <div className="tool-code-gutter" aria-hidden="true">
+            {numbered.nums.map((n, i) => (
+              <span key={i}>{n ?? ''}</span>
+            ))}
+          </div>
+          <pre className="tool-code-pre">
+            {hl ? (
+              <code className="hljs" dangerouslySetInnerHTML={{ __html: hl.html }} />
+            ) : (
+              <code className="hljs">{numbered.code}</code>
+            )}
+          </pre>
+        </div>
+      ) : (
+        hasTechnical && (
+          <ToolTechnicalDetails
+            tool={tool}
+            output={output}
+            initiallyOpen={!friendly && !tool.media?.length}
+          />
+        )
+      )}
     </div>
   )
 }
@@ -729,8 +1037,18 @@ function ToolRow({
   tool: ChatToolCall
   projectPath: string
 }): JSX.Element {
+  const [open, setOpen] = useState(Boolean(t.media?.length))
+
+  useEffect(() => {
+    if (t.media?.length) setOpen(true)
+  }, [t.media])
+
   return (
-    <details className={`tool-call tool-call--${t.state}`}>
+    <details
+      className={`tool-call tool-call--${t.state}`}
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary title={t.title}>
         <span className="tool-call-icon">
           {t.state === 'running' ? (
@@ -742,7 +1060,7 @@ function ToolRow({
         <span className="tool-call-name">{friendlyTool(t.name)}</span>
         <span className="tool-call-title">{shortDetail(t.title, projectPath)}</span>
       </summary>
-      {t.output && <ToolOutput name={t.name} title={t.title} output={t.output} />}
+      {(t.output || t.media?.length) && <ToolOutput tool={t} />}
     </details>
   )
 }
@@ -951,7 +1269,13 @@ function AgentStatus({
         <span className="agent-status-orb-core" />
       </span>
       <span className="agent-status-label" role="status" aria-live="polite">
-        {notice ? <><Codicon name="refresh" /> {label}</> : `${label}…`}
+        {notice ? (
+          <>
+            <Codicon name="refresh" /> {label}
+          </>
+        ) : (
+          `${label}…`
+        )}
       </span>
       <span className="agent-status-time" aria-hidden="true">
         {mm}:{ss}
@@ -1013,7 +1337,15 @@ function PlanCard({
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
           >
-            {expanded ? <><Codicon name="chevron-down" /> Hide full plan</> : <><Codicon name="chevron-right" /> View full plan</>}
+            {expanded ? (
+              <>
+                <Codicon name="chevron-down" /> Hide full plan
+              </>
+            ) : (
+              <>
+                <Codicon name="chevron-right" /> View full plan
+              </>
+            )}
           </button>
           {expanded && (
             <div className="plan-card-body msg-text--md">
@@ -1180,7 +1512,14 @@ function reduce(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
       return {
         ...msg,
         tools: msg.tools.map((t) =>
-          t.id === ev.id ? { ...t, state: ev.state, output: ev.output ?? t.output } : t
+          t.id === ev.id
+            ? {
+                ...t,
+                state: ev.state,
+                output: ev.output ?? t.output,
+                media: ev.media ?? t.media
+              }
+            : t
         )
       }
     case 'notice':
@@ -1244,6 +1583,109 @@ const MODES: { id: ChatMode; label: string; hint: string; desc: string }[] = [
     desc: 'Runs autonomously end-to-end, auto-approving tools.'
   }
 ]
+
+function AgentToolManager({
+  settings,
+  saving,
+  error,
+  onChange
+}: {
+  settings?: AgentToolSettings
+  saving: boolean
+  error?: string
+  onChange: (enabledToolIds: string[]) => void
+}): JSX.Element {
+  const enabled = useMemo(() => new Set(settings?.enabledToolIds ?? []), [settings])
+  const total = settings?.groups.reduce((sum, group) => sum + group.tools.length, 0) ?? 0
+
+  const toggleGroup = (ids: string[]): void => {
+    const allEnabled = ids.every((id) => enabled.has(id))
+    const next = new Set(enabled)
+    for (const id of ids) {
+      if (allEnabled) next.delete(id)
+      else next.add(id)
+    }
+    onChange([...next])
+  }
+
+  const toggleTool = (id: string): void => {
+    const next = new Set(enabled)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    onChange([...next])
+  }
+
+  return (
+    <div className="agent-tools-pop" role="dialog" aria-label="Agent tools">
+      <div className="agent-tools-head">
+        <span>
+          <strong>Agent tools</strong>
+          <small>Choose what Fabricator can use in this project.</small>
+        </span>
+        <span className="agent-tools-count">
+          {enabled.size}/{total}
+        </span>
+      </div>
+      {!settings ? (
+        <div className="agent-tools-empty">Loading tools...</div>
+      ) : (
+        <div className="agent-tools-groups">
+          {settings.groups.map((group) => {
+            const ids = group.tools.map((tool) => tool.id)
+            const enabledCount = ids.filter((id) => enabled.has(id)).length
+            const checked = enabledCount === ids.length
+            const mixed = enabledCount > 0 && !checked
+            return (
+              <section className="agent-tool-group" key={group.id}>
+                <button
+                  type="button"
+                  className="agent-tool-group-toggle"
+                  role="checkbox"
+                  aria-checked={mixed ? 'mixed' : checked}
+                  disabled={saving}
+                  onClick={() => toggleGroup(ids)}
+                >
+                  <span
+                    className={`agent-tool-check${checked || mixed ? ' is-on' : ''}`}
+                    aria-hidden="true"
+                  >
+                    <Codicon name={mixed ? 'remove' : 'check'} />
+                  </span>
+                  <span>
+                    <strong>{group.label}</strong>
+                    <small>{group.description}</small>
+                  </span>
+                </button>
+                <div className="agent-tool-items">
+                  {group.tools.map((tool) => (
+                    <label className="agent-tool-item" key={tool.id}>
+                      <input
+                        type="checkbox"
+                        checked={enabled.has(tool.id)}
+                        disabled={saving}
+                        onChange={() => toggleTool(tool.id)}
+                      />
+                      <span>
+                        <strong>{tool.label}</strong>
+                        <small>{tool.description}</small>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      )}
+      {error && <div className="agent-tools-error">{error}</div>}
+      <div className="agent-tools-foot">
+        {saving
+          ? 'Applying changes...'
+          : 'Changes apply to the same resumable conversation on the next turn.'}
+      </div>
+    </div>
+  )
+}
 
 /** Friendly labels for the SDK's plan continuation actions. */
 const PLAN_ACTION_LABELS: Record<string, string> = {
@@ -1379,7 +1821,11 @@ const MessageRow = memo(function MessageRow({
             {m.attachments} screenshot{m.attachments > 1 ? 's' : ''}
           </div>
         ) : null}
-        {m.notice && !m.pending && <div className="msg-notice"><Codicon name="refresh" /> {m.notice}</div>}
+        {m.notice && !m.pending && (
+          <div className="msg-notice">
+            <Codicon name="refresh" /> {m.notice}
+          </div>
+        )}
         {m.pending && (
           <AgentStatus
             tools={m.tools}
@@ -1480,6 +1926,10 @@ export default function ChatPanel({
   const [effort, setEffort] = useState<ReasoningEffort | ''>(project.effort ?? '')
   const [showModel, setShowModel] = useState(false)
   const [showMode, setShowMode] = useState(false)
+  const [showTools, setShowTools] = useState(false)
+  const [toolSettings, setToolSettings] = useState<AgentToolSettings>()
+  const [toolsSaving, setToolsSaving] = useState(false)
+  const [toolsError, setToolsError] = useState<string>()
   const { models, loading: modelsLoading } = useCopilotModels(showModel)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -1614,6 +2064,23 @@ export default function ChatPanel({
   } = useGeneratedSuggestions(project.id, messages.length === 0)
   const suggestions = generatedSuggestions ?? fallbackSuggestions
 
+  useEffect(() => {
+    let active = true
+    setToolSettings(undefined)
+    setToolsError(undefined)
+    void window.api.chat.toolSettings(project.id).then(
+      (settings) => {
+        if (active) setToolSettings(settings)
+      },
+      (error) => {
+        if (active) setToolsError(error instanceof Error ? error.message : String(error))
+      }
+    )
+    return () => {
+      active = false
+    }
+  }, [project.id, model])
+
   // The currently-selected model's metadata (when a concrete, still-listed model
   // is chosen) — used to label the picker button and scope the effort options.
   const selectedModel = useMemo(() => models.find((m) => m.id === model), [models, model])
@@ -1652,6 +2119,35 @@ export default function ChatPanel({
     window.addEventListener('click', close)
     return () => window.removeEventListener('click', close)
   }, [showMode])
+
+  useEffect(() => {
+    if (!showTools) return
+    const close = (): void => setShowTools(false)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [showTools])
+
+  useEffect(() => {
+    if (sending) setShowTools(false)
+  }, [sending])
+
+  async function applyToolSettings(enabledToolIds: string[]): Promise<void> {
+    if (!toolSettings || sending || toolsSaving) return
+    const previous = toolSettings
+    setToolSettings({ ...toolSettings, enabledToolIds })
+    setToolsSaving(true)
+    setToolsError(undefined)
+    try {
+      const saved = await window.api.chat.setToolSettings(project.id, enabledToolIds)
+      setToolSettings(saved)
+      onOptionsChanged?.()
+    } catch (error) {
+      setToolSettings(previous)
+      setToolsError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setToolsSaving(false)
+    }
+  }
 
   function saveOptions(nextModel: string, nextEffort: ReasoningEffort | ''): void {
     void window.api.chat.setOptions(project.id, {
@@ -1794,9 +2290,7 @@ export default function ChatPanel({
   // pending-attachment flow as annotated screenshots.
   async function stageImages(files: Iterable<File | null | undefined>): Promise<void> {
     if (!onAddAttachment) return
-    const images = Array.from(files).filter(
-      (f): f is File => !!f && f.type.startsWith('image/')
-    )
+    const images = Array.from(files).filter((f): f is File => !!f && f.type.startsWith('image/'))
     if (images.length === 0) return
     setAttaching(true)
     try {
@@ -1913,14 +2407,24 @@ export default function ChatPanel({
       onChange((prev) =>
         prev.map((m) =>
           m.turnId === liveTurnId && m.pending
-            ? { ...m, segments: [...(m.segments ?? []), { kind: 'interjection', text: displayText, thumbs }] }
+            ? {
+                ...m,
+                segments: [
+                  ...(m.segments ?? []),
+                  { kind: 'interjection', text: displayText, thumbs }
+                ]
+              }
             : m
         )
       )
     }
     let steered = true
     try {
-      const res = await window.api.chat.steer(project.id, prompt, shots.map((s) => s.path))
+      const res = await window.api.chat.steer(
+        project.id,
+        prompt,
+        shots.map((s) => s.path)
+      )
       steered = !!res?.steered
     } catch (err) {
       console.error('Failed to steer', err)
@@ -1979,7 +2483,12 @@ export default function ChatPanel({
       onChange((prev) =>
         prev.map((m) =>
           m.turnId === turnId
-            ? { ...m, pending: false, tools: settleRunningTools(m.tools, 'success'), elapsedMs: m.elapsedMs ?? (m.startedAt ? Date.now() - m.startedAt : undefined) }
+            ? {
+                ...m,
+                pending: false,
+                tools: settleRunningTools(m.tools, 'success'),
+                elapsedMs: m.elapsedMs ?? (m.startedAt ? Date.now() - m.startedAt : undefined)
+              }
             : m
         )
       )
@@ -2029,7 +2538,12 @@ export default function ChatPanel({
       onChange((prev) =>
         prev.map((m) =>
           m.turnId === turnId
-            ? { ...m, pending: false, tools: settleRunningTools(m.tools, 'success'), elapsedMs: m.elapsedMs ?? (m.startedAt ? Date.now() - m.startedAt : undefined) }
+            ? {
+                ...m,
+                pending: false,
+                tools: settleRunningTools(m.tools, 'success'),
+                elapsedMs: m.elapsedMs ?? (m.startedAt ? Date.now() - m.startedAt : undefined)
+              }
             : m
         )
       )
@@ -2051,7 +2565,9 @@ export default function ChatPanel({
     feedback?: string
   ): Promise<void> {
     onChange((prev) =>
-      prev.map((m) => (m.id === msgId && m.plan ? { ...m, plan: { ...m.plan, resolved: true } } : m))
+      prev.map((m) =>
+        m.id === msgId && m.plan ? { ...m, plan: { ...m.plan, resolved: true } } : m
+      )
     )
     // Reflect the approved continuation in the composer so the bar no longer reads "Plan".
     const nextMode = ACTION_TO_MODE[action]
@@ -2433,8 +2949,7 @@ export default function ChatPanel({
                 ) : (
                   <span key={i}>{p.text}</span>
                 )
-              )}
-              {' '}
+              )}{' '}
             </div>
             <textarea
               ref={taRef}
@@ -2467,7 +2982,11 @@ export default function ChatPanel({
                   <button
                     type="button"
                     className={`mode-trigger${showMode ? ' mode-trigger--open' : ''}`}
-                    onClick={() => setShowMode((s) => !s)}
+                    onClick={() => {
+                      setShowTools(false)
+                      setShowModel(false)
+                      setShowMode((s) => !s)
+                    }}
                     disabled={sending}
                     aria-haspopup="menu"
                     aria-expanded={showMode}
@@ -2475,7 +2994,9 @@ export default function ChatPanel({
                   >
                     <ModeIcon mode={mode} className="mode-trigger-icon" />
                     <span className="mode-trigger-label">{currentMode.label}</span>
-                    <span className="mode-trigger-caret"><Codicon name="chevron-down" /></span>
+                    <span className="mode-trigger-caret">
+                      <Codicon name="chevron-down" />
+                    </span>
                   </button>
                   {showMode && (
                     <div className="mode-pop" role="menu">
@@ -2508,6 +3029,47 @@ export default function ChatPanel({
                 </div>
               )}
               <div
+                className="agent-tools-menu"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setShowTools(false)
+                }}
+              >
+                <button
+                  type="button"
+                  className={`agent-tools-trigger${showTools ? ' agent-tools-trigger--open' : ''}`}
+                  title={
+                    sending
+                      ? 'Agent tools cannot be changed while the assistant is working'
+                      : 'Manage agent tools'
+                  }
+                  aria-label="Manage agent tools"
+                  aria-haspopup="dialog"
+                  aria-expanded={showTools}
+                  disabled={sending || toolsSaving}
+                  onClick={() => {
+                    setShowModel(false)
+                    setShowMode(false)
+                    setShowTools((value) => !value)
+                  }}
+                >
+                  <Codicon name="tools" />
+                  {toolSettings && (
+                    <span className="agent-tools-trigger-count">
+                      {toolSettings.enabledToolIds.length}
+                    </span>
+                  )}
+                </button>
+                {showTools && (
+                  <AgentToolManager
+                    settings={toolSettings}
+                    saving={toolsSaving}
+                    error={toolsError}
+                    onChange={(ids) => void applyToolSettings(ids)}
+                  />
+                )}
+              </div>
+              <div
                 className="chat-model-menu"
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
@@ -2522,7 +3084,11 @@ export default function ChatPanel({
                       ? 'Model can’t be changed while the assistant is working'
                       : 'Choose the AI model and reasoning effort'
                   }
-                  onClick={() => setShowModel((s) => !s)}
+                  onClick={() => {
+                    setShowTools(false)
+                    setShowMode(false)
+                    setShowModel((s) => !s)
+                  }}
                   disabled={sending}
                   aria-haspopup="dialog"
                   aria-expanded={showModel}
@@ -2531,7 +3097,9 @@ export default function ChatPanel({
                   <span className="chat-model-btn-label">
                     Model: {selectedModel?.name || model || 'Auto'}
                   </span>
-                  <span className="chat-model-btn-caret"><Codicon name="chevron-down" /></span>
+                  <span className="chat-model-btn-caret">
+                    <Codicon name="chevron-down" />
+                  </span>
                 </button>
                 {showModel && (
                   <div className="chat-model-pop" role="dialog" aria-label="Model settings">

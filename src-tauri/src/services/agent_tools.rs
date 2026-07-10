@@ -11,6 +11,9 @@
 //! These tools exist **only** in Fabricator-driven sessions — they are never part
 //! of the project on disk, so a plain `copilot` CLI run sees none of them.
 
+use std::collections::HashSet;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,15 +22,158 @@ use base64::Engine;
 use github_copilot_sdk::tool::ToolHandler;
 use github_copilot_sdk::types::{ToolBinaryResult, ToolInvocation, ToolResultExpanded};
 use github_copilot_sdk::{Error as SdkError, Tool, ToolResult};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 use crate::commands::deploy;
-use crate::services::{preview, semantic_model, store};
+use crate::services::{paths, preview, semantic_model, store};
+use crate::types::{AgentToolCatalogGroup, AgentToolCatalogItem, AgentToolSettings};
+
+const DEFAULT_INLINE_CHARS: usize = 8_000;
+const STRUCTURED_INLINE_CEILING: usize = 16_000;
+const RAW_INLINE_CEILING: usize = 64_000;
+const MIN_INLINE_CHARS: usize = 256;
+const DIAGNOSTIC_ARTIFACT_DIR: &str = "fabricator-diagnostics";
+
+fn catalog_item(id: &str, label: &str, description: &str) -> AgentToolCatalogItem {
+  AgentToolCatalogItem {
+    id: id.to_string(),
+    label: label.to_string(),
+    description: description.to_string(),
+  }
+}
+
+/// Canonical user-facing catalog for Fabricator's in-process agent capabilities.
+pub fn tool_catalog() -> Vec<AgentToolCatalogGroup> {
+  vec![
+    AgentToolCatalogGroup {
+      id: "deployment".into(),
+      label: "Deployment".into(),
+      description: "Read and drive the app's Fabric deployment state.".into(),
+      tools: vec![
+        catalog_item(
+          "fabricator_deployment_status",
+          "Deployment status",
+          "Read the active deployment, workspace, URLs, and pending code changes.",
+        ),
+        catalog_item(
+          "fabricator_deploy",
+          "Deploy app",
+          "Deploy or redeploy through Fabricator and wait for the final result.",
+        ),
+      ],
+    },
+    AgentToolCatalogGroup {
+      id: "diagnostics".into(),
+      label: "Diagnostics".into(),
+      description: "Inspect what the deployed app rendered and reported.".into(),
+      tools: vec![
+        catalog_item(
+          "fabricator_preview_console",
+          "Console",
+          "Read filtered console messages and page errors.",
+        ),
+        catalog_item(
+          "fabricator_preview_network",
+          "Network traffic",
+          "Inspect filtered fetch, XHR, and resource activity.",
+        ),
+        catalog_item(
+          "fabricator_preview_inspect",
+          "Page inspection",
+          "Read a safe, filtered semantic snapshot of the live page.",
+        ),
+        catalog_item(
+          "fabricator_preview_screenshot",
+          "Screenshot",
+          "Capture the real deployed page as a persistent PNG.",
+        ),
+      ],
+    },
+    AgentToolCatalogGroup {
+      id: "page-control".into(),
+      label: "Page control".into(),
+      description: "Navigate and operate the deployed app like a user.".into(),
+      tools: vec![
+        catalog_item(
+          "fabricator_preview_navigate",
+          "Navigate",
+          "Open a route inside the deployed app.",
+        ),
+        catalog_item(
+          "fabricator_preview_interact",
+          "Interact",
+          "Click, focus, fill, select, check, press, scroll, or reload.",
+        ),
+      ],
+    },
+    AgentToolCatalogGroup {
+      id: "advanced-browser".into(),
+      label: "Advanced browser / CDP".into(),
+      description: "Unrestricted live-page debugging and browser protocol access.".into(),
+      tools: vec![
+        catalog_item(
+          "fabricator_preview_evaluate",
+          "Run page JavaScript",
+          "Execute arbitrary JavaScript in the deployed page.",
+        ),
+        catalog_item(
+          "fabricator_preview_cdp",
+          "Chrome DevTools Protocol",
+          "Call raw Runtime, DOM, CSS, Network, Page, Debugger, and other CDP methods.",
+        ),
+      ],
+    },
+    AgentToolCatalogGroup {
+      id: "fabric-data".into(),
+      label: "Fabric data".into(),
+      description: "Find semantic models to connect to the app.".into(),
+      tools: vec![
+        catalog_item(
+          "fabricator_locate_semantic_model",
+          "Locate semantic model",
+          "Resolve a report, app, model URL, or item ID to its semantic model.",
+        ),
+        catalog_item(
+          "fabricator_search_semantic_models",
+          "Search semantic models",
+          "Search the Fabric catalog for relevant semantic models.",
+        ),
+      ],
+    },
+  ]
+}
+
+pub fn tool_settings(
+  project_id: &str,
+  groups: Vec<AgentToolCatalogGroup>,
+) -> Result<AgentToolSettings, String> {
+  let project =
+    store::find_project(project_id).ok_or_else(|| format!("Project {project_id} no longer exists."))?;
+  let disabled: HashSet<&str> = project
+    .disabled_agent_tools
+    .as_deref()
+    .unwrap_or_default()
+    .iter()
+    .map(String::as_str)
+    .collect();
+  let enabled_tool_ids = groups
+    .iter()
+    .flat_map(|group| group.tools.iter())
+    .filter(|tool| !disabled.contains(tool.id.as_str()))
+    .map(|tool| tool.id.clone())
+    .collect();
+  Ok(AgentToolSettings { groups, enabled_tool_ids })
+}
 
 /// Build the Fabricator in-process tool set for one project's chat session.
 pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
-  vec![
+  let disabled: HashSet<String> = store::find_project(&project_id)
+    .and_then(|project| project.disabled_agent_tools)
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+  let mut tools = vec![
     Tool::new("fabricator_deployment_status")
       .with_description(
         "Read this project's deployment state, active workspace, deployed URLs, deployed commit, \
@@ -48,9 +194,10 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
       .with_handler(Arc::new(DeployTool::new(&app, &project_id))),
     Tool::new("fabricator_preview_navigate")
       .with_description(
-        "Navigate the real deployed app to a same-app absolute URL or app-relative path, wait for \
-         the page to load, and return a screenshot. Navigation cannot leave the deployed app. Use \
-         direct app routes for DOM inspection; a Fabric portal shell may contain a cross-origin iframe.",
+        "Navigate the real deployed app to a same-app absolute URL or app-relative path and wait for \
+         the page to load. Navigation cannot leave the deployed app. A screenshot is opt-in to keep \
+         results compact. Use direct app routes for DOM inspection; a Fabric portal shell may contain \
+         a cross-origin iframe.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -58,6 +205,10 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
           "target": {
             "type": "string",
             "description": "Same-app absolute http(s) URL or app-relative path such as /reports/overview. Defaults to the deployed root."
+          },
+          "screenshot": {
+            "type": "boolean",
+            "description": "Also capture the resulting page (default false)."
           }
         }
       }))
@@ -65,9 +216,19 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
     Tool::new("fabricator_preview_screenshot")
       .with_description(
         "Capture the current live deployed page as a PNG. On Windows this works silently even when \
-         the preview pane is hidden or the app is minimized.",
+         the preview pane is hidden or the app is minimized. The PNG always persists with the \
+         resumable Copilot session; choose whether it is also sent inline to the model.",
       )
-      .with_parameters(empty_parameters())
+      .with_parameters(serde_json::json!({
+        "type": "object",
+        "properties": {
+          "delivery": {
+            "type": "string",
+            "enum": ["inline", "file"],
+            "description": "inline (default) sends the image to the model and shows it in the timeline; file returns only the persistent artifact path."
+          }
+        }
+      }))
       .with_skip_permission(true)
       .with_handler(Arc::new(PreviewScreenshotTool::new(&app, &project_id))),
     Tool::new("fabricator_preview_console")
@@ -83,13 +244,30 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
             "enum": ["log", "info", "warn", "error", "debug"],
             "description": "Optional exact console level filter."
           },
+          "query": {
+            "type": "string",
+            "description": "Optional case-insensitive substring matched against message text, kind, and URL."
+          },
+          "since": {
+            "type": "number",
+            "description": "Only include entries at or after this epoch timestamp in milliseconds."
+          },
           "limit": {
             "type": "number",
-            "description": "Maximum entries to return (default 100, maximum 200)."
+            "description": "Maximum matching entries to return (default 50, maximum 200)."
           },
           "clear": {
             "type": "boolean",
             "description": "Clear the console ring after reading it."
+          },
+          "maxInlineChars": {
+            "type": "number",
+            "description": "Inline text budget (default 8000, hard maximum 16000)."
+          },
+          "overflow": {
+            "type": "string",
+            "enum": ["file", "truncate", "error"],
+            "description": "What to do above the inline budget (default file). Session files persist for resume."
           }
         }
       }))
@@ -108,13 +286,50 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
             "type": "boolean",
             "description": "Return only failed requests and HTTP 4xx/5xx responses."
           },
+          "query": {
+            "type": "string",
+            "description": "Optional case-insensitive substring matched across URL, method, type, and failure reason."
+          },
+          "urlIncludes": {
+            "type": "string",
+            "description": "Optional case-insensitive substring matched only against the sanitized URL."
+          },
+          "method": {
+            "type": "string",
+            "description": "Optional exact HTTP method such as GET or POST."
+          },
+          "resourceType": {
+            "type": "string",
+            "description": "Optional exact type such as fetch, xhr, script, css, or image."
+          },
+          "statusMin": {
+            "type": "number",
+            "description": "Optional minimum HTTP status (entries without status are excluded)."
+          },
+          "statusMax": {
+            "type": "number",
+            "description": "Optional maximum HTTP status (entries without status are excluded)."
+          },
+          "since": {
+            "type": "number",
+            "description": "Only include entries at or after this epoch timestamp in milliseconds."
+          },
           "limit": {
             "type": "number",
-            "description": "Maximum entries to return (default 100, maximum 300)."
+            "description": "Maximum matching entries to return (default 50, maximum 300)."
           },
           "clear": {
             "type": "boolean",
             "description": "Clear the network ring after reading it."
+          },
+          "maxInlineChars": {
+            "type": "number",
+            "description": "Inline text budget (default 8000, hard maximum 16000)."
+          },
+          "overflow": {
+            "type": "string",
+            "enum": ["file", "truncate", "error"],
+            "description": "What to do above the inline budget (default file). Session files persist for resume."
           }
         }
       }))
@@ -132,6 +347,27 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
           "selector": {
             "type": "string",
             "description": "Optional CSS selector limiting the snapshot to one subtree."
+          },
+          "query": {
+            "type": "string",
+            "description": "Optional case-insensitive substring matched against each element's text, label, role, tag, selector, and href."
+          },
+          "limit": {
+            "type": "number",
+            "description": "Maximum matching elements (default 100, maximum 200)."
+          },
+          "includeBodyText": {
+            "type": "boolean",
+            "description": "Include up to 4000 characters of visible body text (default true)."
+          },
+          "maxInlineChars": {
+            "type": "number",
+            "description": "Inline text budget (default 8000, hard maximum 16000)."
+          },
+          "overflow": {
+            "type": "string",
+            "enum": ["file", "truncate", "error"],
+            "description": "What to do above the inline budget (default file). Session files persist for resume."
           }
         }
       }))
@@ -140,8 +376,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
     Tool::new("fabricator_preview_interact")
       .with_description(
         "Interact with the real deployed page using a previously inspected CSS selector. Supports \
-         click, focus, fill, select, check, press, scroll, and reload. Returns the safe interaction \
-         result plus a screenshot so you can inspect the resulting state.",
+         click, focus, fill, select, check, press, scroll, and reload. Returns a compact result; \
+         request a screenshot only when visual confirmation is useful.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -156,6 +392,10 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
           },
           "value": {
             "description": "Action value: text for fill/select/press, boolean for check, or pixels/top/bottom for scroll."
+          },
+          "screenshot": {
+            "type": "boolean",
+            "description": "Also capture the resulting page (default false)."
           }
         },
         "required": ["action"]
@@ -187,6 +427,15 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
           "timeoutMs": {
             "type": "number",
             "description": "Evaluation timeout in milliseconds (default 10000, maximum 30000)."
+          },
+          "maxInlineChars": {
+            "type": "number",
+            "description": "Inline text budget (default 8000, hard maximum 64000)."
+          },
+          "overflow": {
+            "type": "string",
+            "enum": ["file", "truncate", "error"],
+            "description": "What to do above the inline budget (default file). Raw artifact content is unredacted."
           }
         },
         "required": ["expression"]
@@ -213,6 +462,15 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
           "timeoutMs": {
             "type": "number",
             "description": "Host wait timeout in milliseconds (default 10000, maximum 30000)."
+          },
+          "maxInlineChars": {
+            "type": "number",
+            "description": "Inline text budget (default 8000, hard maximum 64000)."
+          },
+          "overflow": {
+            "type": "string",
+            "enum": ["file", "truncate", "error"],
+            "description": "What to do above the inline budget (default file). Raw artifact content is unredacted."
           }
         },
         "required": ["method"]
@@ -243,6 +501,15 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
           "admin": {
             "type": "boolean",
             "description": "Optional: also try tenant-admin lookup paths (only works if you have admin rights)."
+          },
+          "maxInlineChars": {
+            "type": "number",
+            "description": "Inline text budget (default 8000, hard maximum 16000)."
+          },
+          "overflow": {
+            "type": "string",
+            "enum": ["file", "truncate", "error"],
+            "description": "What to do above the inline budget (default file)."
           }
         },
         "required": ["target"]
@@ -274,13 +541,24 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
           "limit": {
             "type": "number",
             "description": "Optional cap on the number of catalog hits to consider (default 30)."
+          },
+          "maxInlineChars": {
+            "type": "number",
+            "description": "Inline text budget (default 8000, hard maximum 16000)."
+          },
+          "overflow": {
+            "type": "string",
+            "enum": ["file", "truncate", "error"],
+            "description": "What to do above the inline budget (default file)."
           }
         },
         "required": ["query"]
       }))
       .with_skip_permission(true)
       .with_handler(Arc::new(SearchSemanticModelsTool)),
-  ]
+  ];
+  tools.retain(|tool| !disabled.contains(&tool.name));
+  tools
 }
 
 /* ----------------------------- shared helpers ----------------------------- */
@@ -367,26 +645,214 @@ fn safe_json(value: &impl serde::Serialize) -> String {
 }
 
 fn raw_json(value: &impl serde::Serialize) -> String {
-  let json = serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string());
-  if json.chars().count() <= 64_000 {
-    json
+  serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string())
+}
+
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum OverflowMode {
+  #[default]
+  File,
+  Truncate,
+  Error,
+}
+
+#[derive(Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OutputOptions {
+  #[serde(default)]
+  max_inline_chars: Option<usize>,
+  #[serde(default)]
+  overflow: Option<OverflowMode>,
+}
+
+#[derive(Clone, Copy, Default, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum ImageDelivery {
+  #[default]
+  Inline,
+  File,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArtifactMeta {
+  path: String,
+  session_path: String,
+  bytes: usize,
+  format: String,
+  mime_type: String,
+  hint: String,
+}
+
+fn safe_file_component(value: &str) -> String {
+  let safe: String = value
+    .chars()
+    .map(|ch| if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') { ch } else { '-' })
+    .take(80)
+    .collect();
+  if safe.is_empty() { "artifact".into() } else { safe }
+}
+
+fn artifact_path(invocation: &ToolInvocation, extension: &str) -> (PathBuf, String) {
+  let session_id = safe_file_component(invocation.session_id.as_str());
+  let file_name = format!(
+    "{}-{}-{}.{}",
+    chrono::Utc::now().format("%Y%m%dT%H%M%S%.3fZ"),
+    safe_file_component(&invocation.tool_name),
+    safe_file_component(&invocation.tool_call_id),
+    extension
+  );
+  let session_path = format!("files/{DIAGNOSTIC_ARTIFACT_DIR}/{file_name}");
+  (
+    paths::home_dir()
+      .join(".copilot")
+      .join("session-state")
+      .join(session_id)
+      .join("files")
+      .join(DIAGNOSTIC_ARTIFACT_DIR)
+      .join(file_name),
+    session_path,
+  )
+}
+
+fn write_artifact(
+  invocation: &ToolInvocation,
+  bytes: &[u8],
+  extension: &str,
+  format: &str,
+  mime_type: &str,
+) -> Result<ArtifactMeta, String> {
+  let (path, session_path) = artifact_path(invocation, extension);
+  let parent = path
+    .parent()
+    .ok_or_else(|| "Could not resolve the session artifact directory.".to_string())?;
+  fs::create_dir_all(parent)
+    .map_err(|error| format!("Could not create the session artifact directory: {error}"))?;
+  fs::write(&path, bytes)
+    .map_err(|error| format!("Could not write the session diagnostic artifact: {error}"))?;
+  Ok(ArtifactMeta {
+    path: path.to_string_lossy().into_owned(),
+    session_path,
+    bytes: bytes.len(),
+    format: format.to_string(),
+    mime_type: mime_type.to_string(),
+    hint: if format == "json" {
+      "Read this persistent session file with a targeted JSON script or query.".into()
+    } else {
+      "Read this persistent session file only when its full detail is needed.".into()
+    },
+  })
+}
+
+fn bounded_text_result(
+  invocation: &ToolInvocation,
+  content: String,
+  options: &OutputOptions,
+  ceiling: usize,
+  format: &str,
+  total_items: Option<usize>,
+) -> ToolResult {
+  let budget = options
+    .max_inline_chars
+    .unwrap_or(DEFAULT_INLINE_CHARS)
+    .clamp(MIN_INLINE_CHARS, ceiling);
+  let total_chars = content.chars().count();
+  if total_chars <= budget {
+    return ToolResult::Text(content);
+  }
+
+  let preview_chars = budget.saturating_sub(700).clamp(128, 2_000);
+  let preview: String = content.chars().take(preview_chars).collect();
+  let mode = options.overflow.unwrap_or_default();
+  if matches!(mode, OverflowMode::Error) {
+    return failure(format!(
+      "The result contains {total_chars} characters, above maxInlineChars={budget}. \
+       Request narrower filters, raise the budget (up to {ceiling}), or set overflow to file."
+    ));
+  }
+
+  let artifact = if matches!(mode, OverflowMode::File) {
+    let extension = if format == "json" { "json" } else { "txt" };
+    match write_artifact(
+      invocation,
+      content.as_bytes(),
+      extension,
+      format,
+      if format == "json" { "application/json" } else { "text/plain" },
+    ) {
+      Ok(artifact) => Some(artifact),
+      Err(error) => return failure(error),
+    }
   } else {
-    let mut output = json.chars().take(64_000).collect::<String>();
-    output.push_str("\n... truncated ...");
-    output
+    None
+  };
+
+  ToolResult::Text(
+    serde_json::to_string_pretty(&serde_json::json!({
+      "summary": if artifact.is_some() {
+        "The complete result was written to the resumable session's files directory."
+      } else {
+        "The result was truncated at the requested inline budget."
+      },
+      "preview": preview,
+      "totalChars": total_chars,
+      "inlineBudget": budget,
+      "totalItems": total_items,
+      "truncated": artifact.is_none(),
+      "artifact": artifact,
+    }))
+    .unwrap_or_else(|_| preview),
+  )
+}
+
+fn bounded_existing_result(
+  invocation: &ToolInvocation,
+  result: ToolResult,
+  options: &OutputOptions,
+) -> ToolResult {
+  match result {
+    ToolResult::Text(content) => bounded_text_result(
+      invocation,
+      content,
+      options,
+      STRUCTURED_INLINE_CEILING,
+      "text",
+      None,
+    ),
+    other => other,
   }
 }
 
-fn image_success(text: impl Into<String>, bytes: Vec<u8>) -> ToolResult {
+fn image_success(
+  invocation: &ToolInvocation,
+  summary: impl Into<String>,
+  bytes: Vec<u8>,
+  delivery: ImageDelivery,
+) -> ToolResult {
+  let artifact = match write_artifact(invocation, &bytes, "png", "png", "image/png") {
+    Ok(artifact) => artifact,
+    Err(error) => return failure(error),
+  };
+  let summary = summary.into();
+  let content = serde_json::to_string_pretty(&serde_json::json!({
+    "ok": true,
+    "summary": summary,
+    "delivery": delivery,
+    "artifact": artifact,
+  }))
+  .unwrap_or(summary);
   ToolResult::Expanded(ToolResultExpanded {
-    text_result_for_llm: text.into(),
+    text_result_for_llm: content,
     result_type: "success".to_string(),
-    binary_results_for_llm: Some(vec![ToolBinaryResult {
-      data: base64::engine::general_purpose::STANDARD.encode(bytes),
-      mime_type: "image/png".to_string(),
-      r#type: "image".to_string(),
-      description: Some("Live deployed app preview".to_string()),
-    }]),
+    binary_results_for_llm: matches!(delivery, ImageDelivery::Inline).then(|| {
+      vec![ToolBinaryResult {
+        data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        mime_type: "image/png".to_string(),
+        r#type: "image".to_string(),
+        description: Some("Live deployed app preview".to_string()),
+      }]
+    }),
     session_log: None,
     error: None,
     tool_telemetry: None,
@@ -395,7 +861,15 @@ fn image_success(text: impl Into<String>, bytes: Vec<u8>) -> ToolResult {
 
 /// A failure tool result carrying a message the agent can act on.
 fn failure(message: impl Into<String>) -> ToolResult {
-  let message = message.into();
+  let mut message = message.into();
+  let count = message.chars().count();
+  if count > STRUCTURED_INLINE_CEILING {
+    message = format!(
+      "{}\n... error truncated ({} more characters) ...",
+      message.chars().take(STRUCTURED_INLINE_CEILING).collect::<String>(),
+      count - STRUCTURED_INLINE_CEILING
+    );
+  }
   ToolResult::Expanded(ToolResultExpanded {
     text_result_for_llm: message.clone(),
     result_type: "failure".to_string(),
@@ -496,6 +970,8 @@ impl ToolHandler for DeployTool {
 struct NavigateParams {
   #[serde(default, alias = "url", alias = "path")]
   target: Option<String>,
+  #[serde(default)]
+  screenshot: Option<bool>,
 }
 
 #[async_trait]
@@ -523,24 +999,47 @@ impl ToolHandler for PreviewNavigateTool {
     {
       return Ok(failure(error.to_string()));
     }
+    if !params.screenshot.unwrap_or(false) {
+      return Ok(ToolResult::Text(format!("Navigated the live app to {target}.")));
+    }
     tokio::time::sleep(Duration::from_millis(300)).await;
     match preview::agent_capture(&self.0.app).await {
-      Ok(bytes) => Ok(image_success(format!("Navigated the live app to {target}."), bytes)),
+      Ok(bytes) => Ok(image_success(
+        &invocation,
+        format!("Navigated the live app to {target}."),
+        bytes,
+        ImageDelivery::Inline,
+      )),
       Err(error) => Ok(failure(format!(
-        "The page loaded at {target}, but its screenshot failed: {error}"
+        "The page loaded at {target}, but its requested screenshot failed: {error}"
       ))),
     }
   }
 }
 
+#[derive(Default, Deserialize)]
+struct ScreenshotParams {
+  #[serde(default)]
+  delivery: Option<ImageDelivery>,
+}
+
 #[async_trait]
 impl ToolHandler for PreviewScreenshotTool {
-  async fn call(&self, _invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+  async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+    let params: ScreenshotParams = match invocation.params() {
+      Ok(params) => params,
+      Err(error) => return Ok(failure(format!("Invalid arguments: {error}"))),
+    };
     if let Err(error) = self.0.ensure_live_preview().await {
       return Ok(failure(error));
     }
     match preview::agent_capture(&self.0.app).await {
-      Ok(bytes) => Ok(image_success("Captured the current live deployed page.", bytes)),
+      Ok(bytes) => Ok(image_success(
+        &invocation,
+        "Captured the current live deployed page.",
+        bytes,
+        params.delivery.unwrap_or_default(),
+      )),
       Err(error) => Ok(failure(error.to_string())),
     }
   }
@@ -551,9 +1050,15 @@ struct ConsoleParams {
   #[serde(default)]
   level: Option<String>,
   #[serde(default)]
+  query: Option<String>,
+  #[serde(default)]
+  since: Option<u64>,
+  #[serde(default)]
   limit: Option<usize>,
   #[serde(default)]
   clear: Option<bool>,
+  #[serde(flatten)]
+  output: OutputOptions,
 }
 
 #[async_trait]
@@ -569,7 +1074,9 @@ impl ToolHandler for PreviewConsoleTool {
     let entries = match preview::read_console(
       &self.0.app,
       params.level.as_deref(),
-      params.limit.unwrap_or(100),
+      params.query.as_deref(),
+      params.since,
+      params.limit.unwrap_or(50),
       params.clear.unwrap_or(false),
     )
     .await
@@ -582,7 +1089,15 @@ impl ToolHandler for PreviewConsoleTool {
         "No matching console entries have been captured on the current page.".to_string(),
       ));
     }
-    Ok(ToolResult::Text(safe_json(&entries)))
+    let total_items = entries.as_array().map(Vec::len);
+    Ok(bounded_text_result(
+      &invocation,
+      safe_json(&entries),
+      &params.output,
+      STRUCTURED_INLINE_CEILING,
+      "json",
+      total_items,
+    ))
   }
 }
 
@@ -592,9 +1107,25 @@ struct NetworkParams {
   #[serde(default)]
   errors_only: Option<bool>,
   #[serde(default)]
+  query: Option<String>,
+  #[serde(default)]
+  url_includes: Option<String>,
+  #[serde(default)]
+  method: Option<String>,
+  #[serde(default)]
+  resource_type: Option<String>,
+  #[serde(default)]
+  status_min: Option<u16>,
+  #[serde(default)]
+  status_max: Option<u16>,
+  #[serde(default)]
+  since: Option<u64>,
+  #[serde(default)]
   limit: Option<usize>,
   #[serde(default)]
   clear: Option<bool>,
+  #[serde(flatten)]
+  output: OutputOptions,
 }
 
 #[async_trait]
@@ -610,7 +1141,14 @@ impl ToolHandler for PreviewNetworkTool {
     let entries = match preview::read_network(
       &self.0.app,
       params.errors_only.unwrap_or(false),
-      params.limit.unwrap_or(100),
+      params.query.as_deref(),
+      params.url_includes.as_deref(),
+      params.method.as_deref(),
+      params.resource_type.as_deref(),
+      params.status_min,
+      params.status_max,
+      params.since,
+      params.limit.unwrap_or(50),
       params.clear.unwrap_or(false),
     )
     .await
@@ -623,14 +1161,31 @@ impl ToolHandler for PreviewNetworkTool {
         "No matching network activity has been captured on the current page.".to_string(),
       ));
     }
-    Ok(ToolResult::Text(safe_json(&entries)))
+    let total_items = entries.as_array().map(Vec::len);
+    Ok(bounded_text_result(
+      &invocation,
+      safe_json(&entries),
+      &params.output,
+      STRUCTURED_INLINE_CEILING,
+      "json",
+      total_items,
+    ))
   }
 }
 
 #[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct InspectParams {
   #[serde(default)]
   selector: Option<String>,
+  #[serde(default)]
+  query: Option<String>,
+  #[serde(default)]
+  limit: Option<usize>,
+  #[serde(default)]
+  include_body_text: Option<bool>,
+  #[serde(flatten)]
+  output: OutputOptions,
 }
 
 #[async_trait]
@@ -643,20 +1198,44 @@ impl ToolHandler for PreviewInspectTool {
     if let Err(error) = self.0.ensure_live_preview().await {
       return Ok(failure(error));
     }
-    match preview::inspect_page(&self.0.app, params.selector.as_deref()).await {
-      Ok(snapshot) => Ok(ToolResult::Text(safe_json(&snapshot))),
+    match preview::inspect_page(
+      &self.0.app,
+      params.selector.as_deref(),
+      params.query.as_deref(),
+      params.limit.unwrap_or(100),
+      params.include_body_text.unwrap_or(true),
+    )
+    .await
+    {
+      Ok(snapshot) => {
+        let total_items = snapshot
+          .get("elements")
+          .and_then(serde_json::Value::as_array)
+          .map(Vec::len);
+        Ok(bounded_text_result(
+          &invocation,
+          safe_json(&snapshot),
+          &params.output,
+          STRUCTURED_INLINE_CEILING,
+          "json",
+          total_items,
+        ))
+      }
       Err(error) => Ok(failure(error.to_string())),
     }
   }
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct InteractParams {
   action: String,
   #[serde(default)]
   selector: Option<String>,
   #[serde(default)]
   value: Option<serde_json::Value>,
+  #[serde(default)]
+  screenshot: Option<bool>,
 }
 
 #[async_trait]
@@ -700,8 +1279,16 @@ impl ToolHandler for PreviewInteractTool {
       ));
     }
     let text = safe_json(&result);
+    if !params.screenshot.unwrap_or(false) {
+      return Ok(ToolResult::Text(text));
+    }
     match preview::agent_capture(&self.0.app).await {
-      Ok(bytes) => Ok(image_success(text, bytes)),
+      Ok(bytes) => Ok(image_success(
+        &invocation,
+        text,
+        bytes,
+        ImageDelivery::Inline,
+      )),
       Err(_) => Ok(ToolResult::Text(text)),
     }
   }
@@ -717,6 +1304,8 @@ struct EvaluateParams {
   return_by_value: Option<bool>,
   #[serde(default)]
   timeout_ms: Option<u64>,
+  #[serde(flatten)]
+  output: OutputOptions,
 }
 
 #[async_trait]
@@ -743,7 +1332,14 @@ impl ToolHandler for PreviewEvaluateTool {
     )
     .await
     {
-      Ok(result) => Ok(ToolResult::Text(raw_json(&result))),
+      Ok(result) => Ok(bounded_text_result(
+        &invocation,
+        raw_json(&result),
+        &params.output,
+        RAW_INLINE_CEILING,
+        "json",
+        None,
+      )),
       Err(error) => Ok(failure(error.to_string())),
     }
   }
@@ -757,6 +1353,8 @@ struct CdpParams {
   params: Option<serde_json::Value>,
   #[serde(default)]
   timeout_ms: Option<u64>,
+  #[serde(flatten)]
+  output: OutputOptions,
 }
 
 #[async_trait]
@@ -786,7 +1384,14 @@ impl ToolHandler for PreviewCdpTool {
     )
     .await
     {
-      Ok(result) => Ok(ToolResult::Text(raw_json(&result))),
+      Ok(result) => Ok(bounded_text_result(
+        &invocation,
+        raw_json(&result),
+        &params.output,
+        RAW_INLINE_CEILING,
+        "json",
+        None,
+      )),
       Err(error) => Ok(failure(error.to_string())),
     }
   }
@@ -805,6 +1410,8 @@ struct LocateParams {
   workspace: Option<String>,
   #[serde(default)]
   admin: Option<bool>,
+  #[serde(flatten)]
+  output: OutputOptions,
 }
 
 #[async_trait]
@@ -826,7 +1433,11 @@ impl ToolHandler for LocateSemanticModelTool {
       params.admin.unwrap_or(false),
     )
     .await;
-    Ok(render_semantic_model_result(&result))
+    Ok(bounded_existing_result(
+      &invocation,
+      render_semantic_model_result(&result),
+      &params.output,
+    ))
   }
 }
 
@@ -840,6 +1451,8 @@ struct SearchParams {
   types: Option<Vec<String>>,
   #[serde(default)]
   limit: Option<u32>,
+  #[serde(flatten)]
+  output: OutputOptions,
 }
 
 #[async_trait]
@@ -856,7 +1469,11 @@ impl ToolHandler for SearchSemanticModelsTool {
       ));
     }
     let result = semantic_model::search_semantic_models(query, params.types.clone(), params.limit).await;
-    Ok(render_semantic_model_result(&result))
+    Ok(bounded_existing_result(
+      &invocation,
+      render_semantic_model_result(&result),
+      &params.output,
+    ))
   }
 }
 
@@ -982,6 +1599,8 @@ fn render_semantic_model_result(r: &semantic_model::SemanticModelResult) -> Tool
 #[cfg(test)]
 mod tests {
   use super::*;
+  use github_copilot_sdk::types::ToolInvocation;
+  use serde_json::json;
 
   fn text_of(r: &ToolResult) -> String {
     match r {
@@ -1079,5 +1698,73 @@ mod tests {
     assert!(!rendered.contains("client-secret-value"), "got: {rendered}");
     assert!(!rendered.contains("account-key-value"), "got: {rendered}");
     assert!(rendered.contains("<redacted>"), "got: {rendered}");
+  }
+
+  fn invocation(session_id: &str, tool_name: &str) -> ToolInvocation {
+    serde_json::from_value(json!({
+      "sessionId": session_id,
+      "toolCallId": uuid::Uuid::new_v4().to_string(),
+      "toolName": tool_name,
+      "arguments": {},
+    }))
+    .unwrap()
+  }
+
+  #[test]
+  fn catalog_has_unique_tools_in_expected_groups() {
+    let groups = tool_catalog();
+    assert_eq!(
+      groups.iter().map(|group| group.id.as_str()).collect::<Vec<_>>(),
+      vec!["deployment", "diagnostics", "page-control", "advanced-browser", "fabric-data"]
+    );
+    let ids: Vec<&str> = groups
+      .iter()
+      .flat_map(|group| group.tools.iter().map(|tool| tool.id.as_str()))
+      .collect();
+    let unique: HashSet<&str> = ids.iter().copied().collect();
+    assert_eq!(ids.len(), 12);
+    assert_eq!(unique.len(), ids.len());
+  }
+
+  #[test]
+  fn large_results_can_truncate_without_writing_a_file() {
+    let inv = invocation("truncate-test", "fabricator_preview_console");
+    let options = OutputOptions {
+      max_inline_chars: Some(256),
+      overflow: Some(OverflowMode::Truncate),
+    };
+    let result = bounded_text_result(&inv, "x".repeat(2_000), &options, 16_000, "json", Some(20));
+    let rendered = text_of(&result);
+    let envelope: serde_json::Value = serde_json::from_str(&rendered).unwrap();
+    assert_eq!(envelope["truncated"], true);
+    assert!(envelope["artifact"].is_null());
+    assert_eq!(envelope["totalChars"], 2_000);
+    assert_eq!(envelope["totalItems"], 20);
+  }
+
+  #[test]
+  fn large_results_spill_to_the_owning_session_files() {
+    let session_id = format!("fabricator-output-test-{}", uuid::Uuid::new_v4());
+    let inv = invocation(&session_id, "fabricator_preview_cdp");
+    let options = OutputOptions {
+      max_inline_chars: Some(256),
+      overflow: Some(OverflowMode::File),
+    };
+    let full = json!({"nodes": vec!["large-value"; 200]});
+    let content = serde_json::to_string_pretty(&full).unwrap();
+    let result = bounded_text_result(&inv, content.clone(), &options, 64_000, "json", None);
+    let envelope: serde_json::Value = serde_json::from_str(&text_of(&result)).unwrap();
+    let path = PathBuf::from(envelope["artifact"]["path"].as_str().unwrap());
+    assert!(path.exists(), "expected artifact at {}", path.display());
+    assert_eq!(fs::read_to_string(&path).unwrap(), content);
+    assert!(envelope["artifact"]["sessionPath"]
+      .as_str()
+      .unwrap()
+      .starts_with("files/fabricator-diagnostics/"));
+    let session_root = paths::home_dir()
+      .join(".copilot")
+      .join("session-state")
+      .join(session_id);
+    fs::remove_dir_all(session_root).unwrap();
   }
 }

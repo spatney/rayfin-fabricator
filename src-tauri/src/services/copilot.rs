@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use github_copilot_sdk::handler::{ApproveAllHandler, ExitPlanModeHandler, ExitPlanModeResult};
+use github_copilot_sdk::rpc::ToolsListRequest;
 use github_copilot_sdk::session::Session;
 use github_copilot_sdk::{
   Client, ClientOptions, Error as SdkError, ExitPlanModeData, Model, ResumeSessionConfig,
@@ -31,7 +32,7 @@ use tokio::sync::{Mutex, OnceCell};
 use crate::services::emit::emit_chat_event;
 use crate::services::{exec, paths};
 use crate::state::PlanGate;
-use crate::types::ChatEvent;
+use crate::types::{AgentToolCatalogGroup, AgentToolCatalogItem, ChatEvent};
 
 /// Application name reported to the CLI as User-Agent context.
 const CLIENT_NAME: &str = "rayfin-fabricator";
@@ -158,9 +159,10 @@ impl ExitPlanModeHandler for PlanModeHandler {
 /// streaming enabled, auto-approving tool permissions, scoped to `cwd`. When
 /// `exit_plan` is supplied it is installed so Plan-mode turns surface their plan
 /// for approval (harmless for non-plan turns). `tools` are Fabricator's in-process
-/// `fabricator_*` capabilities; the product-scoped skill/instruction directories
-/// (materialized under app-data, never in the repo) are always registered so these
-/// only ever appear in Fabricator-driven sessions.
+/// `fabricator_*` capabilities and `excluded_tools` also filters the SDK's built-in
+/// coding tools. The product-scoped skill/instruction directories (materialized
+/// under app-data, never in the repo) are always registered so these only ever
+/// appear in Fabricator-driven sessions.
 async fn open_session(
   client: &Client,
   cwd: &str,
@@ -169,6 +171,7 @@ async fn open_session(
   effort: &Option<String>,
   exit_plan: Option<Arc<dyn ExitPlanModeHandler>>,
   tools: Vec<Tool>,
+  excluded_tools: Vec<String>,
 ) -> Result<Session, SdkError> {
   let handler = Arc::new(ApproveAllHandler);
   let sid = SessionId::new(session_id.to_string());
@@ -183,13 +186,15 @@ async fn open_session(
       .with_streaming(true)
       .with_client_name(CLIENT_NAME)
       .with_working_directory(cwd_pb)
-      .with_permission_handler(handler);
+      .with_permission_handler(handler)
+      .with_enable_skills(true)
+      .with_skill_directories([skills_dir])
+      .with_instruction_directories([instructions_dir]);
     if !tools.is_empty() {
-      cfg = cfg
-        .with_enable_skills(true)
-        .with_skill_directories([skills_dir])
-        .with_instruction_directories([instructions_dir])
-        .with_tools(tools);
+      cfg = cfg.with_tools(tools);
+    }
+    if !excluded_tools.is_empty() {
+      cfg = cfg.with_excluded_tools(excluded_tools);
     }
     if let Some(h) = exit_plan {
       cfg = cfg.with_exit_plan_mode_handler(h);
@@ -205,13 +210,15 @@ async fn open_session(
       .with_streaming(true)
       .with_client_name(CLIENT_NAME)
       .with_working_directory(cwd_pb)
-      .with_permission_handler(handler);
+      .with_permission_handler(handler)
+      .with_enable_skills(true)
+      .with_skill_directories([skills_dir])
+      .with_instruction_directories([instructions_dir]);
     if !tools.is_empty() {
-      cfg = cfg
-        .with_enable_skills(true)
-        .with_skill_directories([skills_dir])
-        .with_instruction_directories([instructions_dir])
-        .with_tools(tools);
+      cfg = cfg.with_tools(tools);
+    }
+    if !excluded_tools.is_empty() {
+      cfg = cfg.with_excluded_tools(excluded_tools);
     }
     if let Some(h) = exit_plan {
       cfg = cfg.with_exit_plan_mode_handler(h);
@@ -249,6 +256,174 @@ fn map_model(m: &Model) -> Option<crate::types::CopilotModel> {
     supported_reasoning_efforts: m.supported_reasoning_efforts.clone().unwrap_or_default(),
     default_reasoning_effort: m.default_reasoning_effort.clone(),
   })
+}
+
+const INTERNAL_BUILTIN_TOOLS: &[&str] =
+  &["exit_plan_mode", "task_complete", "send_inbox", "context_board"];
+
+fn builtin_tool_group(name: &str) -> (&'static str, &'static str, &'static str) {
+  match name {
+    "view" | "grep" | "glob" | "rg" | "code_search" => (
+      "workspace-read",
+      "Workspace files",
+      "Read and search the project's source files.",
+    ),
+    "edit" | "create" | "apply_patch" | "str_replace_editor" => (
+      "workspace-write",
+      "Code changes",
+      "Create and modify files in the project.",
+    ),
+    "powershell" | "bash" | "shell" => (
+      "terminal",
+      "Terminal",
+      "Run commands, builds, tests, and development tools.",
+    ),
+    "web_fetch" | "web_search" => (
+      "web",
+      "Web",
+      "Retrieve external documentation and other web resources.",
+    ),
+    "task" | "read_agent" | "write_agent" | "list_agents" | "ask_user" | "skill" => (
+      "collaboration",
+      "Agent collaboration",
+      "Use skills, ask questions, and coordinate specialized agents.",
+    ),
+    _ => (
+      "copilot-tools",
+      "Other Copilot tools",
+      "Additional capabilities provided by the Copilot runtime.",
+    ),
+  }
+}
+
+fn builtin_tool_label(name: &str) -> String {
+  let known = match name {
+    "view" => Some("Read files"),
+    "grep" | "rg" => Some("Search file contents"),
+    "glob" => Some("Find files"),
+    "code_search" => Some("Search code"),
+    "edit" | "str_replace_editor" => Some("Edit files"),
+    "create" => Some("Create files"),
+    "apply_patch" => Some("Apply code patch"),
+    "powershell" => Some("Run PowerShell"),
+    "bash" | "shell" => Some("Run shell commands"),
+    "web_fetch" => Some("Fetch web page"),
+    "web_search" => Some("Search the web"),
+    "task" => Some("Run sub-agent"),
+    "read_agent" => Some("Read sub-agent"),
+    "write_agent" => Some("Message sub-agent"),
+    "list_agents" => Some("List sub-agents"),
+    "ask_user" => Some("Ask a question"),
+    "skill" => Some("Run a skill"),
+    _ => None,
+  };
+  known.map(str::to_string).unwrap_or_else(|| {
+    name
+      .split(['_', '-'])
+      .filter(|part| !part.is_empty())
+      .map(|part| {
+        let mut chars = part.chars();
+        chars
+          .next()
+          .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+          .unwrap_or_default()
+      })
+      .collect::<Vec<_>>()
+      .join(" ")
+  })
+}
+
+fn concise_tool_description(name: &str, description: &str) -> String {
+  let known = match name {
+    "view" => Some("Read a file or a targeted range without loading unnecessary content."),
+    "grep" | "rg" => Some("Search project file contents for text or regular-expression matches."),
+    "glob" => Some("Find project files by name or path pattern."),
+    "edit" | "str_replace_editor" => Some("Make targeted changes to an existing project file."),
+    "create" => Some("Create a new file in the project."),
+    "apply_patch" => Some("Apply a precise multi-file code patch."),
+    "powershell" | "bash" | "shell" => Some("Run a command in the project's terminal environment."),
+    "web_fetch" => Some("Load a web page for documentation or research."),
+    "web_search" => Some("Search the web for relevant technical information."),
+    "task" => Some("Delegate an independent task to a specialized sub-agent."),
+    "read_agent" => Some("Read the status and result of a running sub-agent."),
+    "write_agent" => Some("Send follow-up instructions to a sub-agent."),
+    "list_agents" => Some("List active and completed sub-agents."),
+    "ask_user" => Some("Pause and ask you for a decision or missing information."),
+    "skill" => Some("Invoke a packaged workflow for a specialized task."),
+    _ => None,
+  };
+  if let Some(known) = known {
+    return known.to_string();
+  }
+
+  let compact = description.split_whitespace().collect::<Vec<_>>().join(" ");
+  let mut chars = compact.chars();
+  let preview: String = chars.by_ref().take(180).collect();
+  if chars.next().is_some() {
+    format!("{preview}...")
+  } else if preview.is_empty() {
+    "Use this Copilot runtime capability.".into()
+  } else {
+    preview
+  }
+}
+
+fn builtin_catalog_item(name: &str, description: &str) -> AgentToolCatalogItem {
+  AgentToolCatalogItem {
+    id: name.to_string(),
+    label: builtin_tool_label(name),
+    description: concise_tool_description(name, description),
+  }
+}
+
+fn group_builtin_tools(
+  tools: impl IntoIterator<Item = (String, String)>,
+) -> Vec<AgentToolCatalogGroup> {
+  let mut groups: Vec<AgentToolCatalogGroup> = Vec::new();
+  for (name, description) in tools {
+    if INTERNAL_BUILTIN_TOOLS.contains(&name.as_str()) {
+      continue;
+    }
+    let (group_id, group_label, group_description) = builtin_tool_group(&name);
+    if let Some(group) = groups.iter_mut().find(|group| group.id == group_id) {
+      group.tools.push(builtin_catalog_item(&name, &description));
+    } else {
+      groups.push(AgentToolCatalogGroup {
+        id: group_id.into(),
+        label: group_label.into(),
+        description: group_description.into(),
+        tools: vec![builtin_catalog_item(&name, &description)],
+      });
+    }
+  }
+  groups
+}
+
+fn fallback_builtin_tool_catalog() -> Vec<AgentToolCatalogGroup> {
+  let mut tools = vec![
+    ("view", "Read files"),
+    ("grep", "Search file contents"),
+    ("glob", "Find files"),
+    ("edit", "Edit files"),
+    ("create", "Create files"),
+    ("web_fetch", "Fetch web pages"),
+    ("task", "Run a sub-agent"),
+    ("read_agent", "Read a sub-agent"),
+    ("write_agent", "Message a sub-agent"),
+    ("list_agents", "List sub-agents"),
+    ("ask_user", "Ask the user"),
+    ("skill", "Run a skill"),
+  ];
+  tools.push(if cfg!(target_os = "windows") {
+    ("powershell", "Run PowerShell commands")
+  } else {
+    ("bash", "Run shell commands")
+  });
+  group_builtin_tools(
+    tools
+      .into_iter()
+      .map(|(name, description)| (name.to_string(), description.to_string())),
+  )
 }
 
 impl CopilotManager {
@@ -299,6 +474,37 @@ impl CopilotManager {
     Err(format!("Failed to list Copilot models: {last_err}"))
   }
 
+  /// List the built-in Copilot tools available for the selected model. Keep a
+  /// compact fallback so tool management still works while the engine is
+  /// starting or temporarily unavailable.
+  pub async fn builtin_tool_catalog(&self, model: Option<String>) -> Vec<AgentToolCatalogGroup> {
+    let result = async {
+      let client = self.ensure_client().await?;
+      client
+        .rpc()
+        .tools()
+        .list(ToolsListRequest {
+          model: concrete_model(&model),
+        })
+        .await
+        .map_err(|error| error.to_string())
+    }
+    .await;
+
+    match result {
+      Ok(tool_list) => group_builtin_tools(
+        tool_list
+          .tools
+          .into_iter()
+          .map(|tool| (tool.name, tool.description)),
+      ),
+      Err(error) => {
+        log::warn!("Could not list Copilot built-in tools: {error}");
+        fallback_builtin_tool_catalog()
+      }
+    }
+  }
+
   /// Get the persistent, cached session for a project turn, creating or
   /// resuming it as needed and reconciling the current model/effort.
   pub async fn turn_session(
@@ -310,6 +516,7 @@ impl CopilotManager {
     effort: Option<String>,
     exit_plan: Option<Arc<dyn ExitPlanModeHandler>>,
     tools: Vec<Tool>,
+    excluded_tools: Vec<String>,
   ) -> Result<Arc<Session>, String> {
     let key = cache_key(project_id);
     let want_model = concrete_model(&model);
@@ -360,13 +567,33 @@ impl CopilotManager {
     }
 
     let client = self.ensure_client().await?;
-    let session = match open_session(&client, cwd, session_id, &model, &effort, exit_plan.clone(), tools.clone()).await {
+    let session = match open_session(
+      &client,
+      cwd,
+      session_id,
+      &model,
+      &effort,
+      exit_plan.clone(),
+      tools.clone(),
+      excluded_tools.clone(),
+    )
+    .await
+    {
       Ok(s) => s,
       Err(e) if e.is_transport_failure() => {
         // The CLI server died — restart it and try once more.
         self.reset_client().await;
         let client = self.ensure_client().await?;
-        open_session(&client, cwd, session_id, &model, &effort, exit_plan, tools)
+        open_session(
+          &client,
+          cwd,
+          session_id,
+          &model,
+          &effort,
+          exit_plan,
+          tools,
+          excluded_tools,
+        )
           .await
           .map_err(|e| e.to_string())?
       }
@@ -396,12 +623,32 @@ impl CopilotManager {
   ) -> Result<Arc<Session>, String> {
     let client = self.ensure_client().await?;
     let id = uuid::Uuid::new_v4().to_string();
-    let session = match open_session(&client, cwd, &id, &model, &effort, None, Vec::new()).await {
+    let session = match open_session(
+      &client,
+      cwd,
+      &id,
+      &model,
+      &effort,
+      None,
+      Vec::new(),
+      Vec::new(),
+    )
+    .await
+    {
       Ok(s) => s,
       Err(e) if e.is_transport_failure() => {
         self.reset_client().await;
         let client = self.ensure_client().await?;
-        open_session(&client, cwd, &id, &model, &effort, None, Vec::new())
+        open_session(
+          &client,
+          cwd,
+          &id,
+          &model,
+          &effort,
+          None,
+          Vec::new(),
+          Vec::new(),
+        )
           .await
           .map_err(|e| e.to_string())?
       }
@@ -464,7 +711,7 @@ fn parse_cli_version(raw: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-  use super::parse_cli_version;
+  use super::{builtin_tool_label, group_builtin_tools, parse_cli_version};
 
   #[test]
   fn parses_prerelease_and_strips_trailing_period() {
@@ -480,5 +727,30 @@ mod tests {
   #[test]
   fn returns_none_when_absent() {
     assert_eq!(parse_cli_version("no version here"), None);
+  }
+
+  #[test]
+  fn groups_builtin_tools_and_hides_runtime_plumbing() {
+    let groups = group_builtin_tools([
+      ("view".to_string(), "Read files".to_string()),
+      ("powershell".to_string(), "Run commands".to_string()),
+      ("exit_plan_mode".to_string(), "Finish planning".to_string()),
+    ]);
+
+    assert_eq!(groups.len(), 2);
+    assert_eq!(groups[0].id, "workspace-read");
+    assert_eq!(groups[0].tools[0].label, "Read files");
+    assert_eq!(groups[1].id, "terminal");
+    assert!(
+      groups
+        .iter()
+        .flat_map(|group| &group.tools)
+        .all(|tool| tool.id != "exit_plan_mode")
+    );
+  }
+
+  #[test]
+  fn humanizes_new_runtime_tool_names() {
+    assert_eq!(builtin_tool_label("future_tool-name"), "Future Tool Name");
   }
 }

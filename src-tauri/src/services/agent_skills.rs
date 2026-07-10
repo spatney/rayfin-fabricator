@@ -73,6 +73,14 @@ deployed page: runtime JavaScript, navigation, auth, browser layout, or network 
 - Fabricator proactively sends live console/network failures into your active session.
   When that happens, inspect the full diagnostic buffers, find the root cause, fix it,
   deploy through `fabricator_deploy`, and verify the live page.
+- Keep diagnostic context focused: use `query`, `since`, `limit`, URL/status/method,
+  selector, and element filters before raising `maxInlineChars`. Results default to an
+  8K inline budget; overflow is written under the current resumable session's
+  `files/fabricator-diagnostics/` directory for targeted follow-up. Those files persist
+  with the session. Set `overflow` to `truncate` or `error` only when that is preferable.
+- Navigation and interaction do not capture screenshots unless `screenshot: true`.
+  Use the screenshot tool deliberately; `delivery: inline` gives you the image, while
+  `delivery: file` avoids image context and returns its persistent session artifact.
 - **Do not run or test the app locally.** Do not start a dev/preview server (`npm run dev`,
   `npm start`, `vite`, `next dev`), do not run `rayfin up` directly, and do not run local test runners (`npm test`,
   `vitest`, `jest`, `playwright`, `cypress`), and do not `curl`/open a `localhost` URL.
@@ -123,6 +131,13 @@ Fabric integration, and failed network calls:
    `fabricator_preview_cdp` for raw Runtime/DOM/CSS/Network/Page/Debugger protocol
    access whenever the structured tools do not expose enough state.
 6. Fix the root cause, deploy with `fabricator_deploy`, and repeat until the page is clean.
+
+Keep live-tool output proportional to the question. Filter console/network/DOM results first
+(`query`, `since`, `limit`, method/status/URL, selector), then adjust `maxInlineChars` only if
+needed. The default 8K budget writes complete overflow to the resumable session's persistent
+`files/fabricator-diagnostics/` directory. Navigation and interaction screenshots are opt-in;
+request `screenshot: true` only when the visual state matters. For an explicit screenshot,
+use `delivery: file` when a path is enough and `delivery: inline` when you need to see it.
 
 Fabricator may proactively interrupt or start a turn when the live preview reports a new
 console error, unhandled rejection, failed fetch/XHR, or HTTP error. Treat that as a repair

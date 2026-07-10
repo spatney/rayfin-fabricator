@@ -9,11 +9,12 @@
 //! the same session id across turns preserves conversation context (and survives
 //! app restarts), exactly like the old `--session-id <uuid>` reuse did.
 
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use base64::Engine;
 use github_copilot_sdk::handler::{ExitPlanModeHandler, ExitPlanModeResult};
 use github_copilot_sdk::rpc::ModeSetRequest;
 use github_copilot_sdk::session_events::SessionMode;
@@ -32,9 +33,12 @@ use crate::services::emit::emit_chat_event;
 use crate::services::history;
 use crate::services::store;
 use crate::state::{AppState, TurnRoute};
-use crate::types::{ChatEvent, ChatMessage, ChatOptions, ChatToolCall, ChatToolState, ChatTurnResult, CopilotModel, SteerResult};
+use crate::types::{
+  AgentToolSettings, ChatEvent, ChatMessage, ChatOptions, ChatToolCall, ChatToolMedia, ChatToolState,
+  ChatTurnResult, CopilotModel, SteerResult,
+};
 
-const MAX_TOOL_OUTPUT: usize = 4000;
+const MAX_TOOL_OUTPUT: usize = 16_000;
 /// Up to this many copilot invocations per turn on a transient pre-work failure.
 const MAX_ATTEMPTS: u32 = 3;
 /// 1 hour per-turn timeout. Long agent turns (large refactors, multi-step
@@ -76,6 +80,48 @@ fn tool_title(tool_name: &str, args: Option<&Value>) -> String {
   let Some(args) = args else {
     return tool_name.to_string();
   };
+  let arg = |name: &str| args.get(name).and_then(Value::as_str).map(str::trim);
+  let custom = match tool_name {
+    "fabricator_preview_navigate" => Some(format!(
+      "Open {}",
+      arg("target").filter(|value| !value.is_empty()).unwrap_or("the deployed app")
+    )),
+    "fabricator_preview_interact" => Some(format!(
+      "{} {}",
+      arg("action").filter(|value| !value.is_empty()).unwrap_or("Interact with"),
+      arg("selector").filter(|value| !value.is_empty()).unwrap_or("the page")
+    )),
+    "fabricator_preview_console" => Some(match (arg("level"), arg("query")) {
+      (Some(level), Some(query)) => format!("{level} messages matching '{query}'"),
+      (Some(level), None) => format!("{level} console messages"),
+      (None, Some(query)) => format!("Console messages matching '{query}'"),
+      _ => "Recent console messages".into(),
+    }),
+    "fabricator_preview_network" => Some(match arg("query").or_else(|| arg("urlIncludes")) {
+      Some(query) => format!("Network requests matching '{query}'"),
+      None if args.get("errorsOnly").and_then(Value::as_bool) == Some(true) => {
+        "Failed network requests".into()
+      }
+      None => "Recent network requests".into(),
+    }),
+    "fabricator_preview_inspect" => Some(match (arg("selector"), arg("query")) {
+      (Some(selector), Some(query)) => format!("{selector} matching '{query}'"),
+      (Some(selector), None) => selector.to_string(),
+      (None, Some(query)) => format!("Page elements matching '{query}'"),
+      _ => "Current page".into(),
+    }),
+    "fabricator_preview_evaluate" => arg("expression").map(|value| format!("JavaScript: {value}")),
+    "fabricator_preview_cdp" => arg("method").map(|value| format!("CDP {value}")),
+    "fabricator_locate_semantic_model" => arg("target").map(|value| format!("Resolve {value}")),
+    "fabricator_search_semantic_models" => arg("query").map(|value| format!("Search '{value}'")),
+    "fabricator_preview_screenshot" => Some("Current deployed page".into()),
+    "fabricator_deployment_status" => Some("Current deployment".into()),
+    "fabricator_deploy" => Some("Deploy current project".into()),
+    _ => None,
+  };
+  if let Some(custom) = custom {
+    return truncate(custom.trim(), 200);
+  }
   let raw = args
     .get("description")
     .and_then(|v| v.as_str())
@@ -84,6 +130,39 @@ fn tool_title(tool_name: &str, args: Option<&Value>) -> String {
     .unwrap_or(tool_name);
   let collapsed = raw.split_whitespace().collect::<Vec<_>>().join(" ");
   truncate(collapsed.trim(), 200)
+}
+
+fn tool_arguments_for_ui(tool_name: &str, args: Option<&Value>) -> Option<Value> {
+  if !tool_name.starts_with("fabricator_") {
+    return None;
+  }
+  let args = args?;
+  let rendered = serde_json::to_string(args).ok()?;
+  if rendered.chars().count() <= MAX_TOOL_OUTPUT {
+    Some(args.clone())
+  } else {
+    Some(serde_json::json!({
+      "truncated": true,
+      "preview": truncate(&rendered, MAX_TOOL_OUTPUT),
+    }))
+  }
+}
+
+fn tool_media(result: Option<&Value>) -> Option<Vec<ChatToolMedia>> {
+  let content = result?.get("content")?.as_str()?;
+  let parsed: Value = serde_json::from_str(content).ok()?;
+  let artifact = parsed.get("artifact")?;
+  let mime_type = artifact.get("mimeType")?.as_str()?;
+  if !mime_type.starts_with("image/") {
+    return None;
+  }
+  let path = artifact.get("path")?.as_str()?;
+  Some(vec![ChatToolMedia {
+    r#type: "image".into(),
+    path: path.to_string(),
+    mime_type: mime_type.to_string(),
+    description: parsed.get("summary").and_then(Value::as_str).map(str::to_string),
+  }])
 }
 
 /// One tool invocation observed during a turn, accumulated for diagnostics.
@@ -243,22 +322,25 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
         .map(|s| s.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
       ctx.tool_start(&id, &tool_name);
+      let arguments = tool_arguments_for_ui(&tool_name, args);
       sink(ChatEvent::ToolStart {
         tool: ChatToolCall {
           id,
           name: tool_name,
           title,
           state: ChatToolState::Running,
+          arguments,
           output: None,
+          media: None,
         },
       });
     }
     "tool.execution_complete" => {
       let id = data.get("toolCallId").and_then(|v| v.as_str()).unwrap_or("").to_string();
       let success = data.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+      let result = data.get("result");
       // Success carries `result.content`; failure carries `error.message`.
-      let output = data
-        .get("result")
+      let output = result
         .and_then(|r| r.get("content"))
         .and_then(|v| v.as_str())
         .or_else(|| data.get("error").and_then(|e| e.get("message")).and_then(|v| v.as_str()))
@@ -268,6 +350,7 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
         id,
         state: if success { ChatToolState::Success } else { ChatToolState::Error },
         output,
+        media: tool_media(result),
       });
     }
     "session.info" => {
@@ -469,10 +552,10 @@ pub(crate) async fn run_turn(
   let plan_handler: Arc<dyn ExitPlanModeHandler> =
     Arc::new(PlanModeHandler::new(app.clone(), state.plan.clone()));
 
-  // Build Fabricator's in-process tools for this turn. They let the agent locate
-  // and wire semantic models; visual validation happens via headless `npm run
-  // preview` and Fabricator auto-deploys after the turn.
+  // Build the enabled Fabricator tools and pass all persisted exclusions through
+  // to the SDK so its built-in coding tools follow the same project settings.
   let fab_tools = crate::services::agent_tools::fabricator_tools(app.clone(), project_id.clone());
+  let excluded_tools = project.disabled_agent_tools.clone().unwrap_or_default();
 
   // Open (or resume) this project's persistent SDK session, reconciling model/effort.
   let session = match state
@@ -485,6 +568,7 @@ pub(crate) async fn run_turn(
       project.effort.clone(),
       Some(plan_handler),
       fab_tools,
+      excluded_tools,
     )
     .await
   {
@@ -848,6 +932,114 @@ pub fn chat_set_options(project_id: String, options: ChatOptions) {
   });
 }
 
+#[tauri::command]
+pub async fn chat_tool_settings(
+  state: State<'_, AppState>,
+  project_id: String,
+) -> Result<AgentToolSettings, String> {
+  let project =
+    store::find_project(&project_id).ok_or_else(|| format!("Project {project_id} no longer exists."))?;
+  let mut catalog = crate::services::agent_tools::tool_catalog();
+  catalog.extend(state.copilot.builtin_tool_catalog(project.model).await);
+  crate::services::agent_tools::tool_settings(&project_id, catalog)
+}
+
+#[tauri::command]
+pub async fn chat_set_tool_settings(
+  state: State<'_, AppState>,
+  project_id: String,
+  enabled_tool_ids: Vec<String>,
+) -> Result<AgentToolSettings, String> {
+  if state.is_chat_running(&project_id) {
+    return Err("Agent tools cannot be changed while a turn is running.".into());
+  }
+  let project =
+    store::find_project(&project_id).ok_or_else(|| format!("Project {project_id} no longer exists."))?;
+  let previously_disabled = project.disabled_agent_tools.unwrap_or_default();
+
+  let mut catalog = crate::services::agent_tools::tool_catalog();
+  catalog.extend(state.copilot.builtin_tool_catalog(project.model).await);
+  let catalog_ids: Vec<String> = catalog
+    .iter()
+    .flat_map(|group| group.tools.iter().map(|tool| tool.id.clone()))
+    .collect();
+  let valid: HashSet<String> = catalog_ids.iter().cloned().collect();
+  let enabled: HashSet<String> = enabled_tool_ids.into_iter().collect();
+  if let Some(unknown) = enabled.iter().find(|id| !valid.contains(*id)) {
+    return Err(format!("Unknown agent tool: {unknown}"));
+  }
+  let mut disabled: Vec<String> = catalog_ids
+    .into_iter()
+    .filter(|id| !enabled.contains(id))
+    .collect();
+  disabled.extend(
+    previously_disabled
+      .into_iter()
+      .filter(|id| !valid.contains(id)),
+  );
+  disabled.sort();
+  disabled.dedup();
+  store::mutate_project(&project_id, |project| {
+    project.disabled_agent_tools = (!disabled.is_empty()).then_some(disabled);
+  });
+
+  // Disconnect only the in-memory SDK session. The persisted session id and its
+  // on-disk state remain untouched, so the next turn resumes the same conversation
+  // with the newly-filtered tool list.
+  state.copilot.forget(&project_id).await;
+  crate::services::agent_tools::tool_settings(&project_id, catalog)
+}
+
+fn validated_tool_image(path: &Path) -> Result<(PathBuf, &'static str), String> {
+  let canonical = path
+    .canonicalize()
+    .map_err(|error| format!("Could not open the tool image: {error}"))?;
+  let root = crate::services::paths::home_dir()
+    .join(".copilot")
+    .join("session-state")
+    .canonicalize()
+    .map_err(|error| format!("Could not resolve Copilot session storage: {error}"))?;
+  let relative = canonical
+    .strip_prefix(&root)
+    .map_err(|_| "Tool images must come from Copilot session storage.".to_string())?;
+  let mut components = relative.components();
+  let has_session = components.next().is_some();
+  let files = components.next().and_then(|part| part.as_os_str().to_str());
+  let diagnostics = components.next().and_then(|part| part.as_os_str().to_str());
+  if !has_session || files != Some("files") || diagnostics != Some("fabricator-diagnostics") {
+    return Err("Tool images must come from the session's fabricator-diagnostics directory.".into());
+  }
+  let mime_type = match canonical
+    .extension()
+    .and_then(|extension| extension.to_str())
+    .map(str::to_ascii_lowercase)
+    .as_deref()
+  {
+    Some("png") => "image/png",
+    Some("jpg" | "jpeg") => "image/jpeg",
+    Some("webp") => "image/webp",
+    _ => return Err("Unsupported tool image format.".into()),
+  };
+  let size = canonical
+    .metadata()
+    .map_err(|error| format!("Could not inspect the tool image: {error}"))?
+    .len();
+  if size > 15 * 1024 * 1024 {
+    return Err("Tool image exceeds the 15 MB display limit.".into());
+  }
+  Ok((canonical, mime_type))
+}
+
+#[tauri::command]
+pub fn chat_read_tool_image(path: String) -> Result<String, String> {
+  let (path, mime_type) = validated_tool_image(Path::new(&path))?;
+  let bytes = std::fs::read(path).map_err(|error| format!("Could not read the tool image: {error}"))?;
+  Ok(format!(
+    "data:{mime_type};base64,{}",
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+  ))
+}
+
 /// List the Copilot models available to the signed-in user, for the chat model
 /// picker. Returns an `Err` (the renderer then falls back to its static
 /// suggestions) when the engine can't be reached or the user isn't signed in.
@@ -1014,10 +1206,40 @@ mod tests {
       &mut ctx,
     );
     match &events[0] {
-      ChatEvent::ToolEnd { id, state, output } => {
+      ChatEvent::ToolEnd { id, state, output, .. } => {
         assert_eq!(id, "t1");
         assert!(matches!(state, ChatToolState::Success));
         assert_eq!(output.as_deref(), Some("done"));
+      }
+      _ => panic!("expected tool-end"),
+    }
+  }
+
+  #[test]
+  fn tool_complete_maps_persistent_image_artifact() {
+    let mut ctx = TurnCtx::new(false);
+    let content = json!({
+      "ok": true,
+      "summary": "Captured the live app.",
+      "artifact": {
+        "path": r"C:\Users\me\.copilot\session-state\s1\files\fabricator-diagnostics\shot.png",
+        "mimeType": "image/png"
+      }
+    })
+    .to_string();
+    let events = collect(
+      &[(
+        "tool.execution_complete",
+        json!({"toolCallId":"t1","success":true,"result":{"content":content}}),
+      )],
+      &mut ctx,
+    );
+    match &events[0] {
+      ChatEvent::ToolEnd { media, .. } => {
+        let image = &media.as_ref().expect("expected image metadata")[0];
+        assert_eq!(image.mime_type, "image/png");
+        assert!(image.path.ends_with("shot.png"));
+        assert_eq!(image.description.as_deref(), Some("Captured the live app."));
       }
       _ => panic!("expected tool-end"),
     }
@@ -1034,7 +1256,7 @@ mod tests {
       &mut ctx,
     );
     match &events[0] {
-      ChatEvent::ToolEnd { id, state, output } => {
+      ChatEvent::ToolEnd { id, state, output, .. } => {
         assert_eq!(id, "t1");
         assert!(matches!(state, ChatToolState::Error));
         assert_eq!(output.as_deref(), Some("boom"));
@@ -1051,4 +1273,3 @@ mod tests {
     assert!(out.contains("3 more characters"));
   }
 }
-

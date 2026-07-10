@@ -418,6 +418,8 @@ export interface StudioProject {
   lastDeploy?: DeployInfo
   /** Persisted Copilot CLI session id so chat resumes across restarts. */
   copilotSessionId?: string
+  /** Fabricator and built-in Copilot tools disabled for this project. */
+  disabledAgentTools?: string[]
   /**
    * Last Fabric workspace target used for deploys (display name, portal URL,
    * or GUID). Remembered after the user picks one so subsequent deploys reuse
@@ -690,6 +692,14 @@ export interface FileContent {
 
 export type ChatToolState = 'running' | 'success' | 'error'
 
+export interface ChatToolMedia {
+  type: 'image'
+  /** Persistent artifact path under this Copilot session's files directory. */
+  path: string
+  mimeType: string
+  description?: string
+}
+
 export interface ChatToolCall {
   /** Copilot toolCallId. */
   id: string
@@ -698,8 +708,30 @@ export interface ChatToolCall {
   /** Human-friendly one-line summary (description / command / path). */
   title: string
   state: ChatToolState
+  /** Original tool arguments, retained so the UI can explain the action. */
+  arguments?: unknown
   /** Captured tool output once complete (may be truncated for display). */
   output?: string
+  /** Rich UI artifacts produced by the tool without embedding large data in history. */
+  media?: ChatToolMedia[]
+}
+
+export interface AgentToolCatalogItem {
+  id: string
+  label: string
+  description: string
+}
+
+export interface AgentToolCatalogGroup {
+  id: string
+  label: string
+  description: string
+  tools: AgentToolCatalogItem[]
+}
+
+export interface AgentToolSettings {
+  groups: AgentToolCatalogGroup[]
+  enabledToolIds: string[]
 }
 
 /**
@@ -713,7 +745,6 @@ export type ChatSegment =
   | { kind: 'tool'; id: string }
   | { kind: 'interjection'; text: string; thumbs?: string[] }
 
-
 /**
  * Streamed chat events sent from main -> renderer during a turn. The renderer
  * appends 'delta' text to the active assistant bubble and tracks tool calls by id.
@@ -721,7 +752,13 @@ export type ChatSegment =
 export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'tool-start'; tool: ChatToolCall }
-  | { type: 'tool-end'; id: string; state: ChatToolState; output?: string }
+  | {
+      type: 'tool-end'
+      id: string
+      state: ChatToolState
+      output?: string
+      media?: ChatToolMedia[]
+    }
   | { type: 'notice'; text: string }
   | { type: 'error'; text: string }
   | { type: 'result'; ok: boolean; filesModified: string[]; ranDeploy: boolean }
@@ -912,7 +949,6 @@ export interface AdvisorEventEnvelope {
   projectId: string
   event: AdvisorEvent
 }
-
 
 /** Per-project chat configuration (model + reasoning effort). */
 export interface ChatOptions {
@@ -1503,11 +1539,7 @@ export interface RayfinStudioApi {
      * feedback) and resolves with `{ steered: true }`. When nothing is running it
      * resolves with `{ steered: false }`, so the caller sends it as a new turn.
      */
-    steer: (
-      projectId: string,
-      text: string,
-      attachments?: string[]
-    ) => Promise<SteerResult>
+    steer: (projectId: string, text: string, attachments?: string[]) => Promise<SteerResult>
     /** Cancel the in-flight turn for a project. */
     cancel: (projectId: string) => Promise<void>
     /** Start a fresh conversation (drops the persisted Copilot session id). */
@@ -1525,6 +1557,15 @@ export interface RayfinStudioApi {
     saveHistory: (projectId: string, messages: ChatMessage[]) => Promise<void>
     /** Set the model / reasoning effort used for this project's chat. */
     setOptions: (projectId: string, options: ChatOptions) => Promise<void>
+    /** Read the grouped agent-tool catalog and this project's enabled set. */
+    toolSettings: (projectId: string) => Promise<AgentToolSettings>
+    /**
+     * Replace this project's enabled agent-tool set. The cached SDK session
+     * is reconfigured while preserving its resumable session id and history.
+     */
+    setToolSettings: (projectId: string, enabledToolIds: string[]) => Promise<AgentToolSettings>
+    /** Load a persistent image artifact for a rich tool-call card. */
+    readToolImage: (path: string) => Promise<string>
     /** List the Copilot models available to the signed-in user (for the picker). */
     listModels: () => Promise<CopilotModel[]>
     /**
@@ -1660,7 +1701,10 @@ export interface RayfinStudioApi {
       /** Inject AI-generated HTML into the placeholder `id` (controller sanitizes it). */
       applyGenerated: (id: string, html: string) => Promise<void>
       /** Supply the placeholder AI model picker with the available models. */
-      setModels: (models: { id: string; name: string; fast: boolean }[], preferred?: string) => Promise<void>
+      setModels: (
+        models: { id: string; name: string; fast: boolean }[],
+        preferred?: string
+      ) => Promise<void>
       /**
        * Push Fabricator's own theme (accent/surfaces/text/border + UI scale) so
        * the design tools match the host app's look and zoom. Re-sent after a

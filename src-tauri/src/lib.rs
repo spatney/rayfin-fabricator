@@ -208,6 +208,9 @@ pub fn run() {
       commands::chat::chat_history,
       commands::chat::chat_save_history,
       commands::chat::chat_set_options,
+      commands::chat::chat_tool_settings,
+      commands::chat::chat_set_tool_settings,
+      commands::chat::chat_read_tool_image,
       commands::chat::chat_models,
       // suggestions
       commands::suggest::chat_suggest,
