@@ -24,10 +24,14 @@ export default defineConfig({
   // Expose TAURI_* env vars to the client so build-time platform info is available.
   envPrefix: ['VITE_', 'TAURI_ENV_'],
   server: {
-    port: 5173,
+    // Fabricator's own renderer dev server uses 1420 (Tauri's default) so that
+    // port 5173 stays free for a project's live local-preview Vite server — Rayfin
+    // apps pin their auth redirect URI / CORS to localhost:5173. Keep in sync with
+    // `src-tauri/tauri.conf.json` (`build.devUrl`).
+    port: 1420,
     strictPort: true,
     host: host || false,
-    hmr: host ? { protocol: 'ws', host, port: 5174 } : undefined,
+    hmr: host ? { protocol: 'ws', host, port: 1421 } : undefined,
     watch: {
       // Don't watch the Rust crate from the Vite dev server.
       ignored: ['**/src-tauri/**']

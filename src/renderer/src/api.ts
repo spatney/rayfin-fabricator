@@ -214,6 +214,12 @@ export const api: RayfinStudioApi = {
     reconcile: (projectId: string) => invoke('deploy_reconcile', { projectId })
   },
 
+  dev: {
+    start: (projectId: string) => invoke('dev_start', { projectId }),
+    stop: (projectId: string) => invoke('dev_stop', { projectId }),
+    supported: (projectId: string) => invoke('dev_supported_cmd', { projectId })
+  },
+
   settings: {
     get: () => invoke('settings_get'),
     set: (patch: Partial<AppSettings>) => invoke('settings_set', { patch })

@@ -277,6 +277,10 @@ code {
 
 .pane--preview {
   border-right: none;
+  /* Positioning context for the preview-scoped load overlay (.project-loading),
+     so a preview swap (local dev, redeploy, Fabric toggle) shows the loader only
+     over the preview — not across the whole build view / chat. */
+  position: relative;
 }
 
 /* Draggable divider between chat and preview — thin at rest, accent on hover. */
@@ -5569,6 +5573,34 @@ code {
   50% {
     opacity: 0.3;
   }
+}
+
+/* Live local preview (experiment) badge: a small flat teal pill in the preview
+   toolbar signalling the surface is showing the local Vite dev server, not the
+   deployed app. Scoped name to avoid cascade collisions in this large file. */
+.preview-local-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.preview-local-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
 }
 
 .preview-url {

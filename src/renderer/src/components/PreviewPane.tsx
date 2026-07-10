@@ -117,6 +117,11 @@ interface Props {
    *  chat + preview, so the indicator belongs at the content level, not the
    *  preview pane). `null` when not loading. */
   onLoadingChange?: (state: { name: string; fading: boolean } | null) => void
+  /** Live local preview (experiment): the `localhost` URL of the project's running
+   *  Vite dev server, or null/undefined when none. When set (and no deploy is
+   *  running), the preview surface shows this instead of the deployed app, with a
+   *  "Local" badge. See {@link RayfinStudioApi.dev}. */
+  localPreviewUrl?: string | null
 }
 
 function statusLabel(running: boolean, status: string | undefined): string {
@@ -182,7 +187,8 @@ export default function PreviewPane({
   onToggleFocus,
   onPreviewModeChanged,
   onDesignHandoff,
-  onLoadingChange
+  onLoadingChange,
+  localPreviewUrl
 }: Props): JSX.Element {
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
@@ -314,11 +320,16 @@ export default function PreviewPane({
     return { x: r.left, y: r.top, width: r.width, height: r.height }
   }, [])
 
-  const showWebview = !running && Boolean(deployedUrl)
   // Which URL the embedded webview actually loads. Falls back to the direct URL
   // whenever the Fabric link is unavailable or the toggle is off.
   const [previewMode, setPreviewMode] = useState<PreviewMode>(() => readPreviewMode(project))
-  const previewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
+  const deployedPreviewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
+  // Live local preview (experiment): while a Vite dev server is running for this
+  // project, the surface shows its localhost URL instead of the deployed app. A
+  // running deploy still wins (DeployStage), so this only applies mid-turn.
+  const isLocal = Boolean(localPreviewUrl) && !running
+  const previewUrl = isLocal ? (localPreviewUrl as string) : deployedPreviewUrl
+  const showWebview = !running && Boolean(previewUrl)
 
   // Re-init from the persisted project on project switch (don't carry a prior
   // project's Fabric view over). Within a project this component's toggle handler
@@ -392,9 +403,9 @@ export default function PreviewPane({
   // covering modal, the pane collapsed to 0×0) we hide it instead.
   useEffect(() => {
     const visible =
-      showWebview && !suppressed && !transitioningRef.current && Boolean(deployedUrl)
+      showWebview && !suppressed && !transitioningRef.current && Boolean(previewUrl)
     const host = hostRef.current
-    if (!visible || !host || !deployedUrl || !previewUrl) {
+    if (!visible || !host || !previewUrl) {
       // An HTML overlay covering a live preview suppresses the native webview,
       // which paints above ALL HTML and would otherwise cover the overlay. Two
       // cases, handled differently (only while the preview is otherwise STABLE —
@@ -407,7 +418,7 @@ export default function PreviewPane({
       //   • PARTIAL overlay (dropdown/menu/modal over the visible preview): SNAPSHOT
       //     the live frame FIRST and paint it as a backstop, THEN park — so the
       //     overlay floats over a still preview and the pane never flashes bare.
-      if (suppressed && showWebview && deployedUrl && !transitioningRef.current) {
+      if (suppressed && showWebview && previewUrl && !transitioningRef.current) {
         const hostBounds = measureHost()
         if (!hostBounds) {
           void window.api.preview.suppress(
@@ -454,7 +465,7 @@ export default function PreviewPane({
         }
       }
       setFrozen(null)
-      if (transitioningRef.current && deployedUrl) {
+      if (transitioningRef.current && previewUrl) {
         // A fresh page is loading (project switch / redeploy / Fabric toggle): park
         // the surface OFF-SCREEN but keep it RENDERING (at host size) so it paints
         // the new page before we reveal it. A hard-hidden (IsVisible=false) webview
@@ -995,6 +1006,11 @@ export default function PreviewPane({
             <span className="preview-dot" />
             <span className="preview-status-label">{statusLabel(running, status)}</span>
           </span>
+          {isLocal && (
+            <span className="preview-local-badge" title="Live local preview — your app is running from a local Vite dev server for this turn">
+              Local
+            </span>
+          )}
           {(displayUrl || deployedUrl) && (
             <button
               className="preview-url"
@@ -1020,7 +1036,7 @@ export default function PreviewPane({
                   .setPreviewMode(project.id, next)
                   .then(() => onPreviewModeChanged?.())
               }}
-              disabled={!showWebview || !fabricUrl || transitioning}
+              disabled={!showWebview || !fabricUrl || transitioning || isLocal}
               title={
                 !fabricUrl
                   ? 'The Fabric portal view is unavailable for this deployment'
@@ -1035,7 +1051,7 @@ export default function PreviewPane({
             <button
               className={`seg-btn ${designActive ? 'seg-btn--on' : ''}`}
               onClick={toggleDesign}
-              disabled={!showWebview || transitioning || designBusy}
+              disabled={!showWebview || transitioning || designBusy || isLocal}
               title={
                 previewMode === 'fabric'
                   ? 'Design mode — click elements in the embedded app to tweak them (move, resize, color, text, chart specs), then send the changes to chat'

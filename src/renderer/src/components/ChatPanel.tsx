@@ -89,6 +89,9 @@ interface Props {
   onChange: (updater: (prev: UIChatMessage[]) => UIChatMessage[]) => void
   /** Called after a turn completes (used later to trigger deploy/preview refresh). */
   onTurnComplete?: (result: ChatTurnResult) => void
+  /** Called when a fresh turn starts (a new send/retry/resume — not an interjection).
+   *  Lets the host kick off the live local preview for the turn's duration. */
+  onTurnStart?: () => void
   /** Region screenshots staged for the next message. */
   attachments?: PendingShot[]
   /** Stage an image the user added, pasted, or dropped into the composer. */
@@ -114,6 +117,10 @@ interface Props {
   deployLock?: boolean
   /** True while the project's first deploy is actively streaming (gate shows progress). */
   deploying?: boolean
+  /** When true, a deploy in progress pauses *submitting* a new turn (typing stays
+   *  enabled). Used by the live local preview so a turn never overlaps a deploy —
+   *  otherwise the dev server can't start during the deploy and never comes back. */
+  blockSubmitWhileDeploying?: boolean
   /** Open the fullscreen deploy step (the gate CTA). */
   onRequestDeploy?: () => void
   /** Experimental: show the Agent / Plan / Autopilot mode selector in the composer.
@@ -1428,6 +1435,7 @@ export default function ChatPanel({
   messages,
   onChange,
   onTurnComplete,
+  onTurnStart,
   attachments,
   onAddAttachment,
   onRemoveAttachment,
@@ -1440,6 +1448,7 @@ export default function ChatPanel({
   onToggleFocus,
   deployLock = false,
   deploying = false,
+  blockSubmitWhileDeploying = false,
   onRequestDeploy,
   modeSelectorEnabled = false,
   onOpenMention,
@@ -1877,6 +1886,10 @@ export default function ChatPanel({
     }
   }
 
+  // A deploy in progress pauses *submitting* a new turn (typing stays enabled) when
+  // the host asks for it (live local preview). Prevents a turn overlapping a deploy.
+  const submitBlocked = deploying && blockSubmitWhileDeploying
+
   async function send(): Promise<void> {
     if (deployLock) return
     const text = input.trim()
@@ -1891,6 +1904,10 @@ export default function ChatPanel({
       await steer(text, shots)
       return
     }
+    // Pause a *new* turn while a deploy runs (steering a live turn above is still
+    // allowed) so the turn never overlaps the deploy and the local preview can
+    // start cleanly once the deploy finishes.
+    if (submitBlocked) return
     if (!text && shots.length === 0) return
     const prompt = text || 'Here is a screenshot of the current preview — please take a look.'
     setInput('')
@@ -1963,6 +1980,7 @@ export default function ChatPanel({
     }
     onChange((prev) => [...prev, userMsg, assistantMsg])
     setSending(true)
+    onTurnStart?.()
     try {
       const result = await window.api.chat.send(
         project.id,
@@ -2019,6 +2037,7 @@ export default function ChatPanel({
     }
     onChange((prev) => [...prev.filter((m) => m.id !== assistantId), assistantMsg])
     setSending(true)
+    onTurnStart?.()
     try {
       const result = await window.api.chat.send(project.id, turnId, user.text, [], mode)
       onChange((prev) =>
@@ -2628,15 +2647,24 @@ export default function ChatPanel({
                   </button>
                 </>
               ) : (
-                <button
-                  className="composer-send"
-                  onClick={send}
-                  disabled={deployLock || (!input.trim() && (attachments?.length ?? 0) === 0)}
-                  title="Send (Enter)"
-                  aria-label="Send"
+                <span
+                  style={{ display: 'contents' }}
+                  title={submitBlocked ? 'Deploying — sending resumes when it goes live' : undefined}
                 >
-                  <SendIcon />
-                </button>
+                  <button
+                    className="composer-send"
+                    onClick={send}
+                    disabled={
+                      deployLock ||
+                      submitBlocked ||
+                      (!input.trim() && (attachments?.length ?? 0) === 0)
+                    }
+                    title={submitBlocked ? undefined : 'Send (Enter)'}
+                    aria-label="Send"
+                  >
+                    <SendIcon />
+                  </button>
+                </span>
               )}
             </div>
           </div>

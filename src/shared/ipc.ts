@@ -306,6 +306,7 @@ export type ProcStreamId =
   | 'create:project'
   | 'clone:project'
   | 'deploy:run'
+  | 'dev:run'
 
 export interface ProcLogEvent {
   channel: ProcStreamId
@@ -425,6 +426,19 @@ export interface DeployStatus {
   url?: string
   apiUrl?: string
   portalUrl?: string
+}
+
+/**
+ * Result of starting a project's Vite dev server for the live local preview
+ * (experimental). `outcome` is `running` (started, or already up), `unsupported`
+ * (the project has no `dev` script / no local Vite), or `error`.
+ */
+export interface DevServerResult {
+  ok: boolean
+  outcome: 'running' | 'unsupported' | 'error'
+  /** The `localhost` URL Vite is serving on, when it started successfully. */
+  url?: string
+  error?: string
 }
 
 /** One Fabric deployment recorded for a project (`rayfin up list`). */
@@ -573,6 +587,13 @@ export interface ExperimentFlags {
    * in the standard Agent mode.
    */
   chatModeSelector?: boolean
+  /**
+   * Live local preview: while an agent turn runs, start the project's Vite dev
+   * server and point the preview at `localhost` so edits show live (HMR). The
+   * server is stopped at turn end and the normal after-turn deploy takes over.
+   * Off by default; only affects projects that declare a `dev` script.
+   */
+  localDevPreview?: boolean
 }
 
 export interface CreateProjectInput {
@@ -1742,6 +1763,25 @@ export interface RayfinStudioApi {
      * redeploy. Best-effort: leaves state untouched on a failed/offline query.
      */
     reconcile: (projectId: string) => Promise<ProjectsState>
+  }
+
+  /**
+   * Live local preview (experimental, opt-in via {@link ExperimentFlags.localDevPreview}).
+   * Runs the project's Vite dev server directly (no `rayfin up`) so edits show
+   * live at `localhost` during an agent turn; stopped at turn end. Output streams
+   * on the `dev:run` channel (see {@link onProcLog}).
+   */
+  dev: {
+    /**
+     * Start (or reuse) the project's Vite dev server. Resolves once Vite is
+     * serving with its `localhost` URL, or with `unsupported` / `error`. The
+     * process keeps running until {@link stop}.
+     */
+    start: (projectId: string) => Promise<DevServerResult>
+    /** Stop the project's Vite dev server (no-op when none is running). */
+    stop: (projectId: string) => Promise<void>
+    /** True when the project supports a local preview (declares a `dev` script). */
+    supported: (projectId: string) => Promise<boolean>
   }
 
   /** App-wide settings (theme, telemetry opt-in). */

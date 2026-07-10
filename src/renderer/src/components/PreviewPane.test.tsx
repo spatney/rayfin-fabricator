@@ -15,11 +15,13 @@ import { installPreviewEnv, makeProject, type PreviewEnv } from '../../test/harn
 function Harnessed({
   project,
   suppressed,
-  deploy
+  deploy,
+  localPreviewUrl
 }: {
   project: StudioProject
   suppressed: boolean
   deploy?: DeployUiState
+  localPreviewUrl?: string | null
 }): JSX.Element {
   return (
     <OverlayProvider>
@@ -27,6 +29,7 @@ function Harnessed({
       <PreviewPane
         project={project}
         deploy={deploy}
+        localPreviewUrl={localPreviewUrl}
         focused={false}
         onToggleFocus={() => {}}
       />
@@ -298,6 +301,111 @@ describe('PreviewPane visibility', () => {
     expect(reveal).not.toBeNull()
     expect(reveal!.index).toBeGreaterThanOrEqual(mark)
     expect(reveal!.url).toBe('https://p1.example.app/')
+  })
+})
+
+describe('PreviewPane local preview', () => {
+  const LOCAL = 'http://localhost:5173/'
+
+  // Live local preview (experiment): while a Vite dev server is running for the
+  // project, the surface swaps from the deployed app to the local URL and a
+  // "Local" badge is shown. The swap goes through the normal load transition
+  // (navigate hidden → reveal on load), so it's flash-free.
+  it('swaps to the local dev URL (with a Local badge) when a dev server is running', async () => {
+    const { rerender } = render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+    const mark = e.calls.length
+
+    // Turn starts → the dev server comes up and its URL is handed in.
+    rerender(<Harnessed project={makeProject('p1')} suppressed={false} localPreviewUrl={LOCAL} />)
+    await settle(e)
+
+    const during = e.methodsAfter(mark)
+    expect(during, 'must navigate the hidden surface to the local URL').toContain('navigate')
+    const navCall = e.calls.slice(mark).find((c) => c.method === 'navigate')
+    expect(navCall!.args[0]).toBe(LOCAL)
+
+    // The local page finishes loading → revealed at the local URL, badge visible.
+    await act(async () => {
+      e.emitNav({ url: LOCAL, loading: true })
+    })
+    await act(async () => {
+      e.emitNav({ url: LOCAL, loading: false })
+    })
+    await settle(e)
+
+    const reveal = lastShowUrl(e)
+    expect(reveal, 'the local preview was never revealed').not.toBeNull()
+    expect(reveal!.index).toBeGreaterThanOrEqual(mark)
+    expect(reveal!.url).toBe(LOCAL)
+    expect(screen.getByText('Local')).toBeTruthy()
+  })
+
+  it('shows the local dev server even for a never-deployed project', async () => {
+    render(
+      <Harnessed
+        project={makeProject('p1', { lastDeploy: undefined })}
+        suppressed={false}
+        localPreviewUrl={LOCAL}
+      />
+    )
+    await settle(e)
+
+    // No deployment, yet the surface still shows the local URL (not the empty
+    // "not deployed" state) so edits are visible on the very first turn.
+    const reveal = lastShowUrl(e)
+    expect(reveal, 'the local preview should show without a deployment').not.toBeNull()
+    expect(reveal!.url).toBe(LOCAL)
+    expect(screen.getByText('Local')).toBeTruthy()
+  })
+
+  it('lets a running deploy override the local preview (DeployStage wins)', async () => {
+    render(
+      <Harnessed
+        project={makeProject('p1')}
+        suppressed={false}
+        deploy={{ running: true, log: [] }}
+        localPreviewUrl={LOCAL}
+      />
+    )
+    await settle(e)
+
+    // The deploy stage takes the surface; the local URL is never shown, and no
+    // "Local" badge appears while deploying.
+    expect(screen.getByText(/Fabricating/i)).toBeTruthy()
+    expect(screen.queryByText('Local')).toBeNull()
+    const shownLocal = e.calls.some((c) => c.method === 'showUrl' && c.args[0] === LOCAL)
+    expect(shownLocal, 'the local URL must not be shown while a deploy is running').toBe(false)
+  })
+
+  it('returns to the deployed app when the dev server stops (turn ends)', async () => {
+    // Dev server running → local shown.
+    const { rerender } = render(
+      <Harnessed project={makeProject('p1')} suppressed={false} localPreviewUrl={LOCAL} />
+    )
+    await settle(e)
+    await act(async () => {
+      e.emitNav({ url: LOCAL, loading: false })
+    })
+    await settle(e)
+    const mark = e.calls.length
+
+    // Turn ends → the dev server is stopped (localPreviewUrl cleared).
+    rerender(<Harnessed project={makeProject('p1')} suppressed={false} localPreviewUrl={null} />)
+    await settle(e)
+    await act(async () => {
+      e.emitNav({ url: 'https://p1.example.app/', loading: true })
+    })
+    await act(async () => {
+      e.emitNav({ url: 'https://p1.example.app/', loading: false })
+    })
+    await settle(e)
+
+    // Back on the deployed app, no more Local badge.
+    const reveal = lastShowUrl(e)
+    expect(reveal!.index).toBeGreaterThanOrEqual(mark)
+    expect(reveal!.url).toBe('https://p1.example.app/')
+    expect(screen.queryByText('Local')).toBeNull()
   })
 })
 

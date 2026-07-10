@@ -16,6 +16,7 @@ use state::AppState;
 
 use services::preview::PreviewState;
 use services::updater::UpdaterState;
+use services::dev_server::DevServers;
 
 /// Read the bundled telemetry connection string (App Insights) if present.
 /// Mirrors the Electron build, which injects `resources/telemetry.json` at
@@ -95,6 +96,7 @@ pub fn run() {
     .manage(AppState::default())
     .manage(PreviewState::default())
     .manage(UpdaterState::default())
+    .manage(DevServers::default())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -233,6 +235,10 @@ pub fn run() {
       commands::deploy::deploy_switch,
       commands::deploy::deploy_set_name,
       commands::deploy::deploy_reconcile,
+
+            services::dev_server::dev_start,
+            services::dev_server::dev_stop,
+            services::dev_server::dev_supported_cmd,
       // preview
       services::preview::preview_show_url,
       services::preview::preview_navigate,
@@ -257,5 +263,11 @@ pub fn run() {
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
-    .run(|_app, _event| services::watchdog::beat());
+    .run(|app, event| {
+      services::watchdog::beat();
+      // Kill any live Vite dev servers when the app exits so they never orphan.
+      if let tauri::RunEvent::Exit = event {
+        services::dev_server::kill_all(app);
+      }
+    });
 }

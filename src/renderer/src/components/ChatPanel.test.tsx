@@ -22,7 +22,8 @@ function installApi(): void {
       suggest: vi.fn(() => Promise.resolve({ ok: false, suggestions: [] })),
       cancelSuggest: vi.fn(() => Promise.resolve(true)),
       setOptions: vi.fn(() => Promise.resolve(undefined)),
-      listModels: vi.fn(() => Promise.resolve([]))
+      listModels: vi.fn(() => Promise.resolve([])),
+      send: vi.fn(() => Promise.resolve({ ok: true }))
     },
     projects: { files: { tree: vi.fn(() => Promise.resolve({ path: '', name: '', children: [] })) } },
     screenshot: { save: vi.fn(() => Promise.resolve('C:/tmp/shot.png')) }
@@ -213,5 +214,136 @@ describe('ChatPanel composer scrollport (issue #13)', () => {
     // Scrolled so the caret's bottom (396) sits at the viewport bottom: 396 - 100.
     expect(sizer.scrollTop).toBe(296)
     proto.getBoundingClientRect = origRangeRect
+  })
+})
+
+/**
+ * Live local preview (experiment): the host starts the project's Vite dev server
+ * when a turn begins, so ChatPanel exposes an `onTurnStart` hook. It must fire
+ * exactly once per fresh turn (a send), and only when a turn actually starts —
+ * not on mount or while typing.
+ */
+describe('ChatPanel onTurnStart (live local preview hook)', () => {
+  it('fires onTurnStart once when a fresh turn is dispatched', async () => {
+    const onTurnStart = vi.fn()
+    await act(async () => {
+      render(
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={[]}
+          onChange={() => {}}
+          draft=""
+          onTurnStart={onTurnStart}
+        />
+      )
+    })
+
+    const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    await act(async () => {
+      fireEvent.change(ta, { target: { value: 'add a bar chart' } })
+    })
+    // Typing must not start a turn.
+    expect(onTurnStart).not.toHaveBeenCalled()
+
+    // Enter dispatches the turn → the hook fires so the host can start Vite.
+    await act(async () => {
+      fireEvent.keyDown(ta, { key: 'Enter' })
+    })
+    expect(onTurnStart).toHaveBeenCalledTimes(1)
+    expect((window as unknown as { api: { chat: { send: unknown } } }).api.chat.send).toHaveBeenCalled()
+  })
+
+  it('does not fire onTurnStart on an empty send', async () => {
+    const onTurnStart = vi.fn()
+    await act(async () => {
+      render(
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={[]}
+          onChange={() => {}}
+          draft=""
+          onTurnStart={onTurnStart}
+        />
+      )
+    })
+
+    const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    // Enter with an empty composer is a no-op — no turn, no dev server.
+    await act(async () => {
+      fireEvent.keyDown(ta, { key: 'Enter' })
+    })
+    expect(onTurnStart).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Live local preview lifecycle: submitting a new turn while a deploy is in flight
+ * used to leave the local preview unable to start (and never come back). With the
+ * experiment on, submitting is paused during a deploy — typing stays enabled — so
+ * a turn never overlaps a deploy.
+ */
+describe('ChatPanel submit-pause while deploying', () => {
+  const sendMock = (): ReturnType<typeof vi.fn> =>
+    (window as unknown as { api: { chat: { send: ReturnType<typeof vi.fn> } } }).api.chat.send
+
+  it('blocks a new turn while deploying (typing stays enabled)', async () => {
+    const onTurnStart = vi.fn()
+    await act(async () => {
+      render(
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={[]}
+          onChange={() => {}}
+          draft=""
+          onTurnStart={onTurnStart}
+          deploying
+          blockSubmitWhileDeploying
+        />
+      )
+    })
+
+    const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    // Typing is still allowed during a deploy.
+    await act(async () => {
+      fireEvent.change(ta, { target: { value: 'do a thing' } })
+    })
+    expect(ta.value).toBe('do a thing')
+    expect(ta.disabled).toBe(false)
+
+    // Enter must NOT dispatch a turn while deploying.
+    await act(async () => {
+      fireEvent.keyDown(ta, { key: 'Enter' })
+    })
+    expect(onTurnStart).not.toHaveBeenCalled()
+    expect(sendMock()).not.toHaveBeenCalled()
+    // The draft is preserved (not cleared) so it can be sent once the deploy lands.
+    expect(ta.value).toBe('do a thing')
+  })
+
+  it('still submits while deploying when the block is off (experiment disabled)', async () => {
+    const onTurnStart = vi.fn()
+    await act(async () => {
+      render(
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={[]}
+          onChange={() => {}}
+          draft=""
+          onTurnStart={onTurnStart}
+          deploying
+        />
+      )
+    })
+
+    const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    await act(async () => {
+      fireEvent.change(ta, { target: { value: 'do a thing' } })
+    })
+    await act(async () => {
+      fireEvent.keyDown(ta, { key: 'Enter' })
+    })
+    // Without the block, a deploy doesn't stop the user from queuing a turn.
+    expect(onTurnStart).toHaveBeenCalledTimes(1)
+    expect(sendMock()).toHaveBeenCalled()
   })
 })

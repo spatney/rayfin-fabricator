@@ -295,6 +295,12 @@ export default function SettingsModal({
                     checked={Boolean(settings.experiments?.chatModeSelector)}
                     onChange={(v) => onChange({ experiments: { chatModeSelector: v } })}
                   />
+                  <ToggleRow
+                    label="Live local preview"
+                    hint="While an agent turn runs, start the app's Vite dev server and show it in the preview so edits appear live. Stopped at turn end; needs a project with a dev script."
+                    checked={Boolean(settings.experiments?.localDevPreview)}
+                    onChange={(v) => onChange({ experiments: { localDevPreview: v } })}
+                  />
                 </div>
               )}
             </div>

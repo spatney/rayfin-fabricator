@@ -16,6 +16,7 @@ import {
   type ChatMessage,
   type ChatTurnResult,
   type DeployResult,
+  type DevServerResult,
   type ProjectsState,
   type RayfinVersionInfo,
   type StudioProject
@@ -190,6 +191,13 @@ export default function Workbench({
   }
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
+  /** Live local preview (experiment): per-project Vite dev-server state. Present
+   *  only while a turn runs — started at turn start, cleared/stopped at turn end. */
+  const [devServers, setDevServers] = useState<
+    Record<string, { status: 'starting' | 'running'; url?: string }>
+  >({})
+  const devServersRef = useRef(devServers)
+  devServersRef.current = devServers
   /** Region screenshots staged per project for the next chat message. */
   const [shots, setShots] = useState<Record<string, PendingShot[]>>({})
   /** Composer drafts staged per project — a typed-but-unsent prompt persists here
@@ -381,10 +389,53 @@ export default function Workbench({
     [refreshProjects]
   )
 
+  // Kick off the live local preview (experiment) when a turn starts: run the
+  // project's Vite dev server so edits show live at localhost for the turn's
+  // duration. No-op unless the experiment is on and the project supports it — the
+  // backend reports `unsupported` for projects without a `dev` script.
+  const handleTurnStart = useCallback(
+    (projectId: string): void => {
+      if (!settings?.experiments?.localDevPreview) return
+      if (deployingIdRef.current === projectId) return // a deploy owns the surface
+      if (devServersRef.current[projectId]) return // already starting / running
+      setDevServers((all) => ({ ...all, [projectId]: { status: 'starting' } }))
+      void (async () => {
+        let res: DevServerResult
+        try {
+          res = await window.api.dev.start(projectId)
+        } catch {
+          res = { ok: false, outcome: 'error' }
+        }
+        setDevServers((all) => {
+          // The turn already ended (entry cleared in handleTurnComplete) — don't
+          // resurrect a preview whose server was just stopped.
+          if (!all[projectId]) return all
+          if (res.ok && res.url) {
+            return { ...all, [projectId]: { status: 'running', url: res.url } }
+          }
+          const next = { ...all }
+          delete next[projectId]
+          return next
+        })
+      })()
+    },
+    [settings]
+  )
+
   // After a chat turn, persist the transcript and auto-deploy when the agent left
   // undeployed changes.
   const handleTurnComplete = useCallback(
     async (projectId: string, result: ChatTurnResult): Promise<void> => {
+      // Stop the live local preview (if any) first, so the surface returns to the
+      // deployed app and the after-turn deploy can take the stage (DeployStage).
+      if (devServersRef.current[projectId]) {
+        setDevServers((all) => {
+          const next = { ...all }
+          delete next[projectId]
+          return next
+        })
+        void window.api.dev.stop(projectId)
+      }
       await refreshProjects()
       setGitRefresh((n) => n + 1)
       void window.api.chat.saveHistory(projectId, toStored(chatsRef.current[projectId] ?? []))
@@ -919,6 +970,7 @@ export default function Workbench({
                       onTurnComplete={(result) =>
                         void handleTurnComplete(active.id, result)
                       }
+                      onTurnStart={() => handleTurnStart(active.id)}
                       attachments={shots[active.id] ?? []}
                       onAddAttachment={(shot) => addShot(active.id, shot)}
                       onRemoveAttachment={(path) => removeShot(active.id, path)}
@@ -937,6 +989,7 @@ export default function Workbench({
                       }
                       deployLock={active.awaitingFirstDeploy === true}
                       deploying={Boolean(deploys[active.id]?.running)}
+                      blockSubmitWhileDeploying={Boolean(settings?.experiments?.localDevPreview)}
                       onRequestDeploy={() => setCreateMode('deploy')}
                       modeSelectorEnabled={Boolean(settings?.experiments?.chatModeSelector)}
                       onOpenMention={openMention}
@@ -961,6 +1014,11 @@ export default function Workbench({
                     <PreviewPane
                       project={active}
                       deploy={deploys[active.id]}
+                      localPreviewUrl={
+                        devServers[active.id]?.status === 'running'
+                          ? devServers[active.id]?.url ?? null
+                          : null
+                      }
                       focused={focusPane === 'preview'}
                       onToggleFocus={() =>
                         setFocusPane((f) => (f === 'preview' ? null : 'preview'))
@@ -981,6 +1039,18 @@ export default function Workbench({
                       }}
                       onLoadingChange={setPreviewLoading}
                     />
+                    {previewLoading && (
+                      <div
+                        className={`project-loading${previewLoading.fading ? ' project-loading--out' : ''}`}
+                        role="status"
+                        aria-label="Loading project"
+                      >
+                        <span className="project-loading-spinner" />
+                        <span className="project-loading-label">
+                          Loading {previewLoading.name}…
+                        </span>
+                      </div>
+                    )}
                   </section>
                   {resizing && (
                     <div
@@ -989,18 +1059,6 @@ export default function Workbench({
                       onMouseUp={endResize}
                       onMouseLeave={endResize}
                     />
-                  )}
-                  {previewLoading && (
-                    <div
-                      className={`project-loading${previewLoading.fading ? ' project-loading--out' : ''}`}
-                      role="status"
-                      aria-label="Loading project"
-                    >
-                      <span className="project-loading-spinner" />
-                      <span className="project-loading-label">
-                        Loading {previewLoading.name}…
-                      </span>
-                    </div>
                   )}
                 </div>
               ) : null}

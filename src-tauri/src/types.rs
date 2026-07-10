@@ -343,6 +343,21 @@ pub struct DeployResult {
   pub error: Option<String>,
 }
 
+/// Result of starting a project's Vite dev server for the live local preview
+/// (experimental). `outcome` is one of `running` (started or already running),
+/// `unsupported` (no `dev` script / no local Vite), or `error`.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DevServerResult {
+  pub ok: bool,
+  pub outcome: String,
+  /// The `localhost` URL Vite is serving on, when it started successfully.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub url: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DeployStatus {
@@ -437,6 +452,12 @@ pub struct ExperimentFlags {
   /// runs in the standard Agent mode. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub chat_mode_selector: Option<bool>,
+  /// Live local preview: while an agent turn runs, start the project's Vite dev
+  /// server and point the preview at `localhost` so edits show live (HMR); the
+  /// server is stopped at turn end and the normal after-turn deploy takes over.
+  /// Opt-in (off by default) and only for projects that declare a `dev` script.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub local_dev_preview: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
