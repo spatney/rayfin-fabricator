@@ -376,7 +376,7 @@ export default function Workbench({
               projectId,
               display: 'Deployment failed — investigating',
               prompt:
-                'Fabricator detected that the latest managed deployment failed. Treat this as an active repair request: read `fabricator_deployment_status`, inspect the deployment error, fix the root cause in the project, call `fabricator_deploy`, then use the live console/network/DOM/screenshot tools to verify the deployed app. Do not only explain the failure and do not run `rayfin up` directly.',
+                'Fabricator detected that the latest managed deployment failed. Treat this as an active repair request: read `fabricator_deployment_status`, inspect the deployment error, fix the root cause in the project, call `fabricator_deploy`, then use the live console/network/DOM/screenshot tools plus arbitrary page evaluation or raw CDP when needed to verify the deployed app. Do not only explain the failure and do not run `rayfin up` directly.',
               interrupt: true
             })
           }
@@ -673,7 +673,7 @@ export default function Workbench({
           `Summary: ${event.summary}\n` +
           `Details: ${event.details}\n` +
           (event.url ? `Page/request: ${event.url}\n` : '') +
-          '\nTreat this as an active repair request. Inspect the complete live console and network buffers, reproduce/inspect the page as needed, fix the root cause in the project, deploy with `fabricator_deploy`, and verify the live page is clean. Do not merely report the error.',
+          '\nTreat this as an active repair request. Inspect the complete live console and network buffers, reproduce and command the page as needed, use arbitrary page evaluation or raw CDP if the structured tools are insufficient, fix the root cause in the project, deploy with `fabricator_deploy`, and verify the live page is clean. Do not merely report the error.',
         interrupt: true
       })
     })

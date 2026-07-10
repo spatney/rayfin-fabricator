@@ -59,7 +59,10 @@ deployed page: runtime JavaScript, navigation, auth, browser layout, or network 
    `fabricator_deploy` when needed, then inspect the live page with
    `fabricator_preview_console`, `fabricator_preview_network`,
    `fabricator_preview_inspect`, `fabricator_preview_interact`, and
-   `fabricator_preview_screenshot`. Fix, redeploy, and re-check until clean.
+   `fabricator_preview_screenshot`. When those higher-level tools are not enough,
+   use `fabricator_preview_evaluate` for arbitrary page-context JavaScript or
+   `fabricator_preview_cdp` for raw Chrome DevTools Protocol methods. Fix,
+   redeploy, and re-check until clean.
 
 ## Notes
 - Preview catches data-fit and presentation problems (clipping, overlap, low contrast,
@@ -116,7 +119,10 @@ Fabric integration, and failed network calls:
 4. Read `fabricator_preview_console` and `fabricator_preview_network`; inspect the DOM
    with `fabricator_preview_inspect` and the rendered result with
    `fabricator_preview_screenshot`.
-5. Fix the root cause, deploy with `fabricator_deploy`, and repeat until the page is clean.
+5. Use `fabricator_preview_evaluate` for arbitrary JavaScript in the page or
+   `fabricator_preview_cdp` for raw Runtime/DOM/CSS/Network/Page/Debugger protocol
+   access whenever the structured tools do not expose enough state.
+6. Fix the root cause, deploy with `fabricator_deploy`, and repeat until the page is clean.
 
 Fabricator may proactively interrupt or start a turn when the live preview reports a new
 console error, unhandled rejection, failed fetch/XHR, or HTTP error. Treat that as a repair

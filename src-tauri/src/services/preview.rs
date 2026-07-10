@@ -16,6 +16,8 @@
 //! in the user's real browser instead.
 
 use std::collections::VecDeque;
+#[cfg(windows)]
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -1028,6 +1030,126 @@ async fn eval_json<T: serde::de::DeserializeOwned>(
   match serde_json::from_str::<T>(trimmed) {
     Ok(v) => Ok(Some(v)),
     Err(_) => Ok(None),
+  }
+}
+
+/// Invoke one Chrome DevTools Protocol method against the live WebView2 page.
+/// This is the unrestricted escape hatch behind the agent's raw CDP and page
+/// evaluation tools.
+#[cfg(windows)]
+pub(crate) async fn call_cdp(
+  app: &AppHandle,
+  method: &str,
+  params: &serde_json::Value,
+  timeout: Duration,
+) -> AppResult<serde_json::Value> {
+  use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+  use windows::core::HSTRING;
+
+  let wv = app
+    .get_webview(PREVIEW_LABEL)
+    .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
+  let method_name = method.to_string();
+  let method = HSTRING::from(&method_name);
+  let params = HSTRING::from(
+    serde_json::to_string(params)
+      .map_err(|error| AppError::Msg(format!("failed to serialize CDP parameters: {error}")))?,
+  );
+  let (tx, rx) = oneshot::channel::<Result<String, String>>();
+  let tx = Arc::new(Mutex::new(Some(tx)));
+  let tx_for_dispatch = tx.clone();
+
+  wv.with_webview(move |platform| {
+    let core = match unsafe { platform.controller().CoreWebView2() } {
+      Ok(core) => core,
+      Err(error) => {
+        if let Some(tx) = tx_for_dispatch.lock().unwrap().take() {
+          let _ = tx.send(Err(format!("CoreWebView2(): {error}")));
+        }
+        return;
+      }
+    };
+    let tx_for_callback = tx_for_dispatch.clone();
+    let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(
+      move |result, response_json| {
+        if let Some(tx) = tx_for_callback.lock().unwrap().take() {
+          let response = result
+            .map(|_| response_json)
+            .map_err(|error| format!("CDP call failed: {error}"));
+          let _ = tx.send(response);
+        }
+        Ok(())
+      },
+    ));
+    if let Err(error) =
+      unsafe { core.CallDevToolsProtocolMethod(&method, &params, &handler) }
+    {
+      if let Some(tx) = tx_for_dispatch.lock().unwrap().take() {
+        let _ = tx.send(Err(format!("CDP dispatch failed: {error}")));
+      }
+    }
+  })
+  .map_err(|error| AppError::Msg(format!("failed to access preview webview: {error}")))?;
+
+  let response = tokio::time::timeout(timeout, rx)
+    .await
+    .map_err(|_| AppError::Msg(format!("CDP method {method_name} timed out")))?
+    .map_err(|_| AppError::Msg(format!("CDP method {method_name} was cancelled")))?
+    .map_err(AppError::Msg)?;
+  serde_json::from_str(&response)
+    .map_err(|error| AppError::Msg(format!("CDP returned invalid JSON: {error}")))
+}
+
+#[cfg(not(windows))]
+pub(crate) async fn call_cdp(
+  _app: &AppHandle,
+  _method: &str,
+  _params: &serde_json::Value,
+  _timeout: Duration,
+) -> AppResult<serde_json::Value> {
+  Err(AppError::Msg(
+    "Raw Chrome DevTools Protocol access is currently available on Windows only.".into(),
+  ))
+}
+
+pub(crate) async fn evaluate_page(
+  app: &AppHandle,
+  expression: &str,
+  await_promise: bool,
+  return_by_value: bool,
+  timeout: Duration,
+) -> AppResult<serde_json::Value> {
+  #[cfg(windows)]
+  {
+    let params = serde_json::json!({
+      "expression": expression,
+      "awaitPromise": await_promise,
+      "returnByValue": return_by_value,
+      "includeCommandLineAPI": true,
+      "userGesture": true,
+      "replMode": true,
+      "timeout": timeout.as_millis().min(u64::MAX as u128) as u64,
+    });
+    return call_cdp(app, "Runtime.evaluate", &params, timeout + Duration::from_secs(2)).await;
+  }
+
+  #[cfg(not(windows))]
+  {
+    let _ = (await_promise, return_by_value);
+    let value = eval_json::<serde_json::Value>(app, expression, timeout).await?;
+    Ok(serde_json::json!({
+      "result": {
+        "type": value.as_ref().map(|value| match value {
+          serde_json::Value::Null => "object",
+          serde_json::Value::Bool(_) => "boolean",
+          serde_json::Value::Number(_) => "number",
+          serde_json::Value::String(_) => "string",
+          serde_json::Value::Array(_) | serde_json::Value::Object(_) => "object",
+        }).unwrap_or("undefined"),
+        "value": value,
+      },
+      "transport": "webview-eval"
+    }))
   }
 }
 

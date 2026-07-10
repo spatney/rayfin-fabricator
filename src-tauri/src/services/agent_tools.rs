@@ -161,6 +161,63 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
         "required": ["action"]
       }))
       .with_handler(Arc::new(PreviewInteractTool::new(&app, &project_id))),
+    Tool::new("fabricator_preview_evaluate")
+      .with_description(
+        "Execute arbitrary JavaScript in the real deployed page through CDP Runtime.evaluate. \
+         Supports promises and returns the raw protocol result, including exceptions. This is the \
+         unrestricted escape hatch when inspect/interact tools are not enough: it can read or \
+         mutate any page state, DOM, browser storage, cookies visible to JavaScript, and issue \
+         page-context requests.",
+      )
+      .with_parameters(serde_json::json!({
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "JavaScript expression to execute. Use an async IIFE for multi-step asynchronous work."
+          },
+          "awaitPromise": {
+            "type": "boolean",
+            "description": "Await a returned promise (default true)."
+          },
+          "returnByValue": {
+            "type": "boolean",
+            "description": "Serialize the result value (default true). Set false to retain a CDP objectId."
+          },
+          "timeoutMs": {
+            "type": "number",
+            "description": "Evaluation timeout in milliseconds (default 10000, maximum 30000)."
+          }
+        },
+        "required": ["expression"]
+      }))
+      .with_handler(Arc::new(PreviewEvaluateTool::new(&app, &project_id))),
+    Tool::new("fabricator_preview_cdp")
+      .with_description(
+        "Call any Chrome DevTools Protocol method against the real deployed page and return the raw \
+         JSON response. Use this advanced escape hatch for Runtime, DOM, CSS, Network, Page, Log, \
+         Performance, Debugger, Emulation, Storage, or other protocol capabilities not covered by \
+         Fabricator's higher-level tools. Available on Windows WebView2.",
+      )
+      .with_parameters(serde_json::json!({
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string",
+            "description": "CDP method name, for example Runtime.evaluate, DOM.getDocument, Page.reload, or Network.enable."
+          },
+          "params": {
+            "type": "object",
+            "description": "Raw CDP parameters object. Defaults to {}."
+          },
+          "timeoutMs": {
+            "type": "number",
+            "description": "Host wait timeout in milliseconds (default 10000, maximum 30000)."
+          }
+        },
+        "required": ["method"]
+      }))
+      .with_handler(Arc::new(PreviewCdpTool::new(&app, &project_id))),
     Tool::new("fabricator_locate_semantic_model")
       .with_description(
         "Find the Power BI / Fabric semantic model (dataset) behind a report, app, or dataset \
@@ -309,6 +366,17 @@ fn safe_json(value: &impl serde::Serialize) -> String {
   preview::redact_diagnostic_text(&json)
 }
 
+fn raw_json(value: &impl serde::Serialize) -> String {
+  let json = serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string());
+  if json.chars().count() <= 64_000 {
+    json
+  } else {
+    let mut output = json.chars().take(64_000).collect::<String>();
+    output.push_str("\n... truncated ...");
+    output
+  }
+}
+
 fn image_success(text: impl Into<String>, bytes: Vec<u8>) -> ToolResult {
   ToolResult::Expanded(ToolResultExpanded {
     text_result_for_llm: text.into(),
@@ -358,6 +426,8 @@ context_tool!(PreviewConsoleTool);
 context_tool!(PreviewNetworkTool);
 context_tool!(PreviewInspectTool);
 context_tool!(PreviewInteractTool);
+context_tool!(PreviewEvaluateTool);
+context_tool!(PreviewCdpTool);
 
 #[async_trait]
 impl ToolHandler for ProjectTool {
@@ -633,6 +703,91 @@ impl ToolHandler for PreviewInteractTool {
     match preview::agent_capture(&self.0.app).await {
       Ok(bytes) => Ok(image_success(text, bytes)),
       Err(_) => Ok(ToolResult::Text(text)),
+    }
+  }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EvaluateParams {
+  expression: String,
+  #[serde(default)]
+  await_promise: Option<bool>,
+  #[serde(default)]
+  return_by_value: Option<bool>,
+  #[serde(default)]
+  timeout_ms: Option<u64>,
+}
+
+#[async_trait]
+impl ToolHandler for PreviewEvaluateTool {
+  async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+    let params: EvaluateParams = match invocation.params() {
+      Ok(params) => params,
+      Err(error) => return Ok(failure(format!("Invalid arguments: {error}"))),
+    };
+    let expression = params.expression.trim();
+    if expression.is_empty() {
+      return Ok(failure("JavaScript `expression` cannot be empty."));
+    }
+    if let Err(error) = self.0.ensure_live_preview().await {
+      return Ok(failure(error));
+    }
+    let timeout_ms = params.timeout_ms.unwrap_or(10_000).clamp(250, 30_000);
+    match preview::evaluate_page(
+      &self.0.app,
+      expression,
+      params.await_promise.unwrap_or(true),
+      params.return_by_value.unwrap_or(true),
+      Duration::from_millis(timeout_ms),
+    )
+    .await
+    {
+      Ok(result) => Ok(ToolResult::Text(raw_json(&result))),
+      Err(error) => Ok(failure(error.to_string())),
+    }
+  }
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CdpParams {
+  method: String,
+  #[serde(default)]
+  params: Option<serde_json::Value>,
+  #[serde(default)]
+  timeout_ms: Option<u64>,
+}
+
+#[async_trait]
+impl ToolHandler for PreviewCdpTool {
+  async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+    let params: CdpParams = match invocation.params() {
+      Ok(params) => params,
+      Err(error) => return Ok(failure(format!("Invalid arguments: {error}"))),
+    };
+    let method = params.method.trim();
+    if method.is_empty() {
+      return Ok(failure("CDP `method` cannot be empty."));
+    }
+    let cdp_params = params.params.unwrap_or_else(|| serde_json::json!({}));
+    if !cdp_params.is_object() {
+      return Ok(failure("CDP `params` must be a JSON object."));
+    }
+    if let Err(error) = self.0.ensure_live_preview().await {
+      return Ok(failure(error));
+    }
+    let timeout_ms = params.timeout_ms.unwrap_or(10_000).clamp(250, 30_000);
+    match preview::call_cdp(
+      &self.0.app,
+      method,
+      &cdp_params,
+      Duration::from_millis(timeout_ms),
+    )
+    .await
+    {
+      Ok(result) => Ok(ToolResult::Text(raw_json(&result))),
+      Err(error) => Ok(failure(error.to_string())),
     }
   }
 }
