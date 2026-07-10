@@ -64,9 +64,9 @@ const OFFSCREEN_BUILD_SETTLE: Duration = Duration::from_millis(600);
 #[cfg(windows)]
 const OFFSCREEN_PAINT_SETTLE: Duration = Duration::from_millis(180);
 
-/// Document-start diagnostics bridge. It records bounded console and network
-/// telemetry and exposes safe DOM inspection/interaction helpers without request
-/// bodies, headers, browser storage, or input values.
+/// Document-start diagnostics bridge. It records bounded console/network
+/// telemetry and exposes DOM operations without request bodies, headers, or input
+/// values. Its origin-gated relay reaches the deeply nested Data App frame.
 const DIAGNOSTICS_INIT_JS: &str = include_str!("preview_diagnostics.js");
 const DIAGNOSTIC_POLL_INTERVAL: Duration = Duration::from_millis(1200);
 const DIAGNOSTIC_DEDUPE_TTL: Duration = Duration::from_secs(30 * 60);
@@ -196,6 +196,17 @@ struct Inner {
   /// top frame is then re-enabled as a `relay` for that origin on every finished
   /// page load; `None` means the direct view (top frame is the app itself).
   design_relay: Option<String>,
+  /// Persistent CDP session attached to the embedded Data App target. Keeping the
+  /// session alive lets successive raw CDP calls reuse node/object ids.
+  #[cfg(windows)]
+  cdp_frame_session: Option<CdpFrameSession>,
+}
+
+#[cfg(windows)]
+#[derive(Clone)]
+struct CdpFrameSession {
+  origin: String,
+  session_id: String,
 }
 
 impl Inner {
@@ -219,6 +230,10 @@ impl Inner {
     // controller isn't re-injected into it (see `on_page_load`).
     self.design_active = false;
     self.design_relay = None;
+    #[cfg(windows)]
+    {
+      self.cdp_frame_session = None;
+    }
   }
 }
 
@@ -242,10 +257,11 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
     // debug but off in release wry; the `devtools` cargo feature (Cargo.toml)
     // enables `with_devtools` + the context-menu inspector, and this keeps it on.
     .devtools(true)
-    // Install the safe diagnostics bridge before any app code runs. Keep it in
-    // the top-level direct preview so Fabric portal shell failures are not
-    // mistaken for repairable application failures.
-    .initialization_script(DIAGNOSTICS_INIT_JS)
+    // Install diagnostics into every frame so the Data App can be reached through
+    // its deeply nested cross-origin Fabric portal iframe. Rust only activates the
+    // frame relay for the built-in Data App in Fabric preview mode; every other
+    // project keeps using top-frame diagnostics.
+    .initialization_script_for_all_frames(DIAGNOSTICS_INIT_JS)
     // The design-mode controller is baked in at document-start into ALL frames
     // (dormant until `preview_design_set` enables it). This is the only way to
     // reach the app when it is embedded in a cross-origin iframe inside the
@@ -290,6 +306,10 @@ fn on_navigation(app: &AppHandle, u: &Url) {
         inner.stack.push(url.clone());
       }
       inner.cursor = inner.stack.len().saturating_sub(1);
+    }
+    #[cfg(windows)]
+    {
+      inner.cdp_frame_session = None;
     }
     (true, inner.can_back(), inner.can_forward())
   };
@@ -659,17 +679,77 @@ pub(crate) fn project_live_url(project: &crate::types::StudioProject) -> Option<
   deploy.url.clone().or_else(|| deploy.api_url.clone())
 }
 
-fn is_direct_project_preview(project_id: &str, commanded: Option<&str>) -> bool {
-  let Some(commanded) = commanded else {
+/// The app page the agent should debug and the top-level preview surface that
+/// contains it. Only the built-in Data App in Fabric preview mode receives an
+/// iframe origin; this deliberately does not become a general frame selector.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AgentPreviewTarget {
+  pub app_url: String,
+  pub surface_url: String,
+  pub frame_origin: Option<String>,
+}
+
+pub(crate) fn project_agent_target(
+  project: &crate::types::StudioProject,
+) -> Option<AgentPreviewTarget> {
+  let app_url = project_live_url(project)?;
+  let embedded_data_app = project.template.as_deref() == Some("fabricator-dataapp")
+    && project.preview_mode.as_deref() == Some("fabric");
+  if embedded_data_app {
+    let portal_url = project
+      .last_deploy
+      .as_ref()
+      .and_then(|deploy| deploy.portal_url.as_deref())
+      .map(str::trim)
+      .filter(|url| !url.is_empty());
+    if let (Some(surface_url), Some(frame_origin)) = (portal_url, url_origin(&app_url)) {
+      return Some(AgentPreviewTarget {
+        app_url,
+        surface_url: surface_url.to_string(),
+        frame_origin: Some(frame_origin),
+      });
+    }
+  }
+  Some(AgentPreviewTarget {
+    surface_url: app_url.clone(),
+    app_url,
+    frame_origin: None,
+  })
+}
+
+/// Return the embedded frame origin to poll, or `Some(None)` for a direct app.
+/// `None` means the current top-level preview is not this project's debug surface.
+fn project_diagnostic_target(
+  project_id: &str,
+  commanded: Option<&str>,
+) -> Option<Option<String>> {
+  let commanded = commanded?;
+  let project = crate::services::store::find_project(project_id)?;
+  let target = project_agent_target(&project)?;
+  if !preview_surface_matches(commanded, &target) {
+    return None;
+  }
+  Some(target.frame_origin)
+}
+
+fn urls_share_origin(first: &str, second: &str) -> bool {
+  let (Ok(first), Ok(second)) = (tauri::Url::parse(first), tauri::Url::parse(second)) else {
     return false;
   };
-  let Some(project) = crate::services::store::find_project(project_id) else {
-    return false;
-  };
-  let Some(live_url) = project_live_url(&project) else {
-    return false;
-  };
-  url_is_within_app_base(commanded, &live_url)
+  first.scheme() == second.scheme()
+    && first.host_str() == second.host_str()
+    && first.port_or_known_default() == second.port_or_known_default()
+}
+
+fn preview_surface_matches(current: &str, target: &AgentPreviewTarget) -> bool {
+  if target.frame_origin.is_some() {
+    // Fabric commonly rewrites the portal route after loading the deep link. The
+    // project id plus a live app-frame probe below keep this specific despite the
+    // intentionally origin-only shell match.
+    urls_share_origin(current, &target.surface_url)
+  } else {
+    url_is_within_app_base(current, &target.surface_url)
+  }
 }
 
 pub(crate) fn url_is_within_app_base(current: &str, live: &str) -> bool {
@@ -724,11 +804,16 @@ fn start_diagnostic_monitor(app: &AppHandle) {
       let Some(project_id) = project_id else {
         continue;
       };
-      if loading || !is_direct_project_preview(&project_id, current_url.as_deref()) {
+      let Some(frame_origin) =
+        project_diagnostic_target(&project_id, current_url.as_deref())
+      else {
+        continue;
+      };
+      if loading {
         continue;
       }
 
-      let diagnostics = match runtime_diagnostics(&app).await {
+      let diagnostics = match runtime_diagnostics(&app, frame_origin.as_deref()).await {
         Ok(value) => value,
         Err(_) => continue,
       };
@@ -800,44 +885,181 @@ fn emit_runtime_diagnostic(app: &AppHandle, project_id: &str, diagnostic: Runtim
   }
 }
 
-async fn runtime_diagnostics(app: &AppHandle) -> AppResult<Vec<RuntimeDiagnostic>> {
-  let script =
-    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.drainErrors() : []";
-  Ok(
-    eval_json::<Vec<RuntimeDiagnostic>>(app, script, EVAL_TIMEOUT)
-      .await?
-      .unwrap_or_default(),
-  )
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosticsRelayDispatch {
+  ok: bool,
+  id: Option<String>,
+  error: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct DiagnosticsRelayResult {
+  ok: bool,
+  result: Option<serde_json::Value>,
+  error: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DiagnosticsFrameStatus {
+  pub document_id: String,
+  pub url: String,
+  pub ready_state: String,
+}
+
+async fn diagnostics_frame_status(
+  app: &AppHandle,
+  frame_origin: &str,
+) -> AppResult<Option<DiagnosticsFrameStatus>> {
+  let origin = serde_json::to_string(frame_origin).unwrap_or_else(|_| "\"\"".into());
+  let script = format!(
+    "(function(){{try{{return window.__fabricatorDiagnostics?window.__fabricatorDiagnostics.frameStatus({origin}):null}}catch(_error){{return null}}}})()"
+  );
+  eval_json(app, &script, EVAL_TIMEOUT).await
+}
+
+pub(crate) async fn wait_for_diagnostics_frame(
+  app: &AppHandle,
+  frame_origin: &str,
+  timeout: Duration,
+) -> AppResult<DiagnosticsFrameStatus> {
+  let started = Instant::now();
+  while started.elapsed() < timeout {
+    if let Some(status) = diagnostics_frame_status(app, frame_origin).await? {
+      if status.ready_state != "loading" {
+        if let Ok(value) = invoke_frame_diagnostics(
+          app,
+          frame_origin,
+          "frameInfo",
+          &serde_json::json!({}),
+          Duration::from_secs(2),
+        )
+        .await
+        {
+          if let Ok(live_status) = serde_json::from_value::<DiagnosticsFrameStatus>(value) {
+            if live_status.ready_state != "loading" {
+              return Ok(live_status);
+            }
+          }
+        }
+      }
+    }
+    tokio::time::sleep(Duration::from_millis(75)).await;
+  }
+  Err(AppError::Msg(
+    "The embedded Data App frame did not become ready inside the Fabric preview.".into(),
+  ))
+}
+
+async fn invoke_frame_diagnostics(
+  app: &AppHandle,
+  frame_origin: &str,
+  operation: &str,
+  options: &serde_json::Value,
+  timeout: Duration,
+) -> AppResult<serde_json::Value> {
+  let origin = serde_json::to_string(frame_origin).unwrap_or_else(|_| "\"\"".into());
+  let operation = serde_json::to_string(operation).unwrap_or_else(|_| "\"\"".into());
+  let options = serde_json::to_string(options).unwrap_or_else(|_| "{}".into());
+  let request_script = format!(
+    "(function(){{try{{return window.__fabricatorDiagnostics?window.__fabricatorDiagnostics.requestFrame({origin},{operation},{options}):{{ok:false,error:'Diagnostics bridge is unavailable'}}}}catch(error){{return {{ok:false,error:String(error)}}}}}})()"
+  );
+  let dispatch = eval_json::<DiagnosticsRelayDispatch>(app, &request_script, EVAL_TIMEOUT)
+    .await?
+    .ok_or_else(|| AppError::Msg("The embedded diagnostics relay did not respond.".into()))?;
+  if !dispatch.ok {
+    return Err(AppError::Msg(
+      dispatch
+        .error
+        .unwrap_or_else(|| "The embedded diagnostics relay rejected the request.".into()),
+    ));
+  }
+  let id = dispatch
+    .id
+    .ok_or_else(|| AppError::Msg("The embedded diagnostics relay returned no request id.".into()))?;
+  let id_json = serde_json::to_string(&id).unwrap_or_else(|_| "\"\"".into());
+  let result_script = format!(
+    "(function(){{try{{return window.__fabricatorDiagnostics?window.__fabricatorDiagnostics.takeFrameResult({id_json}):null}}catch(_error){{return null}}}})()"
+  );
+
+  let started = Instant::now();
+  while started.elapsed() < timeout {
+    if let Some(response) =
+      eval_json::<DiagnosticsRelayResult>(app, &result_script, EVAL_TIMEOUT).await?
+    {
+      if response.ok {
+        return Ok(response.result.unwrap_or(serde_json::Value::Null));
+      }
+      return Err(AppError::Msg(
+        response
+          .error
+          .unwrap_or_else(|| "The embedded Data App rejected the diagnostics request.".into()),
+      ));
+    }
+    tokio::time::sleep(Duration::from_millis(35)).await;
+  }
+  Err(AppError::Msg(format!(
+    "The embedded Data App did not answer diagnostics operation {operation} before timeout."
+  )))
+}
+
+async fn invoke_diagnostics(
+  app: &AppHandle,
+  frame_origin: Option<&str>,
+  operation: &str,
+  options: serde_json::Value,
+) -> AppResult<serde_json::Value> {
+  if let Some(origin) = frame_origin {
+    return invoke_frame_diagnostics(app, origin, operation, &options, EVAL_TIMEOUT).await;
+  }
+  let operation = serde_json::to_string(operation).unwrap_or_else(|_| "\"\"".into());
+  let options = serde_json::to_string(&options).unwrap_or_else(|_| "{}".into());
+  let script = format!(
+    "(function(){{try{{return window.__fabricatorDiagnostics?window.__fabricatorDiagnostics.invoke({operation},{options}):null}}catch(error){{return {{ok:false,error:String(error)}}}}}})()"
+  );
+  eval_json(app, &script, EVAL_TIMEOUT)
+    .await?
+    .ok_or_else(|| AppError::Msg("The page diagnostics bridge returned no result.".into()))
+}
+
+async fn runtime_diagnostics(
+  app: &AppHandle,
+  frame_origin: Option<&str>,
+) -> AppResult<Vec<RuntimeDiagnostic>> {
+  let value =
+    invoke_diagnostics(app, frame_origin, "drainErrors", serde_json::json!({})).await?;
+  serde_json::from_value(value)
+    .map_err(|error| AppError::Msg(format!("invalid runtime diagnostics: {error}")))
 }
 
 pub(crate) async fn read_console(
   app: &AppHandle,
+  frame_origin: Option<&str>,
   level: Option<&str>,
   query: Option<&str>,
   since: Option<u64>,
   limit: usize,
   clear: bool,
 ) -> AppResult<serde_json::Value> {
-  let options = serde_json::json!({
-    "level": level,
-    "query": query,
-    "since": since,
-    "limit": limit.clamp(1, 200),
-    "clear": clear,
-  });
-  let script = format!(
-    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.readConsole({}) : []",
-    serde_json::to_string(&options).unwrap_or_else(|_| "{}".into())
-  );
-  Ok(
-    eval_json::<serde_json::Value>(app, &script, EVAL_TIMEOUT)
-      .await?
-      .unwrap_or_else(|| serde_json::json!([])),
+  invoke_diagnostics(
+    app,
+    frame_origin,
+    "readConsole",
+    serde_json::json!({
+      "level": level,
+      "query": query,
+      "since": since,
+      "limit": limit.clamp(1, 200),
+      "clear": clear,
+    }),
   )
+  .await
 }
 
 pub(crate) async fn read_network(
   app: &AppHandle,
+  frame_origin: Option<&str>,
   errors_only: bool,
   query: Option<&str>,
   url_includes: Option<&str>,
@@ -849,75 +1071,134 @@ pub(crate) async fn read_network(
   limit: usize,
   clear: bool,
 ) -> AppResult<serde_json::Value> {
-  let options = serde_json::json!({
-    "errorsOnly": errors_only,
-    "query": query,
-    "urlIncludes": url_includes,
-    "method": method,
-    "resourceType": resource_type,
-    "statusMin": status_min,
-    "statusMax": status_max,
-    "since": since,
-    "limit": limit.clamp(1, 300),
-    "clear": clear,
-  });
-  let script = format!(
-    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.readNetwork({}) : []",
-    serde_json::to_string(&options).unwrap_or_else(|_| "{}".into())
-  );
-  Ok(
-    eval_json::<serde_json::Value>(app, &script, EVAL_TIMEOUT)
-      .await?
-      .unwrap_or_else(|| serde_json::json!([])),
+  invoke_diagnostics(
+    app,
+    frame_origin,
+    "readNetwork",
+    serde_json::json!({
+      "errorsOnly": errors_only,
+      "query": query,
+      "urlIncludes": url_includes,
+      "method": method,
+      "resourceType": resource_type,
+      "statusMin": status_min,
+      "statusMax": status_max,
+      "since": since,
+      "limit": limit.clamp(1, 300),
+      "clear": clear,
+    }),
   )
+  .await
 }
 
 pub(crate) async fn inspect_page(
   app: &AppHandle,
+  frame_origin: Option<&str>,
   selector: Option<&str>,
   query: Option<&str>,
   limit: usize,
   include_body_text: bool,
 ) -> AppResult<serde_json::Value> {
-  let options = serde_json::json!({
-    "selector": selector,
-    "query": query,
-    "limit": limit.clamp(1, 200),
-    "includeBodyText": include_body_text,
-  });
-  let script = format!(
-    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.snapshot({}) : {{ok:false,error:'Diagnostics bridge is unavailable'}}",
-    serde_json::to_string(&options).unwrap_or_else(|_| "{}".into())
-  );
-  Ok(
-    eval_json::<serde_json::Value>(app, &script, EVAL_TIMEOUT)
-      .await?
-      .unwrap_or_else(|| serde_json::json!({"ok": false, "error": "No page snapshot returned"})),
+  invoke_diagnostics(
+    app,
+    frame_origin,
+    "snapshot",
+    serde_json::json!({
+      "selector": selector,
+      "query": query,
+      "limit": limit.clamp(1, 200),
+      "includeBodyText": include_body_text,
+    }),
   )
+  .await
 }
 
 pub(crate) async fn interact(
   app: &AppHandle,
+  frame_origin: Option<&str>,
   action: &str,
   selector: Option<&str>,
   value: Option<serde_json::Value>,
   allowed_base: &str,
 ) -> AppResult<serde_json::Value> {
-  let options = serde_json::json!({
-    "action": action,
-    "selector": selector,
-    "value": value,
-    "allowedBase": allowed_base,
-  });
-  let script = format!(
-    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.interact({}) : {{ok:false,error:'Diagnostics bridge is unavailable'}}",
-    serde_json::to_string(&options).unwrap_or_else(|_| "{}".into())
-  );
-  Ok(
-    eval_json::<serde_json::Value>(app, &script, EVAL_TIMEOUT)
-      .await?
-      .unwrap_or_else(|| serde_json::json!({"ok": false, "error": "No interaction result returned"})),
+  invoke_diagnostics(
+    app,
+    frame_origin,
+    "interact",
+    serde_json::json!({
+      "action": action,
+      "selector": selector,
+      "value": value,
+      "allowedBase": allowed_base,
+    }),
   )
+  .await
+}
+
+pub(crate) async fn navigate_embedded_frame(
+  app: &AppHandle,
+  frame_origin: &str,
+  target: &str,
+  allowed_base: &str,
+  timeout: Duration,
+) -> AppResult<()> {
+  let previous_document = diagnostics_frame_status(app, frame_origin)
+    .await?
+    .map(|status| status.document_id);
+  let result = invoke_frame_diagnostics(
+    app,
+    frame_origin,
+    "navigate",
+    &serde_json::json!({
+      "target": target,
+      "allowedBase": allowed_base,
+    }),
+    EVAL_TIMEOUT,
+  )
+  .await?;
+  if result.get("ok").and_then(serde_json::Value::as_bool) == Some(false) {
+    return Err(AppError::Msg(
+      result
+        .get("error")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("The embedded Data App rejected navigation.")
+        .to_string(),
+    ));
+  }
+
+  let started = Instant::now();
+  while started.elapsed() < timeout {
+    if let Some(status) = diagnostics_frame_status(app, frame_origin).await? {
+      let replaced = previous_document
+        .as_deref()
+        .is_none_or(|previous| previous != status.document_id);
+      if replaced && status.ready_state != "loading" {
+        return Ok(());
+      }
+    }
+    tokio::time::sleep(Duration::from_millis(75)).await;
+  }
+  Err(AppError::Msg(
+    "The embedded Data App navigation did not finish before timeout.".into(),
+  ))
+}
+
+pub(crate) async fn embedded_frame_matches(
+  app: &AppHandle,
+  frame_origin: &str,
+  app_url: &str,
+) -> bool {
+  invoke_frame_diagnostics(
+    app,
+    frame_origin,
+    "frameInfo",
+    &serde_json::json!({}),
+    Duration::from_secs(2),
+  )
+    .await
+    .ok()
+    .and_then(|value| serde_json::from_value::<DiagnosticsFrameStatus>(value).ok())
+    .is_some_and(|status| url_is_within_app_base(&status.url, app_url))
 }
 
 /// Lightweight status of the in-preview design session, read by the renderer's
@@ -1064,14 +1345,16 @@ async fn eval_json<T: serde::de::DeserializeOwned>(
 /// This is the unrestricted escape hatch behind the agent's raw CDP and page
 /// evaluation tools.
 #[cfg(windows)]
-pub(crate) async fn call_cdp(
+async fn call_cdp_session(
   app: &AppHandle,
+  session_id: Option<&str>,
   method: &str,
   params: &serde_json::Value,
   timeout: Duration,
 ) -> AppResult<serde_json::Value> {
+  use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_11;
   use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
-  use windows::core::HSTRING;
+  use windows::core::{HSTRING, Interface};
 
   let wv = app
     .get_webview(PREVIEW_LABEL)
@@ -1082,6 +1365,7 @@ pub(crate) async fn call_cdp(
     serde_json::to_string(params)
       .map_err(|error| AppError::Msg(format!("failed to serialize CDP parameters: {error}")))?,
   );
+  let session_id = session_id.map(HSTRING::from);
   let (tx, rx) = oneshot::channel::<Result<String, String>>();
   let tx = Arc::new(Mutex::new(Some(tx)));
   let tx_for_dispatch = tx.clone();
@@ -1108,9 +1392,17 @@ pub(crate) async fn call_cdp(
         Ok(())
       },
     ));
-    if let Err(error) =
+    let dispatched = if let Some(session_id) = session_id.as_ref() {
+      match core.cast::<ICoreWebView2_11>() {
+        Ok(core) => unsafe {
+          core.CallDevToolsProtocolMethodForSession(session_id, &method, &params, &handler)
+        },
+        Err(error) => Err(error),
+      }
+    } else {
       unsafe { core.CallDevToolsProtocolMethod(&method, &params, &handler) }
-    {
+    };
+    if let Err(error) = dispatched {
       if let Some(tx) = tx_for_dispatch.lock().unwrap().take() {
         let _ = tx.send(Err(format!("CDP dispatch failed: {error}")));
       }
@@ -1127,9 +1419,167 @@ pub(crate) async fn call_cdp(
     .map_err(|error| AppError::Msg(format!("CDP returned invalid JSON: {error}")))
 }
 
+#[cfg(windows)]
+async fn call_cdp(
+  app: &AppHandle,
+  method: &str,
+  params: &serde_json::Value,
+  timeout: Duration,
+) -> AppResult<serde_json::Value> {
+  call_cdp_session(app, None, method, params, timeout).await
+}
+
+#[cfg(windows)]
+fn cached_frame_session(app: &AppHandle, frame_origin: &str) -> Option<String> {
+  app
+    .state::<PreviewState>()
+    .inner
+    .lock()
+    .unwrap()
+    .cdp_frame_session
+    .as_ref()
+    .filter(|session| session.origin == frame_origin)
+    .map(|session| session.session_id.clone())
+}
+
+#[cfg(windows)]
+fn clear_cached_frame_session(app: &AppHandle, frame_origin: &str) {
+  let state = app.state::<PreviewState>();
+  let mut inner = state.inner.lock().unwrap();
+  if inner
+    .cdp_frame_session
+    .as_ref()
+    .is_some_and(|session| session.origin == frame_origin)
+  {
+    inner.cdp_frame_session = None;
+  }
+}
+
+#[cfg(windows)]
+async fn attach_frame_session(
+  app: &AppHandle,
+  frame_origin: &str,
+  timeout: Duration,
+) -> AppResult<String> {
+  let _ = call_cdp(
+    app,
+    "Target.setDiscoverTargets",
+    &serde_json::json!({ "discover": true }),
+    timeout,
+  )
+  .await;
+  let targets = call_cdp(app, "Target.getTargets", &serde_json::json!({}), timeout).await?;
+  let target_id = targets
+    .get("targetInfos")
+    .and_then(serde_json::Value::as_array)
+    .and_then(|targets| {
+      targets
+        .iter()
+        .filter(|target| {
+          matches!(
+            target.get("type").and_then(serde_json::Value::as_str),
+            Some("iframe") | Some("page")
+          )
+        })
+        .find(|target| {
+          target
+            .get("url")
+            .and_then(serde_json::Value::as_str)
+            .and_then(url_origin)
+            .as_deref()
+            == Some(frame_origin)
+        })
+    })
+    .and_then(|target| target.get("targetId"))
+    .and_then(serde_json::Value::as_str)
+    .ok_or_else(|| {
+      AppError::Msg(format!(
+        "WebView2 did not expose a CDP target for the embedded Data App at {frame_origin}."
+      ))
+    })?;
+  let attached = call_cdp(
+    app,
+    "Target.attachToTarget",
+    &serde_json::json!({
+      "targetId": target_id,
+      "flatten": true,
+    }),
+    timeout,
+  )
+  .await?;
+  let session_id = attached
+    .get("sessionId")
+    .and_then(serde_json::Value::as_str)
+    .ok_or_else(|| AppError::Msg("CDP did not return an embedded-frame session id.".into()))?
+    .to_string();
+  app.state::<PreviewState>()
+    .inner
+    .lock()
+    .unwrap()
+    .cdp_frame_session = Some(CdpFrameSession {
+      origin: frame_origin.to_string(),
+      session_id: session_id.clone(),
+    });
+  Ok(session_id)
+}
+
+#[cfg(windows)]
+fn cdp_session_was_lost(result: &serde_json::Value) -> bool {
+  let message = result
+    .get("error")
+    .and_then(|error| error.get("message"))
+    .and_then(serde_json::Value::as_str)
+    .unwrap_or_default()
+    .to_ascii_lowercase();
+  message.contains("session") && (message.contains("not found") || message.contains("closed"))
+}
+
+#[cfg(windows)]
+async fn call_cdp_in_frame(
+  app: &AppHandle,
+  frame_origin: &str,
+  method: &str,
+  params: &serde_json::Value,
+  timeout: Duration,
+) -> AppResult<serde_json::Value> {
+  let session_id = match cached_frame_session(app, frame_origin) {
+    Some(session_id) => session_id,
+    None => attach_frame_session(app, frame_origin, timeout).await?,
+  };
+  match call_cdp_session(app, Some(&session_id), method, params, timeout).await {
+    Ok(result) if !cdp_session_was_lost(&result) => Ok(result),
+    first_result => {
+      clear_cached_frame_session(app, frame_origin);
+      let session_id = attach_frame_session(app, frame_origin, timeout).await?;
+      match call_cdp_session(app, Some(&session_id), method, params, timeout).await {
+        Ok(result) => Ok(result),
+        Err(error) => match first_result {
+          Err(first_error) => Err(AppError::Msg(format!("{first_error}; retry failed: {error}"))),
+          Ok(_) => Err(error),
+        },
+      }
+    }
+  }
+}
+
+#[cfg(windows)]
+pub(crate) async fn call_cdp_target(
+  app: &AppHandle,
+  frame_origin: Option<&str>,
+  method: &str,
+  params: &serde_json::Value,
+  timeout: Duration,
+) -> AppResult<serde_json::Value> {
+  match frame_origin {
+    Some(origin) => call_cdp_in_frame(app, origin, method, params, timeout).await,
+    None => call_cdp(app, method, params, timeout).await,
+  }
+}
+
 #[cfg(not(windows))]
-pub(crate) async fn call_cdp(
+pub(crate) async fn call_cdp_target(
   _app: &AppHandle,
+  _frame_origin: Option<&str>,
   _method: &str,
   _params: &serde_json::Value,
   _timeout: Duration,
@@ -1141,6 +1591,7 @@ pub(crate) async fn call_cdp(
 
 pub(crate) async fn evaluate_page(
   app: &AppHandle,
+  frame_origin: Option<&str>,
   expression: &str,
   await_promise: bool,
   return_by_value: bool,
@@ -1157,11 +1608,61 @@ pub(crate) async fn evaluate_page(
       "replMode": true,
       "timeout": timeout.as_millis().min(u64::MAX as u128) as u64,
     });
-    return call_cdp(app, "Runtime.evaluate", &params, timeout + Duration::from_secs(2)).await;
+    let cdp_result = call_cdp_target(
+      app,
+      frame_origin,
+      "Runtime.evaluate",
+      &params,
+      timeout + Duration::from_secs(2),
+    )
+    .await;
+    if cdp_result.is_ok() || !return_by_value {
+      return cdp_result;
+    }
+    let Some(frame_origin) = frame_origin else {
+      return cdp_result;
+    };
+    return invoke_frame_diagnostics(
+      app,
+      frame_origin,
+      "evaluate",
+      &serde_json::json!({
+        "expression": expression,
+        "awaitPromise": await_promise,
+        "returnByValue": true,
+      }),
+      timeout,
+    )
+    .await
+    .map(|mut result| {
+      if let Some(object) = result.as_object_mut() {
+        object.insert(
+          "cdpFallback".into(),
+          serde_json::Value::String(
+            "WebView2 did not expose the embedded frame as a CDP target.".into(),
+          ),
+        );
+      }
+      result
+    });
   }
 
   #[cfg(not(windows))]
   {
+    if let Some(origin) = frame_origin {
+      return invoke_frame_diagnostics(
+        app,
+        origin,
+        "evaluate",
+        &serde_json::json!({
+          "expression": expression,
+          "awaitPromise": await_promise,
+          "returnByValue": return_by_value,
+        }),
+        timeout,
+      )
+      .await;
+    }
     let _ = (await_promise, return_by_value);
     let value = eval_json::<serde_json::Value>(app, expression, timeout).await?;
     Ok(serde_json::json!({
@@ -1549,6 +2050,84 @@ pub(crate) async fn agent_capture(app: &AppHandle) -> AppResult<Vec<u8>> {
   }
 }
 
+/// Capture the embedded Data App target when one is active. WebView2 exposes the
+/// cross-origin iframe as an out-of-process CDP target, so `Page.captureScreenshot`
+/// returns the app viewport rather than the surrounding Fabric shell. If that
+/// target cannot capture, retain the useful whole-preview fallback.
+pub(crate) async fn agent_capture_target(
+  app: &AppHandle,
+  frame_origin: Option<&str>,
+) -> AppResult<Vec<u8>> {
+  let Some(frame_origin) = frame_origin else {
+    return agent_capture(app).await;
+  };
+
+  #[cfg(windows)]
+  {
+    if !is_preview_open(app) {
+      return Err(AppError::Msg("preview is not open".into()));
+    }
+    let was_visible = is_preview_visible(app);
+    let wv = app
+      .get_webview(PREVIEW_LABEL)
+      .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
+    if !was_visible {
+      wv
+        .set_bounds(offscreen_bounds().to_rect())
+        .map_err(|error| AppError::Msg(error.to_string()))?;
+      wv.show().map_err(|error| AppError::Msg(error.to_string()))?;
+      tokio::time::sleep(OFFSCREEN_PAINT_SETTLE).await;
+    }
+
+    let frame_capture = async {
+      let response = call_cdp_target(
+        app,
+        Some(frame_origin),
+        "Page.captureScreenshot",
+        &serde_json::json!({
+          "format": "png",
+          "fromSurface": true,
+          "captureBeyondViewport": false,
+        }),
+        Duration::from_secs(10),
+      )
+      .await?;
+      let data = response
+        .get("data")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+          let detail = response
+            .get("error")
+            .map(serde_json::Value::to_string)
+            .unwrap_or_else(|| "no PNG data was returned".into());
+          AppError::Msg(format!("embedded Data App screenshot failed: {detail}"))
+        })?;
+      base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|error| AppError::Msg(format!("invalid embedded screenshot PNG: {error}")))
+    }
+    .await;
+    let result = match frame_capture {
+      Ok(bytes) => Ok(bytes),
+      Err(frame_error) => capture_now(app).await.map_err(|fallback_error| {
+        AppError::Msg(format!(
+          "{frame_error}; whole-preview fallback also failed: {fallback_error}"
+        ))
+      }),
+    };
+    if !was_visible {
+      let _ = wv.hide();
+    }
+    return result;
+  }
+
+  #[cfg(not(windows))]
+  {
+    let _ = frame_origin;
+    agent_capture(app).await
+  }
+}
+
 /// Bounds used to park the preview far off-screen for a silent capture: a
 /// realistic desktop viewport positioned well outside any monitor, so the surface
 /// keeps rendering (and `CapturePreview` works) while staying invisible.
@@ -1573,12 +2152,16 @@ pub(crate) fn is_preview_open(app: &AppHandle) -> bool {
   app.get_webview(PREVIEW_LABEL).is_some()
 }
 
-pub(crate) fn agent_target_matches(app: &AppHandle, project_id: &str, url: &str) -> bool {
+pub(crate) fn agent_target_matches(
+  app: &AppHandle,
+  project_id: &str,
+  target: &AgentPreviewTarget,
+) -> bool {
   let state = app.state::<PreviewState>();
   let inner = state.inner.lock().unwrap();
   let current = inner.stack.get(inner.cursor).or(inner.commanded.as_ref());
   inner.project_id.as_deref() == Some(project_id)
-    && current.is_some_and(|current| url_is_within_app_base(current, url))
+    && current.is_some_and(|current| preview_surface_matches(current, target))
 }
 
 /// Hard ceiling on how long the Windows capture may pump the UI-thread message
@@ -1775,7 +2358,35 @@ unsafe fn snapshot_image_to_png(
 
 #[cfg(test)]
 mod tests {
-  use super::{url_is_within_app_base, DesignAiEditRequest};
+  use super::{
+    preview_surface_matches, project_agent_target, url_is_within_app_base, DesignAiEditRequest,
+  };
+  use crate::types::{DeployInfo, StudioProject};
+
+  fn preview_project(template: &str, mode: Option<&str>, portal_url: Option<&str>) -> StudioProject {
+    StudioProject {
+      id: "project-1".into(),
+      name: "Preview project".into(),
+      path: r"C:\projects\preview".into(),
+      template: Some(template.into()),
+      added_at: "2026-01-01T00:00:00Z".into(),
+      last_deploy: Some(DeployInfo {
+        url: Some("https://app.example.net/appbackends/item-1".into()),
+        portal_url: portal_url.map(str::to_string),
+        ..Default::default()
+      }),
+      copilot_session_id: None,
+      workspace: None,
+      workspace_name: None,
+      deployment_names: None,
+      awaiting_first_deploy: None,
+      model: None,
+      effort: None,
+      preview_mode: mode.map(str::to_string),
+      disabled_agent_tools: None,
+      missing: None,
+    }
+  }
 
   // Guards the multi-select bug: the controller's drained request carries `ids`
   // (all selected element ids); it must survive deserialization so the renderer
@@ -1810,5 +2421,53 @@ mod tests {
       "https://example.net/appbackends/abcd",
       live
     ));
+  }
+
+  #[test]
+  fn only_embedded_data_app_targets_the_deep_fabric_frame() {
+    let portal = "https://app.fabric.microsoft.com/groups/workspace/appbackends/item-1";
+    let embedded = project_agent_target(&preview_project(
+      "fabricator-dataapp",
+      Some("fabric"),
+      Some(portal),
+    ))
+    .expect("embedded target");
+    assert_eq!(embedded.surface_url, portal);
+    assert_eq!(
+      embedded.frame_origin.as_deref(),
+      Some("https://app.example.net")
+    );
+    assert!(preview_surface_matches(
+      "https://app.fabric.microsoft.com/groups/workspace/items/item-1?experience=power-bi",
+      &embedded
+    ));
+
+    let direct_data_app =
+      project_agent_target(&preview_project("fabricator-dataapp", Some("direct"), Some(portal)))
+        .expect("direct target");
+    assert_eq!(direct_data_app.surface_url, direct_data_app.app_url);
+    assert_eq!(direct_data_app.frame_origin, None);
+    assert!(!preview_surface_matches(
+      "https://app.example.net/appbackends/other-item",
+      &direct_data_app
+    ));
+
+    let unrelated_template =
+      project_agent_target(&preview_project("fabricator-todoapp", Some("fabric"), Some(portal)))
+        .expect("unrelated target");
+    assert_eq!(unrelated_template.surface_url, unrelated_template.app_url);
+    assert_eq!(unrelated_template.frame_origin, None);
+  }
+
+  #[test]
+  fn embedded_data_app_falls_back_to_direct_without_a_portal_url() {
+    let target = project_agent_target(&preview_project(
+      "fabricator-dataapp",
+      Some("fabric"),
+      None,
+    ))
+    .expect("fallback target");
+    assert_eq!(target.surface_url, target.app_url);
+    assert_eq!(target.frame_origin, None);
   }
 }

@@ -10,6 +10,14 @@
   var consoleEntries = []
   var networkEntries = []
   var alertEntries = []
+  var RELAY_CHANNEL = 'fabricator-diagnostics-v1'
+  var documentId =
+    'document-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+  var relaySequence = 0
+  var frameSources = Object.create(null)
+  var frameOrder = []
+  var relayRequests = Object.create(null)
+  var relayResults = Object.create(null)
   var sensitiveQueryNames =
     /^(access[-_]?token|account[-_]?key|api[-_]?key|authorization|code|client[-_]?secret|id[-_]?token|key|password|passwd|pwd|refresh[-_]?token|sas|secret|shared[-_]?access[-_]?signature|sig|signature|subscription[-_]?key|token)$/i
 
@@ -412,7 +420,8 @@
         scroll: { x: Math.round(window.scrollX), y: Math.round(window.scrollY) }
       },
       rootSelector: rootSelector || 'body',
-      bodyText: options.includeBodyText === false ? undefined : safeVisibleText(root, MAX_TEXT_LENGTH),
+      bodyText:
+        options.includeBodyText === false ? undefined : safeVisibleText(root, MAX_TEXT_LENGTH),
       elements: elements,
       totalMatches: totalMatches,
       truncated: totalMatches > elements.length
@@ -475,7 +484,9 @@
     options = options || {}
     var action = String(options.action || '')
     if (action === 'reload') {
-      window.location.reload()
+      setTimeout(function () {
+        window.location.reload()
+      }, 0)
       return { ok: true, action: action }
     }
     if (action === 'scroll') {
@@ -524,7 +535,10 @@
     }
 
     if (action === 'click') {
-      element.click()
+      // Let the relay post its result before a click tears down this document.
+      setTimeout(function () {
+        element.click()
+      }, 0)
     } else if (action === 'focus') {
       element.focus()
     } else if (action === 'fill') {
@@ -600,7 +614,10 @@
         (!since || entry.timestamp >= since) &&
         (!method || entry.method === method) &&
         (!resourceType || String(entry.type || '').toLowerCase() === resourceType) &&
-        (!urlIncludes || String(entry.url || '').toLowerCase().indexOf(urlIncludes) >= 0) &&
+        (!urlIncludes ||
+          String(entry.url || '')
+            .toLowerCase()
+            .indexOf(urlIncludes) >= 0) &&
         (statusMin == null || (entry.status != null && entry.status >= statusMin)) &&
         (statusMax == null || (entry.status != null && entry.status <= statusMax)) &&
         matchesQuery(entry, options.query)
@@ -616,6 +633,316 @@
     return alertEntries.slice()
   }
 
+  function frameInfo() {
+    return {
+      documentId: documentId,
+      url: safeUrl(window.location.href),
+      origin: window.location.origin,
+      readyState: document.readyState,
+      title: document.title
+    }
+  }
+
+  function remoteValue(value, returnByValue) {
+    var type = value === null ? 'object' : typeof value
+    var result = { type: type }
+    if (value === null) {
+      result.subtype = 'null'
+      result.value = null
+      return result
+    }
+    if (type === 'number' && !Number.isFinite(value)) {
+      result.unserializableValue = String(value)
+      return result
+    }
+    if (type === 'bigint') {
+      result.unserializableValue = String(value) + 'n'
+      return result
+    }
+    if (type === 'undefined') return result
+    if (type === 'function' || type === 'symbol') {
+      result.description = clip(String(value), 2000)
+      return result
+    }
+    if (returnByValue === false && (type === 'object' || type === 'function')) {
+      result.description = clip(
+        Object.prototype.toString.call(value) + ' (object handles require Windows CDP)',
+        2000
+      )
+      return result
+    }
+    try {
+      result.value = JSON.parse(JSON.stringify(value))
+    } catch (error) {
+      result.description = serialize(error)
+    }
+    return result
+  }
+
+  function evaluationFailure(error) {
+    return {
+      result: { type: 'undefined' },
+      exceptionDetails: {
+        text: error && error.message ? String(error.message) : 'JavaScript evaluation failed',
+        exception: {
+          type: 'object',
+          subtype: 'error',
+          className: (error && error.name) || 'Error',
+          description: serialize(error)
+        }
+      },
+      transport: 'fabricator-frame-relay'
+    }
+  }
+
+  function evaluate(options) {
+    options = options || {}
+    var value
+    try {
+      value = (0, eval)(String(options.expression || ''))
+    } catch (error) {
+      return evaluationFailure(error)
+    }
+    if (options.awaitPromise !== false && value && typeof value.then === 'function') {
+      return Promise.resolve(value).then(function (resolved) {
+        return {
+          result: remoteValue(resolved, options.returnByValue),
+          transport: 'fabricator-frame-relay'
+        }
+      }, evaluationFailure)
+    }
+    return {
+      result: remoteValue(value, options.returnByValue),
+      transport: 'fabricator-frame-relay'
+    }
+  }
+
+  function navigate(options) {
+    options = options || {}
+    var target
+    try {
+      target = new URL(String(options.target || ''), window.location.href)
+    } catch (error) {
+      return { ok: false, error: 'Invalid navigation target: ' + serialize(error) }
+    }
+    if (!isWithinAllowedBase(target.href, options.allowedBase)) {
+      return { ok: false, error: 'Navigation would leave the deployed app' }
+    }
+    setTimeout(function () {
+      window.location.assign(target.href)
+    }, 0)
+    return { ok: true, action: 'navigate', url: safeUrl(target.href) }
+  }
+
+  function invoke(operation, options) {
+    if (operation === 'readConsole') return readConsole(options)
+    if (operation === 'readNetwork') return readNetwork(options)
+    if (operation === 'drainErrors') return alertEntries.splice(0, alertEntries.length)
+    if (operation === 'snapshot') return snapshot(options)
+    if (operation === 'interact') return interact(options)
+    if (operation === 'evaluate') return evaluate(options)
+    if (operation === 'navigate') return navigate(options)
+    if (operation === 'frameInfo') return frameInfo()
+    if (operation === 'clear') {
+      consoleEntries.splice(0, consoleEntries.length)
+      networkEntries.splice(0, networkEntries.length)
+      alertEntries.splice(0, alertEntries.length)
+      return { ok: true }
+    }
+    throw new Error('Unsupported diagnostics operation ' + operation)
+  }
+
+  function normalizeOrigin(value) {
+    try {
+      var parsed = new URL(String(value))
+      return parsed.origin === String(value) && parsed.origin !== 'null' ? parsed.origin : null
+    } catch (_error) {
+      return null
+    }
+  }
+
+  function rememberFrame(event, data) {
+    var origin = normalizeOrigin(event.origin)
+    if (!origin || !event.source) return
+    if (!frameSources[origin]) frameOrder.push(origin)
+    frameSources[origin] = {
+      source: event.source,
+      documentId: String(data.documentId || ''),
+      url: String(data.url || ''),
+      readyState: String(data.readyState || ''),
+      title: String(data.title || ''),
+      seenAt: Date.now()
+    }
+    while (frameOrder.length > 32) {
+      var staleOrigin = frameOrder.shift()
+      if (staleOrigin) delete frameSources[staleOrigin]
+    }
+  }
+
+  function requestFrame(origin, operation, options) {
+    if (window !== window.top) {
+      return { ok: false, error: 'Frame requests must start in the top preview frame' }
+    }
+    origin = normalizeOrigin(origin)
+    if (!origin) return { ok: false, error: 'Invalid embedded app origin' }
+    var frame = frameSources[origin]
+    if (!frame || !frame.source) {
+      return { ok: false, error: 'The embedded Data App frame has not announced itself yet' }
+    }
+    Object.keys(relayRequests).forEach(function (requestId) {
+      if (Date.now() - relayRequests[requestId].createdAt > 60000) {
+        delete relayRequests[requestId]
+      }
+    })
+    Object.keys(relayRequests)
+      .slice(0, -100)
+      .forEach(function (requestId) {
+        delete relayRequests[requestId]
+      })
+    relaySequence += 1
+    var id = 'relay-' + relaySequence + '-' + Date.now().toString(36)
+    relayRequests[id] = {
+      origin: origin,
+      source: frame.source,
+      createdAt: Date.now()
+    }
+    try {
+      frame.source.postMessage(
+        {
+          channel: RELAY_CHANNEL,
+          kind: 'request',
+          id: id,
+          operation: String(operation || ''),
+          options: options || {},
+          hostOrigin: window.location.origin,
+          targetOrigin: origin
+        },
+        origin
+      )
+      return { ok: true, id: id }
+    } catch (error) {
+      delete relayRequests[id]
+      return { ok: false, error: 'Could not reach the embedded Data App: ' + serialize(error) }
+    }
+  }
+
+  function takeFrameResult(id) {
+    id = String(id || '')
+    var result = relayResults[id]
+    if (!result) return null
+    delete relayResults[id]
+    return result
+  }
+
+  function frameStatus(origin) {
+    origin = normalizeOrigin(origin)
+    if (!origin || !frameSources[origin]) return null
+    var frame = frameSources[origin]
+    return {
+      documentId: frame.documentId,
+      url: frame.url,
+      readyState: frame.readyState,
+      title: frame.title,
+      seenAt: frame.seenAt
+    }
+  }
+
+  function postFrameHello() {
+    if (window === window.top) return
+    var info = frameInfo()
+    try {
+      window.top.postMessage(
+        {
+          channel: RELAY_CHANNEL,
+          kind: 'hello',
+          documentId: info.documentId,
+          url: info.url,
+          readyState: info.readyState,
+          title: info.title
+        },
+        '*'
+      )
+    } catch (_error) {}
+  }
+
+  window.addEventListener('message', function (event) {
+    var data = event.data
+    if (!data || data.channel !== RELAY_CHANNEL) return
+
+    if (window === window.top) {
+      if (data.kind === 'hello' && event.source !== window) {
+        rememberFrame(event, data)
+        return
+      }
+      if (data.kind !== 'result') return
+      var pending = relayRequests[String(data.id || '')]
+      if (!pending || pending.source !== event.source || pending.origin !== event.origin) {
+        return
+      }
+      delete relayRequests[data.id]
+      relayResults[data.id] = {
+        ok: data.ok === true,
+        result: data.result,
+        error: data.error == null ? null : String(data.error)
+      }
+      Object.keys(relayResults)
+        .slice(0, -100)
+        .forEach(function (resultId) {
+          delete relayResults[resultId]
+        })
+      return
+    }
+
+    if (
+      data.kind !== 'request' ||
+      event.source !== window.top ||
+      event.origin !== data.hostOrigin ||
+      window.location.origin !== data.targetOrigin
+    ) {
+      return
+    }
+
+    var replyOrigin = event.origin
+    Promise.resolve()
+      .then(function () {
+        return invoke(data.operation, data.options)
+      })
+      .then(
+        function (result) {
+          window.top.postMessage(
+            {
+              channel: RELAY_CHANNEL,
+              kind: 'result',
+              id: data.id,
+              ok: true,
+              result: result
+            },
+            replyOrigin
+          )
+        },
+        function (error) {
+          window.top.postMessage(
+            {
+              channel: RELAY_CHANNEL,
+              kind: 'result',
+              id: data.id,
+              ok: false,
+              error: serialize(error)
+            },
+            replyOrigin
+          )
+        }
+      )
+  })
+
+  if (window !== window.top) {
+    window.addEventListener('DOMContentLoaded', postFrameHello)
+    window.addEventListener('load', postFrameHello)
+    ;[0, 50, 250, 1000, 3000].forEach(function (delay) {
+      setTimeout(postFrameHello, delay)
+    })
+  }
+
   var api = {
     readConsole: readConsole,
     readNetwork: readNetwork,
@@ -625,6 +952,11 @@
     },
     snapshot: snapshot,
     interact: interact,
+    evaluate: evaluate,
+    invoke: invoke,
+    requestFrame: requestFrame,
+    takeFrameResult: takeFrameResult,
+    frameStatus: frameStatus,
     clear: function () {
       consoleEntries.splice(0, consoleEntries.length)
       networkEntries.splice(0, networkEntries.length)

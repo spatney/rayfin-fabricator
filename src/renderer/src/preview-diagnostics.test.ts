@@ -13,6 +13,16 @@ interface DiagnosticsApi {
   errors: () => Record<string, unknown>[]
   snapshot: (options?: string | Record<string, unknown>) => Record<string, unknown>
   interact: (options: Record<string, unknown>) => Record<string, unknown>
+  evaluate: (
+    options: Record<string, unknown>
+  ) => Record<string, unknown> | Promise<Record<string, unknown>>
+  requestFrame: (
+    origin: string,
+    operation: string,
+    options?: Record<string, unknown>
+  ) => Record<string, unknown>
+  takeFrameResult: (id: string) => Record<string, unknown> | null
+  frameStatus: (origin: string) => Record<string, unknown> | null
 }
 
 const originalConsole = {
@@ -126,5 +136,82 @@ describe('preview diagnostics bridge', () => {
       allowedBase: 'https://example.test/appbackends/item-1/'
     })
     expect(external).toMatchObject({ ok: false })
+
+    const evaluated = await api.evaluate({
+      expression: 'Promise.resolve({ answer: 42 })',
+      awaitPromise: true,
+      returnByValue: true
+    })
+    expect(evaluated).toMatchObject({
+      result: { type: 'object', value: { answer: 42 } },
+      transport: 'fabricator-frame-relay'
+    })
+
+    const frameOrigin = 'https://embedded.example.test'
+    const framePostMessage = vi.fn()
+    const frameSource = { postMessage: framePostMessage } as unknown as Window
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          channel: 'fabricator-diagnostics-v1',
+          kind: 'hello',
+          documentId: 'nested-document',
+          url: frameOrigin + '/appbackends/item-1',
+          readyState: 'complete',
+          title: 'Nested Data App'
+        },
+        origin: frameOrigin,
+        source: frameSource
+      })
+    )
+    expect(api.frameStatus(frameOrigin)).toMatchObject({
+      documentId: 'nested-document',
+      readyState: 'complete'
+    })
+
+    const request = api.requestFrame(frameOrigin, 'snapshot', { limit: 5 })
+    expect(request).toMatchObject({ ok: true })
+    expect(framePostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'fabricator-diagnostics-v1',
+        kind: 'request',
+        operation: 'snapshot',
+        targetOrigin: frameOrigin
+      }),
+      frameOrigin
+    )
+    const requestId = String(request.id)
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          channel: 'fabricator-diagnostics-v1',
+          kind: 'result',
+          id: requestId,
+          ok: true,
+          result: { ok: true, page: { title: 'wrong frame' } }
+        },
+        origin: 'https://wrong.example.test',
+        source: frameSource
+      })
+    )
+    expect(api.takeFrameResult(requestId)).toBeNull()
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          channel: 'fabricator-diagnostics-v1',
+          kind: 'result',
+          id: requestId,
+          ok: true,
+          result: { ok: true, page: { title: 'Nested Data App' } }
+        },
+        origin: frameOrigin,
+        source: frameSource
+      })
+    )
+    expect(api.takeFrameResult(requestId)).toMatchObject({
+      ok: true,
+      result: { page: { title: 'Nested Data App' } }
+    })
   })
 })

@@ -188,7 +188,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
         "Deploy or redeploy this project through Fabricator's deployment engine and wait for the \
          final result. This is the supported way to drive deployment state; do not run `rayfin up` \
          directly. On success the live preview is navigated to the deployed app so console, \
-         network, DOM, interaction, and screenshot tools can validate it.",
+         network, DOM, interaction, and screenshot tools can validate it. For a Data App in \
+         Fabric preview mode, these tools automatically target the embedded app frame.",
       )
       .with_parameters(empty_parameters())
       .with_handler(Arc::new(DeployTool::new(&app, &project_id))),
@@ -196,8 +197,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
       .with_description(
         "Navigate the real deployed app to a same-app absolute URL or app-relative path and wait for \
          the page to load. Navigation cannot leave the deployed app. A screenshot is opt-in to keep \
-         results compact. Use direct app routes for DOM inspection; a Fabric portal shell may contain \
-         a cross-origin iframe.",
+         results compact. A Data App in Fabric preview mode navigates inside its embedded frame \
+         without leaving the Fabric portal.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -217,7 +218,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
       .with_description(
         "Capture the current live deployed page as a PNG. On Windows this works silently even when \
          the preview pane is hidden or the app is minimized. The PNG always persists with the \
-         resumable Copilot session; choose whether it is also sent inline to the model.",
+         resumable Copilot session; choose whether it is also sent inline to the model. Embedded \
+         Data Apps are captured from their app frame when WebView2 exposes it.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -234,7 +236,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
     Tool::new("fabricator_preview_console")
       .with_description(
         "Read bounded console output, uncaught exceptions, and unhandled promise rejections from \
-         the live deployed page. Secrets and credential-like values are redacted.",
+         the live deployed page. Secrets and credential-like values are redacted. Embedded Data \
+         Apps are read from the app frame rather than the Fabric shell.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -277,7 +280,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
       .with_description(
         "Inspect live fetch/XHR traffic and resource timings captured from document start. Returns \
          method, sanitized URL, type, status, duration, transfer size/cache source, and failure \
-         reason — never request/response bodies, authorization/cookie headers, or secret query values.",
+         reason — never request/response bodies, authorization/cookie headers, or secret query values. \
+         Embedded Data Apps are read from the app frame rather than the Fabric shell.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -339,7 +343,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
       .with_description(
         "Inspect the live page's title, URL, readiness, viewport/document dimensions, visible text, \
          and up to 200 visible semantic/interactive DOM elements with stable selectors and bounds. \
-         Input values, cookies, storage, tokens, and hidden DOM are deliberately excluded.",
+         Input values, cookies, storage, tokens, and hidden DOM are deliberately excluded. Embedded \
+         Data Apps are inspected inside their cross-origin app frame.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -377,7 +382,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
       .with_description(
         "Interact with the real deployed page using a previously inspected CSS selector. Supports \
          click, focus, fill, select, check, press, scroll, and reload. Returns a compact result; \
-         request a screenshot only when visual confirmation is useful.",
+         request a screenshot only when visual confirmation is useful. Embedded Data Apps are \
+         operated inside their app frame.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -407,7 +413,7 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
          Supports promises and returns the raw protocol result, including exceptions. This is the \
          unrestricted escape hatch when inspect/interact tools are not enough: it can read or \
          mutate any page state, DOM, browser storage, cookies visible to JavaScript, and issue \
-         page-context requests.",
+         page-context requests. Embedded Data Apps execute in the app frame, not the Fabric shell.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -446,7 +452,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
         "Call any Chrome DevTools Protocol method against the real deployed page and return the raw \
          JSON response. Use this advanced escape hatch for Runtime, DOM, CSS, Network, Page, Log, \
          Performance, Debugger, Emulation, Storage, or other protocol capabilities not covered by \
-         Fabricator's higher-level tools. Available on Windows WebView2.",
+         Fabricator's higher-level tools. For an embedded Data App, Fabricator attaches a persistent \
+         CDP session to its iframe target. Available on Windows WebView2.",
       )
       .with_parameters(serde_json::json!({
         "type": "object",
@@ -589,22 +596,57 @@ impl ToolContext {
       .ok_or_else(|| format!("Project {} no longer exists.", self.project_id))
   }
 
-  async fn ensure_live_preview(&self) -> Result<String, String> {
+  async fn ensure_live_preview(&self) -> Result<preview::AgentPreviewTarget, String> {
     let project = self.project()?;
-    let url = preview::project_live_url(&project).ok_or_else(|| {
+    let target = preview::project_agent_target(&project).ok_or_else(|| {
       "This project has no deployed live URL yet. Use fabricator_deploy first.".to_string()
     })?;
-    let target_matches = preview::agent_target_matches(&self.app, &self.project_id, &url);
-    preview::agent_ensure_preview(&self.app, &self.project_id, &url, Duration::from_secs(5)).await;
+    let target_matches = preview::agent_target_matches(&self.app, &self.project_id, &target);
+    preview::agent_ensure_preview(
+      &self.app,
+      &self.project_id,
+      &target.surface_url,
+      Duration::from_secs(5),
+    )
+    .await;
     if !preview::is_preview_open(&self.app) {
       return Err("Fabricator could not open the live preview.".to_string());
     }
     if !target_matches {
-      preview::navigate_and_wait(&self.app, &self.project_id, &url, Duration::from_secs(15))
-        .await
-        .map_err(|error| error.to_string())?;
+      preview::navigate_and_wait(
+        &self.app,
+        &self.project_id,
+        &target.surface_url,
+        Duration::from_secs(20),
+      )
+      .await
+      .map_err(|error| error.to_string())?;
     }
-    Ok(url)
+    if let Some(frame_origin) = target.frame_origin.as_deref() {
+      let initial_wait = if target_matches {
+        Duration::from_secs(5)
+      } else {
+        Duration::from_secs(20)
+      };
+      match preview::wait_for_diagnostics_frame(&self.app, frame_origin, initial_wait).await {
+        Ok(_) => {}
+        Err(error) if !target_matches => return Err(error.to_string()),
+        Err(_) => {
+          preview::navigate_and_wait(
+            &self.app,
+            &self.project_id,
+            &target.surface_url,
+            Duration::from_secs(20),
+          )
+          .await
+          .map_err(|error| error.to_string())?;
+          preview::wait_for_diagnostics_frame(&self.app, frame_origin, Duration::from_secs(20))
+            .await
+            .map_err(|error| error.to_string())?;
+        }
+      }
+    }
+    Ok(target)
   }
 }
 
@@ -920,6 +962,7 @@ impl ToolHandler for ProjectTool {
         "name": project.workspace_name,
       },
       "liveDebugUrl": preview::project_live_url(&project),
+      "liveDebugSurface": preview::project_agent_target(&project).map(|target| target.surface_url),
       "lastDeploy": project.last_deploy,
     }))))
   }
@@ -941,25 +984,10 @@ impl ToolHandler for DeployTool {
       )));
     }
 
-    let project = match self.0.project() {
-      Ok(project) => project,
-      Err(error) => return Ok(failure(error)),
-    };
-    if let Some(url) = preview::project_live_url(&project) {
-      preview::agent_ensure_preview(&self.0.app, &self.0.project_id, &url, Duration::from_secs(5))
-        .await;
-      if let Err(error) = preview::navigate_and_wait(
-        &self.0.app,
-        &self.0.project_id,
-        &url,
-        Duration::from_secs(20),
-      )
-      .await
-      {
-        return Ok(failure(format!(
-          "Deployment succeeded, but the live preview could not navigate to {url}: {error}"
-        )));
-      }
+    if let Err(error) = self.0.ensure_live_preview().await {
+      return Ok(failure(format!(
+        "Deployment succeeded, but the live preview could not open: {error}"
+      )));
     }
 
     Ok(ToolResult::Text(safe_json(&result)))
@@ -981,29 +1009,43 @@ impl ToolHandler for PreviewNavigateTool {
       Ok(params) => params,
       Err(error) => return Ok(failure(format!("Invalid arguments: {error}"))),
     };
-    let base = match self.0.ensure_live_preview().await {
+    let preview_target = match self.0.ensure_live_preview().await {
+      Ok(target) => target,
+      Err(error) => return Ok(failure(error)),
+    };
+    let target = match resolve_target(&preview_target.app_url, params.target.as_deref()) {
       Ok(url) => url,
       Err(error) => return Ok(failure(error)),
     };
-    let target = match resolve_target(&base, params.target.as_deref()) {
-      Ok(url) => url,
-      Err(error) => return Ok(failure(error)),
+    let navigation = match preview_target.frame_origin.as_deref() {
+      Some(frame_origin) => {
+        preview::navigate_embedded_frame(
+          &self.0.app,
+          frame_origin,
+          &target,
+          &preview_target.app_url,
+          Duration::from_secs(20),
+        )
+        .await
+      }
+      None => {
+        preview::navigate_and_wait(
+          &self.0.app,
+          &self.0.project_id,
+          &target,
+          Duration::from_secs(20),
+        )
+        .await
+      }
     };
-    if let Err(error) = preview::navigate_and_wait(
-      &self.0.app,
-      &self.0.project_id,
-      &target,
-      Duration::from_secs(20),
-    )
-    .await
-    {
+    if let Err(error) = navigation {
       return Ok(failure(error.to_string()));
     }
     if !params.screenshot.unwrap_or(false) {
       return Ok(ToolResult::Text(format!("Navigated the live app to {target}.")));
     }
     tokio::time::sleep(Duration::from_millis(300)).await;
-    match preview::agent_capture(&self.0.app).await {
+    match preview::agent_capture_target(&self.0.app, preview_target.frame_origin.as_deref()).await {
       Ok(bytes) => Ok(image_success(
         &invocation,
         format!("Navigated the live app to {target}."),
@@ -1030,10 +1072,11 @@ impl ToolHandler for PreviewScreenshotTool {
       Ok(params) => params,
       Err(error) => return Ok(failure(format!("Invalid arguments: {error}"))),
     };
-    if let Err(error) = self.0.ensure_live_preview().await {
-      return Ok(failure(error));
-    }
-    match preview::agent_capture(&self.0.app).await {
+    let target = match self.0.ensure_live_preview().await {
+      Ok(target) => target,
+      Err(error) => return Ok(failure(error)),
+    };
+    match preview::agent_capture_target(&self.0.app, target.frame_origin.as_deref()).await {
       Ok(bytes) => Ok(image_success(
         &invocation,
         "Captured the current live deployed page.",
@@ -1068,11 +1111,13 @@ impl ToolHandler for PreviewConsoleTool {
       Ok(params) => params,
       Err(error) => return Ok(failure(format!("Invalid arguments: {error}"))),
     };
-    if let Err(error) = self.0.ensure_live_preview().await {
-      return Ok(failure(error));
-    }
+    let target = match self.0.ensure_live_preview().await {
+      Ok(target) => target,
+      Err(error) => return Ok(failure(error)),
+    };
     let entries = match preview::read_console(
       &self.0.app,
+      target.frame_origin.as_deref(),
       params.level.as_deref(),
       params.query.as_deref(),
       params.since,
@@ -1135,11 +1180,13 @@ impl ToolHandler for PreviewNetworkTool {
       Ok(params) => params,
       Err(error) => return Ok(failure(format!("Invalid arguments: {error}"))),
     };
-    if let Err(error) = self.0.ensure_live_preview().await {
-      return Ok(failure(error));
-    }
+    let target = match self.0.ensure_live_preview().await {
+      Ok(target) => target,
+      Err(error) => return Ok(failure(error)),
+    };
     let entries = match preview::read_network(
       &self.0.app,
+      target.frame_origin.as_deref(),
       params.errors_only.unwrap_or(false),
       params.query.as_deref(),
       params.url_includes.as_deref(),
@@ -1195,11 +1242,13 @@ impl ToolHandler for PreviewInspectTool {
       Ok(params) => params,
       Err(error) => return Ok(failure(format!("Invalid arguments: {error}"))),
     };
-    if let Err(error) = self.0.ensure_live_preview().await {
-      return Ok(failure(error));
-    }
+    let target = match self.0.ensure_live_preview().await {
+      Ok(target) => target,
+      Err(error) => return Ok(failure(error)),
+    };
     match preview::inspect_page(
       &self.0.app,
+      target.frame_origin.as_deref(),
       params.selector.as_deref(),
       params.query.as_deref(),
       params.limit.unwrap_or(100),
@@ -1245,16 +1294,17 @@ impl ToolHandler for PreviewInteractTool {
       Ok(params) => params,
       Err(error) => return Ok(failure(format!("Invalid arguments: {error}"))),
     };
-    let base = match self.0.ensure_live_preview().await {
-      Ok(url) => url,
+    let target = match self.0.ensure_live_preview().await {
+      Ok(target) => target,
       Err(error) => return Ok(failure(error)),
     };
     let result = match preview::interact(
       &self.0.app,
+      target.frame_origin.as_deref(),
       params.action.trim(),
       params.selector.as_deref(),
       params.value,
-      &base,
+      &target.app_url,
     )
     .await
     {
@@ -1266,11 +1316,17 @@ impl ToolHandler for PreviewInteractTool {
     }
     let settle = if params.action == "reload" { 900 } else { 350 };
     tokio::time::sleep(Duration::from_millis(settle)).await;
-    if !preview::agent_target_matches(&self.0.app, &self.0.project_id, &base) {
+    let remained_in_app = match target.frame_origin.as_deref() {
+      Some(frame_origin) => {
+        preview::embedded_frame_matches(&self.0.app, frame_origin, &target.app_url).await
+      }
+      None => preview::agent_target_matches(&self.0.app, &self.0.project_id, &target),
+    };
+    if !remained_in_app {
       let _ = preview::navigate_and_wait(
         &self.0.app,
         &self.0.project_id,
-        &base,
+        &target.surface_url,
         Duration::from_secs(15),
       )
       .await;
@@ -1282,7 +1338,7 @@ impl ToolHandler for PreviewInteractTool {
     if !params.screenshot.unwrap_or(false) {
       return Ok(ToolResult::Text(text));
     }
-    match preview::agent_capture(&self.0.app).await {
+    match preview::agent_capture_target(&self.0.app, target.frame_origin.as_deref()).await {
       Ok(bytes) => Ok(image_success(
         &invocation,
         text,
@@ -1319,12 +1375,14 @@ impl ToolHandler for PreviewEvaluateTool {
     if expression.is_empty() {
       return Ok(failure("JavaScript `expression` cannot be empty."));
     }
-    if let Err(error) = self.0.ensure_live_preview().await {
-      return Ok(failure(error));
-    }
+    let target = match self.0.ensure_live_preview().await {
+      Ok(target) => target,
+      Err(error) => return Ok(failure(error)),
+    };
     let timeout_ms = params.timeout_ms.unwrap_or(10_000).clamp(250, 30_000);
     match preview::evaluate_page(
       &self.0.app,
+      target.frame_origin.as_deref(),
       expression,
       params.await_promise.unwrap_or(true),
       params.return_by_value.unwrap_or(true),
@@ -1372,12 +1430,14 @@ impl ToolHandler for PreviewCdpTool {
     if !cdp_params.is_object() {
       return Ok(failure("CDP `params` must be a JSON object."));
     }
-    if let Err(error) = self.0.ensure_live_preview().await {
-      return Ok(failure(error));
-    }
+    let target = match self.0.ensure_live_preview().await {
+      Ok(target) => target,
+      Err(error) => return Ok(failure(error)),
+    };
     let timeout_ms = params.timeout_ms.unwrap_or(10_000).clamp(250, 30_000);
-    match preview::call_cdp(
+    match preview::call_cdp_target(
       &self.0.app,
+      target.frame_origin.as_deref(),
       method,
       &cdp_params,
       Duration::from_millis(timeout_ms),
