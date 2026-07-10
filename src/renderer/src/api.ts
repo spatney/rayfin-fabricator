@@ -23,6 +23,7 @@ import {
   type PreviewBounds,
   type PreviewNavState,
   type PreviewAgentEvent,
+  type PreviewDiagnosticEvent,
   type PreviewDesignRestylePatch,
   type PreviewDesignRestyleContext,
   type PreviewDesignTheme,
@@ -222,6 +223,8 @@ export const api: RayfinStudioApi = {
       subscribe<PreviewNavState>(IpcChannels.previewNav, cb),
     onAgentPreview: (cb: (event: PreviewAgentEvent) => void) =>
       subscribe<PreviewAgentEvent>(IpcChannels.previewAgent, cb),
+    onDiagnostic: (cb: (event: PreviewDiagnosticEvent) => void) =>
+      subscribe<PreviewDiagnosticEvent>(IpcChannels.previewDiagnostic, cb),
     design: {
       setEnabled: (enabled: boolean, embedded?: boolean, appUrl?: string) =>
         invoke('preview_design_set', {

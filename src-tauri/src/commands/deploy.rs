@@ -30,6 +30,9 @@ static NOT_SIGNED_RE: Lazy<Regex> =
   Lazy::new(|| Regex::new(r"(?i)not (logged|signed) in|login|unauthor|authenticate").unwrap());
 static NEEDS_WS_RE: Lazy<Regex> =
   Lazy::new(|| Regex::new(r"(?i)no workspace targeting context|pass --workspace").unwrap());
+/// UI, auto-deploy, and in-process agent tools all share this engine. Serialize
+/// them at the backend boundary so two `rayfin up` processes can never race.
+static DEPLOY_LOCK: Lazy<tokio::sync::Mutex<()>> = Lazy::new(|| tokio::sync::Mutex::new(()));
 
 /* ------------------------------ helpers ----------------------------------- */
 
@@ -242,6 +245,7 @@ pub(crate) async fn run_deploy(
   project_id: String,
   workspace: Option<String>,
 ) -> DeployResult {
+  let _deploy_guard = DEPLOY_LOCK.lock().await;
   let Some(project) = store::find_project(&project_id) else {
     return DeployResult {
       ok: false,
@@ -689,4 +693,3 @@ mod tests {
     assert_eq!(last_lines("only", 3), "only");
   }
 }
-

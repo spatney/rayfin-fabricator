@@ -15,10 +15,13 @@
 //! workaround needed, unlike Electron/Chromium). Plain `target=_blank` links open
 //! in the user's real browser instead.
 
+use std::collections::VecDeque;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use base64::Engine;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, Url, WebviewUrl};
 use tauri_plugin_opener::OpenerExt;
@@ -32,6 +35,9 @@ use crate::services::watchdog::{self, Activity};
 const PREVIEW_LABEL: &str = "preview";
 /// Renderer event carrying preview navigation state (matches `IpcChannels.previewNav`).
 const PREVIEW_NAV: &str = "preview:nav";
+/// Renderer event emitted when the live page reports an actionable runtime
+/// diagnostic (matches `IpcChannels.previewDiagnostic`).
+const PREVIEW_DIAGNOSTIC: &str = "preview:diagnostic";
 /// Renderer event asking the UI to surface the preview at a URL on the agent's
 /// behalf (matches `IpcChannels.previewAgent`). Used by the Fabricator
 /// validation tools so a host-driven navigation/screenshot can reveal the
@@ -51,56 +57,20 @@ const OFFSCREEN_COORD: f64 = 20_000.0;
 /// Viewport (logical px) used for a silent off-screen capture.
 #[cfg(windows)]
 const OFFSCREEN_SIZE: (f64, f64) = (1280.0, 800.0);
+#[cfg(windows)]
+const OFFSCREEN_BUILD_SETTLE: Duration = Duration::from_millis(600);
+#[cfg(windows)]
+const OFFSCREEN_PAINT_SETTLE: Duration = Duration::from_millis(180);
 
-/// Document-start script injected into the preview so the agent can later read
-/// the page's console output (see [`read_console`]). It mirrors `console.*`,
-/// `window.onerror`, and `unhandledrejection` into a small bounded ring buffer on
-/// `window.__fabricatorConsole`. Defensive and idempotent: it always forwards to
-/// the original console method and never throws, so it cannot perturb the app
-/// under test. Runs in the page's main world via
-/// [`WebviewBuilder::initialization_script`].
-const CONSOLE_INIT_JS: &str = r#";(function () {
-  try {
-    if (window.__fabricatorConsole) return;
-    var MAX = 200;
-    var buf = [];
-    function fmt(a) {
-      try {
-        if (a instanceof Error) return String(a.stack || (a.name + ': ' + a.message));
-        if (typeof a === 'string') return a;
-        if (a && typeof a === 'object') { try { return JSON.stringify(a); } catch (e) { return String(a); } }
-        return String(a);
-      } catch (e) { return '<unserializable>'; }
-    }
-    function push(level, args) {
-      try {
-        var parts = [];
-        for (var i = 0; i < args.length; i++) parts.push(fmt(args[i]));
-        var text = parts.join(' ');
-        if (text.length > 2000) text = text.slice(0, 2000) + '\u2026';
-        buf.push({ level: level, text: text, t: Date.now() });
-        if (buf.length > MAX) buf.splice(0, buf.length - MAX);
-      } catch (e) {}
-    }
-    window.__fabricatorConsole = { entries: buf, clear: function () { buf.length = 0; } };
-    var levels = ['log', 'info', 'warn', 'error', 'debug'];
-    for (var k = 0; k < levels.length; k++) {
-      (function (m) {
-        var orig = (window.console && typeof console[m] === 'function') ? console[m].bind(console) : function () {};
-        console[m] = function () { push(m, arguments); return orig.apply(console, arguments); };
-      })(levels[k]);
-    }
-    window.addEventListener('error', function (e) {
-      try {
-        if (e && e.message) push('error', [e.message + (e.filename ? ' (' + e.filename + ':' + (e.lineno || 0) + ')' : '')]);
-        else push('error', ['Uncaught error']);
-      } catch (x) {}
-    });
-    window.addEventListener('unhandledrejection', function (e) {
-      try { push('error', ['Unhandled promise rejection: ' + fmt(e && e.reason)]); } catch (x) {}
-    });
-  } catch (e) {}
-})();"#;
+/// Document-start diagnostics bridge. It records bounded console and network
+/// telemetry and exposes safe DOM inspection/interaction helpers without request
+/// bodies, headers, browser storage, or input values.
+const DIAGNOSTICS_INIT_JS: &str = include_str!("preview_diagnostics.js");
+const DIAGNOSTIC_POLL_INTERVAL: Duration = Duration::from_millis(1200);
+const DIAGNOSTIC_DEDUPE_TTL: Duration = Duration::from_secs(30 * 60);
+const DIAGNOSTIC_NOTIFY_COOLDOWN: Duration = Duration::from_secs(5);
+const EVAL_TIMEOUT: Duration = Duration::from_secs(8);
+const MAX_REPORTED_DIAGNOSTICS: usize = 200;
 
 /// The in-page "design mode" controller (see `services/design_agent.js`).
 /// Injected at document-start into **all frames**
@@ -204,6 +174,17 @@ struct Inner {
   /// the whole app — so [`capture_preview_bytes`] refuses to capture unless this
   /// is `true`.
   visible: bool,
+  /// Project whose deployed app currently owns this preview.
+  project_id: Option<String>,
+  /// Whether a top-level document load is currently in progress.
+  loading: bool,
+  /// Starts the single background diagnostics monitor once.
+  monitor_started: bool,
+  /// Runtime-error fingerprints already reported recently. Bounded and TTL-pruned
+  /// so a fix/deploy/error cycle cannot wake the agent forever.
+  reported_diagnostics: VecDeque<(String, Instant)>,
+  /// Coalesces bursts; the first alert tells the agent to inspect the full buffers.
+  last_diagnostic_notification: Option<Instant>,
   /// Whether an in-preview "design mode" session is active. Drives re-injection
   /// of the design controller on every finished page load (so it survives SPA
   /// navigations / reloads) — see [`preview_design_set`] and [`on_page_load`].
@@ -230,6 +211,7 @@ impl Inner {
     self.stack = vec![url.to_string()];
     self.cursor = 0;
     self.programmatic = false;
+    self.loading = true;
     // A genuinely new root URL (project switch, redeploy-navigate, Fabric
     // toggle) is a different app — end any active design session so the
     // controller isn't re-injected into it (see `on_page_load`).
@@ -258,10 +240,10 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
     // debug but off in release wry; the `devtools` cargo feature (Cargo.toml)
     // enables `with_devtools` + the context-menu inspector, and this keeps it on.
     .devtools(true)
-    // Capture the deployed app's console output/errors so the agent can read
-    // them back later via `fabricator_console`. Must be set before the webview
-    // is created so it runs at document start on every page.
-    .initialization_script(CONSOLE_INIT_JS)
+    // Install the safe diagnostics bridge before any app code runs. Keep it in
+    // the top-level direct preview so Fabric portal shell failures are not
+    // mistaken for repairable application failures.
+    .initialization_script(DIAGNOSTICS_INIT_JS)
     // The design-mode controller is baked in at document-start into ALL frames
     // (dormant until `preview_design_set` enables it). This is the only way to
     // reach the app when it is embedded in a cross-origin iframe inside the
@@ -286,6 +268,7 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
   window
     .add_child(builder, bounds.position(), bounds.size())
     .map_err(|e| AppError::Msg(format!("failed to create preview webview: {e}")))?;
+  start_diagnostic_monitor(app);
   Ok(())
 }
 
@@ -317,6 +300,7 @@ fn on_page_load(app: &AppHandle, event: PageLoadEvent, u: &Url) {
   let state = app.state::<PreviewState>();
   let (can_back, can_fwd, design_active, design_relay) = {
     let mut inner = state.inner.lock().unwrap();
+    inner.loading = loading;
     // A finished load releases anyone blocked in `navigate_and_wait`.
     if !loading {
       for tx in inner.load_waiters.drain(..) {
@@ -392,6 +376,7 @@ pub async fn preview_show_url(
   // error we roll the flag back.
   let need_build = {
     let mut inner = state.inner.lock().unwrap();
+    inner.project_id = crate::services::store::get_state().active_project_id;
     if inner.created {
       false
     } else {
@@ -406,6 +391,7 @@ pub async fn preview_show_url(
     }
     state.inner.lock().unwrap().reset_to(&url);
     if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+      state.inner.lock().unwrap().project_id = crate::services::store::get_state().active_project_id;
       let _ = wv.set_bounds(bounds.to_rect());
       let _ = wv.show();
       state.inner.lock().unwrap().visible = true;
@@ -414,6 +400,7 @@ pub async fn preview_show_url(
   }
 
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    state.inner.lock().unwrap().project_id = crate::services::store::get_state().active_project_id;
     let _ = wv.set_bounds(bounds.to_rect());
     // Navigate only when the *commanded* URL changes — never when the webview's
     // live URL has merely drifted (SPA route, trailing slash, AAD redirect, query
@@ -456,6 +443,7 @@ pub fn preview_navigate(
     .parse()
     .map_err(|e| AppError::Msg(format!("invalid preview url {url:?}: {e}")))?;
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    state.inner.lock().unwrap().project_id = crate::services::store::get_state().active_project_id;
     let _ = wv.set_bounds(bounds.to_rect());
     wv.navigate(parsed)
       .map_err(|e| AppError::Msg(e.to_string()))?;
@@ -600,6 +588,309 @@ fn navigate_to(app: &AppHandle, target: Option<String>) {
   }
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeDiagnostic {
+  kind: String,
+  message: String,
+  url: Option<String>,
+  status: Option<u16>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewDiagnosticEvent {
+  pub id: String,
+  pub fingerprint: String,
+  pub project_id: String,
+  pub kind: String,
+  pub summary: String,
+  pub details: String,
+  pub url: Option<String>,
+  pub occurred_at: String,
+}
+
+pub(crate) fn redact_diagnostic_text(input: &str) -> String {
+  static BEARER_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\bbearer\s+[A-Za-z0-9._~+/\-=]+").unwrap());
+  static JWT_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b").unwrap()
+  });
+  static QUERY_SECRET_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+      r"(?i)([?&](?:access[_-]?token|account[_-]?key|api[_-]?key|authorization|code|client[_-]?secret|id[_-]?token|key|password|passwd|pwd|refresh[_-]?token|sas|secret|shared[_-]?access[_-]?signature|sig|signature|subscription[_-]?key|token)=)[^&#\s]+",
+    )
+    .unwrap()
+  });
+  static JSON_SECRET_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+      r#"(?i)("(?:access[_-]?token|account[_-]?key|api[_-]?key|authorization|client[_-]?secret|cookie|id[_-]?token|password|passwd|pwd|refresh[_-]?token|sas|secret|set-cookie|shared[_-]?access[_-]?signature|subscription[_-]?key|token)"\s*:\s*")[^"]*""#,
+    )
+    .unwrap()
+  });
+  static PLAIN_SECRET_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+      r#"(?i)\b(access[_-]?token|account[_-]?key|api[_-]?key|authorization|client[_-]?secret|cookie|id[_-]?token|password|passwd|pwd|refresh[_-]?token|sas|secret|set-cookie|shared[_-]?access[_-]?signature|subscription[_-]?key|token)\s*[:=]\s*["']?[^\s"',;&]+"#,
+    )
+    .unwrap()
+  });
+
+  let redacted = BEARER_RE.replace_all(input, "Bearer <redacted>");
+  let redacted = JWT_RE.replace_all(&redacted, "<redacted-jwt>");
+  let redacted = QUERY_SECRET_RE.replace_all(&redacted, "${1}<redacted>");
+  let redacted = JSON_SECRET_RE.replace_all(&redacted, "${1}<redacted>\"");
+  let redacted = PLAIN_SECRET_RE.replace_all(&redacted, "${1}=<redacted>");
+  truncate_text(&redacted, 16_000)
+}
+
+fn truncate_text(input: &str, max_chars: usize) -> String {
+  if input.chars().count() <= max_chars {
+    return input.to_string();
+  }
+  let mut output = input.chars().take(max_chars).collect::<String>();
+  output.push_str("\n... truncated ...");
+  output
+}
+
+pub(crate) fn project_live_url(project: &crate::types::StudioProject) -> Option<String> {
+  let deploy = project.last_deploy.as_ref()?;
+  deploy.url.clone().or_else(|| deploy.api_url.clone())
+}
+
+fn is_direct_project_preview(project_id: &str, commanded: Option<&str>) -> bool {
+  let Some(commanded) = commanded else {
+    return false;
+  };
+  let Some(project) = crate::services::store::find_project(project_id) else {
+    return false;
+  };
+  let Some(live_url) = project_live_url(&project) else {
+    return false;
+  };
+  url_is_within_app_base(commanded, &live_url)
+}
+
+pub(crate) fn url_is_within_app_base(current: &str, live: &str) -> bool {
+  let (Ok(current), Ok(live)) = (tauri::Url::parse(current), tauri::Url::parse(live)) else {
+    return false;
+  };
+  if current.scheme() != live.scheme()
+    || current.host_str() != live.host_str()
+    || current.port_or_known_default() != live.port_or_known_default()
+  {
+    return false;
+  }
+
+  let live_path = live.path().trim_end_matches('/');
+  live_path.is_empty()
+    || current.path() == live_path
+    || current
+      .path()
+      .strip_prefix(live_path)
+      .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn start_diagnostic_monitor(app: &AppHandle) {
+  {
+    let state = app.state::<PreviewState>();
+    let mut inner = state.inner.lock().unwrap();
+    if inner.monitor_started {
+      return;
+    }
+    inner.monitor_started = true;
+  }
+
+  let app = app.clone();
+  tauri::async_runtime::spawn(async move {
+    let mut interval = tokio::time::interval(DIAGNOSTIC_POLL_INTERVAL);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+      interval.tick().await;
+      if app.get_webview(PREVIEW_LABEL).is_none() {
+        continue;
+      }
+
+      let (project_id, current_url, loading) = {
+        let state = app.state::<PreviewState>();
+        let inner = state.inner.lock().unwrap();
+        (
+          inner.project_id.clone(),
+          inner.stack.get(inner.cursor).cloned().or_else(|| inner.commanded.clone()),
+          inner.loading,
+        )
+      };
+      let Some(project_id) = project_id else {
+        continue;
+      };
+      if loading || !is_direct_project_preview(&project_id, current_url.as_deref()) {
+        continue;
+      }
+
+      let diagnostics = match runtime_diagnostics(&app).await {
+        Ok(value) => value,
+        Err(_) => continue,
+      };
+      for diagnostic in diagnostics {
+        emit_runtime_diagnostic(&app, &project_id, diagnostic);
+      }
+    }
+  });
+}
+
+fn emit_runtime_diagnostic(app: &AppHandle, project_id: &str, diagnostic: RuntimeDiagnostic) {
+  let message = redact_diagnostic_text(&diagnostic.message);
+  let url = diagnostic.url.map(|value| redact_diagnostic_text(&value));
+  let fingerprint = format!(
+    "{}|{}|{}|{}",
+    project_id,
+    diagnostic.kind,
+    diagnostic.status.unwrap_or_default(),
+    message
+  );
+  let now = Instant::now();
+
+  {
+    let state = app.state::<PreviewState>();
+    let mut inner = state.inner.lock().unwrap();
+    while inner
+      .reported_diagnostics
+      .front()
+      .is_some_and(|(_, reported_at)| now.duration_since(*reported_at) > DIAGNOSTIC_DEDUPE_TTL)
+    {
+      inner.reported_diagnostics.pop_front();
+    }
+    if inner
+      .reported_diagnostics
+      .iter()
+      .any(|(existing, _)| existing == &fingerprint)
+    {
+      return;
+    }
+    inner.reported_diagnostics.push_back((fingerprint.clone(), now));
+    while inner.reported_diagnostics.len() > MAX_REPORTED_DIAGNOSTICS {
+      inner.reported_diagnostics.pop_front();
+    }
+    if inner
+      .last_diagnostic_notification
+      .is_some_and(|last| now.duration_since(last) < DIAGNOSTIC_NOTIFY_COOLDOWN)
+    {
+      return;
+    }
+    inner.last_diagnostic_notification = Some(now);
+  }
+
+  let summary = match diagnostic.kind.as_str() {
+    "network" => "The live app reported a failed network request",
+    _ => "The live app reported a runtime error",
+  };
+  let event = PreviewDiagnosticEvent {
+    id: uuid::Uuid::new_v4().to_string(),
+    fingerprint,
+    project_id: project_id.to_string(),
+    kind: diagnostic.kind,
+    summary: summary.to_string(),
+    details: truncate_text(&message, 2_000),
+    url,
+    occurred_at: chrono::Utc::now().to_rfc3339(),
+  };
+  if let Err(error) = app.emit(PREVIEW_DIAGNOSTIC, event) {
+    log::warn!("failed to emit preview diagnostic: {error}");
+  }
+}
+
+async fn runtime_diagnostics(app: &AppHandle) -> AppResult<Vec<RuntimeDiagnostic>> {
+  let script =
+    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.drainErrors() : []";
+  Ok(
+    eval_json::<Vec<RuntimeDiagnostic>>(app, script, EVAL_TIMEOUT)
+      .await?
+      .unwrap_or_default(),
+  )
+}
+
+pub(crate) async fn read_console(
+  app: &AppHandle,
+  level: Option<&str>,
+  limit: usize,
+  clear: bool,
+) -> AppResult<serde_json::Value> {
+  let options = serde_json::json!({
+    "level": level,
+    "limit": limit.clamp(1, 200),
+    "clear": clear,
+  });
+  let script = format!(
+    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.readConsole({}) : []",
+    serde_json::to_string(&options).unwrap_or_else(|_| "{}".into())
+  );
+  Ok(
+    eval_json::<serde_json::Value>(app, &script, EVAL_TIMEOUT)
+      .await?
+      .unwrap_or_else(|| serde_json::json!([])),
+  )
+}
+
+pub(crate) async fn read_network(
+  app: &AppHandle,
+  errors_only: bool,
+  limit: usize,
+  clear: bool,
+) -> AppResult<serde_json::Value> {
+  let options = serde_json::json!({
+    "errorsOnly": errors_only,
+    "limit": limit.clamp(1, 300),
+    "clear": clear,
+  });
+  let script = format!(
+    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.readNetwork({}) : []",
+    serde_json::to_string(&options).unwrap_or_else(|_| "{}".into())
+  );
+  Ok(
+    eval_json::<serde_json::Value>(app, &script, EVAL_TIMEOUT)
+      .await?
+      .unwrap_or_else(|| serde_json::json!([])),
+  )
+}
+
+pub(crate) async fn inspect_page(
+  app: &AppHandle,
+  selector: Option<&str>,
+) -> AppResult<serde_json::Value> {
+  let selector = serde_json::to_string(&selector).unwrap_or_else(|_| "null".into());
+  let script = format!(
+    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.snapshot({selector}) : {{ok:false,error:'Diagnostics bridge is unavailable'}}"
+  );
+  Ok(
+    eval_json::<serde_json::Value>(app, &script, EVAL_TIMEOUT)
+      .await?
+      .unwrap_or_else(|| serde_json::json!({"ok": false, "error": "No page snapshot returned"})),
+  )
+}
+
+pub(crate) async fn interact(
+  app: &AppHandle,
+  action: &str,
+  selector: Option<&str>,
+  value: Option<serde_json::Value>,
+  allowed_base: &str,
+) -> AppResult<serde_json::Value> {
+  let options = serde_json::json!({
+    "action": action,
+    "selector": selector,
+    "value": value,
+    "allowedBase": allowed_base,
+  });
+  let script = format!(
+    "window.__fabricatorDiagnostics ? window.__fabricatorDiagnostics.interact({}) : {{ok:false,error:'Diagnostics bridge is unavailable'}}",
+    serde_json::to_string(&options).unwrap_or_else(|_| "{}".into())
+  );
+  Ok(
+    eval_json::<serde_json::Value>(app, &script, EVAL_TIMEOUT)
+      .await?
+      .unwrap_or_else(|| serde_json::json!({"ok": false, "error": "No interaction result returned"})),
+  )
+}
+
 /// Lightweight status of the in-preview design session, read by the renderer's
 /// poll while design mode is active. Mirrors `window.__rayfinDesign.peek()`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -708,7 +999,11 @@ fn url_origin(url: &str) -> Option<String> {
 /// parsed into `T` (or `None` when the webview is gone / the value is `null`).
 /// WebView2 serializes the result to JSON for the callback; the whole round-trip
 /// is time-bounded so a stalled dispatch can never wedge the caller.
-async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) -> AppResult<Option<T>> {
+async fn eval_json<T: serde::de::DeserializeOwned>(
+  app: &AppHandle,
+  js: &str,
+  timeout: Duration,
+) -> AppResult<Option<T>> {
   let Some(wv) = app.get_webview(PREVIEW_LABEL) else {
     return Ok(None);
   };
@@ -722,7 +1017,7 @@ async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) 
     }
   })
   .map_err(|e| AppError::Msg(format!("failed to eval on preview: {e}")))?;
-  let res = match tokio::time::timeout(Duration::from_secs(4), rx).await {
+  let res = match tokio::time::timeout(timeout, rx).await {
     Ok(Ok(s)) => s,
     _ => return Ok(None),
   };
@@ -734,6 +1029,10 @@ async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) 
     Ok(v) => Ok(Some(v)),
     Err(_) => Ok(None),
   }
+}
+
+async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) -> AppResult<Option<T>> {
+  eval_json(app, js, Duration::from_secs(4)).await
 }
 
 /// Turn the in-preview "design mode" on/off. Enables (or disables) the design
@@ -885,6 +1184,115 @@ pub fn preview_design_set_theme(app: AppHandle, theme: serde_json::Value) -> App
   Ok(())
 }
 
+#[cfg_attr(windows, allow(dead_code))]
+fn request_preview_show(app: &AppHandle, url: &str) {
+  let _ = app.emit(PREVIEW_AGENT, serde_json::json!({ "action": "show", "url": url }));
+}
+
+#[cfg(windows)]
+async fn ensure_offscreen(app: &AppHandle, project_id: &str, url: &str) {
+  {
+    let state = app.state::<PreviewState>();
+    state.inner.lock().unwrap().project_id = Some(project_id.to_string());
+  }
+  if is_preview_open(app) {
+    return;
+  }
+  let parsed: Url = match url.parse() {
+    Ok(url) => url,
+    Err(_) => return,
+  };
+  let state = app.state::<PreviewState>();
+  let need_build = {
+    let mut inner = state.inner.lock().unwrap();
+    if inner.created {
+      false
+    } else {
+      inner.created = true;
+      true
+    }
+  };
+  if !need_build {
+    return;
+  }
+  if build(app, parsed, offscreen_bounds()).is_err() {
+    state.inner.lock().unwrap().created = false;
+    return;
+  }
+  state.inner.lock().unwrap().reset_to(url);
+  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    let _ = wv.hide();
+  }
+  tokio::time::sleep(OFFSCREEN_BUILD_SETTLE).await;
+}
+
+/// Ensure a preview webview exists for an agent debugging turn. Windows creates
+/// and paints it silently off-screen; other platforms ask the renderer to surface
+/// the existing preview pane.
+pub(crate) async fn agent_ensure_preview(
+  app: &AppHandle,
+  project_id: &str,
+  url: &str,
+  show_timeout: Duration,
+) {
+  {
+    let state = app.state::<PreviewState>();
+    state.inner.lock().unwrap().project_id = Some(project_id.to_string());
+  }
+
+  #[cfg(windows)]
+  {
+    let _ = show_timeout;
+    ensure_offscreen(app, project_id, url).await;
+  }
+  #[cfg(not(windows))]
+  {
+    request_preview_show(app, url);
+    if is_preview_open(app) {
+      tokio::time::sleep(Duration::from_millis(300)).await;
+      return;
+    }
+    let start = Instant::now();
+    while start.elapsed() < show_timeout {
+      tokio::time::sleep(Duration::from_millis(150)).await;
+      if is_preview_open(app) {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        return;
+      }
+    }
+  }
+}
+
+/// Navigate the existing preview to a live app URL and wait best-effort for the
+/// top-level document to finish loading.
+pub(crate) async fn navigate_and_wait(
+  app: &AppHandle,
+  project_id: &str,
+  url: &str,
+  timeout: Duration,
+) -> AppResult<()> {
+  let parsed: Url = url
+    .parse()
+    .map_err(|e| AppError::Msg(format!("invalid preview url {url:?}: {e}")))?;
+  let wv = app
+    .get_webview(PREVIEW_LABEL)
+    .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
+
+  let rx = {
+    let state = app.state::<PreviewState>();
+    let mut inner = state.inner.lock().unwrap();
+    inner.project_id = Some(project_id.to_string());
+    let (tx, rx) = oneshot::channel::<()>();
+    inner.load_waiters.push(tx);
+    inner.reset_to(url);
+    rx
+  };
+
+  wv.navigate(parsed).map_err(|e| AppError::Msg(e.to_string()))?;
+  let _ = tokio::time::timeout(timeout, rx).await;
+  Ok(())
+}
+
 /// Capture the current preview content as a PNG and return it as a `data:` URL.
 ///
 /// Uses WebView2's `ICoreWebView2::CapturePreview`, which captures the actual
@@ -960,6 +1368,38 @@ pub(crate) async fn capture_preview_bytes(app: &AppHandle) -> AppResult<Vec<u8>>
   capture_now(app).await
 }
 
+/// Capture for an agent without disturbing the user. A hidden WebView2 surface is
+/// temporarily shown at an off-screen location so `CapturePreview` can paint.
+pub(crate) async fn agent_capture(app: &AppHandle) -> AppResult<Vec<u8>> {
+  if !is_preview_open(app) {
+    return Err(AppError::Msg("preview is not open".into()));
+  }
+  if is_preview_visible(app) {
+    return capture_now(app).await;
+  }
+
+  #[cfg(windows)]
+  {
+    let wv = app
+      .get_webview(PREVIEW_LABEL)
+      .ok_or_else(|| AppError::Msg("preview is not open".into()))?;
+    wv
+      .set_bounds(offscreen_bounds().to_rect())
+      .map_err(|e| AppError::Msg(e.to_string()))?;
+    wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
+    tokio::time::sleep(OFFSCREEN_PAINT_SETTLE).await;
+    let result = capture_now(app).await;
+    if !is_preview_visible(app) {
+      let _ = wv.hide();
+    }
+    result
+  }
+  #[cfg(not(windows))]
+  {
+    Err(AppError::Msg("preview is not visible".into()))
+  }
+}
+
 /// Bounds used to park the preview far off-screen for a silent capture: a
 /// realistic desktop viewport positioned well outside any monitor, so the surface
 /// keeps rendering (and `CapturePreview` works) while staying invisible.
@@ -978,6 +1418,18 @@ fn offscreen_bounds() -> PreviewBounds {
 /// resetting) re-show when this is already `true`.
 pub(crate) fn is_preview_visible(app: &AppHandle) -> bool {
   app.state::<PreviewState>().inner.lock().unwrap().visible
+}
+
+pub(crate) fn is_preview_open(app: &AppHandle) -> bool {
+  app.get_webview(PREVIEW_LABEL).is_some()
+}
+
+pub(crate) fn agent_target_matches(app: &AppHandle, project_id: &str, url: &str) -> bool {
+  let state = app.state::<PreviewState>();
+  let inner = state.inner.lock().unwrap();
+  let current = inner.stack.get(inner.cursor).or(inner.commanded.as_ref());
+  inner.project_id.as_deref() == Some(project_id)
+    && current.is_some_and(|current| url_is_within_app_base(current, url))
 }
 
 /// Hard ceiling on how long the Windows capture may pump the UI-thread message
@@ -1174,7 +1626,7 @@ unsafe fn snapshot_image_to_png(
 
 #[cfg(test)]
 mod tests {
-  use super::DesignAiEditRequest;
+  use super::{url_is_within_app_base, DesignAiEditRequest};
 
   // Guards the multi-select bug: the controller's drained request carries `ids`
   // (all selected element ids); it must survive deserialization so the renderer
@@ -1192,5 +1644,22 @@ mod tests {
     let req: DesignAiEditRequest =
       serde_json::from_str(r#"{"id":"a","description":"x"}"#).expect("parse");
     assert!(req.ids.is_empty());
+  }
+
+  #[test]
+  fn direct_preview_url_accepts_routes_but_not_portal_or_sibling_paths() {
+    let live = "https://example.net/appbackends/abc";
+    assert!(url_is_within_app_base(
+      "https://example.net/appbackends/abc/dashboard?mode=live",
+      live
+    ));
+    assert!(!url_is_within_app_base(
+      "https://app.fabric.microsoft.com/groups/1/items/2",
+      live
+    ));
+    assert!(!url_is_within_app_base(
+      "https://example.net/appbackends/abcd",
+      live
+    ));
   }
 }

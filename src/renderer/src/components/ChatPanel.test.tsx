@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { makeProject } from '../../test/harness'
 import ChatPanel from './ChatPanel'
 
@@ -124,6 +124,46 @@ describe('ChatPanel composer draft', () => {
     })
     const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
     expect(ta.value).toBe('')
+  })
+})
+
+describe('ChatPanel proactive diagnostics', () => {
+  it('steers an interrupting outbound prompt into a running turn', async () => {
+    const send = vi.fn(() => new Promise(() => {}))
+    const steer = vi.fn(() => Promise.resolve({ steered: true }))
+    const api = (window as unknown as { api: { chat: Record<string, unknown> } }).api
+    api.chat.send = send
+    api.chat.steer = steer
+
+    const project = makeProject('p1')
+    const { rerender } = render(
+      <ChatPanel
+        project={project}
+        messages={[]}
+        onChange={() => {}}
+        outbound={{ id: 'initial', display: 'start', prompt: 'start work' }}
+      />
+    )
+    await waitFor(() => expect(send).toHaveBeenCalled())
+
+    rerender(
+      <ChatPanel
+        project={project}
+        messages={[]}
+        onChange={() => {}}
+        outbound={{
+          id: 'diagnostic',
+          display: 'Runtime error detected',
+          prompt: 'inspect and repair the live error',
+          interrupt: true
+        }}
+      />
+    )
+
+    await waitFor(() =>
+      expect(steer).toHaveBeenCalledWith('p1', 'inspect and repair the live error', [])
+    )
+    expect(screen.queryByDisplayValue('inspect and repair the live error')).toBeNull()
   })
 })
 

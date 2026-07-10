@@ -93,6 +93,8 @@ interface Props {
   onSettingsChange: (patch: Partial<AppSettings>) => void
 }
 
+type AgentOutbound = OutboundPrompt & { projectId: string }
+
 export default function Workbench({
   auth,
   onSignOut,
@@ -141,9 +143,7 @@ export default function Workbench({
   /** Active project's local Rayfin (CLI + SDK) version + upgrade availability. */
   const [rayfinVer, setRayfinVer] = useState<RayfinVersionInfo | null>(null)
   /** A prompt queued for the chat composer (e.g. the Rayfin upgrade hand-off). */
-  const [chatOutbound, setChatOutbound] = useState<
-    (OutboundPrompt & { projectId: string }) | null
-  >(null)
+  const [chatOutbound, setChatOutbound] = useState<AgentOutbound | null>(null)
   /** Project content view: the build loop (chat + preview) or the code browser. */
   const [viewMode, setViewMode] = useState<
     'build' | 'code' | 'model' | 'advisor'
@@ -219,6 +219,50 @@ export default function Workbench({
   const reconcilingRef = useRef<Set<string>>(new Set())
   /** Project ids currently being reconciled — drives a brief "checking" affordance. */
   const [reconciling, setReconciling] = useState<Set<string>>(new Set())
+  /** Runtime diagnostics wait behind any existing one-shot chat handoff. */
+  const pendingDiagnosticOutboundRef = useRef<AgentOutbound[]>([])
+  /** Client-side guard for deploy failures; preview diagnostics are also deduped natively. */
+  const recentDiagnosticRef = useRef<Map<string, number>>(new Map())
+  /** Hard stop for dynamic-error repair loops that evade stable fingerprinting. */
+  const diagnosticAttemptsRef = useRef<Map<string, number[]>>(new Map())
+  const repairPausedNoticeRef = useRef<Set<string>>(new Set())
+
+  const queueAgentDiagnostic = useCallback(
+    (fingerprint: string, outbound: AgentOutbound): void => {
+      if (activeIdRef.current !== outbound.projectId) return
+      const now = Date.now()
+      const recent = recentDiagnosticRef.current
+      for (const [key, at] of recent) {
+        if (now - at > 30 * 60_000) recent.delete(key)
+      }
+      if (now - (recent.get(fingerprint) ?? 0) < 30 * 60_000) return
+      const attempts = (diagnosticAttemptsRef.current.get(outbound.projectId) ?? []).filter(
+        (at) => now - at < 10 * 60_000
+      )
+      if (attempts.length >= 3) {
+        if (!repairPausedNoticeRef.current.has(outbound.projectId)) {
+          repairPausedNoticeRef.current.add(outbound.projectId)
+          toast.info('Automatic agent repair paused after three attempts in ten minutes.', {
+            title: 'Repair loop paused'
+          })
+        }
+        return
+      }
+      attempts.push(now)
+      diagnosticAttemptsRef.current.set(outbound.projectId, attempts)
+      recent.set(fingerprint, now)
+      setChatOutbound((current) => {
+        if (!current) return outbound
+        pendingDiagnosticOutboundRef.current.push(outbound)
+        return current
+      })
+    },
+    [toast]
+  )
+
+  const consumeChatOutbound = useCallback((): void => {
+    setChatOutbound(pendingDiagnosticOutboundRef.current.shift() ?? null)
+  }, [])
 
   const addShot = useCallback((key: string, shot: PendingShot): void => {
     setShots((all) => ({ ...all, [key]: [...(all[key] ?? []), shot] }))
@@ -326,6 +370,16 @@ export default function Workbench({
         // reflected in the preview pane and deploy status.
         if (!result.ok) {
           toast.error(result.error ?? 'The deployment did not complete.', { title: 'Deploy failed' })
+          if (result.outcome === 'error') {
+            queueAgentDiagnostic(`deployment|${projectId}|${result.error ?? result.outcome}`, {
+              id: `deploy-diagnostic-${Date.now()}`,
+              projectId,
+              display: 'Deployment failed — investigating',
+              prompt:
+                'Fabricator detected that the latest managed deployment failed. Treat this as an active repair request: read `fabricator_deployment_status`, inspect the deployment error, fix the root cause in the project, call `fabricator_deploy`, then use the live console/network/DOM/screenshot tools to verify the deployed app. Do not only explain the failure and do not run `rayfin up` directly.',
+              interrupt: true
+            })
+          }
         }
         await refreshProjects()
         // A completed deploy proves Fabric sign-in (and may have signed the user
@@ -343,7 +397,7 @@ export default function Workbench({
         }
       }
     },
-    [refreshProjects, refreshRayfinVer, toast, onAuthChanged]
+    [refreshProjects, refreshRayfinVer, toast, onAuthChanged, queueAgentDiagnostic]
   )
   runDeployRef.current = (projectId: string) => void runDeploy(projectId)
 
@@ -602,6 +656,28 @@ export default function Workbench({
       void refreshProjects()
     })
   }, [refreshProjects])
+
+  // A new live console/network failure becomes an immediate repair turn. If an
+  // agent response is streaming, ChatPanel steers this prompt into that turn.
+  useEffect(() => {
+    return window.api.preview.onDiagnostic((event) => {
+      if (event.projectId !== activeIdRef.current) return
+      setViewMode('build')
+      setFocusPane(null)
+      queueAgentDiagnostic(event.fingerprint, {
+        id: `runtime-diagnostic-${event.id}`,
+        projectId: event.projectId,
+        display: `${event.summary} — investigating`,
+        prompt:
+          `Fabricator proactively detected a new ${event.kind} failure in the live deployed app.\n\n` +
+          `Summary: ${event.summary}\n` +
+          `Details: ${event.details}\n` +
+          (event.url ? `Page/request: ${event.url}\n` : '') +
+          '\nTreat this as an active repair request. Inspect the complete live console and network buffers, reproduce/inspect the page as needed, fix the root cause in the project, deploy with `fabricator_deploy`, and verify the live page is clean. Do not merely report the error.',
+        interrupt: true
+      })
+    })
+  }, [queueAgentDiagnostic])
 
   // Lazy-mount the Advisor view the first time it's opened. After that it stays
   // mounted (hidden when another tab is active) so an in-flight review keeps its
@@ -930,7 +1006,7 @@ export default function Workbench({
                       outbound={
                         chatOutbound?.projectId === active.id ? chatOutbound : null
                       }
-                      onOutboundConsumed={() => setChatOutbound(null)}
+                      onOutboundConsumed={consumeChatOutbound}
                       focused={focusPane === 'chat'}
                       onToggleFocus={() =>
                         setFocusPane((f) => (f === 'chat' ? null : 'chat'))

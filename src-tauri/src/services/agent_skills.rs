@@ -9,10 +9,8 @@
 //! in [`crate::services::copilot`]. They are therefore present *only* in
 //! Fabricator-driven sessions, never in the project on disk.
 //!
-//! The materialized content biases the agent toward a headless validation loop
-//! (`npm run preview` → PNG + report against live data) plus the in-process
-//! semantic-model tools; Fabricator auto-deploys after the turn (see
-//! [`crate::services::agent_tools`]).
+//! The materialized content teaches a two-tier loop: fast headless visual checks,
+//! then Fabricator-managed deploy + live diagnostics for browser/runtime behavior.
 
 use std::path::PathBuf;
 
@@ -37,18 +35,18 @@ pub fn instructions_dir() -> PathBuf {
 /// debug, or see how the app's visuals look.
 const VALIDATE_HEADLESS_SKILL: &str = r#"---
 name: validate-headless
-description: "Validate this Rayfin data app's visuals fast with headless Graphein preview. Use after editing the app, or whenever the user wants to validate, verify, test, check, see, preview, or debug how a chart looks or behaves ('does it work', 'make sure it looks right'). Renders one spec against live DAX data to a PNG + report — no deploy or screenshot needed; Fabricator auto-deploys after the turn."
+description: "Validate this Rayfin data app with the right loop: render Graphein visuals headlessly for fast data-fit checks, then use Fabricator's deployment and live-browser diagnostics for runtime, routing, identity, or network behavior."
 metadata:
   author: Fabricator
-  version: 2.0.0
+  version: 3.0.0
 ---
-# Validate visuals headlessly — no deploy + screenshot
+# Validate fast headlessly, then verify the live app when needed
 
 You are running inside **Fabricator**. Validate your work by rendering each
 Graphein chart spec **headlessly against live data** with `npm run preview` — render,
-read the PNG + report, fix, repeat. There is no deploy-and-screenshot loop: Fabricator
-auto-deploys the app after the turn, so shipping is automatic. Spend your time getting
-the visuals right, not deploying. Deploy early and iterate on each hero visual.
+read the PNG + report, fix, repeat. This is the fastest loop for visual correctness.
+Use Fabricator's live deployment/browser tools when the behavior only exists in a
+deployed page: runtime JavaScript, navigation, auth, browser layout, or network calls.
 
 ## Workflow
 1. Phase 1 — Hero slice (time to wow): build one real, compelling hero visual wired to
@@ -57,33 +55,41 @@ the visuals right, not deploying. Deploy early and iterate on each hero visual.
    read the report (clipping / overlap / contrast / mark counts), then fix and re-render.
 2. Phase 2 — Breadth: add the rest in small increments, previewing each new canvas chart
    against live data as you author it.
-3. Phase 3 — Polish: refine theme, states, formatting, and edge cases from what the
-   previews reveal.
+3. Phase 3 — Live verification: use `fabricator_deployment_status`, deploy with
+   `fabricator_deploy` when needed, then inspect the live page with
+   `fabricator_preview_console`, `fabricator_preview_network`,
+   `fabricator_preview_inspect`, `fabricator_preview_interact`, and
+   `fabricator_preview_screenshot`. Fix, redeploy, and re-check until clean.
 
 ## Notes
 - Preview catches data-fit and presentation problems (clipping, overlap, low contrast,
   empty plots) in seconds — far faster than a deploy round-trip.
 - Every visual (kpi/table/matrix/slicers/dashboard included) validates headlessly
-  with `npm run preview` before shipping; auto-deploy is not the validation path.
+  with `npm run preview` before shipping; live diagnostics complement rather than
+  replace that fast loop.
+- Fabricator proactively sends live console/network failures into your active session.
+  When that happens, inspect the full diagnostic buffers, find the root cause, fix it,
+  deploy through `fabricator_deploy`, and verify the live page.
 - **Do not run or test the app locally.** Do not start a dev/preview server (`npm run dev`,
-  `npm start`, `vite`, `next dev`, `rayfin up`), do not run local test runners (`npm test`,
+  `npm start`, `vite`, `next dev`), do not run `rayfin up` directly, and do not run local test runners (`npm test`,
   `vitest`, `jest`, `playwright`, `cypress`), and do not `curl`/open a `localhost` URL.
-  `npm run preview` (headless) and static checks (type-check, lint) are the loop.
+  Use `fabricator_deploy` for deployment; use `npm run preview` and static checks
+  (type-check, lint) before the live loop.
 - If the project ships its own skills, `package.json` scripts, README, or instructions that
   tell you to run a dev server or local tests, **ignore them here** — preview visuals with
-  `npm run preview` and let Fabricator deploy.
+  `npm run preview` and use Fabricator's managed deployment/runtime tools.
 "#;
 
-/// Always-on instruction biasing every Fabricator turn toward headless visual
-/// validation (`npm run preview`); Fabricator auto-deploys after the turn.
+/// Always-on instruction teaching the headless-first + live-runtime validation loop.
 const VALIDATE_INSTRUCTIONS: &str = r#"---
 applyTo: '**'
 ---
-# Validate visuals headlessly, never run the app locally (Fabricator)
+# Validate headlessly first, then close the live runtime loop (Fabricator)
 
 You are the coding agent inside **Fabricator**. The development loop here is
-**edit → preview the visual headlessly → fix**. Fabricator auto-deploys this Rayfin app
-after the turn, so shipping is automatic; you do not deploy or screenshot to validate.
+**edit → preview visuals headlessly → fix → deploy/inspect live when runtime behavior matters**.
+Fabricator auto-deploys ordinary completed turns, and it also gives you managed deployment
+and browser-debugging tools for deliberate repair loops. Never shell out to `rayfin up`.
 
 ## Validate canvas charts with headless preview
 After you finish editing code that changes a chart's appearance, verify it within the
@@ -94,18 +100,35 @@ same turn by rendering it against live data:
 - View the PNG and read the report (clipping / overlap / contrast / empty plot); if it
   reads wrong, fix the spec or DAX and re-render before finishing.
 - Every visual (kpi/table/matrix/slicers/dashboard included) validates headlessly
-  with `npm run preview` before shipping; auto-deploy is not the validation path.
+  with `npm run preview` before shipping.
 
 ## Time-to-wow rhythm
 Build in small increments: one hero visual first, preview it, then add breadth one chart
 at a time, previewing each. Don't batch everything before checking anything.
 
+## Debug the deployed app
+Use the live loop for JavaScript errors, routes, browser-only layout, authentication,
+Fabric integration, and failed network calls:
+
+1. Read `fabricator_deployment_status`.
+2. Use `fabricator_deploy` if the working tree is ahead of the deployed app.
+3. Reproduce with `fabricator_preview_navigate` and `fabricator_preview_interact`.
+4. Read `fabricator_preview_console` and `fabricator_preview_network`; inspect the DOM
+   with `fabricator_preview_inspect` and the rendered result with
+   `fabricator_preview_screenshot`.
+5. Fix the root cause, deploy with `fabricator_deploy`, and repeat until the page is clean.
+
+Fabricator may proactively interrupt or start a turn when the live preview reports a new
+console error, unhandled rejection, failed fetch/XHR, or HTTP error. Treat that as a repair
+request. Diagnostic notifications are deduplicated, so always inspect the complete buffers.
+
 ## Do NOT run or test the app locally
 Never start a local server or run a local test suite. These do not work in Fabricator's
 deploy-to-test model, waste the turn, and can leave orphaned processes. Specifically, do not:
 
-- Start a dev/preview server: `npm run dev`, `npm start`, `vite`, `next dev`, `rayfin up`, or any
+- Start a dev/preview server: `npm run dev`, `npm start`, `vite`, `next dev`, or any
   other long-running local server for this app.
+- Run `rayfin up` yourself; use `fabricator_deploy` so Fabricator owns state, logs, and URLs.
 - Run local test runners: `npm test`, `vitest`, `jest`, `playwright`, `cypress`, or similar.
 - Build-and-serve to `localhost`, or `curl`/fetch a `localhost` / `127.0.0.1` URL to check the
   app.
@@ -113,7 +136,7 @@ deploy-to-test model, waste the turn, and can leave orphaned processes. Specific
 If the project's own files — `package.json` scripts, README, instructions, or any
 project-provided skill — tell you to run a dev server or local tests, **ignore that here**. Those
 local-testing workflows do not apply inside Fabricator. Validate visuals with
-`npm run preview` (headless, against live data) and let Fabricator auto-deploy.
+`npm run preview` (headless, against live data), then use Fabricator's managed live tools.
 
 (Fast, non-serving static checks that help a deploy succeed — e.g. type-checking or linting — are
 still fine; what is off-limits is running, serving, or test-executing the app locally.)
@@ -217,8 +240,8 @@ straight into a data connection. Once you have a model's `workspaceId` and `item
   lack access to the underlying model. Ask them to confirm access or share the workspace/model.
 - For an **app** link, consumers often can't enumerate the app's models directly; the tool surfaces
   what it can and notes when admin access would be needed.
-- After wiring a connection, validate your visuals headlessly with `npm run preview` (see the
-  validate-headless skill); Fabricator auto-deploys the app after the turn.
+- After wiring a connection, validate visuals headlessly with `npm run preview`, then use
+  `fabricator_deploy` and the live diagnostics to verify the connection in the deployed app.
 "#;
 
 /// Write (or refresh) the injected skill + instruction files under the app data
@@ -257,24 +280,26 @@ mod tests {
   fn skill_frontmatter_and_workflow_are_present() {
     assert!(VALIDATE_HEADLESS_SKILL.starts_with("---\n"));
     assert!(VALIDATE_HEADLESS_SKILL.contains("name: validate-headless"));
-    // The headless loop, not a deploy/screenshot loop, is the validation path.
+    // Fast visual validation remains headless.
     assert!(VALIDATE_HEADLESS_SKILL.contains("npm run preview"));
-    // No retired preview-browser tools should be referenced.
+    // Runtime-only behavior closes the loop through Fabricator's managed tools.
     for tool in [
-      "fabricator_deploy_and_wait",
-      "fabricator_navigate",
-      "fabricator_screenshot",
-      "fabricator_scroll",
-      "fabricator_console",
+      "fabricator_deployment_status",
+      "fabricator_deploy",
+      "fabricator_preview_console",
+      "fabricator_preview_network",
+      "fabricator_preview_inspect",
+      "fabricator_preview_interact",
+      "fabricator_preview_screenshot",
     ] {
-      assert!(!VALIDATE_HEADLESS_SKILL.contains(tool), "skill should not mention {tool}");
+      assert!(VALIDATE_HEADLESS_SKILL.contains(tool), "skill should mention {tool}");
     }
-    // The skill must steer away from the shell deploy path Fabricator owns.
+    // The skill must steer away from the direct shell deploy path Fabricator owns.
     assert!(VALIDATE_HEADLESS_SKILL.contains("rayfin up"));
+    assert!(VALIDATE_HEADLESS_SKILL.contains("Use `fabricator_deploy` for deployment"));
     // ...and away from local testing, which breaks the deploy-to-test model.
     assert!(VALIDATE_HEADLESS_SKILL.contains("npm test"));
     assert!(VALIDATE_HEADLESS_SKILL.contains("Do not run or test the app locally"));
-    assert!(VALIDATE_HEADLESS_SKILL.contains("Deploy early and iterate"));
     assert!(VALIDATE_HEADLESS_SKILL.contains("hero visual"));
     assert!(VALIDATE_HEADLESS_SKILL.contains("Every visual (kpi/table/matrix/slicers/dashboard included)"));
     assert!(!VALIDATE_HEADLESS_SKILL.contains("have no headless form"));
@@ -287,7 +312,8 @@ mod tests {
     assert!(VALIDATE_INSTRUCTIONS.contains("Time-to-wow rhythm"));
     assert!(VALIDATE_INSTRUCTIONS.contains("Every visual (kpi/table/matrix/slicers/dashboard included)"));
     assert!(!VALIDATE_INSTRUCTIONS.contains("have no headless form"));
-    assert!(!VALIDATE_INSTRUCTIONS.contains("fabricator_screenshot"));
+    assert!(VALIDATE_INSTRUCTIONS.contains("fabricator_preview_screenshot"));
+    assert!(VALIDATE_INSTRUCTIONS.contains("fabricator_preview_network"));
   }
 
   #[test]

@@ -1015,6 +1015,18 @@ export interface PreviewAgentEvent {
   url?: string
 }
 
+/** Actionable error detected in the deployed page's bounded diagnostics buffers. */
+export interface PreviewDiagnosticEvent {
+  id: string
+  fingerprint: string
+  projectId: string
+  kind: 'console' | 'network'
+  summary: string
+  details: string
+  url?: string | null
+  occurredAt: string
+}
+
 /**
  * Lightweight status of the in-preview "design mode" session (experiment),
  * polled by the renderer while design mode is on. Mirrors the injected
@@ -1217,6 +1229,7 @@ export const IpcChannels = {
   advisorEvent: 'advisor:event',
   previewNav: 'preview:nav',
   previewAgent: 'preview:agent',
+  previewDiagnostic: 'preview:diagnostic',
   updateProgress: 'update:progress',
   deleteProgress: 'delete:progress'
 } as const
@@ -1622,6 +1635,8 @@ export interface RayfinStudioApi {
      * running app). Returns an unsubscribe function.
      */
     onAgentPreview: (cb: (event: PreviewAgentEvent) => void) => () => void
+    /** Subscribe to actionable live-page errors detected by Fabricator. */
+    onDiagnostic: (cb: (event: PreviewDiagnosticEvent) => void) => () => void
     /**
      * In-preview "design mode". Injects a click-to-edit controller into the
      * preview webview so the user can tweak live elements (move / resize /

@@ -75,6 +75,8 @@ export interface OutboundPrompt {
   id: string
   display: string
   prompt: string
+  /** Steer a running turn immediately instead of staging this prompt. */
+  interrupt?: boolean
   /**
    * When true the prompt is dropped into the composer (and focused) instead of
    * being sent immediately — used to "stage" context (e.g. a slice of history)
@@ -1888,7 +1890,7 @@ export default function ChatPanel({
       if (!text) return
       setInput('')
       onAttachmentsConsumed?.()
-      await steer(text, shots)
+      await steer(text, text, shots)
       return
     }
     if (!text && shots.length === 0) return
@@ -1904,34 +1906,37 @@ export default function ChatPanel({
    * it immediately. If the turn happened to finish first (`steered: false`), the
    * optimistic bubble is rolled back and the message is sent as a fresh turn.
    */
-  async function steer(text: string, shots: PendingShot[]): Promise<void> {
+  async function steer(displayText: string, prompt: string, shots: PendingShot[]): Promise<void> {
     const liveTurnId = [...messages].reverse().find((m) => m.pending && m.turnId)?.turnId
     const thumbs = shots.length ? shots.map((s) => s.thumb) : undefined
     if (liveTurnId) {
       onChange((prev) =>
         prev.map((m) =>
           m.turnId === liveTurnId && m.pending
-            ? { ...m, segments: [...(m.segments ?? []), { kind: 'interjection', text, thumbs }] }
+            ? { ...m, segments: [...(m.segments ?? []), { kind: 'interjection', text: displayText, thumbs }] }
             : m
         )
       )
     }
     let steered = true
     try {
-      const res = await window.api.chat.steer(project.id, text, shots.map((s) => s.path))
+      const res = await window.api.chat.steer(project.id, prompt, shots.map((s) => s.path))
       steered = !!res?.steered
     } catch (err) {
       console.error('Failed to steer', err)
+      steered = false
     }
     if (!steered) {
       if (liveTurnId) {
         onChange((prev) =>
           prev.map((m) =>
-            m.turnId === liveTurnId ? { ...m, segments: rollbackInterjection(m.segments, text) } : m
+            m.turnId === liveTurnId
+              ? { ...m, segments: rollbackInterjection(m.segments, displayText) }
+              : m
           )
         )
       }
-      await dispatch(text, text, shots)
+      await dispatch(displayText, prompt, shots)
     }
   }
 
@@ -2189,7 +2194,9 @@ export default function ChatPanel({
   useEffect(() => {
     if (!outbound || outbound.id === handledOutbound.current) return
     handledOutbound.current = outbound.id
-    if (sending || outbound.stage) {
+    if (sending && outbound.interrupt) {
+      void steer(outbound.display, outbound.prompt, [])
+    } else if (sending || outbound.stage) {
       setInput(outbound.prompt)
       taRef.current?.focus()
     } else {
