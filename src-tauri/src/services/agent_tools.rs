@@ -449,7 +449,7 @@ pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
       .with_handler(Arc::new(PreviewEvaluateTool::new(&app, &project_id))),
     Tool::new("fabricator_preview_cdp")
       .with_description(
-        "Call any Chrome DevTools Protocol method against the real deployed page and return the raw \
+        "Call any Chrome DevTools Protocol method against the live preview page and return the raw \
          JSON response. Use this advanced escape hatch for Runtime, DOM, CSS, Network, Page, Log, \
          Performance, Debugger, Emulation, Storage, or other protocol capabilities not covered by \
          Fabricator's higher-level tools. For an embedded Data App, Fabricator attaches a persistent \
@@ -597,9 +597,16 @@ impl ToolContext {
   }
 
   async fn ensure_live_preview(&self) -> Result<preview::AgentPreviewTarget, String> {
+    let local =
+      crate::services::dev_server::ensure(self.app.clone(), self.project_id.clone()).await;
+    if !local.ok {
+      return Err(local
+        .error
+        .unwrap_or_else(|| "The local preview could not be started.".to_string()));
+    }
     let project = self.project()?;
     let target = preview::project_agent_target(&project).ok_or_else(|| {
-      "This project has no deployed live URL yet. Use fabricator_deploy first.".to_string()
+      "This project has no local preview URL yet. Use fabricator_deploy first.".to_string()
     })?;
     let target_matches = preview::agent_target_matches(&self.app, &self.project_id, &target);
     preview::agent_ensure_preview(

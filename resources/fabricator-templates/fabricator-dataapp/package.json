@@ -11,6 +11,8 @@
     "description": "Fabric Analytics app — connect a Power BI semantic model and build interactive dashboards with DAX-powered visuals, then deploy to Fabric to try it."
   },
   "scripts": {
+    "predev": "rayfin env --framework vite && fabric-app-data generate -o src/fabric.generated.ts",
+    "dev": "vite",
     "prebuild": "rayfin env --framework vite",
     "build": "npx fabric-app-data generate -o src/fabric.generated.ts && tsc -b --noCheck && vite build",
     "build:fabric": "npx fabric-app-data generate -o src/fabric.generated.ts && tsc -b --noCheck && vite build",

@@ -25,10 +25,11 @@
 ## What this app is
 
 A read-only analytics dashboard over a Power BI semantic model. It authenticates
-through Fabric and renders **inside the Fabric portal shell** — it is meant to be
-opened from a deployed Fabric workspace, not `localhost`. There is **no local
-backend or dev server** for app validation: preview every visual headlessly, then
-let Fabricator's automatic after-turn deploy ship the app for user review.
+through Fabric and renders **inside the Fabric portal shell**. Fabricator manages
+a local Vite frontend and loads it through Fabric's `secureItemEmbed` dev mode, so
+hot reload and the governed data proxy both work in the live preview. The app
+must be deployed once first: Fabricator uses that deployment's workspace/item ids
+and applies the exact localhost origin to `services.auth.allowedRedirectUris`.
 
 **The scaffold ships a complete, interactive demo dashboard** (`src/demo/`,
 rendered by `App.tsx`) built **entirely from Graphein specs** on a small bundled
@@ -143,15 +144,16 @@ slicers + filter helpers, `validateSpec` + the `ChartSpec` type (re-exported fro
 ## Quick commands
 
 ```bash
+npm run dev             # local Vite frontend (Fabricator normally manages this)
 npm run build:fabric    # fabric-app-data generate + tsc + vite build
 npm run preview -- --spec <file>   # render a spec headlessly → PNG + report — offline (inlined data) or --query/--data for live (see headless-preview)
 npm run lint            # ESLint
 npm run gallery         # dev-only component gallery (visual validation, no Fabric)
 ```
 
-There is no meaningful `npm run dev` workflow — outside the Fabric embed the app
-has no auth host and KPIs render error tiles. Use `npm run preview` for every
-visual validation before Fabricator's automatic after-turn deploy ships the app.
+Opening `npm run dev` directly shows only the frontend; governed Fabric data still
+requires the secure embed host. Use Fabricator's preview for the full live app.
+Continue using `npm run preview` for fast headless visual validation.
 
 ---
 

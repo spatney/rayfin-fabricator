@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { StudioProject } from '@shared/ipc'
 import { OverlayProvider, SuppressPreview } from '../overlay'
@@ -72,6 +72,85 @@ describe('PreviewPane visibility', () => {
     expect(url).toBe('https://p1.example.app/')
     expect(bounds.width).toBeGreaterThan(0)
     expect(bounds.height).toBeGreaterThan(0)
+  })
+
+  it('loads an ordinary app from its managed localhost frontend', async () => {
+    e.setDevServerResult({
+      ok: true,
+      status: 'ready',
+      dataProxy: false,
+      url: 'http://localhost:5174',
+      devUri: 'http://localhost:5174'
+    })
+    render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+
+    expect(lastShowUrl(e)?.url).toBe('http://localhost:5174')
+  })
+
+  it('loads a Fabric data app through secureItemEmbed instead of its direct localhost URL', async () => {
+    const embed =
+      'https://app.fabric.microsoft.com/secureItemEmbed?itemId=item-1&workspaceId=ws-1&itemType=appBackend&extensionPath=%3FdevUri%3Dhttp%253A%252F%252Flocalhost%253A5174'
+    e.setDevServerResult({
+      ok: true,
+      status: 'ready',
+      dataProxy: true,
+      url: embed,
+      devUri: 'http://localhost:5174'
+    })
+    render(
+      <Harnessed
+        project={makeProject('p1', { template: 'community-template', previewMode: 'direct' })}
+        suppressed={false}
+      />
+    )
+    await settle(e)
+
+    expect(lastShowUrl(e)?.url).toBe(embed)
+    const fabric = screen.getByRole('button', { name: /^fabric$/i }) as HTMLButtonElement
+    expect(fabric.disabled).toBe(true)
+    expect(fabric.className).toContain('seg-btn--on')
+  })
+
+  it('refreshes the target when package detection changes the preview mode', async () => {
+    e.setDevServerResult({
+      ok: true,
+      status: 'ready',
+      dataProxy: false,
+      url: 'http://localhost:5174',
+      devUri: 'http://localhost:5174',
+      instanceId: 'server-1'
+    })
+    render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+
+    const secureUrl =
+      'https://app.fabric.microsoft.com/secureItemEmbed?itemId=item-1&workspaceId=ws-1'
+    vi.mocked(window.api.devServer.status).mockResolvedValueOnce({
+      ok: false,
+      status: 'stale',
+      dataProxy: true,
+      devUri: 'http://localhost:5174',
+      instanceId: 'server-1'
+    })
+    vi.mocked(window.api.devServer.ensure).mockResolvedValueOnce({
+      ok: true,
+      status: 'ready',
+      dataProxy: true,
+      url: secureUrl,
+      devUri: 'http://localhost:5174',
+      instanceId: 'server-2'
+    })
+    await act(async () => {
+      e.advanceTimers(2_000)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await settle(e)
+
+    expect(e.calls.some((call) => call.method === 'navigate' && call.args[0] === secureUrl)).toBe(
+      true
+    )
   })
 
   it('screenshots first, then parks, for a partial overlay (no bare-host flash)', async () => {
@@ -254,6 +333,12 @@ describe('PreviewPane visibility', () => {
   })
 
   it('hides and shows no webview for an undeployed project', async () => {
+    e.setDevServerResult({
+      ok: false,
+      status: 'requires-deploy',
+      dataProxy: false,
+      error: 'Deploy this project to Fabric before starting its local preview.'
+    })
     render(
       <Harnessed project={makeProject('p1', { lastDeploy: undefined })} suppressed={false} />
     )
@@ -263,18 +348,49 @@ describe('PreviewPane visibility', () => {
     expect(e.api.hide).toHaveBeenCalled()
   })
 
-  it('parks + reloads (never captures) across a redeploy, then reveals', async () => {
-    const project = makeProject('p1')
-    const { rerender } = render(
+  it('waits for replacement Vite before navigating the same URL after redeploy', async () => {
+    const project = makeProject('p1', {
+      lastDeploy: {
+        url: 'https://p1.example.app/',
+        status: 'success',
+        at: '2026-01-01T00:00:00.000Z'
+      }
+    })
+    e.setDevServerResult({
+      ok: true,
+      status: 'ready',
+      dataProxy: false,
+      url: 'http://localhost:5174',
+      devUri: 'http://localhost:5174',
+      instanceId: 'server-1'
+    })
+    const { rerender } = render(<Harnessed project={project} suppressed={false} />)
+    await settle(e)
+
+    rerender(
       <Harnessed project={project} suppressed={false} deploy={{ running: true, log: [] }} />
     )
     await settle(e)
 
-    // Deploy finishes successfully → a reload transition re-loads the same URL.
+    e.setDevServerResult({
+      ok: true,
+      status: 'ready',
+      dataProxy: false,
+      url: 'http://localhost:5174',
+      devUri: 'http://localhost:5174',
+      instanceId: 'server-2'
+    })
+    const deployed = makeProject('p1', {
+      lastDeploy: {
+        url: 'https://p1.example.app/',
+        status: 'success',
+        at: '2026-01-01T00:01:00.000Z'
+      }
+    })
     const mark = e.calls.length
     rerender(
       <Harnessed
-        project={project}
+        project={deployed}
         suppressed={false}
         deploy={{ running: false, log: [], result: { ok: true, outcome: 'success' } }}
       />
@@ -282,22 +398,23 @@ describe('PreviewPane visibility', () => {
     await settle(e)
 
     const during = e.methodsAfter(mark)
-    expect(during).toContain('reload')
+    expect(during).toContain('navigate')
+    expect(during).not.toContain('reload')
     expect(during).toContain('suppress') // parked off-screen, kept rendering
-    expect(during, 'no capture during a reload transition').not.toContain('capture')
+    expect(during, 'no capture during a restart transition').not.toContain('capture')
 
     await act(async () => {
-      e.emitNav({ url: 'https://p1.example.app/', loading: true })
+      e.emitNav({ url: 'http://localhost:5174', loading: true })
     })
     await act(async () => {
-      e.emitNav({ url: 'https://p1.example.app/', loading: false })
+      e.emitNav({ url: 'http://localhost:5174', loading: false })
     })
     await settle(e)
 
     const reveal = lastShowUrl(e)
     expect(reveal).not.toBeNull()
     expect(reveal!.index).toBeGreaterThanOrEqual(mark)
-    expect(reveal!.url).toBe('https://p1.example.app/')
+    expect(reveal!.url).toBe('http://localhost:5174')
   })
 })
 
@@ -318,6 +435,13 @@ describe('PreviewPane design mode', () => {
   // (the app runs in a cross-origin iframe the top-frame editor couldn't reach).
   // It must now be enabled and drive the app iframe through the top-frame relay.
   it('enables the Design button in the Fabric-embedded view and drives the relay', async () => {
+    e.setDevServerResult({
+      ok: true,
+      status: 'ready',
+      dataProxy: false,
+      url: 'http://localhost:5174',
+      devUri: 'http://localhost:5174'
+    })
     render(<Harnessed project={fabricProject('p1')} suppressed={false} />)
     await settle(e)
 
@@ -334,6 +458,13 @@ describe('PreviewPane design mode', () => {
   })
 
   it('drives the direct view with embedded=false', async () => {
+    e.setDevServerResult({
+      ok: true,
+      status: 'ready',
+      dataProxy: false,
+      url: 'http://localhost:5174',
+      devUri: 'http://localhost:5174'
+    })
     render(<Harnessed project={makeProject('p1')} suppressed={false} />)
     await settle(e)
 
@@ -341,8 +472,28 @@ describe('PreviewPane design mode', () => {
     expect(designBtn.disabled).toBe(false)
     fireEvent.click(designBtn)
 
-    const call = e.calls.find((c) => c.method === 'design.setEnabled')
-    expect(call!.args).toEqual([true, false, 'https://p1.example.app/'])
+    const call = e.calls.find(
+      (c) => c.method === 'design.setEnabled' && c.args[0] === true
+    )
+    expect(call!.args).toEqual([true, false, 'http://localhost:5174'])
+  })
+
+  it('targets the localhost app frame inside a Data App secure embed', async () => {
+    e.setDevServerResult({
+      ok: true,
+      status: 'ready',
+      dataProxy: true,
+      url: 'https://app.fabric.microsoft.com/secureItemEmbed?itemId=item-1',
+      devUri: 'http://localhost:5174'
+    })
+    render(<Harnessed project={makeProject('p1', { previewMode: 'direct' })} suppressed={false} />)
+    await settle(e)
+
+    fireEvent.click(screen.getByRole('button', { name: /design/i }))
+    const call = e.calls.find(
+      (entry) => entry.method === 'design.setEnabled' && entry.args[0] === true
+    )
+    expect(call!.args).toEqual([true, true, 'http://localhost:5174'])
   })
 
   it('no longer renders an Annotate button (design mode replaced it)', async () => {
@@ -364,4 +515,3 @@ function lastShowUrl(
   }
   return null
 }
-

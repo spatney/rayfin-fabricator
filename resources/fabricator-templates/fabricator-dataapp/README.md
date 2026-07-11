@@ -5,10 +5,9 @@ query it with DAX, and **compose stunning dashboards from a pre-built component
 kit** powered by Graphein specs (charts plus `table` / `matrix`) — tuned for the
 **Fabricator** deploy-to-test workflow.
 
-> This is a Fabricator template: there is **no local backend, dev server, or
-> test harness**. You build your app and deploy it to a Fabric test workspace —
-> the Fabricator agent does this for you and validates the running app in its
-> built-in browser.
+> Fabricator manages a local Vite frontend and previews it through Fabric's
+> `secureItemEmbed` dev mode, preserving hot reload and governed Fabric data
+> access. Deploy once first so Fabricator can target the app's Fabric item.
 
 ## The dashboard kit
 
@@ -142,6 +141,7 @@ so it is meant to be opened from a deployed Fabric workspace (not `localhost`).
 
 | Command | Description |
 |---------|-------------|
+| `npm run dev` | Start the local Vite frontend (Fabricator normally manages this and its port) |
 | `npm run build` | Production build |
 | `npm run build:fabric` | Build for Fabric deployment (entrypoint for `rayfin up`) |
 | `npm run preview -- --spec <file>` | Render a Graphein spec headlessly → PNG + report (offline, or `--query`/`--data` for live) |

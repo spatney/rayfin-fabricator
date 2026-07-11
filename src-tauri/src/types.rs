@@ -374,6 +374,29 @@ pub struct FabricDeployment {
   pub deployed_at: Option<String>,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DevServerStatus {
+  pub ok: bool,
+  /// `ready` | `starting` | `stale` | `stopped` | `requires-deploy` | `error`.
+  pub status: String,
+  pub data_proxy: bool,
+  /// URL loaded by the native preview surface. Data Apps use secureItemEmbed.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub url: Option<String>,
+  /// Direct localhost Vite origin, also used as the embedded app-frame target.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub dev_uri: Option<String>,
+  /// Changes whenever Fabricator starts a replacement Vite process.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub instance_id: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  /// Bounded tail of frontend-process output, included only for diagnostics.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub logs: Vec<String>,
+}
+
 /* ----------------------------- projects ----------------------------- */
 
 #[derive(Serialize, Deserialize, Clone)]

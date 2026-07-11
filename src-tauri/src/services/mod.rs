@@ -6,6 +6,7 @@ pub mod agent_tools;
 pub mod crashlog;
 pub mod copilot;
 pub mod diagnostics;
+pub mod dev_server;
 pub mod emit;
 pub mod env_path;
 pub mod exec;

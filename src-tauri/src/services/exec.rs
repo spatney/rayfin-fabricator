@@ -89,6 +89,9 @@ pub struct RunOptions {
   pub on_data: Option<OnData>,
   pub timeout_ms: Option<u64>,
   pub cancel: Option<CancelToken>,
+  /// Keep only the trailing bytes from each captured stream. Streaming callbacks
+  /// still receive every bounded read chunk.
+  pub max_capture_bytes: Option<usize>,
 }
 
 impl RunOptions {
@@ -158,6 +161,40 @@ fn node_bypass(name: &str) -> Option<Resolved> {
   }
 }
 
+/// npm's current Windows shim stores its CLI path in `%NPM_CLI_JS%` instead of
+/// spelling the script out on the `%*` line, so the generic shim parser above
+/// cannot recover it. Resolve the standard co-located package layout directly.
+fn npm_bypass(name: &str) -> Option<Resolved> {
+  let shim = which::which(name).ok()?;
+  let entry = match name {
+    "npm" => "npm-cli.js",
+    "npx" => "npx-cli.js",
+    _ => return None,
+  };
+  let script = shim
+    .parent()?
+    .join("node_modules")
+    .join("npm")
+    .join("bin")
+    .join(entry);
+  if script.is_file() {
+    let node = which::which("node").ok()?;
+    return Some(Resolved {
+      program: node,
+      prefix: vec![script],
+      not_found: false,
+    });
+  }
+  if !is_batch(&shim) {
+    return Some(Resolved {
+      program: shim,
+      prefix: vec![],
+      not_found: false,
+    });
+  }
+  None
+}
+
 fn which_resolved(file: &str) -> Resolved {
   match which::which(file) {
     Ok(p) => Resolved {
@@ -175,6 +212,9 @@ fn which_resolved(file: &str) -> Resolved {
 
 fn resolve_program(file: &str) -> Resolved {
   match file {
+    // npm-distributed CLIs are .cmd shims on Windows. Resolve their node entry
+    // directly so project lifecycle scripts can run without cmd.exe quoting.
+    "npm" | "npx" => npm_bypass(file).unwrap_or_else(|| which_resolved(file)),
     "rayfin" => node_bypass(file).unwrap_or_else(|| which_resolved(file)),
     _ => which_resolved(file),
   }
@@ -282,7 +322,27 @@ pub fn project_rayfin(project_dir: &Path) -> (PathBuf, Vec<PathBuf>) {
   (PathBuf::from("npx"), vec![PathBuf::from("rayfin")])
 }
 
-async fn pump<R>(mut reader: R, stream: Stream, on_data: Option<OnData>, buf: Arc<Mutex<String>>)
+fn append_capture(buffer: &mut String, chunk: &str, max_bytes: Option<usize>) {
+  buffer.push_str(chunk);
+  let Some(max_bytes) = max_bytes else {
+    return;
+  };
+  let mut remove = buffer.len().saturating_sub(max_bytes);
+  while remove < buffer.len() && !buffer.is_char_boundary(remove) {
+    remove += 1;
+  }
+  if remove > 0 {
+    buffer.drain(..remove);
+  }
+}
+
+async fn pump<R>(
+  mut reader: R,
+  stream: Stream,
+  on_data: Option<OnData>,
+  buf: Arc<Mutex<String>>,
+  max_capture_bytes: Option<usize>,
+)
 where
   R: AsyncReadExt + Unpin,
 {
@@ -292,7 +352,10 @@ where
       Ok(0) => break,
       Ok(n) => {
         let chunk = String::from_utf8_lossy(&tmp[..n]).to_string();
-        buf.lock().await.push_str(&chunk);
+        {
+          let mut capture = buf.lock().await;
+          append_capture(&mut capture, &chunk, max_capture_bytes);
+        }
         if let Some(cb) = &on_data {
           cb(stream, &chunk);
         }
@@ -384,11 +447,27 @@ async fn spawn_and_run(resolved: Resolved, args: &[&str], opts: RunOptions) -> R
   let out_handle = child
     .stdout
     .take()
-    .map(|s| tokio::spawn(pump(s, Stream::Stdout, opts.on_data.clone(), out_buf.clone())));
+    .map(|s| {
+      tokio::spawn(pump(
+        s,
+        Stream::Stdout,
+        opts.on_data.clone(),
+        out_buf.clone(),
+        opts.max_capture_bytes,
+      ))
+    });
   let err_handle = child
     .stderr
     .take()
-    .map(|s| tokio::spawn(pump(s, Stream::Stderr, opts.on_data.clone(), err_buf.clone())));
+    .map(|s| {
+      tokio::spawn(pump(
+        s,
+        Stream::Stderr,
+        opts.on_data.clone(),
+        err_buf.clone(),
+        opts.max_capture_bytes,
+      ))
+    });
 
   let timeout = opts.timeout_ms.map(std::time::Duration::from_millis);
   let cancel = opts.cancel.clone();
@@ -469,6 +548,36 @@ fn version_from(res: RunResult) -> Option<String> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn capped_capture_keeps_a_valid_utf8_tail() {
+    let mut output = "prefix-".to_string();
+    append_capture(&mut output, "abc\u{00e9}def", Some(6));
+    assert_eq!(output, "c\u{00e9}def");
+    assert!(output.len() <= 6);
+  }
+
+  #[cfg(windows)]
+  #[test]
+  fn npm_uses_node_instead_of_a_windows_command_shim() {
+    let resolved = resolve_program("npm");
+    assert!(!resolved.not_found);
+    assert_eq!(
+      resolved
+        .program
+        .file_name()
+        .and_then(|value| value.to_str()),
+      Some("node.exe")
+    );
+    assert_eq!(resolved.prefix.len(), 1);
+    assert_eq!(
+      resolved.prefix[0]
+        .file_name()
+        .and_then(|value| value.to_str()),
+      Some("npm-cli.js")
+    );
+    assert!(resolved.prefix[0].is_file());
+  }
 
   #[test]
   fn project_rayfin_auth_module_prefers_local_then_falls_back() {

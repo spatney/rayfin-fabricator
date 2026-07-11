@@ -257,10 +257,9 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
     // debug but off in release wry; the `devtools` cargo feature (Cargo.toml)
     // enables `with_devtools` + the context-menu inspector, and this keeps it on.
     .devtools(true)
-    // Install diagnostics into every frame so the Data App can be reached through
-    // its deeply nested cross-origin Fabric portal iframe. Rust only activates the
-    // frame relay for the built-in Data App in Fabric preview mode; every other
-    // project keeps using top-frame diagnostics.
+    // Install diagnostics into every frame so a Fabric data-proxy app can be
+    // reached through its deeply nested cross-origin embed chain. Rust activates
+    // the relay only when package.json contains @microsoft/fabric-app-data.
     .initialization_script_for_all_frames(DIAGNOSTICS_INIT_JS)
     // The design-mode controller is baked in at document-start into ALL frames
     // (dormant until `preview_design_set` enables it). This is the only way to
@@ -675,13 +674,17 @@ fn truncate_text(input: &str, max_chars: usize) -> String {
 }
 
 pub(crate) fn project_live_url(project: &crate::types::StudioProject) -> Option<String> {
+  if let Some(target) = crate::services::dev_server::active_preview_target(&project.id) {
+    return Some(target.dev_uri);
+  }
   let deploy = project.last_deploy.as_ref()?;
   deploy.url.clone().or_else(|| deploy.api_url.clone())
 }
 
 /// The app page the agent should debug and the top-level preview surface that
-/// contains it. Only the built-in Data App in Fabric preview mode receives an
-/// iframe origin; this deliberately does not become a general frame selector.
+/// contains it. Only projects that actually depend on `@microsoft/fabric-app-data`
+/// receive an iframe origin; this deliberately does not become a general frame
+/// selector.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AgentPreviewTarget {
   pub app_url: String,
@@ -692,9 +695,24 @@ pub(crate) struct AgentPreviewTarget {
 pub(crate) fn project_agent_target(
   project: &crate::types::StudioProject,
 ) -> Option<AgentPreviewTarget> {
+  if let Some(local) = crate::services::dev_server::active_preview_target(&project.id) {
+    if local.data_proxy {
+      return Some(AgentPreviewTarget {
+        app_url: local.dev_uri.clone(),
+        surface_url: local.surface_url,
+        frame_origin: url_origin(&local.dev_uri),
+      });
+    }
+    return Some(AgentPreviewTarget {
+      surface_url: local.dev_uri.clone(),
+      app_url: local.dev_uri,
+      frame_origin: None,
+    });
+  }
+
   let app_url = project_live_url(project)?;
-  let embedded_data_app = project.template.as_deref() == Some("fabricator-dataapp")
-    && project.preview_mode.as_deref() == Some("fabric");
+  let embedded_data_app =
+    crate::services::dev_server::project_uses_fabric_data(std::path::Path::new(&project.path));
   if embedded_data_app {
     let portal_url = project
       .last_deploy
@@ -2160,8 +2178,16 @@ pub(crate) fn agent_target_matches(
   let state = app.state::<PreviewState>();
   let inner = state.inner.lock().unwrap();
   let current = inner.stack.get(inner.cursor).or(inner.commanded.as_ref());
-  inner.project_id.as_deref() == Some(project_id)
-    && current.is_some_and(|current| preview_surface_matches(current, target))
+  if inner.project_id.as_deref() != Some(project_id) {
+    return false;
+  }
+  if target.frame_origin.is_some() {
+    // Fabric rewrites the loaded shell route, but `commanded` retains the exact
+    // secureItemEmbed target. Compare it so workspace/item changes force a new
+    // navigation even when both shells and localhost frames share an origin.
+    return inner.commanded.as_deref() == Some(target.surface_url.as_str());
+  }
+  current.is_some_and(|current| preview_surface_matches(current, target))
 }
 
 /// Hard ceiling on how long the Windows capture may pump the UI-thread message
@@ -2363,12 +2389,24 @@ mod tests {
   };
   use crate::types::{DeployInfo, StudioProject};
 
-  fn preview_project(template: &str, mode: Option<&str>, portal_url: Option<&str>) -> StudioProject {
+  fn preview_project(data_proxy: bool, mode: Option<&str>, portal_url: Option<&str>) -> StudioProject {
+    let root = std::env::temp_dir().join(format!("fabricator-preview-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    let dependencies = if data_proxy {
+      r#""@microsoft/fabric-app-data":"1.0.0""#
+    } else {
+      r#""react":"19""#
+    };
+    std::fs::write(
+      root.join("package.json"),
+      format!(r#"{{"dependencies":{{{dependencies}}}}}"#),
+    )
+    .unwrap();
     StudioProject {
       id: "project-1".into(),
       name: "Preview project".into(),
-      path: r"C:\projects\preview".into(),
-      template: Some(template.into()),
+      path: root.to_string_lossy().to_string(),
+      template: Some("community-template".into()),
       added_at: "2026-01-01T00:00:00Z".into(),
       last_deploy: Some(DeployInfo {
         url: Some("https://app.example.net/appbackends/item-1".into()),
@@ -2424,14 +2462,12 @@ mod tests {
   }
 
   #[test]
-  fn only_embedded_data_app_targets_the_deep_fabric_frame() {
+  fn only_fabric_data_dependency_targets_the_deep_fabric_frame() {
     let portal = "https://app.fabric.microsoft.com/groups/workspace/appbackends/item-1";
-    let embedded = project_agent_target(&preview_project(
-      "fabricator-dataapp",
-      Some("fabric"),
-      Some(portal),
-    ))
-    .expect("embedded target");
+    // Package presence is authoritative even for a community template whose
+    // persisted mode says direct: proxy-backed local dev must use Fabric embed.
+    let embedded_project = preview_project(true, Some("direct"), Some(portal));
+    let embedded = project_agent_target(&embedded_project).expect("embedded target");
     assert_eq!(embedded.surface_url, portal);
     assert_eq!(
       embedded.frame_origin.as_deref(),
@@ -2442,32 +2478,24 @@ mod tests {
       &embedded
     ));
 
-    let direct_data_app =
-      project_agent_target(&preview_project("fabricator-dataapp", Some("direct"), Some(portal)))
-        .expect("direct target");
-    assert_eq!(direct_data_app.surface_url, direct_data_app.app_url);
-    assert_eq!(direct_data_app.frame_origin, None);
+    let ordinary_project = preview_project(false, Some("fabric"), Some(portal));
+    let ordinary = project_agent_target(&ordinary_project).expect("ordinary target");
+    assert_eq!(ordinary.surface_url, ordinary.app_url);
+    assert_eq!(ordinary.frame_origin, None);
     assert!(!preview_surface_matches(
       "https://app.example.net/appbackends/other-item",
-      &direct_data_app
+      &ordinary
     ));
-
-    let unrelated_template =
-      project_agent_target(&preview_project("fabricator-todoapp", Some("fabric"), Some(portal)))
-        .expect("unrelated target");
-    assert_eq!(unrelated_template.surface_url, unrelated_template.app_url);
-    assert_eq!(unrelated_template.frame_origin, None);
+    let _ = std::fs::remove_dir_all(embedded_project.path);
+    let _ = std::fs::remove_dir_all(ordinary_project.path);
   }
 
   #[test]
-  fn embedded_data_app_falls_back_to_direct_without_a_portal_url() {
-    let target = project_agent_target(&preview_project(
-      "fabricator-dataapp",
-      Some("fabric"),
-      None,
-    ))
-    .expect("fallback target");
+  fn fabric_data_project_falls_back_to_direct_without_a_portal_url() {
+    let project = preview_project(true, Some("fabric"), None);
+    let target = project_agent_target(&project).expect("fallback target");
     assert_eq!(target.surface_url, target.app_url);
     assert_eq!(target.frame_origin, None);
+    let _ = std::fs::remove_dir_all(project.path);
   }
 }

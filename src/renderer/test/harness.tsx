@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import type { PreviewNavState, StudioProject } from '@shared/ipc'
+import type { DevServerStatus, PreviewNavState, StudioProject } from '@shared/ipc'
 
 /**
  * Test harness for {@link PreviewPane}. jsdom has no layout engine and no
@@ -33,6 +33,8 @@ export interface PreviewEnv {
   setHostRect: (rect: Rect | null) => void
   /** Result the mocked `capture()` resolves with. */
   setCaptureResult: (dataUrl: string) => void
+  /** Override the local-dev result returned for subsequent `ensure()` calls. */
+  setDevServerResult: (result: DevServerStatus) => void
   /** Run queued requestAnimationFrame callbacks `rounds` times (default 4). */
   flushRaf: (rounds?: number) => void
   /** Advance fake timers by `ms` (drives the dissolve + frozen-clear timeouts). */
@@ -51,7 +53,11 @@ export function env(): PreviewEnv {
   return currentEnv
 }
 
-function makeApi(calls: PreviewCall[], getCaptureResult: () => string) {
+function makeApi(
+  calls: PreviewCall[],
+  getCaptureResult: () => string,
+  getDevServerResult: (projectId: string) => DevServerStatus
+) {
   let navCb: ((s: PreviewNavState) => void) | null = null
 
   const rec =
@@ -90,6 +96,11 @@ function makeApi(calls: PreviewCall[], getCaptureResult: () => string) {
 
   const api = {
     preview,
+    devServer: {
+      ensure: vi.fn((projectId: string) => Promise.resolve(getDevServerResult(projectId))),
+      status: vi.fn((projectId: string) => Promise.resolve(getDevServerResult(projectId))),
+      stop: vi.fn(() => Promise.resolve(true))
+    },
     openExternal: vi.fn(),
     screenshot: { save: vi.fn(() => Promise.resolve('C:/tmp/shot.png')) },
     projects: { setPreviewMode: vi.fn(() => Promise.resolve(undefined)) },
@@ -103,13 +114,26 @@ function makeApi(calls: PreviewCall[], getCaptureResult: () => string) {
 export function installPreviewEnv(): PreviewEnv {
   const calls: PreviewCall[] = []
   let captureResult = 'data:image/png;base64,AAAA'
+  let devServerResult: DevServerStatus | null = null
   let hostRect: Rect | null = { left: 100, top: 80, width: 900, height: 600 }
 
   // Fake only the timer functions (not rAF/Date/performance — we install our own
   // controllable rAF below) so tests can advance the dissolve + frozen-clear.
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
 
-  const { api, preview, getNavCb } = makeApi(calls, () => captureResult)
+  const { api, preview, getNavCb } = makeApi(
+    calls,
+    () => captureResult,
+    (projectId) =>
+      devServerResult ?? {
+        ok: true,
+        status: 'ready',
+        dataProxy: false,
+        url: `https://${projectId}.example.app/`,
+        devUri: `https://${projectId}.example.app/`,
+        instanceId: `${projectId}-server-1`
+      }
+  )
   ;(window as unknown as { api: unknown }).api = api
 
   // Controllable requestAnimationFrame (jsdom has none / it's uncontrolled).
@@ -176,6 +200,9 @@ export function installPreviewEnv(): PreviewEnv {
     },
     setCaptureResult: (dataUrl) => {
       captureResult = dataUrl
+    },
+    setDevServerResult: (result) => {
+      devServerResult = result
     },
     flushRaf: (rounds = 4) => {
       for (let i = 0; i < rounds; i++) {

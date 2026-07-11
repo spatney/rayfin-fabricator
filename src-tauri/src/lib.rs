@@ -226,6 +226,10 @@ pub fn run() {
       commands::deploy::deploy_switch,
       commands::deploy::deploy_set_name,
       commands::deploy::deploy_reconcile,
+      // managed local frontend server
+      services::dev_server::dev_server_ensure,
+      services::dev_server::dev_server_status,
+      services::dev_server::dev_server_stop,
       // preview
       services::preview::preview_show_url,
       services::preview::preview_navigate,
@@ -250,5 +254,10 @@ pub fn run() {
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
-    .run(|_app, _event| services::watchdog::beat());
+    .run(|_app, event| {
+      services::watchdog::beat();
+      if matches!(event, tauri::RunEvent::Exit) {
+        services::dev_server::stop_all();
+      }
+    });
 }

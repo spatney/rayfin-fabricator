@@ -18,7 +18,9 @@ use crate::commands::auth::get_cached_identity;
 use crate::commands::util::{annotate_state, now_iso};
 use crate::services::exec::{self, OnData, RunOptions, RunResult, Stream};
 use crate::services::{emit, store, telemetry};
-use crate::types::{DeployInfo, DeployResult, DeployStatus, FabricDeployment, ProjectsState};
+use crate::types::{
+  DeployInfo, DeployResult, DeployStatus, FabricDeployment, ProjectsState, StudioProject,
+};
 
 const DEPLOY_TIMEOUT_MS: u64 = 20 * 60_000;
 const DEPLOY_CHANNEL: &str = "deploy:run";
@@ -33,6 +35,10 @@ static NEEDS_WS_RE: Lazy<Regex> =
 /// UI, auto-deploy, and in-process agent tools all share this engine. Serialize
 /// them at the backend boundary so two `rayfin up` processes can never race.
 static DEPLOY_LOCK: Lazy<tokio::sync::Mutex<()>> = Lazy::new(|| tokio::sync::Mutex::new(()));
+
+pub(crate) async fn acquire_deploy_lock() -> tokio::sync::MutexGuard<'static, ()> {
+  DEPLOY_LOCK.lock().await
+}
 
 /* ------------------------------ helpers ----------------------------------- */
 
@@ -245,7 +251,7 @@ pub(crate) async fn run_deploy(
   project_id: String,
   workspace: Option<String>,
 ) -> DeployResult {
-  let _deploy_guard = DEPLOY_LOCK.lock().await;
+  let _deploy_guard = acquire_deploy_lock().await;
   let Some(project) = store::find_project(&project_id) else {
     return DeployResult {
       ok: false,
@@ -365,6 +371,9 @@ pub(crate) async fn run_deploy(
   let api = status.api_url.clone();
   let portal = status.portal_url.clone();
   let url = pick_preview_url(hosting.as_deref(), api.as_deref(), portal.as_deref());
+  // Invalidate the old local target before publishing the new deployment state,
+  // so any reactive preview restart captures the new lifecycle generation.
+  crate::services::dev_server::stop_project(&project_id);
 
   {
     let (url, api, portal) = (url.clone(), api.clone(), portal.clone());
@@ -430,6 +439,33 @@ pub async fn deploy_list(project_id: String) -> Vec<FabricDeployment> {
   parse_deploy_list(&res.stdout, &names)
 }
 
+/// Resolve the active deployment with its workspace/item ids. Local Data App
+/// preview needs both ids to build the secureItemEmbed dev-mode URL.
+pub(crate) async fn active_deployment(
+  project: &StudioProject,
+) -> Result<Option<FabricDeployment>, String> {
+  let names = project.deployment_names.clone().unwrap_or_default();
+  let res = exec::run_project_rayfin(
+    Path::new(&project.path),
+    &["up", "list", "--json"],
+    RunOptions::timeout(60_000),
+  )
+  .await;
+  if res.not_found {
+    return Err("The Rayfin CLI was not found. Run npm install in the project.".into());
+  }
+  if !res.ok {
+    return Err(error_text(
+      &res,
+      &res.stdout,
+      "Could not read the project's active Fabric deployment.",
+    ));
+  }
+  let list = parse_deploy_list_opt(&res.stdout, &names)
+    .ok_or_else(|| "Rayfin returned an unreadable deployment list.".to_string())?;
+  Ok(list.into_iter().find(|deployment| deployment.active))
+}
+
 /// Reconcile the Studio store's recorded deployment with on-disk reality
 /// (`rayfin/.deployments.json`, read via `rayfin up list --json`). Treats disk as
 /// the source of truth and re-syncs `last_deploy` + `workspace`/`workspace_name`
@@ -446,6 +482,7 @@ pub async fn deploy_reconcile(project_id: String) -> ProjectsState {
   if project.last_deploy.as_ref().and_then(|d| d.status.as_deref()) == Some("deploying") {
     return annotate_state(store::get_state());
   }
+  let _deploy_guard = acquire_deploy_lock().await;
 
   let names = project.deployment_names.clone().unwrap_or_default();
   let res = exec::run_project_rayfin(
@@ -523,6 +560,7 @@ pub async fn deploy_switch(project_id: String, workspace: String, by_id: Option<
       error: Some("Project not found.".into()),
     };
   };
+  let _deploy_guard = acquire_deploy_lock().await;
 
   let args: Vec<String> = if by_id {
     vec!["up".into(), "switch".into(), "--workspace-id".into(), workspace.clone()]
@@ -568,6 +606,7 @@ pub async fn deploy_switch(project_id: String, workspace: String, by_id: Option<
   let api = status.api_url.clone();
   let portal = status.portal_url.clone();
   let url = pick_preview_url(None, api.as_deref(), portal.as_deref());
+  crate::services::dev_server::stop_project(&project_id);
 
   {
     let w = workspace.clone();

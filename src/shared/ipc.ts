@@ -371,6 +371,24 @@ export interface FabricDeployment {
   deployedAt?: string
 }
 
+/** Managed local Vite frontend and the URL Fabricator should load for it. */
+export interface DevServerStatus {
+  ok: boolean
+  /** `ready` | `starting` | `stale` | `stopped` | `requires-deploy` | `error`. */
+  status: string
+  /** True when package.json contains `@microsoft/fabric-app-data`. */
+  dataProxy: boolean
+  /** Native preview surface URL (secureItemEmbed for proxy-backed Data Apps). */
+  url?: string
+  /** Direct localhost Vite origin, including its selected port. */
+  devUri?: string
+  /** Changes whenever Fabricator starts a replacement Vite process. */
+  instanceId?: string
+  error?: string
+  /** Bounded diagnostic tail; never the unbounded process stream. */
+  logs?: string[]
+}
+
 /** Reasoning effort levels supported by the Copilot CLI (`--effort`). */
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
@@ -1256,6 +1274,10 @@ export const IpcChannels = {
   deploySetName: 'deploy:setName',
   deployReconcile: 'deploy:reconcile',
 
+  devServerEnsure: 'devServer:ensure',
+  devServerStatus: 'devServer:status',
+  devServerStop: 'devServer:stop',
+
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
 
@@ -1618,6 +1640,16 @@ export interface RayfinStudioApi {
      * redeploy. Best-effort: leaves state untouched on a failed/offline query.
      */
     reconcile: (projectId: string) => Promise<ProjectsState>
+  }
+
+  /** One managed local Vite process shared by the preview and agent tools. */
+  devServer: {
+    /** Start or reuse the project's frontend and resolve its preview target. */
+    ensure: (projectId: string) => Promise<DevServerStatus>
+    /** Read current state without starting a process. */
+    status: (projectId: string) => Promise<DevServerStatus>
+    /** Stop the project frontend if it is running. */
+    stop: (projectId: string) => Promise<boolean>
   }
 
   /** App-wide settings (theme, telemetry opt-in). */

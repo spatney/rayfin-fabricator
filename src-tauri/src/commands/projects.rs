@@ -126,10 +126,18 @@ pub async fn projects_remove(
   id: String,
   delete_files: Option<bool>,
 ) -> Result<ProjectsState, String> {
-  Ok(
-    crate::commands::projects_impl::remove_project(&app, state.inner(), id, delete_files.unwrap_or(false))
-      .await,
+  crate::services::dev_server::stop_project(&id);
+  let result = crate::commands::projects_impl::remove_project(
+    &app,
+    state.inner(),
+    id.clone(),
+    delete_files.unwrap_or(false),
   )
+  .await;
+  // Cancel a start that was queued after the first stop while removal awaited
+  // filesystem/trash work.
+  crate::services::dev_server::stop_project(&id);
+  Ok(result)
 }
 
 /* ----------------------------- git (ported in Phase 3) ----------------------------- */

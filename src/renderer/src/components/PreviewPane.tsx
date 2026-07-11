@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  DevServerStatus,
   DeployResult,
   PreviewBounds,
   PreviewDesignAiRequest,
@@ -92,11 +93,13 @@ const MIN_LOADING_MS = 400
  *      transition (park + navigate + reveal-on-load) so the "Loading…" overlay
  *      shows and the previous project's frame never flashes. */
 let surfaceShownUrl: string | null = null
+let surfaceShownInstanceId: string | null = null
 
 /** Test-only: clear the module-scoped surface tracking so each test starts as a
  *  fresh app with no preview surface shown. */
 export function __resetPreviewSurfaceState(): void {
   surfaceShownUrl = null
+  surfaceShownInstanceId = null
 }
 
 interface Props {
@@ -119,8 +122,14 @@ interface Props {
   onLoadingChange?: (state: { name: string; fading: boolean } | null) => void
 }
 
-function statusLabel(running: boolean, status: string | undefined): string {
+function statusLabel(
+  running: boolean,
+  status: string | undefined,
+  local: DevServerStatus | null
+): string {
   if (running) return 'Deploying…'
+  if (local?.status === 'starting') return 'Starting…'
+  if (local?.ok) return local.dataProxy ? 'Local · Fabric' : 'Local'
   switch (status) {
     case 'success':
       return 'Live'
@@ -186,22 +195,126 @@ export default function PreviewPane({
 }: Props): JSX.Element {
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
-  const deployedUrl = project.lastDeploy?.url
-  // The deployed item can also be viewed embedded in the Fabric portal shell
-  // (`…/groups/{workspace}/appbackends/{item}`). The CLI hands us that deep link
-  // as `lastDeploy.portalUrl`; a toolbar toggle switches the webview between the
-  // direct app URL and this Fabric-hosted view.
-  const fabricUrl = project.lastDeploy?.portalUrl
-  const status = running ? 'deploying' : project.lastDeploy?.status
-  const error = project.lastDeploy?.error
+  const publishedFabricUrl = project.lastDeploy?.portalUrl
+  const successfulDeployAt =
+    project.lastDeploy?.status === 'success' ? project.lastDeploy.at : undefined
+  const deployCycleRef = useRef(0)
+  const wasDeployingRef = useRef(running)
+  if (wasDeployingRef.current && !running) deployCycleRef.current += 1
+  wasDeployingRef.current = running
+  const devRevision = `${project.id}:${successfulDeployAt ?? 'none'}:${deployCycleRef.current}`
+  const [devState, setDevState] = useState<{
+    projectId: string
+    revision?: string
+    result: DevServerStatus
+  } | null>(null)
+  const updateDevState = useCallback(
+    (projectId: string, revision: string | undefined, result: DevServerStatus): void => {
+      setDevState((previous) => {
+        if (
+          previous?.projectId === projectId &&
+          previous.revision === revision &&
+          JSON.stringify(previous.result) === JSON.stringify(result)
+        ) {
+          return previous
+        }
+        return { projectId, revision, result }
+      })
+    },
+    []
+  )
+  const devPreview =
+    !running && devState?.projectId === project.id && devState.revision === devRevision
+      ? devState.result
+      : null
+  const devPending = !devPreview || devPreview.status === 'starting'
+  const dataProxy = devPreview?.ok === true && devPreview.dataProxy
+  // `deployedUrl` remains the direct-app variable throughout the native-surface
+  // state machine, but now points at the managed Vite origin.
+  const deployedUrl = devPreview?.ok ? devPreview.devUri : undefined
+  // Proxy-backed Data Apps receive a secureItemEmbed dev-mode URL from Rust.
+  // Ordinary apps keep the optional published Fabric shell toggle.
+  const fabricUrl = dataProxy ? devPreview?.url : publishedFabricUrl
+  const localError = !devPending && !devPreview?.ok ? devPreview?.error : undefined
+  const status = running
+    ? 'deploying'
+    : localError
+      ? 'error'
+      : devPreview?.ok
+        ? 'success'
+        : project.lastDeploy?.status
+  const error = localError ?? project.lastDeploy?.error
   // The first deploy of a project has no recorded Fabric workspace — surface a
   // prompt instead of a dead error so the user can pick a target and retry.
   const outcome = deploy?.result?.outcome ?? project.lastDeploy?.outcome
   const needsWorkspace = !running && outcome === 'needs-workspace'
 
+  // Start (or reuse) one managed Vite process. The backend also resolves the
+  // package-based Data App embed target before returning `ready`.
+  useEffect(() => {
+    if (running) return
+    let cancelled = false
+    updateDevState(project.id, devRevision, {
+      ok: false,
+      status: 'starting',
+      dataProxy: false
+    })
+    void window.api.devServer
+      .ensure(project.id)
+      .then((result) => {
+        if (!cancelled) updateDevState(project.id, devRevision, result)
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return
+        updateDevState(project.id, devRevision, {
+          ok: false,
+          status: 'error',
+          dataProxy: false,
+          error: reason instanceof Error ? reason.message : String(reason)
+        })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [project.id, devRevision, running, updateDevState])
+
+  // Observe package-mode edits and agent-triggered server restarts without
+  // repeatedly running deployment discovery while the preview is unavailable.
+  useEffect(() => {
+    if (!devPreview?.ok) return
+    let cancelled = false
+    let checking = false
+    const refresh = async (): Promise<void> => {
+      if (checking) return
+      checking = true
+      try {
+        let result = await window.api.devServer.status(project.id)
+        if (!result.ok) {
+          result = await window.api.devServer.ensure(project.id)
+        }
+        if (!cancelled) updateDevState(project.id, devRevision, result)
+      } catch (reason: unknown) {
+        if (!cancelled) {
+          updateDevState(project.id, devRevision, {
+            ok: false,
+            status: 'error',
+            dataProxy: false,
+            error: reason instanceof Error ? reason.message : String(reason)
+          })
+        }
+      } finally {
+        checking = false
+      }
+    }
+    const timer = window.setInterval(() => void refresh(), 2_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [project.id, devRevision, devPreview?.ok, updateDevState])
+
   const hostRef = useRef<HTMLDivElement>(null)
-  const prevRunningRef = useRef(running)
-  const [displayUrl, setDisplayUrl] = useState(deployedUrl ?? '')
+  const [displayUrl, setDisplayUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [canBack, setCanBack] = useState(false)
   const [canForward, setCanForward] = useState(false)
@@ -318,7 +431,17 @@ export default function PreviewPane({
   // Which URL the embedded webview actually loads. Falls back to the direct URL
   // whenever the Fabric link is unavailable or the toggle is off.
   const [previewMode, setPreviewMode] = useState<PreviewMode>(() => readPreviewMode(project))
-  const previewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
+  const embeddedPreview = dataProxy || (previewMode === 'fabric' && Boolean(fabricUrl))
+  const previewUrl = dataProxy
+    ? fabricUrl
+    : previewMode === 'fabric' && fabricUrl
+      ? fabricUrl
+      : deployedUrl
+  const designAppUrl = dataProxy
+    ? deployedUrl
+    : embeddedPreview
+      ? project.lastDeploy?.url
+      : deployedUrl
 
   // Re-init from the persisted project on project switch (don't carry a prior
   // project's Fabric view over). Within a project this component's toggle handler
@@ -328,21 +451,24 @@ export default function PreviewPane({
     setPreviewMode(readPreviewMode(project))
   }, [project.id])
 
-  // After a successful (re)deploy the URL is usually unchanged but the server
-  // code changed, so force a reload — hidden behind the spinner so the previous
-  // build never flashes. Revealed once the fresh page finishes loading (onNavState).
+  // A deploy stops and recreates Vite. Wait for the replacement to be ready, then
+  // explicitly navigate even when it reused the same port/URL.
   useEffect(() => {
-    const wasRunning = prevRunningRef.current
-    prevRunningRef.current = running
-    if (wasRunning && !running && deploy?.result?.ok && previewUrl) {
-      beginTransition(previewUrl)
-      void window.api.preview.reload()
-    }
-  }, [running, deploy?.result, previewUrl, beginTransition])
+    if (!devPreview?.ok || !devPreview.instanceId || !previewUrl) return
+    if (surfaceShownInstanceId === devPreview.instanceId) return
+    if (surfaceShownUrl === null) return
+    beginTransition(previewUrl)
+    const bounds = measureHost()
+    void window.api.preview.navigate(
+      previewUrl,
+      bounds ?? { x: 0, y: 0, width: 1, height: 1 }
+    )
+  }, [devPreview?.ok, devPreview?.instanceId, previewUrl, beginTransition, measureHost])
 
+  useEffect(() => setDisplayUrl(''), [project.id])
   useEffect(() => {
-    if (deployedUrl) setDisplayUrl(deployedUrl)
-  }, [deployedUrl])
+    if (previewUrl) setDisplayUrl(previewUrl)
+  }, [previewUrl])
 
   // Subscribe to navigation state pushed from the native webview (Rust side).
   useEffect(() => {
@@ -454,7 +580,12 @@ export default function PreviewPane({
         }
       }
       setFrozen(null)
-      if (transitioningRef.current && deployedUrl) {
+      if (devPending && lastBoundsRef.current) {
+        // A project switch can briefly wait for its managed dev URL before the
+        // navigation transition starts. Keep the singleton surface rendering
+        // off-screen rather than hard-hiding the previous project.
+        void window.api.preview.suppress(lastBoundsRef.current)
+      } else if (transitioningRef.current && deployedUrl) {
         // A fresh page is loading (project switch / redeploy / Fabric toggle): park
         // the surface OFF-SCREEN but keep it RENDERING (at host size) so it paints
         // the new page before we reveal it. A hard-hidden (IsVisible=false) webview
@@ -481,6 +612,7 @@ export default function PreviewPane({
     // showUrl below), so the HTML→native handoff never exposes a bare host.
     loadedUrlRef.current = previewUrl
     surfaceShownUrl = previewUrl
+    surfaceShownInstanceId = devPreview?.instanceId ?? null
 
     let raf = 0
     let clearFrozenTimer = 0
@@ -600,7 +732,16 @@ export default function PreviewPane({
       if (raf !== 0) cancelAnimationFrame(raf)
       if (clearFrozenTimer !== 0) window.clearTimeout(clearFrozenTimer)
     }
-  }, [deployedUrl, previewUrl, showWebview, suppressed, transitioning, measureHost])
+  }, [
+    deployedUrl,
+    previewUrl,
+    devPreview?.instanceId,
+    showWebview,
+    suppressed,
+    transitioning,
+    devPending,
+    measureHost
+  ])
 
   // The positioning effect hides the webview whenever a dependency change makes it
   // not-visible (and its rAF loop hides it when the host collapses to 0×0). On the
@@ -654,7 +795,7 @@ export default function PreviewPane({
     void window.api.preview.forward()
   }, [])
   const openExternal = (): void => {
-    const u = displayUrl || deployedUrl
+    const u = displayUrl || previewUrl
     if (u) void window.api.openExternal(u)
   }
 
@@ -796,11 +937,11 @@ export default function PreviewPane({
       // In the Fabric-embedded view the app runs in a cross-origin iframe; tell
       // the host to drive the controller through the top-frame relay by passing
       // the embedded flag + the direct app URL (its origin identifies the iframe).
-      void window.api.preview.design.setEnabled(next, previewMode === 'fabric', deployedUrl)
+      void window.api.preview.design.setEnabled(next, embeddedPreview, designAppUrl)
       if (!next) setDesignCount(0)
       return next
     })
-  }, [previewMode, deployedUrl])
+  }, [embeddedPreview, designAppUrl])
 
   // Capture the highlighted screenshot, drain the composed instruction, hand it
   // to chat, then leave design mode. Fired when the poll sees `handoffReady`.
@@ -950,13 +1091,13 @@ export default function PreviewPane({
   }, [previewUrl])
 
   const dotClass =
-    status === 'success'
+    devPending || running || status === 'deploying'
+      ? 'busy'
+      : status === 'success'
       ? 'ok'
       : status === 'error'
         ? 'err'
-        : running || status === 'deploying'
-          ? 'busy'
-          : 'idle'
+        : 'idle'
 
   return (
     <div className="preview">
@@ -993,7 +1134,9 @@ export default function PreviewPane({
           </div>
           <span className={`preview-status preview-status--${dotClass}`}>
             <span className="preview-dot" />
-            <span className="preview-status-label">{statusLabel(running, status)}</span>
+            <span className="preview-status-label">
+              {statusLabel(running, status, devPreview)}
+            </span>
           </span>
           {(displayUrl || deployedUrl) && (
             <button
@@ -1009,7 +1152,7 @@ export default function PreviewPane({
           {loading && showWebview && <span className="preview-loading">Loading…</span>}
           <div className="seg seg--toolbar">
             <button
-              className={`seg-btn ${previewMode === 'fabric' ? 'seg-btn--on' : ''}`}
+              className={`seg-btn ${embeddedPreview ? 'seg-btn--on' : ''}`}
               onClick={() => {
                 const next: PreviewMode = previewMode === 'fabric' ? 'direct' : 'fabric'
                 setPreviewMode(next)
@@ -1020,9 +1163,11 @@ export default function PreviewPane({
                   .setPreviewMode(project.id, next)
                   .then(() => onPreviewModeChanged?.())
               }}
-              disabled={!showWebview || !fabricUrl || transitioning}
+              disabled={dataProxy || !showWebview || !fabricUrl || transitioning}
               title={
-                !fabricUrl
+                dataProxy
+                  ? 'Fabric data proxy apps always use the Fabric secure embed during local development'
+                  : !fabricUrl
                   ? 'The Fabric portal view is unavailable for this deployment'
                   : previewMode === 'fabric'
                     ? 'Viewing inside the Fabric portal shell — click to return to the direct app view'
@@ -1037,7 +1182,7 @@ export default function PreviewPane({
               onClick={toggleDesign}
               disabled={!showWebview || transitioning || designBusy}
               title={
-                previewMode === 'fabric'
+                embeddedPreview
                   ? 'Design mode — click elements in the embedded app to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
                   : 'Design mode — click elements in the preview to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
               }
@@ -1087,6 +1232,10 @@ export default function PreviewPane({
               </div>
             </div>
           </div>
+        ) : devPending && project.lastDeploy ? (
+          <div className="preview-placeholder">
+            <p>Starting the local frontend for <strong>{project.name}</strong>…</p>
+          </div>
         ) : needsWorkspace ? (
           <div className="preview-placeholder">
             <div className="ws-prompt">
@@ -1104,7 +1253,11 @@ export default function PreviewPane({
             {error ? (
               <>
                 <div className="alert alert--error">{error}</div>
-                {deploy?.log.length ? (
+                {devPreview?.logs?.length ? (
+                  <pre className="deploy-log deploy-log--static">
+                    {devPreview.logs.join('\n')}
+                  </pre>
+                ) : deploy?.log.length ? (
                   <pre className="deploy-log deploy-log--static">{deploy.log.join('')}</pre>
                 ) : null}
               </>

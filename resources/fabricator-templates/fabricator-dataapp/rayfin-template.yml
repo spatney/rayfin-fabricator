@@ -4,8 +4,8 @@ metadata:
   displayName: Data App
   description: >-
     Fabric Analytics app — connect a Power BI semantic model and build
-    interactive dashboards with DAX-powered visuals. Built for the Fabricator
-    deploy-to-test loop, with no local backend or test harness.
+    interactive dashboards with DAX-powered visuals. Built for Fabricator's
+    secure-embed local preview and deploy loop, with no local backend.
 entries:
   - path: .
     name: fabricator-dataapp
