@@ -567,18 +567,17 @@ function shortDetail(title: string, projectPath: string): string {
   return title
 }
 
+/** A stingray silhouette with eyes — on-brand for Rayfin, kept monochrome for the neutral user chip. */
 function UserIcon(): JSX.Element {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="8" r="4" />
-      <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      {/* body / wings — eyes are cut as holes (evenodd) so the chip shows through */}
+      <path
+        fillRule="evenodd"
+        d="M12 4.4 C15.8 4.6 20.7 6.4 23 12 C20 13.6 15 14 12 16.2 C9 14 4 13.6 1 12 C3.3 6.4 8.2 4.6 12 4.4 Z M9 8.6 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 Z M13 8.6 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 Z"
+      />
+      {/* tail */}
+      <path d="M11.4 15.8 L12 23.6 L12.6 15.8 Z" />
     </svg>
   )
 }

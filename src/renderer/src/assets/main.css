@@ -8191,10 +8191,16 @@ code {
   height: 15px;
 }
 
-/* User: a calm neutral chip — keeps the single teal accent on the brand mark. */
+/* User: a calm neutral chip — keeps the single teal accent on the brand mark.
+   The stingray fills the chip (~18px) to match the assistant's brand mark. */
 .turn--user .turn-avatar {
   background: var(--bg-elev-3);
   color: var(--text-dim);
+}
+
+.turn--user .turn-avatar svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* Assistant: subtle teal tint carrying the brand logo. */
@@ -8299,13 +8305,31 @@ code {
 }
 
 .turn--user .msg-text {
-  align-self: flex-start;
-  max-width: 100%;
+  align-self: flex-end;
+  max-width: 85%;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 10px 14px;
   white-space: pre-wrap;
+}
+
+/* User turns sit on the right, chat-style: mirror the header so the avatar and
+   "You" label hug the right edge, and right-align the bubble + any attachments. */
+.turn--user .turn-head {
+  flex-direction: row-reverse;
+}
+
+.turn--user .turn-main {
+  align-items: flex-end;
+  padding-left: 0;
+  padding-right: 2px;
+}
+
+.turn--user .msg-shots,
+.turn--user .msg-attach {
+  align-self: flex-end;
+  justify-content: flex-end;
 }
 
 .msg-notice {
