@@ -118,6 +118,22 @@ describe('SemanticModelView', () => {
     expect(fetchSchema).toHaveBeenCalledTimes(2)
   })
 
+  it('fits the initial layout before paint instead of scheduling a second-frame camera jump', async () => {
+    const originalRaf = globalThis.requestAnimationFrame
+    const raf = vi.fn(() => 1)
+    globalThis.requestAnimationFrame = raf as typeof requestAnimationFrame
+    try {
+      installApi(schema())
+      render(<SemanticModelView projectId="p1" models={[MODEL]} refreshKey={0} />)
+
+      await screen.findByText('Orders')
+
+      expect(raf).not.toHaveBeenCalled()
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf
+    }
+  })
+
   it('isolates a table and its neighbours when focused', async () => {
     installApi(schema())
     render(<SemanticModelView projectId="p1" models={[MODEL]} refreshKey={0} />)

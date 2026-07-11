@@ -99,7 +99,8 @@ function columnChip(dataType?: string): { label: string; cls: string } {
   if (/bool/.test(t)) return { label: 'bool', cls: 'semantic-chip--bool' }
   if (/(date|time)/.test(t)) return { label: 'date', cls: 'semantic-chip--date' }
   if (/int/.test(t)) return { label: 'int', cls: 'semantic-chip--num' }
-  if (/(dec|doub|curr|number|money|float)/.test(t)) return { label: 'decimal', cls: 'semantic-chip--num' }
+  if (/(dec|doub|curr|number|money|float)/.test(t))
+    return { label: 'decimal', cls: 'semantic-chip--num' }
   if (/(string|text|char)/.test(t)) return { label: 'text', cls: 'semantic-chip--text' }
   if (/binary/.test(t)) return { label: 'binary', cls: 'semantic-chip--blob' }
   return { label: dataType ?? '—', cls: 'semantic-chip--unknown' }
@@ -169,10 +170,20 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
   positionsRef.current = positions
   const gesture = useRef<
     | { kind: 'pan'; startX: number; startY: number; tx0: number; ty0: number }
-    | { kind: 'card'; name: string; startX: number; startY: number; ox: number; oy: number; moved: boolean }
+    | {
+        kind: 'card'
+        name: string
+        startX: number
+        startY: number
+        ox: number
+        oy: number
+        moved: boolean
+      }
     | null
   >(null)
   const fitReq = useRef(false)
+  /** Skip one measure pass after replacing positions so cards commit before fitting them. */
+  const pendingPositionCommit = useRef(false)
   // Tracks the refresh/reload counters seen by the load effect so it can tell a
   // genuine "fetch fresh" (Refresh button / parent refreshKey bump) apart from a
   // mere remount or selection change, which may be served from the schema cache.
@@ -280,35 +291,39 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
     return s
   }, [model, query])
 
-  const buildPositions = useCallback((m: SemanticModel, useStored: boolean): Map<string, XY> => {
-    const nodes: LayoutNode[] = m.tables.map((t) => ({
-      id: t.name,
-      width: CARD_WIDTH,
-      height: estimateHeight(t)
-    }))
-    const layoutEdges: LayoutEdge[] = m.relationships
-      .filter((r) => r.fromTable && r.toTable)
-      .map((r) => ({ from: r.fromTable!, to: r.toTable! }))
-    const vp = viewportRef.current
-    const targetAspect =
-      vp && vp.clientWidth > 0 && vp.clientHeight > 0
-        ? Math.min(2.6, Math.max(1.3, vp.clientWidth / vp.clientHeight))
-        : undefined
-    const auto = computeLayout(nodes, layoutEdges, { targetAspect }).positions
-    const stored = useStored ? loadStoredPositions(projectId) : {}
-    const merged = new Map<string, XY>()
-    for (const [name, rect] of auto) {
-      const s = stored[name]
-      merged.set(name, {
-        x: s && typeof s.x === 'number' ? s.x : rect.x,
-        y: s && typeof s.y === 'number' ? s.y : rect.y
-      })
-    }
-    return merged
-  }, [projectId])
+  const buildPositions = useCallback(
+    (m: SemanticModel, useStored: boolean): Map<string, XY> => {
+      const nodes: LayoutNode[] = m.tables.map((t) => ({
+        id: t.name,
+        width: CARD_WIDTH,
+        height: estimateHeight(t)
+      }))
+      const layoutEdges: LayoutEdge[] = m.relationships
+        .filter((r) => r.fromTable && r.toTable)
+        .map((r) => ({ from: r.fromTable!, to: r.toTable! }))
+      const vp = viewportRef.current
+      const targetAspect =
+        vp && vp.clientWidth > 0 && vp.clientHeight > 0
+          ? Math.min(2.6, Math.max(1.3, vp.clientWidth / vp.clientHeight))
+          : undefined
+      const auto = computeLayout(nodes, layoutEdges, { targetAspect }).positions
+      const stored = useStored ? loadStoredPositions(projectId) : {}
+      const merged = new Map<string, XY>()
+      for (const [name, rect] of auto) {
+        const s = stored[name]
+        merged.set(name, {
+          x: s && typeof s.x === 'number' ? s.x : rect.x,
+          y: s && typeof s.y === 'number' ? s.y : rect.y
+        })
+      }
+      return merged
+    },
+    [projectId]
+  )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!model) return
+    pendingPositionCommit.current = true
     setPositions(buildPositions(model, true))
     setQuery('')
     setHighlight(null)
@@ -400,10 +415,19 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
   // Measure card rects, recompute edges (+ their glyphs) and canvas bounds.
   useLayoutEffect(() => {
     if (!model) return
+    if (pendingPositionCommit.current) {
+      pendingPositionCommit.current = false
+      return
+    }
     const rectOf = (name: string): RectLike | null => {
       const el = cardRefs.current.get(name)
       if (!el) return null
-      return { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }
+      return {
+        left: el.offsetLeft,
+        top: el.offsetTop,
+        width: el.offsetWidth,
+        height: el.offsetHeight
+      }
     }
     const firstKey = (table: string): string | undefined => {
       const t = model.tables.find((x) => x.name === table)
@@ -481,10 +505,19 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
 
     if (fitReq.current) {
       fitReq.current = false
-      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => fitTo())
-      else fitTo()
+      fitTo()
     }
-  }, [model, derived, positions, collapsed, collapsedAll, expandedMeasures, renderSet, redrawTick, fitTo])
+  }, [
+    model,
+    derived,
+    positions,
+    collapsed,
+    collapsedAll,
+    expandedMeasures,
+    renderSet,
+    redrawTick,
+    fitTo
+  ])
 
   // Web fonts load lazily; re-measure once ready so edges stay aligned.
   useEffect(() => {
@@ -552,7 +585,11 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
     const g = gesture.current
     if (!g) return
     if (g.kind === 'pan') {
-      setView((v) => ({ ...v, tx: g.tx0 + (e.clientX - g.startX), ty: g.ty0 + (e.clientY - g.startY) }))
+      setView((v) => ({
+        ...v,
+        tx: g.tx0 + (e.clientX - g.startX),
+        ty: g.ty0 + (e.clientY - g.startY)
+      }))
       return
     }
     const dx = e.clientX - g.startX
@@ -673,7 +710,11 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
           <p className="semantic-empty-sub">
             The semantic model is read live from Fabric, so you need an active Fabric session.
           </p>
-          <button className="btn btn--primary" disabled={reauthing} onClick={() => void signInAndReload()}>
+          <button
+            className="btn btn--primary"
+            disabled={reauthing}
+            onClick={() => void signInAndReload()}
+          >
             {reauthing ? 'Signing in…' : 'Sign in to Fabric'}
           </button>
         </div>
@@ -687,10 +728,14 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
         <div className="semantic-empty semantic-empty--cta">
           <div className="semantic-empty-title">Sign in to Azure to view the semantic model</div>
           <p className="semantic-empty-sub">
-            The semantic model’s schema is read live from Fabric using your Azure CLI session.
-            Sign in with <code>az login</code> to continue.
+            The semantic model’s schema is read live from Fabric using your Azure CLI session. Sign
+            in with <code>az login</code> to continue.
           </p>
-          <button className="btn btn--primary" disabled={reauthing} onClick={() => void signInAzAndReload()}>
+          <button
+            className="btn btn--primary"
+            disabled={reauthing}
+            onClick={() => void signInAzAndReload()}
+          >
             {reauthing ? 'Signing in…' : 'Sign in to Azure'}
           </button>
         </div>
@@ -733,7 +778,12 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
 
   const cardDimmed = (name: string): boolean => {
     if (matched && !matched.has(name)) return true
-    if (!matched && highlight && name !== highlight && !(neighbors.get(highlight)?.has(name) ?? false))
+    if (
+      !matched &&
+      highlight &&
+      name !== highlight &&
+      !(neighbors.get(highlight)?.has(name) ?? false)
+    )
       return true
     return false
   }
@@ -783,7 +833,11 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
             onChange={(e) => setQuery(e.target.value)}
           />
           {query && (
-            <button className="model-search-clear" aria-label="Clear search" onClick={() => setQuery('')}>
+            <button
+              className="model-search-clear"
+              aria-label="Clear search"
+              onClick={() => setQuery('')}
+            >
               <Codicon name="close" />
             </button>
           )}
@@ -893,150 +947,159 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
             })}
           </svg>
 
-          {model.tables.filter((table) => isRendered(table.name)).map((table) => {
-            const pos = positions.get(table.name) ?? { x: 0, y: 0 }
-            const dim = cardDimmed(table.name)
-            const collapsedCard = isCollapsed(table.name)
-            const measuresExpanded = expandedMeasures.has(table.name)
-            const shownMeasures = measuresExpanded
-              ? table.measures
-              : table.measures.slice(0, MEASURE_PREVIEW)
-            return (
-              <div
-                key={table.name}
-                ref={setCardRef(table.name)}
-                className={`semantic-card${dim ? ' semantic-card--dim' : ''}${
-                  dragging === table.name ? ' semantic-card--dragging' : ''
-                }${highlight === table.name ? ' semantic-card--active' : ''}${
-                  table.isHidden ? ' semantic-card--hidden' : ''
-                }`}
-                style={{ left: pos.x, top: pos.y, width: CARD_WIDTH }}
-                onPointerDown={(e) => onCardPointerDown(e, table.name)}
-                onMouseEnter={() => {
-                  if (!gesture.current) setHighlight(table.name)
-                }}
-                onMouseLeave={() => setHighlight(null)}
-              >
-                <div className="semantic-card-head" title={table.description}>
-                  <button
-                    className="semantic-card-collapse"
-                    aria-label={collapsedCard ? 'Expand table' : 'Collapse table'}
-                    title={collapsedCard ? 'Expand' : 'Collapse'}
-                    onClick={() => toggleCard(table.name)}
-                  >
-                    <Codicon name={collapsedCard ? 'chevron-right' : 'chevron-down'} />
-                  </button>
-                  <Codicon name="table" className="semantic-card-ico" />
-                  <span className="semantic-card-name">{table.name}</span>
-                  {table.isHidden && <span className="semantic-card-badge">hidden</span>}
-                  <button
-                    className="semantic-card-focus"
-                    data-no-drag
-                    aria-label={focus === table.name ? 'Clear focus' : 'Focus this table'}
-                    title={focus === table.name ? 'Clear focus' : 'Focus neighbourhood'}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      focusOn(focus === table.name ? null : table.name)
-                    }}
-                  >
-                    <Codicon name={focus === table.name ? 'eye-closed' : 'eye'} />
-                  </button>
-                </div>
+          {model.tables
+            .filter((table) => isRendered(table.name))
+            .map((table) => {
+              const pos = positions.get(table.name) ?? { x: 0, y: 0 }
+              const dim = cardDimmed(table.name)
+              const collapsedCard = isCollapsed(table.name)
+              const measuresExpanded = expandedMeasures.has(table.name)
+              const shownMeasures = measuresExpanded
+                ? table.measures
+                : table.measures.slice(0, MEASURE_PREVIEW)
+              return (
+                <div
+                  key={table.name}
+                  ref={setCardRef(table.name)}
+                  className={`semantic-card${dim ? ' semantic-card--dim' : ''}${
+                    dragging === table.name ? ' semantic-card--dragging' : ''
+                  }${highlight === table.name ? ' semantic-card--active' : ''}${
+                    table.isHidden ? ' semantic-card--hidden' : ''
+                  }`}
+                  style={{ left: pos.x, top: pos.y, width: CARD_WIDTH }}
+                  onPointerDown={(e) => onCardPointerDown(e, table.name)}
+                  onMouseEnter={() => {
+                    if (!gesture.current) setHighlight(table.name)
+                  }}
+                  onMouseLeave={() => setHighlight(null)}
+                >
+                  <div className="semantic-card-head" title={table.description}>
+                    <button
+                      className="semantic-card-collapse"
+                      aria-label={collapsedCard ? 'Expand table' : 'Collapse table'}
+                      title={collapsedCard ? 'Expand' : 'Collapse'}
+                      onClick={() => toggleCard(table.name)}
+                    >
+                      <Codicon name={collapsedCard ? 'chevron-right' : 'chevron-down'} />
+                    </button>
+                    <Codicon name="table" className="semantic-card-ico" />
+                    <span className="semantic-card-name">{table.name}</span>
+                    {table.isHidden && <span className="semantic-card-badge">hidden</span>}
+                    <button
+                      className="semantic-card-focus"
+                      data-no-drag
+                      aria-label={focus === table.name ? 'Clear focus' : 'Focus this table'}
+                      title={focus === table.name ? 'Clear focus' : 'Focus neighbourhood'}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        focusOn(focus === table.name ? null : table.name)
+                      }}
+                    >
+                      <Codicon name={focus === table.name ? 'eye-closed' : 'eye'} />
+                    </button>
+                  </div>
 
-                {collapsedCard ? (
-                  <button
-                    className="semantic-card-summary"
-                    onClick={() => toggleCard(table.name)}
-                  >
-                    {table.columns.length}{' '}
-                    {table.columns.length === 1 ? 'column' : 'columns'}
-                    {table.measures.length > 0 &&
-                      ` · ${table.measures.length} ${
-                        table.measures.length === 1 ? 'measure' : 'measures'
-                      }`}
-                  </button>
-                ) : (
-                  <>
-                <ul className="semantic-fields">
-                  {table.columns.map((col) => {
-                    const chip = columnChip(col.dataType)
-                    return (
-                      <li
-                        key={col.name}
-                        data-field={col.name}
-                        className={`semantic-field${col.isHidden ? ' semantic-field--hidden' : ''}`}
-                        title={col.expression ? `Calculated: ${col.expression}` : col.dataType}
-                      >
-                        <span className="semantic-field-gutter" aria-hidden="true">
-                          {col.isKey ? (
-                            <Codicon name="key" className="semantic-field-ico semantic-field-ico--pk" />
-                          ) : (
-                            <span className="semantic-field-ico" />
+                  {collapsedCard ? (
+                    <button
+                      className="semantic-card-summary"
+                      onClick={() => toggleCard(table.name)}
+                    >
+                      {table.columns.length} {table.columns.length === 1 ? 'column' : 'columns'}
+                      {table.measures.length > 0 &&
+                        ` · ${table.measures.length} ${
+                          table.measures.length === 1 ? 'measure' : 'measures'
+                        }`}
+                    </button>
+                  ) : (
+                    <>
+                      <ul className="semantic-fields">
+                        {table.columns.map((col) => {
+                          const chip = columnChip(col.dataType)
+                          return (
+                            <li
+                              key={col.name}
+                              data-field={col.name}
+                              className={`semantic-field${col.isHidden ? ' semantic-field--hidden' : ''}`}
+                              title={
+                                col.expression ? `Calculated: ${col.expression}` : col.dataType
+                              }
+                            >
+                              <span className="semantic-field-gutter" aria-hidden="true">
+                                {col.isKey ? (
+                                  <Codicon
+                                    name="key"
+                                    className="semantic-field-ico semantic-field-ico--pk"
+                                  />
+                                ) : (
+                                  <span className="semantic-field-ico" />
+                                )}
+                              </span>
+                              <span className="semantic-field-name">{col.name}</span>
+                              <span className={`semantic-chip ${chip.cls}`}>{chip.label}</span>
+                            </li>
+                          )
+                        })}
+                        {table.columns.length === 0 && (
+                          <li className="semantic-field semantic-field--empty">No columns.</li>
+                        )}
+                      </ul>
+
+                      {table.measures.length > 0 && (
+                        <div className="semantic-measures">
+                          <div className="semantic-measures-head">
+                            Measures{' '}
+                            <span className="semantic-measures-count">{table.measures.length}</span>
+                          </div>
+                          {shownMeasures.map((m) => (
+                            <button
+                              key={m.name}
+                              className="semantic-measure"
+                              data-no-drag
+                              title="Show DAX"
+                              onClick={(e) => openMeasure(e, table.name, m)}
+                            >
+                              <span className="semantic-measure-fx" aria-hidden="true">
+                                fx
+                              </span>
+                              <span className="semantic-measure-name">{m.name}</span>
+                            </button>
+                          ))}
+                          {table.measures.length > MEASURE_PREVIEW && (
+                            <button
+                              className="semantic-measure-more"
+                              data-no-drag
+                              onClick={() => toggleMeasures(table.name)}
+                            >
+                              {measuresExpanded
+                                ? 'Show fewer'
+                                : `Show all ${table.measures.length}`}
+                            </button>
                           )}
-                        </span>
-                        <span className="semantic-field-name">{col.name}</span>
-                        <span className={`semantic-chip ${chip.cls}`}>{chip.label}</span>
-                      </li>
-                    )
-                  })}
-                  {table.columns.length === 0 && (
-                    <li className="semantic-field semantic-field--empty">No columns.</li>
+                        </div>
+                      )}
+
+                      {(table.storageMode || table.description) && (
+                        <div className="semantic-card-foot">
+                          {table.storageMode && (
+                            <span
+                              className="semantic-foot-mode"
+                              title={`Storage mode: ${table.storageMode}`}
+                            >
+                              {table.storageMode}
+                            </span>
+                          )}
+                          {table.description && (
+                            <span className="semantic-foot-desc" title={table.description}>
+                              {table.description}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
-                </ul>
-
-                {table.measures.length > 0 && (
-                  <div className="semantic-measures">
-                    <div className="semantic-measures-head">
-                      Measures <span className="semantic-measures-count">{table.measures.length}</span>
-                    </div>
-                    {shownMeasures.map((m) => (
-                      <button
-                        key={m.name}
-                        className="semantic-measure"
-                        data-no-drag
-                        title="Show DAX"
-                        onClick={(e) => openMeasure(e, table.name, m)}
-                      >
-                        <span className="semantic-measure-fx" aria-hidden="true">
-                          fx
-                        </span>
-                        <span className="semantic-measure-name">{m.name}</span>
-                      </button>
-                    ))}
-                    {table.measures.length > MEASURE_PREVIEW && (
-                      <button
-                        className="semantic-measure-more"
-                        data-no-drag
-                        onClick={() => toggleMeasures(table.name)}
-                      >
-                        {measuresExpanded ? 'Show fewer' : `Show all ${table.measures.length}`}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {(table.storageMode || table.description) && (
-                  <div className="semantic-card-foot">
-                    {table.storageMode && (
-                      <span
-                        className="semantic-foot-mode"
-                        title={`Storage mode: ${table.storageMode}`}
-                      >
-                        {table.storageMode}
-                      </span>
-                    )}
-                    {table.description && (
-                      <span className="semantic-foot-desc" title={table.description}>
-                        {table.description}
-                      </span>
-                    )}
-                  </div>
-                )}
-                  </>
-                )}
-              </div>
-            )
-          })}
+                </div>
+              )
+            })}
         </div>
       </div>
 
@@ -1126,15 +1189,7 @@ function CrowMark({ m }: { m: EndMark }): JSX.Element {
     )
   }
   const bx = m.x + m.outX * ONE_OFF
-  return (
-    <line
-      className="semantic-one"
-      x1={bx}
-      y1={m.y - ONE_HALF}
-      x2={bx}
-      y2={m.y + ONE_HALF}
-    />
-  )
+  return <line className="semantic-one" x1={bx} y1={m.y - ONE_HALF} x2={bx} y2={m.y + ONE_HALF} />
 }
 
 /** Render a DAX expression with lightweight syntax highlighting. */

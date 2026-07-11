@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import type { FileContent, FileNode, StudioProject } from '@shared/ipc'
 import { monacoLanguage } from '../monaco'
@@ -125,7 +125,9 @@ function TreeRow({ node, depth, selectedPath, onSelect }: TreeRowProps): JSX.Ele
           onClick={() => setOpen((o) => !o)}
           title={node.ignored ? 'Ignored by Git' : undefined}
         >
-          <span className="tree-caret"><Codicon name={open ? 'chevron-down' : 'chevron-right'} /></span>
+          <span className="tree-caret">
+            <Codicon name={open ? 'chevron-down' : 'chevron-right'} />
+          </span>
           <span className="tree-name">{node.name}</span>
         </button>
         {open &&
@@ -167,7 +169,7 @@ function FilesView({
   const [tree, setTree] = useState<FileNode[] | null>(null)
   const [selectedState, setSelectedState] = useState(() => ({
     projectId: project.id,
-    path: readCodeFile(project.id)
+    path: openRequest?.path ?? readCodeFile(project.id)
   }))
   const selected = selectedState.projectId === project.id ? selectedState.path : null
   const [file, setFile] = useState<FileContent | null>(null)
@@ -175,6 +177,10 @@ function FilesView({
   const [copied, setCopied] = useState(false)
   // Guards the one-time default pick so we never override a manual selection.
   const didDefaultRef = useRef(false)
+  /** Latest read wins so a slower default-config read cannot overwrite an external request. */
+  const fileReadRef = useRef(0)
+  const requestedPathRef = useRef(openRequest?.path)
+  requestedPathRef.current = openRequest?.path
 
   const loadTree = useCallback(async (): Promise<void> => {
     setTree(await window.api.projects.files.tree(project.id))
@@ -182,11 +188,13 @@ function FilesView({
 
   const readPath = useCallback(
     async (path: string): Promise<void> => {
+      const request = ++fileReadRef.current
       setLoading(true)
       try {
-        setFile(await window.api.projects.files.read(project.id, path))
+        const next = await window.api.projects.files.read(project.id, path)
+        if (request === fileReadRef.current) setFile(next)
       } finally {
-        setLoading(false)
+        if (request === fileReadRef.current) setLoading(false)
       }
     },
     [project.id]
@@ -196,7 +204,11 @@ function FilesView({
   // file remembered for the new project.
   useEffect(() => {
     didDefaultRef.current = false
-    setSelectedState({ projectId: project.id, path: readCodeFile(project.id) })
+    fileReadRef.current += 1
+    setSelectedState({
+      projectId: project.id,
+      path: requestedPathRef.current ?? readCodeFile(project.id)
+    })
     setFile(null)
     setTree(null)
   }, [project.id])
@@ -213,7 +225,7 @@ function FilesView({
   // On first entry, open the project's Rayfin config (rayfin/rayfin.yml). Skipped
   // once the user has picked a file, so manual selections are never overridden.
   useEffect(() => {
-    if (!tree || didDefaultRef.current || selected) return
+    if (!tree || didDefaultRef.current || selected || openRequest?.path) return
     didDefaultRef.current = true
     const target = findFile(tree, (n) => DEFAULT_FILES.includes(n.path.toLowerCase()))
     if (target) setSelectedState({ projectId: project.id, path: target.path })
@@ -223,8 +235,8 @@ function FilesView({
     if (selected) void readPath(selected)
   }, [refreshKey, selected, readPath])
 
-  // Honour an external request to open a specific file (e.g. from the Model tab).
-  useEffect(() => {
+  // Honour an external request before passive effects can choose the default config file.
+  useLayoutEffect(() => {
     if (!openRequest?.path) return
     didDefaultRef.current = true
     setSelectedState({ projectId: project.id, path: openRequest.path })
@@ -249,7 +261,11 @@ function FilesView({
       <div className="code-tree">
         <div className="code-tree-head">
           <span>Files</span>
-          <button className="btn btn--xs btn--ghost" onClick={() => void loadTree()} title="Refresh">
+          <button
+            className="btn btn--xs btn--ghost"
+            onClick={() => void loadTree()}
+            title="Refresh"
+          >
             <Codicon name="refresh" />
           </button>
         </div>

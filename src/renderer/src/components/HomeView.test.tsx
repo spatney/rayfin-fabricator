@@ -1,30 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import HomeView from './HomeView'
 import { makeProject } from '../../test/harness'
 
-/**
- * Guards the "Open existing…" dropdown added for Clone-from-GitHub: the button
- * opens a menu whose two items route to the folder picker vs. the GitHub flow.
- */
-
-function baseProps(): React.ComponentProps<typeof HomeView> {
+function baseProps(): ComponentProps<typeof HomeView> {
   return {
     projects: [],
     activeId: null,
-    workspaceRoot: '/ws',
+    workspaceRoot: 'C:/workspace',
     opening: false,
-    menuOpenId: null,
-    setMenuOpenId: vi.fn(),
-    renamingId: null,
-    renameValue: '',
-    setRenameValue: vi.fn(),
     onSelect: vi.fn(),
-    onStartRename: vi.fn(),
-    onSubmitRename: vi.fn(),
-    onCancelRename: vi.fn(),
-    onRemoveFromList: vi.fn(),
-    onDeleteFromDisk: vi.fn(),
+    onManageProject: vi.fn(),
     onNewProject: vi.fn(),
     onOpenExisting: vi.fn(),
     onCloneFromGitHub: vi.fn(),
@@ -34,59 +21,44 @@ function baseProps(): React.ComponentProps<typeof HomeView> {
 
 afterEach(() => cleanup())
 
-describe('HomeView "Open existing…" menu', () => {
-  it('is closed initially and opens the two options on click', () => {
-    render(<HomeView {...baseProps()} />)
-
-    expect(screen.queryByRole('menuitem', { name: 'Browse folder…' })).toBeNull()
-    expect(screen.queryByRole('menuitem', { name: 'Clone from GitHub…' })).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open existing…' }))
-
-    expect(screen.getByRole('menuitem', { name: 'Browse folder…' })).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: 'Clone from GitHub…' })).toBeTruthy()
-  })
-
-  it('"Browse folder…" fires onOpenExisting (and not the clone flow)', () => {
+describe('HomeView project launcher', () => {
+  it('routes each direct quick-start action without hiding folder or GitHub options in a menu', () => {
     const props = baseProps()
     render(<HomeView {...props} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open existing…' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Browse folder…' }))
+    fireEvent.click(screen.getByRole('button', { name: /new project/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open folder/i }))
+    fireEvent.click(screen.getByRole('button', { name: /clone from github/i }))
 
+    expect(props.onNewProject).toHaveBeenCalledTimes(1)
     expect(props.onOpenExisting).toHaveBeenCalledTimes(1)
-    expect(props.onCloneFromGitHub).not.toHaveBeenCalled()
-  })
-
-  it('"Clone from GitHub…" fires onCloneFromGitHub (and not the folder picker)', () => {
-    const props = baseProps()
-    render(<HomeView {...props} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open existing…' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Clone from GitHub…' }))
-
     expect(props.onCloneFromGitHub).toHaveBeenCalledTimes(1)
-    expect(props.onOpenExisting).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /open existing/i })).toBeNull()
+    expect(document.querySelectorAll('.home-action-icon > svg')).toHaveLength(3)
   })
-})
 
-describe('HomeView project rows (keyboard activation)', () => {
-  it('opens a project on Enter and Space, and ignores other keys', () => {
+  it('uses separate native controls to open and manage a recent project', () => {
     const props = baseProps()
-    props.projects = [makeProject('p1', { name: 'Sales' })]
+    const project = makeProject('p1', { name: 'Sales' })
+    props.projects = [project]
     render(<HomeView {...props} />)
 
-    const row = screen.getByText('Sales').closest('.project-item') as HTMLElement
-    expect(row).not.toBeNull()
+    const open = screen.getByRole('button', { name: 'Open Sales' })
+    expect(open.tagName).toBe('BUTTON')
+    fireEvent.click(open)
+    fireEvent.click(screen.getByRole('button', { name: 'Manage Sales' }))
 
-    fireEvent.keyDown(row, { key: 'Enter' })
-    expect(props.onSelect).toHaveBeenCalledTimes(1)
+    expect(props.onSelect).toHaveBeenCalledWith(project)
+    expect(props.onManageProject).toHaveBeenCalledWith(project)
+  })
 
-    fireEvent.keyDown(row, { key: ' ' })
-    expect(props.onSelect).toHaveBeenCalledTimes(2)
+  it('keeps the workspace location actionable', () => {
+    const props = baseProps()
+    render(<HomeView {...props} />)
 
-    // A non-activating key must not open the project.
-    fireEvent.keyDown(row, { key: 'a' })
-    expect(props.onSelect).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('C:/workspace')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Change folder' }))
+
+    expect(props.onChangeWorkspaceRoot).toHaveBeenCalledTimes(1)
   })
 })

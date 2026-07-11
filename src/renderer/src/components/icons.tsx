@@ -19,7 +19,9 @@ export function Codicon({
   className = '',
   ...rest
 }: { name: string } & HTMLAttributes<HTMLElement>): JSX.Element {
-  return <i className={`codicon codicon-${name} ${className}`.trim()} aria-hidden="true" {...rest} />
+  return (
+    <i className={`codicon codicon-${name} ${className}`.trim()} aria-hidden="true" {...rest} />
+  )
 }
 
 function Icon({ className = 'btn-ico', children, ...rest }: IconProps): JSX.Element {
@@ -47,6 +49,26 @@ export function InfoIcon(props: IconProps): JSX.Element {
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="8" x2="12" y2="12" />
       <line x1="12" y1="16" x2="12.01" y2="16" />
+    </Icon>
+  )
+}
+
+/** Plus — create a new project. */
+export function AddIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </Icon>
+  )
+}
+
+/** Folder — open an existing local project. */
+export function FolderIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h5l2 2h8A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-10Z" />
+      <path d="M3 10h18" opacity="0.45" />
     </Icon>
   )
 }

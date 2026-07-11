@@ -161,11 +161,21 @@ export default function ModelView({
   projectIdRef.current = project.id
   const gesture = useRef<
     | { kind: 'pan'; startX: number; startY: number; tx0: number; ty0: number }
-    | { kind: 'card'; name: string; startX: number; startY: number; ox: number; oy: number; moved: boolean }
+    | {
+        kind: 'card'
+        name: string
+        startX: number
+        startY: number
+        ox: number
+        oy: number
+        moved: boolean
+      }
     | null
   >(null)
   /** Pending fit-to-view request, consumed after the next measure. */
   const fitReq = useRef<ReadonlySet<string> | 'all' | null>(null)
+  /** Skip one measure pass after replacing positions so cards commit before fitting them. */
+  const pendingPositionCommit = useRef(false)
 
   // (Re)parse the data model whenever the project or its files change — unless
   // the parent supplied a pre-parsed model, in which case use it directly.
@@ -204,7 +214,6 @@ export default function ModelView({
     () => (model ? deriveRelationEdges(model.relations) : { pairs: [], selfs: [] }),
     [model]
   )
-
 
   // Undirected neighbour map for hover highlighting + focus neighbourhoods.
   const neighbors = useMemo(() => {
@@ -259,39 +268,37 @@ export default function ModelView({
   )
 
   // Build auto-layout positions, then overlay any persisted manual positions.
-  const buildPositions = useCallback(
-    (model: DataModel, useStored: boolean): Map<string, XY> => {
-      const nodes: LayoutNode[] = model.entities.map((e) => ({
-        id: e.name,
-        width: CARD_WIDTH,
-        height: estimateHeight(e)
-      }))
-      const layoutEdges: LayoutEdge[] = model.relations.map((r) => ({ from: r.from, to: r.to }))
-      // Bias the layout toward the live viewport shape so a wide window gets a
-      // wide diagram (and fit-to-view doesn't have to zoom way out).
-      const vp = viewportRef.current
-      const targetAspect =
-        vp && vp.clientWidth > 0 && vp.clientHeight > 0
-          ? Math.min(2.6, Math.max(1.3, vp.clientWidth / vp.clientHeight))
-          : undefined
-      const auto = computeLayout(nodes, layoutEdges, { targetAspect }).positions
-      const stored = useStored ? loadStoredPositions(projectIdRef.current) : {}
-      const merged = new Map<string, XY>()
-      for (const [name, rect] of auto) {
-        const s = stored[name]
-        merged.set(name, {
-          x: s && typeof s.x === 'number' ? s.x : rect.x,
-          y: s && typeof s.y === 'number' ? s.y : rect.y
-        })
-      }
-      return merged
-    },
-    []
-  )
+  const buildPositions = useCallback((model: DataModel, useStored: boolean): Map<string, XY> => {
+    const nodes: LayoutNode[] = model.entities.map((e) => ({
+      id: e.name,
+      width: CARD_WIDTH,
+      height: estimateHeight(e)
+    }))
+    const layoutEdges: LayoutEdge[] = model.relations.map((r) => ({ from: r.from, to: r.to }))
+    // Bias the layout toward the live viewport shape so a wide window gets a
+    // wide diagram (and fit-to-view doesn't have to zoom way out).
+    const vp = viewportRef.current
+    const targetAspect =
+      vp && vp.clientWidth > 0 && vp.clientHeight > 0
+        ? Math.min(2.6, Math.max(1.3, vp.clientWidth / vp.clientHeight))
+        : undefined
+    const auto = computeLayout(nodes, layoutEdges, { targetAspect }).positions
+    const stored = useStored ? loadStoredPositions(projectIdRef.current) : {}
+    const merged = new Map<string, XY>()
+    for (const [name, rect] of auto) {
+      const s = stored[name]
+      merged.set(name, {
+        x: s && typeof s.x === 'number' ? s.x : rect.x,
+        y: s && typeof s.y === 'number' ? s.y : rect.y
+      })
+    }
+    return merged
+  }, [])
 
   // When the model changes, (re)seed positions and reset interaction state.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!model) return
+    pendingPositionCommit.current = true
     setPositions(buildPositions(model, true))
     setFocus(null)
     setQuery('')
@@ -352,12 +359,21 @@ export default function ModelView({
   // Measure card rects, recompute edges + canvas bounds, and honour fit requests.
   useLayoutEffect(() => {
     if (!model) return
+    if (pendingPositionCommit.current) {
+      pendingPositionCommit.current = false
+      return
+    }
     const rectOf = (
       name: string
     ): { left: number; top: number; width: number; height: number } | null => {
       const el = cardRefs.current.get(name)
       if (!el) return null
-      return { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }
+      return {
+        left: el.offsetLeft,
+        top: el.offsetTop,
+        width: el.offsetWidth,
+        height: el.offsetHeight
+      }
     }
 
     // Vertical anchor for an edge end: the centre of the `via` field row (else the
@@ -403,10 +419,7 @@ export default function ModelView({
     if (fitReq.current) {
       const target = fitReq.current
       fitReq.current = null
-      const run = (): void => fitTo(target === 'all' ? undefined : target)
-      // Defer to next frame so the canvas size above has applied.
-      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
-      else run()
+      fitTo(target === 'all' ? undefined : target)
     }
   }, [model, derived, positions, collapsed, collapsedAll, renderSet, redrawTick, fitTo])
 
@@ -478,7 +491,11 @@ export default function ModelView({
     const g = gesture.current
     if (!g) return
     if (g.kind === 'pan') {
-      setView((v) => ({ ...v, tx: g.tx0 + (e.clientX - g.startX), ty: g.ty0 + (e.clientY - g.startY) }))
+      setView((v) => ({
+        ...v,
+        tx: g.tx0 + (e.clientX - g.startX),
+        ty: g.ty0 + (e.clientY - g.startY)
+      }))
       return
     }
     const dx = e.clientX - g.startX
@@ -644,7 +661,8 @@ export default function ModelView({
 
   const cardDimmed = (name: string): boolean => {
     if (matched && !matched.has(name)) return true
-    if (!matched && highlight && name !== highlight && !neighborsOf(highlight).has(name)) return true
+    if (!matched && highlight && name !== highlight && !neighborsOf(highlight).has(name))
+      return true
     return false
   }
   const edgeMood = (from: string, to: string): 'hot' | 'dim' | '' => {
@@ -720,11 +738,7 @@ export default function ModelView({
           <button className="model-zoom-btn" onClick={() => zoomBy(0.8)} aria-label="Zoom out">
             <Codicon name="zoom-out" />
           </button>
-          <button
-            className="model-zoom-label"
-            onClick={() => fitTo(fitTarget)}
-            title="Fit to view"
-          >
+          <button className="model-zoom-label" onClick={() => fitTo(fitTarget)} title="Fit to view">
             {Math.round(view.scale * 100)}%
           </button>
           <button className="model-zoom-btn" onClick={() => zoomBy(1.25)} aria-label="Zoom in">
@@ -784,152 +798,160 @@ export default function ModelView({
             })}
           </svg>
 
-          {model.entities.filter((e) => isRendered(e.name)).map((entity) => {
-            const tone = ACCESS_META[entity.access.level].tone
-            const pos = positions.get(entity.name) ?? { x: 0, y: 0 }
-            const dim = cardDimmed(entity.name)
-            const collapsedCard = isCollapsed(entity.name)
-            const linked = neighborsOf(entity.name).size
-            return (
-              <div
-                key={entity.name}
-                ref={setCardRef(entity.name)}
-                className={`model-card model-card--${tone}${dim ? ' model-card--dim' : ''}${
-                  dragging === entity.name ? ' model-card--dragging' : ''
-                }${highlight === entity.name ? ' model-card--active' : ''}`}
-                style={{ left: pos.x, top: pos.y, width: CARD_WIDTH }}
-                onPointerDown={(e) => onCardPointerDown(e, entity.name)}
-                onMouseEnter={() => {
-                  if (!gesture.current) setHighlight(entity.name)
-                }}
-                onMouseLeave={() => setHighlight(null)}
-              >
-                <div className="model-card-head">
-                  <button
-                    className="model-card-collapse"
-                    aria-label={collapsedCard ? 'Expand entity' : 'Collapse entity'}
-                    title={collapsedCard ? 'Expand' : 'Collapse'}
-                    onClick={() => toggleCard(entity.name)}
-                  >
-                    <Codicon name={collapsedCard ? 'chevron-right' : 'chevron-down'} />
-                  </button>
-                  <button
-                    className="model-card-name"
-                    title={`${entity.access.detail} · Open ${entity.file}`}
-                    onClick={() => onOpenFile(entity.file)}
-                  >
-                    {entity.customName || entity.name}
-                  </button>
-                  <span
-                    className={`model-card-access model-card-access--${tone}`}
-                    title={entity.access.detail}
-                    aria-label={entity.access.label}
-                  />
-                </div>
-
-                {collapsedCard ? (
-                  <button className="model-card-summary" onClick={() => toggleCard(entity.name)}>
-                    {entity.fields.length} {entity.fields.length === 1 ? 'field' : 'fields'}
-                    {linked > 0 && ` · ${linked} linked`}
-                  </button>
-                ) : (
-                  <>
-                    <ul className="model-fields">
-                      {entity.fields.map((field) => {
-                        const relTarget =
-                          field.relationTo && entityNames.has(field.relationTo)
-                            ? field.relationTo
-                            : field.fkTo && entityNames.has(field.fkTo)
-                              ? field.fkTo
-                              : null
-                        const typeText = field.relationTo
-                          ? `${field.relationTo}${field.relationKind === 'many' ? '[]' : ''}`
-                          : typeChip(field).label
-                        const required = !field.optional && !field.primaryKey
-                        return (
-                          <li
-                            key={field.name}
-                            data-field={field.name}
-                            className={`model-field${relTarget ? ' model-field--link' : ''}`}
-                            title={relTarget ? `References ${relTarget}` : undefined}
-                            onClick={relTarget ? () => setHighlight(relTarget) : undefined}
-                          >
-                            <span className="model-field-gutter" aria-hidden="true">
-                              {field.primaryKey ? (
-                                <Codicon
-                                  name="key"
-                                  className="model-field-icon model-field-icon--pk"
-                                  title="Primary key"
-                                />
-                              ) : relTarget ? (
-                                <Codicon
-                                  name="link"
-                                  className="model-field-icon model-field-icon--fk"
-                                  title={`References ${relTarget}`}
-                                />
-                              ) : (
-                                <span className="model-field-icon" />
-                              )}
-                              <span
-                                className={`model-field-req${
-                                  required ? '' : ' model-field-req--opt'
-                                }${field.unique ? ' model-field-req--uniq' : ''}`}
-                                title={`${required ? 'Required' : 'Optional'}${
-                                  field.unique ? ' · Unique' : ''
-                                }`}
-                              />
-                            </span>
-                            <span className="model-field-name">{field.name}</span>
-                            <span className="model-field-type">{typeText}</span>
-                          </li>
-                        )
-                      })}
-                      {entity.fields.length === 0 && (
-                        <li className="model-field model-field--empty">No fields parsed.</li>
-                      )}
-                    </ul>
-
-                    <div className="model-card-perms" title="Access grants">
-                      {entity.permissions.length === 0 ? (
-                        <span className="model-perm model-perm--none">no explicit roles</span>
-                      ) : (
-                        entity.permissions.map((p, i) => (
-                          <span
-                            key={`${p.role}-${i}`}
-                            className={`model-perm${p.hasPolicy ? ' model-perm--scoped' : ''}`}
-                            title={`${p.decorator}: ${p.actions.join(', ')}${
-                              p.hasPolicy ? ' (row-level policy)' : ''
-                            }`}
-                          >
-                            {p.role}
-                            <span className="model-perm-actions">{p.actions.join('/')}</span>
-                            {p.hasPolicy && <span className="model-perm-policy">policy</span>}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </>
-                )}
-
-                <div className="model-card-actions">
-                  <button className="btn btn--xs btn--ghost" onClick={() => onOpenFile(entity.file)}>
-                    Open
-                  </button>
-                  {needsHardening(entity.access.level) && (
-                    <button className="btn btn--xs btn--ghost" onClick={() => hardenEntity(entity)}>
-                      Harden
+          {model.entities
+            .filter((e) => isRendered(e.name))
+            .map((entity) => {
+              const tone = ACCESS_META[entity.access.level].tone
+              const pos = positions.get(entity.name) ?? { x: 0, y: 0 }
+              const dim = cardDimmed(entity.name)
+              const collapsedCard = isCollapsed(entity.name)
+              const linked = neighborsOf(entity.name).size
+              return (
+                <div
+                  key={entity.name}
+                  ref={setCardRef(entity.name)}
+                  className={`model-card model-card--${tone}${dim ? ' model-card--dim' : ''}${
+                    dragging === entity.name ? ' model-card--dragging' : ''
+                  }${highlight === entity.name ? ' model-card--active' : ''}`}
+                  style={{ left: pos.x, top: pos.y, width: CARD_WIDTH }}
+                  onPointerDown={(e) => onCardPointerDown(e, entity.name)}
+                  onMouseEnter={() => {
+                    if (!gesture.current) setHighlight(entity.name)
+                  }}
+                  onMouseLeave={() => setHighlight(null)}
+                >
+                  <div className="model-card-head">
+                    <button
+                      className="model-card-collapse"
+                      aria-label={collapsedCard ? 'Expand entity' : 'Collapse entity'}
+                      title={collapsedCard ? 'Expand' : 'Collapse'}
+                      onClick={() => toggleCard(entity.name)}
+                    >
+                      <Codicon name={collapsedCard ? 'chevron-right' : 'chevron-down'} />
                     </button>
+                    <button
+                      className="model-card-name"
+                      title={`${entity.access.detail} · Open ${entity.file}`}
+                      onClick={() => onOpenFile(entity.file)}
+                    >
+                      {entity.customName || entity.name}
+                    </button>
+                    <span
+                      className={`model-card-access model-card-access--${tone}`}
+                      title={entity.access.detail}
+                      aria-label={entity.access.label}
+                    />
+                  </div>
+
+                  {collapsedCard ? (
+                    <button className="model-card-summary" onClick={() => toggleCard(entity.name)}>
+                      {entity.fields.length} {entity.fields.length === 1 ? 'field' : 'fields'}
+                      {linked > 0 && ` · ${linked} linked`}
+                    </button>
+                  ) : (
+                    <>
+                      <ul className="model-fields">
+                        {entity.fields.map((field) => {
+                          const relTarget =
+                            field.relationTo && entityNames.has(field.relationTo)
+                              ? field.relationTo
+                              : field.fkTo && entityNames.has(field.fkTo)
+                                ? field.fkTo
+                                : null
+                          const typeText = field.relationTo
+                            ? `${field.relationTo}${field.relationKind === 'many' ? '[]' : ''}`
+                            : typeChip(field).label
+                          const required = !field.optional && !field.primaryKey
+                          return (
+                            <li
+                              key={field.name}
+                              data-field={field.name}
+                              className={`model-field${relTarget ? ' model-field--link' : ''}`}
+                              title={relTarget ? `References ${relTarget}` : undefined}
+                              onClick={relTarget ? () => setHighlight(relTarget) : undefined}
+                            >
+                              <span className="model-field-gutter" aria-hidden="true">
+                                {field.primaryKey ? (
+                                  <Codicon
+                                    name="key"
+                                    className="model-field-icon model-field-icon--pk"
+                                    title="Primary key"
+                                  />
+                                ) : relTarget ? (
+                                  <Codicon
+                                    name="link"
+                                    className="model-field-icon model-field-icon--fk"
+                                    title={`References ${relTarget}`}
+                                  />
+                                ) : (
+                                  <span className="model-field-icon" />
+                                )}
+                                <span
+                                  className={`model-field-req${
+                                    required ? '' : ' model-field-req--opt'
+                                  }${field.unique ? ' model-field-req--uniq' : ''}`}
+                                  title={`${required ? 'Required' : 'Optional'}${
+                                    field.unique ? ' · Unique' : ''
+                                  }`}
+                                />
+                              </span>
+                              <span className="model-field-name">{field.name}</span>
+                              <span className="model-field-type">{typeText}</span>
+                            </li>
+                          )
+                        })}
+                        {entity.fields.length === 0 && (
+                          <li className="model-field model-field--empty">No fields parsed.</li>
+                        )}
+                      </ul>
+
+                      <div className="model-card-perms" title="Access grants">
+                        {entity.permissions.length === 0 ? (
+                          <span className="model-perm model-perm--none">no explicit roles</span>
+                        ) : (
+                          entity.permissions.map((p, i) => (
+                            <span
+                              key={`${p.role}-${i}`}
+                              className={`model-perm${p.hasPolicy ? ' model-perm--scoped' : ''}`}
+                              title={`${p.decorator}: ${p.actions.join(', ')}${
+                                p.hasPolicy ? ' (row-level policy)' : ''
+                              }`}
+                            >
+                              {p.role}
+                              <span className="model-perm-actions">{p.actions.join('/')}</span>
+                              {p.hasPolicy && <span className="model-perm-policy">policy</span>}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </>
                   )}
-                  <button
-                    className="btn btn--xs btn--ghost model-card-focus"
-                    onClick={() => focusOn(focus === entity.name ? null : entity.name)}
-                  >
-                    {focus === entity.name ? 'Unfocus' : 'Focus'}
-                  </button>
+
+                  <div className="model-card-actions">
+                    <button
+                      className="btn btn--xs btn--ghost"
+                      onClick={() => onOpenFile(entity.file)}
+                    >
+                      Open
+                    </button>
+                    {needsHardening(entity.access.level) && (
+                      <button
+                        className="btn btn--xs btn--ghost"
+                        onClick={() => hardenEntity(entity)}
+                      >
+                        Harden
+                      </button>
+                    )}
+                    <button
+                      className="btn btn--xs btn--ghost model-card-focus"
+                      onClick={() => focusOn(focus === entity.name ? null : entity.name)}
+                    >
+                      {focus === entity.name ? 'Unfocus' : 'Focus'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
         </div>
       </div>
 

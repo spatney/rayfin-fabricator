@@ -100,6 +100,19 @@ describe('ModelView', () => {
     expect(document.querySelectorAll('.model-edge').length).toBe(1)
   })
 
+  it('fits the initial layout before paint instead of scheduling a second-frame camera jump', async () => {
+    const originalRaf = globalThis.requestAnimationFrame
+    const raf = vi.fn(() => 1)
+    globalThis.requestAnimationFrame = raf as typeof requestAnimationFrame
+    try {
+      await renderLoaded()
+
+      expect(raf).not.toHaveBeenCalled()
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf
+    }
+  })
+
   it('marks access level via the header dot and only offers Harden on loose access', async () => {
     await renderLoaded()
     const user = cardOf('User')

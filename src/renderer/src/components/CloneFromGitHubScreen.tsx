@@ -9,6 +9,8 @@ interface Props {
   onCloned: () => void
 }
 
+const INITIAL_REPO_RENDER_COUNT = 40
+
 /** Case-insensitive match of a repo against the filter box (name / desc / language). */
 function matches(repo: GithubRepo, query: string): boolean {
   const q = query.trim().toLowerCase()
@@ -20,10 +22,45 @@ function matches(repo: GithubRepo, query: string): boolean {
   )
 }
 
+function errorMessage(reason: unknown, fallback: string): string {
+  return reason instanceof Error && reason.message ? reason.message : fallback
+}
+
+/** Keeps the repository pane spatially stable while `gh` performs its network query. */
+function RepositorySkeleton({ label }: { label: string }): JSX.Element {
+  return (
+    <div className="clone-repo-skeleton" aria-busy="true">
+      <p className="clone-loading-status" role="status">
+        <span className="ws-spinner" aria-hidden="true" /> {label}
+      </p>
+      <div className="clone-skeleton-row">
+        <span className="clone-skeleton-mark" />
+        <span className="clone-skeleton-copy">
+          <span className="clone-skeleton-line clone-skeleton-line--title" />
+          <span className="clone-skeleton-line clone-skeleton-line--body" />
+        </span>
+      </div>
+      <div className="clone-skeleton-row">
+        <span className="clone-skeleton-mark" />
+        <span className="clone-skeleton-copy">
+          <span className="clone-skeleton-line clone-skeleton-line--title" />
+          <span className="clone-skeleton-line clone-skeleton-line--body" />
+        </span>
+      </div>
+      <div className="clone-skeleton-row">
+        <span className="clone-skeleton-mark" />
+        <span className="clone-skeleton-copy">
+          <span className="clone-skeleton-line clone-skeleton-line--title" />
+          <span className="clone-skeleton-line clone-skeleton-line--body" />
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /**
- * "Open existing… → Clone from GitHub" full-screen flow. Gated on the optional
- * `gh` CLI: install → sign in (external terminal + status poll) → browse the
- * user's repos (or paste a URL) → clone into the workspace and open it.
+ * "Open existing -> Clone from GitHub" full-screen flow. Gated on the optional
+ * `gh` CLI: install -> sign in -> browse repositories (or paste a URL) -> clone.
  */
 export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JSX.Element {
   // The native preview webview floats above HTML; suppress it while this covers the body.
@@ -31,6 +68,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
   const [status, setStatus] = useState<GithubStatus | null>(null)
   const [checking, setChecking] = useState(true)
+  const [statusError, setStatusError] = useState<string | null>(null)
 
   // gh install
   const [installing, setInstalling] = useState(false)
@@ -48,6 +86,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [manual, setManual] = useState('')
+  const [visibleRepoCount, setVisibleRepoCount] = useState(INITIAL_REPO_RENDER_COUNT)
 
   // clone
   const [cloning, setCloning] = useState(false)
@@ -60,8 +99,18 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
   async function recheck(): Promise<void> {
     setChecking(true)
+    setStatusError(null)
     try {
-      setStatus(await window.api.github.status())
+      const next = await window.api.github.status()
+      setStatus(next)
+      if (!next.signedIn) {
+        setRepos(null)
+        setReposError(null)
+        setSelected(null)
+      }
+    } catch (reason) {
+      setStatus(null)
+      setStatusError(errorMessage(reason, 'Could not check the GitHub CLI. Please try again.'))
     } finally {
       setChecking(false)
     }
@@ -74,8 +123,8 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
   // Esc abandons the flow when nothing is in flight.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !busy) onCancel()
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && !busy) onCancel()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -83,9 +132,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
   // Stream gh install + clone output.
   useEffect(() => {
-    return window.api.onProcLog((e) => {
-      if (e.channel === 'clone:project') setCloneLog((prev) => prev + e.data)
-      else if (e.channel === 'install:gh') setInstallLog((prev) => prev + e.data)
+    return window.api.onProcLog((event) => {
+      if (event.channel === 'clone:project') setCloneLog((prev) => prev + event.data)
+      else if (event.channel === 'install:gh') setInstallLog((prev) => prev + event.data)
     })
   }, [])
 
@@ -94,10 +143,10 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
     if (!waitingLogin) return
     let cancelled = false
     const tick = async (): Promise<void> => {
-      const s = await window.api.github.status().catch(() => null)
-      if (cancelled || !s) return
-      setStatus(s)
-      if (s.signedIn) setWaitingLogin(false)
+      const next = await window.api.github.status().catch(() => null)
+      if (cancelled || !next) return
+      setStatus(next)
+      if (next.signedIn) setWaitingLogin(false)
     }
     const id = window.setInterval(() => void tick(), 2000)
     return () => {
@@ -105,15 +154,6 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       window.clearInterval(id)
     }
   }, [waitingLogin])
-
-  // Load the user's repos once signed in.
-  useEffect(() => {
-    if (status?.signedIn && repos === null && !loadingRepos) void loadRepos()
-  }, [status?.signedIn])
-
-  useEffect(() => {
-    if (cloneLogRef.current) cloneLogRef.current.scrollTop = cloneLogRef.current.scrollHeight
-  }, [cloneLog, showCloneLog])
 
   async function loadRepos(): Promise<void> {
     setLoadingRepos(true)
@@ -126,13 +166,24 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
         setRepos([])
         setReposError(res.error ?? 'Could not load your repositories.')
       }
-    } catch (e) {
+    } catch (reason) {
       setRepos([])
-      setReposError(String(e))
+      setReposError(errorMessage(reason, 'Could not load your repositories.'))
     } finally {
       setLoadingRepos(false)
     }
   }
+
+  // Load the user's repos once signed in. A null list is always a loading state,
+  // never an empty search result, so the picker cannot flash a false empty message.
+  useEffect(() => {
+    if (!status?.signedIn || repos !== null || loadingRepos || reposError) return
+    void loadRepos()
+  }, [status?.signedIn, repos, loadingRepos, reposError])
+
+  useEffect(() => {
+    if (cloneLogRef.current) cloneLogRef.current.scrollTop = cloneLogRef.current.scrollHeight
+  }, [cloneLog, showCloneLog])
 
   async function installGh(): Promise<void> {
     setInstalling(true)
@@ -150,14 +201,18 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
   async function beginLogin(): Promise<void> {
     setLoginError(null)
-    const res = await window.api.github.login()
-    if (!res.ok) {
-      setLoginError(
-        'Could not open a terminal automatically. Run "gh auth login" in your terminal, then click Re-check.'
-      )
-      return
+    try {
+      const res = await window.api.github.login()
+      if (!res.ok) {
+        setLoginError(
+          'Could not open a terminal automatically. Run "gh auth login" in your terminal, then click Re-check.'
+        )
+        return
+      }
+      setWaitingLogin(true)
+    } catch (reason) {
+      setLoginError(errorMessage(reason, 'Could not start GitHub sign-in. Please try again.'))
     }
-    setWaitingLogin(true)
   }
 
   const cloneTarget = (manual.trim() || selected || '').trim()
@@ -176,270 +231,360 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
         setCloneError(res.error ?? 'Clone failed.')
         setShowCloneLog(true)
       }
-    } catch (e) {
-      setCloneError(String(e))
+    } catch (reason) {
+      setCloneError(errorMessage(reason, 'Clone failed. Please try again.'))
       setShowCloneLog(true)
     } finally {
       setCloning(false)
     }
   }
 
-  const filtered = (repos ?? []).filter((r) => matches(r, filter))
-
-  /* --------------------------------- render --------------------------------- */
-
+  const filtered = (repos ?? []).filter((repo) => matches(repo, filter))
   const ghInstalled = status?.ghInstalled ?? false
   const signedIn = status?.signedIn ?? false
+  const initialChecking = checking && status === null
+  const reposPending = signedIn && repos === null && !reposError
+  const visibleRepos = filtered.slice(0, visibleRepoCount)
+  const remainingRepoCount = filtered.length - visibleRepos.length
 
   let sub = 'Sign in to GitHub to clone one of your repositories into your workspace.'
   if (signedIn) sub = 'Pick a repository to clone into your workspace, or paste a URL.'
-  else if (status && !ghInstalled) sub = 'The GitHub CLI (gh) is needed to sign in and clone repositories.'
+  else if (status && !ghInstalled)
+    sub = 'The GitHub CLI (gh) is needed to sign in and clone repositories.'
+  else if (statusError) sub = 'Check your GitHub CLI connection, then try again.'
+
+  const connection = checking
+    ? 'Checking GitHub'
+    : statusError
+      ? 'Connection unavailable'
+      : signedIn
+        ? `Connected${status?.user ? ` as ${status.user}` : ''}`
+        : ghInstalled
+          ? 'Sign in required'
+          : 'GitHub CLI needed'
 
   return (
-    <div className="create-screen">
-      <div className="create-shell">
-        <header className="create-head">
+    <div className="create-screen clone-screen">
+      <div className="create-shell clone-shell">
+        <header className="create-head clone-head">
+          <span className="clone-head-icon" aria-hidden="true">
+            <span className="codicon codicon-repo-clone" />
+          </span>
           <div className="create-head-text">
+            <p className="clone-eyebrow">GitHub</p>
             <h1 className="create-title">Clone from GitHub</h1>
             <p className="create-sub">{sub}</p>
           </div>
+          <span
+            className={`clone-connection${
+              signedIn ? ' clone-connection--ready' : statusError ? ' clone-connection--error' : ''
+            }`}
+            role="status"
+          >
+            {checking && <span className="ws-spinner" aria-hidden="true" />}
+            {connection}
+          </span>
         </header>
 
-        <div className="create-body">
-          {/* 1) Initial probe */}
-          {checking && repos === null && (
-            <div className="gallery-empty">
-              <p className="gallery-empty-msg">
-                <span className="ws-spinner" aria-hidden="true" /> Checking GitHub CLI…
-              </p>
-            </div>
-          )}
-
-          {/* 2) gh missing → install */}
-          {!checking && status && !ghInstalled && (
-            <div className="gallery-empty">
-              <p className="gallery-empty-msg">
-                The GitHub CLI (<code>gh</code>) isn’t installed. Install it to sign in to GitHub and
-                clone your repositories.
-              </p>
-              <div className="gallery-empty-actions">
-                <button
-                  type="button"
-                  className="btn btn--primary btn--sm"
-                  disabled={installing}
-                  onClick={() => void installGh()}
-                >
-                  {installing ? 'Installing…' : 'Install GitHub CLI'}
-                </button>
-                {installResult?.requiresRelaunch ? (
-                  <button
-                    type="button"
-                    className="btn btn--sm"
-                    onClick={() => void window.api.relaunch()}
-                  >
-                    Restart to finish
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn--sm"
-                    disabled={installing}
-                    onClick={() => void recheck()}
-                  >
-                    Re-check
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="link-btn"
-                  onClick={() => void window.api.openExternal('https://cli.github.com')}
-                >
-                  Install manually
-                </button>
+        <div className="create-body clone-body">
+          {initialChecking && (
+            <section className="clone-loading-card" aria-label="Checking GitHub connection">
+              <div className="clone-loading-copy">
+                <strong>Preparing your GitHub repositories</strong>
+                <span>Checking the GitHub CLI and your sign-in before loading the picker.</span>
               </div>
-              {installResult?.manual && (
-                <p className="field-hint">
-                  The installer was opened in your browser. After installing, click Restart.
-                </p>
-              )}
-              {(installing || installLog) && (
-                <pre className="log-console log-console--sm" style={{ marginTop: 12 }}>
-                  {installLog || 'Starting…'}
-                </pre>
-              )}
-            </div>
+              <span className="clone-skeleton-input" aria-hidden="true" />
+              <RepositorySkeleton label="Loading repository picker..." />
+            </section>
           )}
 
-          {/* 3) Installed but signed out → sign in */}
-          {!checking && ghInstalled && !signedIn && (
-            <div className="gallery-empty">
-              {waitingLogin ? (
-                <>
-                  <p className="gallery-empty-msg">
-                    <span className="ws-spinner" aria-hidden="true" /> Waiting for sign-in… A terminal
-                    window opened — follow the prompts in your browser, then come back here.
-                  </p>
-                  <div className="gallery-empty-actions">
-                    <button type="button" className="btn btn--sm" onClick={() => void recheck()}>
-                      Re-check now
-                    </button>
+          {statusError && !initialChecking && (
+            <section className="clone-state-card clone-state-card--error" role="alert">
+              <span className="clone-state-icon codicon codicon-warning" aria-hidden="true" />
+              <div className="clone-state-copy">
+                <h2>Could not check GitHub</h2>
+                <p>{statusError}</p>
+              </div>
+              <button type="button" className="btn btn--sm" onClick={() => void recheck()}>
+                Try again
+              </button>
+            </section>
+          )}
+
+          {!initialChecking && !statusError && status && !ghInstalled && (
+            <section className="clone-state-card">
+              <span className="clone-state-icon codicon codicon-terminal" aria-hidden="true" />
+              <div className="clone-state-copy">
+                <h2>Install the GitHub CLI</h2>
+                <p>
+                  Fabricator uses <code>gh</code> to sign in and clone repositories from GitHub.
+                </p>
+                <div className="clone-state-actions">
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--sm"
+                    disabled={installing}
+                    onClick={() => void installGh()}
+                  >
+                    {installing ? 'Installing...' : 'Install GitHub CLI'}
+                  </button>
+                  {installResult?.requiresRelaunch ? (
                     <button
                       type="button"
-                      className="link-btn"
-                      onClick={() => setWaitingLogin(false)}
+                      className="btn btn--sm"
+                      onClick={() => void window.api.relaunch()}
                     >
-                      Cancel
+                      Restart to finish
                     </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="gallery-empty-msg">
-                    Sign in to GitHub to browse and clone your repositories.
-                  </p>
-                  <div className="gallery-empty-actions">
+                  ) : (
                     <button
                       type="button"
-                      className="btn btn--primary btn--sm"
-                      onClick={() => void beginLogin()}
+                      className="btn btn--sm"
+                      disabled={installing}
+                      onClick={() => void recheck()}
                     >
-                      Sign in with GitHub
-                    </button>
-                    <button type="button" className="btn btn--sm" onClick={() => void recheck()}>
                       Re-check
                     </button>
-                  </div>
+                  )}
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => void window.api.openExternal('https://cli.github.com')}
+                  >
+                    Install manually
+                  </button>
+                </div>
+                {installResult?.manual && (
                   <p className="field-hint">
-                    A terminal opens running <code>gh auth login --web</code>; complete it in your
-                    browser.
+                    The installer was opened in your browser. After installing, click Restart.
                   </p>
-                </>
-              )}
-              {loginError && <div className="alert alert--error">{loginError}</div>}
-            </div>
+                )}
+                {(installing || installLog) && (
+                  <pre className="log-console log-console--sm clone-install-log">
+                    {installLog || 'Starting...'}
+                  </pre>
+                )}
+              </div>
+            </section>
           )}
 
-          {/* 4) Signed in → browse + clone */}
-          {!checking && signedIn && (
-            <>
-              <div className="field">
-                <span className="field-label">
-                  Your repositories
-                  {status?.user && <span className="field-hint"> — signed in as {status.user}</span>}
-                </span>
-                <input
-                  className="field-input"
-                  type="text"
-                  value={filter}
-                  placeholder="Filter repositories…"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  disabled={cloning}
-                  onChange={(e) => setFilter(e.target.value)}
-                />
+          {!initialChecking && !statusError && ghInstalled && !signedIn && (
+            <section className="clone-state-card">
+              <span className="clone-state-icon codicon codicon-account" aria-hidden="true" />
+              <div className="clone-state-copy">
+                {waitingLogin ? (
+                  <>
+                    <h2>Waiting for GitHub sign-in</h2>
+                    <p>
+                      A terminal window opened. Complete the browser prompts, then return here and
+                      Fabricator will detect your sign-in.
+                    </p>
+                    <div className="clone-state-actions">
+                      <button type="button" className="btn btn--sm" onClick={() => void recheck()}>
+                        Re-check now
+                      </button>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => setWaitingLogin(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h2>Sign in to GitHub</h2>
+                    <p>
+                      A terminal will run <code>gh auth login --web</code>. Complete the sign-in in
+                      your browser, then return here.
+                    </p>
+                    <div className="clone-state-actions">
+                      <button
+                        type="button"
+                        className="btn btn--primary btn--sm"
+                        onClick={() => void beginLogin()}
+                      >
+                        Sign in with GitHub
+                      </button>
+                      <button type="button" className="btn btn--sm" onClick={() => void recheck()}>
+                        Re-check
+                      </button>
+                    </div>
+                  </>
+                )}
+                {loginError && <div className="alert alert--error">{loginError}</div>}
               </div>
+            </section>
+          )}
 
-              {loadingRepos ? (
-                <div className="gallery-empty">
-                  <p className="gallery-empty-msg">
-                    <span className="ws-spinner" aria-hidden="true" /> Loading repositories…
+          {!statusError && (initialChecking || signedIn) && (
+            <section className="clone-manual" aria-labelledby="clone-manual-title">
+              <div className="clone-section-head">
+                <div>
+                  <p className="clone-section-eyebrow">
+                    {initialChecking ? 'Direct link' : 'Another repository'}
                   </p>
+                  <h2 id="clone-manual-title">
+                    {initialChecking ? 'Paste a repository link' : 'Or paste a repository link'}
+                  </h2>
                 </div>
-              ) : reposError ? (
-                <div className="gallery-empty">
-                  <p className="gallery-empty-msg">{reposError}</p>
-                  <div className="gallery-empty-actions">
+              </div>
+              <input
+                className="field-input"
+                type="text"
+                value={manual}
+                placeholder="owner/name or https://github.com/owner/name"
+                autoCapitalize="off"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+                disabled={cloning}
+                onChange={(event) => {
+                  setManual(event.target.value)
+                  if (event.target.value.trim()) setSelected(null)
+                }}
+              />
+              <span className="field-hint">
+                {initialChecking ? (
+                  'You can paste a link now. Cloning unlocks once GitHub connection checking finishes.'
+                ) : (
+                  <>
+                    The repository is cloned into your workspace and must contain{' '}
+                    <code>rayfin/rayfin.yml</code>.
+                  </>
+                )}
+              </span>
+            </section>
+          )}
+
+          {!initialChecking && !statusError && signedIn && (
+            <>
+              <section className="clone-repo-panel" aria-labelledby="clone-repositories-title">
+                <div className="clone-section-head">
+                  <div>
+                    <p className="clone-section-eyebrow">Your repositories</p>
+                    <h2 id="clone-repositories-title">Choose a repository</h2>
+                  </div>
+                  <span className="clone-account">
+                    <span className="codicon codicon-account" aria-hidden="true" />
+                    {status?.user ?? 'GitHub account'}
+                  </span>
+                </div>
+                <label className="clone-search">
+                  <span className="sr-only">Filter repositories</span>
+                  <span className="clone-search-icon codicon codicon-search" aria-hidden="true" />
+                  <input
+                    className="field-input clone-search-input"
+                    type="text"
+                    value={filter}
+                    placeholder="Filter repositories"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={cloning || reposPending}
+                    onChange={(event) => {
+                      setFilter(event.target.value)
+                      setVisibleRepoCount(INITIAL_REPO_RENDER_COUNT)
+                    }}
+                  />
+                </label>
+
+                {reposPending ? (
+                  <RepositorySkeleton label="Loading your repositories..." />
+                ) : reposError ? (
+                  <div className="clone-list-state" role="alert">
+                    <p>{reposError}</p>
                     <button
                       type="button"
                       className="btn btn--sm"
                       onClick={() => {
                         setRepos(null)
-                        void loadRepos()
+                        setReposError(null)
                       }}
                     >
                       Try again
                     </button>
                   </div>
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="gallery-empty">
-                  <p className="gallery-empty-msg">
-                    {repos && repos.length === 0
-                      ? 'No repositories found for this account.'
-                      : 'No repositories match your filter.'}
-                  </p>
-                </div>
-              ) : (
-                <div className="gh-repo-scroll">
-                  {filtered.map((r) => (
-                    <div
-                      key={r.nameWithOwner}
-                      className={`project-item${selected === r.nameWithOwner ? ' project-item--active' : ''}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => {
-                        if (cloning) return
-                        setSelected(r.nameWithOwner)
-                        setManual('')
-                      }}
-                      onKeyDown={(e) => {
-                        if (cloning) return
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          setSelected(r.nameWithOwner)
-                          setManual('')
-                        }
-                      }}
-                    >
-                      <div className="project-item-mark" aria-hidden="true">
-                        {r.name.trim()[0]?.toUpperCase() ?? '?'}
-                      </div>
-                      <div className="project-item-main">
-                        <span className="project-item-name">
-                          {r.nameWithOwner}
-                          {r.isPrivate && <span className="badge">Private</span>}
-                          {r.primaryLanguage && (
-                            <span className="badge badge--accent">{r.primaryLanguage}</span>
+                ) : filtered.length === 0 ? (
+                  <div className="clone-list-state">
+                    <p>
+                      {repos && repos.length === 0
+                        ? 'No repositories found for this account.'
+                        : 'No repositories match your filter.'}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="clone-repo-scroll" role="list">
+                      {visibleRepos.map((repo) => (
+                        <button
+                          key={repo.nameWithOwner}
+                          type="button"
+                          className={`clone-repo${
+                            selected === repo.nameWithOwner ? ' clone-repo--active' : ''
+                          }`}
+                          disabled={cloning}
+                          onClick={() => {
+                            setSelected(repo.nameWithOwner)
+                            setManual('')
+                          }}
+                        >
+                          <span className="clone-repo-mark" aria-hidden="true">
+                            {repo.name.trim()[0]?.toUpperCase() ?? '?'}
+                          </span>
+                          <span className="clone-repo-main">
+                            <span className="clone-repo-name">
+                              {repo.nameWithOwner}
+                              {repo.isPrivate && <span className="clone-repo-tag">Private</span>}
+                              {repo.primaryLanguage && (
+                                <span className="clone-repo-tag clone-repo-tag--language">
+                                  {repo.primaryLanguage}
+                                </span>
+                              )}
+                            </span>
+                            <span className="clone-repo-path" title={repo.description ?? ''}>
+                              {repo.description || repo.url || 'No description'}
+                            </span>
+                          </span>
+                          {selected === repo.nameWithOwner && (
+                            <span
+                              className="clone-repo-selected codicon codicon-check"
+                              aria-hidden="true"
+                            />
                           )}
-                        </span>
-                        <span className="project-item-path" title={r.description ?? ''}>
-                          {r.description || r.url || ''}
-                        </span>
-                      </div>
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
-
-              <label className="field" style={{ marginTop: 12 }}>
-                <span className="field-label">Or paste a repository</span>
-                <input
-                  className="field-input"
-                  type="text"
-                  value={manual}
-                  placeholder="owner/name or https://github.com/owner/name"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  disabled={cloning}
-                  onChange={(e) => {
-                    setManual(e.target.value)
-                    if (e.target.value.trim()) setSelected(null)
-                  }}
-                />
-                <span className="field-hint">
-                  Cloned into your workspace. It must be a Rayfin project (has rayfin/rayfin.yml).
-                </span>
-              </label>
+                    {remainingRepoCount > 0 && (
+                      <div className="clone-repo-more">
+                        <span>
+                          Showing {visibleRepos.length} of {filtered.length} repositories
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          disabled={cloning}
+                          onClick={() =>
+                            setVisibleRepoCount((count) => count + INITIAL_REPO_RENDER_COUNT)
+                          }
+                        >
+                          Show {Math.min(INITIAL_REPO_RENDER_COUNT, remainingRepoCount)} more
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
 
               {(cloning || cloneLog) && (
-                <div className="create-progress" aria-busy={cloning} style={{ marginTop: 12 }}>
-                  <p className="gallery-empty-msg" style={{ margin: 0 }}>
+                <div className="create-progress clone-progress" aria-busy={cloning}>
+                  <p className="gallery-empty-msg">
                     {cloning ? (
                       <>
                         <span className="ws-spinner" aria-hidden="true" /> Cloning{' '}
-                        <code>{cloneTarget}</code> and installing dependencies…
+                        <code>{cloneTarget}</code> and installing dependencies...
                       </>
                     ) : cloneError ? (
                       'Clone failed.'
@@ -452,14 +597,14 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                     <button
                       type="button"
                       className="link-btn create-progress-toggle"
-                      onClick={() => setShowCloneLog((v) => !v)}
+                      onClick={() => setShowCloneLog((value) => !value)}
                     >
                       {showCloneLog ? 'Hide details' : 'Show details'}
                     </button>
                   </div>
                   {showCloneLog && (
                     <pre className="log-console log-console--sm" ref={cloneLogRef}>
-                      {cloneLog || 'Starting…'}
+                      {cloneLog || 'Starting...'}
                     </pre>
                   )}
                 </div>
@@ -470,7 +615,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
           )}
         </div>
 
-        <footer className="create-foot">
+        <footer className="create-foot clone-foot">
           <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
             Cancel
           </button>
@@ -480,7 +625,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
               onClick={() => void clone()}
               disabled={cloning || !cloneTarget}
             >
-              {cloning ? 'Cloning…' : 'Clone & open'}
+              {cloning ? 'Cloning...' : 'Clone and open'}
             </button>
           )}
         </footer>

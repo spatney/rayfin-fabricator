@@ -24,6 +24,7 @@ import {
 import CreateProjectScreen from '../components/CreateProjectScreen'
 import CloneFromGitHubScreen from '../components/CloneFromGitHubScreen'
 import HomeView from '../components/HomeView'
+import ManageProjectModal from '../components/ManageProjectModal'
 import DeleteProjectModal from '../components/DeleteProjectModal'
 import ConfirmModal from '../components/ConfirmModal'
 import SettingsModal from '../components/SettingsModal'
@@ -122,10 +123,8 @@ export default function Workbench({
    * different project is opened. Going to the launcher never deactivates a project;
    * only opening a *different* one closes the current. */
   const [showHome, setShowHome] = useState(false)
-  /** Sidebar per-project actions menu / inline-rename / delete-confirm state. */
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
-  const [renamingId, setRenamingId] = useState<string | null>(null)
-  const [renameValue, setRenameValue] = useState('')
+  /** Launcher project-management and local-trash confirmation state. */
+  const [managingProject, setManagingProject] = useState<StudioProject | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<StudioProject | null>(null)
   /** Bumped whenever the working tree likely changed (deploy / chat turn). */
   const [gitRefresh, setGitRefresh] = useState(0)
@@ -645,14 +644,6 @@ export default function Workbench({
     void refreshProjects()
   }, [refreshProjects])
 
-  // Close the open sidebar actions menu on any outside click.
-  useEffect(() => {
-    if (!menuOpenId) return
-    const close = (): void => setMenuOpenId(null)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
-  }, [menuOpenId])
-
   // When a Fabricator validation tool wants to show the running app, make sure
   // the preview pane is actually on screen AND has a deploy URL to load:
   //  • switch to the build view (the preview only mounts there) and, if chat is
@@ -728,26 +719,20 @@ export default function Workbench({
   }
 
   async function removeFromList(p: StudioProject): Promise<void> {
-    setMenuOpenId(null)
     setProjects(await window.api.projects.remove(p.id, false))
   }
 
-  function startRename(p: StudioProject): void {
-    setMenuOpenId(null)
-    setRenameValue(p.name)
-    setRenamingId(p.id)
-  }
-
-  async function submitRename(p: StudioProject): Promise<void> {
-    const next = renameValue.trim()
-    setRenamingId(null)
-    if (!next || next === p.name) return
-    const result = await window.api.projects.rename(p.id, next)
-    if (!result.ok) {
-      setNotice(result.error ?? 'Could not rename the project.')
-      return
+  async function renameProject(p: StudioProject, name: string): Promise<string | null> {
+    try {
+      const result = await window.api.projects.rename(p.id, name)
+      if (!result.ok) return result.error ?? 'Could not rename the project.'
+      await refreshProjects()
+      return null
+    } catch (error) {
+      return error instanceof Error && error.message
+        ? error.message
+        : 'Could not rename the project. Please try again.'
     }
-    await refreshProjects()
   }
 
   async function signOut(): Promise<void> {
@@ -1103,20 +1088,8 @@ export default function Workbench({
                 activeId={active?.id}
                 workspaceRoot={projects?.workspaceRoot ?? ''}
                 opening={opening}
-                menuOpenId={menuOpenId}
-                setMenuOpenId={setMenuOpenId}
-                renamingId={renamingId}
-                renameValue={renameValue}
-                setRenameValue={setRenameValue}
                 onSelect={(p) => void selectProject(p)}
-                onStartRename={startRename}
-                onSubmitRename={(p) => void submitRename(p)}
-                onCancelRename={() => setRenamingId(null)}
-                onRemoveFromList={(p) => void removeFromList(p)}
-                onDeleteFromDisk={(p) => {
-                  setMenuOpenId(null)
-                  setConfirmDelete(p)
-                }}
+                onManageProject={setManagingProject}
                 onNewProject={() => setCreateMode('create')}
                 onOpenExisting={openExisting}
                 onCloneFromGitHub={() => setShowClone(true)}
@@ -1185,6 +1158,16 @@ export default function Workbench({
           versions={versions}
           onChange={onSettingsChange}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {managingProject && (
+        <ManageProjectModal
+          project={managingProject}
+          onRename={renameProject}
+          onRemoveFromList={(p) => void removeFromList(p)}
+          onMoveToTrash={setConfirmDelete}
+          onClose={() => setManagingProject(null)}
         />
       )}
 
