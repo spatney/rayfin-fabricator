@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { ChatEventEnvelope } from '@shared/ipc'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ChatEventEnvelope, ChatPlanArtifact } from '@shared/ipc'
 import { makeProject } from '../../test/harness'
 import ChatPanel, { type UIChatMessage } from './ChatPanel'
+
+vi.mock('../monaco', () => ({}))
+vi.mock('@monaco-editor/react', () => ({
+  default: () => <textarea data-testid="plan-editor" />
+}))
 
 /**
  * Guards issue #9: a typed-but-unsent prompt must survive ChatPanel unmounting.
@@ -15,20 +20,40 @@ import ChatPanel, { type UIChatMessage } from './ChatPanel'
 
 const PLACEHOLDER = /Message Fabricator about/i
 
+interface InstalledApi {
+  onChatEvent: ReturnType<typeof vi.fn>
+  chat: {
+    send: ReturnType<typeof vi.fn>
+    steer: ReturnType<typeof vi.fn>
+    resolvePlan: ReturnType<typeof vi.fn>
+    resolveQuestion: ReturnType<typeof vi.fn>
+    exportPlan: ReturnType<typeof vi.fn>
+  }
+}
+
 /** Minimal `window.api` surface ChatPanel touches on mount / while typing. */
-function installApi(): void {
-  ;(window as unknown as { api: unknown }).api = {
+function installApi(): InstalledApi {
+  const api = {
     onChatEvent: vi.fn(() => () => {}),
     chat: {
       suggest: vi.fn(() => Promise.resolve({ ok: false, suggestions: [] })),
       cancelSuggest: vi.fn(() => Promise.resolve(true)),
       setOptions: vi.fn(() => Promise.resolve(undefined)),
       listModels: vi.fn(() => Promise.resolve([])),
-      send: vi.fn(() => Promise.resolve({ ok: true }))
+      send: vi.fn(() =>
+        Promise.resolve({ ok: true, filesModified: [], ranDeploy: false })
+      ),
+      steer: vi.fn(() => Promise.resolve({ steered: true })),
+      resolvePlan: vi.fn(() => Promise.resolve(undefined)),
+      resolveQuestion: vi.fn(() => Promise.resolve(undefined)),
+      exportPlan: vi.fn(() => Promise.resolve(null)),
+      reset: vi.fn(() => Promise.resolve(undefined))
     },
     projects: { files: { tree: vi.fn(() => Promise.resolve({ path: '', name: '', children: [] })) } },
     screenshot: { save: vi.fn(() => Promise.resolve('C:/tmp/shot.png')) }
   }
+  ;(window as unknown as { api: unknown }).api = api
+  return api
 }
 
 /**
@@ -59,6 +84,61 @@ function Harness({ initialDraft = '' }: { initialDraft?: string }): JSX.Element 
   )
 }
 
+function planArtifact(overrides: Partial<ChatPlanArtifact> = {}): ChatPlanArtifact {
+  return {
+    id: 'plan-1',
+    phase: 'review',
+    summary: 'Implement the durable workflow.',
+    content: '# Plan\n\nImplement the durable workflow.',
+    actions: ['interactive', 'autopilot'],
+    recommendedAction: 'interactive',
+    todos: [],
+    dependencies: [],
+    questions: [],
+    liveRequestId: 'request-1',
+    ...overrides
+  }
+}
+
+function PlanHarness({
+  plan,
+  pending = true,
+  onPlanExecutionStart
+}: {
+  plan: ChatPlanArtifact
+  pending?: boolean
+  onPlanExecutionStart?: () => void
+}): JSX.Element {
+  const [messages, setMessages] = useState<UIChatMessage[]>([
+    {
+      id: 'user-1',
+      role: 'user',
+      text: 'Improve the workflow',
+      tools: [],
+      pending: false
+    },
+    {
+      id: 'assistant-1',
+      role: 'assistant',
+      text: '',
+      tools: [],
+      pending,
+      interrupted: pending ? undefined : true,
+      plan
+    }
+  ])
+  return (
+    <ChatPanel
+      project={makeProject('p1')}
+      messages={messages}
+      onChange={(update) => setMessages(update)}
+      draft=""
+      modeSelectorEnabled
+      onPlanExecutionStart={onPlanExecutionStart}
+    />
+  )
+}
+
 async function toggleTab(): Promise<void> {
   await act(async () => {
     fireEvent.click(screen.getByText('toggle-tab'))
@@ -69,6 +149,7 @@ let raf: typeof globalThis.requestAnimationFrame | undefined
 let cancelRaf: typeof globalThis.cancelAnimationFrame | undefined
 
 beforeEach(() => {
+  localStorage.clear()
   installApi()
   // jsdom may not expose rAF; ChatPanel's scroll/flush effects rely on it.
   if (!globalThis.requestAnimationFrame) {
@@ -100,6 +181,7 @@ describe('ChatPanel composer draft', () => {
     await act(async () => {
       fireEvent.change(ta, { target: { value: 'build me a sales dashboard' } })
     })
+
     expect(ta.value).toBe('build me a sales dashboard')
 
     // Switch to the Code tab — ChatPanel unmounts.
@@ -126,6 +208,210 @@ describe('ChatPanel composer draft', () => {
     })
     const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
     expect(ta.value).toBe('')
+  })
+})
+
+describe('ChatPanel Plan-mode entry', () => {
+  const complexPrompt = [
+    'Redesign authentication across the frontend and backend.',
+    '1. Migrate token storage while preserving backward compatibility.',
+    '2. Refactor the API middleware.',
+    '3. Update the React sign-in flow and add integration tests.'
+  ].join('\n')
+
+  it('suggests Plan mode for a complex draft without switching automatically', async () => {
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[]}
+        onChange={() => {}}
+        draft=""
+        modeSelectorEnabled
+      />
+    )
+    const input = screen.getByPlaceholderText(PLACEHOLDER)
+    await act(async () => {
+      fireEvent.change(input, { target: { value: complexPrompt } })
+    })
+
+    expect(screen.getByText('This looks multi-step.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Agent/i })).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Use Plan' }))
+    })
+    expect(screen.getByRole('button', { name: /Plan/i })).toBeTruthy()
+  })
+
+  it('does not suggest Plan mode for a small cosmetic edit', async () => {
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[]}
+        onChange={() => {}}
+        draft=""
+        modeSelectorEnabled
+      />
+    )
+    await act(async () => {
+      fireEvent.change(screen.getByPlaceholderText(PLACEHOLDER), {
+        target: { value: 'Change the button label to Save changes' }
+      })
+    })
+    expect(screen.queryByText('This looks multi-step.')).toBeNull()
+  })
+
+  it('restores the selected mode for the project after remounting', async () => {
+    const props = {
+      project: makeProject('p1'),
+      messages: [] as UIChatMessage[],
+      onChange: () => {},
+      draft: '',
+      modeSelectorEnabled: true
+    }
+    const first = render(<ChatPanel {...props} />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Agent/i }))
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitemradio', { name: /Plan/i }))
+    })
+    first.unmount()
+
+    render(<ChatPanel {...props} />)
+    expect(screen.getByRole('button', { name: /Plan/i })).toBeTruthy()
+  })
+
+  it('does not subscribe twice when the workbench owns chat events', () => {
+    const api = installApi()
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[]}
+        onChange={() => {}}
+        draft=""
+        eventsManagedExternally
+      />
+    )
+    expect(api.onChatEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('ChatPanel Plan lifecycle integration', () => {
+  it('writes the current plan before transitioning a live approval to execution', async () => {
+    const api = installApi()
+    const onPlanExecutionStart = vi.fn()
+    render(
+      <PlanHarness
+        plan={planArtifact()}
+        onPlanExecutionStart={onPlanExecutionStart}
+      />
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Build plan' }))
+    })
+
+    expect(api.chat.resolvePlan).toHaveBeenCalledWith(
+      'p1',
+      'request-1',
+      'interactive',
+      '# Plan\n\nImplement the durable workflow.',
+      undefined
+    )
+    expect(screen.getByRole('button', { name: /expand plan progress/i })).toBeTruthy()
+    expect(onPlanExecutionStart).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a live plan actionable and surfaces the backend error when approval fails', async () => {
+    const api = installApi()
+    api.chat.resolvePlan.mockRejectedValueOnce(new Error('Could not save the edited plan'))
+    render(<PlanHarness plan={planArtifact()} />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Build plan' }))
+    })
+
+    expect(screen.getByText('Could not save the edited plan')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Build plan' }) as HTMLButtonElement).disabled).toBe(
+      false
+    )
+  })
+
+  it('tells the agent to reconcile todos when approving a directly edited plan', async () => {
+    const api = installApi()
+    render(<PlanHarness plan={planArtifact({ edited: true, content: '# Edited plan' })} />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Build plan' }))
+    })
+
+    expect(api.chat.resolvePlan).toHaveBeenCalledWith(
+      'p1',
+      'request-1',
+      'interactive',
+      '# Edited plan',
+      expect.stringContaining('reconcile the structured todos')
+    )
+  })
+
+  it('routes composer feedback through plan revision instead of a generic interjection', async () => {
+    const api = installApi()
+    const onPlanExecutionStart = vi.fn()
+    render(
+      <PlanHarness
+        plan={planArtifact()}
+        onPlanExecutionStart={onPlanExecutionStart}
+      />
+    )
+    const input = screen.getByPlaceholderText(PLACEHOLDER)
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'Split the UI work into two steps' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+    })
+
+    expect(api.chat.resolvePlan).toHaveBeenCalledWith(
+      'p1',
+      'request-1',
+      'keep_planning',
+      '# Plan\n\nImplement the durable workflow.',
+      'Split the UI work into two steps'
+    )
+    expect(api.chat.steer).not.toHaveBeenCalled()
+    expect(onPlanExecutionStart).not.toHaveBeenCalled()
+    expect(screen.getByText('Revising the plan…')).toBeTruthy()
+    expect(screen.getByText('Split the UI work into two steps')).toBeTruthy()
+  })
+
+  it('resumes interrupted execution with only unfinished work marked for execution', async () => {
+    const api = installApi()
+    render(
+      <PlanHarness
+        pending={false}
+        plan={planArtifact({
+          phase: 'interruptedExecution',
+          selectedAction: 'interactive',
+          liveRequestId: undefined,
+          todos: [
+            { id: 'done', title: 'Finished step', status: 'done' },
+            { id: 'next', title: 'Remaining step', status: 'pending' }
+          ]
+        })}
+      />
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Resume remaining work' }))
+    })
+
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalled())
+    const calls = api.chat.send.mock.calls
+    const [, , prompt, , mode] = calls[calls.length - 1] ?? []
+    expect(mode).toBe('agent')
+    expect(prompt).toContain('next: Remaining step')
+    expect(prompt).toContain('done: Finished step')
+    expect(prompt).toContain('do not redo')
   })
 })
 

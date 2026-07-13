@@ -470,6 +470,66 @@ export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'ma
  */
 export type ChatMode = 'agent' | 'plan' | 'autopilot'
 
+/** Durable lifecycle of a Plan-mode artifact in the chat transcript. */
+export type ChatPlanPhase =
+  | 'researching'
+  | 'clarifying'
+  | 'drafting'
+  | 'review'
+  | 'revising'
+  | 'executing'
+  | 'completed'
+  | 'failed'
+  | 'interruptedReview'
+  | 'interruptedExecution'
+
+/** Status values written by the agent to the session SQL `todos` table. */
+export type ChatPlanTodoStatus = 'pending' | 'in_progress' | 'done' | 'blocked'
+
+export interface ChatPlanTodo {
+  id: string
+  title: string
+  description?: string
+  status: ChatPlanTodoStatus
+}
+
+export interface ChatPlanDependency {
+  todoId: string
+  dependsOn: string
+}
+
+export interface ChatPlanQuestion {
+  id: string
+  question: string
+  choices?: string[]
+  allowFreeform: boolean
+  state: 'pending' | 'answered' | 'interrupted'
+  answer?: string
+  wasFreeform?: boolean
+}
+
+/**
+ * Durable Plan-mode artifact attached to the assistant turn that created it.
+ * `liveRequestId` is populated only while this process owns the SDK callback;
+ * persisted/reloaded artifacts clear it and use a continuation turn to resume.
+ */
+export interface ChatPlanArtifact {
+  id: string
+  phase: ChatPlanPhase
+  summary: string
+  content: string
+  actions: string[]
+  recommendedAction: string
+  selectedAction?: string
+  todos: ChatPlanTodo[]
+  dependencies: ChatPlanDependency[]
+  questions: ChatPlanQuestion[]
+  edited?: boolean
+  revisionCount?: number
+  error?: string
+  liveRequestId?: string
+}
+
 /**
  * A Copilot model available to the signed-in user, as reported by the engine
  * (`models.list`). Drives the chat model picker so the choices match each user's
@@ -583,8 +643,8 @@ export interface ExperimentFlags {
   compatibilityRendering?: boolean
   /**
    * Chat mode selector: show the Agent / Plan / Autopilot dropdown in the chat
-   * composer. When off (the default), the selector is hidden and every turn runs
-   * in the standard Agent mode.
+   * composer. Plan mode researches, clarifies, and waits for approval before
+   * building. When off (the default), every turn runs in standard Agent mode.
    */
   chatModeSelector?: boolean
   /**
@@ -829,6 +889,17 @@ export type ChatEvent =
       recommendedAction: string
     }
   | { type: 'plan-resolved'; requestId: string }
+  | { type: 'plan-content'; content: string; operation: string }
+  | { type: 'plan-todos'; todos: ChatPlanTodo[]; dependencies: ChatPlanDependency[] }
+  | { type: 'mode-changed'; mode: ChatMode }
+  | {
+      type: 'plan-question'
+      requestId: string
+      question: string
+      choices?: string[]
+      allowFreeform: boolean
+    }
+  | { type: 'plan-question-resolved'; requestId: string; answer?: string }
 
 /** Envelope so the renderer can route events to the right project's conversation. */
 export interface ChatEventEnvelope {
@@ -1135,6 +1206,8 @@ export interface ChatMessage {
   interrupted?: boolean
   /** Wall-clock duration of the assistant turn, in ms. Set when the turn finishes. */
   elapsedMs?: number
+  /** Durable Plan-mode artifact owned by this assistant turn, when present. */
+  plan?: ChatPlanArtifact
 }
 
 /* ------------------------------------------------------------------ *
@@ -1706,7 +1779,17 @@ export interface RayfinStudioApi {
      * continue with that route, or 'keep_planning' to send the agent back to revise
      * the plan (optionally with `feedback`).
      */
-    resolvePlan: (requestId: string, action: string, feedback?: string) => Promise<void>
+    resolvePlan: (
+      projectId: string,
+      requestId: string,
+      action: string,
+      planContent: string,
+      feedback?: string
+    ) => Promise<void>
+    /** Answer a structured clarification raised by the Plan-mode `ask_user` tool. */
+    resolveQuestion: (requestId: string, answer: string, wasFreeform: boolean) => Promise<void>
+    /** Export a plan to a user-selected Markdown file. Null means the dialog was cancelled. */
+    exportPlan: (suggestedName: string, content: string) => Promise<string | null>
     /** Load the persisted conversation history for a project. */
     history: (projectId: string) => Promise<ChatMessage[]>
     /** Persist the conversation history for a project (empty array clears it). */

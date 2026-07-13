@@ -737,6 +737,81 @@ pub enum ChatSegment {
   Interjection { text: String },
 }
 
+/// One structured todo item from the session's SQL `todos` table (via
+/// `session.plan.readSqlTodosWithDependencies`), normalized for the renderer.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPlanTodo {
+  pub id: String,
+  pub title: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub description: Option<String>,
+  /// One of `"pending" | "in_progress" | "done" | "blocked"`.
+  pub status: String,
+}
+
+/// One dependency edge from the session's SQL `todo_deps` table: `todo_id`
+/// depends on (must follow) `depends_on`.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPlanDependency {
+  pub todo_id: String,
+  pub depends_on: String,
+}
+
+/// One structured question asked via the `ask_user` tool, persisted alongside
+/// its resolution so a reloaded transcript can render the exchange.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPlanQuestion {
+  pub id: String,
+  pub question: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub choices: Option<Vec<String>>,
+  pub allow_freeform: bool,
+  /// One of `"pending" | "answered" | "interrupted"`.
+  pub state: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub answer: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub was_freeform: Option<bool>,
+}
+
+/// A persisted snapshot of a Plan-mode plan card, attached to the assistant
+/// message it belongs to so a reloaded transcript can re-render it (including
+/// any edits/questions/todos that accumulated while it was live).
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPlanArtifact {
+  pub id: String,
+  /// Renderer-owned Plan lifecycle phase, e.g. `"researching"` | `"clarifying"`
+  /// | `"drafting"` | `"review"` | `"revising"` | `"executing"` | `"completed"`
+  /// | `"failed"` | `"interrupted"` (exact set/naming owned by the frontend;
+  /// this DTO passes the string through opaquely for persistence/round-trip).
+  pub phase: String,
+  pub summary: String,
+  pub content: String,
+  #[serde(default)]
+  pub actions: Vec<String>,
+  pub recommended_action: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub selected_action: Option<String>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub todos: Vec<ChatPlanTodo>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub dependencies: Vec<ChatPlanDependency>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub questions: Vec<ChatPlanQuestion>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub edited: Option<bool>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub revision_count: Option<u32>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub live_request_id: Option<String>,
+}
+
 /// Streamed chat events (main -> renderer), tagged by `type`.
 #[derive(Serialize, Clone)]
 #[serde(tag = "type")]
@@ -782,6 +857,40 @@ pub enum ChatEvent {
   PlanResolved {
     #[serde(rename = "requestId")]
     request_id: String,
+  },
+  /// The session plan file changed (`session.plan_changed`); `content` is empty
+  /// when `operation` is `"delete"`.
+  #[serde(rename = "plan-content")]
+  PlanContent { content: String, operation: String },
+  /// A full snapshot of the session's SQL todos + dependencies
+  /// (`session.todos_changed`, re-read via `readSqlTodosWithDependencies`).
+  #[serde(rename = "plan-todos")]
+  PlanTodos {
+    todos: Vec<ChatPlanTodo>,
+    dependencies: Vec<ChatPlanDependency>,
+  },
+  /// The session's agent mode changed (`session.mode_changed`).
+  #[serde(rename = "mode-changed")]
+  ModeChanged { mode: String },
+  /// The `ask_user` tool asked a structured question and is awaiting the user's
+  /// answer, sent back via `chat_resolve_question`.
+  #[serde(rename = "plan-question")]
+  PlanQuestion {
+    #[serde(rename = "requestId")]
+    request_id: String,
+    question: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    choices: Option<Vec<String>>,
+    #[serde(rename = "allowFreeform")]
+    allow_freeform: bool,
+  },
+  /// A previously-asked question was resolved (so its card can dismiss itself).
+  #[serde(rename = "plan-question-resolved")]
+  PlanQuestionResolved {
+    #[serde(rename = "requestId")]
+    request_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    answer: Option<String>,
   },
 }
 
@@ -864,6 +973,10 @@ pub struct ChatMessage {
   /// "resume" (re-run the prompt) on the next launch; cleared on completion.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub interrupted: Option<bool>,
+  /// A Plan-mode plan card attached to this assistant message, so a reloaded
+  /// transcript can re-render its proposed/resolved state.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub plan: Option<ChatPlanArtifact>,
 }
 
 /* ----------------------------- rayfin versions ----------------------------- */
@@ -1132,4 +1245,130 @@ pub struct SuggestionSet {
 pub struct SuggestionRaw {
   #[serde(default)]
   pub suggestions: Vec<Suggestion>,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn plan_content_event_serializes_camelcase_with_type_tag() {
+    let event = ChatEvent::PlanContent { content: "# Plan".into(), operation: "update".into() };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "plan-content");
+    assert_eq!(json["content"], "# Plan");
+    assert_eq!(json["operation"], "update");
+  }
+
+  #[test]
+  fn plan_todos_event_nests_normalized_todo_dtos() {
+    let event = ChatEvent::PlanTodos {
+      todos: vec![ChatPlanTodo {
+        id: "t1".into(),
+        title: "Write tests".into(),
+        description: None,
+        status: "pending".into(),
+      }],
+      dependencies: vec![ChatPlanDependency { todo_id: "t2".into(), depends_on: "t1".into() }],
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "plan-todos");
+    assert_eq!(json["todos"][0]["id"], "t1");
+    assert_eq!(json["todos"][0]["status"], "pending");
+    assert!(json["todos"][0].get("description").is_none());
+    assert_eq!(json["dependencies"][0]["todoId"], "t2");
+    assert_eq!(json["dependencies"][0]["dependsOn"], "t1");
+  }
+
+  #[test]
+  fn mode_changed_event_serializes() {
+    let event = ChatEvent::ModeChanged { mode: "plan".into() };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "mode-changed");
+    assert_eq!(json["mode"], "plan");
+  }
+
+  #[test]
+  fn plan_question_event_uses_camelcase_field_names() {
+    let event = ChatEvent::PlanQuestion {
+      request_id: "req-1".into(),
+      question: "Which approach?".into(),
+      choices: Some(vec!["A".into(), "B".into()]),
+      allow_freeform: true,
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "plan-question");
+    assert_eq!(json["requestId"], "req-1");
+    assert_eq!(json["allowFreeform"], true);
+    assert_eq!(json["choices"][0], "A");
+  }
+
+  #[test]
+  fn plan_question_resolved_omits_absent_answer() {
+    let event = ChatEvent::PlanQuestionResolved { request_id: "req-1".into(), answer: None };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "plan-question-resolved");
+    assert!(json.get("answer").is_none());
+  }
+
+  #[test]
+  fn chat_message_round_trips_with_plan_artifact() {
+    let msg = ChatMessage {
+      id: "m1".into(),
+      role: "assistant".into(),
+      text: "Here's the plan".into(),
+      tools: vec![],
+      segments: None,
+      error: None,
+      attachments: None,
+      attachment_thumbs: None,
+      kind: None,
+      interrupted: None,
+      plan: Some(ChatPlanArtifact {
+        id: "req-1".into(),
+        phase: "proposed".into(),
+        summary: "Refactor the widget".into(),
+        content: "# Plan\n1. Do it".into(),
+        actions: vec!["interactive".into(), "autopilot".into()],
+        recommended_action: "interactive".into(),
+        selected_action: None,
+        todos: vec![ChatPlanTodo {
+          id: "t1".into(),
+          title: "Do it".into(),
+          description: None,
+          status: "pending".into(),
+        }],
+        dependencies: vec![],
+        questions: vec![ChatPlanQuestion {
+          id: "q1".into(),
+          question: "Ready?".into(),
+          choices: None,
+          allow_freeform: true,
+          state: "pending".into(),
+          answer: None,
+          was_freeform: None,
+        }],
+        edited: Some(false),
+        revision_count: Some(0),
+        error: None,
+        live_request_id: Some("req-1".into()),
+      }),
+    };
+    let json = serde_json::to_string(&msg).unwrap();
+    let back: ChatMessage = serde_json::from_str(&json).unwrap();
+    let plan = back.plan.expect("plan round-trips");
+    assert_eq!(plan.id, "req-1");
+    assert_eq!(plan.todos[0].id, "t1");
+    assert_eq!(plan.questions[0].id, "q1");
+    assert!(plan.dependencies.is_empty());
+  }
+
+  #[test]
+  fn chat_message_without_plan_deserializes_from_legacy_json() {
+    // Old transcripts saved before the `plan` field existed must still load.
+    let legacy = r#"{"id":"m1","role":"user","text":"hi"}"#;
+    let msg: ChatMessage = serde_json::from_str(legacy).unwrap();
+    assert!(msg.plan.is_none());
+    assert!(msg.tools.is_empty());
+  }
 }

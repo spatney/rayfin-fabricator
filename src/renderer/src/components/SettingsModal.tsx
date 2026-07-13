@@ -294,7 +294,7 @@ export default function SettingsModal({
                   </div>
                   <ToggleRow
                     label="Chat mode selector"
-                    hint="Show the Agent / Plan / Autopilot dropdown in the composer. Off runs every turn in Agent mode."
+                    hint="Show Agent, Plan, and Autopilot in the composer. Plan researches, clarifies, and waits for approval before building."
                     checked={Boolean(settings.experiments?.chatModeSelector)}
                     onChange={(v) => onChange({ experiments: { chatModeSelector: v } })}
                   />

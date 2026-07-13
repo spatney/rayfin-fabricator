@@ -30,6 +30,8 @@ import ConfirmModal from '../components/ConfirmModal'
 import SettingsModal from '../components/SettingsModal'
 import { applyUiScale, UI_SCALES } from '../theme'
 import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../components/ChatPanel'
+import { planForStorage, planFromStorage } from '../chatPlan'
+import { useChatEventStore } from '../chatEventStore'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 import DeploymentsControl from '../components/DeploymentsControl'
 import GitControl from '../components/GitControl'
@@ -59,7 +61,7 @@ function avatarInitials(email: string | null | undefined): string {
 
 /** Hydrate a persisted message into a live (non-pending) UI message. */
 function toUi(m: ChatMessage): UIChatMessage {
-  return { ...m, pending: false }
+  return { ...m, plan: planFromStorage(m.plan), pending: false }
 }
 
 /** Strip transient fields (turnId, pending) before persisting to disk. A turn
@@ -79,7 +81,8 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       attachmentThumbs,
       pending,
       interrupted,
-      elapsedMs
+      elapsedMs,
+      plan
     }) => {
       const cutOff = (role === 'assistant' && pending) || interrupted
       return {
@@ -96,6 +99,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         attachments,
         attachmentThumbs,
         elapsedMs,
+        plan: planForStorage(plan, Boolean(cutOff)),
         interrupted: cutOff ? true : undefined
       }
     }
@@ -202,6 +206,7 @@ export default function Workbench({
     localStorage.setItem('rayfin.splitFrac', '0.5')
   }
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
+  useChatEventStore(setChats)
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
   /** Live local preview (experiment): per-project Vite dev-server state. Present
    *  only while a turn runs — started at turn start, cleared/stopped at turn end. */
@@ -421,8 +426,17 @@ export default function Workbench({
         let res: DevServerResult
         try {
           res = await window.api.dev.start(projectId)
-        } catch {
-          res = { ok: false, outcome: 'error' }
+        } catch (err) {
+          res = {
+            ok: false,
+            outcome: 'error',
+            error: err instanceof Error ? err.message : String(err)
+          }
+        }
+        if (!res.ok && res.outcome === 'error') {
+          toast.error(res.error ?? 'The local Vite server could not be started.', {
+            title: 'Local preview failed'
+          })
         }
         setDevServers((all) => {
           // The turn already ended (entry cleared in handleTurnComplete) — don't
@@ -437,7 +451,7 @@ export default function Workbench({
         })
       })()
     },
-    [settings]
+    [settings, toast]
   )
 
   // After a chat turn, persist the transcript and auto-deploy when the agent left
@@ -982,6 +996,7 @@ export default function Workbench({
                           onChange={(updater) => setMessagesFor(active.id, updater)}
                           onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
                           onTurnStart={() => handleTurnStart(active.id)}
+                          onPlanExecutionStart={() => handleTurnStart(active.id)}
                           attachments={shots[active.id] ?? []}
                           onAddAttachment={(shot) => addShot(active.id, shot)}
                           onRemoveAttachment={(path) => removeShot(active.id, path)}
@@ -999,6 +1014,7 @@ export default function Workbench({
                           )}
                           onRequestDeploy={() => setCreateMode('deploy')}
                           modeSelectorEnabled={Boolean(settings?.experiments?.chatModeSelector)}
+                          eventsManagedExternally
                           onOpenMention={openMention}
                           draft={drafts[active.id] ?? ''}
                           onDraftChange={(value) => setDraftFor(active.id, value)}

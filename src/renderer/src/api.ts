@@ -186,8 +186,17 @@ export const api: RayfinStudioApi = {
       invoke('chat_steer', { projectId, text, attachments }),
     cancel: (projectId: string) => invoke('chat_cancel', { projectId }),
     reset: (projectId: string) => invoke('chat_reset', { projectId }),
-    resolvePlan: (requestId: string, action: string, feedback?: string) =>
-      invoke('chat_resolve_plan', { requestId, action, feedback }),
+    resolvePlan: (
+      projectId: string,
+      requestId: string,
+      action: string,
+      planContent: string,
+      feedback?: string
+    ) => invoke('chat_resolve_plan', { projectId, requestId, action, planContent, feedback }),
+    resolveQuestion: (requestId: string, answer: string, wasFreeform: boolean) =>
+      invoke('chat_resolve_question', { requestId, answer, wasFreeform }),
+    exportPlan: (suggestedName: string, content: string) =>
+      invoke('chat_export_plan', { suggestedName, content }),
     history: (projectId: string) => invoke('chat_history', { projectId }),
     saveHistory: (projectId: string, messages: ChatMessage[]) =>
       invoke('chat_save_history', { projectId, messages }),

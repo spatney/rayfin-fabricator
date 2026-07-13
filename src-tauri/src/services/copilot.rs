@@ -17,7 +17,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use github_copilot_sdk::handler::{ApproveAllHandler, ExitPlanModeHandler, ExitPlanModeResult};
+use github_copilot_sdk::handler::{
+  ApproveAllHandler, ExitPlanModeHandler, ExitPlanModeResult, UserInputHandler, UserInputResponse,
+};
 use github_copilot_sdk::session::Session;
 use github_copilot_sdk::{
   Client, ClientOptions, Error as SdkError, ExitPlanModeData, Model, ResumeSessionConfig,
@@ -144,11 +146,17 @@ async fn apply_options(
   session.set_model(&set_model_target(model), Some(opts)).await
 }
 
-/// Bridges the SDK's `exit_plan_mode` callback to the renderer. When the agent
-/// (in Plan mode) finishes a plan and calls `exit_plan_mode`, the SDK invokes
-/// [`handle`](PlanModeHandler::handle): we emit a `plan-proposed` chat event to
-/// the active turn's conversation, then block on a oneshot until the user picks
-/// an action (via `chat_resolve_plan`) or the turn ends.
+/// Bridges the SDK's `exit_plan_mode` and `ask_user` callbacks to the renderer.
+/// When the agent (in Plan mode) finishes a plan and calls `exit_plan_mode`, the
+/// SDK invokes [`handle`](ExitPlanModeHandler::handle): we emit a `plan-proposed`
+/// chat event to the active turn's conversation, then block on a oneshot until
+/// the user picks an action (via `chat_resolve_plan`) or the turn ends. The same
+/// bridge answers `ask_user` questions via [`UserInputHandler`], but only for
+/// turns that started in Plan mode (`TurnRoute::plan_context`) — an Agent-mode
+/// question has no Plan card to attach to, so it's answered with `None`
+/// (declining to bridge it) rather than surfacing a misleading Plan-artifact
+/// card. When bridged, it emits `plan-question` and blocks until
+/// `chat_resolve_question` answers it or the turn ends.
 pub struct PlanModeHandler {
   app: AppHandle,
   gate: Arc<PlanGate>,
@@ -168,7 +176,7 @@ impl ExitPlanModeHandler for PlanModeHandler {
       return ExitPlanModeResult::default();
     };
     let request_id = uuid::Uuid::new_v4().to_string();
-    let rx = self.gate.register_pending(session_id.as_str(), &request_id);
+    let rx = self.gate.register_pending_plan(session_id.as_str(), &request_id);
     emit_chat_event(
       &self.app,
       &route.project_id,
@@ -191,10 +199,45 @@ impl ExitPlanModeHandler for PlanModeHandler {
   }
 }
 
+#[async_trait]
+impl UserInputHandler for PlanModeHandler {
+  async fn handle(
+    &self,
+    session_id: SessionId,
+    question: String,
+    choices: Option<Vec<String>>,
+    allow_freeform: Option<bool>,
+  ) -> Option<UserInputResponse> {
+    // No active turn for this session → no answer available.
+    let route = self.gate.route(session_id.as_str())?;
+    // Agent-mode questions have no Plan card to attach to — surfacing one as
+    // `plan-question` would draw a misleading "before drafting" card in the
+    // renderer's Plan artifact. Only bridge `ask_user` for turns that started
+    // in Plan mode (this stays true through an approved Plan continuation).
+    if !route.plan_context {
+      return None;
+    }
+    // The CLI's `allowFreeform` is optional on the wire; default to allowed.
+    let allow_freeform = allow_freeform.unwrap_or(true);
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let rx = self.gate.register_pending_question(session_id.as_str(), &request_id, allow_freeform);
+    emit_chat_event(
+      &self.app,
+      &route.project_id,
+      &route.turn_id,
+      ChatEvent::PlanQuestion { request_id, question, choices, allow_freeform },
+    );
+    // Block until the user answers (via `chat_resolve_question`) or the turn
+    // ends and the sender is dropped/rejected, which we treat as "no answer".
+    rx.await.ok().flatten()
+  }
+}
+
 /// Resume (when on-disk state exists) or create a session bound to `session_id`,
 /// streaming enabled, auto-approving tool permissions, scoped to `cwd`. When
 /// `exit_plan` is supplied it is installed so Plan-mode turns surface their plan
-/// for approval (harmless for non-plan turns). `tools` are Fabricator's in-process
+/// for approval (harmless for non-plan turns); when `user_input` is supplied it
+/// answers `ask_user` questions the same way. `tools` are Fabricator's in-process
 /// `fabricator_*` capabilities; the product-scoped skill/instruction directories
 /// (materialized under app-data, never in the repo) are always registered so these
 /// only ever appear in Fabricator-driven sessions.
@@ -205,6 +248,7 @@ async fn open_session(
   model: &Option<String>,
   effort: &Option<String>,
   exit_plan: Option<Arc<dyn ExitPlanModeHandler>>,
+  user_input: Option<Arc<dyn UserInputHandler>>,
   tools: Vec<Tool>,
 ) -> Result<Session, SdkError> {
   let handler = Arc::new(ApproveAllHandler);
@@ -231,6 +275,9 @@ async fn open_session(
     if let Some(h) = exit_plan {
       cfg = cfg.with_exit_plan_mode_handler(h);
     }
+    if let Some(h) = user_input {
+      cfg = cfg.with_user_input_handler(h);
+    }
     cfg.reasoning_effort = eff;
     let session = client.resume_session(cfg).await?;
     // Resume can't carry a model in its config; reconcile after attaching. A
@@ -256,6 +303,9 @@ async fn open_session(
     }
     if let Some(h) = exit_plan {
       cfg = cfg.with_exit_plan_mode_handler(h);
+    }
+    if let Some(h) = user_input {
+      cfg = cfg.with_user_input_handler(h);
     }
     cfg.reasoning_effort = eff;
     if let Some(m) = &model {
@@ -342,6 +392,7 @@ impl CopilotManager {
 
   /// Get the persistent, cached session for a project turn, creating or
   /// resuming it as needed and reconciling the current model/effort.
+  #[allow(clippy::too_many_arguments)]
   pub async fn turn_session(
     &self,
     project_id: &str,
@@ -350,6 +401,7 @@ impl CopilotManager {
     model: Option<String>,
     effort: Option<String>,
     exit_plan: Option<Arc<dyn ExitPlanModeHandler>>,
+    user_input: Option<Arc<dyn UserInputHandler>>,
     tools: Vec<Tool>,
   ) -> Result<Arc<Session>, String> {
     let key = cache_key(project_id);
@@ -396,13 +448,24 @@ impl CopilotManager {
     }
 
     let client = self.ensure_client().await?;
-    let session = match open_session(&client, cwd, session_id, &model, &effort, exit_plan.clone(), tools.clone()).await {
+    let session = match open_session(
+      &client,
+      cwd,
+      session_id,
+      &model,
+      &effort,
+      exit_plan.clone(),
+      user_input.clone(),
+      tools.clone(),
+    )
+    .await
+    {
       Ok(s) => s,
       Err(e) if e.is_transport_failure() => {
         // The CLI server died — restart it and try once more.
         self.reset_client().await;
         let client = self.ensure_client().await?;
-        open_session(&client, cwd, session_id, &model, &effort, exit_plan, tools)
+        open_session(&client, cwd, session_id, &model, &effort, exit_plan, user_input, tools)
           .await
           .map_err(|e| e.to_string())?
       }
@@ -432,12 +495,12 @@ impl CopilotManager {
   ) -> Result<Arc<Session>, String> {
     let client = self.ensure_client().await?;
     let id = uuid::Uuid::new_v4().to_string();
-    let session = match open_session(&client, cwd, &id, &model, &effort, None, Vec::new()).await {
+    let session = match open_session(&client, cwd, &id, &model, &effort, None, None, Vec::new()).await {
       Ok(s) => s,
       Err(e) if e.is_transport_failure() => {
         self.reset_client().await;
         let client = self.ensure_client().await?;
-        open_session(&client, cwd, &id, &model, &effort, None, Vec::new())
+        open_session(&client, cwd, &id, &model, &effort, None, None, Vec::new())
           .await
           .map_err(|e| e.to_string())?
       }

@@ -14,8 +14,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use github_copilot_sdk::handler::{ExitPlanModeHandler, ExitPlanModeResult};
-use github_copilot_sdk::rpc::ModeSetRequest;
+use github_copilot_sdk::handler::{ExitPlanModeHandler, ExitPlanModeResult, UserInputHandler, UserInputResponse};
+use github_copilot_sdk::rpc::{ModeSetRequest, PlanSqlTodoDependency, PlanSqlTodosRow, PlanUpdateRequest};
+use github_copilot_sdk::session::Session;
 use github_copilot_sdk::session_events::SessionMode;
 use github_copilot_sdk::subscription::RecvErrorKind;
 use github_copilot_sdk::{Attachment, DeliveryMode, MessageOptions};
@@ -23,6 +24,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::Value;
 use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
 use crate::commands::screenshot;
@@ -32,7 +34,10 @@ use crate::services::emit::emit_chat_event;
 use crate::services::history;
 use crate::services::store;
 use crate::state::{AppState, TurnRoute};
-use crate::types::{ChatEvent, ChatMessage, ChatOptions, ChatToolCall, ChatToolState, ChatTurnResult, CopilotModel, SteerResult};
+use crate::types::{
+  ChatEvent, ChatMessage, ChatOptions, ChatPlanDependency, ChatPlanTodo, ChatToolCall, ChatToolState, ChatTurnResult,
+  CopilotModel, SteerResult,
+};
 
 const MAX_TOOL_OUTPUT: usize = 4000;
 /// Up to this many copilot invocations per turn on a transient pre-work failure.
@@ -59,6 +64,126 @@ fn session_mode(mode: &Option<String>) -> SessionMode {
     Some("plan") => SessionMode::Plan,
     Some("autopilot") => SessionMode::Autopilot,
     _ => SessionMode::Interactive,
+  }
+}
+
+/// Map the SDK's `session.mode_changed` wire mode (`newMode`) to the renderer's
+/// mode string. Unknown/unrecognized values are dropped rather than guessed at.
+fn map_sdk_mode(new_mode: &str) -> Option<String> {
+  match new_mode {
+    "interactive" => Some("agent".to_string()),
+    "plan" => Some("plan".to_string()),
+    "autopilot" => Some("autopilot".to_string()),
+    _ => None,
+  }
+}
+
+/// Normalize a best-effort SQL todo status into one of the four statuses the
+/// renderer understands; unknown/missing values fall back to `"pending"`.
+fn normalize_status(status: Option<&str>) -> String {
+  match status.map(str::trim).map(str::to_lowercase).as_deref() {
+    Some("in_progress") | Some("in-progress") | Some("inprogress") => "in_progress",
+    Some("done") | Some("complete") | Some("completed") => "done",
+    Some("blocked") => "blocked",
+    _ => "pending",
+  }
+  .to_string()
+}
+
+/// Normalize best-effort SQL todo rows + dependency edges (from
+/// `readSqlTodosWithDependencies`) into the renderer DTOs. Rows without a
+/// nonblank id are dropped (nothing to key them on); a missing/blank title
+/// falls back to a nonblank description, then the id itself.
+fn normalize_todos(
+  rows: Vec<PlanSqlTodosRow>,
+  deps: Vec<PlanSqlTodoDependency>,
+) -> (Vec<ChatPlanTodo>, Vec<ChatPlanDependency>) {
+  let todos = rows
+    .into_iter()
+    .filter_map(|row| {
+      let id = row.id.as_deref().map(str::trim).filter(|s| !s.is_empty())?.to_string();
+      let description = row
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+      let title = row
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| description.clone())
+        .unwrap_or_else(|| id.clone());
+      let status = normalize_status(row.status.as_deref());
+      Some(ChatPlanTodo { id, title, description, status })
+    })
+    .collect();
+  let dependencies = deps
+    .into_iter()
+    .map(|d| ChatPlanDependency { todo_id: d.todo_id, depends_on: d.depends_on })
+    .collect();
+  (todos, dependencies)
+}
+
+/// How the drain loop should treat a raw SDK event with respect to Plan
+/// structural state. `session.todos_changed`/`session.plan_changed` are
+/// general SDK events (not exclusive to Plan mode); bridging them into
+/// `plan-todos`/`plan-content` (RPC reads + chat events) only makes sense for
+/// turns that started in Plan mode ([`TurnRoute::plan_context`]) — otherwise
+/// they're treated as [`PlanStructuralEvent::Other`] and fall through to the
+/// normal `map_event` path (which ignores them).
+#[derive(Debug, PartialEq, Eq)]
+enum PlanStructuralEvent {
+  TodosChanged,
+  PlanChanged,
+  Other,
+}
+
+/// Classify a raw SDK event for the drain loop's Plan-structural handling.
+/// `plan_context` gates `TodosChanged`/`PlanChanged` so non-Plan turns never
+/// trigger a `plan().read()`/`readSqlTodosWithDependencies()` RPC call.
+fn classify_plan_event(event_type: &str, plan_context: bool) -> PlanStructuralEvent {
+  match event_type {
+    "session.todos_changed" if plan_context => PlanStructuralEvent::TodosChanged,
+    "session.plan_changed" if plan_context => PlanStructuralEvent::PlanChanged,
+    _ => PlanStructuralEvent::Other,
+  }
+}
+
+/// Read the session's current SQL todos + dependencies and emit the full
+/// snapshot as a `plan-todos` chat event. Best-effort: a read failure is logged
+/// and swallowed rather than ending the turn — the next `todos_changed` retries.
+async fn emit_plan_todos(session: &Session, app: &AppHandle, project_id: &str, turn_id: &str) {
+  match session.rpc().plan().read_sql_todos_with_dependencies().await {
+    Ok(result) => {
+      let (todos, dependencies) = normalize_todos(result.rows, result.dependencies);
+      emit_chat_event(app, project_id, turn_id, ChatEvent::PlanTodos { todos, dependencies });
+    }
+    Err(e) => log::warn!("failed to read session plan todos: {e}"),
+  }
+}
+
+/// Read (or, for a delete, skip reading) the session plan file and emit its
+/// content as a `plan-content` chat event. Best-effort: a read failure is
+/// logged and swallowed rather than ending the turn.
+async fn emit_plan_content(session: &Session, app: &AppHandle, project_id: &str, turn_id: &str, operation: &str) {
+  if operation == "delete" {
+    emit_chat_event(
+      app,
+      project_id,
+      turn_id,
+      ChatEvent::PlanContent { content: String::new(), operation: operation.to_string() },
+    );
+    return;
+  }
+  match session.rpc().plan().read().await {
+    Ok(result) => {
+      let content = result.content.unwrap_or_default();
+      emit_chat_event(app, project_id, turn_id, ChatEvent::PlanContent { content, operation: operation.to_string() });
+    }
+    Err(e) => log::warn!("failed to read session plan file: {e}"),
   }
 }
 
@@ -289,6 +414,13 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
         sink(ChatEvent::PlanResolved { request_id: request_id.to_string() });
       }
     }
+    "session.mode_changed" => {
+      // Purely a data-mapping event (no RPC needed), so it's handled inline
+      // here rather than in the drain loop's async plan_changed/todos_changed path.
+      if let Some(mode) = data.get("newMode").and_then(|v| v.as_str()).and_then(map_sdk_mode) {
+        sink(ChatEvent::ModeChanged { mode });
+      }
+    }
     "session.idle" => {
       ctx.saw_result = true;
       return Flow::Stop;
@@ -463,11 +595,14 @@ pub(crate) async fn run_turn(
   let full = diagnostics::full_enabled();
   let app_version = app.package_info().version.to_string();
 
-  // Surface plan-approval prompts (`exit_plan_mode`) to this turn's UI. The handler
-  // is installed on every chat turn (cheap, harmless when not in Plan mode) because
-  // the SDK session is cached/reused and may switch to Plan on a later turn.
-  let plan_handler: Arc<dyn ExitPlanModeHandler> =
-    Arc::new(PlanModeHandler::new(app.clone(), state.plan.clone()));
+  // Surface plan-approval prompts (`exit_plan_mode`) and structured questions
+  // (`ask_user`) to this turn's UI. Both are backed by the same handler/gate and
+  // installed on every chat turn (cheap, harmless when neither fires) because the
+  // SDK session is cached/reused and may switch to Plan (or call `ask_user`) on a
+  // later turn.
+  let bridge = Arc::new(PlanModeHandler::new(app.clone(), state.plan.clone()));
+  let plan_handler: Arc<dyn ExitPlanModeHandler> = bridge.clone();
+  let user_input_handler: Arc<dyn UserInputHandler> = bridge;
 
   // Build Fabricator's in-process tools for this turn. They let the agent locate
   // and wire semantic models; visual validation happens via headless `npm run
@@ -484,6 +619,7 @@ pub(crate) async fn run_turn(
       project.model.clone(),
       project.effort.clone(),
       Some(plan_handler),
+      Some(user_input_handler),
       fab_tools,
     )
     .await
@@ -524,10 +660,17 @@ pub(crate) async fn run_turn(
   }
 
   // Point the plan handler at this turn's UI for the duration of the turn.
+  // `plan_context` records whether this turn was started in Plan mode: an
+  // Agent-mode `ask_user` question has no Plan card to attach to, so
+  // `UserInputHandler` uses this to skip emitting `plan-question` for those.
+  // It stays fixed for the whole route (i.e. through an approved Plan
+  // continuation into Autopilot/Interactive), since the route isn't replaced
+  // again until the turn ends.
   let session_key = ctx_info.session_id.clone();
+  let plan_context = mode.as_deref() == Some("plan");
   state.plan.set_route(
     &session_key,
-    TurnRoute { project_id: project_id.clone(), turn_id: turn_id.clone() },
+    TurnRoute { project_id: project_id.clone(), turn_id: turn_id.clone(), plan_context },
   );
 
   // File attachments → typed SDK attachments (built once, cloned per attempt).
@@ -557,6 +700,11 @@ pub(crate) async fn run_turn(
 
     // Subscribe before sending so the turn's events can't be missed.
     let mut sub = session.subscribe();
+    // Coalesces bursts of `session.todos_changed` signals (no payload; a bulk
+    // todo-table write can fire many in a row) into one `readSqlTodosWithDependencies`
+    // RPC + `plan-todos` emit, flushed right before the next distinct event so
+    // relative event order is preserved.
+    let mut todos_dirty = false;
 
     let mut opts = MessageOptions::new(text.clone());
     if !attach.is_empty() {
@@ -572,21 +720,48 @@ pub(crate) async fn run_turn(
     let drain = async {
       loop {
         if token.is_cancelled() {
+          if todos_dirty {
+            emit_plan_todos(&session, &app, &project_id, &turn_id).await;
+            todos_dirty = false;
+          }
           let _ = session.abort().await;
           return DrainEnd::Cancelled;
         }
         tokio::select! {
           _ = token.wait_cancelled() => {
+            if todos_dirty {
+              emit_plan_todos(&session, &app, &project_id, &turn_id).await;
+              todos_dirty = false;
+            }
             let _ = session.abort().await;
             return DrainEnd::Cancelled;
           }
           recv = sub.recv() => match recv {
-            Ok(ev) => {
-              let mut sink = |e: ChatEvent| emit_chat_event(&app, &project_id, &turn_id, e);
-              if let Flow::Stop = map_event(&ev.event_type, &ev.data, &mut sink, &mut ctx) {
-                return DrainEnd::Finished;
+            Ok(ev) => match classify_plan_event(&ev.event_type, plan_context) {
+              // Signal-only (no payload): defer the actual read/emit until the
+              // burst settles (see `todos_dirty` above).
+              PlanStructuralEvent::TodosChanged => {
+                todos_dirty = true;
               }
-            }
+              PlanStructuralEvent::PlanChanged => {
+                if todos_dirty {
+                  emit_plan_todos(&session, &app, &project_id, &turn_id).await;
+                  todos_dirty = false;
+                }
+                let operation = ev.data.get("operation").and_then(|v| v.as_str()).unwrap_or("update");
+                emit_plan_content(&session, &app, &project_id, &turn_id, operation).await;
+              }
+              PlanStructuralEvent::Other => {
+                if todos_dirty {
+                  emit_plan_todos(&session, &app, &project_id, &turn_id).await;
+                  todos_dirty = false;
+                }
+                let mut sink = |e: ChatEvent| emit_chat_event(&app, &project_id, &turn_id, e);
+                if let Flow::Stop = map_event(&ev.event_type, &ev.data, &mut sink, &mut ctx) {
+                  return DrainEnd::Finished;
+                }
+              }
+            },
             Err(err) => match err.kind() {
               RecvErrorKind::Lagged(l) => {
                 ctx.lagged_events += l.skipped();
@@ -637,9 +812,10 @@ pub(crate) async fn run_turn(
   screenshot::cleanup(&attachments);
   state.end_chat(&project_id);
   // Drop this turn's plan route and unblock any handler still awaiting a decision
-  // (covers Stop / timeout while an approval card is open).
+  // (covers Stop / timeout while an approval card or a structured question is open).
   state.plan.clear_route(&session_key);
-  state.plan.reject_pending(&session_key);
+  state.plan.reject_pending_plan(&session_key);
+  state.plan.reject_pending_question(&session_key);
 
   // Record one lightweight diagnostics line for this turn (off the streaming hot
   // path, best-effort). `outcome` mirrors the branches below.
@@ -718,7 +894,8 @@ pub fn chat_cancel(state: State<'_, AppState>, project_id: String) {
 /// Interject a message into the turn already running for `project` —
 /// conversation steering. Returns `{ steered: true }` when a turn was in flight:
 /// the message either interrupts the current step immediately (Immediate
-/// delivery) or, when a Plan card is awaiting a decision, is routed as
+/// delivery), answers a pending structured question (when it accepts a
+/// free-form answer), or, when a Plan card is awaiting a decision, is routed as
 /// plan-revision feedback. Returns `{ steered: false }` when nothing is running,
 /// so the renderer sends it as a normal new turn instead.
 #[tauri::command]
@@ -738,22 +915,50 @@ pub async fn chat_steer(
   let Some(ctx_info) = resolve_context(&project_id) else {
     return Ok(SteerResult { steered: false });
   };
-  // Where the live turn is streaming, so any plan card dismisses on the right turn.
+  // Where the live turn is streaming, so any plan/question card dismisses on
+  // the right turn.
   let active_turn = state.plan.route(&ctx_info.session_id).map(|r| r.turn_id);
 
   // Plan mode: a plan card is awaiting the user's decision, so the agent is
   // blocked on that choice rather than "thinking". Treat the typed message as
   // feedback that asks it to revise the plan instead of an immediate interjection.
-  if let Some(request_id) = state.plan.pending_request(&ctx_info.session_id) {
+  if let Some(request_id) = state.plan.pending_plan_request(&ctx_info.session_id) {
     if let Some(turn) = &active_turn {
       emit_chat_event(&app, &project_id, turn, ChatEvent::PlanResolved { request_id: request_id.clone() });
     }
-    state.plan.resolve(
+    state.plan.resolve_plan(
       &request_id,
       ExitPlanModeResult { approved: false, selected_action: None, feedback: Some(text) },
     );
     screenshot::cleanup(&attachments);
     return Ok(SteerResult { steered: true });
+  }
+
+  // A structured `ask_user` question is awaiting an answer. Only consume the
+  // typed message as its answer when the question accepts a free-form reply —
+  // otherwise leave it pending for the renderer's own choice UI and fall
+  // through to a normal interjection.
+  if let Some((request_id, allow_freeform)) = state.plan.pending_question(&ctx_info.session_id) {
+    if allow_freeform {
+      // Mirror `chat_resolve_question`: only emit `plan-question-resolved` once
+      // the pending oneshot has actually resolved, so a dropped receiver (the
+      // turn ending in the same race) can't render an answered card.
+      let resolved = state
+        .plan
+        .resolve_question(&request_id, Some(UserInputResponse { answer: text.clone(), was_freeform: true }));
+      if resolved {
+        if let Some(turn) = &active_turn {
+          emit_chat_event(
+            &app,
+            &project_id,
+            turn,
+            ChatEvent::PlanQuestionResolved { request_id: request_id.clone(), answer: Some(text.clone()) },
+          );
+        }
+      }
+      screenshot::cleanup(&attachments);
+      return Ok(SteerResult { steered: true });
+    }
   }
 
   // Normal interjection: deliver the message Immediately so it interrupts the
@@ -810,33 +1015,138 @@ pub fn chat_history(project_id: String) -> Vec<ChatMessage> {
   history::load_history(&project_id)
 }
 
+/// Sanitize a user-suggested export filename: keep letters, digits, spaces,
+/// `_`/`-`; everything else becomes `-`. Falls back to `"plan"` when nothing
+/// usable remains (e.g. an all-emoji summary).
+fn sanitize_export_name(input: &str) -> String {
+  let mapped: String = input
+    .chars()
+    .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == ' ' { c } else { '-' })
+    .collect();
+  let trimmed = mapped.trim().trim_matches('-').trim();
+  if trimmed.is_empty() {
+    "plan".to_string()
+  } else {
+    trimmed.to_string()
+  }
+}
+
 /// Resolve a pending Plan-mode approval prompt raised via `exit_plan_mode`.
 /// `action` is one of "interactive" | "autopilot" | "autopilot_fleet" | "exit_only"
 /// (approve and continue with that route) — anything else (e.g. "keep_planning")
 /// rejects the plan so the agent revises it, optionally using `feedback`.
+///
+/// Before resolving, writes `plan_content` back to the session's plan file via
+/// `session.plan.update` (the user may have edited the card). Validates that
+/// `request_id` is still pending *for this project*, and that the update RPC
+/// succeeds, before ever touching the pending oneshot — a failure here leaves
+/// the prompt outstanding rather than silently discarding the user's edits.
 #[tauri::command]
-pub fn chat_resolve_plan(
+pub async fn chat_resolve_plan(
   state: State<'_, AppState>,
+  project_id: String,
   request_id: String,
   action: String,
+  plan_content: String,
   feedback: Option<String>,
 ) -> Result<(), String> {
+  let owner = state.plan.plan_owner(&request_id).ok_or_else(|| "No pending plan to resolve.".to_string())?;
+  if owner.project_id != project_id {
+    return Err("That plan request doesn't belong to this project.".into());
+  }
+  let session = state
+    .copilot
+    .peek_session(&project_id)
+    .await
+    .ok_or_else(|| "No active Copilot session for this project.".to_string())?;
+  session
+    .rpc()
+    .plan()
+    .update(PlanUpdateRequest { content: plan_content })
+    .await
+    .map_err(|e| format!("Failed to update the plan: {e}"))?;
+
   let result = match action.as_str() {
     "interactive" | "autopilot" | "autopilot_fleet" | "exit_only" => {
       ExitPlanModeResult { approved: true, selected_action: Some(action), feedback }
     }
     _ => ExitPlanModeResult { approved: false, selected_action: None, feedback },
   };
-  if state.plan.resolve(&request_id, result) {
+  if state.plan.resolve_plan(&request_id, result) {
     Ok(())
   } else {
     Err("No pending plan to resolve.".into())
   }
 }
 
+/// Resolve a pending structured question raised via the `ask_user` tool.
+/// Rejects an empty/whitespace-only answer, and rejects `was_freeform: true`
+/// when the question doesn't accept a free-form reply. Only emits
+/// `plan-question-resolved` to the question's turn *after* the pending oneshot
+/// resolves successfully — if the receiver was already dropped (e.g. the turn
+/// ended), we return `Err` without telling the renderer the card was answered.
+#[tauri::command]
+pub fn chat_resolve_question(
+  app: AppHandle,
+  state: State<'_, AppState>,
+  request_id: String,
+  answer: String,
+  was_freeform: bool,
+) -> Result<(), String> {
+  let trimmed = answer.trim();
+  if trimmed.is_empty() {
+    return Err("An answer is required.".into());
+  }
+  let owner = state
+    .plan
+    .question_owner(&request_id)
+    .ok_or_else(|| "No pending question to resolve.".to_string())?;
+  if was_freeform && !owner.allow_freeform {
+    return Err("This question doesn't accept a free-form answer.".into());
+  }
+  if !state
+    .plan
+    .resolve_question(&request_id, Some(UserInputResponse { answer: trimmed.to_string(), was_freeform }))
+  {
+    return Err("No pending question to resolve.".into());
+  }
+  emit_chat_event(
+    &app,
+    &owner.project_id,
+    &owner.turn_id,
+    ChatEvent::PlanQuestionResolved { request_id: request_id.clone(), answer: Some(trimmed.to_string()) },
+  );
+  Ok(())
+}
+
 #[tauri::command]
 pub fn chat_save_history(project_id: String, messages: Vec<ChatMessage>) {
   history::save_history(&project_id, messages);
+}
+
+/// Export a plan's Markdown content via the OS's native "Save As" dialog.
+/// Returns `Ok(None)` when the user cancels; writes UTF-8 to disk only after a
+/// destination is chosen — the project tree is never touched automatically.
+#[tauri::command]
+pub async fn chat_export_plan(app: AppHandle, suggested_name: String, content: String) -> Result<Option<String>, String> {
+  let file_name = format!("{}.md", sanitize_export_name(&suggested_name));
+  let (tx, rx) = tokio::sync::oneshot::channel();
+  app
+    .dialog()
+    .file()
+    .add_filter("Markdown", &["md"])
+    .set_file_name(file_name)
+    .save_file(move |picked| {
+      let _ = tx.send(picked);
+    });
+  let Some(picked) = rx.await.ok().flatten() else {
+    return Ok(None);
+  };
+  let Some(path) = picked.into_path().ok() else {
+    return Ok(None);
+  };
+  std::fs::write(&path, content.as_bytes()).map_err(|e| format!("Couldn't save the plan: {e}"))?;
+  Ok(Some(path.display().to_string()))
 }
 
 #[tauri::command]
@@ -1049,6 +1359,122 @@ mod tests {
     let out = truncate("abcdef", 3);
     assert!(out.starts_with("abc"));
     assert!(out.contains("3 more characters"));
+  }
+
+  #[test]
+  fn map_sdk_mode_maps_known_wire_values() {
+    assert_eq!(map_sdk_mode("interactive").as_deref(), Some("agent"));
+    assert_eq!(map_sdk_mode("plan").as_deref(), Some("plan"));
+    assert_eq!(map_sdk_mode("autopilot").as_deref(), Some("autopilot"));
+    assert_eq!(map_sdk_mode("something_else"), None);
+    assert_eq!(map_sdk_mode(""), None);
+  }
+
+  #[test]
+  fn classify_plan_event_bridges_structural_events_only_in_plan_context() {
+    // In a Plan-mode turn, both structural events are bridged.
+    assert_eq!(classify_plan_event("session.todos_changed", true), PlanStructuralEvent::TodosChanged);
+    assert_eq!(classify_plan_event("session.plan_changed", true), PlanStructuralEvent::PlanChanged);
+    // In an ordinary Agent/Autopilot turn, the same events are general SDK
+    // signals (not exclusive to Plan mode) and must NOT trigger an RPC
+    // read/emit — they fall through to `Other` (→ `map_event`, which ignores
+    // them) instead.
+    assert_eq!(classify_plan_event("session.todos_changed", false), PlanStructuralEvent::Other);
+    assert_eq!(classify_plan_event("session.plan_changed", false), PlanStructuralEvent::Other);
+    // Unrelated event types are always `Other`, regardless of plan_context.
+    assert_eq!(classify_plan_event("session.idle", true), PlanStructuralEvent::Other);
+    assert_eq!(classify_plan_event("session.idle", false), PlanStructuralEvent::Other);
+  }
+
+  #[test]
+  fn mode_changed_event_maps_new_mode_to_chat_event() {
+    let mut ctx = TurnCtx::new(false);
+    let events = collect(&[("session.mode_changed", json!({"newMode":"plan","previousMode":"interactive"}))], &mut ctx);
+    assert_eq!(events.len(), 1);
+    match &events[0] {
+      ChatEvent::ModeChanged { mode } => assert_eq!(mode, "plan"),
+      _ => panic!("expected mode-changed"),
+    }
+  }
+
+  #[test]
+  fn mode_changed_event_drops_unknown_mode() {
+    let mut ctx = TurnCtx::new(false);
+    let events = collect(&[("session.mode_changed", json!({"newMode":"mystery"}))], &mut ctx);
+    assert!(events.is_empty());
+  }
+
+  #[test]
+  fn normalize_status_maps_known_variants_and_defaults_unknown_to_pending() {
+    assert_eq!(normalize_status(Some("in_progress")), "in_progress");
+    assert_eq!(normalize_status(Some("in-progress")), "in_progress");
+    assert_eq!(normalize_status(Some("InProgress")), "in_progress");
+    assert_eq!(normalize_status(Some("done")), "done");
+    assert_eq!(normalize_status(Some("complete")), "done");
+    assert_eq!(normalize_status(Some("completed")), "done");
+    assert_eq!(normalize_status(Some("blocked")), "blocked");
+    assert_eq!(normalize_status(Some("pending")), "pending");
+    assert_eq!(normalize_status(Some("whatever")), "pending");
+    assert_eq!(normalize_status(None), "pending");
+  }
+
+  #[test]
+  fn normalize_todos_drops_blank_or_missing_ids() {
+    let rows = vec![
+      PlanSqlTodosRow {
+        id: Some("t1".into()),
+        title: Some("Do the thing".into()),
+        description: None,
+        status: Some("done".into()),
+      },
+      PlanSqlTodosRow { id: None, title: Some("orphaned".into()), description: None, status: None },
+      PlanSqlTodosRow { id: Some("  ".into()), title: Some("blank id".into()), description: None, status: None },
+    ];
+    let (todos, deps) = normalize_todos(rows, vec![]);
+    assert_eq!(todos.len(), 1);
+    assert_eq!(todos[0].id, "t1");
+    assert_eq!(todos[0].title, "Do the thing");
+    assert_eq!(todos[0].status, "done");
+    assert!(deps.is_empty());
+  }
+
+  #[test]
+  fn normalize_todos_title_falls_back_to_description_then_id() {
+    let rows = vec![
+      PlanSqlTodosRow { id: Some("t1".into()), title: None, description: Some("desc only".into()), status: None },
+      PlanSqlTodosRow { id: Some("t2".into()), title: Some("   ".into()), description: None, status: None },
+      PlanSqlTodosRow {
+        id: Some("t3".into()),
+        title: Some("   ".into()),
+        description: Some("   ".into()),
+        status: None,
+      },
+    ];
+    let (todos, _deps) = normalize_todos(rows, vec![]);
+    assert_eq!(todos[0].title, "desc only");
+    assert_eq!(todos[0].description.as_deref(), Some("desc only"));
+    assert_eq!(todos[1].title, "t2");
+    assert_eq!(todos[1].description, None);
+    // Blank title AND blank description both fall back to the id.
+    assert_eq!(todos[2].title, "t3");
+    assert_eq!(todos[2].description, None);
+  }
+
+  #[test]
+  fn normalize_todos_maps_dependencies() {
+    let deps = vec![PlanSqlTodoDependency { todo_id: "t2".into(), depends_on: "t1".into() }];
+    let (_todos, mapped) = normalize_todos(vec![], deps);
+    assert_eq!(mapped.len(), 1);
+    assert_eq!(mapped[0].todo_id, "t2");
+    assert_eq!(mapped[0].depends_on, "t1");
+  }
+
+  #[test]
+  fn sanitize_export_name_replaces_unsafe_chars_and_falls_back() {
+    assert_eq!(sanitize_export_name("My Plan / v2?"), "My Plan - v2");
+    assert_eq!(sanitize_export_name("  "), "plan");
+    assert_eq!(sanitize_export_name("💥💥"), "plan");
+    assert_eq!(sanitize_export_name("normal-name_1"), "normal-name_1");
   }
 }
 

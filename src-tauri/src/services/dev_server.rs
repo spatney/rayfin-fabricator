@@ -34,6 +34,7 @@ const DEV_CHANNEL: &str = "dev:run";
 /// backend CORS are pinned to `localhost:5173`, so the preview must serve there
 /// (Fabricator's own renderer dev server is moved off 5173 to keep it free).
 const LOCAL_PORT: &str = "5173";
+const LOCAL_URL: &str = "http://localhost:5173";
 /// Max time to wait for Vite to print its `Local:` URL before giving up.
 const READY_TIMEOUT_MS: u64 = 60_000;
 /// Best-effort timeout for the pre-step that refreshes `.env` (no deploy).
@@ -47,12 +48,55 @@ const SCAN_TAIL: usize = 4096;
 /// case a color reset is appended.
 static LOCAL_URL_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)Local:\s*(https?://[^\s\x1b]+)").unwrap());
+static HTML_TITLE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?is)<title[^>]*>\s*(.*?)\s*</title>").unwrap());
 
 /// Extract Vite's `Local:` URL from a chunk of dev-server output (trailing slash
 /// trimmed). Returns `None` when the text doesn't contain the ready banner.
 pub fn parse_local_url(text: &str) -> Option<String> {
     let raw = LOCAL_URL_RE.captures(text)?.get(1)?.as_str();
     Some(raw.trim_end_matches('/').to_string())
+}
+
+fn html_title(text: &str) -> Option<String> {
+    HTML_TITLE_RE
+        .captures(text)?
+        .get(1)
+        .map(|m| m.as_str().split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|title| !title.is_empty())
+}
+
+/// A Vite server on the shared Rayfin port is reusable only when its served
+/// document matches this project's index title. This prevents attaching the
+/// preview to another Rayfin app that happens to be running on port 5173.
+fn existing_vite_matches(project_index: &str, served_html: &str) -> bool {
+    if !served_html.contains("/@vite/client") {
+        return false;
+    }
+    matches!(
+        (html_title(project_index), html_title(served_html)),
+        (Some(expected), Some(actual)) if expected == actual
+    )
+}
+
+/// Probe an already-running Vite server on the canonical Rayfin port.
+/// `Some(true)` means it serves this project, `Some(false)` means another Vite
+/// app owns the port, and `None` means no Vite page answered.
+async fn probe_existing_vite(project_dir: &Path) -> Option<bool> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let response = client.get(LOCAL_URL).send().await.ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let served_html = response.text().await.ok()?;
+    if !served_html.contains("/@vite/client") {
+        return None;
+    }
+    let project_index = std::fs::read_to_string(project_dir.join("index.html")).ok()?;
+    Some(existing_vite_matches(&project_index, &served_html))
 }
 
 /// True when a project has Vite installed locally — the one requirement for the
@@ -215,6 +259,33 @@ pub async fn dev_start(
     };
 
     let renderer = emit::proc_streamer(&app, DEV_CHANNEL);
+    match probe_existing_vite(&project_dir).await {
+        Some(true) => {
+            renderer(
+                Stream::System,
+                &format!("Reusing this project's existing local preview at {LOCAL_URL}\n"),
+            );
+            return Ok(DevServerResult {
+                ok: true,
+                outcome: "running".into(),
+                url: Some(LOCAL_URL.into()),
+                error: None,
+            });
+        }
+        Some(false) => {
+            let reason = format!(
+                "Port {LOCAL_PORT} is already serving a different Vite app. Stop it before starting this local preview."
+            );
+            renderer(Stream::System, &format!("{reason}\n"));
+            return Ok(DevServerResult {
+                ok: false,
+                outcome: "error".into(),
+                url: None,
+                error: Some(reason),
+            });
+        }
+        None => {}
+    }
     renderer(
         Stream::System,
         &format!("Starting local preview for {}…\n", project.name),
@@ -439,6 +510,19 @@ mod tests {
     #[test]
     fn no_url_when_banner_absent() {
         assert_eq!(parse_local_url("transforming modules..."), None);
+    }
+
+    #[test]
+    fn existing_vite_requires_the_same_project_title() {
+        let index = "<html><head><title>Super Rayfin</title></head></html>";
+        let matching =
+            r#"<html><head><script type="module" src="/@vite/client"></script><title> Super   Rayfin </title></head></html>"#;
+        let other =
+            r#"<html><head><script type="module" src="/@vite/client"></script><title>Other App</title></head></html>"#;
+        assert!(existing_vite_matches(index, matching));
+        assert!(!existing_vite_matches(index, other));
+        assert!(!existing_vite_matches(index, "<title>Super Rayfin</title>"));
+        assert!(!existing_vite_matches("<html></html>", "<script src=\"/@vite/client\"></script>"));
     }
 
     #[test]

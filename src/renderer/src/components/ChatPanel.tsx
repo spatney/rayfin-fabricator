@@ -14,6 +14,7 @@ import {
   type ChatEvent,
   type ChatMessage,
   type ChatMode,
+  type ChatPlanArtifact,
   type ChatSegment,
   type ChatToolCall,
   type ChatTurnResult,
@@ -40,6 +41,17 @@ import {
   Codicon
 } from './icons'
 import { FabricatorMark } from './FabricatorMark'
+import PlanCard from './PlanCard'
+import {
+  buildRecoveredPlanPrompt,
+  createPlanArtifact,
+  modeForPlanAction,
+  readChatMode,
+  reducePlanEvent,
+  setPlanSubmitting,
+  shouldSuggestPlanMode,
+  writeChatMode
+} from '../chatPlan'
 
 export interface UIChatMessage extends ChatMessage {
   /** Correlates streamed events to the active assistant bubble (live only). */
@@ -54,16 +66,6 @@ export interface UIChatMessage extends ChatMessage {
   startedAt?: number
   /** Transient status note (e.g. a transient-failure retry); not persisted. */
   notice?: string
-  /** A Plan-mode proposal awaiting the user's decision (live only). */
-  plan?: {
-    requestId: string
-    summary: string
-    planContent: string
-    actions: string[]
-    recommendedAction: string
-    /** True once answered (here or elsewhere) — buttons disable. */
-    resolved?: boolean
-  }
 }
 
 /**
@@ -92,6 +94,9 @@ interface Props {
   /** Called when a fresh turn starts (a new send/retry/resume — not an interjection).
    *  Lets the host kick off the live local preview for the turn's duration. */
   onTurnStart?: () => void
+  /** Called when a reviewed Plan begins executing within its existing turn.
+   *  Lets the host ensure live local preview is running for the edit phase. */
+  onPlanExecutionStart?: () => void
   /** Region screenshots staged for the next message. */
   attachments?: PendingShot[]
   /** Stage an image the user added, pasted, or dropped into the composer. */
@@ -126,6 +131,8 @@ interface Props {
   /** Experimental: show the Agent / Plan / Autopilot mode selector in the composer.
    * When false (the default), the selector is hidden and every turn runs in Agent mode. */
   modeSelectorEnabled?: boolean
+  /** The host owns the global chat-event subscription (keeps turns live while this panel is unmounted). */
+  eventsManagedExternally?: boolean
   /** Open a file referenced by an @-mention chip (path without the leading @). */
   onOpenMention?: (ref: string) => void
   /** The current composer draft. Persisted by the parent (keyed by project) so a
@@ -977,100 +984,6 @@ function formatTurnDuration(ms: number): string {
   const s = total % 60
   return s ? `${m}m ${s}s` : `${m}m`
 }
-/**
- * Plan-mode approval card: shows the proposed plan summary (with an expandable
- * full plan) and the continuation choices. Buttons disable once the plan is
- * resolved. "Keep planning" reveals an optional feedback box that sends the
- * agent back to revise.
- */
-function PlanCard({
-  plan,
-  onResolve
-}: {
-  plan: NonNullable<UIChatMessage['plan']>
-  onResolve: (action: string, feedback?: string) => void
-}): JSX.Element {
-  const [expanded, setExpanded] = useState(false)
-  const [revising, setRevising] = useState(false)
-  const [feedback, setFeedback] = useState('')
-  const resolved = Boolean(plan.resolved)
-  const actions = plan.actions.filter((a) => a in PLAN_ACTION_LABELS)
-  return (
-    <div className={`plan-card${resolved ? ' plan-card--resolved' : ''}`}>
-      <div className="plan-card-head">
-        <span className="plan-card-icon" aria-hidden="true">
-          <SparkleIcon />
-        </span>
-        <span className="plan-card-title">Plan ready for review</span>
-        {resolved && <span className="plan-card-status">Resolved</span>}
-      </div>
-      {plan.summary && (
-        <div className="plan-card-summary msg-text--md">
-          <Markdown>{plan.summary}</Markdown>
-        </div>
-      )}
-      {plan.planContent && (
-        <div className="plan-card-detail">
-          <button
-            type="button"
-            className="plan-card-toggle"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-          >
-            {expanded ? <><Codicon name="chevron-down" /> Hide full plan</> : <><Codicon name="chevron-right" /> View full plan</>}
-          </button>
-          {expanded && (
-            <div className="plan-card-body msg-text--md">
-              <Markdown>{plan.planContent}</Markdown>
-            </div>
-          )}
-        </div>
-      )}
-      {!resolved && (
-        <>
-          <div className="plan-card-actions">
-            {actions.map((a) => (
-              <button
-                key={a}
-                type="button"
-                className={`btn btn--sm${a === plan.recommendedAction ? ' btn--primary' : ' btn--ghost'}`}
-                onClick={() => onResolve(a)}
-              >
-                {PLAN_ACTION_LABELS[a]}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="btn btn--sm btn--ghost"
-              onClick={() => setRevising((v) => !v)}
-            >
-              Keep planning
-            </button>
-          </div>
-          {revising && (
-            <div className="plan-card-revise">
-              <textarea
-                className="plan-card-feedback"
-                placeholder="Optional — what should change about the plan?"
-                value={feedback}
-                rows={2}
-                onChange={(e) => setFeedback(e.target.value)}
-              />
-              <button
-                type="button"
-                className="btn btn--sm btn--primary"
-                onClick={() => onResolve('keep_planning', feedback.trim() || undefined)}
-              >
-                Send feedback
-              </button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
 /** Largest dimension we keep when re-encoding pasted/added images (keeps temp
  *  files and the model's vision payload reasonable). */
 const MAX_IMAGE_DIM = 2000
@@ -1163,34 +1076,39 @@ function settleRunningTools(tools: ChatToolCall[], to: 'success' | 'error'): Cha
   return tools.map((t) => (t.state === 'running' ? { ...t, state: to } : t))
 }
 
-function reduce(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
+export function reduceChatMessage(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
+  let next: UIChatMessage
   switch (ev.type) {
     case 'delta':
-      return {
+      next = {
         ...msg,
         text: msg.text + ev.text,
         segments: appendText(msg.segments, ev.text),
         notice: undefined
       }
+      break
     case 'tool-start':
       if (msg.tools.some((t) => t.id === ev.tool.id)) return msg
-      return {
+      next = {
         ...msg,
         tools: [...msg.tools, ev.tool],
         segments: [...(msg.segments ?? []), { kind: 'tool', id: ev.tool.id }],
         notice: undefined
       }
+      break
     case 'tool-end':
-      return {
+      next = {
         ...msg,
         tools: msg.tools.map((t) =>
           t.id === ev.id ? { ...t, state: ev.state, output: ev.output ?? t.output } : t
         )
       }
+      break
     case 'notice':
-      return { ...msg, notice: ev.text }
+      next = { ...msg, notice: ev.text }
+      break
     case 'error':
-      return {
+      next = {
         ...msg,
         error: ev.text,
         pending: false,
@@ -1198,33 +1116,29 @@ function reduce(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
         tools: settleRunningTools(msg.tools, 'error'),
         elapsedMs: msg.startedAt ? Date.now() - msg.startedAt : msg.elapsedMs
       }
+      break
     case 'result':
-      return {
+      next = {
         ...msg,
         pending: false,
         notice: undefined,
         tools: settleRunningTools(msg.tools, ev.ok ? 'success' : 'error'),
         elapsedMs: msg.startedAt ? Date.now() - msg.startedAt : msg.elapsedMs
       }
+      break
     case 'plan-proposed':
-      return {
-        ...msg,
-        plan: {
-          requestId: ev.requestId,
-          summary: ev.summary,
-          planContent: ev.planContent,
-          actions: ev.actions,
-          recommendedAction: ev.recommendedAction,
-          resolved: false
-        },
-        notice: undefined
-      }
     case 'plan-resolved':
-      if (!msg.plan || msg.plan.requestId !== ev.requestId) return msg
-      return { ...msg, plan: { ...msg.plan, resolved: true } }
+    case 'plan-content':
+    case 'plan-todos':
+    case 'plan-question':
+    case 'plan-question-resolved':
+      next = { ...msg, notice: undefined }
+      break
     default:
-      return msg
+      next = msg
   }
+  const plan = reducePlanEvent(msg.plan, ev, `plan-${msg.id}`)
+  return plan === msg.plan ? next : { ...next, plan }
 }
 
 /** Composer mode options (Agent / Plan / Autopilot) with hover hints + menu copy. */
@@ -1248,24 +1162,6 @@ const MODES: { id: ChatMode; label: string; hint: string; desc: string }[] = [
     desc: 'Runs autonomously end-to-end, auto-approving tools.'
   }
 ]
-
-/** Friendly labels for the SDK's plan continuation actions. */
-const PLAN_ACTION_LABELS: Record<string, string> = {
-  interactive: 'Approve & run',
-  autopilot: 'Approve & autopilot',
-  autopilot_fleet: 'Approve & autopilot fleet',
-  exit_only: 'Approve (exit plan)'
-}
-
-/**
- * Which composer mode a continuation maps to, so the bar reflects the user's
- * choice after they approve a plan. `exit_only` / `keep_planning` leave it unchanged.
- */
-const ACTION_TO_MODE: Record<string, ChatMode> = {
-  interactive: 'agent',
-  autopilot: 'autopilot',
-  autopilot_fleet: 'autopilot'
-}
 
 /** A file the composer can reference via @-mention. */
 interface MentionFile {
@@ -1313,21 +1209,43 @@ function rankFiles(files: MentionFile[], query: string): MentionFile[] {
  */
 const MessageRow = memo(function MessageRow({
   message: m,
+  projectName,
   projectPath,
   canRetry,
   onRetry,
   canResume,
   onResume,
+  planBusy,
+  onChangePlanContent,
   onResolvePlan,
+  onAnswerPlanQuestion,
+  onResumePlan,
+  onExportPlan,
   onOpenMention
 }: {
   message: UIChatMessage
+  projectName: string
   projectPath: string
   canRetry: boolean
   onRetry: (id: string) => void
   canResume: boolean
   onResume: (id: string) => void
-  onResolvePlan: (msgId: string, requestId: string, action: string, feedback?: string) => void
+  planBusy: boolean
+  onChangePlanContent: (msgId: string, content: string) => void
+  onResolvePlan: (msgId: string, action: string, feedback?: string) => void
+  onAnswerPlanQuestion: (
+    msgId: string,
+    requestId: string,
+    answer: string,
+    wasFreeform: boolean
+  ) => void
+  onResumePlan: (
+    msgId: string,
+    kind: 'review' | 'execute' | 'revise',
+    action?: string,
+    feedback?: string
+  ) => void
+  onExportPlan: (msgId: string, content: string) => Promise<void> | void
   onOpenMention?: (ref: string) => void
 }): JSX.Element {
   return (
@@ -1366,9 +1284,15 @@ const MessageRow = memo(function MessageRow({
         {m.plan && (
           <PlanCard
             plan={m.plan}
-            onResolve={(action, feedback) =>
-              onResolvePlan(m.id, m.plan!.requestId, action, feedback)
+            projectName={projectName}
+            busy={planBusy}
+            onContentChange={(content) => onChangePlanContent(m.id, content)}
+            onResolve={(action, feedback) => onResolvePlan(m.id, action, feedback)}
+            onAnswerQuestion={(requestId, answer, wasFreeform) =>
+              onAnswerPlanQuestion(m.id, requestId, answer, wasFreeform)
             }
+            onResume={(kind, action, feedback) => onResumePlan(m.id, kind, action, feedback)}
+            onExport={(content) => onExportPlan(m.id, content)}
           />
         )}
         {m.attachmentThumbs && m.attachmentThumbs.length > 0 ? (
@@ -1390,11 +1314,13 @@ const MessageRow = memo(function MessageRow({
             hasText={Boolean(m.text)}
             notice={m.notice}
             projectPath={projectPath}
-            awaitingDecision={Boolean(m.plan && !m.plan.resolved)}
+            awaitingDecision={Boolean(
+              m.plan && (m.plan.phase === 'review' || m.plan.phase === 'clarifying')
+            )}
             startedAt={m.startedAt}
           />
         )}
-        {m.error && (
+        {m.error && !m.plan && (
           <div className="alert alert--error msg-error">
             <span className="msg-error-text">{m.error}</span>
             {canRetry && (
@@ -1408,7 +1334,7 @@ const MessageRow = memo(function MessageRow({
             )}
           </div>
         )}
-        {m.interrupted && !m.pending && !m.error && (
+        {m.interrupted && !m.plan && !m.pending && !m.error && (
           <div className="msg-interrupted">
             <span className="msg-interrupted-text">
               This response was interrupted when the app closed.
@@ -1435,6 +1361,7 @@ export default function ChatPanel({
   onChange,
   onTurnComplete,
   onTurnStart,
+  onPlanExecutionStart,
   attachments,
   onAddAttachment,
   onRemoveAttachment,
@@ -1450,6 +1377,7 @@ export default function ChatPanel({
   blockSubmitWhileDeploying = false,
   onRequestDeploy,
   modeSelectorEnabled = false,
+  eventsManagedExternally = false,
   onOpenMention,
   draft,
   onDraftChange
@@ -1481,11 +1409,24 @@ export default function ChatPanel({
   useEffect(() => {
     setSending((s) => (s === hasLiveTurn ? s : hasLiveTurn))
   }, [hasLiveTurn])
-  const [mode, setMode] = useState<ChatMode>('agent')
+  const [mode, setModeState] = useState<ChatMode>(() => readChatMode(project.id))
+  const setMode = useCallback(
+    (next: ChatMode): void => {
+      setModeState(next)
+      writeChatMode(project.id, next)
+    },
+    [project.id]
+  )
+  useEffect(() => {
+    setModeState(readChatMode(project.id))
+  }, [project.id])
+  const activeMode: ChatMode = modeSelectorEnabled ? mode : 'agent'
   const [model, setModel] = useState(project.model ?? '')
   const [effort, setEffort] = useState<ReasoningEffort | ''>(project.effort ?? '')
   const [showModel, setShowModel] = useState(false)
   const [showMode, setShowMode] = useState(false)
+  const [planBusyId, setPlanBusyId] = useState<string | null>(null)
+  const [dismissedPlanSuggestion, setDismissedPlanSuggestion] = useState<string | null>(null)
   const { models, loading: modelsLoading } = useCopilotModels(showModel)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
@@ -1499,11 +1440,41 @@ export default function ChatPanel({
   resumeRef.current = resume
   const resolvePlanRef = useRef(resolvePlan)
   resolvePlanRef.current = resolvePlan
+  const changePlanContentRef = useRef(changePlanContent)
+  changePlanContentRef.current = changePlanContent
+  const answerPlanQuestionRef = useRef(answerPlanQuestion)
+  answerPlanQuestionRef.current = answerPlanQuestion
+  const resumePlanRef = useRef(resumePlan)
+  resumePlanRef.current = resumePlan
+  const exportPlanRef = useRef(exportPlan)
+  exportPlanRef.current = exportPlan
   const onRetry = useCallback((id: string) => void retryRef.current(id), [])
   const onResume = useCallback((id: string) => void resumeRef.current(id), [])
   const onResolvePlan = useCallback(
-    (msgId: string, requestId: string, action: string, feedback?: string) =>
-      void resolvePlanRef.current(msgId, requestId, action, feedback),
+    (msgId: string, action: string, feedback?: string) =>
+      void resolvePlanRef.current(msgId, action, feedback),
+    []
+  )
+  const onChangePlanContent = useCallback(
+    (msgId: string, content: string) => changePlanContentRef.current(msgId, content),
+    []
+  )
+  const onAnswerPlanQuestion = useCallback(
+    (msgId: string, requestId: string, answer: string, wasFreeform: boolean) =>
+      void answerPlanQuestionRef.current(msgId, requestId, answer, wasFreeform),
+    []
+  )
+  const onResumePlan = useCallback(
+    (
+      msgId: string,
+      kind: 'review' | 'execute' | 'revise',
+      action?: string,
+      feedback?: string
+    ) => void resumePlanRef.current(msgId, kind, action, feedback),
+    []
+  )
+  const onExportPlan = useCallback(
+    (msgId: string, content: string) => exportPlanRef.current(msgId, content),
     []
   )
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -1524,6 +1495,8 @@ export default function ChatPanel({
   const sizerRef = useRef<HTMLDivElement>(null)
   const revealRaf = useRef<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const modeMenuRef = useRef<HTMLDivElement>(null)
+  const modeTriggerRef = useRef<HTMLButtonElement>(null)
   const [attaching, setAttaching] = useState(false)
 
   // Keep the caret in view inside the composer's single scrollport
@@ -1625,7 +1598,13 @@ export default function ChatPanel({
   const selectedModel = useMemo(() => models.find((m) => m.id === model), [models, model])
 
   // The active mode's copy, used to label the composer's mode pill.
-  const currentMode = MODES.find((m) => m.id === mode) ?? MODES[0]
+  const currentMode = MODES.find((m) => m.id === activeMode) ?? MODES[0]
+  const showPlanSuggestion =
+    modeSelectorEnabled &&
+    activeMode === 'agent' &&
+    !sending &&
+    shouldSuggestPlanMode(input) &&
+    !(dismissedPlanSuggestion && input.startsWith(dismissedPlanSuggestion))
 
   // Reasoning efforts offered for the current selection: the chosen model's own
   // set, or — on Auto — the union across all models (an effort still rides along
@@ -1658,6 +1637,41 @@ export default function ChatPanel({
     window.addEventListener('click', close)
     return () => window.removeEventListener('click', close)
   }, [showMode])
+
+  useEffect(() => {
+    if (!showMode) return
+    const id = requestAnimationFrame(() => {
+      const selected = modeMenuRef.current?.querySelector<HTMLButtonElement>(
+        '[role="menuitemradio"][aria-checked="true"]'
+      )
+      selected?.focus()
+    })
+    return () => cancelAnimationFrame(id)
+  }, [showMode])
+
+  function onModeMenuKeyDown(e: KeyboardEvent<HTMLDivElement>): void {
+    if (e.key === 'Escape') {
+      setShowMode(false)
+      requestAnimationFrame(() => modeTriggerRef.current?.focus())
+      return
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+    const items = Array.from(
+      e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
+    )
+    if (!items.length) return
+    e.preventDefault()
+    const current = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement))
+    const next =
+      e.key === 'Home'
+        ? 0
+        : e.key === 'End'
+          ? items.length - 1
+          : e.key === 'ArrowDown'
+            ? (current + 1) % items.length
+            : (current - 1 + items.length) % items.length
+    items[next].focus()
+  }
 
   function saveOptions(nextModel: string, nextEffort: ReasoningEffort | ''): void {
     void window.api.chat.setOptions(project.id, {
@@ -1693,6 +1707,7 @@ export default function ChatPanel({
   const lastFlushRef = useRef<number>(0)
 
   useEffect(() => {
+    if (eventsManagedExternally) return
     // Streamed deltas flush at most once per this interval (ms). Structural events
     // bypass it via an immediate drain, so this only throttles plain text growth.
     const FLUSH_INTERVAL_MS = 90
@@ -1711,7 +1726,7 @@ export default function ChatPanel({
         prev.map((m) => {
           if (m.role !== 'assistant' || !m.turnId) return m
           const text = pending.get(m.turnId)
-          return text !== undefined ? reduce(m, { type: 'delta', text }) : m
+          return text !== undefined ? reduceChatMessage(m, { type: 'delta', text }) : m
         })
       )
     }
@@ -1732,9 +1747,12 @@ export default function ChatPanel({
       }
       // Structural event: drain buffered text first so deltas land before it.
       flush()
+      if (ev.type === 'mode-changed' && modeSelectorEnabled) setMode(ev.mode)
       onChangeRef.current((prev) =>
         prev.map((m) =>
-          m.turnId === envelope.turnId && m.role === 'assistant' ? reduce(m, ev) : m
+          m.turnId === envelope.turnId && m.role === 'assistant'
+            ? reduceChatMessage(m, ev)
+            : m
         )
       )
     })
@@ -1747,7 +1765,7 @@ export default function ChatPanel({
       }
       buf.clear()
     }
-  }, [project.id])
+  }, [eventsManagedExternally, project.id, modeSelectorEnabled, setMode])
 
   // Keep the view pinned to the newest content — but only when the user is already
   // near the bottom, so reading earlier messages isn't interrupted. Otherwise we
@@ -1910,6 +1928,39 @@ export default function ChatPanel({
     // ignored while busy — interjections are about saying something now.
     if (sending) {
       if (!text) return
+      const awaiting = [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.pending &&
+            message.plan?.questions.some((question) => question.state === 'pending')
+        )
+      const question = awaiting?.plan?.questions.find((item) => item.state === 'pending')
+      if (awaiting && question) {
+        if (!question.allowFreeform) {
+          changePlan(awaiting.id, (plan) => ({
+            ...plan,
+            error: 'Choose one of the available answers before planning can continue.'
+          }))
+          return
+        }
+        setInput('')
+        await answerPlanQuestion(awaiting.id, question.id, text, true)
+        return
+      }
+      const reviewing = [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.pending &&
+            message.plan?.phase === 'review' &&
+            Boolean(message.plan.liveRequestId)
+        )
+      if (reviewing) {
+        setInput('')
+        await resolvePlan(reviewing.id, 'keep_planning', text)
+        return
+      }
       setInput('')
       onAttachmentsConsumed?.()
       await steer(text, shots)
@@ -1967,9 +2018,13 @@ export default function ChatPanel({
   async function dispatch(
     displayText: string,
     prompt: string,
-    shots: PendingShot[]
+    shots: PendingShot[],
+    modeOverride?: ChatMode,
+    initialPlan?: ChatPlanArtifact
   ): Promise<void> {
     const turnId = uid()
+    const assistantId = uid()
+    const sendMode = modeOverride ?? activeMode
     const userMsg: UIChatMessage = {
       id: uid(),
       role: 'user',
@@ -1980,14 +2035,17 @@ export default function ChatPanel({
       attachmentThumbs: shots.length ? shots.map((s) => s.thumb) : undefined
     }
     const assistantMsg: UIChatMessage = {
-      id: uid(),
+      id: assistantId,
       turnId,
       role: 'assistant',
       text: '',
       tools: [],
       segments: [],
       pending: true,
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      plan:
+        initialPlan ??
+        (sendMode === 'plan' ? createPlanArtifact(`plan-${assistantId}`) : undefined)
     }
     onChange((prev) => [...prev, userMsg, assistantMsg])
     setSending(true)
@@ -1998,7 +2056,7 @@ export default function ChatPanel({
         turnId,
         prompt,
         shots.map((s) => s.path),
-        mode
+        sendMode
       )
       onChange((prev) =>
         prev.map((m) =>
@@ -2050,7 +2108,7 @@ export default function ChatPanel({
     setSending(true)
     onTurnStart?.()
     try {
-      const result = await window.api.chat.send(project.id, turnId, user.text, [], mode)
+      const result = await window.api.chat.send(project.id, turnId, user.text, [], activeMode)
       onChange((prev) =>
         prev.map((m) =>
           m.turnId === turnId
@@ -2068,23 +2126,181 @@ export default function ChatPanel({
     await window.api.chat.cancel(project.id)
   }
 
-  /** Answer a Plan-mode approval card; optimistically disables its buttons. */
+  function changePlan(
+    msgId: string,
+    update: (plan: ChatPlanArtifact) => ChatPlanArtifact
+  ): void {
+    onChange((prev) =>
+      prev.map((message) =>
+        message.id === msgId && message.plan
+          ? { ...message, plan: update(message.plan) }
+          : message
+      )
+    )
+  }
+
+  function changePlanContent(msgId: string, content: string): void {
+    changePlan(msgId, (plan) => ({ ...plan, content, edited: true, error: undefined }))
+  }
+
+  /** Resolve a live SDK plan only after its edited content has been saved successfully. */
   async function resolvePlan(
     msgId: string,
-    requestId: string,
     action: string,
     feedback?: string
   ): Promise<void> {
-    onChange((prev) =>
-      prev.map((m) => (m.id === msgId && m.plan ? { ...m, plan: { ...m.plan, resolved: true } } : m))
-    )
-    // Reflect the approved continuation in the composer so the bar no longer reads "Plan".
-    const nextMode = ACTION_TO_MODE[action]
-    if (nextMode) setMode(nextMode)
+    const plan = messages.find((message) => message.id === msgId)?.plan
+    if (!plan || planBusyId === plan.id) return
+    if (!plan.liveRequestId) {
+      await resumePlan(
+        msgId,
+        action === 'keep_planning' ? 'revise' : 'review',
+        action === 'keep_planning' ? undefined : action,
+        feedback
+      )
+      return
+    }
+    setPlanBusyId(plan.id)
     try {
-      await window.api.chat.resolvePlan(requestId, action, feedback)
+      const editNote = plan.edited
+        ? 'The user directly edited the saved plan. Treat that content as authoritative and reconcile the structured todos with it before continuing.'
+        : undefined
+      const resolutionFeedback = [feedback?.trim(), editNote].filter(Boolean).join('\n\n') || undefined
+      await window.api.chat.resolvePlan(
+        project.id,
+        plan.liveRequestId,
+        action,
+        plan.content,
+        resolutionFeedback
+      )
+      const revising = action === 'keep_planning'
+      const visibleFeedback = revising ? feedback?.trim() : undefined
+      onChange((prev) =>
+        prev.map((message) =>
+          message.id === msgId && message.plan
+            ? {
+                ...message,
+                plan: setPlanSubmitting(message.plan, action, revising),
+                segments: visibleFeedback
+                  ? [
+                      ...(message.segments ?? []),
+                      { kind: 'interjection' as const, text: visibleFeedback }
+                    ]
+                  : message.segments
+              }
+            : message
+        )
+      )
+      setMode(revising ? 'plan' : modeForPlanAction(action))
+      if (!revising && action !== 'exit_only') onPlanExecutionStart?.()
     } catch (err) {
-      console.error('Failed to resolve plan', err)
+      const error = err instanceof Error ? err.message : String(err)
+      changePlan(msgId, (current) => ({ ...current, phase: 'review', error }))
+    } finally {
+      setPlanBusyId(null)
+    }
+  }
+
+  async function answerPlanQuestion(
+    msgId: string,
+    requestId: string,
+    answer: string,
+    wasFreeform: boolean
+  ): Promise<void> {
+    const plan = messages.find((message) => message.id === msgId)?.plan
+    if (!plan || planBusyId === plan.id) return
+    setPlanBusyId(plan.id)
+    try {
+      await window.api.chat.resolveQuestion(requestId, answer, wasFreeform)
+      changePlan(msgId, (current) => ({
+        ...current,
+        phase: current.content ? 'drafting' : 'researching',
+        error: undefined,
+        questions: current.questions.map((question) =>
+          question.id === requestId
+            ? { ...question, state: 'answered', answer, wasFreeform }
+            : question
+        )
+      }))
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      changePlan(msgId, (current) => ({ ...current, error }))
+    } finally {
+      setPlanBusyId(null)
+    }
+  }
+
+  async function resumePlan(
+    msgId: string,
+    kind: 'review' | 'execute' | 'revise',
+    action?: string,
+    feedback?: string
+  ): Promise<void> {
+    if (sending) return
+    const idx = messages.findIndex((message) => message.id === msgId)
+    const message = idx >= 0 ? messages[idx] : undefined
+    const original = idx > 0 && messages[idx - 1]?.role === 'user' ? messages[idx - 1].text : ''
+    const plan = message?.plan
+    if (!plan) return
+
+    const selectedAction = action ?? plan.selectedAction ?? plan.recommendedAction ?? 'interactive'
+    if (kind === 'review' && selectedAction === 'exit_only' && plan.content.trim()) {
+      changePlan(msgId, (current) => ({
+        ...current,
+        phase: 'completed',
+        selectedAction,
+        error: undefined
+      }))
+      setMode('agent')
+      return
+    }
+
+    const continuePlanning = kind === 'review' && !plan.content.trim()
+    const promptKind =
+      kind === 'revise' ? 'revise' : continuePlanning ? 'review' : 'execute'
+    const sendMode: ChatMode =
+      promptKind === 'revise' || promptKind === 'review'
+        ? 'plan'
+        : modeForPlanAction(selectedAction)
+    const phase =
+      promptKind === 'execute' ? 'executing' : promptKind === 'revise' ? 'revising' : 'researching'
+    const recovered: ChatPlanArtifact = {
+      ...plan,
+      phase,
+      selectedAction: promptKind === 'execute' ? selectedAction : undefined,
+      liveRequestId: undefined,
+      error: undefined
+    }
+    const prompt = buildRecoveredPlanPrompt(recovered, original, promptKind, feedback)
+    const display =
+      promptKind === 'execute'
+        ? 'Resume the approved plan'
+        : promptKind === 'revise'
+          ? feedback?.trim() || 'Revise the recovered plan'
+          : 'Resume planning'
+
+    // Move the durable artifact to the new continuation turn so future SDK
+    // snapshots update one active card rather than leaving a stale duplicate.
+    onChange((prev) =>
+      prev.map((item) =>
+        item.id === msgId ? { ...item, plan: undefined, interrupted: undefined } : item
+      )
+    )
+    setMode(sendMode)
+    await dispatch(display, prompt, [], sendMode, recovered)
+  }
+
+  async function exportPlan(msgId: string, content: string): Promise<void> {
+    const plan = messages.find((message) => message.id === msgId)?.plan
+    if (!plan || planBusyId === plan.id) return
+    setPlanBusyId(plan.id)
+    try {
+      await window.api.chat.exportPlan(`${project.name}-plan`, content)
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      changePlan(msgId, (current) => ({ ...current, error }))
+    } finally {
+      setPlanBusyId(null)
     }
   }
 
@@ -2242,23 +2458,43 @@ export default function ChatPanel({
           prevUser?.role === 'user' &&
           !prevUser.attachments &&
           prevUser.text !== '(screenshot)'
-        const canRetry = Boolean(m.error) && rerunnable
-        const canResume = Boolean(m.interrupted) && !m.pending && rerunnable
+        const canRetry = Boolean(m.error) && !m.plan && rerunnable
+        const canResume = Boolean(m.interrupted) && !m.plan && !m.pending && rerunnable
         return (
           <MessageRow
             key={m.id}
             message={m}
+            projectName={project.name}
             projectPath={project.path}
             canRetry={canRetry}
             onRetry={onRetry}
             canResume={canResume}
             onResume={onResume}
+            planBusy={m.plan?.id === planBusyId}
+            onChangePlanContent={onChangePlanContent}
             onResolvePlan={onResolvePlan}
+            onAnswerPlanQuestion={onAnswerPlanQuestion}
+            onResumePlan={onResumePlan}
+            onExportPlan={onExportPlan}
             onOpenMention={onOpenMention}
           />
         )
       }),
-    [messages, sending, project.path, onRetry, onResume, onResolvePlan, onOpenMention]
+    [
+      messages,
+      sending,
+      project.name,
+      project.path,
+      planBusyId,
+      onRetry,
+      onResume,
+      onChangePlanContent,
+      onResolvePlan,
+      onAnswerPlanQuestion,
+      onResumePlan,
+      onExportPlan,
+      onOpenMention
+    ]
   )
 
   return (
@@ -2349,6 +2585,7 @@ export default function ChatPanel({
         {showJump && messages.length > 0 && (
           <button
             type="button"
+            ref={modeTriggerRef}
             className={`chat-jump${jumpNew ? ' chat-jump--new' : ''}`}
             onClick={jumpToLatest}
             title="Jump to the latest message"
@@ -2408,6 +2645,34 @@ export default function ChatPanel({
                 </button>
               </div>
             ))}
+          </div>
+        )}
+        {showPlanSuggestion && (
+          <div className="chat-plan-suggestion" role="status">
+            <span className="chat-plan-suggestion-icon" aria-hidden="true">
+              <ModeIcon mode="plan" />
+            </span>
+            <span className="chat-plan-suggestion-copy">
+              <strong>This looks multi-step.</strong> Plan it before making changes?
+            </span>
+            <button
+              type="button"
+              className="chat-plan-suggestion-action"
+              onClick={() => {
+                setMode('plan')
+                setDismissedPlanSuggestion(input)
+              }}
+            >
+              Use Plan
+            </button>
+            <button
+              type="button"
+              className="chat-plan-suggestion-dismiss"
+              aria-label="Dismiss Plan suggestion"
+              onClick={() => setDismissedPlanSuggestion(input)}
+            >
+              <CloseIcon />
+            </button>
           </div>
         )}
         <div
@@ -2486,10 +2751,9 @@ export default function ChatPanel({
               {modeSelectorEnabled && (
                 <div
                   className="mode-menu"
+                  ref={modeMenuRef}
                   onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setShowMode(false)
-                  }}
+                  onKeyDown={onModeMenuKeyDown}
                 >
                   <button
                     type="button"
@@ -2500,7 +2764,7 @@ export default function ChatPanel({
                     aria-expanded={showMode}
                     title={currentMode.hint}
                   >
-                    <ModeIcon mode={mode} className="mode-trigger-icon" />
+                    <ModeIcon mode={activeMode} className="mode-trigger-icon" />
                     <span className="mode-trigger-label">{currentMode.label}</span>
                     <span className="mode-trigger-caret"><Codicon name="chevron-down" /></span>
                   </button>
@@ -2511,11 +2775,12 @@ export default function ChatPanel({
                           key={m.id}
                           type="button"
                           role="menuitemradio"
-                          aria-checked={mode === m.id}
-                          className={`mode-opt${mode === m.id ? ' mode-opt--on' : ''}`}
+                          aria-checked={activeMode === m.id}
+                          className={`mode-opt${activeMode === m.id ? ' mode-opt--on' : ''}`}
                           onClick={() => {
                             setMode(m.id)
                             setShowMode(false)
+                            requestAnimationFrame(() => modeTriggerRef.current?.focus())
                           }}
                         >
                           <ModeIcon mode={m.id} className="mode-opt-icon" />
@@ -2523,7 +2788,7 @@ export default function ChatPanel({
                             <span className="mode-opt-label">{m.label}</span>
                             <span className="mode-opt-desc">{m.desc}</span>
                           </span>
-                          {mode === m.id && (
+                          {activeMode === m.id && (
                             <span className="mode-opt-check" aria-hidden="true">
                               <Codicon name="check" />
                             </span>
