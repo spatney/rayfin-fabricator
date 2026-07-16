@@ -779,7 +779,13 @@ export default function Workbench({
   async function signIn(): Promise<void> {
     setSigningIn(true)
     try {
-      await window.api.auth.loginRayfin()
+      const res = await window.api.auth.loginRayfin()
+      if (!res.ok) {
+        // Don't silently reset the button (issue #17) — tell the user why.
+        toast.error(res.error ?? 'Fabric sign-in did not complete. Please try again.', {
+          title: 'Sign-in failed'
+        })
+      }
       await onAuthChanged()
     } finally {
       setSigningIn(false)

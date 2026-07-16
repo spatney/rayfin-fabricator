@@ -2616,6 +2616,14 @@ code {
   line-height: 1.5;
   color: var(--text-dim);
 }
+.ws-empty-err {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--danger, #d33);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .ws-empty-actions {
   display: flex;
   gap: 8px;

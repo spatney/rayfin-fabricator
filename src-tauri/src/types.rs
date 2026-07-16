@@ -214,6 +214,10 @@ pub struct FabricDeleteResult {
 pub struct ProcResult {
   pub ok: bool,
   pub exit_code: Option<i32>,
+  /// User-facing reason a process failed (e.g. the CLI's `❌ Login failed: …`
+  /// stderr line). `None` on success or when no detail could be extracted.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 #[derive(Serialize, Clone)]

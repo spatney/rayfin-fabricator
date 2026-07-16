@@ -12,6 +12,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use tauri::AppHandle;
 
+use crate::services::crashlog;
 use crate::services::emit::proc_streamer;
 use crate::services::exec::{self, RunOptions};
 use crate::services::paths;
@@ -225,7 +226,11 @@ pub async fn auth_login_copilot(app: AppHandle) -> ProcResult {
   on_data(exec::Stream::Stdout, "Starting GitHub Copilot sign-in…\n");
   let Some(cli) = crate::services::copilot::bundled_cli_path() else {
     on_data(exec::Stream::Stderr, "The bundled Copilot CLI is unavailable on this platform.\n");
-    return ProcResult { ok: false, exit_code: None };
+    return ProcResult {
+      ok: false,
+      exit_code: None,
+      error: Some("The bundled Copilot CLI is unavailable on this platform.".into()),
+    };
   };
   let res = exec::run_program(
     cli,
@@ -240,6 +245,60 @@ pub async fn auth_login_copilot(app: AppHandle) -> ProcResult {
   ProcResult {
     ok: res.ok,
     exit_code: res.exit_code,
+    error: None,
+  }
+}
+
+/// Collapse multi-line CLI output into a single, bounded line so a login
+/// failure is one greppable record and survives the diagnostics tail logic.
+/// Returns `"(none)"` when empty.
+fn one_line(text: &str) -> String {
+  let joined = text.split_whitespace().collect::<Vec<_>>().join(" ");
+  if joined.is_empty() {
+    return "(none)".to_string();
+  }
+  joined.chars().take(1500).collect()
+}
+
+/// Compose a user-facing reason for a failed `rayfin login`.
+///
+/// The CLI prints the real cause to stderr as `❌ Login failed: <message>` (see
+/// `@microsoft/rayfin-cli` login command) and exits non-zero for the fast-fail
+/// cases users hit (native keychain/MSAL module load, MSAL/AADSTS errors,
+/// browser-open failures, partial `RAYFIN_*` overrides). Prefer the most
+/// descriptive stderr line, then stdout, then an exit-status-based hint that
+/// points at the same `npx rayfin login` fallback we suggest in the UI.
+fn login_failure_detail(res: &exec::RunResult) -> String {
+  if res.not_found {
+    return "The Rayfin CLI could not be found. Open the project so its dependencies install (or install Node.js and the Rayfin CLI), then try signing in again."
+      .to_string();
+  }
+  let pick = |text: &str| -> Option<String> {
+    let lines: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    // Prefer an explicit failure/error line (the CLI logs `❌ Login failed: …`
+    // last), else the final non-empty line.
+    lines
+      .iter()
+      .rev()
+      .find(|l| {
+        let low = l.to_lowercase();
+        low.contains("login failed") || low.contains("failed") || low.contains("error")
+      })
+      .or_else(|| lines.last())
+      .map(|l| l.chars().take(500).collect::<String>())
+  };
+  if let Some(msg) = pick(&res.stderr).filter(|m| !m.is_empty()) {
+    return msg;
+  }
+  if let Some(msg) = pick(&res.stdout).filter(|m| !m.is_empty()) {
+    return msg;
+  }
+  match res.exit_code {
+    Some(code) => format!(
+      "Sign-in exited with code {code} without opening a sign-in window or reporting a reason. Please try again; if it keeps happening, run `npx rayfin login` in the project folder to see the full error."
+    ),
+    None => "Sign-in ended without opening a sign-in window or reporting a reason (it may have timed out or been blocked). Please try again; if it keeps happening, run `npx rayfin login` in the project folder to see the full error."
+      .to_string(),
   }
 }
 
@@ -248,9 +307,14 @@ pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>) -> ProcRe
   let on_data = proc_streamer(&app, "login:rayfin");
   on_data(exec::Stream::Stdout, "Starting Fabric / Rayfin sign-in…\n");
   let mut args: Vec<String> = vec!["login".into(), "--select".into()];
-  if let Some(t) = tenant.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+  let tenant_label = tenant
+    .as_ref()
+    .map(|s| s.trim())
+    .filter(|s| !s.is_empty())
+    .map(|t| t.to_string());
+  if let Some(t) = tenant_label.as_ref() {
     args.push("--tenant".into());
-    args.push(t.to_string());
+    args.push(t.clone());
   }
   let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
   let res = run_rayfin(
@@ -265,10 +329,32 @@ pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>) -> ProcRe
   if res.ok {
     get_rayfin_auth().await;
     telemetry::track_signin(cached_identity().as_ref(), "login");
+    return ProcResult {
+      ok: true,
+      exit_code: res.exit_code,
+      error: None,
+    };
   }
+  // Surface *why* sign-in failed: return a user-facing detail and record the
+  // full CLI output to the crash log so it lands in the diagnostics bundle's
+  // "Recent crash / hang log" section. Previously this was silently swallowed
+  // (issue #17), so a failed sign-in looked like the button did nothing.
+  let detail = login_failure_detail(&res);
+  crashlog::log_error(
+    "fabric-login",
+    &format!(
+      "rayfin login failed — exit={:?} not_found={} tenant={} — stderr: {} — stdout: {}",
+      res.exit_code,
+      res.not_found,
+      tenant_label.as_deref().unwrap_or("(default)"),
+      one_line(&res.stderr),
+      one_line(&res.stdout),
+    ),
+  );
   ProcResult {
-    ok: res.ok,
+    ok: false,
     exit_code: res.exit_code,
+    error: Some(detail),
   }
 }
 
@@ -289,6 +375,7 @@ pub async fn auth_login_az(app: AppHandle) -> ProcResult {
   ProcResult {
     ok: res.ok,
     exit_code: res.exit_code,
+    error: None,
   }
 }
 
@@ -310,10 +397,72 @@ pub async fn auth_logout_rayfin(app: AppHandle) -> ProcResult {
   ProcResult {
     ok: res.ok,
     exit_code: res.exit_code,
+    error: None,
   }
 }
 
 /// The most recently resolved signed-in identity (used by deploy telemetry).
 pub fn get_cached_identity() -> Option<TelemetryIdentity> {
   cached_identity()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn res(exit_code: Option<i32>, not_found: bool, stdout: &str, stderr: &str) -> exec::RunResult {
+    exec::RunResult {
+      ok: false,
+      exit_code,
+      stdout: stdout.to_string(),
+      stderr: stderr.to_string(),
+      not_found,
+    }
+  }
+
+  #[test]
+  fn login_detail_prefers_the_cli_failure_line_from_stderr() {
+    // The CLI logs MSAL warnings then the real reason last; we surface the
+    // `❌ Login failed: …` line, not the noise above it.
+    let r = res(
+      Some(1),
+      false,
+      "🔑 Opening browser for sign-in...\n",
+      "[msal] some info\n❌ Login failed: AADSTS50020: User account from identity provider does not exist in tenant\n",
+    );
+    let detail = login_failure_detail(&r);
+    assert!(detail.contains("Login failed"), "got: {detail}");
+    assert!(detail.contains("AADSTS50020"), "got: {detail}");
+  }
+
+  #[test]
+  fn login_detail_reports_a_missing_cli() {
+    let r = res(None, true, "", "rayfin was not found on PATH");
+    let detail = login_failure_detail(&r);
+    assert!(detail.contains("Rayfin CLI could not be found"), "got: {detail}");
+  }
+
+  #[test]
+  fn login_detail_falls_back_to_stdout_then_exit_hint() {
+    // No stderr, but stdout carried the reason.
+    let from_stdout = login_failure_detail(&res(Some(1), false, "Something failed mid-run\n", ""));
+    assert!(from_stdout.contains("Something failed"), "got: {from_stdout}");
+
+    // No output at all → an actionable, exit-status-based hint pointing at the
+    // same `npx rayfin login` fallback the UI suggests.
+    let from_code = login_failure_detail(&res(Some(3), false, "", ""));
+    assert!(from_code.contains("code 3"), "got: {from_code}");
+    assert!(from_code.contains("npx rayfin login"), "got: {from_code}");
+
+    let no_code = login_failure_detail(&res(None, false, "   \n  ", "\n"));
+    assert!(no_code.contains("npx rayfin login"), "got: {no_code}");
+  }
+
+  #[test]
+  fn one_line_collapses_whitespace_and_marks_empty() {
+    assert_eq!(one_line("  a\n\n  b   c \n"), "a b c");
+    assert_eq!(one_line("   \n\t "), "(none)");
+    // Bounded so a runaway log can't bloat the crash file.
+    assert!(one_line(&"x ".repeat(2000)).chars().count() <= 1500);
+  }
 }

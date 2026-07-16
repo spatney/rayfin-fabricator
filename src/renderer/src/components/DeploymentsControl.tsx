@@ -7,6 +7,7 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
+import { useToast } from '../toast'
 import { Codicon } from './icons'
 import DeploymentCreateForm from './DeploymentCreateForm'
 
@@ -54,6 +55,7 @@ export default function DeploymentsControl({
   onSignedIn
 }: Props): JSX.Element {
   const [open, setOpen] = useState(false)
+  const toast = useToast()
   const [creating, setCreating] = useState(false)
   const [deployments, setDeployments] = useState<FabricDeployment[] | null>(null)
   const [loadingDeps, setLoadingDeps] = useState(false)
@@ -88,6 +90,10 @@ export default function DeploymentsControl({
           if (login.ok) {
             onSignedIn?.()
             res = await window.api.fabric.listWorkspaces()
+          } else {
+            toast.error(login.error ?? 'Fabric sign-in did not complete. Please try again.', {
+              title: 'Sign-in failed'
+            })
           }
         } finally {
           setReauthing(false)

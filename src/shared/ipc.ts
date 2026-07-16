@@ -317,6 +317,11 @@ export interface ProcLogEvent {
 export interface ProcResult {
   ok: boolean
   exitCode: number | null
+  /**
+   * User-facing reason the process failed (e.g. the Rayfin CLI's
+   * `❌ Login failed: …` output). Present only on failure; absent on success.
+   */
+  error?: string
 }
 
 /** Result of a tool install, including whether the app must relaunch to see it. */

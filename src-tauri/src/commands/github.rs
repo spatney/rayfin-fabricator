@@ -90,12 +90,14 @@ pub fn github_login() -> ProcResult {
     return ProcResult {
       ok: false,
       exit_code: None,
+      error: Some("The GitHub CLI (gh) is not installed or not on PATH.".into()),
     };
   }
   let ok = launch_login_terminal();
   ProcResult {
     ok,
     exit_code: None,
+    error: None,
   }
 }
 

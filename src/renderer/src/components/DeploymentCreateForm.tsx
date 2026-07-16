@@ -102,6 +102,7 @@ export default function DeploymentCreateForm({
   const [creatingBusy, setCreatingBusy] = useState(false)
   const [createErr, setCreateErr] = useState<string | null>(null)
   const [signingIn, setSigningIn] = useState(false)
+  const [signInErr, setSignInErr] = useState<string | null>(null)
 
   async function loadCaps(): Promise<void> {
     setLoadingCaps(true)
@@ -142,11 +143,17 @@ export default function DeploymentCreateForm({
 
   async function signInToFabric(): Promise<void> {
     setSigningIn(true)
+    setSignInErr(null)
     try {
       const res = await window.api.auth.loginRayfin()
       if (res.ok) {
         onSignedIn?.()
         onReload()
+      } else {
+        // Surface why sign-in failed instead of silently resetting the button
+        // (issue #17). The backend returns the CLI's reason and also logs it to
+        // the diagnostics bundle.
+        setSignInErr(res.error ?? 'Fabric sign-in did not complete. Please try again.')
       }
     } finally {
       setSigningIn(false)
@@ -452,6 +459,7 @@ export default function DeploymentCreateForm({
                 >
                   {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
                 </button>
+                {signInErr && <p className="ws-empty-err">{signInErr}</p>}
               </>
             ) : (
               <>

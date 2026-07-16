@@ -27,6 +27,7 @@ import type { SemanticModelRef } from '../model/fabricConfig'
 import { tokenizeDax } from '../model/daxHighlight'
 import { getCachedSchema, schemaCacheKey, setCachedSchema } from '../model/schemaCache'
 import { useSuppressPreview } from '../overlay'
+import { useToast } from '../toast'
 import { Codicon } from './icons'
 
 interface Props {
@@ -141,6 +142,7 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [reloadTick, setReloadTick] = useState(0)
   const [reauthing, setReauthing] = useState(false)
+  const toast = useToast()
 
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState<string | null>(null)
@@ -643,20 +645,28 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
     try {
       const res = await window.api.auth.loginRayfin()
       if (res.ok) setReloadTick((n) => n + 1)
+      else
+        toast.error(res.error ?? 'Fabric sign-in did not complete. Please try again.', {
+          title: 'Sign-in failed'
+        })
     } finally {
       setReauthing(false)
     }
-  }, [])
+  }, [toast])
 
   const signInAzAndReload = useCallback(async (): Promise<void> => {
     setReauthing(true)
     try {
       const res = await window.api.auth.loginAz()
       if (res.ok) setReloadTick((n) => n + 1)
+      else
+        toast.error(res.error ?? 'Azure sign-in did not complete. Please try again.', {
+          title: 'Sign-in failed'
+        })
     } finally {
       setReauthing(false)
     }
-  }, [])
+  }, [toast])
 
   const openMeasure = useCallback(
     (_e: ReactMouseEvent<HTMLButtonElement>, table: string, measure: SemanticMeasure): void => {

@@ -183,17 +183,20 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
       mark('fabric', 'active')
       try {
         let res = await withTimeout(window.api.fabric.deleteApps(project.id), 130_000)
+        let loginErr: string | undefined
         if (!res.ok && res.needsLogin) {
           // The Fabric session expired — re-sign-in once, then retry.
           const login = await window.api.auth.loginRayfin()
           if (login.ok) res = await withTimeout(window.api.fabric.deleteApps(project.id), 130_000)
+          else loginErr = login.error
         }
         if (!res.ok) {
           mark('fabric', 'error')
           setFailedAt('fabric')
           setError(
             res.needsLogin
-              ? 'Your Fabric session expired and sign-in was cancelled. Sign in and try again, or delete locally only.'
+              ? (loginErr ??
+                'Your Fabric session expired and sign-in was cancelled. Sign in and try again, or delete locally only.')
               : (res.failures[0]?.error ?? res.error ?? 'Could not delete the app from Fabric.')
           )
           setPhase('error')

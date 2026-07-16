@@ -50,4 +50,36 @@ describe('DeploymentCreateForm Fabric reauth', () => {
     // Fabric auth state (e.g. the workbench titlebar), not just reload workspaces.
     await waitFor(() => expect(onSignedIn).toHaveBeenCalledTimes(1))
   })
+
+  it('surfaces the failure reason when Fabric sign-in fails (issue #17)', async () => {
+    const loginRayfin = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        exitCode: 1,
+        error: '❌ Login failed: AADSTS50020 user from a different tenant'
+      })
+    )
+    const onReload = vi.fn()
+    const onSignedIn = vi.fn()
+    installApi(loginRayfin)
+
+    render(
+      <DeploymentCreateForm
+        wsResult={{ ok: false, needsLogin: true }}
+        loadingWs={false}
+        onReload={onReload}
+        onSignedIn={onSignedIn}
+        onSubmit={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in to Fabric' }))
+
+    await waitFor(() => expect(loginRayfin).toHaveBeenCalledTimes(1))
+    // The reason is shown inline instead of the button silently resetting.
+    await screen.findByText(/Login failed: AADSTS50020/)
+    // A failed sign-in must not reload workspaces or claim a successful sign-in.
+    expect(onReload).not.toHaveBeenCalled()
+    expect(onSignedIn).not.toHaveBeenCalled()
+  })
 })
