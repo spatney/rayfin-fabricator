@@ -710,8 +710,9 @@ export default function Workbench({
       // Capture each report page as an image so the agent has a pixel-accurate
       // visual reference alongside the PBIR. Best-effort: image export is
       // tenant-blocked on many tenants (so we export a PDF and rasterize it with
-      // pdf.js), and PDF export needs a capacity-backed workspace — any failure is
-      // reported as "skipped", never fatal to the migration.
+      // pdf.js), and PDF export needs a capacity-backed workspace + a signed-in
+      // `az`. A real failure is surfaced to the user as a visible (red) sub-step
+      // but never blocks the migration — the app is still built from the PBIR.
       let pageShots: PendingShot[] = []
       onProgress('pages', 'Exporting the report to PDF…')
       try {
@@ -726,17 +727,26 @@ export default function Workbench({
               'done'
             )
           } else {
-            onProgress('pages', 'No visible report pages to capture.', 'skipped')
+            onProgress('pages', 'Export succeeded but had no visible pages to capture.', 'skipped')
           }
         } else {
+          const why = pdf.error ?? 'the Power BI export API was unavailable'
+          const cta = pdf.needsLogin
+            ? ' Run `az login`, then re-run the migration to capture the report pages.'
+            : ''
           onProgress(
             'pages',
-            pdf.error ?? 'Report-page export is unavailable for this report — skipped.',
-            'skipped'
+            `Couldn't export the report to PDF — continuing without page images. (${why})${cta}`,
+            'error'
           )
         }
       } catch (e) {
-        onProgress('pages', `Skipped (${e instanceof Error ? e.message : String(e)}).`, 'skipped')
+        onProgress(
+          'pages',
+          "Couldn't export the report to PDF — continuing without page images. " +
+            `(${e instanceof Error ? e.message : String(e)})`,
+          'error'
+        )
       }
 
       const reportList = reportFiles.map((f) => `- source-report/${f}`).join('\n')
@@ -771,9 +781,11 @@ export default function Workbench({
       // When we captured page images, tell the agent they're attached so it uses
       // them as the visual ground truth for layout, colours, and chart types.
       const pagesSection = pageShots.length
-        ? '\n\nI\'ve also attached rendered images of each report page (exported straight from ' +
-          'the live report). Use them as the visual reference for the layout, colours, chart ' +
-          'types, and overall look — match them as closely as the Rayfin component set allows.'
+        ? '\n\nI\'ve attached rendered images of each report page, exported straight from the ' +
+          'live report (its PDF export). **Use them to understand the report\'s look and feel** — ' +
+          'study the layout and grid, colour palette, typography, spacing, chart types, and ' +
+          'overall visual styling, and **apply the same styles to the app** so it closely matches ' +
+          'the original report (within what the Rayfin component set allows).'
         : ''
 
       const prompt =

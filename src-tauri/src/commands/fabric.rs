@@ -419,7 +419,7 @@ main().catch((err) => {
 /// Helper executed by the system `node` to export a Power BI report to a PDF via
 /// the Power BI `ExportTo` REST API, then write it to disk and hand it back
 /// base64-encoded (the renderer rasterizes each page to an image with pdf.js).
-/// argv: <authModulePath> <pbiBase> <workspaceId> <reportId> <destPdfPath>.
+/// argv: <pbiBase> <workspaceId> <reportId> <destPdfPath>.
 /// We always export **PDF** (a single file with every page): PNG/image export is
 /// disabled at the tenant level on many tenants, whereas PDF export is broadly
 /// available for capacity-backed workspaces. Writes one JSON line to stdout.
@@ -428,16 +428,42 @@ console.log = (...a) => process.stderr.write(a.map(String).join(' ') + '\n')
 console.debug = console.log
 console.info = console.log
 
-import { pathToFileURL } from 'node:url'
+import { execFile } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-// ExportTo lives on the Power BI surface and needs a Power BI-audience token
-// (Report.Read.All). `.default` returns whatever Power BI scopes the Rayfin CLI
-// app is consented for; silentOnly:false lets it pop a one-time consent window.
-const PBI_SCOPES = ['https://analysis.windows.net/powerbi/api/.default']
+// ExportTo lives on the classic Power BI surface and enforces the delegated
+// `Report.Read.All` scope. The Rayfin CLI's MSAL app registration is only
+// consented for Fabric scopes (Item.*/Workspace.*), so its Power BI-audience
+// token is rejected by ExportTo with 401. The Azure CLI's first-party client
+// *is* preauthorized for Power BI (its token carries `scp=user_impersonation`),
+// and `az` is a required, signed-in tool in Fabricator — so, mirroring the
+// DAX/semantic-model path (services/semantic_model_helper.mjs), we mint the
+// ExportTo token via `az` rather than the MSAL Fabric token.
+const PBI_RESOURCE = 'https://analysis.windows.net/powerbi/api'
+
+class NeedsAz extends Error {}
+
+// Acquire a Power BI-audience token from the signed-in Azure CLI. `az` is
+// `az.cmd` on Windows; invoke it through cmd.exe so we don't need shell:true
+// (which Node deprecates when args are passed as an array).
+function azToken(resource) {
+  return new Promise((resolve, reject) => {
+    const args = ['account', 'get-access-token', '--resource', resource, '--query', 'accessToken', '-o', 'tsv']
+    const isWin = process.platform === 'win32'
+    const file = isWin ? process.env.ComSpec || 'cmd.exe' : 'az'
+    const argv = isWin ? ['/d', '/s', '/c', 'az', ...args] : args
+    execFile(file, argv, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const errText = (stderr || (err && err.message) || '').trim()
+      if (err) return reject(new NeedsAz(errText || 'az account get-access-token failed'))
+      const t = (stdout || '').trim()
+      if (!t) return reject(new NeedsAz(errText || 'az returned no token'))
+      resolve(t)
+    })
+  })
+}
 
 function tag(status, msg) {
   const e = new Error('(' + status + ') ' + msg)
@@ -446,10 +472,8 @@ function tag(status, msg) {
 }
 
 async function main() {
-  const [authPath, pbiBase, workspaceId, reportId, destPath] = process.argv.slice(2)
-  const auth = await import(pathToFileURL(authPath).href)
-  const rf = await auth.getRayfinAuth()
-  const { token } = await rf.acquireToken(PBI_SCOPES, { silentOnly: false })
+  const [pbiBase, workspaceId, reportId, destPath] = process.argv.slice(2)
+  const token = await azToken(PBI_RESOURCE)
   const headers = { Authorization: 'Bearer ' + token }
 
   // 1) Kick off the export.
@@ -503,7 +527,8 @@ async function main() {
 
 main().catch((err) => {
   const msg = err && err.message ? String(err.message) : String(err)
-  const needsLogin = /silent|cached|account|login|token|interactive|sign|unauthorized|forbidden|consent/i.test(msg)
+  const needsLogin = err instanceof NeedsAz ||
+    /silent|cached|account|az login|login|token|interactive|sign|unauthorized|forbidden|consent/i.test(msg)
   process.stdout.write(JSON.stringify({ ok: false, needsLogin, error: msg }))
 })
 "#;
@@ -1006,7 +1031,14 @@ async fn fabric_definition_download(
 
   let out = res.stdout.trim();
   match serde_json::from_str::<FabricReportDefinitionResult>(out) {
-    Ok(parsed) => parsed,
+    Ok(parsed) => {
+      // Keep the downloaded reference definition out of git: it's a migrate-time
+      // spec for the agent, not part of the app the user ships.
+      if parsed.ok {
+        ensure_gitignored(&project_path, &format!("{sub_dir}/"));
+      }
+      parsed
+    }
     Err(_) => {
       let (needs_login, err) = failure_error(&res, out);
       fail(Some(needs_login), err)
@@ -1014,14 +1046,44 @@ async fn fabric_definition_download(
   }
 }
 
-/// Export a Power BI report to a PDF (every page) via the Power BI `ExportTo`
+/// Add `entry` to `<project_dir>/.gitignore` (creating the file if absent) unless
+/// it is already ignored. The migrate flow downloads a report's PBIR into
+/// `source-report/` and its model's TMDL into `source-model/` purely as a spec
+/// for the rebuild agent; those folders (and the exported `report.pdf` inside
+/// `source-report/`) must never be committed or bundled. Best-effort: any I/O
+/// error is swallowed so a hiccup touching `.gitignore` can't fail a download.
+fn ensure_gitignored(project_dir: &Path, entry: &str) {
+  let path = project_dir.join(".gitignore");
+  let existing = std::fs::read_to_string(&path).unwrap_or_default();
+  let bare = entry.trim_end_matches('/');
+  let already = existing
+    .lines()
+    .any(|l| l.trim() == entry || l.trim() == bare);
+  if already {
+    return;
+  }
+  const MARKER: &str = "# Fabricator migrate: downloaded source report/model (reference only)";
+  let mut out = existing;
+  if !out.is_empty() && !out.ends_with('\n') {
+    out.push('\n');
+  }
+  if !out.contains(MARKER) {
+    out.push('\n');
+    out.push_str(MARKER);
+    out.push('\n');
+  }
+  out.push_str(entry);
+  out.push('\n');
+  let _ = std::fs::write(&path, out);
+}
 /// REST API and write it to `<projectDir>/source-report/report.pdf`, returning it
 /// base64-encoded so the renderer can rasterize each page into an image for the
 /// migrate chat hand-off. Best-effort in the migrate flow: image export is
 /// tenant-blocked on many tenants (so we export PDF), and PDF export needs a
 /// capacity-backed workspace — a failure here is surfaced but never blocks the
-/// migration. Runs through the *global* Rayfin CLI so it never waits on the new
-/// project's install; may pop a one-time Power BI consent window.
+/// migration. The ExportTo token comes from the signed-in Azure CLI (`az`), whose
+/// first-party client is preauthorized for Power BI; the Rayfin CLI's own MSAL
+/// token only carries Fabric scopes and is rejected by ExportTo with 401.
 #[tauri::command]
 pub async fn fabric_export_report_pdf(
   workspace_id: String,
@@ -1038,10 +1100,6 @@ pub async fn fabric_export_report_pdf(
   };
 
   let project_path = PathBuf::from(&project_dir);
-  let auth_path = match project_auth_module(None).await {
-    Ok(p) => p,
-    Err(error) => return fail(None, error),
-  };
 
   let script_path = match write_helper("fabric-export-pdf.mjs", EXPORT_PDF_HELPER_SOURCE) {
     Ok(p) => p,
@@ -1049,14 +1107,12 @@ pub async fn fabric_export_report_pdf(
   };
 
   let dest = project_path.join("source-report").join("report.pdf");
-  let auth_str = auth_path.to_string_lossy().to_string();
   let script_str = script_path.to_string_lossy().to_string();
   let dest_str = dest.to_string_lossy().to_string();
   let res = exec::run(
     "node",
     &[
       &script_str,
-      &auth_str,
       FABRIC_PBI_BASE,
       &workspace_id,
       &report_id,
@@ -1581,13 +1637,44 @@ mod tests {
     // The migrate "capture pages" sub-step exports a PDF (image export is
     // tenant-blocked on many tenants) via the Power BI ExportTo API, polls the
     // long-running op, and returns the file base64 for renderer rasterization.
-    assert!(EXPORT_PDF_HELPER_SOURCE.contains("getRayfinAuth"));
-    assert!(EXPORT_PDF_HELPER_SOURCE.contains("analysis.windows.net/powerbi/api/.default"));
+    // The ExportTo token is minted via `az` (the Rayfin CLI's MSAL token only
+    // carries Fabric scopes and is rejected by ExportTo with 401).
+    assert!(EXPORT_PDF_HELPER_SOURCE.contains("account', 'get-access-token"));
+    assert!(EXPORT_PDF_HELPER_SOURCE.contains("analysis.windows.net/powerbi/api"));
+    assert!(!EXPORT_PDF_HELPER_SOURCE.contains("getRayfinAuth"));
     assert!(EXPORT_PDF_HELPER_SOURCE.contains("/ExportTo"));
     assert!(EXPORT_PDF_HELPER_SOURCE.contains("format: 'PDF'"));
     assert!(EXPORT_PDF_HELPER_SOURCE.contains("Succeeded"));
     assert!(EXPORT_PDF_HELPER_SOURCE.contains("pdfBase64"));
     // Power BI-audience base, distinct from the Fabric API base.
     assert_eq!(FABRIC_PBI_BASE, "https://api.powerbi.com/v1.0/myorg");
+  }
+
+  #[test]
+  fn ensure_gitignored_appends_once_and_is_idempotent() {
+    let dir = std::env::temp_dir().join(format!("fab-gi-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let gi = dir.join(".gitignore");
+    std::fs::write(&gi, "node_modules\ndist\n").unwrap();
+
+    ensure_gitignored(&dir, "source-report/");
+    ensure_gitignored(&dir, "source-model/");
+    // Repeat calls (and the bare form) must not duplicate entries.
+    ensure_gitignored(&dir, "source-report/");
+    ensure_gitignored(&dir, "source-model");
+
+    let body = std::fs::read_to_string(&gi).unwrap();
+    assert_eq!(body.matches("source-report/").count(), 1, "report ignore once");
+    assert_eq!(body.matches("source-model/").count(), 1, "model ignore once");
+    assert!(body.contains("node_modules"), "preserves existing entries");
+
+    // Creates the file when absent.
+    let dir2 = dir.join("nested");
+    std::fs::create_dir_all(&dir2).unwrap();
+    ensure_gitignored(&dir2, "source-report/");
+    assert!(std::fs::read_to_string(dir2.join(".gitignore")).unwrap().contains("source-report/"));
+
+    let _ = std::fs::remove_dir_all(&dir);
   }
 }

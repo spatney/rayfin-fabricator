@@ -227,7 +227,7 @@ export interface FabricExportPdfResult {
   pdfBase64?: string
   /** Byte length of the exported PDF. */
   bytes?: number
-  /** True when the failure was a missing/expired Fabric session. */
+  /** True when the failure was that the Azure CLI (`az`) isn't signed in. */
   needsLogin?: boolean
   error?: string
 }
