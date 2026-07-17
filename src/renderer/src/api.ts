@@ -98,6 +98,8 @@ export const api: RayfinStudioApi = {
       invoke('fabric_semantic_model_definition', { workspaceId, modelId, projectDir }),
     exportReportPdf: (workspaceId: string, reportId: string, projectDir: string) =>
       invoke('fabric_export_report_pdf', { workspaceId, reportId, projectDir }),
+    saveReportPages: (projectDir: string, pages: string[]) =>
+      invoke('fabric_save_report_pages', { projectDir, pages }),
     signIn: () => invoke('fabric_sign_in', {}),
     listCapacities: () => invoke('fabric_capacities'),
     createWorkspace: (name: string, capacityId: string) =>

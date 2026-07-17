@@ -719,7 +719,7 @@ export default function Workbench({
         const pdf = await window.api.fabric.exportReportPdf(workspaceId, report.id, project.path)
         if (pdf.ok && pdf.pdfBase64) {
           onProgress('pages', 'Rendering report pages to images…')
-          pageShots = await renderPdfToShots(pdf.pdfBase64)
+          pageShots = await renderPdfToShots(pdf.pdfBase64, project.path)
           if (pageShots.length) {
             onProgress(
               'pages',
@@ -778,15 +778,27 @@ export default function Workbench({
             `(${modelError ?? 'no model reference found'}). Tell me the workspace + dataset id and ` +
             "I'll wire the app to query it — we should read from the existing model, not copy data."
 
-      // When we captured page images, tell the agent they're attached so it uses
-      // them as the visual ground truth for layout, colours, and chart types.
-      const pagesSection = pageShots.length
-        ? '\n\nI\'ve attached rendered images of each report page, exported straight from the ' +
-          'live report (its PDF export). **Use them to understand the report\'s look and feel** — ' +
-          'study the layout and grid, colour palette, typography, spacing, chart types, and ' +
-          'overall visual styling, and **apply the same styles to the app** so it closely matches ' +
-          'the original report (within what the Rayfin component set allows).'
-        : ''
+      // The report pages are persisted as images in `source-report/pages/` (and
+      // attached to this turn). Point the agent at them + the migrate skill so it
+      // treats the report's look as the design direction, up front.
+      const pageCount = pageShots.length
+      const pagesSection = pageCount
+        ? '\n\nEach page of the report has been rendered to an image in the ' +
+          `\`source-report/pages/\` folder (\`page-01.png\`${pageCount > 1 ? `…\`page-${String(pageCount).padStart(2, '0')}.png\`` : ''}), ` +
+          'and the same images are attached to this message. They are your visual ground ' +
+          "truth for the report's look and feel — open them and study the layout and grid, colour " +
+          'palette, typography, spacing, chart types, and overall styling. ' +
+          '(`source-report/report.pdf` is the full-resolution original if you need it.) ' +
+          '**This is a migration, so the report\'s existing look IS the design direction.** Before ' +
+          'applying the default theming guidance in `build-workflow`/`app-design`, read and follow ' +
+          '`.agents/skills/match-source-report/SKILL.md` — for a migration you establish the ' +
+          "report's palette, typography, and layout up front (in `src/global.css`) rather than " +
+          'picking a default and deferring theming, so the app closely matches the original report ' +
+          '(within what the Rayfin component set allows).'
+        : '\n\n**This is a migration, so the report\'s existing look IS the design direction.** Before ' +
+          'applying the default theming guidance in `build-workflow`/`app-design`, read and follow ' +
+          '`.agents/skills/match-source-report/SKILL.md` and match the report\'s palette, typography, ' +
+          'and layout from its `source-report/` definition.'
 
       const prompt =
         `I've imported a Power BI report ("${report.displayName}") from Fabric workspace ` +

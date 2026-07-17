@@ -1646,6 +1646,14 @@ export interface RayfinStudioApi {
       projectDir: string
     ) => Promise<FabricExportPdfResult>
     /**
+     * Persist the renderer's rasterized report pages (PNG data URLs) into
+     * `<projectDir>/source-report/pages/` as `page-01.png`, … and return their
+     * absolute paths. These live in the project (not a temp dir), so the build
+     * agent can re-open them on any turn as a persistent visual reference;
+     * `source-report/` is git-ignored so they're never committed or bundled.
+     */
+    saveReportPages: (projectDir: string, pages: string[]) => Promise<string[]>
+    /**
      * Open the interactive Microsoft Fabric sign-in window (returns immediately
      * when already signed in). Used by the migrate-report flow so workspaces can
      * be listed from the Home screen where no project is active.

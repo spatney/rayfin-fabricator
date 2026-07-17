@@ -16,6 +16,7 @@
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
+use base64::Engine;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
@@ -1134,6 +1135,43 @@ pub async fn fabric_export_report_pdf(
       fail(Some(needs_login), err)
     }
   }
+}
+
+/// Persist the renderer's rasterized report pages (PNG data URLs, one per visible
+/// page) into `<projectDir>/source-report/pages/` as `page-01.png`, `page-02.png`,
+/// … and return their absolute paths. Unlike `screenshot_save` (which writes to a
+/// temp dir the chat turn engine cleans up after the turn), these live in the
+/// project so the build agent can re-open them on *any* turn — the source
+/// report's look is a persistent visual reference for theming, not a one-shot
+/// attachment. `source-report/` is git-ignored, so they're never committed or
+/// bundled. Clears stale pages first so a re-run's numbering stays clean.
+#[tauri::command]
+pub async fn fabric_save_report_pages(
+  project_dir: String,
+  pages: Vec<String>,
+) -> Result<Vec<String>, String> {
+  let dir = PathBuf::from(&project_dir).join("source-report").join("pages");
+  std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  if let Ok(entries) = std::fs::read_dir(&dir) {
+    for entry in entries.flatten() {
+      let p = entry.path();
+      if p.extension().and_then(|x| x.to_str()) == Some("png") {
+        let _ = std::fs::remove_file(&p);
+      }
+    }
+  }
+  let mut out = Vec::with_capacity(pages.len());
+  for (i, data_url) in pages.iter().enumerate() {
+    // Accept either a `data:image/png;base64,…` URL or a bare base64 string.
+    let b64 = data_url.split_once(',').map(|(_, b)| b).unwrap_or(data_url);
+    let bytes = base64::engine::general_purpose::STANDARD
+      .decode(b64.as_bytes())
+      .map_err(|e| e.to_string())?;
+    let path = dir.join(format!("page-{:02}.png", i + 1));
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    out.push(path.to_string_lossy().to_string());
+  }
+  Ok(out)
 }
 
 /// Node helper that opens the interactive Fabric sign-in / consent window so the

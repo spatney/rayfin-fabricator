@@ -84,13 +84,18 @@ async function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
 }
 
 /**
- * Render every visible page of the given base64 PDF to a PNG, persist each via
- * `screenshot.save`, and return the {@link PendingShot}s (path + thumbnail) ready
- * to attach to the migrate chat prompt. Best-effort: this is a visual aid, so
- * callers should treat a throw as "skip page images", not a fatal error.
+ * Render every visible page of the given base64 PDF to a PNG, persist each into
+ * the project's `source-report/pages/` folder (via `fabric.saveReportPages`), and
+ * return the {@link PendingShot}s (path + thumbnail) ready to attach to the
+ * migrate chat prompt. Persisting in-project (rather than a temp dir the chat
+ * turn engine cleans up) means the build agent can re-open the page images on any
+ * later turn as a durable visual reference for theming — not just the first turn.
+ * Best-effort: this is a visual aid, so callers should treat a throw as "skip
+ * page images", not a fatal error.
  */
 export async function renderPdfToShots(
   pdfBase64: string,
+  projectPath: string,
   opts: RenderOptions = {}
 ): Promise<PendingShot[]> {
   const { maxWidth = 1400, thumbWidth = 240 } = opts
@@ -106,7 +111,8 @@ export async function renderPdfToShots(
       page.cleanup()
     }
     const keep = pickVisiblePages(sizes)
-    const shots: PendingShot[] = []
+    const dataUrls: string[] = []
+    const thumbs: string[] = []
     for (const pageNum of keep) {
       const page = await doc.getPage(pageNum)
       const base = page.getViewport({ scale: 1 })
@@ -121,12 +127,13 @@ export async function renderPdfToShots(
         continue
       }
       await page.render({ canvasContext: ctx, viewport }).promise
-      const dataUrl = canvas.toDataURL('image/png')
-      const path = await window.api.screenshot.save(dataUrl)
-      shots.push({ path, thumb: toThumb(canvas, thumbWidth) })
+      dataUrls.push(canvas.toDataURL('image/png'))
+      thumbs.push(toThumb(canvas, thumbWidth))
       page.cleanup()
     }
-    return shots
+    if (dataUrls.length === 0) return []
+    const paths = await window.api.fabric.saveReportPages(projectPath, dataUrls)
+    return paths.map((path, i) => ({ path, thumb: thumbs[i] }))
   } finally {
     await doc.destroy()
   }
