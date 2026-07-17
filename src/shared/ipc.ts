@@ -174,6 +174,64 @@ export interface FabricWorkspacesResult {
   error?: string
 }
 
+/** A Power BI report in a Fabric workspace the user can migrate. */
+export interface FabricReport {
+  id: string
+  displayName: string
+  /** Report description, when set. */
+  description?: string
+  /** Direct link to the report in the Fabric/Power BI portal, when known. */
+  webUrl?: string
+}
+
+/** Outcome of listing a workspace's Power BI reports (never throws across IPC). */
+export interface FabricReportsResult {
+  ok: boolean
+  reports?: FabricReport[]
+  /** True when the failure was a missing/expired Fabric session. */
+  needsLogin?: boolean
+  error?: string
+}
+
+/** Outcome of downloading a report's PBIR definition to disk (never throws). */
+export interface FabricReportDefinitionResult {
+  ok: boolean
+  /** Relative paths (under the destination dir) of the files written. */
+  files?: string[]
+  /** Absolute directory the report files were written into. */
+  dir?: string
+  /** The report's bound semantic model id (report downloads only), resolved from
+   * its `definition.pbir` so the caller can download the model next. */
+  modelId?: string
+  /** True when the failure was a missing/expired Fabric session. */
+  needsLogin?: boolean
+  error?: string
+}
+
+/** Outcome of the interactive Fabric sign-in (never throws across IPC). */
+export interface FabricSignInResult {
+  ok: boolean
+  error?: string
+}
+
+/** Outcome of exporting a Power BI report to PDF (never throws across IPC). The
+ * PDF is returned inline (base64) so the renderer can rasterize each page to an
+ * image with pdf.js and stage them as chat attachments. Best-effort: a failure
+ * (image/PDF export disabled on the tenant, or a non-capacity workspace) is
+ * reported, not thrown, and never blocks the migration. */
+export interface FabricExportPdfResult {
+  ok: boolean
+  /** Absolute path the exported PDF was written to (`source-report/report.pdf`). */
+  pdfPath?: string
+  /** The exported PDF, base64-encoded, for renderer rasterization. */
+  pdfBase64?: string
+  /** Byte length of the exported PDF. */
+  bytes?: number
+  /** True when the failure was a missing/expired Fabric session. */
+  needsLogin?: boolean
+  error?: string
+}
+
 /** A dedicated capacity the user can create a workspace on. */
 export interface FabricCapacity {
   id: string
@@ -1552,6 +1610,47 @@ export interface RayfinStudioApi {
   fabric: {
     /** List the signed-in user's Fabric workspaces (with capacity / F-SKU info). */
     listWorkspaces: () => Promise<FabricWorkspacesResult>
+    /** List the Power BI reports in a workspace (for the migrate-report picker). */
+    listReports: (workspaceId: string) => Promise<FabricReportsResult>
+    /**
+     * Download a report's public definition (PBIR) into `<projectDir>/source-report`
+     * so the agent can rebuild it. Follows the getDefinition long-running operation
+     * and writes each decoded part to disk; never throws.
+     */
+    reportDefinition: (
+      workspaceId: string,
+      reportId: string,
+      projectDir: string
+    ) => Promise<FabricReportDefinitionResult>
+    /**
+     * Download a semantic model's definition (TMDL — the DAX measures/tables)
+     * into `<projectDir>/source-model`. `modelId` comes from a prior
+     * `reportDefinition` call. Best-effort: a failure is reported, not thrown.
+     */
+    semanticModelDefinition: (
+      workspaceId: string,
+      modelId: string,
+      projectDir: string
+    ) => Promise<FabricReportDefinitionResult>
+    /**
+     * Export a Power BI report to a PDF (every page) via the Power BI `ExportTo`
+     * REST API, writing it to `<projectDir>/source-report/report.pdf` and
+     * returning it base64-encoded so the renderer can rasterize each page into an
+     * image for the migrate chat hand-off. Best-effort: image export is
+     * tenant-blocked on many tenants (so we export PDF), and PDF export needs a
+     * capacity-backed workspace — a failure is reported, not thrown.
+     */
+    exportReportPdf: (
+      workspaceId: string,
+      reportId: string,
+      projectDir: string
+    ) => Promise<FabricExportPdfResult>
+    /**
+     * Open the interactive Microsoft Fabric sign-in window (returns immediately
+     * when already signed in). Used by the migrate-report flow so workspaces can
+     * be listed from the Home screen where no project is active.
+     */
+    signIn: () => Promise<FabricSignInResult>
     /** List eligible (F-SKU / P-SKU) capacities the user can create a workspace on. */
     listCapacities: () => Promise<FabricCapacitiesResult>
     /** Create + assign a new workspace to `capacityId`; region follows the capacity. */

@@ -147,6 +147,89 @@ pub struct FabricWorkspacesResult {
   pub error: Option<String>,
 }
 
+/// A Power BI report living in a Fabric workspace (candidate for migration).
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FabricReport {
+  pub id: String,
+  pub display_name: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub description: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub web_url: Option<String>,
+}
+
+/// Outcome of listing a workspace's Power BI reports (never throws across IPC).
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FabricReportsResult {
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub reports: Option<Vec<FabricReport>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_login: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// Outcome of downloading a report's public definition (PBIR files written to
+/// disk). Never throws across IPC — reports `needsLogin`/`error` for the UI.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FabricReportDefinitionResult {
+  pub ok: bool,
+  /// Relative paths (under the destination dir) of the files written.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub files: Option<Vec<String>>,
+  /// Absolute directory the report files were written into.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub dir: Option<String>,
+  /// The report's bound semantic model id, resolved from its `definition.pbir`
+  /// (report mode only). The migrate flow uses it to download the model next.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub model_id: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_login: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// Outcome of a Power BI report → PDF export (the migrate flow's "capture report
+/// pages" sub-step). The PDF is returned inline (base64) so the renderer can
+/// rasterize each page to an image with pdf.js and stage them as chat
+/// attachments; a copy is also written to `source-report/report.pdf`. Best-effort
+/// in the UI — a failure (e.g. image/PDF export disabled on the tenant, or a
+/// non-capacity workspace) is surfaced but never blocks the migration.
+/// Never throws across IPC — reports `needsLogin`/`error` for the UI.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FabricExportPdfResult {
+  pub ok: bool,
+  /// Absolute path the exported PDF was written to (`source-report/report.pdf`).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub pdf_path: Option<String>,
+  /// The exported PDF, base64-encoded, for the renderer to rasterize.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub pdf_base64: Option<String>,
+  /// Byte length of the exported PDF (diagnostics / progress copy).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub bytes: Option<u64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_login: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// Outcome of the interactive Fabric sign-in used by the migrate-report flow.
+/// Never throws across IPC — reports `error` for the UI.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FabricSignInResult {
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
 /// A dedicated capacity the signed-in user can create a workspace on.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

@@ -3,13 +3,54 @@ import type {
   CommunityGallery,
   FabricWorkspacesResult,
   ProjectActionResult,
+  StudioProject,
   TemplateInfo
 } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import DeploymentCreateForm from './DeploymentCreateForm'
+import CreateProgress from './CreateProgress'
 
 type Mode = 'create' | 'deploy'
-type Step = 'details' | 'deploy'
+type Step = 'details' | 'migrate' | 'deploy'
+
+/**
+ * Configuration that turns the create flow into a Power BI migration. When set,
+ * the wizard runs three steps — Details (name your app, defaulted to the report
+ * name, then the *standard* create + install using the data-app template), Migrate
+ * (download the report's code + semantic model into the new project), then the
+ * standard Deploy step. Injected so migrate reuses the exact same `projects.create`
+ * + deploy path as a normal create.
+ */
+export interface MigrateSetup {
+  /** Human name for the created project (the report's display name). */
+  projectName: string
+  /**
+   * Download the report definition + semantic model into the freshly-created
+   * project. Runs after create, before Deploy. Progress is reported per sub-step
+   * via `onProgress`: `'code'` covers the PBIR + semantic-model download, and
+   * `'pages'` covers exporting the report to PDF and rasterizing each page into a
+   * chat attachment. A `status` marks a sub-step terminal (`'done'` / `'error'` /
+   * `'skipped'`); omitting it means the sub-step is still `'running'`. Returns an
+   * error string to abort (the screen rolls back the project), or null on success.
+   */
+  onFetchReportCode: (
+    project: StudioProject,
+    onProgress: (phase: MigratePhase, detail: string, status?: MigrateSubStatus) => void
+  ) => Promise<string | null>
+  /** Delete the just-created project (rollback) if fetch fails or the user cancels. */
+  onRollback: (project: StudioProject) => Promise<void>
+}
+
+/** The two sub-steps of the migrate fetch, reported independently to the UI. */
+export type MigratePhase = 'code' | 'pages'
+/** Terminal state of a migrate sub-step (absence ⇒ still running). */
+export type MigrateSubStatus = 'done' | 'error' | 'skipped'
+
+/** UI state for one migrate sub-step row: its current detail + lifecycle state. */
+interface MigrateSub {
+  detail: string
+  status: 'pending' | 'running' | MigrateSubStatus
+}
 
 interface Props {
   /** 'create' runs Details → Deploy; 'deploy' shows only the Deploy step for the active project. */
@@ -28,86 +69,23 @@ interface Props {
   deploying?: boolean
   /** Notify the parent that a Fabric sign-in just succeeded (refresh app auth). */
   onSignedIn?: () => void
+  /** When set, runs the create flow as a Power BI report migration (see {@link MigrateSetup}). */
+  migrate?: MigrateSetup
 }
 
 const keyOf = (t: { path?: string; name: string }): string => t.path || t.name
 
-/** The coarse stages a scaffold goes through, in order. `done` is authoritative. */
-type CreatePhase = 'preparing' | 'customizing' | 'installing' | 'finalizing' | 'done'
-
-interface PhaseDef {
-  id: CreatePhase
-  label: string
-  hint?: string
-  /**
-   * Loose, lowercase fragments that signal this stage has begun. Kept broad and
-   * forgiving on purpose — see {@link markerPhase}.
-   */
-  markers: string[]
-}
-
-/**
- * The visible create stages. `finalizing` keys off our *own* backend `say()`
- * line ("Initializing git repository…"), which we control; `customizing` /
- * `installing` key off the upstream `npm create @microsoft/rayfin` scaffolder.
- * `done` is never marker-derived (see below).
- */
-const CREATE_PHASES: PhaseDef[] = [
-  { id: 'preparing', label: 'Preparing', markers: [] },
-  { id: 'customizing', label: 'Customizing template', markers: ['customiz'] },
-  {
-    id: 'installing',
-    label: 'Installing dependencies',
-    hint: 'First run can take a minute or two.',
-    markers: ['install']
-  },
-  { id: 'finalizing', label: 'Finishing up', markers: ['initializing git', 'git repository'] }
-]
-
-const PHASE_ORDER: CreatePhase[] = ['preparing', 'customizing', 'installing', 'finalizing', 'done']
-const phaseRank = (p: CreatePhase): number => PHASE_ORDER.indexOf(p)
-
-/**
- * Best-effort, **purely cosmetic** mapping of the cumulative create log to the
- * furthest stage reached. Hardened so upstream output changes can never break
- * or stall the actual create:
- *  - It never reports `done` — completion is driven solely by the backend
- *    result, so reworded/removed "finished" lines can't strand the wizard.
- *  - Markers are loose substrings; missing them only softens the indicator
- *    (the spinner + elapsed timer + {@link fallbackPhase} still convey motion).
- *  - Wrapped so a parsing slip degrades gracefully instead of throwing.
- */
-function markerPhase(log: string): CreatePhase {
-  try {
-    const l = log.toLowerCase()
-    let reached: CreatePhase = 'preparing'
-    for (const def of CREATE_PHASES) {
-      if (def.markers.length && def.markers.some((m) => l.includes(m))) reached = def.id
-    }
-    return reached
-  } catch {
-    return 'preparing'
-  }
-}
-
-/**
- * Time-based floor so the indicator keeps advancing even if every upstream
- * output marker changes. Capped at `installing` (the dominant time sink) — it
- * never fabricates `finalizing`/`done`, which require a real signal/result.
- */
-function fallbackPhase(elapsedSec: number, running: boolean): CreatePhase {
-  if (!running) return 'preparing'
-  if (elapsedSec >= 10) return 'installing'
-  if (elapsedSec >= 3) return 'customizing'
-  return 'preparing'
-}
+/** The bundled data-app template a migration always scaffolds from. */
+const DATA_APP_TEMPLATE = 'fabricator-dataapp'
 
 /**
  * The full-window create-a-project experience. In `create` mode it runs a two-step
  * wizard — Details (name + template, ported from the old New Project dialog) then
  * Deploy (pick a Fabric workspace via the shared {@link DeploymentCreateForm}). In
  * `deploy` mode it shows only the Deploy step, used by the chat hard-gate CTA to
- * guide a freshly created project to its first deployment before chatting.
+ * guide a freshly created project to its first deployment before chatting. When a
+ * {@link MigrateSetup} is supplied, the Details step instead runs a Power BI report
+ * migration (standard create + install, then a report-code fetch) before Deploy.
  */
 export default function CreateProjectScreen({
   mode,
@@ -117,7 +95,8 @@ export default function CreateProjectScreen({
   onDeploy,
   onContinueWithoutDeploy,
   onSignedIn,
-  deploying = false
+  deploying = false,
+  migrate
 }: Props): JSX.Element {
   // The native preview webview floats above HTML; suppress it while this covers the body.
   useSuppressPreview()
@@ -128,7 +107,8 @@ export default function CreateProjectScreen({
   // ----- Details step (ported from NewProjectModal) -----
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(true)
-  const [name, setName] = useState('')
+  // In migrate mode the app name defaults to the report's display name (editable).
+  const [name, setName] = useState(() => migrate?.projectName ?? '')
   const [source, setSource] = useState<'builtin' | 'community'>('builtin')
   const [template, setTemplate] = useState('')
   const [gallery, setGallery] = useState<CommunityGallery | null>(null)
@@ -140,12 +120,18 @@ export default function CreateProjectScreen({
   const [templateName, setTemplateName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [log, setLog] = useState('')
-  const [showDetails, setShowDetails] = useState(false)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [now, setNow] = useState(0)
   const [done, setDone] = useState(false)
-  const logRef = useRef<HTMLPreElement>(null)
+
+  // ----- Migrate sub-step (report-code fetch, between create and deploy) -----
+  const [fetching, setFetching] = useState(false)
+  // The migrate fetch runs two visible sub-steps: download the report + model
+  // code, then export the report to PDF and rasterize each page into a chat
+  // attachment. Each tracks its own status/detail so both render as a row.
+  const [codeSub, setCodeSub] = useState<MigrateSub>({ detail: '', status: 'pending' })
+  const [pagesSub, setPagesSub] = useState<MigrateSub>({ detail: '', status: 'pending' })
+  // The project scaffolded by a migrate create, kept so a fetch failure or Cancel
+  // can roll it back (and a fetch retry reuses it instead of re-scaffolding).
+  const createdProjectRef = useRef<StudioProject | null>(null)
 
   // ----- Deploy step -----
   const [wsResult, setWsResult] = useState<FabricWorkspacesResult | null>(null)
@@ -211,27 +197,6 @@ export default function CreateProjectScreen({
     }
   }, [source, customMode])
 
-  useEffect(() => {
-    const off = window.api.onProcLog((e) => {
-      if (e.channel === 'create:project') setLog((prev) => prev + e.data)
-    })
-    return off
-  }, [])
-
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [log, showDetails])
-
-  // Tick a 1s elapsed clock while a create is in flight. This is the strongest
-  // "still working" cue during the output-silent npm install — and it's
-  // independent of any scaffolder/CLI log wording, so it survives upstream
-  // output changes.
-  useEffect(() => {
-    if (!busy || startedAt == null) return
-    const id = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(id)
-  }, [busy, startedAt])
-
   // Fetch workspaces when the Deploy step first appears.
   useEffect(() => {
     if (step === 'deploy' && !wsResult && !loadingWs) void loadWorkspaces()
@@ -242,11 +207,7 @@ export default function CreateProjectScreen({
   async function create(): Promise<void> {
     setBusy(true)
     setError(null)
-    setLog('')
     setDone(false)
-    setShowDetails(false)
-    setStartedAt(Date.now())
-    setNow(Date.now())
     try {
       let tmpl: string
       let tmplName: string | undefined
@@ -272,13 +233,103 @@ export default function CreateProjectScreen({
         setStep('deploy')
       } else {
         setError(result.error ?? 'Project creation failed.')
-        // Surface the raw output so the real failure (not just our summary) is
-        // visible without an extra click.
-        setShowDetails(true)
       }
     } finally {
       setBusy(false)
     }
+  }
+
+  // ----- Migrate: run the *standard* create (data-app template, named by the
+  // Details field, with the same numbered-name collision retry a normal create
+  // uses), advance to the Migrate step, download the report's code into the
+  // project, then advance to the Deploy step. -----
+
+  async function runFetch(project: StudioProject): Promise<boolean> {
+    if (!migrate) return true
+    setFetching(true)
+    setError(null)
+    setCodeSub({ detail: 'Getting your report’s code…', status: 'running' })
+    setPagesSub({ detail: 'Waiting for the report code…', status: 'pending' })
+    const err = await migrate.onFetchReportCode(project, (phase, detail, status) => {
+      const next: MigrateSub = { detail, status: status ?? 'running' }
+      if (phase === 'code') setCodeSub(next)
+      else setPagesSub(next)
+    })
+    setFetching(false)
+    if (err) {
+      setError(err)
+      // Attribute the failure to whichever sub-step was still running.
+      setCodeSub((s) => (s.status === 'running' ? { detail: err, status: 'error' } : s))
+      setPagesSub((s) => (s.status === 'running' ? { detail: err, status: 'error' } : s))
+      return false
+    }
+    // Defensive: settle any sub-step the reporter left non-terminal on success.
+    setCodeSub((s) => (s.status === 'done' ? s : { ...s, status: 'done' }))
+    setPagesSub((s) =>
+      s.status === 'running' ? { ...s, status: 'done' } : s.status === 'pending' ? { detail: 'Skipped.', status: 'skipped' } : s
+    )
+    return true
+  }
+
+  async function createMigrate(): Promise<void> {
+    if (!migrate) return
+    const base = name.trim() || migrate.projectName
+    setBusy(true)
+    setError(null)
+    setDone(false)
+    let project: StudioProject | null = null
+    try {
+      let created = await window.api.projects.create({
+        name: base,
+        template: DATA_APP_TEMPLATE
+      })
+      for (
+        let n = 2;
+        !created.ok && created.error && /already exists/i.test(created.error) && n <= 50;
+        n++
+      ) {
+        created = await window.api.projects.create({
+          name: `${base} ${n}`,
+          template: DATA_APP_TEMPLATE
+        })
+      }
+      if (!created.ok || !created.project) {
+        setError(created.error ?? 'Could not create a project for the report.')
+        return
+      }
+      project = created.project
+      createdProjectRef.current = project
+      setDone(true)
+      setCreatedName(project.name)
+      onCreated?.(created)
+    } finally {
+      setBusy(false)
+    }
+    if (!project) return
+    setStep('migrate')
+    if (await runFetch(project)) setStep('deploy')
+  }
+
+  // Retry the failed part only: a failed create re-scaffolds; a failed fetch (the
+  // project already exists) just re-downloads the report code.
+  async function retryMigrate(): Promise<void> {
+    const existing = createdProjectRef.current
+    if (existing) {
+      if (await runFetch(existing)) setStep('deploy')
+    } else {
+      await createMigrate()
+    }
+  }
+
+  // Abandon a migration: roll back the scaffolded project (if any) so no empty
+  // folder is left behind, then leave the flow.
+  async function cancelMigrate(): Promise<void> {
+    const proj = createdProjectRef.current
+    if (proj && migrate) {
+      createdProjectRef.current = null
+      await migrate.onRollback(proj)
+    }
+    onCancel()
   }
 
   const slug = name
@@ -288,40 +339,45 @@ export default function CreateProjectScreen({
     .replace(/^-+|-+$/g, '')
 
   const urlValid = /^(https?:\/\/|git@|git\+)/i.test(url.trim())
-  const canCreate =
-    Boolean(slug) &&
-    (source === 'builtin' ? Boolean(template) : customMode ? urlValid : Boolean(selectedEntry))
+  const canCreate = migrate
+    ? Boolean(slug)
+    : Boolean(slug) &&
+      (source === 'builtin' ? Boolean(template) : customMode ? urlValid : Boolean(selectedEntry))
 
   // ----- Create progress (cosmetic; completion is driven by `done`) -----
-  const elapsedSec = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0
-  const elapsedLabel = `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`
-  const detectedPhase = markerPhase(log)
-  const fallback = fallbackPhase(elapsedSec, busy)
-  // Never regress: take the furthest of the parsed marker and the time floor.
-  const phase: CreatePhase = done
-    ? 'done'
-    : phaseRank(detectedPhase) >= phaseRank(fallback)
-      ? detectedPhase
-      : fallback
-  const activeIdx =
-    phase === 'done' ? CREATE_PHASES.length : CREATE_PHASES.findIndex((p) => p.id === phase)
-  const activePhaseLabel =
-    phase === 'done' ? 'Project ready' : (CREATE_PHASES[activeIdx]?.label ?? 'Preparing')
   const createFailed = !busy && !done && Boolean(error)
-  const showProgress = busy || Boolean(log)
+  // A migration's report-code fetch failed *after* a successful create — surfaced
+  // inline on the fetch row (with a Try again that re-downloads, not re-creates).
+  const fetchFailed = Boolean(migrate) && done && !fetching && Boolean(error)
+
+  // Wizard steps for the header progress rail (migrate inserts a Migrate step).
+  const stepOrder: Step[] = migrate ? ['details', 'migrate', 'deploy'] : ['details', 'deploy']
+  const curStepIdx = stepOrder.indexOf(step)
+  const stepClass = (s: Step): string => {
+    const i = stepOrder.indexOf(s)
+    return `create-step${
+      i === curStepIdx ? ' create-step--active' : i < curStepIdx ? ' create-step--done' : ''
+    }`
+  }
 
   const heading =
     step === 'deploy'
       ? mode === 'create'
         ? 'Deploy your app'
         : 'Create your first deployment'
-      : 'New Rayfin project'
+      : migrate
+        ? 'Migrate Power BI report'
+        : 'New Rayfin project'
   const sub =
     step === 'deploy'
       ? `Publish ${createdName || 'your app'} to a Fabric workspace to start building with chat.`
-      : busy
-        ? `Setting up ${name.trim() || 'your app'}…`
-        : 'Name your app and pick a template to start from.'
+      : step === 'migrate'
+        ? `Getting ${createdName || 'the report'}’s code…`
+        : busy
+          ? `Setting up ${name.trim() || 'your app'}…`
+          : migrate
+            ? 'Name your app — we’ll migrate the report into it.'
+            : 'Name your app and pick a template to start from.'
   const skipLabel = mode === 'deploy' ? 'Maybe later' : 'Continue without deploying →'
 
   return (
@@ -334,16 +390,18 @@ export default function CreateProjectScreen({
           </div>
           {mode === 'create' && (
             <ol className="create-steps" aria-label="Progress">
-              <li
-                className={`create-step${
-                  step === 'details' ? ' create-step--active' : ' create-step--done'
-                }`}
-              >
+              <li className={stepClass('details')}>
                 <span className="create-step-no">1</span>
                 <span className="create-step-label">Details</span>
               </li>
-              <li className={`create-step${step === 'deploy' ? ' create-step--active' : ''}`}>
-                <span className="create-step-no">2</span>
+              {migrate && (
+                <li className={stepClass('migrate')}>
+                  <span className="create-step-no">2</span>
+                  <span className="create-step-label">Migrate</span>
+                </li>
+              )}
+              <li className={stepClass('deploy')}>
+                <span className="create-step-no">{migrate ? 3 : 2}</span>
                 <span className="create-step-label">Deploy</span>
               </li>
             </ol>
@@ -354,7 +412,7 @@ export default function CreateProjectScreen({
           <>
             <div className="create-body">
               <label className={`field${busy ? ' create-field-hidden' : ''}`}>
-                <span className="field-label">Project name</span>
+                <span className="field-label">App name</span>
                 <input
                   className="field-input"
                   type="text"
@@ -374,253 +432,272 @@ export default function CreateProjectScreen({
                 )}
               </label>
 
-              <div className={`field${busy ? ' create-field-hidden' : ''}`}>
-                <span className="field-label">Template</span>
-                <div className="seg">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className={`seg-btn${source === 'builtin' ? ' seg-btn--active' : ''}`}
-                    onClick={() => setSource('builtin')}
-                  >
-                    Featured
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className={`seg-btn${source === 'community' ? ' seg-btn--active' : ''}`}
-                    onClick={() => setSource('community')}
-                  >
-                    Community
-                  </button>
-                </div>
+              {!migrate && (
+                <>
+                  <div className={`field${busy ? ' create-field-hidden' : ''}`}>
+                    <span className="field-label">Template</span>
+                    <div className="seg">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className={`seg-btn${source === 'builtin' ? ' seg-btn--active' : ''}`}
+                        onClick={() => setSource('builtin')}
+                      >
+                        Featured
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className={`seg-btn${source === 'community' ? ' seg-btn--active' : ''}`}
+                        onClick={() => setSource('community')}
+                      >
+                        Community
+                      </button>
+                    </div>
 
-                <p className="template-caption">
-                  {source === 'builtin'
-                    ? 'Curated, ready-to-run starting points — each deploys straight to a Fabric test workspace, then you keep building with chat.'
-                    : 'Start from any community template published in an awesome-rayfin GitHub repo.'}
-                </p>
+                    <p className="template-caption">
+                      {source === 'builtin'
+                        ? 'Curated, ready-to-run starting points — each deploys straight to a Fabric test workspace, then you keep building with chat.'
+                        : 'Start from any community template published in an awesome-rayfin GitHub repo.'}
+                    </p>
 
-                {source === 'builtin' ? (
-                  loadingTemplates ? (
-                    <div className="template-grid" aria-busy="true">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="template-card template-card--skel">
-                          <span className="skel-line skel-line--title" />
-                          <span className="skel-line" />
-                          <span className="skel-line skel-line--short" />
+                    {source === 'builtin' ? (
+                      loadingTemplates ? (
+                        <div className="template-grid" aria-busy="true">
+                          {Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="template-card template-card--skel">
+                              <span className="skel-line skel-line--title" />
+                              <span className="skel-line" />
+                              <span className="skel-line skel-line--short" />
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="template-grid">
-                      {templates.map((t) => (
-                        <button
-                          key={t.name}
-                          type="button"
-                          disabled={busy}
-                          className={`template-card${template === t.name ? ' template-card--active' : ''}`}
-                          onClick={() => setTemplate(t.name)}
-                        >
-                          <span className="template-card-name">{t.displayName}</span>
-                          {t.defaultPreviewMode === 'fabric' && (
-                            <span
-                              className="template-card-badge"
-                              title="Opens embedded in the Fabric portal view by default — you can switch to the direct view any time."
+                      ) : (
+                        <div className="template-grid">
+                          {templates.map((t) => (
+                            <button
+                              key={t.name}
+                              type="button"
+                              disabled={busy}
+                              className={`template-card${template === t.name ? ' template-card--active' : ''}`}
+                              onClick={() => setTemplate(t.name)}
                             >
-                              Opens in Fabric view
-                            </span>
-                          )}
-                          <span className="template-card-desc">{t.description}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )
-                ) : customMode ? (
-                  <div className="template-url">
-                    <input
-                      className="field-input"
-                      type="text"
-                      value={url}
-                      placeholder="https://github.com/owner/awesome-rayfin-template"
-                      spellCheck={false}
-                      disabled={busy}
-                      onChange={(e) => setUrl(e.target.value)}
-                    />
-                    <span className="field-hint">
-                      A git or tarball URL for a community (awesome-rayfin) template.
-                    </span>
-                    <input
-                      className="field-input"
-                      type="text"
-                      value={templateName}
-                      placeholder="Template name (optional, for multi-template repos)"
-                      spellCheck={false}
-                      disabled={busy}
-                      onChange={(e) => setTemplateName(e.target.value)}
-                    />
-                    {url.trim() && !urlValid && (
-                      <span className="field-hint field-hint--warn">
-                        Enter a valid http(s) or git URL.
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="link-btn"
-                      disabled={busy}
-                      onClick={() => setCustomMode(false)}
-                    >
-                      ← Back to the gallery
-                    </button>
-                  </div>
-                ) : loadingGallery ? (
-                  <div className="template-grid" aria-busy="true">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="template-card template-card--skel">
-                        <span className="skel-line skel-line--title" />
-                        <span className="skel-line" />
-                        <span className="skel-line skel-line--short" />
-                      </div>
-                    ))}
-                  </div>
-                ) : galleryError ? (
-                  <div className="gallery-empty">
-                    <p className="gallery-empty-msg">{galleryError}</p>
-                    <div className="gallery-empty-actions">
-                      <button
-                        type="button"
-                        className="btn btn--sm"
-                        disabled={busy}
-                        onClick={() => void loadGallery()}
-                      >
-                        Try again
-                      </button>
-                      <button
-                        type="button"
-                        className="link-btn"
-                        disabled={busy}
-                        onClick={() => setCustomMode(true)}
-                      >
-                        Use a custom URL
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="template-grid">
-                      {gallery?.templates.map((t) => (
-                        <button
-                          key={keyOf(t)}
-                          type="button"
-                          disabled={busy}
-                          className={`template-card${communitySel === keyOf(t) ? ' template-card--active' : ''}`}
-                          onClick={() => setCommunitySel(keyOf(t))}
-                        >
-                          <span className="template-card-name">{t.name}</span>
-                          <span className="template-card-desc">{t.description}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="gallery-footer">
-                      <span className="field-hint">
-                        From{' '}
-                        <code>
-                          {gallery?.displayName || gallery?.repoUrl.replace(/^https?:\/\//, '')}
-                        </code>
-                      </span>
-                      <button
-                        type="button"
-                        className="link-btn"
-                        disabled={busy}
-                        onClick={() => setCustomMode(true)}
-                      >
-                        Use a custom URL
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {showProgress && (
-                <div className="create-progress" aria-busy={busy}>
-                  <span className="sr-only" role="status" aria-live="polite">
-                    {busy ? activePhaseLabel : done ? 'Project ready' : ''}
-                  </span>
-                  <ol className="create-phases">
-                    {CREATE_PHASES.map((p, i) => {
-                      const state =
-                        phase === 'done' || i < activeIdx
-                          ? 'done'
-                          : i === activeIdx
-                            ? 'active'
-                            : 'pending'
-                      return (
-                        <li
-                          key={p.id}
-                          className={`create-phase create-phase--${state}${
-                            createFailed && state === 'active' ? ' create-phase--failed' : ''
-                          }`}
-                        >
-                          <span className="create-phase-ico" aria-hidden="true">
-                            {state === 'active' ? (
-                              busy ? (
-                                <span className="ws-spinner" />
-                              ) : createFailed ? (
-                                '✕'
-                              ) : null
-                            ) : state === 'done' ? (
-                              '✓'
-                            ) : null}
-                          </span>
-                          <span className="create-phase-text">
-                            <span className="create-phase-label">{p.label}</span>
-                            {p.id === 'installing' && state === 'active' && (
-                              <span className="create-phase-hint">
-                                {elapsedSec > 75
-                                  ? 'Still working — large dependency trees take a little longer.'
-                                  : p.hint}
-                              </span>
-                            )}
-                          </span>
-                        </li>
+                              <span className="template-card-name">{t.displayName}</span>
+                              {t.defaultPreviewMode === 'fabric' && (
+                                <span
+                                  className="template-card-badge"
+                                  title="Opens embedded in the Fabric portal view by default — you can switch to the direct view any time."
+                                >
+                                  Opens in Fabric view
+                                </span>
+                              )}
+                              <span className="template-card-desc">{t.description}</span>
+                            </button>
+                          ))}
+                        </div>
                       )
-                    })}
-                  </ol>
-
-                  <div className="create-progress-meta">
-                    <span className="create-elapsed" aria-hidden="true">
-                      {busy ? `${elapsedLabel} elapsed` : done ? 'Done' : ''}
-                    </span>
-                    <button
-                      type="button"
-                      className="link-btn create-progress-toggle"
-                      onClick={() => setShowDetails((v) => !v)}
-                    >
-                      {showDetails ? 'Hide details' : 'Show details'}
-                    </button>
+                    ) : customMode ? (
+                      <div className="template-url">
+                        <input
+                          className="field-input"
+                          type="text"
+                          value={url}
+                          placeholder="https://github.com/owner/awesome-rayfin-template"
+                          spellCheck={false}
+                          disabled={busy}
+                          onChange={(e) => setUrl(e.target.value)}
+                        />
+                        <span className="field-hint">
+                          A git or tarball URL for a community (awesome-rayfin) template.
+                        </span>
+                        <input
+                          className="field-input"
+                          type="text"
+                          value={templateName}
+                          placeholder="Template name (optional, for multi-template repos)"
+                          spellCheck={false}
+                          disabled={busy}
+                          onChange={(e) => setTemplateName(e.target.value)}
+                        />
+                        {url.trim() && !urlValid && (
+                          <span className="field-hint field-hint--warn">
+                            Enter a valid http(s) or git URL.
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="link-btn"
+                          disabled={busy}
+                          onClick={() => setCustomMode(false)}
+                        >
+                          ← Back to the gallery
+                        </button>
+                      </div>
+                    ) : loadingGallery ? (
+                      <div className="template-grid" aria-busy="true">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                          <div key={i} className="template-card template-card--skel">
+                            <span className="skel-line skel-line--title" />
+                            <span className="skel-line" />
+                            <span className="skel-line skel-line--short" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : galleryError ? (
+                      <div className="gallery-empty">
+                        <p className="gallery-empty-msg">{galleryError}</p>
+                        <div className="gallery-empty-actions">
+                          <button
+                            type="button"
+                            className="btn btn--sm"
+                            disabled={busy}
+                            onClick={() => void loadGallery()}
+                          >
+                            Try again
+                          </button>
+                          <button
+                            type="button"
+                            className="link-btn"
+                            disabled={busy}
+                            onClick={() => setCustomMode(true)}
+                          >
+                            Use a custom URL
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="template-grid">
+                          {gallery?.templates.map((t) => (
+                            <button
+                              key={keyOf(t)}
+                              type="button"
+                              disabled={busy}
+                              className={`template-card${communitySel === keyOf(t) ? ' template-card--active' : ''}`}
+                              onClick={() => setCommunitySel(keyOf(t))}
+                            >
+                              <span className="template-card-name">{t.name}</span>
+                              <span className="template-card-desc">{t.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="gallery-footer">
+                          <span className="field-hint">
+                            From{' '}
+                            <code>
+                              {gallery?.displayName || gallery?.repoUrl.replace(/^https?:\/\//, '')}
+                            </code>
+                          </span>
+                          <button
+                            type="button"
+                            className="link-btn"
+                            disabled={busy}
+                            onClick={() => setCustomMode(true)}
+                          >
+                            Use a custom URL
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
-
-                  {showDetails && (
-                    <pre
-                      className="log-console log-console--sm create-progress-details"
-                      ref={logRef}
-                    >
-                      {log || 'Starting…'}
-                    </pre>
-                  )}
-                </div>
+                </>
               )}
+
+              <CreateProgress running={busy} done={done} failed={createFailed} />
 
               {error && <div className="alert alert--error">{error}</div>}
             </div>
 
             <footer className="create-foot">
-              <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
+              {migrate ? (
+                <>
+                  <button
+                    className="btn btn--ghost"
+                    onClick={() => void cancelMigrate()}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </button>
+                  {createFailed ? (
+                    <button
+                      className="btn btn--primary"
+                      onClick={() => void retryMigrate()}
+                      disabled={busy}
+                    >
+                      Try again
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn--primary"
+                      onClick={() => void createMigrate()}
+                      disabled={busy || !canCreate}
+                    >
+                      {busy ? 'Creating…' : 'Create app'}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn--primary"
+                    onClick={create}
+                    disabled={busy || !canCreate}
+                  >
+                    {busy ? 'Creating…' : 'Create project'}
+                  </button>
+                </>
+              )}
+            </footer>
+          </>
+        ) : step === 'migrate' ? (
+          <>
+            <div className="create-body">
+              {(
+                [
+                  { key: 'code', label: 'Get report code (definition + semantic model)', sub: codeSub },
+                  { key: 'pages', label: 'Capture report pages (PDF → images)', sub: pagesSub }
+                ] as const
+              ).map(({ key, label, sub }) => (
+                <div key={key} className={`migrate-fetch migrate-fetch--${sub.status}`}>
+                  <span className="migrate-fetch-ico" aria-hidden="true">
+                    {sub.status === 'error'
+                      ? '✕'
+                      : sub.status === 'done'
+                        ? '✓'
+                        : sub.status === 'skipped'
+                          ? '–'
+                          : sub.status === 'pending'
+                            ? '·'
+                            : <span className="ws-spinner" />}
+                  </span>
+                  <span className="migrate-fetch-body">
+                    <span className="migrate-fetch-label">{label}</span>
+                    <span className="migrate-fetch-detail">{sub.detail}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <footer className="create-foot">
+              <button
+                className="btn btn--ghost"
+                onClick={() => void cancelMigrate()}
+                disabled={fetching}
+              >
                 Cancel
               </button>
-              <button className="btn btn--primary" onClick={create} disabled={busy || !canCreate}>
-                {busy ? 'Creating…' : 'Create project'}
-              </button>
+              {fetchFailed && (
+                <button
+                  className="btn btn--primary"
+                  onClick={() => void retryMigrate()}
+                  disabled={fetching}
+                >
+                  Try again
+                </button>
+              )}
             </footer>
           </>
         ) : (

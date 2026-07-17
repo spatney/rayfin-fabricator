@@ -73,6 +73,18 @@ export function FolderIcon(props: IconProps): JSX.Element {
   )
 }
 
+/** Bar chart — migrate a Power BI report. */
+export function ReportIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M3 3v18h18" />
+      <rect x="7" y="12" width="3" height="5" rx="0.5" />
+      <rect x="12" y="8" width="3" height="9" rx="0.5" />
+      <rect x="17" y="5" width="3" height="12" rx="0.5" />
+    </Icon>
+  )
+}
+
 /** Gear — Settings. */
 export function GearIcon(props: IconProps): JSX.Element {
   return (

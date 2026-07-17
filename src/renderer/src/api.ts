@@ -91,6 +91,14 @@ export const api: RayfinStudioApi = {
 
   fabric: {
     listWorkspaces: () => invoke('fabric_workspaces'),
+    listReports: (workspaceId: string) => invoke('fabric_reports', { workspaceId }),
+    reportDefinition: (workspaceId: string, reportId: string, projectDir: string) =>
+      invoke('fabric_report_definition', { workspaceId, reportId, projectDir }),
+    semanticModelDefinition: (workspaceId: string, modelId: string, projectDir: string) =>
+      invoke('fabric_semantic_model_definition', { workspaceId, modelId, projectDir }),
+    exportReportPdf: (workspaceId: string, reportId: string, projectDir: string) =>
+      invoke('fabric_export_report_pdf', { workspaceId, reportId, projectDir }),
+    signIn: () => invoke('fabric_sign_in', {}),
     listCapacities: () => invoke('fabric_capacities'),
     createWorkspace: (name: string, capacityId: string) =>
       invoke('fabric_create_workspace', { name, capacityId }),

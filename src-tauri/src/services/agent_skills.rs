@@ -221,6 +221,126 @@ straight into a data connection. Once you have a model's `workspaceId` and `item
   validate-headless skill); Fabricator auto-deploys the app after the turn.
 "#;
 
+/// Always-on instruction: Fabricator owns dependency installation, so the agent
+/// must never run its own `npm install` (a second install in the same project
+/// races the app's background install and corrupts `node_modules`).
+const MANAGED_DEPS_INSTRUCTIONS: &str = r#"---
+applyTo: '**'
+---
+# Dependencies are installed and managed by Fabricator
+
+You are the coding agent inside **Fabricator**. Fabricator installs and manages this
+project's npm dependencies for you — it runs the install when the project opens and
+shows the user an install-status banner (with a **Retry**) if it fails. Managing
+`node_modules` yourself starts a second install in the same folder, which races the
+app's install and corrupts it.
+
+## Never install or mutate dependencies
+Do **not** run any of these (or their equivalents):
+
+- `npm install` / `npm i` / `npm ci` / `npm update` / `npm rebuild`
+- `pnpm install` / `yarn` / `yarn install` / `bun install`
+- Deleting, moving, or hand-editing `node_modules/`, `package-lock.json`, or any lockfile.
+
+Editing `package.json` to add a dependency is fine when a task genuinely needs a new
+package — but do **not** then run an install; tell the user which package you added
+and let Fabricator install it.
+
+(`npx fabric-app-data …` is **not** a dependency install — it's the app's own data
+CLI. Keep using it, and the build/preview scripts, normally.)
+
+## If a command fails because a module is missing
+That means the background install hasn't finished yet (or failed) — **not** that you
+should install it. Instead:
+
+1. Wait a few seconds and retry the **same** command once or twice; the install
+   usually finishes within a minute of the project opening.
+2. If it still fails, stop and tell the user their dependencies are still installing
+   or failed to install, and point them at the install banner's **Retry installation**
+   button. Do not try to work around it by installing packages yourself.
+"#;
+
+/// Model-invoked skill for rebuilding an imported Power BI report (PBIR / legacy
+/// report.json + semantic-model TMDL under `source-report/` and `source-model/`)
+/// as this data app: read the report as the UI spec, find the semantic model id it
+/// binds to, wire a live connection, reuse its DAX, and map visuals to Graphein.
+const BUILD_FROM_REPORT_SKILL: &str = r#"---
+name: build-from-powerbi-report
+description: "Rebuild an imported Power BI report as this Rayfin data app. Use whenever the project contains an imported report under `source-report/` (a PBIR `definition.pbir` / `definition/` folder, or a classic `report.json`) and/or a semantic model under `source-model/` (TMDL) — e.g. a migrated Power BI report. Covers reading the report as the UI spec, finding the semantic model id it binds to, wiring a live connection, reusing its DAX, and mapping its visuals to Graphein specs."
+metadata:
+  author: Fabricator
+  version: 1.0.0
+---
+# Rebuild an imported Power BI report
+
+You are running inside **Fabricator**, rebuilding an existing Power BI report as a
+Rayfin **data app** that reads from the report's own Fabric **semantic model**, live.
+The importer dropped two reference folders in the project:
+
+- **`source-report/`** — the report definition: a PBIR `definition.pbir` + `definition/`
+  folder (pages, visuals, layout), or a classic `report.json` for a legacy report. This
+  is the **UI spec** — what pages, visuals, and layout to rebuild.
+- **`source-model/`** — the semantic model as **TMDL** (tables, relationships,
+  measures/DAX). This is **schema + DAX reference — metadata, not data.**
+
+Both are references you read; they are not wired into the app. Your job: connect to the
+live model and rebuild the visuals with Graphein.
+
+## 1. Find the semantic model it binds to
+Fabricator usually hands you the model's coordinates (workspace id + dataset id) in the
+message that opens this chat — **use those directly** when present. If you need to find
+the id yourself, read the report's PBIR and look for the dataset reference:
+
+- Open `source-report/definition.pbir` (or files under `source-report/definition/`).
+- Modern PBIR (`version` 4.0+) stores the binding as a **connection string** under
+  `datasetReference.byConnection.connectionString`. The dataset GUID is the
+  **`semanticmodelid=<GUID>`** param — e.g. `…;semanticmodelid=<GUID>`. **Note the
+  `initial catalog=<name>` in that same string is the model's display name, NOT a
+  GUID — don't use it as the id.**
+- Older/thick PBIR instead exposes the GUID as a **`pbiModelDatabaseName`** under
+  `datasetReference.byConnection` — e.g. `"pbiModelDatabaseName": "<GUID>"`.
+- Either way, that GUID is the Power BI **dataset id, which IS the
+  Fabric semantic-model item id.** Further fallbacks: an `Initial Catalog=<GUID>`
+  in a connection string, or a `"datasetId": "<GUID>"`.
+- A **`byPath`** reference (a model inside the same PBIP project) has no remote id —
+  resolve it with **`fabricator_locate_semantic_model`** (pass the report/model link or
+  a GUID), or ask the user for the workspace + dataset id.
+
+## 2. Wire the model as a live connection
+Once you have `workspaceId` + `itemId` (= the dataset id), add it and generate — see the
+**fabric-data** and **connect-semantic-model** skills for the full surface:
+
+```
+fabric-app-data add <alias> -w <workspaceId> -i <itemId>
+```
+
+Then query it live with `useSemanticModelQuery` / `fabric-app-data query`. **Do not
+import, copy, or reload the data, and do not recreate the model as Rayfin `data`
+entities** — the data stays in the semantic model and the app reads it on demand. You
+can disable the `data` service in `rayfin/rayfin.yml`.
+
+## 3. Reuse the report's DAX
+The TMDL in `source-model/` holds the measure names and expressions the original report
+used. **Reuse the exact measure names** (and their definitions where you must recompute)
+so your numbers match the original report. Prefer the model's own measures over
+re-deriving aggregates in TypeScript. (→ `dax`)
+
+## 4. Rebuild the visuals as Graphein specs
+Treat `source-report/` as the layout brief, not something to port line-for-line:
+
+- Each report page → a dashboard page/section; each visual → the closest Graphein spec
+  (`ChartCard` / `KpiCard` / `DataTableCard`), authored from a DAX result. (→ `visuals`)
+- Report slicers → React slicers over shared filter state; cross-filtering → Graphein
+  selections. (→ `visuals`: Interactivity)
+- Start with ONE hero visual wired to live data, preview it, then expand. (→ `build-workflow`)
+
+## Notes
+- If the model can't be resolved or you lack access to it, say so and ask the user for
+  the workspace + dataset id — don't fall back to copying data out of the TMDL.
+- Validate every visual headlessly with `npm run preview`; Fabricator auto-deploys after
+  the turn. Don't run `rayfin up`, a dev server, or `npm install`.
+"#;
+
 /// Write (or refresh) the injected skill + instruction files under the app data
 /// dir. Idempotent and best-effort: always overwrites so content updates ship
 /// with the app. Call once at startup, before any session opens.
@@ -242,10 +362,15 @@ fn write_all(root: &std::path::Path) -> std::io::Result<()> {
   std::fs::create_dir_all(&connect_dir)?;
   std::fs::write(connect_dir.join("SKILL.md"), CONNECT_MODEL_SKILL)?;
 
+  let report_dir = root.join("skills").join("build-from-powerbi-report");
+  std::fs::create_dir_all(&report_dir)?;
+  std::fs::write(report_dir.join("SKILL.md"), BUILD_FROM_REPORT_SKILL)?;
+
   let instr_dir = root.join("instructions");
   std::fs::create_dir_all(&instr_dir)?;
   std::fs::write(instr_dir.join("fabricator-validate.instructions.md"), VALIDATE_INSTRUCTIONS)?;
   std::fs::write(instr_dir.join("fabricator-stable-only.instructions.md"), STABLE_ONLY_INSTRUCTIONS)?;
+  std::fs::write(instr_dir.join("fabricator-dependencies.instructions.md"), MANAGED_DEPS_INSTRUCTIONS)?;
   Ok(())
 }
 
@@ -338,6 +463,39 @@ mod tests {
   }
 
   #[test]
+  fn managed_deps_instructions_forbid_agent_install() {
+    assert!(MANAGED_DEPS_INSTRUCTIONS.contains("applyTo: '**'"));
+    // Fabricator owns the install; the agent must never start its own.
+    for forbidden in ["npm install", "npm ci", "yarn install", "pnpm install"] {
+      assert!(
+        MANAGED_DEPS_INSTRUCTIONS.contains(forbidden),
+        "managed-deps instructions should ban {forbidden}"
+      );
+    }
+    // ...but the app's own data CLI stays allowed, and missing modules mean "wait".
+    assert!(MANAGED_DEPS_INSTRUCTIONS.contains("fabric-app-data"));
+    assert!(MANAGED_DEPS_INSTRUCTIONS.contains("Retry installation"));
+  }
+
+  #[test]
+  fn build_from_report_skill_documents_model_id_and_wiring() {
+    assert!(BUILD_FROM_REPORT_SKILL.starts_with("---\n"));
+    assert!(BUILD_FROM_REPORT_SKILL.contains("name: build-from-powerbi-report"));
+    // Names the reference folders the importer drops in.
+    assert!(BUILD_FROM_REPORT_SKILL.contains("source-report/"));
+    assert!(BUILD_FROM_REPORT_SKILL.contains("source-model/"));
+    // Teaches where the semantic model id lives in the PBIR and the id-equivalence.
+    assert!(BUILD_FROM_REPORT_SKILL.contains("pbiModelDatabaseName"));
+    // ...including the modern PBIR v4 connection-string form.
+    assert!(BUILD_FROM_REPORT_SKILL.contains("semanticmodelid"));
+    assert!(BUILD_FROM_REPORT_SKILL.contains("Fabric semantic-model item id"));
+    assert!(BUILD_FROM_REPORT_SKILL.contains("fabricator_locate_semantic_model"));
+    // ...and reuses the model live rather than copying the data out of the TMDL.
+    assert!(BUILD_FROM_REPORT_SKILL.contains("fabric-app-data add <alias> -w <workspaceId> -i <itemId>"));
+    assert!(BUILD_FROM_REPORT_SKILL.contains("do not recreate the model as Rayfin `data`"));
+  }
+
+  #[test]
   fn write_all_creates_expected_layout() {
     let tmp = std::env::temp_dir().join(format!("fab-agent-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
@@ -345,15 +503,21 @@ mod tests {
 
     let skill = tmp.join("skills").join("validate-headless").join("SKILL.md");
     let connect = tmp.join("skills").join("connect-semantic-model").join("SKILL.md");
+    let report = tmp.join("skills").join("build-from-powerbi-report").join("SKILL.md");
     let instr = tmp.join("instructions").join("fabricator-validate.instructions.md");
     let stable = tmp.join("instructions").join("fabricator-stable-only.instructions.md");
+    let deps = tmp.join("instructions").join("fabricator-dependencies.instructions.md");
     assert!(skill.is_file(), "SKILL.md should exist at {skill:?}");
     assert!(connect.is_file(), "connect SKILL.md should exist at {connect:?}");
+    assert!(report.is_file(), "build-from-report SKILL.md should exist at {report:?}");
     assert!(instr.is_file(), "instructions file should exist at {instr:?}");
     assert!(stable.is_file(), "stable-only instructions should exist at {stable:?}");
+    assert!(deps.is_file(), "managed-deps instructions should exist at {deps:?}");
     assert_eq!(std::fs::read_to_string(&skill).unwrap(), VALIDATE_HEADLESS_SKILL);
     assert_eq!(std::fs::read_to_string(&connect).unwrap(), CONNECT_MODEL_SKILL);
+    assert_eq!(std::fs::read_to_string(&report).unwrap(), BUILD_FROM_REPORT_SKILL);
     assert_eq!(std::fs::read_to_string(&stable).unwrap(), STABLE_ONLY_INSTRUCTIONS);
+    assert_eq!(std::fs::read_to_string(&deps).unwrap(), MANAGED_DEPS_INSTRUCTIONS);
 
     let _ = std::fs::remove_dir_all(&tmp);
   }
