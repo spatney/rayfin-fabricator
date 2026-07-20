@@ -1,0 +1,12 @@
+{
+  "source": "https://learn.microsoft.com/fabric/admin/region-availability",
+  "verified": "2026-07-20",
+  "note": "Regions where 'Fabric App (preview)' is listed as unavailable in the Fabric region-availability matrix. This is the single place to update when a region gains or loses Fabric Apps support. Preview-scoped: expected to shrink and eventually empty at GA. Values are matched case-insensitively against a workspace's capacity region.",
+  "unsupportedRegions": [
+    "Brazil South",
+    "Canada Central",
+    "North Europe",
+    "South Central US",
+    "West US 3"
+  ]
+}
