@@ -44,7 +44,7 @@ async-trait = "0.1"
 # %LOCALAPPDATA%\github-copilot-sdk\cli\<ver>\copilot.exe at runtime, so the app is
 # self-contained (no separate install). Build requires network; cache via
 # BUNDLED_CLI_CACHE_DIR in CI.
-github-copilot-sdk = "1.0.3"
+github-copilot-sdk = "1.0.7"
 
 uuid = { version = "1", features = ["v4"] }
 sha2 = "0.10"
