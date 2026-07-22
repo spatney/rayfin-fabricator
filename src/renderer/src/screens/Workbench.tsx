@@ -17,6 +17,7 @@ import {
   type ChatTurnResult,
   type DeployResult,
   type DevServerResult,
+  type DoctorReport,
   type ProjectsState,
   type RayfinVersionInfo,
   type StudioProject
@@ -43,11 +44,111 @@ import AdvisorView, { categoryMeta } from '../components/AdvisorView'
 import ModelTab from '../components/ModelTab'
 import { useToast } from '../toast'
 import { reportIssue as runReportIssue } from './reportIssue'
-import { InfoIcon, GearIcon, SignOutIcon, CompareIcon } from '../components/icons'
+import { InfoIcon, GearIcon, SignOutIcon, AddIcon, ProjectsIcon, SidebarExpandIcon, SidebarCollapseIcon, Codicon } from '../components/icons'
 import { FabricatorMark } from '../components/FabricatorMark'
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
+
+/** Custom window controls for the frameless window (decorations are off so the
+ * app owns its chrome — no black OS titlebar in light mode). Uses the Tauri
+ * window handle already imported for the app. */
+function WindowControls(): JSX.Element {
+  const win = getCurrentWindow()
+  return (
+    <div className="win-controls">
+      <button
+        type="button"
+        className="win-btn"
+        aria-label="Minimize"
+        title="Minimize"
+        onClick={() => void win.minimize()}
+      >
+        <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
+          <rect x="0" y="4.5" width="10" height="1" fill="currentColor" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="win-btn"
+        aria-label="Maximize"
+        title="Maximize"
+        onClick={() => void win.toggleMaximize()}
+      >
+        <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="win-btn win-btn--close"
+        aria-label="Close"
+        title="Close"
+        onClick={() => void win.close()}
+      >
+        <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
+          <path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" strokeWidth="1.1" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+/** Directions match Tauri's ResizeDirection string union (avoids importing the type). */
+type ResizeDir =
+  | 'North'
+  | 'South'
+  | 'East'
+  | 'West'
+  | 'NorthEast'
+  | 'NorthWest'
+  | 'SouthEast'
+  | 'SouthWest'
+
+const RESIZE_HANDLES: Array<{ dir: ResizeDir; cls: string }> = [
+  { dir: 'North', cls: 'n' },
+  { dir: 'South', cls: 's' },
+  { dir: 'East', cls: 'e' },
+  { dir: 'West', cls: 'w' },
+  { dir: 'NorthWest', cls: 'nw' },
+  { dir: 'NorthEast', cls: 'ne' },
+  { dir: 'SouthWest', cls: 'sw' },
+  { dir: 'SouthEast', cls: 'se' }
+]
+
+/** Thin edge/corner grips that drive OS-native resize on the frameless window
+ * (decorations are off, so the OS no longer provides its own resize borders). */
+function WindowResizeHandles(): JSX.Element {
+  const win = getCurrentWindow()
+  return (
+    <>
+      {RESIZE_HANDLES.map((h) => (
+        <div
+          key={h.cls}
+          className={`win-resize win-resize--${h.cls}`}
+          onMouseDown={(e) => {
+            if (e.button !== 0) return
+            e.preventDefault()
+            void win.startResizeDragging(h.dir)
+          }}
+        />
+      ))}
+    </>
+  )
+}
+
+/** Start an OS-native window move when the empty part of the titlebar strip is
+ * dragged (not the window buttons). Double-click toggles maximize. */
+function onTitlebarPointerDown(e: ReactMouseEvent<HTMLDivElement>): void {
+  if (e.button !== 0) return
+  if (e.target !== e.currentTarget) return
+  void getCurrentWindow().startDragging()
+}
+
+function onTitlebarDoubleClick(e: ReactMouseEvent<HTMLDivElement>): void {
+  if (e.target !== e.currentTarget) return
+  void getCurrentWindow().toggleMaximize()
+}
 
 /** Up-to-two-letter initials for the signed-in user's avatar, derived from their
  * email (e.g. "first.last@…" → "FL", "sapatney@…" → "SA"). */
@@ -123,6 +224,8 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
 
 interface Props {
   auth: AuthStatus
+  /** Environment check from startup; drives the non-blocking "needs setup" banner. */
+  doctor?: DoctorReport | null
   onSignOut: () => Promise<void> | void
   onAuthChanged: () => Promise<void> | void
   settings: AppSettings | null
@@ -131,6 +234,7 @@ interface Props {
 
 export default function Workbench({
   auth,
+  doctor,
   onSignOut,
   onAuthChanged,
   settings,
@@ -141,6 +245,47 @@ export default function Workbench({
   const [signingOut, setSigningOut] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  /** Which Settings section to open — the setup banner deep-links to 'environment'. */
+  const [settingsSection, setSettingsSection] = useState<'general' | 'environment'>('general')
+  /** Account popover (sign in / out) anchored to the nav rail avatar. */
+  const [showAccountMenu, setShowAccountMenu] = useState(false)
+  /** Best-effort Entra profile photo (data URL) for the avatar; null → initials. */
+  const [entraPhoto, setEntraPhoto] = useState<string | null>(null)
+  /** Left nav rail expanded (icon labels visible) vs collapsed (icons only). */
+  const [navExpanded, setNavExpanded] = useState(
+    () => localStorage.getItem('rayfin.navExpanded') === '1'
+  )
+  const toggleNav = (): void => {
+    setNavExpanded((v) => {
+      const next = !v
+      localStorage.setItem('rayfin.navExpanded', next ? '1' : '0')
+      return next
+    })
+  }
+  // Load the signed-in user's Entra profile photo (via az → Microsoft Graph).
+  // Best-effort: any failure just leaves the avatar showing initials.
+  useEffect(() => {
+    if (!auth.rayfin.signedIn) {
+      setEntraPhoto(null)
+      return
+    }
+    let cancelled = false
+    const pending = window.api.auth.entraPhoto?.()
+    if (pending) {
+      pending
+        .then((url) => {
+          if (!cancelled) setEntraPhoto(url ?? null)
+        })
+        .catch(() => {
+          if (!cancelled) setEntraPhoto(null)
+        })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [auth.rayfin.signedIn])
+  /** Dismissed the "environment needs setup" banner for this session. */
+  const [setupBannerDismissed, setSetupBannerDismissed] = useState(false)
   const [projects, setProjects] = useState<ProjectsState | null>(null)
   /** Fullscreen create/deploy flow: 'create' = new-project wizard, 'deploy' = first-deploy gate CTA. */
   const [createMode, setCreateMode] = useState<'create' | 'deploy' | null>(null)
@@ -735,6 +880,11 @@ export default function Workbench({
   // project is only closed when a different one is opened from the launcher.
   function goHome(): void {
     setNotice(null)
+    // Clear the create/clone overlays too — they render on top of the workbench,
+    // so leaving them set would make the nav rail appear dead (the launcher would
+    // never surface). This is what lets "Projects" reliably return from "New".
+    setCreateMode(null)
+    setShowClone(false)
     setShowHome(true)
   }
 
@@ -823,39 +973,200 @@ export default function Workbench({
 
   return (
     <div className="app-shell">
-      <header className="titlebar">
-        <div className="brand">
-          <FabricatorMark className="brand-mark" />
-          <span className="brand-name">Fabricator</span>
-        </div>
-        <div className="titlebar-status">
-          {auth.rayfin.signedIn && (
-            <div
-              className="who-avatar"
-              title={auth.rayfin.user ?? 'Signed in'}
-              aria-label={auth.rayfin.user ? `Signed in as ${auth.rayfin.user}` : 'Signed in'}
-            >
-              {avatarInitials(auth.rayfin.user)}
-            </div>
-          )}
-          <div className="seg seg--toolbar">
-            <button className="seg-btn" onClick={() => setShowSettings(true)} title="Settings">
-              <GearIcon />
-              Settings
-            </button>
-            {auth.rayfin.signedIn ? (
-              <button className="seg-btn" disabled={signingOut} onClick={signOut} title="Sign out">
-                <SignOutIcon />
-                {signingOut ? 'Signing out…' : 'Sign out'}
-              </button>
+      <WindowResizeHandles />
+      <nav className={`nav-rail${navExpanded ? ' nav-rail--expanded' : ''}`} aria-label="Primary">
+        <div className="nav-rail-top">
+          <button
+            type="button"
+            className="nav-toggle"
+            onClick={toggleNav}
+            title={navExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-label={navExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+            aria-expanded={navExpanded}
+          >
+            {navExpanded ? (
+              <SidebarCollapseIcon className="nav-item-ico" />
             ) : (
-              <button className="seg-btn" disabled={signingIn} onClick={signIn}>
-                {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
-              </button>
+              <SidebarExpandIcon className="nav-item-ico" />
+            )}
+          </button>
+          <div className="nav-rail-group">
+            <button
+              type="button"
+              className={`nav-item${createMode === 'create' ? ' nav-item--active' : ''}`}
+              onClick={() => {
+                setShowClone(false)
+                setCreateMode('create')
+              }}
+              title="New project"
+              aria-label="New project"
+            >
+              <AddIcon className="nav-item-ico" />
+              <span className="nav-item-label">New</span>
+            </button>
+            <button
+              type="button"
+              className={`nav-item${(showHome || !active) && !createMode && !showClone ? ' nav-item--active' : ''}`}
+              onClick={goHome}
+              title="Projects"
+              aria-label="Projects"
+            >
+              <ProjectsIcon className="nav-item-ico" />
+              <span className="nav-item-label">Projects</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="nav-rail-foot">
+          <button
+            type="button"
+            className="nav-item"
+            onClick={() => {
+              setSettingsSection('general')
+              setShowSettings(true)
+            }}
+            title="Settings"
+            aria-label="Settings"
+          >
+            <GearIcon className="nav-item-ico" />
+            <span className="nav-item-label">Settings</span>
+          </button>
+
+          <div className="nav-account">
+            <button
+              type="button"
+              className="nav-account-btn"
+              onClick={() => setShowAccountMenu((v) => !v)}
+              title={
+                auth.rayfin.signedIn ? (auth.rayfin.user ?? 'Signed in') : 'Sign in to Fabric'
+              }
+              aria-label="Account"
+              aria-expanded={showAccountMenu}
+            >
+              {auth.rayfin.signedIn ? (
+                entraPhoto ? (
+                  <span className="who-avatar who-avatar--photo">
+                    <img className="who-avatar-img" src={entraPhoto} alt="" />
+                  </span>
+                ) : (
+                  <span className="who-avatar">{avatarInitials(auth.rayfin.user)}</span>
+                )
+              ) : (
+                <span className="who-avatar who-avatar--out" aria-hidden="true">
+                  <Codicon name="account" />
+                </span>
+              )}
+            </button>
+            {showAccountMenu && (
+              <>
+                <div className="nav-popover-scrim" onClick={() => setShowAccountMenu(false)} />
+                <div className="nav-popover" role="menu">
+                  {auth.rayfin.signedIn ? (
+                    <>
+                      <div className="nav-popover-head">
+                        {entraPhoto ? (
+                          <span className="who-avatar who-avatar--lg who-avatar--photo">
+                            <img className="who-avatar-img" src={entraPhoto} alt="" />
+                          </span>
+                        ) : (
+                          <span className="who-avatar who-avatar--lg">
+                            {avatarInitials(auth.rayfin.user)}
+                          </span>
+                        )}
+                        <div className="nav-popover-id">
+                          <span className="nav-popover-name">
+                            {auth.rayfin.user ?? 'Signed in'}
+                          </span>
+                          <span className="nav-popover-sub">Fabric account</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="nav-popover-item"
+                        disabled={signingOut}
+                        onClick={() => {
+                          setShowAccountMenu(false)
+                          void signOut()
+                        }}
+                      >
+                        <SignOutIcon className="nav-popover-ico" />
+                        {signingOut ? 'Signing out…' : 'Sign out'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="nav-popover-head nav-popover-head--out">
+                        <span className="nav-popover-name">Not signed in</span>
+                        <span className="nav-popover-sub">
+                          Sign in to build and deploy with Fabric.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="nav-popover-item"
+                        disabled={signingIn}
+                        onClick={() => {
+                          setShowAccountMenu(false)
+                          void signIn()
+                        }}
+                      >
+                        {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>
-      </header>
+      </nav>
+
+      <div className="app-main">
+        <div
+          className="app-topbar"
+          data-tauri-drag-region
+          onMouseDown={onTitlebarPointerDown}
+          onDoubleClick={onTitlebarDoubleClick}
+        >
+          <button
+            type="button"
+            className="app-topbar-brand"
+            onClick={goHome}
+            title="Fabricator — home"
+            aria-label="Home"
+          >
+            <FabricatorMark className="app-topbar-mark" />
+          </button>
+          <span className="app-topbar-title" aria-hidden="true" />
+          <WindowControls />
+        </div>
+
+        {doctor && !doctor.ready && !setupBannerDismissed && (
+          <div className="setup-banner" role="status">
+            <Codicon name="tools" className="setup-banner-ico" />
+            <span className="setup-banner-text">
+              Some tools or sign-ins still need attention before you can build and deploy.
+            </span>
+            <button
+              type="button"
+              className="btn btn--sm btn--primary"
+              onClick={() => {
+                setSettingsSection('environment')
+                setShowSettings(true)
+              }}
+            >
+              Open setup
+            </button>
+            <button
+              type="button"
+              className="setup-banner-close"
+              aria-label="Dismiss"
+              onClick={() => setSetupBannerDismissed(true)}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
       {showClone ? (
         <CloneFromGitHubScreen
@@ -901,17 +1212,8 @@ export default function Workbench({
                 <div className={`project-pane${showHome ? ' project-pane--hidden' : ''}`}>
                   <div className="project-header">
                     <div className="project-id">
-                      <button
-                        className="switch-projects-btn"
-                        onClick={goHome}
-                        title="Switch projects — open a recent project or create a new one (keeps this project running)"
-                      >
-                        <CompareIcon />
-                        Switch projects
-                      </button>
                       <div className="project-id-text">
                         <h1 className="project-title">{active.name}</h1>
-                        <span className="project-subpath">{active.path}</span>
                       </div>
                     </div>
                     <div className="project-tabs" role="tablist">
@@ -1005,7 +1307,7 @@ export default function Workbench({
                         focusPane
                           ? undefined
                           : {
-                              gridTemplateColumns: `minmax(0, ${chatFrac}fr) 7px minmax(0, ${1 - chatFrac}fr)`
+                              gridTemplateColumns: `minmax(0, ${chatFrac}fr) 1px minmax(0, ${1 - chatFrac}fr)`
                             }
                       }
                     >
@@ -1196,6 +1498,7 @@ export default function Workbench({
           Report an issue
         </button>
       </footer>
+      </div>
 
       {showSettings && settings && (
         <SettingsModal
@@ -1203,6 +1506,8 @@ export default function Workbench({
           versions={versions}
           onChange={onSettingsChange}
           onClose={() => setShowSettings(false)}
+          initialSection={settingsSection}
+          initialDoctor={doctor}
         />
       )}
 
