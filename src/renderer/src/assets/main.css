@@ -170,19 +170,502 @@ code {
 }
 
 .app-shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+/* The main column (everything right of the nav rail): custom titlebar, optional
+   banner, the workbench body, and the status bar. */
+.app-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom, frameless window chrome. Decorations are off (tauri.conf.json), so this
+   thin transparent strip owns dragging + the min/max/close controls. In light mode
+   there is no black OS titlebar — the app surface runs edge to edge. */
+.app-topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 4px 0 14px;
+  background: var(--bg-elev);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.app-topbar-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Shrunk Fabricator brand mark, pinned to the top bar's left edge. */
+.app-topbar-brand {
+  flex: none;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.app-topbar-brand:hover {
+  background: var(--bg-elev-2);
+}
+
+.app-topbar-mark {
+  width: 18px;
+  height: 18px;
+}
+
+.win-controls {
+  flex: none;
+  display: flex;
+  align-items: stretch;
   height: 100%;
 }
 
-/* Title bar */
-.titlebar {
+.win-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 100%;
+  padding: 0;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.win-btn:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.win-btn--close:hover {
+  color: #fff;
+  background: #d93a30;
+}
+
+.win-btn svg {
+  display: block;
+}
+
+/* Frameless-window resize grips. Decorations are off, so the OS no longer draws
+   its own resize borders — these thin fixed strips drive startResizeDragging().
+   Kept below modals/popovers (z-index 30) so overlays stay interactive. */
+.win-resize {
+  position: fixed;
+  z-index: 30;
+}
+
+.win-resize--n {
+  top: 0;
+  left: 6px;
+  right: 6px;
+  height: 5px;
+  cursor: ns-resize;
+}
+
+.win-resize--s {
+  bottom: 0;
+  left: 6px;
+  right: 6px;
+  height: 5px;
+  cursor: ns-resize;
+}
+
+.win-resize--e {
+  top: 6px;
+  bottom: 6px;
+  right: 0;
+  width: 5px;
+  cursor: ew-resize;
+}
+
+.win-resize--w {
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 5px;
+  cursor: ew-resize;
+}
+
+.win-resize--nw {
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nwse-resize;
+}
+
+.win-resize--ne {
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nesw-resize;
+}
+
+.win-resize--sw {
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nesw-resize;
+}
+
+.win-resize--se {
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nwse-resize;
+}
+
+/* Left navigation rail (M365 style): brand + primary destinations up top,
+   Settings + account at the bottom. */
+.nav-rail {
+  flex: none;
+  width: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0 12px;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border);
+  transition: width 0.16s ease;
+}
+
+.nav-rail-top,
+.nav-rail-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.nav-rail-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 52px;
+  padding: 8px 2px 6px;
+  color: var(--text-dim);
+  font: inherit;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.nav-item:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.nav-item--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.nav-item-ico {
+  width: 20px;
+  height: 20px;
+}
+
+.nav-item-label {
+  display: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+}
+
+/* Collapsible rail: a toggle button switches between the icon-only rail (default)
+   and an expanded rail where each item shows its label to the right of the icon. */
+.nav-toggle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 14px;
+  justify-content: center;
+  width: 40px;
+  height: 34px;
+  margin-bottom: 2px;
+  padding: 0;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.nav-toggle:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.nav-rail--expanded {
+  width: 208px;
+  align-items: stretch;
+  padding: 10px 10px 12px;
+}
+
+.nav-rail--expanded .nav-rail-top,
+.nav-rail--expanded .nav-rail-foot,
+.nav-rail--expanded .nav-rail-group {
+  align-items: stretch;
+}
+
+.nav-rail--expanded .nav-toggle {
+  width: 100%;
+  height: 38px;
+  justify-content: flex-start;
+  padding: 0 10px;
+}
+
+.nav-rail--expanded .nav-item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+}
+
+.nav-rail--expanded .nav-item-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.nav-rail--expanded .nav-account {
+  justify-content: flex-start;
+  padding-left: 8px;
+}
+
+/* Account cluster + its popover (anchored to the rail). */
+.nav-account {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.nav-account-btn {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.nav-account-btn:hover {
+  background: var(--bg-elev-2);
+}
+
+.who-avatar--out {
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border-color: var(--border);
+  font-size: 15px;
+}
+
+.who-avatar--lg {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
+/* Avatar showing a real profile photo: drop the tinted fill/padding and let the
+   image fill the ring. */
+.who-avatar--photo {
+  background: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+.who-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.nav-popover-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.nav-popover {
+  position: absolute;
+  left: calc(100% + 8px);
+  bottom: 0;
+  z-index: 41;
+  width: 260px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   background: var(--bg-elev);
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.nav-popover-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.nav-popover-head--out {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.nav-popover-id {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.nav-popover-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-popover-sub {
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.nav-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.nav-popover-item:hover:not(:disabled) {
+  background: var(--bg-elev-2);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+
+.nav-popover-item:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.nav-popover-ico {
+  width: 16px;
+  height: 16px;
+}
+
+/* Non-blocking "your environment needs setup" banner (replaces the old startup gate). */
+.setup-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 14px 0;
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 13px;
+  background: color-mix(in srgb, var(--pending) 12%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--pending) 42%, var(--border));
+  border-radius: var(--radius);
+}
+
+.setup-banner-ico {
+  flex: none;
+  color: var(--pending);
+  font-size: 16px;
+}
+
+.setup-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.setup-banner-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.setup-banner-close:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
 }
 
 .brand {
@@ -371,6 +854,17 @@ code {
   transition:
     background 0.12s ease,
     width 0.12s ease;
+}
+
+/* Invisible wider grab zone so the 1px line stays draggable. */
+.pane-divider::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  right: -5px;
+  cursor: col-resize;
 }
 
 .pane-divider:hover::before,
@@ -1174,6 +1668,18 @@ code {
   width: 14px;
   height: 14px;
   flex: none;
+}
+
+/* Fluent 9 stand-in for a codicon web-font glyph (see Codicon in icons.tsx).
+   Sizes the SVG to 1em so callers that sized the old font glyph via font-size
+   keep working unchanged; defaults to the codicon base 16px and nudges the
+   baseline for inline-with-text use. */
+.fluent-codicon {
+  width: 1em;
+  height: 1em;
+  font-size: 16px;
+  flex: none;
+  vertical-align: -0.15em;
 }
 
 .btn--primary {
@@ -2014,43 +2520,6 @@ code {
 
 .project-id-text {
   min-width: 0;
-  padding-left: 14px;
-  border-left: 1px solid var(--border);
-}
-
-.switch-projects-btn {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-elev-2);
-  color: var(--text-dim);
-  font-size: 12px;
-  font-weight: 550;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.switch-projects-btn:hover {
-  background: var(--bg-elev-3);
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.switch-projects-btn:active {
-  transform: translateY(0.5px);
-}
-
-.switch-projects-btn svg {
-  width: 15px;
-  height: 15px;
 }
 
 .project-title {
@@ -2058,16 +2527,6 @@ code {
   font-size: 14px;
   font-weight: 650;
   line-height: 1.2;
-}
-
-.project-subpath {
-  display: block;
-  max-width: 360px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--text-faint);
 }
 
 .project-meta {
@@ -2661,7 +3120,7 @@ code {
   display: inline-flex;
   gap: 2px;
   padding: 3px;
-  background: var(--bg);
+  background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 9px;
 }
@@ -4197,6 +4656,18 @@ code {
   border-color: var(--border);
 }
 
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-btn--on,
+.icon-btn--on:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
 /* Code viewer (file tree + highlighted file) */
 .code-viewer {
   display: flex;
@@ -5691,6 +6162,53 @@ code {
   min-width: 0;
 }
 
+.preview-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Design-mode toggle: a standalone 28px pill (matches the neighbouring icon
+   buttons' height so the toolbar aligns). White in light mode, light gray only
+   when active. */
+.design-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.design-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-elev-3);
+}
+
+.design-btn--on,
+.design-btn--on:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.design-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .preview-toolbar-right {
   display: flex;
   flex-wrap: wrap;
@@ -5785,6 +6303,137 @@ code {
 
 .preview-url:hover {
   text-decoration: underline;
+}
+
+/* URL dropdown: switch the preview between the Fabric portal view and the direct
+   app URL. The trigger reuses `.preview-url`'s mono/accent styling. */
+.preview-url-select {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.preview-url--select {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+}
+
+.preview-url--select:hover {
+  text-decoration: none;
+}
+
+.preview-url--select:hover .preview-url-text {
+  text-decoration: underline;
+}
+
+.preview-url--select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.preview-url-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-url-caret {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.preview-url-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.preview-url-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 61;
+  min-width: 248px;
+  max-width: 340px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.preview-url-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.preview-url-option:hover {
+  background: var(--bg-elev-2);
+}
+
+.preview-url-option--on {
+  background: var(--accent-soft);
+}
+
+.preview-url-option-ico {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--text-dim);
+}
+
+.preview-url-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.preview-url-option-label {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.preview-url-option-sub {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-url-option-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: var(--accent);
+}
+
+.preview-url-menu-divider {
+  height: 1px;
+  margin: 3px 6px;
+  background: var(--border-soft);
 }
 
 .preview-status-label,
@@ -6342,6 +6991,11 @@ code {
   align-items: center;
   gap: 8px;
 }
+/* White chip in light mode for the deployment "dropdown" trigger (dark mode
+   adapts via the same token). */
+.seg--toolbar.dep-seg {
+  background: var(--bg-elev);
+}
 .dep-chip-prefix {
   font-size: 11px;
   font-weight: 600;
@@ -6373,7 +7027,7 @@ code {
   display: flex;
   flex-direction: column;
   gap: 11px;
-  background: var(--bg-elev-2);
+  background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow-lg);
@@ -6498,6 +7152,17 @@ code {
   border: none;
   cursor: pointer;
   padding: 2px 0;
+}
+.dep-pop-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dep-pop-foot .dep-new {
+  align-self: center;
+}
+.dep-redeploy {
+  white-space: nowrap;
 }
 .dep-new:disabled {
   opacity: 0.5;
@@ -6890,17 +7555,131 @@ code {
   min-height: 0;
   display: flex;
   justify-content: center;
-  padding: 28px 28px 18px;
+  overflow-y: auto;
+  padding: 28px 28px 24px;
 }
 
 .home-inner {
   width: 100%;
-  max-width: 900px;
+  max-width: 860px;
   min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 26px;
+}
+
+/* M365 Copilot-style centered landing: brand mark, greeting, one primary
+   affordance, and a couple of quiet secondary chips. */
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 30px 0 8px;
+  text-align: center;
+}
+
+.home-hero-mark {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
+.home-hero-title {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: 30px;
+  font-weight: 680;
+  letter-spacing: -0.4px;
+  line-height: 1.1;
+}
+
+.home-hero-sub {
+  max-width: 520px;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.home-hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 13px 22px;
+  color: var(--on-accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    transform 0.08s ease;
+}
+
+.home-hero-cta:hover {
+  background: color-mix(in srgb, var(--accent) 88%, white);
+}
+
+.home-hero-cta:active {
+  transform: translateY(1px);
+}
+
+.home-hero-cta-ico {
+  width: 18px;
+  height: 18px;
+}
+
+.home-hero-cta-arrow {
+  font-size: 16px;
+  opacity: 0.85;
+}
+
+.home-hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.home-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 15px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.home-chip:hover:not(:disabled) {
+  background: var(--bg-elev-2);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+
+.home-chip:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.home-chip-ico {
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
 }
 
 .home-head {
@@ -7781,10 +8560,140 @@ code {
 }
 
 /* Settings modal */
-.settings-row {
+.modal--settings {
+  max-width: 780px;
+}
+
+/* Two-pane settings: a slim section nav on the left, the active panel on the right. */
+.settings-body {
+  flex-direction: row;
+  gap: 0;
+  padding: 0;
+  min-height: 0;
+  /* Fixed comfortable height so switching sections doesn't resize the dialog. */
+  height: min(560px, calc(78vh / var(--ui-scale, 1)));
+  overflow: hidden;
+}
+
+.settings-nav {
+  flex: none;
+  width: 176px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 10px;
+  background: var(--bg-elev-2);
+  border-right: 1px solid var(--border);
+}
+
+.settings-nav-btn {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
+  padding: 9px 11px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.settings-nav-btn:hover {
+  color: var(--text);
+  background: var(--bg-elev-3);
+}
+
+.settings-nav-btn--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.settings-nav-ico {
+  font-size: 16px;
+}
+
+.settings-nav-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  background: var(--pending);
+  border-radius: 50%;
+}
+
+.settings-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Embedded environment checks (the old setup screen, now living inside Settings). */
+.setup--embedded {
+  position: static;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: transparent;
+}
+
+.setup--embedded .setup-scroll {
+  position: static;
+  overflow: visible;
+  padding: 0;
+}
+
+.setup--embedded .setup-inner {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 14px;
+}
+
+.setup--embedded .setup-grid {
+  grid-template-columns: 1fr;
+}
+
+/* In-flow action bar (no fixed footer) when embedded. */
+.setup--embedded .setup-actionbar {
+  position: static;
+  padding: 4px 0 0;
+  background: transparent;
+  border: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.setup--embedded .setup-actionbar-inner {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.setup--embedded .setup-logwrap {
+  position: static;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.setup--embedded .setup-logwrap-inner {
+  max-width: none;
+  margin: 0;
+  padding: 8px 0 0;
 }
 .diagnostics-actions {
   margin-left: auto;
@@ -8361,6 +9270,7 @@ code {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--bg-elev);
 }
 
 .chat-toolbar {
@@ -8392,7 +9302,7 @@ code {
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text-dim);
-  background: var(--bg-elev-2);
+  background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
@@ -8448,7 +9358,7 @@ code {
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  background: var(--bg-elev-3);
+  background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -8877,7 +9787,7 @@ code {
 .turn--user .msg-text {
   align-self: flex-end;
   max-width: 85%;
-  background: var(--bg-elev);
+  background: var(--bg-elev-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 10px 14px;
@@ -9640,7 +10550,7 @@ code {
   position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  background: var(--bg-elev-2);
+  background: var(--bg-elev);
   padding: 10px 12px 10px 16px;
   box-shadow: var(--shadow-sm);
   transition:
@@ -12271,7 +13181,8 @@ code {
   border-radius: 11px;
 }
 
-.clone-head-icon .codicon {
+.clone-head-icon .codicon,
+.clone-head-icon .fluent-codicon {
   display: block;
   font-size: 19px;
   line-height: 1;
@@ -12672,6 +13583,8 @@ code {
 }
 
 .clone-repo-selected {
+  display: grid;
+  place-items: center;
   width: 20px;
   height: 20px;
   flex: none;
@@ -12680,16 +13593,8 @@ code {
   border-radius: 50%;
 }
 
-/* Codicon's base rule (`.codicon[class*='codicon-']`, specificity 0,2,0) forces
-   `display:inline-block` and `font:…16px/1`, overriding a single class — so the
-   intended grid-centering never applied and the 16px glyph sat high/off-center in
-   the 20px circle. Re-apply the centering layout + a smaller size at higher
-   specificity (0,3,0) so the check is properly centered. */
-.clone-repo .clone-repo-selected.codicon {
-  display: grid;
-  place-items: center;
+.clone-repo-selected .fluent-codicon {
   font-size: 13px;
-  line-height: 1;
 }
 
 .clone-list-state {

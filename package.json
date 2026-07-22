@@ -30,6 +30,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\""
   },
   "dependencies": {
+    "@fluentui/react-icons": "^2.0.333",
     "@monaco-editor/react": "^4.7.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.1",

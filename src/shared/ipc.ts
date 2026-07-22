@@ -1551,6 +1551,12 @@ export interface RayfinStudioApi {
     loginRayfin: (tenant?: string) => Promise<ProcResult>
     loginAz: () => Promise<ProcResult>
     logoutRayfin: () => Promise<ProcResult>
+    /**
+     * Best-effort Entra profile photo for the signed-in user, as a `data:` URL
+     * (base64) ready for an `<img src>`. Resolves to `null` when unavailable
+     * (az not signed in, no photo set, or insufficient Graph consent).
+     */
+    entraPhoto: () => Promise<string | null>
   }
 
   /** Optional GitHub integration (backed by the `gh` CLI) for cloning repos. */

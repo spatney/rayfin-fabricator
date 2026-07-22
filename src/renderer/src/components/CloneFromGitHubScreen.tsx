@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GithubRepo, GithubStatus, InstallResult } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
+import { Codicon } from './icons'
 
 interface Props {
   /** Abandon the flow (no clone happened). */
@@ -364,7 +365,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       <div className="create-shell clone-shell">
         <header className="create-head clone-head">
           <span className="clone-head-icon" aria-hidden="true">
-            <span className="codicon codicon-repo-clone" />
+            <Codicon name="repo-clone" />
           </span>
           <div className="create-head-text">
             <p className="clone-eyebrow">GitHub</p>
@@ -396,7 +397,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
           {statusError && !initialChecking && (
             <section className="clone-state-card clone-state-card--error" role="alert">
-              <span className="clone-state-icon codicon codicon-warning" aria-hidden="true" />
+              <span className="clone-state-icon" aria-hidden="true">
+                <Codicon name="warning" />
+              </span>
               <div className="clone-state-copy">
                 <h2>Could not check GitHub</h2>
                 <p>{statusError}</p>
@@ -409,7 +412,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
           {!initialChecking && !statusError && status && !ghInstalled && (
             <section className="clone-state-card">
-              <span className="clone-state-icon codicon codicon-terminal" aria-hidden="true" />
+              <span className="clone-state-icon" aria-hidden="true">
+                <Codicon name="terminal" />
+              </span>
               <div className="clone-state-copy">
                 <h2>Install the GitHub CLI</h2>
                 <p>
@@ -466,7 +471,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
           {!initialChecking && !statusError && ghInstalled && !signedIn && (
             <section className="clone-state-card">
-              <span className="clone-state-icon codicon codicon-account" aria-hidden="true" />
+              <span className="clone-state-icon" aria-hidden="true">
+                <Codicon name="account" />
+              </span>
               <div className="clone-state-copy">
                 {waitingLogin ? (
                   <>
@@ -564,13 +571,13 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                       <h2 id="clone-repositories-title">Choose a repository</h2>
                     </div>
                     <span className="clone-account">
-                      <span className="codicon codicon-account" aria-hidden="true" />
+                      <Codicon name="account" />
                       {status?.user ?? 'GitHub account'}
                     </span>
                   </div>
                   <label className="clone-search">
                     <span className="sr-only">Filter repositories</span>
-                    <span className="clone-search-icon codicon codicon-search" aria-hidden="true" />
+                    <Codicon name="search" className="clone-search-icon" />
                     <input
                       className="field-input clone-search-input"
                       type="text"
@@ -646,10 +653,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                               </span>
                             </span>
                             {selected === repo.nameWithOwner && (
-                              <span
-                                className="clone-repo-selected codicon codicon-check"
-                                aria-hidden="true"
-                              />
+                              <span className="clone-repo-selected" aria-hidden="true">
+                                <Codicon name="check" />
+                              </span>
                             )}
                           </button>
                         ))}
@@ -680,7 +686,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                 <div className="create-progress clone-progress" aria-busy={cloning}>
                   <div className="clone-progress-head">
                     <span className="clone-progress-ico" aria-hidden="true">
-                      <span className="codicon codicon-repo-clone" />
+                      <Codicon name="repo-clone" />
                     </span>
                     <span className="clone-progress-heading">
                       <span className="clone-progress-title">
