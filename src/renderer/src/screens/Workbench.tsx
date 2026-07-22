@@ -17,15 +17,18 @@ import {
   type ChatTurnResult,
   type DeployResult,
   type DevServerResult,
+  type FabricReport,
   type ProjectsState,
   type RayfinVersionInfo,
   type StudioProject
 } from '@shared/ipc'
 import CreateProjectScreen from '../components/CreateProjectScreen'
+import type { MigratePhase, MigrateSubStatus } from '../components/CreateProjectScreen'
 import CloneFromGitHubScreen from '../components/CloneFromGitHubScreen'
 import HomeView from '../components/HomeView'
 import ManageProjectModal from '../components/ManageProjectModal'
 import DeleteProjectModal from '../components/DeleteProjectModal'
+import MigratePowerBIReportModal from '../components/MigratePowerBIReportModal'
 import ConfirmModal from '../components/ConfirmModal'
 import SettingsModal from '../components/SettingsModal'
 import { applyUiScale, UI_SCALES } from '../theme'
@@ -33,6 +36,7 @@ import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../component
 import { planForStorage, planFromStorage } from '../chatPlan'
 import { useChatEventStore } from '../chatEventStore'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
+import { renderPdfToShots } from '../reportPages'
 import DeploymentsControl from '../components/DeploymentsControl'
 import GitControl from '../components/GitControl'
 import ProjectDependencyGuard from '../components/ProjectDependencyGuard'
@@ -160,6 +164,22 @@ export default function Workbench({
   /** Launcher project-management and local-trash confirmation state. */
   const [managingProject, setManagingProject] = useState<StudioProject | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<StudioProject | null>(null)
+  /** Whether the "Migrate Power BI report" workspace→report picker is open. */
+  const [showMigratePbi, setShowMigratePbi] = useState(false)
+  /**
+   * The report chosen in the picker, handed to the shared create flow. When set,
+   * `CreateProjectScreen` runs in migrate mode: create → fetch report code →
+   * deploy. Cleared once the flow completes or is cancelled.
+   */
+  const [migrateSel, setMigrateSel] = useState<{
+    workspaceId: string
+    report: FabricReport
+  } | null>(null)
+  /**
+   * The seed chat prompt built during the migrate fetch step, stashed so it can
+   * be dropped into the chat once the create → fetch → deploy flow finishes.
+   */
+  const migratePromptRef = useRef<(OutboundPrompt & { projectId: string }) | null>(null)
   /** Bumped whenever the working tree likely changed (deploy / chat turn). */
   const [gitRefresh, setGitRefresh] = useState(0)
   /** A user-initiated deploy paused by the "you have unpulled changes" warning. */
@@ -640,6 +660,214 @@ export default function Workbench({
       stage
     })
   }, [])
+
+  // Migrate step (fetch): with the Data App project already scaffolded by the
+  // shared create flow, grant Fabric access + download the chosen report's code
+  // into it. Downloads the report definition (PBIR, or classic report.json for
+  // legacy reports) into `source-report/` and best-effort its semantic model
+  // TMDL (schema + DAX reference) into `source-model/`. Runs through the *global*
+  // Rayfin CLI so it never waits on the new project's install; the first Fabric
+  // call may pop an interactive consent window for the write scope. Builds the
+  // seed chat prompt and stashes it (`migratePromptRef`) to drop into the chat
+  // once the flow reaches deploy. Returns an error string (fetch failed, create
+  // screen shows it + offers retry) or null on success.
+  const fetchMigrateReportCode = useCallback(
+    async (
+      project: StudioProject,
+      onProgress: (phase: MigratePhase, detail: string, status?: MigrateSubStatus) => void
+    ): Promise<string | null> => {
+      if (!migrateSel) return 'No report selected to migrate.'
+      const { workspaceId, report } = migrateSel
+
+      onProgress(
+        'code',
+        "Granting Fabric access & fetching your report's code… a Microsoft sign-in window may open."
+      )
+      const def = await window.api.fabric.reportDefinition(workspaceId, report.id, project.path)
+      if (!def.ok) {
+        return (
+          def.error ??
+          (def.needsLogin
+            ? 'Your Fabric session needs re-authentication — sign in again and retry.'
+            : 'Could not download the report definition.')
+        )
+      }
+      const reportFiles = def.files ?? []
+
+      // Best-effort: download the semantic model (TMDL — where the DAX lives). A
+      // missing reference or cross-workspace model is noted in the summary, not fatal.
+      let modelFiles: string[] = []
+      let modelError: string | undefined
+      if (!def.modelId) {
+        modelError = 'no semantic model reference found in the report'
+      } else {
+        onProgress('code', 'Fetching semantic model code (DAX)…')
+        const model = await window.api.fabric.semanticModelDefinition(
+          workspaceId,
+          def.modelId,
+          project.path
+        )
+        if (model.ok) {
+          modelFiles = model.files ?? []
+        } else {
+          modelError = model.error ?? 'the semantic model could not be downloaded'
+        }
+      }
+
+      const reportSummary = `${reportFiles.length} report file${reportFiles.length === 1 ? '' : 's'}`
+      const modelSummary = modelFiles.length
+        ? `, ${modelFiles.length} model file${modelFiles.length === 1 ? '' : 's'}`
+        : modelError
+          ? ', semantic model skipped'
+          : ''
+      onProgress('code', `${reportSummary}${modelSummary}`, 'done')
+
+      // Capture each report page as an image so the agent has a pixel-accurate
+      // visual reference alongside the PBIR. Best-effort: image export is
+      // tenant-blocked on many tenants (so we export a PDF and rasterize it with
+      // pdf.js), and PDF export needs a capacity-backed workspace + a signed-in
+      // `az`. A real failure is surfaced to the user as a visible (red) sub-step
+      // but never blocks the migration — the app is still built from the PBIR.
+      let pageShots: PendingShot[] = []
+      onProgress('pages', 'Exporting the report to PDF…')
+      try {
+        const pdf = await window.api.fabric.exportReportPdf(workspaceId, report.id, project.path)
+        if (pdf.ok && pdf.pdfBase64) {
+          onProgress('pages', 'Rendering report pages to images…')
+          pageShots = await renderPdfToShots(pdf.pdfBase64, project.path)
+          if (pageShots.length) {
+            onProgress(
+              'pages',
+              `${pageShots.length} page image${pageShots.length === 1 ? '' : 's'} captured`,
+              'done'
+            )
+          } else {
+            onProgress('pages', 'Export succeeded but had no visible pages to capture.', 'skipped')
+          }
+        } else {
+          const why = pdf.error ?? 'the Power BI export API was unavailable'
+          const cta = pdf.needsLogin
+            ? ' Run `az login`, then re-run the migration to capture the report pages.'
+            : ''
+          onProgress(
+            'pages',
+            `Couldn't export the report to PDF — continuing without page images. (${why})${cta}`,
+            'error'
+          )
+        }
+      } catch (e) {
+        onProgress(
+          'pages',
+          "Couldn't export the report to PDF — continuing without page images. " +
+            `(${e instanceof Error ? e.message : String(e)})`,
+          'error'
+        )
+      }
+
+      const reportList = reportFiles.map((f) => `- source-report/${f}`).join('\n')
+      const modelList = modelFiles.map((f) => `- source-model/${f}`).join('\n')
+
+      // The app should CONNECT to the report's existing Fabric semantic model and
+      // query it live — never copy or reload the data, and never recreate the model
+      // as Rayfin `data` entities. The TMDL in source-model/ is the schema + DAX
+      // *reference* (metadata, not data). Hand the agent the model's coordinates
+      // (workspace + dataset id) so it can wire a live DAX query path.
+      const modelSection = modelList
+        ? '\n\nThis report is powered by an **existing Fabric semantic model** ' +
+          `(workspace \`${workspaceId}\`, dataset \`${def.modelId}\`). Its definition — ` +
+          'tables, relationships, and the DAX measures — is in the `source-model/` folder as ' +
+          `TMDL (schema/metadata, not data):\n\n${modelList}\n\n` +
+          "**Use that semantic model as the app's data source: connect to it and query it live " +
+          "(via the Fabric DAX `executeQueries` REST endpoint, authenticated with the app's " +
+          'Fabric brokered auth). Do NOT import, copy, or duplicate the data, and do NOT ' +
+          'recreate the model as Rayfin `data` entities — the data stays in the semantic model ' +
+          'and the app reads it on demand.** Reuse the exact DAX measure names from the TMDL so ' +
+          'the numbers match the original report. You can disable the `data` service in ' +
+          "`rayfin/rayfin.yml` since you won't be provisioning a separate database."
+        : def.modelId
+          ? '\n\nThis report is powered by an existing Fabric semantic model ' +
+            `(workspace \`${workspaceId}\`, dataset \`${def.modelId}\`), but I couldn't download ` +
+            `its TMDL definition (${modelError ?? 'unknown reason'}). Still, wire the app to query ` +
+            'that model live via the Fabric DAX `executeQueries` endpoint rather than copying data.'
+          : "\n\nNote: I couldn't resolve the semantic model this report is bound to " +
+            `(${modelError ?? 'no model reference found'}). Tell me the workspace + dataset id and ` +
+            "I'll wire the app to query it — we should read from the existing model, not copy data."
+
+      // The report pages are persisted as images in `source-report/pages/` (and
+      // attached to this turn). Point the agent at them + the migrate skill so it
+      // treats the report's look as the design direction, up front.
+      const pageCount = pageShots.length
+      const pagesSection = pageCount
+        ? '\n\nEach page of the report has been rendered to an image in the ' +
+          `\`source-report/pages/\` folder (\`page-01.png\`${pageCount > 1 ? `…\`page-${String(pageCount).padStart(2, '0')}.png\`` : ''}), ` +
+          'and the same images are attached to this message. They are your visual ground ' +
+          "truth for the report's look and feel — open them and study the layout and grid, colour " +
+          'palette, typography, spacing, chart types, and overall styling. ' +
+          '(`source-report/report.pdf` is the full-resolution original if you need it.) ' +
+          '**This is a migration, so the report\'s existing look IS the design direction.** Before ' +
+          'applying the default theming guidance in `build-workflow`/`app-design`, read and follow ' +
+          '`.agents/skills/match-source-report/SKILL.md` — for a migration you establish the ' +
+          "report's palette, typography, and layout up front (in `src/global.css`) rather than " +
+          'picking a default and deferring theming, so the app closely matches the original report ' +
+          '(within what the Rayfin component set allows).'
+        : '\n\n**This is a migration, so the report\'s existing look IS the design direction.** Before ' +
+          'applying the default theming guidance in `build-workflow`/`app-design`, read and follow ' +
+          '`.agents/skills/match-source-report/SKILL.md` and match the report\'s palette, typography, ' +
+          'and layout from its `source-report/` definition.'
+
+      const prompt =
+        `I've imported a Power BI report ("${report.displayName}") from Fabric workspace ` +
+        `\`${workspaceId}\`. Its definition files are in the \`source-report/\` folder:\n\n` +
+        `${reportList}\n\n` +
+        "These describe the report's pages, visuals, and layout — use them as the spec for the " +
+        "app's UI." +
+        modelSection +
+        pagesSection +
+        '\n\nPlease read everything, then help me rebuild this as a Rayfin Data App that reads ' +
+        'from the existing semantic model. Start by summarizing the report (pages, visuals, key ' +
+        "measures) and proposing a plan. Do not run `npm install` — Fabricator installs the " +
+        "project's dependencies for you."
+      migratePromptRef.current = {
+        id: `migrate-pbi-${Date.now()}`,
+        projectId: project.id,
+        display: `Migrate “${report.displayName}”`,
+        prompt,
+        // Auto-submit once the first deploy clears the chat gate: the user lands
+        // in chat and the migrate prompt sends itself (staged in the composer
+        // meanwhile so they can see what's going out).
+        autoSend: true,
+        attachments: pageShots
+      }
+
+      return null
+    },
+    [migrateSel]
+  )
+
+  // Undo a migrate project (delete its files) when the user cancels the flow, so
+  // no empty scaffold is left cluttering the workspace / colliding on retry.
+  const rollbackMigrateProject = useCallback(
+    async (project: StudioProject): Promise<void> => {
+      try {
+        await window.api.projects.remove(project.id, true)
+      } catch {
+        // best-effort cleanup; ignore
+      }
+      await refreshProjects()
+    },
+    [refreshProjects]
+  )
+
+  // Drop the stashed migrate prompt into the chat (once the create → fetch →
+  // deploy flow finishes) and clear the migrate selection. A no-op for the normal
+  // create flow (nothing stashed).
+  const seedMigrateChat = useCallback((): void => {
+    const pending = migratePromptRef.current
+    migratePromptRef.current = null
+    setMigrateSel(null)
+    if (pending) setChatOutbound(pending)
+  }, [])
+
   useEffect(() => {
     const id = projects?.activeProjectId
     if (!id) {
@@ -869,8 +1097,23 @@ export default function Workbench({
         <CreateProjectScreen
           mode={createMode}
           projectName={active?.name}
+          migrate={
+            migrateSel
+              ? {
+                  projectName: migrateSel.report.displayName,
+                  onFetchReportCode: fetchMigrateReportCode,
+                  onRollback: rollbackMigrateProject
+                }
+              : undefined
+          }
           deploying={Boolean(active && deploys[active.id]?.running)}
-          onCancel={() => setCreateMode(null)}
+          onCancel={() => {
+            if (migrateSel) {
+              migratePromptRef.current = null
+              setMigrateSel(null)
+            }
+            setCreateMode(null)
+          }}
           onCreated={() => void refreshProjects()}
           onSignedIn={() => void onAuthChanged()}
           onDeploy={(depName, workspaceId) => {
@@ -881,6 +1124,7 @@ export default function Workbench({
             const projectId = active.id
             setCreateMode(null)
             setViewMode('build')
+            seedMigrateChat()
             void (async () => {
               try {
                 await window.api.deploy.setName(projectId, workspaceId, depName)
@@ -890,7 +1134,11 @@ export default function Workbench({
               await requestUserDeploy(projectId, workspaceId)
             })()
           }}
-          onContinueWithoutDeploy={() => setCreateMode(null)}
+          onContinueWithoutDeploy={() => {
+            setViewMode('build')
+            seedMigrateChat()
+            setCreateMode(null)
+          }}
         />
       ) : (
         <div className="workbench">
@@ -1138,6 +1386,7 @@ export default function Workbench({
                   onNewProject={() => setCreateMode('create')}
                   onOpenExisting={openExisting}
                   onCloneFromGitHub={() => setShowClone(true)}
+                  onMigratePowerBIReport={() => setShowMigratePbi(true)}
                   onChangeWorkspaceRoot={changeWorkspaceRoot}
                 />
               </>
@@ -1221,6 +1470,18 @@ export default function Workbench({
           project={confirmDelete}
           onRemoved={(next) => setProjects(next)}
           onClose={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {showMigratePbi && (
+        <MigratePowerBIReportModal
+          onClose={() => setShowMigratePbi(false)}
+          onSelect={(workspaceId, report) => {
+            setShowMigratePbi(false)
+            migratePromptRef.current = null
+            setMigrateSel({ workspaceId, report })
+            setCreateMode('create')
+          }}
         />
       )}
 

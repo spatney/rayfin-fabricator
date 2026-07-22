@@ -1,6 +1,6 @@
 import type { StudioProject } from '@shared/ipc'
 import { FabricatorMark } from './FabricatorMark'
-import { AddIcon, BranchIcon, FolderIcon, GearIcon } from './icons'
+import { AddIcon, BranchIcon, FolderIcon, GearIcon, ReportIcon } from './icons'
 
 interface Props {
   /** All known projects, most-recently-used first. */
@@ -19,6 +19,8 @@ interface Props {
   onOpenExisting: () => void
   /** Start the sign-in/browse/clone flow. */
   onCloneFromGitHub: () => void
+  /** Open the "pick a workspace, then a report" Power BI migration flow. */
+  onMigratePowerBIReport: () => void
   onChangeWorkspaceRoot: () => void
 }
 
@@ -33,6 +35,7 @@ export default function HomeView({
   onNewProject,
   onOpenExisting,
   onCloneFromGitHub,
+  onMigratePowerBIReport,
   onChangeWorkspaceRoot
 }: Props): JSX.Element {
   const projectCount = `${projects.length} project${projects.length === 1 ? '' : 's'}`
@@ -88,6 +91,15 @@ export default function HomeView({
               <span className="home-action-text">
                 <span className="home-action-label">Clone from GitHub</span>
                 <span className="home-action-hint">Bring a repository into Fabricator</span>
+              </span>
+            </button>
+            <button type="button" className="home-action" onClick={onMigratePowerBIReport}>
+              <span className="home-action-icon" aria-hidden="true">
+                <ReportIcon className="home-action-svg" />
+              </span>
+              <span className="home-action-text">
+                <span className="home-action-label">Migrate Power BI Report</span>
+                <span className="home-action-hint">Bring a Power BI report into Fabricator</span>
               </span>
             </button>
           </div>

@@ -157,6 +157,12 @@ pub fn run() {
       commands::github::github_clone,
       // fabric
       commands::fabric::fabric_workspaces,
+      commands::fabric::fabric_reports,
+      commands::fabric::fabric_report_definition,
+      commands::fabric::fabric_export_report_pdf,
+      commands::fabric::fabric_save_report_pages,
+      commands::fabric::fabric_semantic_model_definition,
+      commands::fabric::fabric_sign_in,
       commands::fabric::fabric_capacities,
       commands::fabric::fabric_create_workspace,
       commands::fabric::fabric_delete_apps,
