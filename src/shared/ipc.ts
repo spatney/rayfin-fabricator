@@ -11,8 +11,14 @@ export interface AppVersions {
   app: string
   tauri: string
   webview2: string
-  /** Bundled GitHub Copilot CLI version, or null if unavailable. */
+  /** GitHub Copilot CLI version actually running (self-reported), or null. */
   copilot: string | null
+  /**
+   * The SDK's pinned bundled CLI version (from the install dir). The CLI
+   * self-updates past this, so it can be older than `copilot`; surfaced only
+   * to disambiguate the two. Absent when it can't be determined.
+   */
+  copilotBundled?: string | null
 }
 
 /** An available application update (mirrors the Rust `UpdateInfo`). */

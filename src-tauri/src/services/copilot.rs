@@ -552,6 +552,17 @@ pub async fn bundled_cli_version() -> Option<String> {
     .clone()
 }
 
+/// The SDK's *pinned* bundled CLI version, read from the install directory name
+/// (`.../github-copilot-sdk/cli/<version>/copilot[.exe]`). This is what the SDK
+/// baked in at build time — the floor the CLI self-updates from — so it can lag
+/// the running binary's self-reported `--version` (see [`bundled_cli_version`]).
+/// `None` when the platform isn't bundled or the path carries no version.
+pub fn bundled_cli_pinned_version() -> Option<String> {
+  let path = bundled_cli_path()?;
+  let name = path.parent()?.file_name()?.to_string_lossy().to_string();
+  (!name.is_empty() && name != "unversioned").then_some(name)
+}
+
 /// Pull a clean semver-ish token out of `copilot --version` output such as
 /// `"GitHub Copilot CLI 1.0.64-3.\nRun 'copilot update'…"`.
 fn parse_cli_version(raw: &str) -> Option<String> {

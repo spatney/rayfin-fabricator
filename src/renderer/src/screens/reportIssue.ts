@@ -1,4 +1,5 @@
 import type { AppVersions, RayfinStudioApi } from '@shared/ipc'
+import { formatCopilotCli } from '../copilotVersion'
 
 const REPO_URL = 'https://github.com/spatney/rayfin-fabricator'
 
@@ -25,7 +26,7 @@ export function buildReportIssueUrl(
     `- App: Fabricator ${versions?.app ?? 'unknown'}`,
     `- Tauri: ${versions?.tauri ?? 'unknown'}`,
     `- WebView2: ${versions?.webview2 ?? 'unknown'}`,
-    `- Copilot CLI: ${versions?.copilot ?? 'unknown'}`,
+    `- Copilot CLI: ${formatCopilotCli(versions)}`,
     `- User agent: ${userAgent}`,
     ...(bundlePath
       ? [

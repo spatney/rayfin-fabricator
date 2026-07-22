@@ -15,9 +15,16 @@ pub struct AppVersions {
   pub tauri: String,
   /// WebView2 runtime version on Windows (the embedded browser engine).
   pub webview2: String,
-  /// The bundled GitHub Copilot CLI version (self-reported via `--version`).
-  /// `None` if the platform isn't bundled or the probe failed.
+  /// The GitHub Copilot CLI version actually running, self-reported via
+  /// `--version`. The CLI self-updates past the SDK's bundled pin, so this can
+  /// be newer than `copilot_bundled`. `None` if the platform isn't bundled or
+  /// the probe failed.
   pub copilot: Option<String>,
+  /// The SDK's *pinned* bundled CLI version (from the install dir). The renderer
+  /// shows it alongside `copilot` when the two differ. Omitted when it can't be
+  /// determined (e.g. the platform isn't bundled).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub copilot_bundled: Option<String>,
 }
 
 /* ----------------------------- updates ----------------------------- */

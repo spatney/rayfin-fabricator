@@ -4,6 +4,7 @@ import { applyTheme, applyUiScale, UI_SCALES } from '../theme'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { useUpdates } from '../update'
+import { formatCopilotCli } from '../copilotVersion'
 import ConfirmModal from './ConfirmModal'
 
 interface Props {
@@ -312,7 +313,7 @@ export default function SettingsModal({
           <div className="modal-footer settings-footer">
             <span className="settings-version">
               {versions
-                ? `Fabricator ${versions.app} · Tauri ${versions.tauri} · WebView2 ${versions.webview2} · Copilot CLI ${versions.copilot ?? 'unknown'}`
+                ? `Fabricator ${versions.app} · Tauri ${versions.tauri} · WebView2 ${versions.webview2} · Copilot CLI ${formatCopilotCli(versions)}`
                 : ''}
             </span>
             <button className="btn btn--primary" onClick={onClose}>
