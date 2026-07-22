@@ -880,6 +880,11 @@ export default function Workbench({
   // project is only closed when a different one is opened from the launcher.
   function goHome(): void {
     setNotice(null)
+    // Clear the create/clone overlays too — they render on top of the workbench,
+    // so leaving them set would make the nav rail appear dead (the launcher would
+    // never surface). This is what lets "Projects" reliably return from "New".
+    setCreateMode(null)
+    setShowClone(false)
     setShowHome(true)
   }
 
@@ -988,8 +993,11 @@ export default function Workbench({
           <div className="nav-rail-group">
             <button
               type="button"
-              className="nav-item"
-              onClick={() => setCreateMode('create')}
+              className={`nav-item${createMode === 'create' ? ' nav-item--active' : ''}`}
+              onClick={() => {
+                setShowClone(false)
+                setCreateMode('create')
+              }}
               title="New project"
               aria-label="New project"
             >
