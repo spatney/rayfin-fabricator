@@ -36,13 +36,12 @@ pub struct AppState {
 pub struct TurnRoute {
   pub project_id: String,
   pub turn_id: String,
-  /// Whether this turn was started in Plan mode. `ask_user` questions are only
-  /// surfaced as `plan-question` (routed into the renderer's Plan artifact) when
-  /// this is `true` — an Agent-mode question has no Plan card to attach to, and
-  /// emitting one would draw a misleading "before drafting" card. Stays `true`
-  /// for the lifetime of this route, including through an approved Plan
-  /// continuation (e.g. into Autopilot), since the route isn't replaced until
-  /// the turn ends.
+  /// Whether this turn was started in Plan mode. Determines how an `ask_user`
+  /// question is surfaced: Plan-mode turns route it into the Plan artifact
+  /// (`plan-question`), Agent-mode turns surface it as a standalone question
+  /// card (`agent-question`). Stays fixed for the lifetime of this route,
+  /// including through an approved Plan continuation (e.g. into Autopilot),
+  /// since the route isn't replaced until the turn ends.
   pub plan_context: bool,
 }
 

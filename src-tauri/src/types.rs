@@ -889,12 +889,27 @@ pub enum ChatEvent {
     allow_freeform: bool,
   },
   /// A previously-asked question was resolved (so its card can dismiss itself).
+  /// Shared by both Plan-mode and Agent-mode questions (routed by `request_id`).
   #[serde(rename = "plan-question-resolved")]
   PlanQuestionResolved {
     #[serde(rename = "requestId")]
     request_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     answer: Option<String>,
+  },
+  /// The `ask_user` tool asked a structured question during an **Agent-mode**
+  /// turn (no Plan artifact to attach to). Rendered as a standalone question
+  /// card on the assistant turn; answered via `chat_resolve_question`, the same
+  /// path Plan-mode questions use.
+  #[serde(rename = "agent-question")]
+  AgentQuestion {
+    #[serde(rename = "requestId")]
+    request_id: String,
+    question: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    choices: Option<Vec<String>>,
+    #[serde(rename = "allowFreeform")]
+    allow_freeform: bool,
   },
 }
 
@@ -981,6 +996,12 @@ pub struct ChatMessage {
   /// transcript can re-render its proposed/resolved state.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub plan: Option<ChatPlanArtifact>,
+  /// Standalone clarifying questions raised by the `ask_user` tool during an
+  /// Agent-mode turn (no Plan artifact). Retained so a reloaded transcript can
+  /// re-render the exchange; must round-trip through this DTO or it is dropped
+  /// when the renderer persists history.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub questions: Option<Vec<ChatPlanQuestion>>,
 }
 
 /* ----------------------------- rayfin versions ----------------------------- */
@@ -1316,6 +1337,35 @@ mod tests {
   }
 
   #[test]
+  fn agent_question_event_uses_camelcase_field_names() {
+    let event = ChatEvent::AgentQuestion {
+      request_id: "req-2".into(),
+      question: "What theme?".into(),
+      choices: Some(vec!["Light".into(), "Dark".into()]),
+      allow_freeform: false,
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "agent-question");
+    assert_eq!(json["requestId"], "req-2");
+    assert_eq!(json["allowFreeform"], false);
+    assert_eq!(json["choices"][1], "Dark");
+  }
+
+  #[test]
+  fn agent_question_event_omits_absent_choices() {
+    let event = ChatEvent::AgentQuestion {
+      request_id: "req-3".into(),
+      question: "Describe the tone.".into(),
+      choices: None,
+      allow_freeform: true,
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "agent-question");
+    assert!(json.get("choices").is_none());
+    assert_eq!(json["allowFreeform"], true);
+  }
+
+  #[test]
   fn chat_message_round_trips_with_plan_artifact() {
     let msg = ChatMessage {
       id: "m1".into(),
@@ -1357,6 +1407,7 @@ mod tests {
         error: None,
         live_request_id: Some("req-1".into()),
       }),
+      questions: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
     let back: ChatMessage = serde_json::from_str(&json).unwrap();
@@ -1365,6 +1416,39 @@ mod tests {
     assert_eq!(plan.todos[0].id, "t1");
     assert_eq!(plan.questions[0].id, "q1");
     assert!(plan.dependencies.is_empty());
+  }
+
+  #[test]
+  fn chat_message_round_trips_standalone_agent_questions() {
+    let msg = ChatMessage {
+      id: "m1".into(),
+      role: "assistant".into(),
+      text: "".into(),
+      tools: vec![],
+      segments: None,
+      error: None,
+      attachments: None,
+      attachment_thumbs: None,
+      kind: None,
+      interrupted: None,
+      plan: None,
+      questions: Some(vec![ChatPlanQuestion {
+        id: "q1".into(),
+        question: "Which theme?".into(),
+        choices: Some(vec!["Light".into(), "Dark".into()]),
+        allow_freeform: false,
+        state: "answered".into(),
+        answer: Some("Dark".into()),
+        was_freeform: Some(false),
+      }]),
+    };
+    let json = serde_json::to_string(&msg).unwrap();
+    let back: ChatMessage = serde_json::from_str(&json).unwrap();
+    let questions = back.questions.expect("standalone questions round-trip");
+    assert_eq!(questions[0].id, "q1");
+    assert_eq!(questions[0].state, "answered");
+    assert_eq!(questions[0].answer.as_deref(), Some("Dark"));
+    assert!(back.plan.is_none());
   }
 
   #[test]

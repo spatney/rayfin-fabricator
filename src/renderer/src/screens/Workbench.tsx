@@ -61,7 +61,16 @@ function avatarInitials(email: string | null | undefined): string {
 
 /** Hydrate a persisted message into a live (non-pending) UI message. */
 function toUi(m: ChatMessage): UIChatMessage {
-  return { ...m, plan: planFromStorage(m.plan), pending: false }
+  return {
+    ...m,
+    plan: planFromStorage(m.plan),
+    // A standalone question left pending at persist time can't be answered on a
+    // reloaded transcript (its turn/session is gone) — show it as interrupted.
+    questions: m.questions?.map((q) =>
+      q.state === 'pending' ? { ...q, state: 'interrupted' } : q
+    ),
+    pending: false
+  }
 }
 
 /** Strip transient fields (turnId, pending) before persisting to disk. A turn
@@ -82,7 +91,8 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       pending,
       interrupted,
       elapsedMs,
-      plan
+      plan,
+      questions
     }) => {
       const cutOff = (role === 'assistant' && pending) || interrupted
       return {
@@ -100,6 +110,11 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         attachmentThumbs,
         elapsedMs,
         plan: planForStorage(plan, Boolean(cutOff)),
+        // Mirror plan-question handling: a question still pending when the turn
+        // was cut off can never be answered, so persist it as interrupted.
+        questions: cutOff
+          ? questions?.map((q) => (q.state === 'pending' ? { ...q, state: 'interrupted' } : q))
+          : questions,
         interrupted: cutOff ? true : undefined
       }
     }

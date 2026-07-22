@@ -15,6 +15,7 @@ import {
   type ChatMessage,
   type ChatMode,
   type ChatPlanArtifact,
+  type ChatPlanQuestion,
   type ChatSegment,
   type ChatToolCall,
   type ChatTurnResult,
@@ -42,6 +43,7 @@ import {
 } from './icons'
 import { FabricatorMark } from './FabricatorMark'
 import PlanCard from './PlanCard'
+import PlanQuestionCard from './PlanQuestionCard'
 import {
   buildRecoveredPlanPrompt,
   createPlanArtifact,
@@ -66,6 +68,8 @@ export interface UIChatMessage extends ChatMessage {
   startedAt?: number
   /** Transient status note (e.g. a transient-failure retry); not persisted. */
   notice?: string
+  /** Transient error from answering a standalone Agent-mode question; not persisted. */
+  questionError?: string
 }
 
 /**
@@ -1131,9 +1135,35 @@ export function reduceChatMessage(msg: UIChatMessage, ev: ChatEvent): UIChatMess
     case 'plan-content':
     case 'plan-todos':
     case 'plan-question':
-    case 'plan-question-resolved':
       next = { ...msg, notice: undefined }
       break
+    case 'agent-question': {
+      // A standalone `ask_user` question from an Agent-mode turn (no Plan card).
+      const question: ChatPlanQuestion = {
+        id: ev.requestId,
+        question: ev.question,
+        choices: ev.choices,
+        allowFreeform: ev.allowFreeform,
+        state: 'pending'
+      }
+      const existing = msg.questions ?? []
+      const idx = existing.findIndex((item) => item.id === ev.requestId)
+      const questions =
+        idx < 0 ? [...existing, question] : existing.map((item, i) => (i === idx ? question : item))
+      next = { ...msg, questions, questionError: undefined, notice: undefined }
+      break
+    }
+    case 'plan-question-resolved': {
+      // Mark a standalone (Agent-mode) question answered; a Plan-mode question
+      // with the same id is handled by reducePlanEvent below.
+      const questions = msg.questions?.map((item) =>
+        item.id === ev.requestId
+          ? { ...item, state: 'answered' as const, answer: ev.answer ?? item.answer }
+          : item
+      )
+      next = { ...msg, questions: questions ?? msg.questions, notice: undefined }
+      break
+    }
     default:
       next = msg
   }
@@ -1216,6 +1246,7 @@ const MessageRow = memo(function MessageRow({
   canResume,
   onResume,
   planBusy,
+  questionBusy,
   onChangePlanContent,
   onResolvePlan,
   onAnswerPlanQuestion,
@@ -1231,6 +1262,7 @@ const MessageRow = memo(function MessageRow({
   canResume: boolean
   onResume: (id: string) => void
   planBusy: boolean
+  questionBusy: boolean
   onChangePlanContent: (msgId: string, content: string) => void
   onResolvePlan: (msgId: string, action: string, feedback?: string) => void
   onAnswerPlanQuestion: (
@@ -1294,6 +1326,28 @@ const MessageRow = memo(function MessageRow({
             onResume={(kind, action, feedback) => onResumePlan(m.id, kind, action, feedback)}
             onExport={(content) => onExportPlan(m.id, content)}
           />
+        )}
+        {m.questions && m.questions.length > 0 && (
+          <div className="chat-agent-questions">
+            <div className="chat-agent-questions-head">
+              <Codicon name="comment-discussion" /> Fabricator needs your input
+            </div>
+            {m.questions.map((q) => (
+              <PlanQuestionCard
+                key={q.id}
+                question={q}
+                busy={questionBusy}
+                onAnswer={(requestId, answer, wasFreeform) =>
+                  onAnswerPlanQuestion(m.id, requestId, answer, wasFreeform)
+                }
+              />
+            ))}
+            {m.questionError && (
+              <div className="chat-agent-questions-error">
+                <Codicon name="warning" /> {m.questionError}
+              </div>
+            )}
+          </div>
         )}
         {m.attachmentThumbs && m.attachmentThumbs.length > 0 ? (
           <div className="msg-shots">
@@ -1933,15 +1987,26 @@ export default function ChatPanel({
         .find(
           (message) =>
             message.pending &&
-            message.plan?.questions.some((question) => question.state === 'pending')
+            (message.plan?.questions.some((question) => question.state === 'pending') ||
+              message.questions?.some((question) => question.state === 'pending'))
         )
-      const question = awaiting?.plan?.questions.find((item) => item.state === 'pending')
+      const question =
+        awaiting?.plan?.questions.find((item) => item.state === 'pending') ??
+        awaiting?.questions?.find((item) => item.state === 'pending')
       if (awaiting && question) {
         if (!question.allowFreeform) {
-          changePlan(awaiting.id, (plan) => ({
-            ...plan,
-            error: 'Choose one of the available answers before planning can continue.'
-          }))
+          const errText = awaiting.plan
+            ? 'Choose one of the available answers before planning can continue.'
+            : 'Choose one of the available answers to continue.'
+          if (awaiting.plan) {
+            changePlan(awaiting.id, (plan) => ({ ...plan, error: errText }))
+          } else {
+            onChange((prev) =>
+              prev.map((message) =>
+                message.id === awaiting.id ? { ...message, questionError: errText } : message
+              )
+            )
+          }
           return
         }
         setInput('')
@@ -2207,24 +2272,60 @@ export default function ChatPanel({
     answer: string,
     wasFreeform: boolean
   ): Promise<void> {
-    const plan = messages.find((message) => message.id === msgId)?.plan
-    if (!plan || planBusyId === plan.id) return
-    setPlanBusyId(plan.id)
+    const message = messages.find((item) => item.id === msgId)
+    if (!message) return
+    const inPlan = message.plan?.questions.some((q) => q.id === requestId) ?? false
+    const inStandalone = message.questions?.some((q) => q.id === requestId) ?? false
+    if (!inPlan && !inStandalone) return
+    // Plan questions track busy by the plan id; standalone questions by the
+    // message id (plan ids are `plan-${msgId}`, so the two never collide).
+    const busyKey = inPlan ? message.plan!.id : msgId
+    if (planBusyId === busyKey) return
+    setPlanBusyId(busyKey)
     try {
       await window.api.chat.resolveQuestion(requestId, answer, wasFreeform)
-      changePlan(msgId, (current) => ({
-        ...current,
-        phase: current.content ? 'drafting' : 'researching',
-        error: undefined,
-        questions: current.questions.map((question) =>
-          question.id === requestId
-            ? { ...question, state: 'answered', answer, wasFreeform }
-            : question
-        )
-      }))
+      onChange((prev) =>
+        prev.map((item) => {
+          if (item.id !== msgId) return item
+          let updated = item
+          if (item.plan?.questions.some((q) => q.id === requestId)) {
+            updated = {
+              ...updated,
+              plan: {
+                ...item.plan,
+                phase: item.plan.content ? 'drafting' : 'researching',
+                error: undefined,
+                questions: item.plan.questions.map((question) =>
+                  question.id === requestId
+                    ? { ...question, state: 'answered', answer, wasFreeform }
+                    : question
+                )
+              }
+            }
+          }
+          if (item.questions?.some((q) => q.id === requestId)) {
+            updated = {
+              ...updated,
+              questionError: undefined,
+              questions: item.questions.map((question) =>
+                question.id === requestId
+                  ? { ...question, state: 'answered', answer, wasFreeform }
+                  : question
+              )
+            }
+          }
+          return updated
+        })
+      )
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err)
-      changePlan(msgId, (current) => ({ ...current, error }))
+      if (inPlan) {
+        changePlan(msgId, (current) => ({ ...current, error }))
+      } else {
+        onChange((prev) =>
+          prev.map((item) => (item.id === msgId ? { ...item, questionError: error } : item))
+        )
+      }
     } finally {
       setPlanBusyId(null)
     }
@@ -2471,6 +2572,7 @@ export default function ChatPanel({
             canResume={canResume}
             onResume={onResume}
             planBusy={m.plan?.id === planBusyId}
+            questionBusy={planBusyId === m.id}
             onChangePlanContent={onChangePlanContent}
             onResolvePlan={onResolvePlan}
             onAnswerPlanQuestion={onAnswerPlanQuestion}

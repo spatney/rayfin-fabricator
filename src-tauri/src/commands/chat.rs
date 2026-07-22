@@ -660,12 +660,12 @@ pub(crate) async fn run_turn(
   }
 
   // Point the plan handler at this turn's UI for the duration of the turn.
-  // `plan_context` records whether this turn was started in Plan mode: an
-  // Agent-mode `ask_user` question has no Plan card to attach to, so
-  // `UserInputHandler` uses this to skip emitting `plan-question` for those.
-  // It stays fixed for the whole route (i.e. through an approved Plan
-  // continuation into Autopilot/Interactive), since the route isn't replaced
-  // again until the turn ends.
+  // `plan_context` records whether this turn was started in Plan mode:
+  // `UserInputHandler` uses it to route an `ask_user` question into the Plan
+  // artifact (`plan-question`) for Plan-mode turns, or a standalone question
+  // card (`agent-question`) for Agent-mode turns. It stays fixed for the whole
+  // route (i.e. through an approved Plan continuation into Autopilot/Interactive),
+  // since the route isn't replaced again until the turn ends.
   let session_key = ctx_info.session_id.clone();
   let plan_context = mode.as_deref() == Some("plan");
   state.plan.set_route(

@@ -151,12 +151,12 @@ async fn apply_options(
 /// SDK invokes [`handle`](ExitPlanModeHandler::handle): we emit a `plan-proposed`
 /// chat event to the active turn's conversation, then block on a oneshot until
 /// the user picks an action (via `chat_resolve_plan`) or the turn ends. The same
-/// bridge answers `ask_user` questions via [`UserInputHandler`], but only for
-/// turns that started in Plan mode (`TurnRoute::plan_context`) — an Agent-mode
-/// question has no Plan card to attach to, so it's answered with `None`
-/// (declining to bridge it) rather than surfacing a misleading Plan-artifact
-/// card. When bridged, it emits `plan-question` and blocks until
-/// `chat_resolve_question` answers it or the turn ends.
+/// bridge answers `ask_user` questions via [`UserInputHandler`]. Plan-mode
+/// turns (`TurnRoute::plan_context`) surface the question inside their Plan
+/// artifact (`plan-question`); Agent-mode turns have no Plan card, so they
+/// surface it as a standalone question card (`agent-question`). Either way it
+/// emits the event and blocks until `chat_resolve_question` answers it or the
+/// turn ends.
 pub struct PlanModeHandler {
   app: AppHandle,
   gate: Arc<PlanGate>,
@@ -210,23 +210,22 @@ impl UserInputHandler for PlanModeHandler {
   ) -> Option<UserInputResponse> {
     // No active turn for this session → no answer available.
     let route = self.gate.route(session_id.as_str())?;
-    // Agent-mode questions have no Plan card to attach to — surfacing one as
-    // `plan-question` would draw a misleading "before drafting" card in the
-    // renderer's Plan artifact. Only bridge `ask_user` for turns that started
-    // in Plan mode (this stays true through an approved Plan continuation).
-    if !route.plan_context {
-      return None;
-    }
     // The CLI's `allowFreeform` is optional on the wire; default to allowed.
     let allow_freeform = allow_freeform.unwrap_or(true);
     let request_id = uuid::Uuid::new_v4().to_string();
     let rx = self.gate.register_pending_question(session_id.as_str(), &request_id, allow_freeform);
-    emit_chat_event(
-      &self.app,
-      &route.project_id,
-      &route.turn_id,
-      ChatEvent::PlanQuestion { request_id, question, choices, allow_freeform },
-    );
+    // Plan-mode questions attach to the turn's Plan artifact card; Agent-mode
+    // questions have no Plan card, so they surface as a standalone question card
+    // (`agent-question`). Both block on the same gate and are answered by
+    // `chat_resolve_question` (routed by `request_id`), so declining to bridge an
+    // Agent-mode question — which left `ask_user` resolving to "no response" and
+    // the agent guessing — is no longer necessary.
+    let event = if route.plan_context {
+      ChatEvent::PlanQuestion { request_id, question, choices, allow_freeform }
+    } else {
+      ChatEvent::AgentQuestion { request_id, question, choices, allow_freeform }
+    };
+    emit_chat_event(&self.app, &route.project_id, &route.turn_id, event);
     // Block until the user answers (via `chat_resolve_question`) or the turn
     // ends and the sender is dropped/rejected, which we treat as "no answer".
     rx.await.ok().flatten()

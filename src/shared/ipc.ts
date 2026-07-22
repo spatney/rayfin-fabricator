@@ -905,6 +905,13 @@ export type ChatEvent =
       allowFreeform: boolean
     }
   | { type: 'plan-question-resolved'; requestId: string; answer?: string }
+  | {
+      type: 'agent-question'
+      requestId: string
+      question: string
+      choices?: string[]
+      allowFreeform: boolean
+    }
 
 /** Envelope so the renderer can route events to the right project's conversation. */
 export interface ChatEventEnvelope {
@@ -1213,6 +1220,12 @@ export interface ChatMessage {
   elapsedMs?: number
   /** Durable Plan-mode artifact owned by this assistant turn, when present. */
   plan?: ChatPlanArtifact
+  /**
+   * Standalone clarifying questions raised by the `ask_user` tool during an
+   * Agent-mode turn (no Plan artifact). Rendered as inline question cards on
+   * this assistant turn and answered via `chat_resolve_question`.
+   */
+  questions?: ChatPlanQuestion[]
 }
 
 /* ------------------------------------------------------------------ *

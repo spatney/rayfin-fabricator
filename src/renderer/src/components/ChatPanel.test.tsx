@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ChatEventEnvelope, ChatPlanArtifact } from '@shared/ipc'
+import type { ChatEventEnvelope, ChatPlanArtifact, ChatPlanQuestion } from '@shared/ipc'
 import { makeProject } from '../../test/harness'
-import ChatPanel, { type UIChatMessage } from './ChatPanel'
+import ChatPanel, { reduceChatMessage, type UIChatMessage } from './ChatPanel'
 
 vi.mock('../monaco', () => ({}))
 vi.mock('@monaco-editor/react', () => ({
@@ -412,6 +412,122 @@ describe('ChatPanel Plan lifecycle integration', () => {
     expect(prompt).toContain('next: Remaining step')
     expect(prompt).toContain('done: Finished step')
     expect(prompt).toContain('do not redo')
+  })
+})
+
+/**
+ * Regression: the embedded agent's `ask_user` tool was silently dropped in Agent
+ * mode (the Rust `UserInputHandler` returned `None` when not in Plan mode), so the
+ * tool resolved with "no response" and the user was never prompted. Agent-mode
+ * questions now surface as a standalone question card, answered the same way a
+ * Plan-mode clarifying question is.
+ */
+describe('ChatPanel Agent-mode ask_user questions', () => {
+  function AgentQuestionHarness({ question }: { question: ChatPlanQuestion }): JSX.Element {
+    const [messages, setMessages] = useState<UIChatMessage[]>([
+      { id: 'user-1', role: 'user', text: 'Build the landing page', tools: [], pending: false },
+      { id: 'assistant-1', role: 'assistant', text: '', tools: [], pending: true, questions: [question] }
+    ])
+    return (
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={messages}
+        onChange={(update) => setMessages(update)}
+        draft=""
+        modeSelectorEnabled
+      />
+    )
+  }
+
+  const pendingAssistant: UIChatMessage = {
+    id: 'assistant-1',
+    role: 'assistant',
+    text: '',
+    tools: [],
+    pending: true
+  }
+
+  it('reduceChatMessage surfaces an agent-question as a pending standalone question', () => {
+    const next = reduceChatMessage(pendingAssistant, {
+      type: 'agent-question',
+      requestId: 'q1',
+      question: 'Which theme?',
+      choices: ['Light', 'Dark'],
+      allowFreeform: true
+    })
+    // Agent-mode questions must NOT create a Plan artifact.
+    expect(next.plan).toBeUndefined()
+    expect(next.questions).toEqual([
+      {
+        id: 'q1',
+        question: 'Which theme?',
+        choices: ['Light', 'Dark'],
+        allowFreeform: true,
+        state: 'pending'
+      }
+    ])
+  })
+
+  it('reduceChatMessage marks a standalone question answered on resolution', () => {
+    const asked = reduceChatMessage(pendingAssistant, {
+      type: 'agent-question',
+      requestId: 'q1',
+      question: 'Which theme?',
+      allowFreeform: true
+    })
+    const resolved = reduceChatMessage(asked, {
+      type: 'plan-question-resolved',
+      requestId: 'q1',
+      answer: 'Dark'
+    })
+    expect(resolved.plan).toBeUndefined()
+    expect(resolved.questions?.[0]).toMatchObject({ id: 'q1', state: 'answered', answer: 'Dark' })
+  })
+
+  it('renders a standalone question and answers a preset choice via resolveQuestion', async () => {
+    const api = installApi()
+    render(
+      <AgentQuestionHarness
+        question={{
+          id: 'q1',
+          question: 'Which theme should the site use?',
+          choices: ['Light', 'Dark'],
+          allowFreeform: false,
+          state: 'pending'
+        }}
+      />
+    )
+    expect(screen.getByText('Fabricator needs your input')).toBeTruthy()
+    expect(screen.getByText('Which theme should the site use?')).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Dark' }))
+    })
+
+    expect(api.chat.resolveQuestion).toHaveBeenCalledWith('q1', 'Dark', false)
+  })
+
+  it('answers a standalone question with a free-form reply', async () => {
+    const api = installApi()
+    render(
+      <AgentQuestionHarness
+        question={{
+          id: 'q1',
+          question: 'Describe the tone you want.',
+          allowFreeform: true,
+          state: 'pending'
+        }}
+      />
+    )
+    const box = screen.getByPlaceholderText(/Type an answer/)
+    await act(async () => {
+      fireEvent.change(box, { target: { value: 'Warm and playful' } })
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send answer' }))
+    })
+
+    expect(api.chat.resolveQuestion).toHaveBeenCalledWith('q1', 'Warm and playful', true)
   })
 })
 
