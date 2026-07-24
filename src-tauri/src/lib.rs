@@ -75,6 +75,41 @@ fn apply_compatibility_rendering() {
 #[cfg(not(windows))]
 fn apply_compatibility_rendering() {}
 
+/// Env var the Rayfin CLI reads to permit a plaintext token cache when the OS
+/// credential store is unavailable.
+const RAYFIN_ENCRYPTION_FALLBACK_ENV: &str = "RAYFIN_ENCRYPTION_FALLBACK_ENABLED";
+
+/// Decide what to set [`RAYFIN_ENCRYPTION_FALLBACK_ENV`] to, given whatever the
+/// process already inherited: default it to `"true"` when unset, but never
+/// clobber a value the user set deliberately (either direction). Kept pure so
+/// the policy is unit-tested without mutating global process state.
+fn rayfin_encryption_fallback_value(existing: Option<&str>) -> Option<&'static str> {
+  match existing {
+    Some(_) => None,
+    None => Some("true"),
+  }
+}
+
+/// Let the Rayfin CLI fall back to a plaintext token cache when the OS keychain
+/// (DPAPI on Windows, Keychain on macOS, libsecret on Linux) is unavailable.
+///
+/// By default the CLI *aborts* when it can't reach the credential store —
+/// `createCachePlugin` throws "OS keychain is not available and plaintext token
+/// storage is not enabled". On locked-down machines where the native binding
+/// can't load, that made `rayfin login` — and every silent token read used to
+/// list Fabric workspaces or deploy — fail, so the Sign-in button looked like it
+/// did nothing (issue #17). The CLI still prefers encrypted storage whenever the
+/// keychain works (it only reaches the plaintext branch after the native path
+/// throws), so opting in here is a no-op in the common case and only degrades to
+/// plaintext when there is genuinely no credential store to use. Setting it in
+/// this process propagates to every spawned CLI/auth-helper child.
+fn enable_rayfin_encryption_fallback() {
+  let existing = std::env::var(RAYFIN_ENCRYPTION_FALLBACK_ENV).ok();
+  if let Some(value) = rayfin_encryption_fallback_value(existing.as_deref()) {
+    std::env::set_var(RAYFIN_ENCRYPTION_FALLBACK_ENV, value);
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   services::crashlog::install_panic_hook();
@@ -83,6 +118,11 @@ pub fn run() {
   // macOS app inherits a minimal PATH that omits Homebrew and Node version
   // managers, so the doctor would otherwise report Node/npm/Rayfin CLI as missing.
   services::env_path::repair();
+
+  // Allow the Rayfin CLI to use a plaintext token cache when the OS keychain is
+  // unavailable, so Fabric sign-in works on machines without a usable credential
+  // store (issue #17). Must run before anything spawns the CLI or its helpers.
+  enable_rayfin_encryption_fallback();
 
   // Apply the "compatibility rendering" preference before the webview is created
   // (WebView2 reads this env var at environment creation). Fixes freezing/hangs in
@@ -273,4 +313,24 @@ pub fn run() {
         services::dev_server::kill_all(app);
       }
     });
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn defaults_rayfin_encryption_fallback_on_when_unset() {
+    // Regression for #17: with no inherited value the CLI would abort on
+    // keychain-less machines, so we must default the fallback on.
+    assert_eq!(rayfin_encryption_fallback_value(None), Some("true"));
+  }
+
+  #[test]
+  fn respects_an_explicit_rayfin_encryption_fallback_override() {
+    // A value the user set deliberately (either direction) is left untouched.
+    assert_eq!(rayfin_encryption_fallback_value(Some("true")), None);
+    assert_eq!(rayfin_encryption_fallback_value(Some("false")), None);
+    assert_eq!(rayfin_encryption_fallback_value(Some("")), None);
+  }
 }
