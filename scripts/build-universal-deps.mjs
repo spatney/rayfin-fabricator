@@ -42,7 +42,12 @@ function npm(args, cwd, cacheDir) {
 }
 
 function tarCzf(outFile, cwd, entries) {
-  execFileSync('tar', ['-czf', outFile, '-C', cwd, ...entries], { stdio: 'inherit' });
+  // On Windows the release step runs under Git Bash, whose GNU tar reads the
+  // drive-letter colon in an absolute archive path (e.g. `D:\…\node_modules.tgz`)
+  // as a remote `host:path` spec and aborts with "Cannot connect to D: resolve
+  // failed". --force-local tells tar to treat the path as a local file.
+  const forceLocal = process.platform === 'win32' ? ['--force-local'] : [];
+  execFileSync('tar', [...forceLocal, '-czf', outFile, '-C', cwd, ...entries], { stdio: 'inherit' });
 }
 
 /** Parse a capability pack's MODULES.md into a flat list of `name@range` specs. */
@@ -100,7 +105,11 @@ function main() {
       execFileSync('npm', ['init', '-y'], { cwd: superDir, stdio: 'ignore', shell: process.platform === 'win32' });
       try {
         // Populate the cache tarballs; the resolved tree itself is discarded.
-        npm(['install', ...extras], superDir, cacheDir);
+        // --legacy-peer-deps: the superset unions every pack's modules, whose peer
+        // ranges can conflict (e.g. eslint@10 vs typescript-eslint's eslint 8||9
+        // peer). We only need the downloaded tarballs in the cache, not a valid
+        // tree, so skip strict peer resolution to keep the warm cache complete.
+        npm(['install', '--legacy-peer-deps', ...extras], superDir, cacheDir);
       } catch (err) {
         warn(`cache warm for capability modules was partial (${err.message}); continuing`);
       }
