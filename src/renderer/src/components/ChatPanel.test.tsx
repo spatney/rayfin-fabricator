@@ -680,6 +680,123 @@ describe('ChatPanel onTurnStart (live local preview hook)', () => {
 })
 
 /**
+ * Outbound autoSend (the migrate hand-off): a prompt flagged `autoSend` submits
+ * itself once a new turn is allowed. The migrate flow seeds it while the first
+ * deploy is still streaming, so it must stay staged in the composer behind the
+ * deploy gate and fire the instant the gate clears — never require an Enter.
+ */
+describe('ChatPanel outbound autoSend', () => {
+  const sendMock = (): ReturnType<typeof vi.fn> =>
+    (window as unknown as { api: { chat: { send: ReturnType<typeof vi.fn> } } }).api.chat.send
+
+  it('stages an autoSend prompt behind the deploy gate, then fires it when the gate clears', async () => {
+    const onConsumed = vi.fn()
+    const outbound = {
+      id: 'mig-1',
+      display: 'Migrate report',
+      prompt: 'rebuild this report',
+      autoSend: true
+    }
+    let rerender: ReturnType<typeof render>['rerender'] = () => {}
+    await act(async () => {
+      const r = render(
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={[]}
+          onChange={() => {}}
+          draft=""
+          deployLock
+          outbound={outbound}
+          onOutboundConsumed={onConsumed}
+        />
+      )
+      rerender = r.rerender
+    })
+
+    // Gate up: staged in the composer, not sent.
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement
+    expect(ta.value).toBe('rebuild this report')
+    expect(sendMock()).not.toHaveBeenCalled()
+    expect(onConsumed).toHaveBeenCalledTimes(1)
+
+    // Deploy lands → gate clears → the prompt submits itself, composer cleared.
+    await act(async () => {
+      rerender(
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={[]}
+          onChange={() => {}}
+          draft=""
+          deployLock={false}
+          outbound={outbound}
+          onOutboundConsumed={onConsumed}
+        />
+      )
+    })
+    await waitFor(() => expect(sendMock()).toHaveBeenCalled())
+    const calls = sendMock().mock.calls
+    const [, , prompt] = calls[calls.length - 1] ?? []
+    expect(prompt).toBe('rebuild this report')
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('sends an autoSend prompt immediately when no gate is up, showing the full prompt as the message', async () => {
+    // Capture the visible user message the panel appends so we can assert the
+    // bubble shows the full prompt (not a short display label).
+    const userTexts: string[] = []
+    const onChange = (updater: (prev: UIChatMessage[]) => UIChatMessage[]): void => {
+      for (const m of updater([])) if (m.role === 'user') userTexts.push(m.text)
+    }
+    await act(async () => {
+      render(
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={[]}
+          onChange={onChange}
+          draft=""
+          outbound={{ id: 'mig-2', display: 'Migrate report', prompt: 'rebuild it now', autoSend: true }}
+        />
+      )
+    })
+    await waitFor(() => expect(sendMock()).toHaveBeenCalled())
+    const calls = sendMock().mock.calls
+    const [, , prompt] = calls[calls.length - 1] ?? []
+    expect(prompt).toBe('rebuild it now')
+    // The visible message is the full prompt, not the short display label.
+    expect(userTexts.at(-1)).toBe('rebuild it now')
+    expect(userTexts).not.toContain('Migrate report')
+  })
+
+  it('forwards autoSend attachment paths to chat.send (the migrate report-page images)', async () => {
+    await act(async () => {
+      render(
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={[]}
+          onChange={() => {}}
+          draft=""
+          outbound={{
+            id: 'mig-3',
+            display: 'Migrate report',
+            prompt: 'rebuild it now',
+            autoSend: true,
+            attachments: [
+              { path: '/tmp/page-1.png', thumb: 'data:image/png;base64,AAAA' },
+              { path: '/tmp/page-2.png', thumb: 'data:image/png;base64,BBBB' }
+            ]
+          }}
+        />
+      )
+    })
+    await waitFor(() => expect(sendMock()).toHaveBeenCalled())
+    const calls = sendMock().mock.calls
+    // chat.send(projectId, turnId, prompt, attachmentPaths[], mode)
+    const [, , , attachments] = calls[calls.length - 1] ?? []
+    expect(attachments).toEqual(['/tmp/page-1.png', '/tmp/page-2.png'])
+  })
+})
+
+/**
  * Live local preview lifecycle: submitting a new turn while a deploy is in flight
  * used to leave the local preview unable to start (and never come back). With the
  * experiment on, submitting is paused during a deploy — typing stays enabled — so

@@ -87,6 +87,19 @@ export interface OutboundPrompt {
    * so the user can append their actual request before sending.
    */
   stage?: boolean
+  /**
+   * When true the prompt submits itself automatically as soon as a new turn is
+   * allowed. If the deploy gate is still up (a migrate seeds chat while its
+   * first deploy is streaming), it's staged in the composer and fired the moment
+   * the gate clears. Takes precedence over {@link stage}.
+   */
+  autoSend?: boolean
+  /**
+   * Image attachments to send with the prompt (e.g. the migrate flow's rendered
+   * report-page PNGs). Threaded through to `chat.send` as `--attachment` paths
+   * and shown as thumbnails on the user bubble.
+   */
+  attachments?: PendingShot[]
 }
 
 interface Props {
@@ -2533,17 +2546,42 @@ export default function ChatPanel({
   // notify the parent so it clears the one-shot prompt; otherwise it would
   // replay every time this panel remounts (e.g. after switching tabs).
   const handledOutbound = useRef<string | null>(null)
+  // A prompt flagged autoSend fires itself once a new turn is allowed. If the
+  // deploy gate is still up (the migrate flow seeds chat while the first deploy
+  // is streaming), we stash it here and flush it the moment the gate clears.
+  const autoSendPrompt = useRef<{ prompt: string; shots: PendingShot[] } | null>(null)
   useEffect(() => {
     if (!outbound || outbound.id === handledOutbound.current) return
     handledOutbound.current = outbound.id
-    if (sending || outbound.stage) {
+    const shots = outbound.attachments ?? []
+    if (outbound.autoSend) {
+      // Fire now if nothing blocks a turn; otherwise stage it in the composer
+      // and let the flush effect send it. Send the full prompt as the visible
+      // message so the user sees exactly what was submitted, not a short label.
+      if (!sending && !deployLock && !submitBlocked) {
+        void dispatch(outbound.prompt, outbound.prompt, shots)
+      } else {
+        setInput(outbound.prompt)
+        autoSendPrompt.current = { prompt: outbound.prompt, shots }
+      }
+    } else if (sending || outbound.stage) {
       setInput(outbound.prompt)
       taRef.current?.focus()
     } else {
-      void dispatch(outbound.display, outbound.prompt, [])
+      void dispatch(outbound.display, outbound.prompt, shots)
     }
     onOutboundConsumed?.()
   }, [outbound?.id])
+
+  // Flush a staged autoSend prompt once nothing blocks a new turn (deploy gate
+  // cleared, no deploy streaming, not mid-turn), clearing the composer as it fires.
+  useEffect(() => {
+    const pending = autoSendPrompt.current
+    if (!pending || sending || deployLock || submitBlocked) return
+    autoSendPrompt.current = null
+    setInput('')
+    void dispatch(pending.prompt, pending.prompt, pending.shots)
+  }, [sending, deployLock, submitBlocked])
 
   // Precompute the conversation rows so a keystroke in the composer (which only
   // touches local `input` state) doesn't re-run `messages.map` and re-create N
