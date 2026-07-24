@@ -220,6 +220,77 @@ export interface FabricDeleteResult {
   error?: string
 }
 
+/**
+ * One semantic-model connection declared in a project's `fabric.yaml` (active
+ * profile). `itemId` is the Power BI dataset id. Surfaced to the Share dialog so
+ * the user can see which models will be auto-shared.
+ */
+export interface SemanticModelRef {
+  alias: string
+  workspaceId: string
+  itemId: string
+}
+
+/** The outcome of one grant — the app role assignment, or one model share. */
+export interface FabricShareGrant {
+  ok: boolean
+  /** True when the principal already had the access (idempotent no-op). */
+  skipped?: boolean
+  error?: string
+}
+
+/** The outcome of granting Build on one semantic model, with its identity. */
+export interface FabricShareModelGrant {
+  alias?: string
+  itemId?: string
+  workspaceId?: string
+  ok: boolean
+  skipped?: boolean
+  error?: string
+}
+
+/** Per-recipient share outcome: directory resolution + app + model grants. */
+export interface FabricShareRecipientResult {
+  email: string
+  resolved: boolean
+  principalType?: string
+  app: FabricShareGrant
+  models: FabricShareModelGrant[]
+}
+
+/**
+ * Outcome of sharing a deployment's app (+ its different-workspace semantic
+ * models) with a set of recipients. Never throws across IPC — a global failure
+ * (no cached Fabric session / missing Azure CLI) sets `ok:false` with
+ * `needsLogin`/`needsAz`/`error`; partial failures are reported per recipient.
+ */
+export interface FabricShareResult {
+  ok: boolean
+  recipients: FabricShareRecipientResult[]
+  /** True when there was no cached Fabric session (Rayfin re-login needed). */
+  needsLogin?: boolean
+  /** True when the Azure CLI isn't signed in (needed to resolve recipients). */
+  needsAz?: boolean
+  error?: string
+}
+
+/** One directory person matched by the Share dialog's autocomplete. */
+export interface FabricDirectoryPerson {
+  id?: string
+  displayName?: string
+  email?: string
+}
+
+/** Outcome of a directory (people) search — powers Share-dialog autocomplete. */
+export interface FabricDirectoryResult {
+  ok: boolean
+  people: FabricDirectoryPerson[]
+  /** True when the Azure CLI isn't signed in (autocomplete degrades quietly). */
+  needsAz?: boolean
+  needsLogin?: boolean
+  error?: string
+}
+
 /** One table in a semantic model's schema (a node in the Model-tab diagram). */
 export interface SemanticTable {
   name?: string
@@ -671,9 +742,9 @@ export interface CreateProjectInput {
   name: string
   /**
    * Template the project is scaffolded from. Either a built-in (bundled) name
-   * ('fabricator-dataapp' | 'fabricator-todoapp') or a community template URL
-   * (e.g. an awesome-rayfin git/tarball URL) — `npm create @microsoft/rayfin -- -t`
-   * accepts either.
+   * ('fabricator-universal' | 'fabricator-blankapp' | 'fabricator-todoapp' |
+   * 'fabricator-dataapp') or a community template URL (e.g. an awesome-rayfin
+   * git/tarball URL) — `npm create @microsoft/rayfin -- -t` accepts either.
    */
   template: string
   /**
@@ -1588,6 +1659,29 @@ export interface RayfinStudioApi {
      * `needsAz`/`needsLogin`/`error` for the UI to render.
      */
     semanticModelSchema: (workspaceId: string, itemId: string) => Promise<SemanticSchemaResult>
+    /**
+     * List the semantic-model connections declared in the project's `fabric.yaml`
+     * active profile — surfaced in the Share dialog so the user can see which
+     * models will also be shared. Never throws (empty list when there are none).
+     */
+    projectSemanticModels: (projectId: string) => Promise<SemanticModelRef[]>
+    /**
+     * Share a deployment's app with tenant users/groups (by email): grant each
+     * Contributor on the app's hosting workspace, and Build on every semantic
+     * model the app uses that lives in a different workspace. Never throws —
+     * reports per-recipient results plus `needsLogin`/`needsAz`/`error`.
+     */
+    shareApp: (
+      projectId: string,
+      workspaceId: string,
+      recipients: string[]
+    ) => Promise<FabricShareResult>
+    /**
+     * Search the directory (Microsoft Graph via the Azure CLI) for people
+     * matching a name/email fragment — powers the Share dialog's autocomplete.
+     * Never throws; reports `needsAz` when the Azure CLI isn't signed in.
+     */
+    directorySearch: (query: string) => Promise<FabricDirectoryResult>
   }
 
   projects: {

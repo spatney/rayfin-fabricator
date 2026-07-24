@@ -6488,6 +6488,12 @@ code {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.dep-share-btn .codicon {
+  font-size: 13px;
+}
+.dep-copy-btn .codicon {
+  font-size: 15px;
+}
 .dep-new {
   align-self: flex-start;
   font: inherit;
@@ -7778,6 +7784,318 @@ code {
   gap: 10px;
   padding: 14px 20px;
   border-top: 1px solid var(--border);
+}
+
+/* Share app modal */
+.share-modal {
+  max-width: 480px;
+}
+.share-copy-link {
+  margin-right: auto;
+  gap: 6px;
+}
+.share-copy-link .codicon {
+  font-size: 14px;
+}
+.share-intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.share-intro strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.share-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.share-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.share-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 5px 7px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: text;
+}
+.share-chips:focus-within {
+  border-color: var(--accent);
+}
+.share-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 6px 2px 3px;
+  max-width: 100%;
+}
+.share-chip--bad {
+  border-color: var(--danger);
+  color: var(--danger);
+  padding-left: 9px;
+}
+.share-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.share-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0 2px;
+}
+.share-chip-x:hover {
+  color: var(--text);
+}
+.share-chip-x .codicon {
+  font-size: 12px;
+}
+/* Teams-like round avatar with initials (colour set inline per person). */
+.share-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #0b0e14;
+  text-transform: uppercase;
+}
+.share-avatar--add {
+  background: var(--bg-elev-3);
+  color: var(--text-dim);
+}
+.share-avatar--add .codicon {
+  font-size: 13px;
+}
+.share-chip-input {
+  flex: 1;
+  min-width: 140px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 2px;
+}
+.share-combo {
+  position: relative;
+}
+.share-suggest {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 248px;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+}
+.share-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.share-suggest-item--active {
+  background: var(--accent-soft);
+}
+.share-suggest-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.share-suggest-name {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-suggest-mail {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-hl {
+  color: var(--accent);
+  font-weight: 600;
+}
+.share-suggest-add .share-suggest-name {
+  color: var(--text-dim);
+}
+.share-suggest-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.share-hint {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.share-hint--bad {
+  color: var(--danger);
+}
+.share-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+.share-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.share-target .codicon {
+  font-size: 14px;
+  color: var(--text-dim);
+  flex: none;
+}
+.share-target--muted {
+  color: var(--text-dim);
+  font-style: italic;
+}
+.share-target-main {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-target-tag {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 5px;
+  padding: 1px 7px;
+}
+.share-target-tag--muted {
+  color: var(--text-faint);
+  background: transparent;
+  font-weight: 500;
+}
+.share-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.share-banner > span {
+  flex: 1;
+}
+.share-banner--bad {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.share-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.share-result {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.share-result-email {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.share-result-lines {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.share-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.share-line .codicon {
+  font-size: 13px;
+  flex: none;
+}
+.share-line-what {
+  font-weight: 500;
+  color: var(--text-dim);
+  min-width: 92px;
+}
+.share-line-status {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-line--ok .codicon {
+  color: var(--ok);
+}
+.share-line--skip .codicon {
+  color: var(--text-faint);
+}
+.share-line--error .codicon {
+  color: var(--danger);
+}
+.share-line--error .share-line-status {
+  color: var(--danger);
 }
 
 /* Settings modal */

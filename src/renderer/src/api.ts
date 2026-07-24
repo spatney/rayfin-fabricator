@@ -96,7 +96,12 @@ export const api: RayfinStudioApi = {
       invoke('fabric_create_workspace', { name, capacityId }),
     deleteApps: (projectId: string) => invoke('fabric_delete_apps', { projectId }),
     semanticModelSchema: (workspaceId: string, itemId: string) =>
-      invoke('fabric_semantic_model_schema', { workspaceId, itemId })
+      invoke('fabric_semantic_model_schema', { workspaceId, itemId }),
+    projectSemanticModels: (projectId: string) =>
+      invoke('fabric_project_semantic_models', { projectId }),
+    shareApp: (projectId: string, workspaceId: string, recipients: string[]) =>
+      invoke('fabric_share_app', { projectId, workspaceId, recipients }),
+    directorySearch: (query: string) => invoke('fabric_directory_search', { query })
   },
 
   projects: {

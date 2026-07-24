@@ -214,6 +214,117 @@ pub struct FabricDeleteResult {
   pub error: Option<String>,
 }
 
+/// One semantic-model connection declared in a project's `fabric.yaml`
+/// (active profile). `item_id` is the Power BI dataset id. Surfaced to the Share
+/// dialog so the user can see which models will be auto-shared.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticModelRef {
+  pub alias: String,
+  pub workspace_id: String,
+  pub item_id: String,
+}
+
+/// The outcome of one grant (the app role assignment, or one model share).
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricShareGrant {
+  pub ok: bool,
+  /// True when the principal already had the access (idempotent no-op).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub skipped: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// The outcome of granting Build on one semantic model, carrying its identity so
+/// the UI can label the row.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricShareModelGrant {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub alias: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub item_id: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub workspace_id: Option<String>,
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub skipped: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// Per-recipient result: whether the email resolved to a directory principal, and
+/// the outcome of the app grant plus each different-workspace model grant.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricShareRecipientResult {
+  pub email: String,
+  pub resolved: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub principal_type: Option<String>,
+  pub app: FabricShareGrant,
+  pub models: Vec<FabricShareModelGrant>,
+}
+
+/// Outcome of sharing a deployment's app (+ its different-workspace semantic
+/// models) with a set of recipients. Never throws across IPC — a global failure
+/// (no cached session / missing Azure CLI) sets `ok:false` with
+/// `needs_login`/`needs_az`/`error`; partial failures are reported per recipient.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricShareResult {
+  pub ok: bool,
+  pub recipients: Vec<FabricShareRecipientResult>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_login: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_az: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+impl FabricShareResult {
+  /// Build a global `ok:false` failure (no recipients processed).
+  pub fn failure(error: String) -> Self {
+    FabricShareResult {
+      ok: false,
+      recipients: vec![],
+      needs_login: None,
+      needs_az: None,
+      error: Some(error),
+    }
+  }
+}
+
+/// One directory person matched by the Share dialog's autocomplete.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricDirectoryPerson {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub id: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub display_name: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub email: Option<String>,
+}
+
+/// Outcome of a directory (people) search. Never throws — a missing/expired
+/// Azure CLI sets `needs_az` so the dialog can degrade autocomplete gracefully.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricDirectoryResult {
+  pub ok: bool,
+  pub people: Vec<FabricDirectoryPerson>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_az: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_login: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
 /* ----------------------------- processes ----------------------------- */
 
 #[derive(Serialize, Clone)]

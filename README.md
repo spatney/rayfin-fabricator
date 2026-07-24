@@ -42,7 +42,7 @@ Fabricator is the desktop shell that makes building those apps effortless.
 
 1. **Chat to build.** Describe what you want in plain English. The built-in GitHub Copilot agent writes and edits the project files for you — you never touch a command line. Git quietly snapshots every change, so you can diff and roll back anytime.
 2. **See it as it's built.** Inspect and edit any file in a built-in Monaco editor, and watch the app itself in a live inline preview — no separate browser, no copy-pasting URLs.
-3. **Deploy with a click.** Hit deploy and Fabricator runs `rayfin up` for you, shipping the app to Microsoft Fabric. Create, switch, and redeploy across workspaces from a single deployments panel.
+3. **Deploy with a click.** Hit deploy and Fabricator runs `rayfin up` for you, shipping the app to Microsoft Fabric. Create, switch, and redeploy across workspaces from a single deployments panel — then share the app with teammates in your tenant straight from that panel.
 4. **Harden it.** The Advisor runs Copilot-driven security and policy checks — unprotected routes, over-permissive database policies, that kind of thing — and flags them when the project changes.
 5. **Repeat** until it's exactly what you wanted.
 
@@ -78,7 +78,7 @@ Want to build from source instead? Jump to [Build from source](#build-from-sourc
 
 **Author.** Chat with a built-in GitHub Copilot agent — pick the model and reasoning effort, steer it mid-turn, and keep separate threads (plus optional parallel side threads) with full history. Every turn runs in **Agent** mode; enable the experimental mode selector (Settings → Experiments) to also choose **Plan** or **Autopilot**. Inspect and edit any generated file in a built-in Monaco editor, see your data model as an entity diagram, browse the agent's reusable Skills, and lean on a git timeline you can diff and restore.
 
-**Ship.** One-click `rayfin up` deploys to Microsoft Fabric. A deployments panel handles create, switch, and redeploy across workspaces.
+**Ship.** One-click `rayfin up` deploys to Microsoft Fabric. A deployments panel handles create, switch, and redeploy across workspaces — and share a deployed app with people in your Entra tenant by email (each recipient gets Contributor on its workspace, and any semantic model the app uses in another workspace is automatically shared with Build access).
 
 **Preview.** A native inline preview loads your running app — navigation, reload, browser devtools (inspector), focus mode, a Fabric portal shell toggle, and annotate-a-screenshot-straight-into-chat.
 

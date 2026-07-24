@@ -152,6 +152,13 @@ pub fn run() {
       // app-data so chat sessions can inject them (never written into the repo).
       services::agent_skills::ensure_materialized();
 
+      // Point npm at the bundled warm offline cache (if this build shipped one)
+      // so the Universal template's capability router can install modules on
+      // demand fast. Best-effort + `prefer-offline`, so a miss falls back to the
+      // network; no-op in dev/source builds. Set before any chat CLI server spawns
+      // so its shell `npm install`s inherit the cache config.
+      services::deps::init_process_offline_cache(app.handle());
+
       // Watch for main-thread freezes (Parallels/VM hangs) and record them. The
       // monitor actively probes the main thread, so an idle (event-starved) loop
       // is never mistaken for a hang.
@@ -201,6 +208,9 @@ pub fn run() {
       commands::fabric::fabric_create_workspace,
       commands::fabric::fabric_delete_apps,
       commands::fabric::fabric_semantic_model_schema,
+      commands::fabric::fabric_project_semantic_models,
+      commands::fabric::fabric_share_app,
+      commands::fabric::fabric_directory_search,
       // projects
       commands::projects::projects_state,
       commands::projects::projects_templates,

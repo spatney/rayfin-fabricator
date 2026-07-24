@@ -14,16 +14,19 @@
 //! Rust is neither practical nor safe. All orchestration around it is Rust.
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::services::{exec, paths, store};
 use crate::services::exec::RunOptions;
 use crate::types::{FabricDeleteResult, FabricWorkspacesResult};
 use crate::types::{FabricCapacitiesResult, FabricCreateWorkspaceResult};
+use crate::types::{FabricShareResult, SemanticModelRef};
+use crate::types::FabricDirectoryResult;
 
 const FABRIC_API_BASE: &str = "https://api.fabric.microsoft.com/v1";
 
@@ -649,6 +652,262 @@ pub async fn fabric_semantic_model_schema(
   crate::services::semantic_model::schema_semantic_model(&workspace_id, &item_id).await
 }
 
+/* ------------------------------- sharing ---------------------------------- */
+
+/// The Node helper that grants a Fabric workspace role + Power BI model access.
+/// Embedded at compile time; written to the app data dir at runtime (via
+/// [`write_helper`]) so the system `node` can execute it.
+const SHARE_HELPER_SOURCE: &str = include_str!("../services/fabric_share_helper.mjs");
+
+/// Sharing fans out across recipients × (app + models) with a Graph lookup each,
+/// so allow a generous budget before the child is killed.
+const SHARE_TIMEOUT_MS: u64 = 120_000;
+
+/// Parse-failure classification for a missing / signed-out Azure CLI (the share
+/// helper needs an `az` Graph token to resolve recipients to object ids).
+static NEEDS_AZ_RE: Lazy<Regex> =
+  Lazy::new(|| Regex::new(r"(?i)\baz\b|azure cli|az login|az account").unwrap());
+
+/// `fabric.yaml` shape — only the fields we read (keys are camelCase).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FabricYaml {
+  #[serde(default)]
+  active_profile: Option<String>,
+  #[serde(default)]
+  profiles: HashMap<String, FabricProfile>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct FabricProfile {
+  #[serde(default)]
+  semantic_models: HashMap<String, FabricModelConn>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FabricModelConn {
+  #[serde(default)]
+  workspace_id: String,
+  #[serde(default)]
+  item_id: String,
+}
+
+/// Parse the semantic-model connections in a `fabric.yaml` document (active
+/// profile, falling back to `default`). Returns an empty list when the document
+/// is unparseable or declares none — the app then simply has no models to share.
+fn parse_semantic_models_yaml(text: &str) -> Vec<SemanticModelRef> {
+  let parsed: FabricYaml = match serde_yaml::from_str(text) {
+    Ok(p) => p,
+    Err(_) => return vec![],
+  };
+  let profile_name = parsed.active_profile.unwrap_or_else(|| "default".to_string());
+  let Some(profile) = parsed
+    .profiles
+    .get(&profile_name)
+    .or_else(|| parsed.profiles.get("default"))
+  else {
+    return vec![];
+  };
+  let mut models: Vec<SemanticModelRef> = profile
+    .semantic_models
+    .iter()
+    .filter(|(_, c)| !c.workspace_id.trim().is_empty() && !c.item_id.trim().is_empty())
+    .map(|(alias, c)| SemanticModelRef {
+      alias: alias.clone(),
+      workspace_id: c.workspace_id.trim().to_string(),
+      item_id: c.item_id.trim().to_string(),
+    })
+    .collect();
+  models.sort_by(|a, b| a.alias.to_lowercase().cmp(&b.alias.to_lowercase()));
+  models
+}
+
+/// Read the project's `fabric.yaml` semantic-model connections. A missing file is
+/// not an error (an app can use no models) — it just yields an empty list.
+fn read_project_semantic_models(project_dir: &Path) -> Vec<SemanticModelRef> {
+  match std::fs::read_to_string(project_dir.join("fabric.yaml")) {
+    Ok(text) => parse_semantic_models_yaml(&text),
+    Err(_) => vec![],
+  }
+}
+
+/// Split models into `(different_workspace, same_workspace)` relative to the app's
+/// hosting workspace (case-insensitive). Same-workspace models are already
+/// covered by the workspace role grant, so only the different-workspace ones need
+/// an explicit Build share.
+fn split_models_by_workspace(
+  models: Vec<SemanticModelRef>,
+  app_workspace_id: &str,
+) -> (Vec<SemanticModelRef>, Vec<SemanticModelRef>) {
+  let app = app_workspace_id.trim().to_lowercase();
+  models
+    .into_iter()
+    .partition(|m| m.workspace_id.trim().to_lowercase() != app)
+}
+
+/// List the semantic-model connections declared in the project's `fabric.yaml`
+/// active profile — surfaced to the Share dialog so the user can see which models
+/// will also be shared. Never throws.
+#[tauri::command]
+pub async fn fabric_project_semantic_models(project_id: String) -> Vec<SemanticModelRef> {
+  match store::find_project(&project_id) {
+    Some(p) => read_project_semantic_models(Path::new(&p.path)),
+    None => vec![],
+  }
+}
+
+/// Share a deployment's app with `recipients` (emails): grant each **Contributor**
+/// on the app's hosting workspace (`workspace_id`), and **Build** on every
+/// semantic model the app uses that lives in a *different* workspace. Reuses the
+/// silent Rayfin-CLI tokens (Fabric + Power BI) and an Azure CLI Graph token (to
+/// resolve emails to directory object ids). Never throws — returns a structured
+/// [`FabricShareResult`] with per-recipient outcomes, or a global
+/// `needs_login`/`needs_az`/`error`.
+#[tauri::command]
+pub async fn fabric_share_app(
+  project_id: String,
+  workspace_id: String,
+  recipients: Vec<String>,
+) -> FabricShareResult {
+  let recipients: Vec<String> = recipients
+    .into_iter()
+    .map(|r| r.trim().to_string())
+    .filter(|r| !r.is_empty())
+    .collect();
+  if recipients.is_empty() {
+    return FabricShareResult::failure("Enter at least one email to share with.".to_string());
+  }
+  let ws = workspace_id.trim().to_string();
+  if ws.is_empty() {
+    return FabricShareResult::failure(
+      "This deployment has no Fabric workspace id yet — deploy it before sharing.".to_string(),
+    );
+  }
+
+  let Some(project) = store::find_project(&project_id) else {
+    return FabricShareResult::failure("Project not found.".to_string());
+  };
+  let project_dir = PathBuf::from(project.path);
+
+  let auth_path = match project_auth_module(Some(&project_dir)).await {
+    Ok(p) => p,
+    Err(error) => return FabricShareResult::failure(error),
+  };
+  let script_path = match write_helper("fabric-share.mjs", SHARE_HELPER_SOURCE) {
+    Ok(p) => p,
+    Err(err) => {
+      return FabricShareResult::failure(format!("Could not prepare the share helper: {err}"))
+    }
+  };
+
+  // Only different-workspace models need an explicit Build share; same-workspace
+  // models are covered by the workspace Contributor grant.
+  let all_models = read_project_semantic_models(&project_dir);
+  let (different, _same) = split_models_by_workspace(all_models, &ws);
+
+  let request = serde_json::json!({
+    "appWorkspaceId": ws,
+    "role": "Contributor",
+    "recipients": recipients,
+    "models": different,
+    "modelAccessRight": "ReadExplore",
+  });
+
+  let auth_str = auth_path.to_string_lossy().to_string();
+  let script_str = script_path.to_string_lossy().to_string();
+  let request_str = request.to_string();
+  let res = exec::run(
+    "node",
+    &[&script_str, &auth_str, &request_str],
+    RunOptions::timeout(SHARE_TIMEOUT_MS),
+  )
+  .await;
+
+  if res.not_found {
+    return FabricShareResult::failure("Node.js was not found on PATH.".to_string());
+  }
+
+  let out = res.stdout.trim();
+  match serde_json::from_str::<FabricShareResult>(out) {
+    Ok(parsed) => parsed,
+    Err(_) => {
+      // The child died before emitting JSON — classify the raw error.
+      let (needs_login, err) = failure_error(&res, out);
+      let needs_az = NEEDS_AZ_RE.is_match(&err);
+      FabricShareResult {
+        ok: false,
+        recipients: vec![],
+        needs_login: Some(needs_login && !needs_az),
+        needs_az: Some(needs_az),
+        error: Some(err),
+      }
+    }
+  }
+}
+
+/// Search the directory (Microsoft Graph, via the Azure CLI token) for people
+/// matching `query` — powers the Share dialog's name/email autocomplete. Reuses
+/// the embedded share helper's `searchDirectory` mode (no Rayfin auth module
+/// needed, so it stays fast). Never throws — an empty query yields no people; a
+/// signed-out `az` yields `needs_az` so the UI can degrade autocomplete quietly.
+#[tauri::command]
+pub async fn fabric_directory_search(query: String) -> FabricDirectoryResult {
+  let q = query.trim().to_string();
+  if q.is_empty() {
+    return FabricDirectoryResult {
+      ok: true,
+      ..Default::default()
+    };
+  }
+  let script_path = match write_helper("fabric-share.mjs", SHARE_HELPER_SOURCE) {
+    Ok(p) => p,
+    Err(err) => {
+      return FabricDirectoryResult {
+        ok: false,
+        error: Some(format!("Could not prepare the directory helper: {err}")),
+        ..Default::default()
+      }
+    }
+  };
+  let script_str = script_path.to_string_lossy().to_string();
+  let request = serde_json::json!({ "mode": "searchDirectory", "query": q });
+  let request_str = request.to_string();
+  // The helper's search mode ignores the auth-module argv, so pass a placeholder
+  // rather than resolving (and possibly installing) the project's Rayfin CLI.
+  let res = exec::run(
+    "node",
+    &[&script_str, "-", &request_str],
+    RunOptions::timeout(20_000),
+  )
+  .await;
+
+  if res.not_found {
+    return FabricDirectoryResult {
+      ok: false,
+      error: Some("Node.js was not found on PATH.".to_string()),
+      ..Default::default()
+    };
+  }
+
+  let out = res.stdout.trim();
+  match serde_json::from_str::<FabricDirectoryResult>(out) {
+    Ok(parsed) => parsed,
+    Err(_) => {
+      let (needs_login, err) = failure_error(&res, out);
+      let needs_az = NEEDS_AZ_RE.is_match(&err);
+      FabricDirectoryResult {
+        ok: false,
+        people: vec![],
+        needs_az: Some(needs_az),
+        needs_login: Some(needs_login && !needs_az),
+        error: Some(err),
+      }
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -784,5 +1043,127 @@ mod tests {
     // Create-workspace helper POSTs a workspace; capacities helper excludes PPU.
     assert!(CREATE_WS_HELPER_SOURCE.contains("method: 'POST'"));
     assert!(CAPACITIES_HELPER_SOURCE.contains("s.startsWith('PP')"));
+  }
+
+  #[test]
+  fn parse_semantic_models_yaml_reads_active_profile() {
+    let yaml = r#"
+activeProfile: dev
+profiles:
+  dev:
+    semanticModels:
+      sales:
+        workspaceId: "ws-1"
+        itemId: "ds-1"
+      churn:
+        workspaceId: "me"
+        itemId: "ds-2"
+  production:
+    semanticModels:
+      sales:
+        workspaceId: "ws-prod"
+        itemId: "ds-prod"
+"#;
+    let models = parse_semantic_models_yaml(yaml);
+    // Only the active (dev) profile, sorted by alias (churn, sales).
+    assert_eq!(models.len(), 2);
+    assert_eq!(models[0].alias, "churn");
+    assert_eq!(models[0].workspace_id, "me");
+    assert_eq!(models[1].alias, "sales");
+    assert_eq!(models[1].item_id, "ds-1");
+  }
+
+  #[test]
+  fn parse_semantic_models_yaml_empty_and_invalid() {
+    // The scaffold's empty default profile declares no models.
+    assert!(parse_semantic_models_yaml("activeProfile: default\nprofiles:\n  default: {}\n").is_empty());
+    // Junk / non-YAML degrades to an empty list rather than panicking.
+    assert!(parse_semantic_models_yaml(":: not yaml ::").is_empty());
+    // A model missing ids is skipped.
+    let partial = "activeProfile: d\nprofiles:\n  d:\n    semanticModels:\n      x:\n        workspaceId: \"\"\n        itemId: \"i\"\n";
+    assert!(parse_semantic_models_yaml(partial).is_empty());
+  }
+
+  #[test]
+  fn split_models_by_workspace_partitions_case_insensitively() {
+    let models = vec![
+      SemanticModelRef { alias: "same".into(), workspace_id: "WS-A".into(), item_id: "i1".into() },
+      SemanticModelRef { alias: "other".into(), workspace_id: "ws-b".into(), item_id: "i2".into() },
+      SemanticModelRef { alias: "mine".into(), workspace_id: "me".into(), item_id: "i3".into() },
+    ];
+    let (different, same) = split_models_by_workspace(models, "ws-a");
+    // Same workspace matched despite different casing.
+    assert_eq!(same.len(), 1);
+    assert_eq!(same[0].alias, "same");
+    // "me" and the other group both count as different workspaces (need Build).
+    let diff_aliases: Vec<&str> = different.iter().map(|m| m.alias.as_str()).collect();
+    assert_eq!(diff_aliases, vec!["other", "mine"]);
+  }
+
+  #[test]
+  fn share_result_shape_deserializes() {
+    let json = r#"{
+      "ok": true,
+      "recipients": [
+        {"email":"a@x.com","resolved":true,"principalType":"User",
+         "app":{"ok":true},
+         "models":[{"alias":"sales","itemId":"ds-1","workspaceId":"ws-2","ok":true,"skipped":true}]}
+      ]
+    }"#;
+    let parsed: FabricShareResult = serde_json::from_str(json).unwrap();
+    assert!(parsed.ok);
+    assert_eq!(parsed.recipients.len(), 1);
+    let r = &parsed.recipients[0];
+    assert!(r.resolved);
+    assert!(r.app.ok);
+    assert_eq!(r.models.len(), 1);
+    assert_eq!(r.models[0].skipped, Some(true));
+    assert!(parsed.needs_az.is_none());
+
+    let failure: FabricShareResult =
+      serde_json::from_str(r#"{"ok":false,"recipients":[],"needsAz":true,"error":"az login"}"#).unwrap();
+    assert!(!failure.ok);
+    assert_eq!(failure.needs_az, Some(true));
+    assert_eq!(failure.error.as_deref(), Some("az login"));
+  }
+
+  #[test]
+  fn semantic_model_ref_serializes_camel_case() {
+    let m = SemanticModelRef { alias: "sales".into(), workspace_id: "w".into(), item_id: "i".into() };
+    let json = serde_json::to_string(&m).unwrap();
+    assert!(json.contains("\"workspaceId\":\"w\""));
+    assert!(json.contains("\"itemId\":\"i\""));
+  }
+
+  #[test]
+  fn share_helper_source_contract() {
+    // Silent token reuse + the two grant endpoints + Build access right, and a
+    // single clean stdout write.
+    assert!(SHARE_HELPER_SOURCE.contains("getRayfinAuth"));
+    assert!(SHARE_HELPER_SOURCE.contains("silentOnly: true"));
+    assert!(SHARE_HELPER_SOURCE.contains("roleAssignments"));
+    assert!(SHARE_HELPER_SOURCE.contains("/datasets/"));
+    assert!(SHARE_HELPER_SOURCE.contains("ReadExplore"));
+    assert!(SHARE_HELPER_SOURCE.contains("graph.microsoft.com"));
+    // The directory-search (autocomplete) mode is embedded in the same helper.
+    assert!(SHARE_HELPER_SOURCE.contains("searchDirectory"));
+  }
+
+  #[test]
+  fn directory_result_shape_deserializes() {
+    let ok: FabricDirectoryResult = serde_json::from_str(
+      r#"{"ok":true,"people":[{"id":"1","displayName":"Ada Lovelace","email":"ada@x.com"},{"email":"grace@x.com"}]}"#,
+    )
+    .unwrap();
+    assert!(ok.ok);
+    assert_eq!(ok.people.len(), 2);
+    assert_eq!(ok.people[0].display_name.as_deref(), Some("Ada Lovelace"));
+    assert_eq!(ok.people[1].email.as_deref(), Some("grace@x.com"));
+    assert!(ok.people[1].display_name.is_none());
+
+    let bad: FabricDirectoryResult =
+      serde_json::from_str(r#"{"ok":false,"people":[],"needsAz":true,"error":"az login"}"#).unwrap();
+    assert!(!bad.ok);
+    assert_eq!(bad.needs_az, Some(true));
   }
 }

@@ -10,6 +10,7 @@ import { useSuppressPreview } from '../overlay'
 import { useToast } from '../toast'
 import { Codicon } from './icons'
 import DeploymentCreateForm from './DeploymentCreateForm'
+import ShareDeploymentModal from './ShareDeploymentModal'
 
 interface Props {
   project: StudioProject
@@ -66,6 +67,7 @@ export default function DeploymentsControl({
   const [renamingKey, setRenamingKey] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [busy, setBusy] = useState(false)
+  const [sharing, setSharing] = useState<FabricDeployment | null>(null)
 
   async function loadDeployments(): Promise<void> {
     setLoadingDeps(true)
@@ -142,6 +144,8 @@ export default function DeploymentsControl({
     undefined
   const activeLabel = activeDep ? activeDep.name || activeDep.workspaceName : fallbackName
   const hasDeployment = Boolean(activeDep || project.lastDeploy?.url || project.workspace)
+  const activeUrl =
+    activeDep?.hostingUrl || activeDep?.apiUrl || project.lastDeploy?.url || undefined
 
   function startCreate(): void {
     setCreating(true)
@@ -185,6 +189,36 @@ export default function DeploymentsControl({
     }
   }
 
+  /** Open the Share dialog for the active deployment (loading the list first if
+   * the popover hasn't populated it yet). */
+  async function openShareForActive(): Promise<void> {
+    if (running) return
+    let deps = deployments
+    if (!deps) {
+      deps = await window.api.deploy.list(project.id)
+      setDeployments(deps)
+    }
+    const target =
+      deps.find((d) => d.active && d.workspaceId) ?? deps.find((d) => d.workspaceId) ?? null
+    if (!target) {
+      toast.error('Deploy this app to a workspace before sharing.', { title: 'Nothing to share yet' })
+      return
+    }
+    setOpen(false)
+    setSharing(target)
+  }
+
+  /** Copy the active deployment's app URL to the clipboard. */
+  async function copyUrl(): Promise<void> {
+    if (!activeUrl) return
+    try {
+      await navigator.clipboard.writeText(activeUrl)
+      toast.success('App URL copied to clipboard.', { title: 'Copied' })
+    } catch {
+      toast.error('Could not copy the URL.', { title: 'Copy failed' })
+    }
+  }
+
   return (
     <div className="dep-control" onClick={(e) => e.stopPropagation()}>
       <div className="seg seg--toolbar dep-seg">
@@ -217,6 +251,27 @@ export default function DeploymentsControl({
           }}
         >
           {running ? 'Deploying…' : hasDeployment ? 'Redeploy' : 'Deploy'}
+        </button>
+        <button
+          className="seg-btn dep-share-btn"
+          disabled={running || reconciling || !hasDeployment}
+          title={
+            hasDeployment
+              ? 'Share this app with people in your tenant'
+              : 'Deploy this app before sharing'
+          }
+          onClick={() => void openShareForActive()}
+        >
+          <Codicon name="person-add" /> Share
+        </button>
+        <button
+          className="seg-btn seg-btn--icon dep-copy-btn"
+          disabled={!activeUrl}
+          title={activeUrl ? `Copy app URL — ${activeUrl}` : 'Deploy this app to get a URL'}
+          aria-label="Copy app URL"
+          onClick={() => void copyUrl()}
+        >
+          <Codicon name="link" />
         </button>
       </div>
 
@@ -341,6 +396,15 @@ export default function DeploymentsControl({
             </>
           )}
         </div>
+      )}
+
+      {sharing && (
+        <ShareDeploymentModal
+          project={project}
+          deployment={sharing}
+          onClose={() => setSharing(null)}
+          onSignedIn={onSignedIn}
+        />
       )}
     </div>
   )
