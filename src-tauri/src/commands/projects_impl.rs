@@ -41,11 +41,21 @@ pub fn fabricator_default_preview_mode(template: &str) -> Option<String> {
 /// for the deploy-to-test workflow. Their metadata ships with the app, so the list
 /// is constant — no registry / `--list-templates` discovery is needed, and New
 /// Project opens instantly and offline. Order matters: the first entry is the
-/// default selection, so the Blank App leads as the clean starting point (it bundles
-/// Graphein plus a `graphein-visuals` skill). The Data App carries
-/// `default_preview_mode = "fabric"` so it opens in the embedded Fabric portal preview.
+/// default selection, so the Universal App leads — a lean base whose bundled
+/// capability router grows it into anything (so the user doesn't have to know the
+/// app shape up front). The Blank App and Todo App follow as pre-shaped starting
+/// points, and the Data App carries `default_preview_mode = "fabric"` so it opens
+/// in the embedded Fabric portal preview.
 fn bundled_templates() -> Vec<TemplateInfo> {
   vec![
+    TemplateInfo {
+      name: "fabricator-universal".into(),
+      display_name: "Universal App".into(),
+      description:
+        "Start here — a lean app that grows into anything. A built-in capability router picks the right Fabric services, npm modules, and skills for whatever you describe: CRUD, storage, functions, charts, or analytics. Deploys to Fabric."
+          .into(),
+      default_preview_mode: fabricator_default_preview_mode("fabricator-universal"),
+    },
     TemplateInfo {
       name: "fabricator-blankapp".into(),
       display_name: "Blank App".into(),
@@ -378,7 +388,7 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   //     it against its bundled set).
   let is_fabricator = matches!(
     template.as_str(),
-    "fabricator-dataapp" | "fabricator-todoapp" | "fabricator-blankapp"
+    "fabricator-universal" | "fabricator-dataapp" | "fabricator-todoapp" | "fabricator-blankapp"
   );
   let template_source = if is_fabricator {
     let tmpl_dir = crate::services::paths::fabricator_templates_dir(app).join(&template);
@@ -394,6 +404,17 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
 
   let label = if is_url { "community template".to_string() } else { format!("{template} template") };
   say(&on, &format!("Creating \"{slug}\" from the {label}…\n"));
+
+  // Install acceleration for the Universal template: when this build shipped a
+  // prebuilt `node_modules` tarball for the platform, tell the scaffolder to
+  // `--skip-install` and extract the tree ourselves after scaffolding — far
+  // faster than a cold `npm install`. Absent (dev/source builds), we leave the
+  // scaffolder's normal install in place.
+  let universal_nm_tarball = if template == "fabricator-universal" {
+    crate::services::deps::universal_node_modules_tarball(app)
+  } else {
+    None
+  };
 
   // npm create @microsoft/rayfin@latest -- <slug> -t <source>
   //   [--template-name <name>] --project-name "<name>"
@@ -416,6 +437,11 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   }
   create_args.push("--project-name".into());
   create_args.push(name.clone());
+  if universal_nm_tarball.is_some() {
+    // Hidden `rayfin init` flag: skip all package installation. We supply the
+    // dependency tree from the bundled tarball instead.
+    create_args.push("--skip-install".into());
+  }
 
   let arg_refs: Vec<&str> = create_args.iter().map(String::as_str).collect();
   let init = run(
@@ -440,6 +466,36 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
     } else {
       format!("Project creation failed (exit code {code}).")
     });
+  }
+
+  // If we scaffolded with `--skip-install`, restore the dependency tree from the
+  // bundled tarball now. On any failure, fall back to a normal `npm install` so
+  // the project is still usable (just slower).
+  if let Some(tarball) = &universal_nm_tarball {
+    say(&on, "Unpacking bundled dependencies…\n");
+    let tarball = tarball.clone();
+    let dest = dir.clone();
+    let ok = tokio::task::spawn_blocking(move || crate::services::deps::extract_tgz(&tarball, &dest))
+      .await
+      .unwrap_or(false);
+    if !ok || !dir.join("node_modules").is_dir() {
+      say(&on, "Bundled dependencies didn't apply; installing from npm instead…\n");
+      let inst = run(
+        "npm",
+        &["install"],
+        RunOptions {
+          cwd: Some(dir.clone()),
+          on_data: Some(on.clone()),
+          timeout_ms: Some(600_000),
+          ..Default::default()
+        },
+      )
+      .await;
+      if !inst.ok {
+        let code = inst.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
+        return err(format!("Installing dependencies failed (exit code {code})."));
+      }
+    }
   }
 
   crate::commands::skills::ensure_project_skills(dir.to_string_lossy().as_ref());
@@ -674,14 +730,19 @@ entries:
   fn bundled_templates_lists_only_the_fabricator_variants() {
     let bundled = bundled_templates();
     let names: Vec<&str> = bundled.iter().map(|t| t.name.as_str()).collect();
-    // The three bundled Fabricator templates are offered as built-ins; the
+    // The four bundled Fabricator templates are offered as built-ins; the
     // upstream gettingstartedauth entry is dropped and the upstream `blankapp`
     // is replaced by our Graphein-equipped `fabricator-blankapp`. Order is
     // meaningful: the first entry is the default selection in New Project, so the
-    // Blank App leads.
+    // Universal App leads.
     assert_eq!(
       names,
-      vec!["fabricator-blankapp", "fabricator-todoapp", "fabricator-dataapp"]
+      vec![
+        "fabricator-universal",
+        "fabricator-blankapp",
+        "fabricator-todoapp",
+        "fabricator-dataapp"
+      ]
     );
     assert!(bundled
       .iter()
@@ -704,6 +765,7 @@ entries:
   #[test]
   fn fabricator_default_preview_mode_only_fabric_for_data_app() {
     assert_eq!(fabricator_default_preview_mode("fabricator-dataapp").as_deref(), Some("fabric"));
+    assert_eq!(fabricator_default_preview_mode("fabricator-universal"), None);
     assert_eq!(fabricator_default_preview_mode("fabricator-todoapp"), None);
     assert_eq!(fabricator_default_preview_mode("fabricator-blankapp"), None);
     assert_eq!(fabricator_default_preview_mode("blankapp"), None);

@@ -1,0 +1,45 @@
+# Analytics npm modules
+
+## dependencies
+
+- `@fontsource-variable/inter`: `^5.2.8`
+- `@fontsource-variable/jetbrains-mono`: `^5.2.8`
+- `@fontsource-variable/space-grotesk`: `^5.2.10`
+- `@microsoft/fabric-app-data`: `1.1.0`
+- `@microsoft/fabric-app-data-embed-client`: `1.0.0`
+- `@microsoft/fabric-app-data-proxy`: `1.0.0`
+- `@microsoft/rayfin-auth-provider-fabric`: `^1.33.1`
+- `@microsoft/rayfin-client`: `^1.33.1`
+- `@microsoft/rayfin-core`: `^1.33.1`
+- `@microsoft/rayfin-data`: `^1.33.1`
+- `@microsoft/rayfin-lib`: `^1.33.1`
+- `@tailwindcss/vite`: `^4.3.0`
+- `clsx`: `^2.1.1`
+- `framer-motion`: `^12.40.0`
+- `graphein`: `>=0.16.0`
+- `lucide-react`: `^1.17.0`
+- `react`: `^19.2.7`
+- `react-dom`: `^19.2.7`
+- `react-error-boundary`: `^6.1.2`
+- `tailwind-merge`: `^3.6.0`
+- `tailwindcss`: `^4.3.0`
+
+## devDependencies
+
+- `@eslint/js`: `^9.21.0`
+- `@graphein/node`: `>=0.16.0`
+- `@microsoft/fabric-app-data-cli`: `1.1.0`
+- `@microsoft/fabric-app-data-cli-proxy`: `1.0.0`
+- `@microsoft/rayfin-cli`: `^1.33.1`
+- `@microsoft/rayfin-mcp`: `^1.33.1`
+- `@types/react`: `^19.2.17`
+- `@types/react-dom`: `^19.2.3`
+- `@vitejs/plugin-react-swc`: `^4.3.1`
+- `eslint`: `^10.4.1`
+- `eslint-plugin-react-hooks`: `^7.1.1`
+- `eslint-plugin-react-refresh`: `^0.5.2`
+- `globals`: `^17.6.0`
+- `rollup-plugin-license`: `^3.7.1`
+- `typescript`: `~5.7.2`
+- `typescript-eslint`: `^8.38.0`
+- `vite`: `^8.1.1`

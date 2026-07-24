@@ -1,0 +1,342 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------
+ * Dashboard design tokens — single source of truth for the look.
+ *
+ * Direction: "Editorial analytics" — light-first, on warm paper. Ink
+ * text on a calm bone canvas, one confident indigo accent, a geometric
+ * display face (Space Grotesk) over Inter. Hierarchy comes from surface,
+ * hairline borders, type scale and spacing rhythm — NO gradients, NO
+ * drop shadows. Dark mode is a warm near-black (not navy).
+ *
+ * Components reference these tokens via Tailwind utilities (`bg-card`,
+ * `text-foreground`, `border-border`) or the chart helpers in
+ * `lib/chartTokens.ts` — never raw hex. The whole palette lives in
+ * `@theme static` so every `--color-*` is emitted as a real CSS variable
+ * (the chart helpers read them via getComputedStyle; `lib/graphein-theme.ts`
+ * bridges them into Graphein). `.dark` flips every token.
+ *
+ * Accent is ONE swappable family — recolor `--color-primary*` (+ first
+ * `--color-chart-1`, `--color-ring`) to rebrand the whole app + charts.
+ * ------------------------------------------------------------------ */
+
+@theme static {
+  /* ---------- Fonts (bundled via @fontsource-variable in main.tsx) ---------- */
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", sans-serif;
+  /* Display = Space Grotesk — geometric, a touch quirky, sets the character.
+     Swap to another characterful face in the polish pass to rebrand. */
+  --font-display: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif,
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace,
+    "SF Mono", Menlo, Consolas, monospace;
+  --font-numeric: var(--font-sans);
+  /* Back-compat aliases (font-heading / font-base / font-monospace utilities) */
+  --font-heading: var(--font-display);
+  --font-base: var(--font-sans);
+  --font-monospace: var(--font-mono);
+
+  /* ---------- Radius scale ---------- */
+  --radius-none: 0;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+  --radius-3xl: 1.5rem;
+  --radius-full: 9999px;
+  --radius: 0.875rem;
+
+  /* ---------- Light mode palette (default) — warm "paper" editorial ---------- */
+  /* Surfaces — bone canvas, white cards float above it */
+  --color-background: #f4f2ec;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #ebe8df;
+  --color-card: #fffdf9;
+  --color-card-foreground: #1b1a17;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1b1a17;
+  --color-muted: #ece9e0;
+  --color-muted-foreground: #6f6a5e;
+  --color-accent: #e9e5da;
+  --color-accent-foreground: #1b1a17;
+
+  /* Text — ink, secondary, faint */
+  --color-foreground: #1b1a17;
+  --color-foreground-secondary: #57534a;
+  --color-foreground-muted: #908b7d;
+
+  /* Borders / inputs / focus */
+  --color-border: #e2ddd1;
+  --color-border-strong: #cbc4b3;
+  --color-input: #ddd8cb;
+  --color-ring: #4f46e5;
+
+  /* Brand — confident indigo. White-on-indigo for fills; -strong is a
+     deeper indigo for accent text/labels that need AA on paper. */
+  --color-primary: #4f46e5;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: rgba(79, 70, 229, 0.12);
+  --color-primary-strong: #4338ca;
+
+  /* Secondary surfaces (button / chip backgrounds) */
+  --color-secondary: #ebe8df;
+  --color-secondary-foreground: #1b1a17;
+
+  /* State colors */
+  --color-success: #15803d;
+  --color-success-soft: rgba(21, 128, 61, 0.14);
+  --color-warning: #b45309;
+  --color-warning-soft: rgba(180, 83, 9, 0.12);
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-destructive-soft: rgba(220, 38, 38, 0.1);
+  --color-info: #1d4ed8;
+  --color-info-soft: rgba(29, 78, 216, 0.12);
+
+  /* Chart palette — 10 hues, accent-first so the lead series matches brand.
+     Identical in light + dark order; the bridge feeds these to every chart. */
+  --color-chart-1: #4f46e5; /* indigo (accent) */
+  --color-chart-2: #0d9488; /* teal */
+  --color-chart-3: #d97706; /* amber */
+  --color-chart-4: #e11d48; /* rose */
+  --color-chart-5: #7c3aed; /* violet */
+  --color-chart-6: #0284c7; /* sky */
+  --color-chart-7: #16a34a; /* green */
+  --color-chart-8: #ea580c; /* orange */
+  --color-chart-9: #db2777; /* pink */
+  --color-chart-10: #65a30d; /* lime */
+  --color-chart-track: rgba(27, 26, 23, 0.06);
+  --color-chart-grid: #e6e1d5;
+  --color-chart-axis: #cbc4b3;
+  --color-chart-cursor: rgba(27, 26, 23, 0.08);
+
+  /* ---------- Spacing — 4px baseline grid (p-*, m-*, gap-*) ----------
+     NOTE: do NOT add a `--spacing-none` key — Tailwind v4 folds the
+     `--spacing-*` namespace into `leading-*`, so `none` would turn
+     `leading-none` into line-height:0 and collapse KPI values. */
+  --spacing-xxs: 2px;
+  --spacing-xs: 4px;
+  --spacing-s-nudge: 6px;
+  --spacing-s: 8px;
+  --spacing-m-nudge: 10px;
+  --spacing-m: 12px;
+  --spacing-l: 16px;
+  --spacing-xl: 20px;
+  --spacing-xxl: 24px;
+  --spacing-xxxl: 32px;
+
+  /* ---------- Font sizes — 100-based scale (text-*) ---------- */
+  --text-100: 10px;
+  --text-200: 12px;
+  --text-300: 14px;
+  --text-400: 16px;
+  --text-500: 20px;
+  --text-600: 24px;
+  --text-hero-700: 28px;
+  --text-hero-800: 32px;
+  --text-hero-900: 40px;
+  --text-hero-1000: 68px;
+
+  /* ---------- Line heights (leading-*) ---------- */
+  --leading-100: 14px;
+  --leading-200: 16px;
+  --leading-300: 20px;
+  --leading-400: 22px;
+  --leading-500: 28px;
+  --leading-600: 32px;
+  --leading-hero-700: 36px;
+  --leading-hero-800: 40px;
+  --leading-hero-900: 52px;
+  --leading-hero-1000: 92px;
+
+  /* ---------- Font weights (font-*) ---------- */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ---------- Icon sizes — icon-size-* utility ---------- */
+  --icon-size-100: 12px;
+  --icon-size-200: 16px;
+  --icon-size-300: 20px;
+  --icon-size-400: 24px;
+  --icon-size-500: 28px;
+  --icon-size-600: 32px;
+  --icon-size-700: 48px;
+}
+
+/* ---------- Dark mode override — warm near-black ---------- */
+.dark {
+  --color-background: #121113;
+  --color-surface-1: #1a191d;
+  --color-surface-2: #221f25;
+  --color-card: #1a191d;
+  --color-card-foreground: #f1efe9;
+  --color-popover: #221f25;
+  --color-popover-foreground: #f1efe9;
+  --color-muted: #26232a;
+  --color-muted-foreground: #a39e95;
+  --color-accent: #2a2730;
+  --color-accent-foreground: #f1efe9;
+
+  --color-foreground: #f1efe9;
+  --color-foreground-secondary: #a8a39a;
+  --color-foreground-muted: #6f6a62;
+
+  --color-border: #2b2830;
+  --color-border-strong: #403c46;
+  --color-input: #2b2830;
+  --color-ring: #8b85ff;
+
+  /* Brand — luminous indigo on near-black; dark ink for fills. */
+  --color-primary: #8b85ff;
+  --color-primary-foreground: #15131c;
+  --color-primary-soft: rgba(139, 133, 255, 0.18);
+  --color-primary-strong: #aaa4ff;
+
+  --color-secondary: #26232a;
+  --color-secondary-foreground: #f1efe9;
+
+  --color-success: #4ade80;
+  --color-success-soft: rgba(74, 222, 128, 0.14);
+  --color-warning: #fbbf24;
+  --color-warning-soft: rgba(251, 191, 36, 0.1);
+  --color-destructive: #fb7185;
+  --color-destructive-foreground: #15131c;
+  --color-destructive-soft: rgba(251, 113, 133, 0.12);
+  --color-info: #60a5fa;
+  --color-info-soft: rgba(96, 165, 250, 0.12);
+
+  /* Chart palette — brighter hues for the dark canvas, same order. */
+  --color-chart-1: #8b85ff; /* indigo */
+  --color-chart-2: #2dd4bf; /* teal */
+  --color-chart-3: #fbbf24; /* amber */
+  --color-chart-4: #fb7185; /* rose */
+  --color-chart-5: #a78bfa; /* violet */
+  --color-chart-6: #38bdf8; /* sky */
+  --color-chart-7: #4ade80; /* green */
+  --color-chart-8: #fb923c; /* orange */
+  --color-chart-9: #f472b6; /* pink */
+  --color-chart-10: #a3e635; /* lime */
+  --color-chart-track: rgba(241, 239, 233, 0.08);
+  --color-chart-grid: #221f25;
+  --color-chart-axis: #403c46;
+  --color-chart-cursor: rgba(241, 239, 233, 0.08);
+}
+
+@utility icon-size-* {
+  width: --value(--icon-size-*);
+  height: --value(--icon-size-*);
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    background: var(--color-background);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  /* Native form controls inherit the page font */
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+
+  /* Theme-aware focus ring for any focus-visible element */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  /* Tabular numerics on hero / KPI / axis numbers */
+  .font-numeric,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* Subtle theme-aware scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: var(--radius-md);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  /* Shimmer used for skeleton loaders — theme-aware. */
+  @keyframes kit-shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--color-muted) 0%,
+      var(--color-accent) 50%,
+      var(--color-muted) 100%
+    );
+    background-size: 200% 100%;
+    animation: kit-shimmer 1.8s ease-in-out infinite;
+  }
+
+  /* Staggered card reveal — one high-impact load moment. */
+  @keyframes kit-rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .animate-rise {
+    animation: kit-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}

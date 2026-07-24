@@ -1,0 +1,12 @@
+apiVersion: v1
+metadata:
+  name: fabricator-universal
+  displayName: Universal App
+  description: >-
+    A lean, Fabric-authenticated React + Vite starter that grows into anything.
+    A built-in capability router picks the right Rayfin services, npm modules,
+    and skills on demand — CRUD apps, storage, functions, Graphein charts, or
+    Fabric analytics dashboards. Built for the Fabricator deploy-to-test loop.
+entries:
+  - path: .
+    name: fabricator-universal

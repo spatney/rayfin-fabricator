@@ -5,6 +5,7 @@ pub mod agent_skills;
 pub mod agent_tools;
 pub mod crashlog;
 pub mod copilot;
+pub mod deps;
 pub mod dev_server;
 pub mod diagnostics;
 pub mod emit;

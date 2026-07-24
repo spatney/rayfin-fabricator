@@ -70,6 +70,16 @@ jobs:
         env:
           CS: ${{ secrets.APPINSIGHTS_CONNECTION_STRING }}
 
+      # Prebuild the Universal template's install-acceleration artifacts
+      # (node_modules.tgz + npm-cache.tgz) for THIS platform, into
+      # resources/fabricator-universal-deps/ so the Tauri bundle picks them up.
+      # Best-effort: the script warns and exits 0 if it can't install (e.g. the
+      # Rayfin packages aren't resolvable here), and Fabricator falls back to a
+      # normal npm install at runtime — so this never blocks a release.
+      - name: Build Universal template dependency artifacts
+        shell: bash
+        run: npm run build:universal-deps
+
       # --- Windows code signing (Azure Trusted / Artifact Signing) -------------
       - name: Detect code-signing configuration (Windows)
         if: runner.os == 'Windows'

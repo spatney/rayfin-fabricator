@@ -37,7 +37,8 @@
     "copyright": "Copyright © 2026 Sachin Patney",
     "resources": {
       "../resources/telemetry*.json": "resources/",
-      "../resources/fabricator-templates/": "resources/fabricator-templates/"
+      "../resources/fabricator-templates/": "resources/fabricator-templates/",
+      "../resources/fabricator-universal-deps/": "resources/fabricator-universal-deps/"
     },
     "icon": [
       "icons/32x32.png",

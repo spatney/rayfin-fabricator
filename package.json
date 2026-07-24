@@ -27,6 +27,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "build:universal-deps": "node scripts/build-universal-deps.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\""
   },
   "dependencies": {
