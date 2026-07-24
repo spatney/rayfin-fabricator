@@ -148,11 +148,6 @@ export default function DeploymentsControl({
     if (!wsResult) void loadWorkspaces()
   }
 
-  function openCreate(): void {
-    setOpen(true)
-    startCreate()
-  }
-
   async function doSwitch(d: FabricDeployment): Promise<void> {
     const byId = Boolean(d.workspaceId)
     const target = d.workspaceId ?? d.workspaceName
@@ -205,18 +200,6 @@ export default function DeploymentsControl({
             {activeLabel || (reconciling ? 'Checking…' : 'Not deployed')}
           </span>
           <span className="dep-chip-caret"><Codicon name="chevron-down" /></span>
-        </button>
-        <button
-          className="seg-btn seg-btn--primary dep-deploy"
-          disabled={running || (reconciling && !hasDeployment)}
-          title={hasDeployment ? 'Redeploy the active deployment' : 'Create your first deployment'}
-          onClick={() => {
-            if (running || (reconciling && !hasDeployment)) return
-            if (hasDeployment) onRedeploy()
-            else openCreate()
-          }}
-        >
-          {running ? 'Deploying…' : hasDeployment ? 'Redeploy' : 'Deploy'}
         </button>
       </div>
 
@@ -334,9 +317,25 @@ export default function DeploymentsControl({
                 </ul>
               )}
               {!(loadingDeps && deployments === null) && (
-                <button className="dep-new" onClick={startCreate} disabled={running}>
-                  + New deployment
-                </button>
+                <div className="dep-pop-foot">
+                  {hasDeployment && (
+                    <button
+                      className="btn btn--sm btn--primary dep-redeploy"
+                      disabled={running || reconciling}
+                      title="Redeploy the active deployment"
+                      onClick={() => {
+                        if (running || reconciling) return
+                        onRedeploy()
+                        setOpen(false)
+                      }}
+                    >
+                      {running ? 'Deploying…' : 'Redeploy'}
+                    </button>
+                  )}
+                  <button className="dep-new" onClick={startCreate} disabled={running}>
+                    + New deployment
+                  </button>
+                </div>
               )}
             </>
           )}

@@ -1,11 +1,15 @@
-import { useEffect, useId, useState } from 'react'
-import type { AppSettings, AppVersions, ThemePreference } from '@shared/ipc'
+import { useCallback, useEffect, useId, useState } from 'react'
+import type { AppSettings, AppVersions, AuthStatus, DoctorReport, ThemePreference } from '@shared/ipc'
 import { applyTheme, applyUiScale, UI_SCALES } from '../theme'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { useUpdates } from '../update'
 import { formatCopilotCli } from '../copilotVersion'
 import ConfirmModal from './ConfirmModal'
+import SetupScreen from '../screens/SetupScreen'
+import { Codicon } from './icons'
+
+type SettingsSection = 'general' | 'environment'
 
 interface Props {
   settings: AppSettings
@@ -13,6 +17,11 @@ interface Props {
   /** Persist a settings patch; the parent re-applies theme + stores it. */
   onChange: (patch: Partial<AppSettings>) => void
   onClose: () => void
+  /** Which section to open first (the prereq banner deep-links to 'environment'). */
+  initialSection?: SettingsSection
+  /** Doctor report from startup — seeds the Environment badge without re-spawning
+   *  the (subprocess-heavy) tool checks until the user opens that section. */
+  initialDoctor?: DoctorReport | null
 }
 
 const THEMES: Array<{ value: ThemePreference; label: string }> = [
@@ -50,14 +59,23 @@ export default function SettingsModal({
   settings,
   versions,
   onChange,
-  onClose
+  onClose,
+  initialSection = 'general',
+  initialDoctor = null
 }: Props): JSX.Element {
   useSuppressPreview()
   const { status: updateStatus, info: updateInfo, checkNow } = useUpdates()
+  const [section, setSection] = useState<SettingsSection>(initialSection)
   const [checkedUpdates, setCheckedUpdates] = useState(false)
   const [showExperiments, setShowExperiments] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
+  // Environment (setup) diagnostics — the checks now live in Settings rather than a
+  // startup gate. Seed `doctor` from the startup report so the nav badge is correct
+  // immediately; auth + a fresh re-check load lazily when the section is opened.
+  const [doctor, setDoctor] = useState<DoctorReport | null>(initialDoctor)
+  const [auth, setAuth] = useState<AuthStatus | null>(null)
+  const [envRefreshing, setEnvRefreshing] = useState(false)
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
   // Compatibility rendering is applied at startup, so any change only takes effect
@@ -77,6 +95,30 @@ export default function SettingsModal({
   useEffect(() => {
     void window.api.projects.state().then((s) => setWorkspaceRoot(s.workspaceRoot))
   }, [])
+
+  // Re-run the environment check (tools + sign-in status). Called on open and by
+  // the embedded checks panel's "Re-check" / install / sign-in actions.
+  const refreshEnv = useCallback(async (): Promise<void> => {
+    setEnvRefreshing(true)
+    try {
+      const [d, a] = await Promise.all([window.api.doctor.check(), window.api.auth.status()])
+      setDoctor(d)
+      setAuth(a)
+    } finally {
+      setEnvRefreshing(false)
+    }
+  }, [])
+
+  // Load the environment check (fresh doctor + auth) only when the section is
+  // actually opened — the checks shell out to node/npm/git/az, so this must not
+  // run for users who never leave General. `auth` doubles as the loaded sentinel.
+  useEffect(() => {
+    if (section === 'environment' && auth === null && !envRefreshing) {
+      void refreshEnv()
+    }
+  }, [section, auth, envRefreshing, refreshEnv])
+
+  const envReady = doctor?.ready ?? true
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -136,7 +178,7 @@ export default function SettingsModal({
     <>
       <div className="modal-backdrop" onClick={onClose}>
         <div
-          className="modal"
+          className="modal modal--settings"
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
@@ -154,8 +196,31 @@ export default function SettingsModal({
             </button>
           </div>
 
-          <div className="modal-body">
-            <div className="field">
+          <div className="modal-body settings-body">
+            <nav className="settings-nav" aria-label="Settings sections">
+              <button
+                type="button"
+                className={`settings-nav-btn${section === 'general' ? ' settings-nav-btn--active' : ''}`}
+                onClick={() => setSection('general')}
+              >
+                <Codicon name="settings-gear" className="settings-nav-ico" />
+                General
+              </button>
+              <button
+                type="button"
+                className={`settings-nav-btn${section === 'environment' ? ' settings-nav-btn--active' : ''}`}
+                onClick={() => setSection('environment')}
+              >
+                <Codicon name="tools" className="settings-nav-ico" />
+                Environment
+                {!envReady && <span className="settings-nav-dot" aria-label="Needs attention" />}
+              </button>
+            </nav>
+
+            <div className="settings-panel">
+              {section === 'general' ? (
+                <>
+                  <div className="field">
               <span className="field-label">Theme</span>
               <div className="seg">
                 {THEMES.map((t) => (
@@ -276,10 +341,7 @@ export default function SettingsModal({
                 aria-expanded={showExperiments}
                 onClick={() => setShowExperiments((s) => !s)}
               >
-                <span
-                  className="codicon codicon-chevron-right settings-disclosure-caret"
-                  aria-hidden="true"
-                />
+                <Codicon name="chevron-right" className="settings-disclosure-caret" />
                 <span className="field-label">
                   Experiments <span className="settings-beta">Beta</span>
                 </span>
@@ -287,7 +349,7 @@ export default function SettingsModal({
               {showExperiments && (
                 <div className="settings-disclosure-body">
                   <div className="settings-warn" role="note">
-                    <span className="codicon codicon-warning" aria-hidden="true" />
+                    <Codicon name="warning" />
                     <span>
                       These features are experimental and off by default. They may be unstable,
                       change, or be removed in a future update.
@@ -306,6 +368,17 @@ export default function SettingsModal({
                     onChange={(v) => onChange({ experiments: { localDevPreview: v } })}
                   />
                 </div>
+              )}
+                  </div>
+                </>
+              ) : (
+                <SetupScreen
+                  embedded
+                  doctor={doctor}
+                  auth={auth}
+                  refreshing={envRefreshing}
+                  onRefresh={refreshEnv}
+                />
               )}
             </div>
           </div>

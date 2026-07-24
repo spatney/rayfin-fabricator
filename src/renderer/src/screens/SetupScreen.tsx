@@ -21,10 +21,20 @@ interface Props {
   auth: AuthStatus | null
   refreshing: boolean
   onRefresh: () => Promise<void> | void
-  onEnter: () => void
+  /** Present only for the (legacy) standalone gate; omit when embedded in Settings. */
+  onEnter?: () => void
+  /** Render as a Settings panel: no hero, no "Enter Fabricator", flows inline. */
+  embedded?: boolean
 }
 
-export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnter }: Props): JSX.Element {
+export default function SetupScreen({
+  doctor,
+  auth,
+  refreshing,
+  onRefresh,
+  onEnter,
+  embedded = false
+}: Props): JSX.Element {
   const [log, setLog] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [finalizing, setFinalizing] = useState(false)
@@ -126,21 +136,23 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
     .join('\n')
 
   return (
-    <div className="setup">
+    <div className={`setup${embedded ? ' setup--embedded' : ''}`}>
       <div className="setup-scroll">
         <div className="setup-inner">
-          <header className="setup-hero">
-            <div className="setup-hero-mark">
-              <FabricatorMark />
-            </div>
-            <div className="setup-hero-copy">
-              <span className="setup-eyebrow">Welcome to</span>
-              <h1 className="setup-hero-title">Fabricator</h1>
-              <p className="setup-hero-tagline">
-                Build and ship Rayfin apps by chatting with an AI agent.
-              </p>
-            </div>
-          </header>
+          {!embedded && (
+            <header className="setup-hero">
+              <div className="setup-hero-mark">
+                <FabricatorMark />
+              </div>
+              <div className="setup-hero-copy">
+                <span className="setup-eyebrow">Welcome to</span>
+                <h1 className="setup-hero-title">Fabricator</h1>
+                <p className="setup-hero-tagline">
+                  Build and ship Rayfin apps by chatting with an AI agent.
+                </p>
+              </div>
+            </header>
+          )}
 
           <div className={`setup-meter ${allReady ? 'setup-meter--done' : ''}`}>
             <div className="setup-meter-head">
@@ -366,16 +378,18 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
               <ReloadIcon className={`btn-ico ${refreshing ? 'icon-spin' : ''}`} />
               {refreshing ? 'Checking…' : 'Re-check'}
             </button>
-            <button
-              className="btn btn--primary setup-enter"
-              disabled={!allReady || busy !== null}
-              onClick={() => onEnter()}
-            >
-              Enter Fabricator
-              <span className="setup-enter-arrow" aria-hidden="true">
-                →
-              </span>
-            </button>
+            {!embedded && onEnter && (
+              <button
+                className="btn btn--primary setup-enter"
+                disabled={!allReady || busy !== null}
+                onClick={() => onEnter()}
+              >
+                Enter Fabricator
+                <span className="setup-enter-arrow" aria-hidden="true">
+                  →
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type FormEvent } from 'react'
 import type { StudioProject } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
+import { Codicon } from './icons'
 
 interface Props {
   project: StudioProject
@@ -105,7 +106,7 @@ export default function ManageProjectModal({
             disabled={saving}
             onClick={onClose}
           >
-            <span className="codicon codicon-close" aria-hidden="true" />
+            <Codicon name="close" />
           </button>
         </div>
 

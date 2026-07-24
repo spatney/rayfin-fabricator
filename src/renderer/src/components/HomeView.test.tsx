@@ -34,7 +34,7 @@ describe('HomeView project launcher', () => {
     expect(props.onOpenExisting).toHaveBeenCalledTimes(1)
     expect(props.onCloneFromGitHub).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('button', { name: /open existing/i })).toBeNull()
-    expect(document.querySelectorAll('.home-action-icon > svg')).toHaveLength(3)
+    expect(document.querySelectorAll('.home-hero-cta-ico, .home-chip-ico')).toHaveLength(3)
   })
 
   it('uses separate native controls to open and manage a recent project', () => {

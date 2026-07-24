@@ -2602,31 +2602,29 @@ export default function ChatPanel({
   return (
     <div className="chat">
       <div className="chat-toolbar">
-        <div className="seg seg--toolbar">
-          {onToggleFocus && (
-            <button
-              className={`seg-btn seg-btn--icon${focused ? ' seg-btn--on' : ''}`}
-              onClick={onToggleFocus}
-              title={
-                focused
-                  ? 'Exit focus — show the preview again'
-                  : 'Focus the chat — hide the preview'
-              }
-              aria-label={focused ? 'Exit focus' : 'Focus the chat'}
-            >
-              {focused ? <CollapseIcon /> : <ExpandIcon />}
-            </button>
-          )}
+        {onToggleFocus && (
           <button
-            className="seg-btn"
-            onClick={newChat}
-            disabled={sending || messages.length === 0}
-            title="Clear this conversation and start fresh"
+            className={`icon-btn${focused ? ' icon-btn--on' : ''}`}
+            onClick={onToggleFocus}
+            title={
+              focused
+                ? 'Exit focus — show the preview again'
+                : 'Focus the chat — hide the preview'
+            }
+            aria-label={focused ? 'Exit focus' : 'Focus the chat'}
           >
-            <EraserIcon />
-            Clear chat
+            {focused ? <CollapseIcon /> : <ExpandIcon />}
           </button>
-        </div>
+        )}
+        <button
+          className="icon-btn"
+          onClick={newChat}
+          disabled={sending || messages.length === 0}
+          title="Clear this conversation and start fresh"
+          aria-label="Clear chat"
+        >
+          <EraserIcon />
+        </button>
         <span className="chat-toolbar-spacer" />
       </div>
 
@@ -2810,7 +2808,7 @@ export default function ChatPanel({
                     pickFile(f.path)
                   }}
                 >
-                  <span className="codicon codicon-file mention-ico" aria-hidden="true" />
+                  <Codicon name="file" className="mention-ico" />
                   <span className="mention-name">{f.name}</span>
                   <span className="mention-path">{f.path}</span>
                 </button>

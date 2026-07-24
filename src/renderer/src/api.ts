@@ -79,7 +79,8 @@ export const api: RayfinStudioApi = {
     loginCopilot: () => invoke('auth_login_copilot'),
     loginRayfin: (tenant?: string) => invoke('auth_login_rayfin', { tenant }),
     loginAz: () => invoke('auth_login_az'),
-    logoutRayfin: () => invoke('auth_logout_rayfin')
+    logoutRayfin: () => invoke('auth_logout_rayfin'),
+    entraPhoto: () => invoke('auth_entra_photo')
   },
 
   github: {

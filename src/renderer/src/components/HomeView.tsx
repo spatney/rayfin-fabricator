@@ -40,55 +40,32 @@ export default function HomeView({
   return (
     <div className="home">
       <div className="home-inner">
-        <header className="home-head">
-          <div className="home-brand">
-            <FabricatorMark className="home-mark" />
-            <div>
-              <p className="home-eyebrow">Fabricator</p>
-              <h1 className="home-title">Your projects</h1>
-            </div>
-          </div>
-          <p className="home-sub">
+        <header className="home-hero">
+          <FabricatorMark className="home-hero-mark" />
+          <h1 className="home-hero-title">Let’s build something</h1>
+          <p className="home-hero-sub">
             Start a Rayfin app from a template, open a local project, or pick up where you left off.
           </p>
-          <div className="home-actions" aria-label="Project actions">
+          <button type="button" className="home-hero-cta" onClick={onNewProject}>
+            <AddIcon className="home-hero-cta-ico" />
+            <span className="home-hero-cta-label">Start a new project</span>
+            <span className="home-hero-cta-arrow" aria-hidden="true">
+              →
+            </span>
+          </button>
+          <div className="home-hero-chips" aria-label="More ways to start">
             <button
               type="button"
-              className="home-action home-action--primary"
-              onClick={onNewProject}
-            >
-              <span className="home-action-icon" aria-hidden="true">
-                <AddIcon className="home-action-svg" />
-              </span>
-              <span className="home-action-text">
-                <span className="home-action-label">New project</span>
-                <span className="home-action-hint">Start with a Rayfin template</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              className="home-action"
+              className="home-chip"
               disabled={opening}
               onClick={onOpenExisting}
             >
-              <span className="home-action-icon" aria-hidden="true">
-                <FolderIcon className="home-action-svg" />
-              </span>
-              <span className="home-action-text">
-                <span className="home-action-label">
-                  {opening ? 'Opening folder...' : 'Open folder'}
-                </span>
-                <span className="home-action-hint">Use an existing local project</span>
-              </span>
+              <FolderIcon className="home-chip-ico" />
+              {opening ? 'Opening folder…' : 'Open folder'}
             </button>
-            <button type="button" className="home-action" onClick={onCloneFromGitHub}>
-              <span className="home-action-icon" aria-hidden="true">
-                <BranchIcon className="home-action-svg" />
-              </span>
-              <span className="home-action-text">
-                <span className="home-action-label">Clone from GitHub</span>
-                <span className="home-action-hint">Bring a repository into Fabricator</span>
-              </span>
+            <button type="button" className="home-chip" onClick={onCloneFromGitHub}>
+              <BranchIcon className="home-chip-ico" />
+              Clone from GitHub
             </button>
           </div>
         </header>

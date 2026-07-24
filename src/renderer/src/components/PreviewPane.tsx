@@ -11,12 +11,16 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { loadCopilotModels, pickFastModel, isFastModel } from '../copilotModels'
-import { usePreviewSuppressed } from '../overlay'
+import { usePreviewSuppressed, useSuppressPreview } from '../overlay'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronDownIcon,
   ReloadIcon,
   FabricIcon,
+  GlobeIcon,
+  CheckIcon,
+  OpenExternalIcon,
   DesignIcon,
   ExpandIcon,
   CollapseIcon
@@ -323,6 +327,10 @@ export default function PreviewPane({
   // Which URL the embedded webview actually loads. Falls back to the direct URL
   // whenever the Fabric link is unavailable or the toggle is off.
   const [previewMode, setPreviewMode] = useState<PreviewMode>(() => readPreviewMode(project))
+  // Toolbar URL dropdown (switch between the Fabric portal view and the direct
+  // app URL). It's an HTML overlay, so it must freeze the native preview to show.
+  const [urlMenuOpen, setUrlMenuOpen] = useState(false)
+  useSuppressPreview(urlMenuOpen)
   const deployedPreviewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
   // Live local preview (experiment): while a Vite dev server is running for this
   // project, the surface shows its localhost URL instead of the deployed app. A
@@ -668,6 +676,14 @@ export default function PreviewPane({
     const u = displayUrl || deployedUrl
     if (u) void window.api.openExternal(u)
   }
+  // Switch the preview between the Fabric portal shell and the direct app URL.
+  // Persist on the project so the agent's screenshot/navigate tools target the
+  // same view, then refresh project state so the choice survives a remount.
+  const selectMode = (next: PreviewMode): void => {
+    if (next === previewMode) return
+    setPreviewMode(next)
+    void window.api.projects.setPreviewMode(project.id, next).then(() => onPreviewModeChanged?.())
+  }
 
   // ── In-preview design mode ────────────────────────────────────────────────
   // A click-to-edit controller injected into the preview webview lets the user
@@ -973,9 +989,9 @@ export default function PreviewPane({
     <div className="preview">
       <div className="preview-toolbar">
         <div className="preview-toolbar-left">
-          <div className="seg seg--toolbar preview-nav">
+          <div className="preview-nav">
             <button
-              className="seg-btn seg-btn--icon"
+              className="icon-btn"
               onClick={goBack}
               disabled={!showWebview || !canBack || transitioning}
               aria-label="Back"
@@ -984,7 +1000,7 @@ export default function PreviewPane({
               <ChevronLeftIcon />
             </button>
             <button
-              className="seg-btn seg-btn--icon"
+              className="icon-btn"
               onClick={goForward}
               disabled={!showWebview || !canForward || transitioning}
               aria-label="Forward"
@@ -993,7 +1009,7 @@ export default function PreviewPane({
               <ChevronRightIcon />
             </button>
             <button
-              className="seg-btn seg-btn--icon"
+              className="icon-btn"
               onClick={reload}
               disabled={!showWebview || transitioning}
               aria-label="Reload"
@@ -1011,73 +1027,123 @@ export default function PreviewPane({
               Local
             </span>
           )}
-          {(displayUrl || deployedUrl) && (
-            <button
-              className="preview-url"
-              title={displayUrl || deployedUrl}
-              onClick={openExternal}
-            >
-              {prettyUrl(displayUrl || deployedUrl || '')}
-            </button>
-          )}
+          {(displayUrl || deployedUrl) &&
+            (fabricUrl && !isLocal ? (
+              <div className="preview-url-select">
+                <button
+                  className="preview-url preview-url--select"
+                  title={displayUrl || deployedUrl}
+                  onClick={() => setUrlMenuOpen((v) => !v)}
+                  disabled={transitioning}
+                  aria-haspopup="menu"
+                  aria-expanded={urlMenuOpen}
+                >
+                  <span className="preview-url-text">
+                    {prettyUrl(displayUrl || deployedUrl || '')}
+                  </span>
+                  <ChevronDownIcon className="preview-url-caret" />
+                </button>
+                {urlMenuOpen && (
+                  <>
+                    <div className="preview-url-scrim" onClick={() => setUrlMenuOpen(false)} />
+                    <div className="preview-url-menu" role="menu">
+                      <button
+                        className={`preview-url-option${previewMode === 'fabric' ? ' preview-url-option--on' : ''}`}
+                        role="menuitemradio"
+                        aria-checked={previewMode === 'fabric'}
+                        onClick={() => {
+                          selectMode('fabric')
+                          setUrlMenuOpen(false)
+                        }}
+                      >
+                        <FabricIcon className="preview-url-option-ico" />
+                        <span className="preview-url-option-body">
+                          <span className="preview-url-option-label">Fabric</span>
+                          <span className="preview-url-option-sub">{prettyUrl(fabricUrl)}</span>
+                        </span>
+                        {previewMode === 'fabric' && (
+                          <CheckIcon className="preview-url-option-check" />
+                        )}
+                      </button>
+                      <button
+                        className={`preview-url-option${previewMode === 'direct' ? ' preview-url-option--on' : ''}`}
+                        role="menuitemradio"
+                        aria-checked={previewMode === 'direct'}
+                        onClick={() => {
+                          selectMode('direct')
+                          setUrlMenuOpen(false)
+                        }}
+                      >
+                        <GlobeIcon className="preview-url-option-ico" />
+                        <span className="preview-url-option-body">
+                          <span className="preview-url-option-label">External URL</span>
+                          <span className="preview-url-option-sub">
+                            {prettyUrl(deployedUrl || '')}
+                          </span>
+                        </span>
+                        {previewMode === 'direct' && (
+                          <CheckIcon className="preview-url-option-check" />
+                        )}
+                      </button>
+                      <div className="preview-url-menu-divider" />
+                      <button
+                        className="preview-url-option"
+                        role="menuitem"
+                        onClick={() => {
+                          openExternal()
+                          setUrlMenuOpen(false)
+                        }}
+                      >
+                        <OpenExternalIcon className="preview-url-option-ico" />
+                        <span className="preview-url-option-body">
+                          <span className="preview-url-option-label">Open in browser</span>
+                        </span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <button
+                className="preview-url"
+                title={displayUrl || deployedUrl}
+                onClick={openExternal}
+              >
+                {prettyUrl(displayUrl || deployedUrl || '')}
+              </button>
+            ))}
         </div>
         <div className="preview-toolbar-right">
           {loading && showWebview && <span className="preview-loading">Loading…</span>}
-          <div className="seg seg--toolbar">
-            <button
-              className={`seg-btn ${previewMode === 'fabric' ? 'seg-btn--on' : ''}`}
-              onClick={() => {
-                const next: PreviewMode = previewMode === 'fabric' ? 'direct' : 'fabric'
-                setPreviewMode(next)
-                // Persist on the project (store-backed) so the Fabricator agent's
-                // screenshot/navigate tools target the same view, not just the UI;
-                // then refresh project state so the choice survives a remount.
-                void window.api.projects
-                  .setPreviewMode(project.id, next)
-                  .then(() => onPreviewModeChanged?.())
-              }}
-              disabled={!showWebview || !fabricUrl || transitioning || isLocal}
-              title={
-                !fabricUrl
-                  ? 'The Fabric portal view is unavailable for this deployment'
-                  : previewMode === 'fabric'
-                    ? 'Viewing inside the Fabric portal shell — click to return to the direct app view'
-                    : 'View the app embedded in the Fabric portal shell'
-              }
-            >
-              <FabricIcon />
-              <span className="seg-btn-label">Fabric</span>
-            </button>
-            <button
-              className={`seg-btn ${designActive ? 'seg-btn--on' : ''}`}
-              onClick={toggleDesign}
-              disabled={!showWebview || transitioning || designBusy || isLocal}
-              title={
-                previewMode === 'fabric'
-                  ? 'Design mode — click elements in the embedded app to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
-                  : 'Design mode — click elements in the preview to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
-              }
-            >
-              <DesignIcon />
-              <span className="seg-btn-label">
-                {designBusy
-                  ? 'Sending…'
-                  : designActive
-                    ? `Design${designCount ? ` · ${designCount}` : ''}`
-                    : 'Design'}
-              </span>
-            </button>
-            <button
-              className={`seg-btn seg-btn--icon ${focused ? 'seg-btn--on' : ''}`}
-              onClick={onToggleFocus}
-              aria-label={focused ? 'Exit focus' : 'Focus'}
-              title={
-                focused ? 'Exit focus — show the chat again' : 'Focus the preview — hide the chat'
-              }
-            >
-              {focused ? <CollapseIcon /> : <ExpandIcon />}
-            </button>
-          </div>
+          <button
+            className={`design-btn ${designActive ? 'design-btn--on' : ''}`}
+            onClick={toggleDesign}
+            disabled={!showWebview || transitioning || designBusy || isLocal}
+            title={
+              previewMode === 'fabric'
+                ? 'Design mode — click elements in the embedded app to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
+                : 'Design mode — click elements in the preview to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
+            }
+          >
+            <DesignIcon />
+            <span className="seg-btn-label">
+              {designBusy
+                ? 'Sending…'
+                : designActive
+                  ? `Design${designCount ? ` · ${designCount}` : ''}`
+                  : 'Design'}
+            </span>
+          </button>
+          <button
+            className={`icon-btn ${focused ? 'icon-btn--on' : ''}`}
+            onClick={onToggleFocus}
+            aria-label={focused ? 'Exit focus' : 'Focus'}
+            title={
+              focused ? 'Exit focus — show the chat again' : 'Focus the preview — hide the chat'
+            }
+          >
+            {focused ? <CollapseIcon /> : <ExpandIcon />}
+          </button>
         </div>
       </div>
 

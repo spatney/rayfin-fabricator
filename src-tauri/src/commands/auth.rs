@@ -406,6 +406,67 @@ pub fn get_cached_identity() -> Option<TelemetryIdentity> {
   cached_identity()
 }
 
+/// Fetch the signed-in user's Entra profile photo from Microsoft Graph, using a
+/// Graph access token minted by the Azure CLI (`az`) — the same identity surface
+/// the app already relies on for `az`-backed features. Returns a `data:` URL
+/// (base64) the renderer can drop straight into an `<img>`, or `None` when `az`
+/// isn't signed in, the user has no photo set, or anything fails. Callers fall
+/// back to initials, so this is best-effort and never surfaces an error.
+#[tauri::command]
+pub async fn auth_entra_photo() -> Option<String> {
+  let token_res = exec::run(
+    "az",
+    &[
+      "account",
+      "get-access-token",
+      "--resource",
+      "https://graph.microsoft.com",
+      "--query",
+      "accessToken",
+      "--output",
+      "tsv",
+    ],
+    RunOptions::timeout(30_000),
+  )
+  .await;
+  if !token_res.ok {
+    return None;
+  }
+  let token = token_res.stdout.trim();
+  if token.is_empty() {
+    return None;
+  }
+
+  let client = reqwest::Client::builder()
+    .timeout(std::time::Duration::from_secs(20))
+    .build()
+    .ok()?;
+  let res = client
+    .get("https://graph.microsoft.com/v1.0/me/photo/$value")
+    .bearer_auth(token)
+    .send()
+    .await
+    .ok()?;
+  // 404 = no photo set; 401/403 = insufficient Graph consent — all fall back.
+  if !res.status().is_success() {
+    return None;
+  }
+  let content_type = res
+    .headers()
+    .get(reqwest::header::CONTENT_TYPE)
+    .and_then(|v| v.to_str().ok())
+    .filter(|s| s.starts_with("image/"))
+    .unwrap_or("image/jpeg")
+    .to_string();
+  let bytes = res.bytes().await.ok()?;
+  if bytes.is_empty() {
+    return None;
+  }
+  use base64::Engine;
+  let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+  Some(format!("data:{content_type};base64,{encoded}"))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

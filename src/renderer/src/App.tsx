@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, AuthStatus, DoctorReport } from '@shared/ipc'
-import SetupScreen from './screens/SetupScreen'
 import Workbench from './screens/Workbench'
 import UpdateBanner from './components/UpdateBanner'
 import ForcedUpdateScreen from './components/ForcedUpdateScreen'
@@ -8,7 +7,7 @@ import SplashScreen from './components/SplashScreen'
 import { applyUiScale, watchTheme } from './theme'
 import { useUpdates } from './update'
 
-type Phase = 'loading' | 'setup' | 'ready'
+type Phase = 'loading' | 'ready'
 
 // Keep the playful splash on screen long enough to actually be seen, even when the
 // startup checks resolve almost instantly. Only the very first load is gated.
@@ -20,7 +19,6 @@ function App(): JSX.Element {
   const [doctor, setDoctor] = useState<DoctorReport | null>(null)
   const [auth, setAuth] = useState<AuthStatus | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
   const { blocking } = useUpdates()
 
   // Don't leave the splash before its minimum showtime has elapsed (first load only).
@@ -40,29 +38,17 @@ function App(): JSX.Element {
   }, [])
 
   const refresh = useCallback(async (): Promise<void> => {
-    setRefreshing(true)
-    try {
-      const [d, a] = await Promise.all([window.api.doctor.check(), window.api.auth.status()])
-      setDoctor(d)
-      setAuth(a)
-      // Always land on the setup screen — even when every tool is installed and
-      // all accounts are signed in. Entering the workbench is an explicit choice
-      // the user makes from there (see `enter`), so re-checks and sign-outs keep
-      // us on setup rather than auto-advancing.
-      applyPhase('setup')
-    } finally {
-      setRefreshing(false)
-    }
+    const [d, a] = await Promise.all([window.api.doctor.check(), window.api.auth.status()])
+    setDoctor(d)
+    setAuth(a)
+    // Land directly in the workbench — the environment check (tools + sign-in) now
+    // lives in Settings → Environment, surfaced by a non-blocking banner when
+    // something still needs attention. `doctor` is kept only to drive that banner.
+    applyPhase('ready')
   }, [applyPhase])
 
   const refreshAuth = useCallback(async (): Promise<void> => {
     setAuth(await window.api.auth.status())
-  }, [])
-
-  // Explicit transition into the workbench, triggered by the setup screen's
-  // "Enter" button once every prerequisite is satisfied.
-  const enter = useCallback((): void => {
-    setPhase('ready')
   }, [])
 
   useEffect(() => {
@@ -103,6 +89,7 @@ function App(): JSX.Element {
         <UpdateBanner />
         <Workbench
           auth={auth}
+          doctor={doctor}
           onSignOut={refresh}
           onAuthChanged={refreshAuth}
           settings={settings}
@@ -112,10 +99,11 @@ function App(): JSX.Element {
     )
   }
 
+  // Auth failed to resolve (rare): keep the splash rather than a dead setup gate.
   return (
     <>
       <UpdateBanner />
-      <SetupScreen doctor={doctor} auth={auth} refreshing={refreshing} onRefresh={refresh} onEnter={enter} />
+      <SplashScreen />
     </>
   )
 }
