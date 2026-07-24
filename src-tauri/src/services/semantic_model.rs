@@ -218,6 +218,45 @@ impl SemanticSchemaResult {
   }
 }
 
+/// One semantic model (dataset) in a workspace, for the "connect a model from
+/// your workspace" picker (`mode:"listWorkspaceModels"`).
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorkspaceModel {
+  pub id: Option<String>,
+  pub name: Option<String>,
+  pub is_refreshable: Option<bool>,
+  pub configured_by: Option<String>,
+  pub web_url: Option<String>,
+}
+
+/// The helper's `listWorkspaceModels` reply: the workspace's datasets plus the
+/// shared ok/needs-login/error envelope. Never panics — a failure classifies the
+/// login/az need so the UI can offer a sign-in.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorkspaceModelsResult {
+  pub ok: bool,
+  pub needs_login: bool,
+  pub needs_az: bool,
+  pub error: Option<String>,
+  pub models: Vec<WorkspaceModel>,
+}
+
+impl WorkspaceModelsResult {
+  fn failure(error: String) -> Self {
+    let needs_az = NEEDS_AZ_RE.is_match(&error);
+    let needs_login = !needs_az && NEEDS_LOGIN_RE.is_match(&error);
+    WorkspaceModelsResult {
+      ok: false,
+      needs_login,
+      needs_az,
+      error: Some(error),
+      ..Default::default()
+    }
+  }
+}
+
 /// Write the embedded helper to the app data dir and return its path.
 ///
 /// The helper source is a compile-time constant, so we only need to materialize
@@ -349,6 +388,22 @@ pub async fn schema_semantic_model(workspace_id: &str, item_id: &str) -> Semanti
     Ok(out) => serde_json::from_str::<SemanticSchemaResult>(&out)
       .unwrap_or_else(|_| SemanticSchemaResult::failure(out)),
     Err(detail) => SemanticSchemaResult::failure(detail),
+  }
+}
+
+/// List the semantic models (datasets) in `workspace_id` — the data behind the
+/// "connect a model from your workspace" picker. Uses the silent Power BI token
+/// (the helper's `listWorkspaceModels` mode). Never panics — a failure returns an
+/// `ok:false` [`WorkspaceModelsResult`] with login classification.
+pub async fn list_workspace_models(workspace_id: &str) -> WorkspaceModelsResult {
+  let request = serde_json::json!({
+    "mode": "listWorkspaceModels",
+    "workspaceId": workspace_id,
+  });
+  match invoke_helper(&request).await {
+    Ok(out) => serde_json::from_str::<WorkspaceModelsResult>(&out)
+      .unwrap_or_else(|_| WorkspaceModelsResult::failure(out)),
+    Err(detail) => WorkspaceModelsResult::failure(detail),
   }
 }
 

@@ -291,6 +291,25 @@ export interface FabricDirectoryResult {
   error?: string
 }
 
+/** One semantic model (dataset) in a workspace, for the connect-model picker. */
+export interface WorkspaceModel {
+  id?: string
+  name?: string
+  isRefreshable?: boolean
+  configuredBy?: string
+  webUrl?: string
+}
+
+/** Outcome of listing a workspace's semantic models (never throws). */
+export interface WorkspaceModelsResult {
+  ok: boolean
+  models: WorkspaceModel[]
+  /** True when there was no cached Fabric session (Rayfin re-login needed). */
+  needsLogin?: boolean
+  needsAz?: boolean
+  error?: string
+}
+
 /** One table in a semantic model's schema (a node in the Model-tab diagram). */
 export interface SemanticTable {
   name?: string
@@ -1682,6 +1701,12 @@ export interface RayfinStudioApi {
      * Never throws; reports `needsAz` when the Azure CLI isn't signed in.
      */
     directorySearch: (query: string) => Promise<FabricDirectoryResult>
+    /**
+     * List the semantic models (datasets) in a Fabric workspace — the data behind
+     * the "connect a model from your workspace" picker. Never throws; reports
+     * `needsLogin` when the Fabric session has lapsed.
+     */
+    listWorkspaceModels: (workspaceId: string) => Promise<WorkspaceModelsResult>
   }
 
   projects: {

@@ -44,6 +44,7 @@ import {
 import { FabricatorMark } from './FabricatorMark'
 import PlanCard from './PlanCard'
 import PlanQuestionCard from './PlanQuestionCard'
+import ConnectModelModal from './ConnectModelModal'
 import {
   buildRecoveredPlanPrompt,
   createPlanArtifact,
@@ -1552,6 +1553,7 @@ export default function ChatPanel({
   const modeMenuRef = useRef<HTMLDivElement>(null)
   const modeTriggerRef = useRef<HTMLButtonElement>(null)
   const [attaching, setAttaching] = useState(false)
+  const [connectOpen, setConnectOpen] = useState(false)
 
   // Keep the caret in view inside the composer's single scrollport
   // (`.composer-input-sizer`). The textarea is sized to its full content height so
@@ -3001,6 +3003,19 @@ export default function ChatPanel({
               />
               <button
                 className="composer-attach"
+                onClick={() => setConnectOpen(true)}
+                disabled={deployLock}
+                title={
+                  deployLock
+                    ? 'Deploy this app to a workspace before connecting a semantic model'
+                    : 'Connect a semantic model from your workspace'
+                }
+                aria-label="Connect a semantic model"
+              >
+                <Codicon name="database" />
+              </button>
+              <button
+                className="composer-attach"
                 onClick={() => fileRef.current?.click()}
                 disabled={attaching || deployLock}
                 title="Attach an image (or paste / drop one here)"
@@ -3052,6 +3067,16 @@ export default function ChatPanel({
           </div>
         </div>
       </div>
+
+      {connectOpen && (
+        <ConnectModelModal
+          project={project}
+          onClose={() => setConnectOpen(false)}
+          onConnect={(prompt) =>
+            setInput((prev) => (prev.trim() ? `${prev}\n\n${prompt}` : prompt))
+          }
+        />
+      )}
     </div>
   )
 }

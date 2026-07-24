@@ -211,6 +211,7 @@ pub fn run() {
       commands::fabric::fabric_project_semantic_models,
       commands::fabric::fabric_share_app,
       commands::fabric::fabric_directory_search,
+      commands::fabric::fabric_list_workspace_models,
       // projects
       commands::projects::projects_state,
       commands::projects::projects_templates,

@@ -8098,6 +8098,108 @@ code {
   color: var(--danger);
 }
 
+/* Connect semantic model modal */
+.connect-modal {
+  max-width: 480px;
+}
+.connect-sub {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.connect-sub strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.connect-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+  padding: 10px 2px;
+}
+.connect-state--empty {
+  display: block;
+  line-height: 1.5;
+}
+.connect-filter {
+  width: 100%;
+}
+.connect-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.connect-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.connect-item:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.connect-item--sel {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.connect-item--done {
+  opacity: 0.7;
+  cursor: default;
+}
+.connect-item > .codicon {
+  font-size: 15px;
+  color: var(--text-dim);
+  flex: none;
+}
+.connect-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.connect-item-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connect-item-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connect-item-check {
+  color: var(--accent);
+  flex: none;
+}
+.connect-badge {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  border-radius: 5px;
+  padding: 1px 7px;
+}
+
 /* Settings modal */
 .settings-row {
   display: flex;
@@ -10445,6 +10547,9 @@ code {
 .composer-attach svg {
   width: 17px;
   height: 17px;
+}
+.composer-attach .codicon {
+  font-size: 16px;
 }
 
 .composer-send:hover:not(:disabled) {

@@ -44,11 +44,12 @@ async function makeTokens(authPath) {
   const rf = await auth.getRayfinAuth()
   const cache = {}
   return async function token(scopes) {
-    const key = scopes.join(' ')
+    const key = scopes ? scopes.join(' ') : '(default)'
     if (cache[key]) return cache[key]
     let res
     try {
       // silentOnly: never pop a browser — fail fast if there's no cached session.
+      // `scopes` undefined → the CLI's default (Fabric) token.
       res = await rf.acquireToken(scopes, { silentOnly: true })
     } catch (e) {
       throw new NeedsLogin(String((e && e.message) || e))
@@ -667,6 +668,45 @@ async function runSchema(_token, req) {
   return { ok: true, matched: schema.tables.length > 0, workspaceId: wsId, itemId: dsId, ...schema, notes: [] }
 }
 
+// The Fabric REST endpoint listing a workspace's semantic models. Pure — covered
+// by --selftest.
+function workspaceModelsUrl(workspaceId) {
+  return `${FABRIC_RESOURCE}/v1/workspaces/${String(workspaceId || '').trim()}/semanticModels`
+}
+
+// List the semantic models in a workspace, for the "connect a model from your
+// workspace" picker. Uses the Fabric REST API with the silent *Fabric* token (the
+// same token the workspace picker uses) — the Rayfin app can't mint the Power BI
+// scope silently, so a signed-in user was wrongly told to re-auth. Follows the
+// Fabric 100/page continuation the same way the workspace list does.
+async function runListWorkspaceModels(token, req) {
+  const wsId = String(req.workspaceId || req.workspace || '').trim()
+  if (!wsId) return { ok: false, error: 'A workspaceId is required.' }
+  const fabric = makeApi(await token(), '') // default scopes → Fabric token
+  const start = workspaceModelsUrl(wsId)
+  const items = []
+  let url = start
+  for (let i = 0; i < 100 && url; i++) {
+    const [s, j] = await fabric.get(url)
+    if (s === 401) throw new NeedsLogin('Fabric rejected the request (401).')
+    if (s === 403) return { ok: false, error: "You don't have access to this workspace's semantic models." }
+    if (s !== 200 || !j) return { ok: false, error: 'Fabric semantic models request failed (' + s + ').' }
+    for (const v of j.value || []) items.push(v)
+    if (j.continuationUri) {
+      url = j.continuationUri.startsWith('http') ? j.continuationUri : FABRIC_RESOURCE + j.continuationUri
+    } else if (j.continuationToken) {
+      url = start + '?continuationToken=' + encodeURIComponent(j.continuationToken)
+    } else {
+      url = null
+    }
+  }
+  const models = items
+    .map((d) => ({ id: d.id, name: d.displayName || d.name }))
+    .filter((m) => m.id)
+  models.sort((a, b) => String(a.name || '').toLowerCase().localeCompare(String(b.name || '').toLowerCase()))
+  return { ok: true, models }
+}
+
 // ── Entry ─────────────────────────────────────────────────────────────────--
 // Pure-function self-test for parseTarget + schema normalization — no
 // auth/network. Run with `node semantic_model_helper.mjs --selftest`. Exits
@@ -730,6 +770,9 @@ function selftest() {
   )
   assert(s.relationships[1].isActive === false && s.relationships[1].crossFilter === 'bothDirections', 'relationship overrides')
 
+  // Workspace semantic-models endpoint (Fabric REST).
+  assert(workspaceModelsUrl('ea3779f7-4d16-4fbc-87ba-f501e2a6fdee') === 'https://api.fabric.microsoft.com/v1/workspaces/ea3779f7-4d16-4fbc-87ba-f501e2a6fdee/semanticModels', 'workspace models url')
+
   if (failed) { process.stderr.write(`${failed} selftest assertion(s) failed\n`); process.exit(1) }
   process.stderr.write('semantic-model selftest ok\n')
   process.exit(0)
@@ -744,6 +787,7 @@ async function main() {
   const result =
     req.mode === 'search' ? await runSearch(token, req)
     : req.mode === 'schema' ? await runSchema(token, req)
+    : req.mode === 'listWorkspaceModels' ? await runListWorkspaceModels(token, req)
     : await runLocate(token, req)
   process.stdout.write(JSON.stringify(result))
 }

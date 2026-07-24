@@ -101,7 +101,9 @@ export const api: RayfinStudioApi = {
       invoke('fabric_project_semantic_models', { projectId }),
     shareApp: (projectId: string, workspaceId: string, recipients: string[]) =>
       invoke('fabric_share_app', { projectId, workspaceId, recipients }),
-    directorySearch: (query: string) => invoke('fabric_directory_search', { query })
+    directorySearch: (query: string) => invoke('fabric_directory_search', { query }),
+    listWorkspaceModels: (workspaceId: string) =>
+      invoke('fabric_list_workspace_models', { workspaceId })
   },
 
   projects: {

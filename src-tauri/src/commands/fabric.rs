@@ -908,6 +908,18 @@ pub async fn fabric_directory_search(query: String) -> FabricDirectoryResult {
   }
 }
 
+/* ------------------------- connect semantic model ------------------------- */
+
+/// List the semantic models in a workspace — the data behind the "connect a model
+/// from your workspace" picker. Delegates to the semantic-model service (silent
+/// Fabric token). Never throws.
+#[tauri::command]
+pub async fn fabric_list_workspace_models(
+  workspace_id: String,
+) -> crate::services::semantic_model::WorkspaceModelsResult {
+  crate::services::semantic_model::list_workspace_models(&workspace_id).await
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1165,5 +1177,23 @@ profiles:
       serde_json::from_str(r#"{"ok":false,"people":[],"needsAz":true,"error":"az login"}"#).unwrap();
     assert!(!bad.ok);
     assert_eq!(bad.needs_az, Some(true));
+  }
+
+  #[test]
+  fn workspace_models_result_shape_deserializes() {
+    use crate::services::semantic_model::WorkspaceModelsResult;
+    let ok: WorkspaceModelsResult = serde_json::from_str(
+      r#"{"ok":true,"models":[{"id":"d1","name":"Sales","isRefreshable":true,"configuredBy":"a@x.com"}]}"#,
+    )
+    .unwrap();
+    assert!(ok.ok);
+    assert_eq!(ok.models.len(), 1);
+    assert_eq!(ok.models[0].name.as_deref(), Some("Sales"));
+    assert_eq!(ok.models[0].is_refreshable, Some(true));
+
+    let bad: WorkspaceModelsResult =
+      serde_json::from_str(r#"{"ok":false,"needsLogin":true,"error":"no cached account"}"#).unwrap();
+    assert!(!bad.ok);
+    assert!(bad.needs_login);
   }
 }
