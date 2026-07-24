@@ -152,13 +152,6 @@ pub fn run() {
       // app-data so chat sessions can inject them (never written into the repo).
       services::agent_skills::ensure_materialized();
 
-      // Point npm at the bundled warm offline cache (if this build shipped one)
-      // so the Universal template's capability router can install modules on
-      // demand fast. Best-effort + `prefer-offline`, so a miss falls back to the
-      // network; no-op in dev/source builds. Set before any chat CLI server spawns
-      // so its shell `npm install`s inherit the cache config.
-      services::deps::init_process_offline_cache(app.handle());
-
       // Watch for main-thread freezes (Parallels/VM hangs) and record them. The
       // monitor actively probes the main thread, so an idle (event-starved) loop
       // is never mistaken for a hang.

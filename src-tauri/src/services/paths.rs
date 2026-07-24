@@ -125,33 +125,3 @@ pub fn fabricator_templates_dir(app: &tauri::AppHandle) -> PathBuf {
     .join("resources")
     .join("fabricator-templates")
 }
-
-/// Absolute path to the bundled dependency artifacts for the Universal template
-/// (a prebuilt `node_modules.tgz` and a warm `npm-cache.tgz`), resolved like
-/// [`fabricator_templates_dir`]. These are generated per-platform at release time
-/// and may be **absent** in dev/source builds — callers must treat a missing
-/// directory or file as "no acceleration available" and fall back to a normal
-/// `npm install`.
-pub fn fabricator_universal_deps_dir(app: &tauri::AppHandle) -> PathBuf {
-  use tauri::Manager;
-  if let Ok(res) = app.path().resource_dir() {
-    let bundled = res.join("resources").join("fabricator-universal-deps");
-    if bundled.is_dir() {
-      return bundled;
-    }
-  }
-  let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-  crate_dir
-    .parent()
-    .map(|p| p.to_path_buf())
-    .unwrap_or(crate_dir)
-    .join("resources")
-    .join("fabricator-universal-deps")
-}
-
-/// Writable directory the bundled warm npm cache is extracted to on first use.
-/// Lives under the per-user data dir (npm needs a writable cache), so the
-/// read-only bundled `npm-cache.tgz` is expanded here once and reused.
-pub fn npm_offline_cache_dir() -> PathBuf {
-  data_dir().join("npm-offline-cache")
-}

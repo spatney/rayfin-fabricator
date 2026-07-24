@@ -405,17 +405,6 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   let label = if is_url { "community template".to_string() } else { format!("{template} template") };
   say(&on, &format!("Creating \"{slug}\" from the {label}…\n"));
 
-  // Install acceleration for the Universal template: when this build shipped a
-  // prebuilt `node_modules` tarball for the platform, tell the scaffolder to
-  // `--skip-install` and extract the tree ourselves after scaffolding — far
-  // faster than a cold `npm install`. Absent (dev/source builds), we leave the
-  // scaffolder's normal install in place.
-  let universal_nm_tarball = if template == "fabricator-universal" {
-    crate::services::deps::universal_node_modules_tarball(app)
-  } else {
-    None
-  };
-
   // npm create @microsoft/rayfin@latest -- <slug> -t <source>
   //   [--template-name <name>] --project-name "<name>"
   // The positional <slug> is the target directory; --project-name carries the
@@ -437,11 +426,6 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   }
   create_args.push("--project-name".into());
   create_args.push(name.clone());
-  if universal_nm_tarball.is_some() {
-    // Hidden `rayfin init` flag: skip all package installation. We supply the
-    // dependency tree from the bundled tarball instead.
-    create_args.push("--skip-install".into());
-  }
 
   let arg_refs: Vec<&str> = create_args.iter().map(String::as_str).collect();
   let init = run(
@@ -466,36 +450,6 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
     } else {
       format!("Project creation failed (exit code {code}).")
     });
-  }
-
-  // If we scaffolded with `--skip-install`, restore the dependency tree from the
-  // bundled tarball now. On any failure, fall back to a normal `npm install` so
-  // the project is still usable (just slower).
-  if let Some(tarball) = &universal_nm_tarball {
-    say(&on, "Unpacking bundled dependencies…\n");
-    let tarball = tarball.clone();
-    let dest = dir.clone();
-    let ok = tokio::task::spawn_blocking(move || crate::services::deps::extract_tgz(&tarball, &dest))
-      .await
-      .unwrap_or(false);
-    if !ok || !dir.join("node_modules").is_dir() {
-      say(&on, "Bundled dependencies didn't apply; installing from npm instead…\n");
-      let inst = run(
-        "npm",
-        &["install"],
-        RunOptions {
-          cwd: Some(dir.clone()),
-          on_data: Some(on.clone()),
-          timeout_ms: Some(600_000),
-          ..Default::default()
-        },
-      )
-      .await;
-      if !inst.ok {
-        let code = inst.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
-        return err(format!("Installing dependencies failed (exit code {code})."));
-      }
-    }
   }
 
   crate::commands::skills::ensure_project_skills(dir.to_string_lossy().as_ref());
