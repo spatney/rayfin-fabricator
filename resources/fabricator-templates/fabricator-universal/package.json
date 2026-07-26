@@ -16,7 +16,8 @@
     "build": "tsc -b && vite build",
     "build:fabric": "tsc -b && vite build",
     "lint": "eslint .",
-    "rayfin:up": "rayfin up"
+    "rayfin:up": "rayfin up",
+    "pack:add": "node scripts/scaffold.mjs"
   },
   "dependencies": {
     "@microsoft/rayfin-auth-provider-fabric": "^1.33.2",

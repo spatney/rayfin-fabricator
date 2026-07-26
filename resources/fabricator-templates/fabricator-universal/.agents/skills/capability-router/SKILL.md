@@ -25,6 +25,12 @@ asked for.
    Most requests need 1–2 packs. When in doubt, start with the smallest set and
    grow later — you can always route again on the next turn.
 2. **For each chosen pack, in order:**
+   0. **If the pack ships a `pack.json`, scaffold it in one command** — `npm run
+      pack:add -- <pack>` enables the service, installs the pinned modules,
+      copies the kit, and wires scripts in one idempotent pass (see
+      [`pack-manifest.md`](pack-manifest.md)). Today **`analytics`** ships one, so
+      that whole path is a single command — then jump straight to reading the
+      pack skill. Otherwise, do the manual steps below.
    1. **Enable the service** — edit `rayfin/rayfin.yml` (see the pack's row).
       Auth + data + static hosting are already on.
    2. **Install the modules** — `npm install <…>` for that pack. This is fast
@@ -42,9 +48,9 @@ asked for.
 | Pack | Route here when the user wants… | Enable in `rayfin.yml` | Install | Scaffold | Then read |
 |---|---|---|---|---|---|
 | **authentication** | sign-in, accounts, login, logout, protected pages, "who is the current user", per-user data | `auth` (already on) | — (scaffolding already present) | Wire `AuthProvider` + `bootstrapAuth()` in `src/main.tsx`; add the route guard in `src/App.tsx` | `authentication` |
-| **data-modeling** | records, CRUD, a database, entities, lists, "save/store X", per-user rows, row-level security | `data` (already on, `dialect: mssql`) | `@microsoft/rayfin-data` | Add entity classes under `rayfin/data/*.ts`; register them in `rayfin/data/schema.ts`; read/write via the `rayfin-client` | `data-modeling` |
+| **data-modeling** | records, CRUD, a database, entities, lists, "save/store X", per-user rows, row-level security | `data` (already on, `dialect: mssql`) + `auth` | `@microsoft/rayfin-data` | Add entity classes under `rayfin/data/*.ts`; register them in `rayfin/data/schema.ts`; read/write via the `rayfin-client`; **wire auth** (Rayfin data is always authenticated) | `data-modeling` **+ `authentication`** |
 | **graphein-visuals** | a chart, graph, plot, KPI, table, or small dashboard over app data | — | `graphein` (already present) | Author a `ChartSpec`, drop into `<Chart spec={…} />` (`src/components/Chart.tsx`) | `graphein-visuals` |
-| **analytics** | a **Power BI / semantic-model** dashboard, DAX measures, BI reporting over an existing dataset | `auth` on; **`data` off** (read-only analytics) | see `analytics/MODULES.md` | Copy `analytics/kit/**` into `src/` + wire the semantic model | `analytics` (then `build-workflow`, `visuals`, `dax`, `fabric-data`, `app-design`, `headless-preview`) |
+| **analytics** | a **Power BI / semantic-model** dashboard, DAX measures, BI reporting over an existing dataset | one command: **`npm run pack:add -- analytics`** (sets `auth` on / **`data` off**, installs modules, copies `kit/**`, seeds a runnable demo) | — (the command installs them) | — (the command copies the kit + seeds `App.tsx`/`main.tsx`); then wire the semantic model | `analytics` (then `build-workflow`, `visuals`, `dax`, `fabric-data`, `app-design`, `headless-preview`) |
 
 ## Notes on routing
 
@@ -59,5 +65,11 @@ asked for.
   (e.g. `data-modeling` for the data + `graphein-visuals` for the chart).
 - **Row-level security** lives inside `data-modeling` — route there when the user
   says "each user only sees their own …".
+- **Data implies auth.** Rayfin data is always accessed as an authenticated user
+  (no anonymous access on Fabric), so any request that stores or reads app data —
+  `data-modeling` especially — must **also wire `authentication`**; route to both.
+  A **static page over public data** needs neither. (Analytics is separate: its
+  Power BI model is read through the Fabric embed proxy, which Fabric
+  authenticates — no app `AuthProvider` needed.)
 - **Grow incrementally.** Ship the core of what was asked, let it deploy, then add
   the next capability. You don't have to wire every pack up front.

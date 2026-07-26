@@ -26,7 +26,8 @@ A minimal React 19 + Vite app, Fabric-ready but deliberately bare:
 - A no-auth `HomePage` (`src/pages/HomePage.tsx`) rendered by `src/App.tsx` — so
   it previews with **no backend** (`npm run preview`).
 - **Fabric auth scaffolding, wired OFF** under `src/services/` +
-  `src/hooks/AuthContext.tsx`. The `authentication` pack turns it on.
+  `src/hooks/AuthContext.tsx` — the base is a static, public page, so it needs no
+  auth. **Wire auth in as soon as the app uses data** (see the rule in Rules).
 - **Graphein** wired in for charts: `src/components/Chart.tsx` (+ `useChart.ts`)
   renders a declarative `<Chart spec={…} />`. The `graphein-visuals` pack covers
   authoring specs.
@@ -50,6 +51,18 @@ The `analytics` pack also brings its own supporting skills (`build-workflow`,
 `visuals`, `dax`, `fabric-data`, `app-design`, `headless-preview`) — read those
 only when you're on the analytics path.
 
+> **Fast path — one command.** A pack that ships a `pack.json` manifest turns on
+> with a single idempotent command instead of dozens of manual steps:
+>
+> ```sh
+> npm run pack:add -- <pack>      # e.g. analytics
+> ```
+>
+> It enables the service, installs the pinned modules, copies the kit, wires the
+> scripts, seeds a runnable demo, and runs `npm install`. **`analytics`** ships a
+> manifest today; more capabilities/connectors will adopt the same mechanism.
+> See `.agents/skills/capability-router/pack-manifest.md`.
+
 ---
 
 ## Rules (Fabricator deploy-to-test)
@@ -70,6 +83,11 @@ only when you're on the analytics path.
 - **Installing npm modules is expected and fast** — Fabricator ships a warm
   offline package cache, so `npm install <module>` from a pack is quick. Install
   what a pack needs; don't pre-install everything.
+- **Auth follows data.** Rayfin data is always accessed as an authenticated user
+  (no anonymous access on Fabric), so **wire authentication whenever the app uses
+  or connects to data** — `data-modeling`, per-user rows, row-level security. A
+  **static page over public data** needs no auth. (Analytics reads its Power BI
+  model through the Fabric embed proxy, which Fabric authenticates.)
 
 When you finish editing, briefly summarize what you changed — Fabricator handles
 the deploy.
@@ -83,5 +101,5 @@ the deploy.
 | Store records / build CRUD / add a table | `data-modeling` |
 | Restrict rows to their owner | `data-modeling` → row-level security |
 | Add a chart / KPI / small dashboard | `graphein-visuals` |
-| Build a Power BI / semantic-model dashboard | `analytics` (then its sub-skills) |
+| Build a Power BI / semantic-model dashboard | run **`npm run pack:add -- analytics`**, then `analytics` (then its sub-skills) |
 | Make it look polished / themed | the relevant pack's styling notes + Tailwind theme in `src/main.css` |

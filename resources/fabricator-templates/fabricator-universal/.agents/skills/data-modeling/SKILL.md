@@ -23,6 +23,14 @@ The `data` service is already enabled in `rayfin/rayfin.yml`
 (`data: { enabled: true, dialect: mssql }`), so you don't need to turn anything
 on — just add entities.
 
+> **Data means auth — wire it in.** Rayfin data is always accessed as an
+> **authenticated user** (there's no anonymous/public data access on Fabric — see
+> Notes). So adding data isn't complete until authentication is wired in: follow
+> the **`authentication`** skill (`AuthProvider` + `bootstrapAuth()` in
+> `src/main.tsx`, the route guard in `src/App.tsx`). Per-user rows and row-level
+> security key off the signed-in identity. Only a purely **static page over
+> public data** (no Rayfin data) can skip auth.
+
 ## Step 1 — install the data package
 
 ```bash

@@ -5,15 +5,46 @@ description: Enable on demand for Power BI, semantic model, dataset, DAX, analyt
 
 # Analytics capability pack
 
-This pack is dormant reference code until copied into the app. Do not import `kit/**` from the running universal template.
+Power BI / semantic-model analytics dashboard (read-only). The `kit/**` tree is
+**dormant reference code** — don't import it from the base app; scaffold it in.
 
-When the user asks for a Power BI / semantic-model analytics dashboard:
+## Turn it on — one command
 
-1. Install the npm modules in `MODULES.md` (runtime dependencies and devDependencies).
-2. Copy `kit/components/**`, `kit/hooks/**`, `kit/lib/**`, `kit/demo/**`, `kit/global.css`, and `kit/fabric.generated.ts` into `src/`; copy `kit/fabric.yaml` to the project root; copy `kit/scripts/preview-visual.mjs` to `scripts/preview-visual.mjs`.
-3. Add/replace the required scripts from the data app:
-   - `build:fabric`: `npx fabric-app-data generate -o src/fabric.generated.ts && tsc -b --noCheck && vite build`
-   - `preview`: `node scripts/preview-visual.mjs`
-   - `gallery`: `vite`
-4. Wire the semantic model using the `fabric-data` skill and the `connect-semantic-model` skill if available. Edit `fabric.yaml`; regenerate `src/fabric.generated.ts` via `build:fabric`.
-5. Build the dashboard by pulling in `build-workflow`, `visuals`, and `dax` as needed. Keep imports such as `@/components/dashboard` unchanged after copying into `src/`.
+```sh
+npm run pack:add -- analytics
+```
+
+That runs the scaffolder (`scripts/scaffold.mjs`) against this pack's manifest
+(`pack.json`) and, in one idempotent pass:
+
+- disables the `data` service in `rayfin/rayfin.yml` (read-only analytics; `auth`
+  + `staticHosting` stay on),
+- adds the pinned analytics dependencies **and** the `build:fabric` / `preview` /
+  `gallery` scripts to `package.json`,
+- copies the whole dashboard kit into `src/` (`components/dashboard`, `hooks`,
+  `lib`, `demo`, `global.css`, `fabric.generated.ts`), `fabric.yaml` to the root,
+  and the headless-preview script to `scripts/`,
+- seeds a runnable `src/App.tsx` + `src/main.tsx` (bundled Graphein demo over
+  inlined data — never blank), leaving them alone if you've already edited them,
+- runs a single `npm install`.
+
+Flags: `--no-install` (skip install), `--dry-run` (print the plan, write nothing).
+
+You now have a **runnable starter dashboard**. Validate visuals headlessly with
+`npm run preview -- --spec <file>`; **Fabricator auto-deploys after the turn** and
+validates the running app in its built-in browser — don't run `rayfin up` or a dev
+server. (`npm run gallery` is a dev-only component gallery if you want to eyeball
+the kit.)
+
+## Then build the real thing
+
+1. **Connect the semantic model** — edit `fabric.yaml`, then regenerate
+   `src/fabric.generated.ts` (`npm run build:fabric` runs `fabric-app-data
+   generate`). See `fabric-data`.
+2. **Build the dashboard** — follow `build-workflow` (hero slice → preview →
+   Fabricator auto-deploys → iterate), pulling in `visuals`, `dax`,
+   `headless-preview`, and `app-design` as each phase needs them. Keep imports
+   like `@/components/dashboard` unchanged.
+
+`pack.json` is the source of truth for what gets installed and copied;
+`MODULES.md` documents the dependency set and why.

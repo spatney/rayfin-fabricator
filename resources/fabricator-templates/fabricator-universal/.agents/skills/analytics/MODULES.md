@@ -1,6 +1,22 @@
 # Analytics npm modules
 
-## dependencies
+`pack.json` is the machine-readable source of truth — `npm run pack:add --
+analytics` installs exactly what's below. This file explains it.
+
+## How versions are reconciled
+
+The **base template owns the shared toolchain** — `react`, `react-dom`, `vite`,
+`typescript`, `eslint`, `tailwindcss`, `@tailwindcss/vite`,
+`@vitejs/plugin-react-swc`, `graphein`, and the `@microsoft/rayfin-*` core. The
+analytics pack therefore **only adds the packages the dashboard kit needs**,
+pinned to versions that agree with the base. Enabling analytics doesn't bump or
+re-resolve the base toolchain, so the install is small and fast — only the
+net-new packages, served from Fabricator's **warm offline package cache**.
+
+If you enable analytics by hand instead of `pack:add`, add only these — don't
+change the base toolchain versions.
+
+## Dependencies (analytics-only)
 
 - `@fontsource-variable/inter`: `^5.2.8`
 - `@fontsource-variable/jetbrains-mono`: `^5.2.8`
@@ -8,38 +24,22 @@
 - `@microsoft/fabric-app-data`: `1.1.0`
 - `@microsoft/fabric-app-data-embed-client`: `1.0.0`
 - `@microsoft/fabric-app-data-proxy`: `1.0.0`
-- `@microsoft/rayfin-auth-provider-fabric`: `^1.33.1`
-- `@microsoft/rayfin-client`: `^1.33.1`
-- `@microsoft/rayfin-core`: `^1.33.1`
-- `@microsoft/rayfin-data`: `^1.33.1`
-- `@microsoft/rayfin-lib`: `^1.33.1`
-- `@tailwindcss/vite`: `^4.3.0`
+- `@microsoft/rayfin-data`: `^1.33.2`
+- `@microsoft/rayfin-lib`: `^1.33.2`
 - `clsx`: `^2.1.1`
 - `framer-motion`: `^12.40.0`
-- `graphein`: `>=0.16.0`
-- `lucide-react`: `^1.17.0`
-- `react`: `^19.2.7`
-- `react-dom`: `^19.2.7`
-- `react-error-boundary`: `^6.1.2`
 - `tailwind-merge`: `^3.6.0`
-- `tailwindcss`: `^4.3.0`
 
-## devDependencies
+## devDependencies (analytics-only)
 
-- `@eslint/js`: `^9.21.0`
-- `@graphein/node`: `>=0.16.0`
-- `@microsoft/fabric-app-data-cli`: `1.1.0`
+- `@graphein/node`: `>=0.16.0` — headless render for `npm run preview`
+- `@microsoft/fabric-app-data-cli`: `1.1.0` — `fabric-app-data generate` in `build:fabric`
 - `@microsoft/fabric-app-data-cli-proxy`: `1.0.0`
-- `@microsoft/rayfin-cli`: `^1.33.1`
-- `@microsoft/rayfin-mcp`: `^1.33.1`
-- `@types/react`: `^19.2.17`
-- `@types/react-dom`: `^19.2.3`
-- `@vitejs/plugin-react-swc`: `^4.3.1`
-- `eslint`: `^10.4.1`
-- `eslint-plugin-react-hooks`: `^7.1.1`
-- `eslint-plugin-react-refresh`: `^0.5.2`
-- `globals`: `^17.6.0`
-- `rollup-plugin-license`: `^3.7.1`
-- `typescript`: `~5.7.2`
-- `typescript-eslint`: `^8.38.0`
-- `vite`: `^8.1.1`
+- `@microsoft/rayfin-mcp`: `^1.33.2`
+
+## Not included
+
+`lucide-react`, `react-error-boundary`, and `rollup-plugin-license` are **not**
+installed: nothing in `kit/**` imports or references them (the kit ships its own
+`components/dashboard/icons.tsx` and error states). Leaving them out keeps the
+install lean. Add them back only if you introduce code that needs them.

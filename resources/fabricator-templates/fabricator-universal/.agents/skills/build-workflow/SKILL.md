@@ -38,6 +38,10 @@ big-bang build every time.
 Get ONE compelling, real visual wired to live data, previewed, and on screen —
 as fast as possible.
 
+> **Scaffold first, then start here.** `npm run pack:add -- analytics` already
+> gave you the dashboard kit + a runnable demo (`src/demo`). Don't re-read setup
+> or re-copy files — go straight to the hero slice, then swap the demo for it.
+
 0. **Pick an archetype** — decide the dashboard's shape from the request: executive
    summary, operational monitoring, or analytical deep-dive. This frames the hero
    tile and the breadth that follows. Default to executive summary when unsure.

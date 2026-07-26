@@ -1,23 +1,31 @@
 ---
 name: authentication
 description: >
-  Use when the user wants to add sign-in, authentication, login, accounts, user
-  identity, protected/gated pages, or per-user data to this app. This starter
-  ships as a no-auth "hello world" so it previews with no backend, but the full
-  Fabric authentication scaffolding is already in the project — this skill wires
-  it back in. Covers: AuthProvider + bootstrapAuth in main.tsx, the route auth
+  Wire this in whenever the app uses or connects to data — records, a database,
+  entities, per-user data, row-level security — or when the user wants sign-in,
+  accounts, login, or protected pages. Rayfin data is always accessed as an
+  authenticated user, so **data implies auth**; only a static page over public
+  data skips it. The starter ships as a no-auth "hello world" that previews with
+  no backend, and the full Fabric auth scaffolding is already in the project —
+  this skill wires it in: AuthProvider + bootstrapAuth in main.tsx, the route
   guard in App.tsx, the sign-in page, sign-out, and the env/deploy requirement.
   Triggers: auth, authentication, sign in, sign-in, login, log in, sign out,
   logout, account, user, identity, protect route, require login, gated page,
-  who is the current user, Fabric auth, Entra, per-user data.
+  data, database, records, per-user, row-level security, who is the current user,
+  Fabric auth, Entra.
 ---
 
 # Enabling authentication
 
 This starter renders a **no-auth hello-world page** so it previews locally
-(`npm run preview`) with no backend. The Fabric auth scaffolding is still in the
-project, just not wired into the running app. When the user asks for sign-in,
-accounts, protected pages, or per-user data, re-enable it with the steps below.
+(`npm run preview`) with no backend. The Fabric auth scaffolding is present but
+not wired into the running app.
+
+**Wire it in as soon as the app uses data.** Rayfin data is always accessed as an
+authenticated user — there is **no anonymous/public data access on Fabric** — so
+the moment you add data (records, a database, per-user rows, row-level security),
+or the user asks for sign-in / accounts / protected pages, wire auth in with the
+steps below. A **static page over public data** (no Rayfin data) stays no-auth.
 
 > Authentication needs a deployed Rayfin backend. `rayfin env` injects the
 > `VITE_RAYFIN_*` and `VITE_FABRIC_*` vars at build time from the active
