@@ -222,6 +222,30 @@ async fn status_for(path: &str) -> DeployStatus {
   }
 }
 
+/// One-time Fabric-preview default applied after a successful deploy. Semantic-model
+/// apps only render correctly inside the Fabric portal shell, so the first deploy that
+/// carries a `fabric.yaml` semantic-model connection switches the preview to the
+/// embedded Fabric view — but only if the user hasn't already picked a view, and only
+/// once, so a later manual switch back to the direct view (persisted as `None`) is
+/// never re-overridden on subsequent (often after-turn) auto-deploys. Returns
+/// `Some(new_preview_mode)` to persist (marking the project defaulted), or `None` to
+/// leave the project untouched.
+fn fabric_preview_after_deploy(
+  preview_mode: Option<&str>,
+  already_defaulted: bool,
+  has_semantic_models: bool,
+) -> Option<Option<String>> {
+  if already_defaulted || !has_semantic_models {
+    return None;
+  }
+  // Adopt the Fabric view when the user hasn't chosen one; otherwise keep their
+  // choice. Either way the caller records that the default has now been applied.
+  Some(match preview_mode {
+    None => Some("fabric".to_string()),
+    Some(mode) => Some(mode.to_string()),
+  })
+}
+
 /* ------------------------------ commands ---------------------------------- */
 
 #[tauri::command]
@@ -401,6 +425,23 @@ pub(crate) async fn run_deploy(
 
   // First successful deploy clears the onboarding "deploy first" gate.
   store::mutate_project(&project_id, |p| p.awaiting_first_deploy = None);
+
+  // Semantic-model apps render correctly only inside the Fabric portal shell, so the
+  // first successful deploy that carries a `fabric.yaml` semantic-model connection
+  // defaults the preview to the embedded Fabric view (a one-time default; see
+  // `fabric_preview_after_deploy`).
+  let has_semantic_models =
+    !crate::commands::fabric::read_project_semantic_models(Path::new(&project.path)).is_empty();
+  store::mutate_project(&project_id, |p| {
+    if let Some(mode) = fabric_preview_after_deploy(
+      p.preview_mode.as_deref(),
+      p.fabric_preview_defaulted == Some(true),
+      has_semantic_models,
+    ) {
+      p.preview_mode = mode;
+      p.fabric_preview_defaulted = Some(true);
+    }
+  });
 
   commit_checkpoint(&project.path, &format!("Deploy {} ({})", project.name, now_iso())).await;
   if let Some(commit) = head_sha(&project.path).await {
@@ -711,5 +752,22 @@ mod tests {
   fn last_lines_takes_tail() {
     assert_eq!(last_lines("a\nb\nc\nd", 2), "c d");
     assert_eq!(last_lines("only", 3), "only");
+  }
+
+  #[test]
+  fn fabric_preview_after_deploy_switches_once_for_semantic_apps() {
+    // No semantic models → never touch the project's preview mode.
+    assert_eq!(fabric_preview_after_deploy(None, false, false), None);
+    assert_eq!(fabric_preview_after_deploy(Some("fabric"), false, false), None);
+    // First deploy with a connected model and no explicit view → adopt Fabric.
+    assert_eq!(fabric_preview_after_deploy(None, false, true), Some(Some("fabric".to_string())));
+    // Already defaulted once → never override again, even though a later manual
+    // switch to the direct view is persisted as `None` (indistinguishable from unset).
+    assert_eq!(fabric_preview_after_deploy(None, true, true), None);
+    // A model plus an existing explicit choice closes the window without changing it.
+    assert_eq!(
+      fabric_preview_after_deploy(Some("fabric"), false, true),
+      Some(Some("fabric".to_string()))
+    );
   }
 }

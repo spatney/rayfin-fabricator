@@ -8,8 +8,8 @@
 //! is wired from the last recorded deployment. The spawned server is long-lived:
 //! [`dev_start`] returns once Vite prints its `Local:` URL but leaves the process
 //! running under a per-project handle until [`dev_stop`] (or app exit) tree-kills
-//! it. Only projects that declare a `dev` script are supported (blankapp /
-//! todoapp); dataapp and others are reported `unsupported`.
+//! it. Only projects that declare a `dev` script are supported (universal /
+//! todoapp); others are reported `unsupported`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

@@ -332,12 +332,14 @@ export default function PreviewPane({
   const showWebview = !running && Boolean(previewUrl)
 
   // Re-init from the persisted project on project switch (don't carry a prior
-  // project's Fabric view over). Within a project this component's toggle handler
-  // is the only writer, so local state stays authoritative — no need to re-sync
-  // from the prop (which avoids a flicker on a rapid double-toggle).
+  // project's Fabric view over) and whenever the persisted mode changes underneath
+  // us — notably the after-deploy default that flips a newly semantic-model-backed
+  // app to the embedded Fabric view (see `run_deploy`). The manual toggle sets local
+  // state optimistically and persists the same value, so this resync is a no-op for
+  // it (bar a transient, self-correcting echo on a rapid double-toggle).
   useEffect(() => {
     setPreviewMode(readPreviewMode(project))
-  }, [project.id])
+  }, [project.id, project.previewMode])
 
   // After a successful (re)deploy the URL is usually unchanged but the server
   // code changed, so force a reload — hidden behind the spinner so the previous

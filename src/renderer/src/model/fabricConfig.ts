@@ -5,7 +5,7 @@
  * to know a project has a semantic model (so it can offer the semantic diagram)
  * and to get the `workspaceId` / `itemId` needed to query the model's schema.
  *
- * `fabric.yaml` shape (see e.g. the fabricator-dataapp template):
+ * `fabric.yaml` shape (for a Fabric-connected app):
  *
  *   activeProfile: default
  *   profiles:

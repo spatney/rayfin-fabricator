@@ -423,14 +423,6 @@ export default function CreateProjectScreen({
                           onClick={() => setTemplate(t.name)}
                         >
                           <span className="template-card-name">{t.displayName}</span>
-                          {t.defaultPreviewMode === 'fabric' && (
-                            <span
-                              className="template-card-badge"
-                              title="Opens embedded in the Fabric portal view by default — you can switch to the direct view any time."
-                            >
-                              Opens in Fabric view
-                            </span>
-                          )}
                           <span className="template-card-desc">{t.description}</span>
                         </button>
                       ))}

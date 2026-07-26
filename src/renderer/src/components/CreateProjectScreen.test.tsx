@@ -70,10 +70,9 @@ describe('CreateProjectScreen create progress', () => {
         templates: vi.fn(() =>
           Promise.resolve([
             {
-              name: 'fabricator-blankapp',
-              displayName: 'Blank App',
-              description: 'Bare-bones starter.',
-              defaultPreviewMode: null
+              name: 'fabricator-universal',
+              displayName: 'Universal App',
+              description: 'Grows into anything.'
             }
           ])
         ),

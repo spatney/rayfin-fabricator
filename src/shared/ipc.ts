@@ -444,12 +444,6 @@ export interface TemplateInfo {
   name: string
   displayName: string
   description: string
-  /**
-   * When `'fabric'`, projects created from this template default to the embedded
-   * Fabric portal preview (the toolbar Fabric toggle starts on). Absent for
-   * templates that open in the direct app view.
-   */
-  defaultPreviewMode?: PreviewMode
 }
 
 /** One template entry from a community gallery repo's root `rayfin-template.yml`. */
@@ -761,9 +755,9 @@ export interface CreateProjectInput {
   name: string
   /**
    * Template the project is scaffolded from. Either a built-in (bundled) name
-   * ('fabricator-universal' | 'fabricator-blankapp' | 'fabricator-todoapp' |
-   * 'fabricator-dataapp') or a community template URL (e.g. an awesome-rayfin
-   * git/tarball URL) — `npm create @microsoft/rayfin -- -t` accepts either.
+   * ('fabricator-universal' | 'fabricator-todoapp') or a community template URL
+   * (e.g. an awesome-rayfin git/tarball URL) — `npm create @microsoft/rayfin -- -t`
+   * accepts either.
    */
   template: string
   /**

@@ -726,7 +726,7 @@ fn parse_semantic_models_yaml(text: &str) -> Vec<SemanticModelRef> {
 
 /// Read the project's `fabric.yaml` semantic-model connections. A missing file is
 /// not an error (an app can use no models) — it just yields an empty list.
-fn read_project_semantic_models(project_dir: &Path) -> Vec<SemanticModelRef> {
+pub(crate) fn read_project_semantic_models(project_dir: &Path) -> Vec<SemanticModelRef> {
   match std::fs::read_to_string(project_dir.join("fabric.yaml")) {
     Ok(text) => parse_semantic_models_yaml(&text),
     Err(_) => vec![],

@@ -23,29 +23,16 @@ use crate::types::{
 
 const CREATE_CHANNEL: &str = "create:project";
 
-/// The default preview mode a project scaffolded from `template` should adopt.
-/// The Data App and Dashboard are Fabric-auth-only and render correctly only inside
-/// the Fabric portal shell, so they open in the embedded Fabric preview by default;
-/// every other template uses the direct app view (`None`). Returned as `Some("fabric")`
-/// to match `StudioProject::preview_mode`.
-pub fn fabricator_default_preview_mode(template: &str) -> Option<String> {
-  match template {
-    "fabricator-dataapp" => Some("fabric".to_string()),
-    _ => None,
-  }
-}
-
-/// The built-in template set shown in New Project: the three bundled Fabricator
-/// variants (`fabricator-blankapp` / `fabricator-todoapp` / `fabricator-dataapp`,
-/// under `resources/fabricator-templates`), which strip the local-testing surface
-/// for the deploy-to-test workflow. Their metadata ships with the app, so the list
-/// is constant — no registry / `--list-templates` discovery is needed, and New
+/// The built-in template set shown in New Project: the bundled Fabricator
+/// variants (`fabricator-universal` / `fabricator-todoapp`, under
+/// `resources/fabricator-templates`), which strip the local-testing surface for
+/// the deploy-to-test workflow. Their metadata ships with the app, so the list is
+/// constant — no registry / `--list-templates` discovery is needed, and New
 /// Project opens instantly and offline. Order matters: the first entry is the
 /// default selection, so the Universal App leads — a lean base whose bundled
 /// capability router grows it into anything (so the user doesn't have to know the
-/// app shape up front). The Blank App and Todo App follow as pre-shaped starting
-/// points, and the Data App carries `default_preview_mode = "fabric"` so it opens
-/// in the embedded Fabric portal preview.
+/// app shape up front), covering the blank-start and data/dashboard cases on its
+/// own. The Todo App follows as a pre-shaped starting point.
 fn bundled_templates() -> Vec<TemplateInfo> {
   vec![
     TemplateInfo {
@@ -54,15 +41,6 @@ fn bundled_templates() -> Vec<TemplateInfo> {
       description:
         "Start here — a lean app that grows into anything. A built-in capability router picks the right Fabric services, npm modules, and skills for whatever you describe: CRUD, storage, functions, charts, or analytics. Deploys to Fabric."
           .into(),
-      default_preview_mode: fabricator_default_preview_mode("fabricator-universal"),
-    },
-    TemplateInfo {
-      name: "fabricator-blankapp".into(),
-      display_name: "Blank App".into(),
-      description:
-        "Start from scratch — a minimal Fabric-authenticated React + Vite app with Graphein wired in for charts. Build anything, then deploy to Fabric."
-          .into(),
-      default_preview_mode: fabricator_default_preview_mode("fabricator-blankapp"),
     },
     TemplateInfo {
       name: "fabricator-todoapp".into(),
@@ -70,21 +48,12 @@ fn bundled_templates() -> Vec<TemplateInfo> {
       description:
         "A polished todo app with per-user row-level security on a Rayfin data model, ready to deploy to Fabric."
           .into(),
-      default_preview_mode: fabricator_default_preview_mode("fabricator-todoapp"),
-    },
-    TemplateInfo {
-      name: "fabricator-dataapp".into(),
-      display_name: "Data App".into(),
-      description:
-        "Fabric Analytics app — connect a Power BI semantic model and build dashboards with DAX-powered visuals, then deploy to Fabric to try it."
-          .into(),
-      default_preview_mode: fabricator_default_preview_mode("fabricator-dataapp"),
     },
   ]
 }
 
 /// List the built-in (bundled) templates shown in New Project. The set is constant
-/// (the three bundled Fabricator variants), so this is instant and works offline.
+/// (the two bundled Fabricator variants), so this is instant and works offline.
 pub async fn list_templates() -> Vec<TemplateInfo> {
   bundled_templates()
 }
@@ -277,6 +246,7 @@ fn register_project(dir: &Path, display_name: Option<&str>) -> StudioProject {
     model: None,
     effort: None,
     preview_mode: None,
+    fabric_preview_defaulted: None,
     missing: None,
   };
   store::upsert_project(project.clone());
@@ -350,7 +320,7 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   }
   let template = {
     let t = input.template.trim();
-    if t.is_empty() { "blankapp".to_string() } else { t.to_string() }
+    if t.is_empty() { "fabricator-universal".to_string() } else { t.to_string() }
   };
   let template_name = input
     .template_name
@@ -388,7 +358,7 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   //     it against its bundled set).
   let is_fabricator = matches!(
     template.as_str(),
-    "fabricator-universal" | "fabricator-dataapp" | "fabricator-todoapp" | "fabricator-blankapp"
+    "fabricator-universal" | "fabricator-todoapp"
   );
   let template_source = if is_fabricator {
     let tmpl_dir = crate::services::paths::fabricator_templates_dir(app).join(&template);
@@ -458,13 +428,11 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   let project = register_project(&dir, Some(&name));
   // Mark this project as awaiting its first deployment so the workbench guides the
   // user to deploy before chatting (cleared on the first successful deploy). This
-  // is set only on create — projects opened from disk are never gated. Also seed the
-  // template's default preview mode (the Data App opens embedded in the Fabric portal
-  // shell); the user can still flip the toolbar Fabric toggle afterward.
-  let default_preview = fabricator_default_preview_mode(&template);
+  // is set only on create — projects opened from disk are never gated. The preview
+  // mode is left at its default (direct view); a project that later connects a
+  // semantic model is switched to the embedded Fabric view on its next deploy.
   store::mutate_project(&project.id, |p| {
     p.awaiting_first_deploy = Some(true);
-    p.preview_mode = default_preview.clone();
   });
   let project = store::find_project(&project.id).unwrap_or(project);
   store::set_active(Some(project.id.clone()));
@@ -684,45 +652,14 @@ entries:
   fn bundled_templates_lists_only_the_fabricator_variants() {
     let bundled = bundled_templates();
     let names: Vec<&str> = bundled.iter().map(|t| t.name.as_str()).collect();
-    // The four bundled Fabricator templates are offered as built-ins; the
-    // upstream gettingstartedauth entry is dropped and the upstream `blankapp`
-    // is replaced by our Graphein-equipped `fabricator-blankapp`. Order is
-    // meaningful: the first entry is the default selection in New Project, so the
-    // Universal App leads.
-    assert_eq!(
-      names,
-      vec![
-        "fabricator-universal",
-        "fabricator-blankapp",
-        "fabricator-todoapp",
-        "fabricator-dataapp"
-      ]
-    );
+    // The two bundled Fabricator templates offered as built-ins; the upstream
+    // gettingstartedauth/blankapp entries and the Data App are dropped in favour
+    // of the Universal App, whose capability router covers the blank-start and
+    // data/dashboard cases. Order is meaningful: the first entry is the default
+    // selection in New Project, so the Universal App leads.
+    assert_eq!(names, vec!["fabricator-universal", "fabricator-todoapp"]);
     assert!(bundled
       .iter()
       .all(|t| !t.display_name.is_empty() && !t.description.is_empty()));
-  }
-
-  #[test]
-  fn data_app_defaults_to_embedded_fabric_preview() {
-    let bundled = bundled_templates();
-    let data = bundled.iter().find(|t| t.name == "fabricator-dataapp").unwrap();
-    let todo = bundled.iter().find(|t| t.name == "fabricator-todoapp").unwrap();
-    let blank = bundled.iter().find(|t| t.name == "fabricator-blankapp").unwrap();
-    // The Data App opens embedded in the Fabric portal shell by default…
-    assert_eq!(data.default_preview_mode.as_deref(), Some("fabric"));
-    // …while the Todo App and Blank App use the direct app view.
-    assert_eq!(todo.default_preview_mode, None);
-    assert_eq!(blank.default_preview_mode, None);
-  }
-
-  #[test]
-  fn fabricator_default_preview_mode_only_fabric_for_data_app() {
-    assert_eq!(fabricator_default_preview_mode("fabricator-dataapp").as_deref(), Some("fabric"));
-    assert_eq!(fabricator_default_preview_mode("fabricator-universal"), None);
-    assert_eq!(fabricator_default_preview_mode("fabricator-todoapp"), None);
-    assert_eq!(fabricator_default_preview_mode("fabricator-blankapp"), None);
-    assert_eq!(fabricator_default_preview_mode("blankapp"), None);
-    assert_eq!(fabricator_default_preview_mode("anything-else"), None);
   }
 }

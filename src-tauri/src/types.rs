@@ -390,11 +390,6 @@ pub struct TemplateInfo {
   pub name: String,
   pub display_name: String,
   pub description: String,
-  /// When `Some("fabric")`, projects scaffolded from this template default to the
-  /// embedded Fabric portal preview (the toolbar Fabric toggle is on at creation).
-  /// Absent for templates that open in the direct app view.
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub default_preview_mode: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -548,6 +543,12 @@ pub struct StudioProject {
   /// honour the same view the user is looking at.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub preview_mode: Option<String>,
+  /// Set once the automatic "semantic-model app ⇒ embedded Fabric preview" default
+  /// has been applied (see [`crate::commands::deploy::run_deploy`]). It makes that
+  /// default fire at most once per project, so a later manual switch to the direct
+  /// view (persisted as `None`) is never re-overridden on subsequent deploys.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub fabric_preview_defaulted: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub missing: Option<bool>,
 }
