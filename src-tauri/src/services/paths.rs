@@ -125,3 +125,35 @@ pub fn fabricator_templates_dir(app: &tauri::AppHandle) -> PathBuf {
     .join("resources")
     .join("fabricator-templates")
 }
+
+/// Writable per-user npm cache Fabricator points every spawned npm at (via
+/// `npm_config_cache`). Seeded once from the bundled warm cache; npm also writes
+/// its own cache misses here. Lives under app-data so it survives across projects
+/// and app updates.
+pub fn npm_cache_dir() -> PathBuf {
+  data_dir().join("npm-cache")
+}
+
+/// Absolute path to the warm npm cache bundled with the app, when present.
+///
+/// Packaged builds ship it under `<resource_dir>/resources/npm-cache` (see
+/// `bundle.resources` in `tauri.conf.json`); the cache itself is warmed
+/// per-platform in CI. Dev builds fall back to the in-repo path, which is
+/// normally empty (nothing is committed there), so seeding is a no-op and npm
+/// uses the network.
+pub fn bundled_npm_cache_dir(app: &tauri::AppHandle) -> PathBuf {
+  use tauri::Manager;
+  if let Ok(res) = app.path().resource_dir() {
+    let bundled = res.join("resources").join("npm-cache");
+    if bundled.is_dir() {
+      return bundled;
+    }
+  }
+  let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+  crate_dir
+    .parent()
+    .map(|p| p.to_path_buf())
+    .unwrap_or(crate_dir)
+    .join("resources")
+    .join("npm-cache")
+}

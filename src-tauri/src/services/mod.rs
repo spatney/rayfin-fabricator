@@ -12,6 +12,7 @@ pub mod env_path;
 pub mod exec;
 pub mod fingerprint;
 pub mod history;
+pub mod npm_cache;
 pub mod paths;
 pub mod preview;
 pub mod semantic_model;

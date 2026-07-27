@@ -124,6 +124,13 @@ pub fn run() {
   // store (issue #17). Must run before anything spawns the CLI or its helpers.
   enable_rayfin_encryption_fallback();
 
+  // Point every spawned npm at Fabricator's warm offline cache (prefer-offline),
+  // so the first `npm install` after creating a project resolves from the bundled
+  // package cache instead of downloading ~30+ packages. Set before any child
+  // spawns so `npm create`, deploy-time installs, and agent pack installs inherit
+  // it. The cache is populated by the background seed in `setup` below.
+  services::npm_cache::configure_env();
+
   // Apply the "compatibility rendering" preference before the webview is created
   // (WebView2 reads this env var at environment creation). Fixes freezing/hangs in
   // VMs such as Parallels where the virtualized GPU misbehaves.
@@ -156,6 +163,19 @@ pub fn run() {
       // monitor actively probes the main thread, so an idle (event-starved) loop
       // is never mistaken for a hang.
       services::watchdog::start(app.handle().clone());
+
+      // Seed the bundled warm npm cache into the writable per-user cache (once
+      // per app version) so the first project's `npm install` resolves offline.
+      // Backgrounded so it never delays startup; idempotent and best-effort, and
+      // `npm_config_cache` already points here (see `configure_env` above), so a
+      // project created before it finishes just falls back to the network.
+      {
+        let handle = app.handle().clone();
+        let version = app.package_info().version.to_string();
+        std::thread::spawn(move || {
+          services::npm_cache::ensure_seeded(&handle, &version);
+        });
+      }
 
       // Trim old chat-session diagnostics so the logs directory stays bounded.
       // Runs once at startup so per-turn capture adds no pruning I/O.

@@ -65,6 +65,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Pre-populate the warm npm cache bundled with the app so a user's first
+      # `npm install` after creating a project resolves offline instead of
+      # downloading ~30+ packages. Warmed per-platform (this runs on both the
+      # Windows and macOS jobs) so each installer carries its own native deps.
+      - name: Warm bundled npm cache
+        run: node scripts/warm-npm-cache.mjs
+
       - name: Write telemetry configuration
         run: node -e "const fs=require('fs');fs.mkdirSync('resources',{recursive:true});fs.writeFileSync('resources/telemetry.json',JSON.stringify({connectionString:process.env.CS},null,2))"
         env:

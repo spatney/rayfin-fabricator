@@ -1,0 +1,5 @@
+# The warm npm cache is generated per-platform in CI (never committed) and
+# bundled as an app resource. This .gitkeep keeps the directory present so the
+# Tauri resource glob in tauri.conf.json always resolves, even before warming.
+#
+# Regenerate locally with: npm run warm-cache

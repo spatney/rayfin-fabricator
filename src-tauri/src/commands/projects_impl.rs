@@ -312,6 +312,21 @@ fn err(message: impl Into<String>) -> ProjectActionResult {
   }
 }
 
+/// Ensure a freshly scaffolded Fabricator project carries the template's
+/// committed `package-lock.json`. The bundled templates ship a lockfile so the
+/// first dependency install can use the deterministic, warm-cache-friendly
+/// `npm ci`; if the scaffolder didn't copy it through, drop it in ourselves.
+/// Best-effort — a missing/failed copy just means the install uses `npm install`.
+fn ensure_template_lockfile(template_dir: &Path, project_dir: &Path) {
+  let src = template_dir.join("package-lock.json");
+  let dst = project_dir.join("package-lock.json");
+  if src.is_file() && !dst.exists() {
+    if let Err(e) = std::fs::copy(&src, &dst) {
+      log::warn!("could not seed template package-lock.json into new project: {e}");
+    }
+  }
+}
+
 /// Scaffold a new Rayfin project, git-init it, and make it active.
 pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> ProjectActionResult {
   let name = input.name.trim().to_string();
@@ -423,6 +438,12 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   }
 
   crate::commands::skills::ensure_project_skills(dir.to_string_lossy().as_ref());
+  // Bundled templates ship a committed lockfile so the first install can use the
+  // deterministic, warm-cache-backed `npm ci`; make sure it survived scaffolding.
+  if is_fabricator {
+    let tmpl_dir = crate::services::paths::fabricator_templates_dir(app).join(&template);
+    ensure_template_lockfile(&tmpl_dir, &dir);
+  }
   init_git_repo(&dir, &format!("Initial commit ({label})"), &on).await;
 
   let project = register_project(&dir, Some(&name));

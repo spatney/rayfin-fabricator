@@ -46,6 +46,14 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+## Warm npm cache (fast first-run installs)
+
+Creating a Universal App and deploying it triggers a first `npm install`. To keep that fast, the app ships a **warm npm cache** — a prebuilt cacache of the Universal App's dependencies (base template + every capability pack) — bundled under `resources/npm-cache/` and seeded into the user's app-data on first launch. Every npm Fabricator spawns runs against it with `--prefer-offline`, falling back to the network only on a cache miss.
+
+- **Generated in CI, per platform.** `.github/workflows/release.yml` runs `node scripts/warm-npm-cache.mjs` on both the Windows and macOS jobs before the Tauri build, so each installer carries the native optional deps (esbuild / SWC / tailwind-oxide / rollup) for its own OS+arch. The cache is **never committed** (see `.gitignore`); a `.gitkeep` keeps the bundled-resource directory present.
+- **Regenerate locally** with `npm run warm-cache` (writes `resources/npm-cache/_cacache`).
+- **Determinism.** The base is warmed from the template's committed `package-lock.json`, so the cached tarballs match what the runtime `npm ci` installs. When you change the template's or a pack's dependencies, regenerate the template lockfile (`npm install --package-lock-only` in `resources/fabricator-templates/fabricator-universal`) so the two stay in sync.
+
 ## Auto-update
 
 The app ships with Tauri's updater plugin. On startup (and via **Settings → Check for updates**) it fetches `latest.json` from the latest GitHub Release, downloads the new installer in the background, and prompts the user to restart and install.
