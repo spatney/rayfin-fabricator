@@ -3,6 +3,7 @@ import type { AppSettings, AuthStatus, DoctorReport } from '@shared/ipc'
 import SetupScreen from './screens/SetupScreen'
 import Workbench from './screens/Workbench'
 import UpdateBanner from './components/UpdateBanner'
+import UpdateModal from './components/UpdateModal'
 import ForcedUpdateScreen from './components/ForcedUpdateScreen'
 import SplashScreen from './components/SplashScreen'
 import { applyUiScale, watchTheme } from './theme'
@@ -92,6 +93,7 @@ function App(): JSX.Element {
     return (
       <>
         <UpdateBanner />
+        <UpdateModal />
         <SplashScreen />
       </>
     )
@@ -101,6 +103,7 @@ function App(): JSX.Element {
     return (
       <>
         <UpdateBanner />
+        <UpdateModal />
         <Workbench
           auth={auth}
           onSignOut={refresh}
@@ -115,6 +118,7 @@ function App(): JSX.Element {
   return (
     <>
       <UpdateBanner />
+      <UpdateModal />
       <SetupScreen doctor={doctor} auth={auth} refreshing={refreshing} onRefresh={refresh} onEnter={enter} />
     </>
   )
