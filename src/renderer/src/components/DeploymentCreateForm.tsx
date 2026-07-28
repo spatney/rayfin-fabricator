@@ -5,6 +5,7 @@ import type {
   FabricWorkspace,
   FabricWorkspacesResult
 } from '@shared/ipc'
+import { fabricAppsRegionWarning, FABRIC_REGION_AVAILABILITY_DOC } from '../fabric'
 
 /** Where to send users who have no Fabric/Premium capacity yet. */
 const TRIAL_URL = 'https://learn.microsoft.com/fabric/fundamentals/fabric-trial'
@@ -174,6 +175,8 @@ export default function DeploymentCreateForm({
   // are no eligible workspaces (it's the only list to show) or while searching
   // (matches must be visible since search spans every workspace).
   const ineligibleExpanded = eligible.length === 0 || Boolean(q) || showIneligible
+  const selectedWsRegion = all.find((w) => w.id === selectedWs)?.region
+  const regionWarning = fabricAppsRegionWarning(selectedWsRegion)
 
   function submit(): void {
     if (!selectedWs || running) return
@@ -474,6 +477,19 @@ export default function DeploymentCreateForm({
           </div>
         )}
       </div>
+
+      {regionWarning && (
+        <p className="field-hint field-hint--warn">
+          {regionWarning}{' '}
+          <button
+            type="button"
+            className="ws-create-link"
+            onClick={() => void window.api.openExternal(FABRIC_REGION_AVAILABILITY_DOC)}
+          >
+            View region availability
+          </button>
+        </p>
+      )}
 
       <div className="dep-create-actions">
         {onCancel && (
