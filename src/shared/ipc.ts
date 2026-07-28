@@ -956,11 +956,16 @@ export interface ChatToolCall {
  * One chronological slice of an assistant turn, used to interleave the model's
  * prose with the tool calls it makes (instead of grouping all tools, then all
  * text). A `'tool'` segment references a {@link ChatToolCall} in `tools` by id so
- * tool-state updates stay in one place. Persisted so reloaded turns keep order.
+ * tool-state updates stay in one place; a `'question'` segment likewise
+ * references a {@link ChatPlanQuestion} in `questions` by id, which docks the
+ * question card at the point in the feed where it was asked instead of letting
+ * it drift to the bottom as the turn keeps streaming. Persisted so reloaded
+ * turns keep order.
  */
 export type ChatSegment =
   | { kind: 'text'; text: string }
   | { kind: 'tool'; id: string }
+  | { kind: 'question'; id: string }
   | { kind: 'interjection'; text: string; thumbs?: string[] }
 
 /**

@@ -529,6 +529,92 @@ describe('ChatPanel Agent-mode ask_user questions', () => {
 
     expect(api.chat.resolveQuestion).toHaveBeenCalledWith('q1', 'Warm and playful', true)
   })
+
+  /**
+   * Regression: the question card was appended to the *end* of the turn body, so
+   * it slid further down the transcript as the rest of the turn kept streaming
+   * (and ended up below the turn summary once the turn settled). It is now
+   * anchored as a `'question'` segment where it was asked and rendered inline in
+   * the chronological feed, so it stays docked at that point.
+   */
+  it('reduceChatMessage anchors an agent-question in the feed where it was asked', () => {
+    const withTool = reduceChatMessage(
+      { ...pendingAssistant, segments: [{ kind: 'text', text: 'Checking the deck.' }] },
+      {
+        type: 'tool-start',
+        tool: { id: 't1', name: 'ask_user', title: 'ask_user', state: 'running' }
+      }
+    )
+    const asked = reduceChatMessage(withTool, {
+      type: 'agent-question',
+      requestId: 'q1',
+      question: 'Which theme?',
+      allowFreeform: true
+    })
+    expect(asked.segments).toEqual([
+      { kind: 'text', text: 'Checking the deck.' },
+      { kind: 'tool', id: 't1' },
+      { kind: 'question', id: 'q1' }
+    ])
+
+    // Later output appends *after* the anchor — the card does not drift down.
+    const streamed = reduceChatMessage(asked, { type: 'delta', text: 'Now editing.' })
+    expect(streamed.segments?.at(-1)).toEqual({ kind: 'text', text: 'Now editing.' })
+    expect(streamed.segments?.[2]).toEqual({ kind: 'question', id: 'q1' })
+
+    // Re-emitting the same request id must not duplicate the anchor.
+    const again = reduceChatMessage(streamed, {
+      type: 'agent-question',
+      requestId: 'q1',
+      question: 'Which theme?',
+      allowFreeform: true
+    })
+    expect(again.segments?.filter((s) => s.kind === 'question')).toHaveLength(1)
+  })
+
+  it('renders an anchored question inline in the feed, not after the turn body', () => {
+    installApi()
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            text: 'Now editing.',
+            tools: [],
+            pending: true,
+            segments: [
+              { kind: 'question', id: 'q1' },
+              { kind: 'text', text: 'Now editing.' }
+            ],
+            questions: [
+              {
+                id: 'q1',
+                question: 'Which theme should the site use?',
+                choices: ['Light', 'Dark'],
+                allowFreeform: false,
+                state: 'pending'
+              }
+            ]
+          }
+        ]}
+        onChange={() => {}}
+        draft=""
+        modeSelectorEnabled
+      />
+    )
+    const feed = document.querySelector('.turn-feed')
+    expect(feed).toBeTruthy()
+    const card = feed?.querySelector('.chat-agent-questions')
+    expect(card).toBeTruthy()
+    // Exactly one card (the trailing fallback block must not double-render it),
+    // and it sits before the prose that streamed after the question.
+    expect(document.querySelectorAll('.chat-agent-questions')).toHaveLength(1)
+    expect(card?.parentElement).toBe(feed)
+    const after = feed?.children[1]
+    expect(after?.textContent).toContain('Now editing.')
+  })
 })
 
 /**

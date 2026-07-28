@@ -13770,6 +13770,13 @@ code {
   background: var(--bg-elev-2);
 }
 
+/* Docked inline in the turn feed at the point it was asked — the feed's own
+   gap handles the spacing, so drop the trailing-block margin. */
+.turn-feed > .chat-agent-questions {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
 .chat-agent-questions-head {
   display: flex;
   align-items: center;

@@ -847,14 +847,17 @@ pub struct ChatToolCall {
   pub output: Option<String>,
 }
 
-/// One chronological slice of an assistant turn (prose or a tool call), used to
-/// persist the interleaved order of the model's text and the tools it ran. A
-/// `Tool` segment references a `ChatToolCall` in `tools` by id.
+/// One chronological slice of an assistant turn (prose, a tool call, or a
+/// question), used to persist the interleaved order of the model's text and the
+/// tools it ran. A `Tool` segment references a `ChatToolCall` in `tools` by id;
+/// a `Question` segment references a `ChatPlanQuestion` in `questions` by id so
+/// the card re-renders docked where it was asked.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ChatSegment {
   Text { text: String },
   Tool { id: String },
+  Question { id: String },
   /// A message the user injected mid-turn (conversation steering), shown inline
   /// in the assistant feed as a small "you interjected" bubble.
   Interjection { text: String },

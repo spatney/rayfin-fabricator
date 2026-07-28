@@ -827,17 +827,55 @@ function TurnSummary({ tools }: { tools: ChatToolCall[] }): JSX.Element | null {
 }
 
 /**
- * Renders an assistant turn body as a single chronological feed: prose and the
- * tool calls it ran, interleaved in the order they streamed. Falls back to the
- * legacy "all tools, then all text" grouping for turns without segment data
- * (e.g. older persisted history).
+ * The "Fabricator needs your input" card for a standalone Agent-mode `ask_user`
+ * question. Rendered inline in the turn feed at the point the question was
+ * asked (see the `'question'` segment) so it stays docked there as the rest of
+ * the turn streams in below it.
+ */
+function AgentQuestionBlock({
+  questions,
+  busy,
+  error,
+  onAnswer
+}: {
+  questions: ChatPlanQuestion[]
+  busy: boolean
+  error?: string
+  onAnswer: (requestId: string, answer: string, wasFreeform: boolean) => void
+}): JSX.Element {
+  return (
+    <div className="chat-agent-questions">
+      <div className="chat-agent-questions-head">
+        <Codicon name="comment-discussion" /> Fabricator needs your input
+      </div>
+      {questions.map((q) => (
+        <PlanQuestionCard key={q.id} question={q} busy={busy} onAnswer={onAnswer} />
+      ))}
+      {error && (
+        <div className="chat-agent-questions-error">
+          <Codicon name="warning" /> {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Renders an assistant turn body as a single chronological feed: prose, the
+ * tool calls it ran, and any `ask_user` question cards, interleaved in the
+ * order they streamed. Falls back to the legacy "all tools, then all text"
+ * grouping for turns without segment data (e.g. older persisted history).
  */
 function AssistantBody({
   message: m,
-  projectPath
+  projectPath,
+  questionBusy,
+  onAnswerQuestion
 }: {
   message: UIChatMessage
   projectPath: string
+  questionBusy: boolean
+  onAnswerQuestion: (requestId: string, answer: string, wasFreeform: boolean) => void
 }): JSX.Element {
   const segments = m.segments
   if (segments && segments.length > 0) {
@@ -873,6 +911,19 @@ function AssistantBody({
                   )}
                 </div>
               </div>
+            )
+          }
+          if (seg.kind === 'question') {
+            const q = m.questions?.find((item) => item.id === seg.id)
+            if (!q) return null
+            return (
+              <AgentQuestionBlock
+                key={i}
+                questions={[q]}
+                busy={questionBusy}
+                error={q.state === 'pending' ? m.questionError : undefined}
+                onAnswer={onAnswerQuestion}
+              />
             )
           }
           const tool = m.tools.find((t) => t.id === seg.id)
@@ -1151,7 +1202,14 @@ export function reduceChatMessage(msg: UIChatMessage, ev: ChatEvent): UIChatMess
       const idx = existing.findIndex((item) => item.id === ev.requestId)
       const questions =
         idx < 0 ? [...existing, question] : existing.map((item, i) => (i === idx ? question : item))
-      next = { ...msg, questions, questionError: undefined, notice: undefined }
+      // Dock the card where it was asked: anchor it in the chronological feed
+      // rather than letting it trail the turn body as more output streams in.
+      const segments = (msg.segments ?? []).some(
+        (s) => s.kind === 'question' && s.id === ev.requestId
+      )
+        ? msg.segments
+        : [...(msg.segments ?? []), { kind: 'question' as const, id: ev.requestId }]
+      next = { ...msg, questions, segments, questionError: undefined, notice: undefined }
       break
     }
     case 'plan-question-resolved': {
@@ -1281,6 +1339,22 @@ const MessageRow = memo(function MessageRow({
   onExportPlan: (msgId: string, content: string) => Promise<void> | void
   onOpenMention?: (ref: string) => void
 }): JSX.Element {
+  const answerQuestion = useCallback(
+    (requestId: string, answer: string, wasFreeform: boolean) =>
+      onAnswerPlanQuestion(m.id, requestId, answer, wasFreeform),
+    [onAnswerPlanQuestion, m.id]
+  )
+  // Questions the feed already docks in place (via a `'question'` segment) are
+  // rendered there; anything left over — legacy turns persisted before segment
+  // anchoring — still falls back to a block at the end of the turn.
+  const unanchoredQuestions = useMemo(() => {
+    const all = m.questions ?? []
+    if (all.length === 0) return all
+    const anchored = new Set(
+      (m.segments ?? []).flatMap((s) => (s.kind === 'question' ? [s.id] : []))
+    )
+    return anchored.size === 0 ? all : all.filter((q) => !anchored.has(q.id))
+  }, [m.questions, m.segments])
   return (
     <div className={`turn turn--${m.role}`}>
       <div className="turn-head">
@@ -1303,7 +1377,12 @@ const MessageRow = memo(function MessageRow({
       </div>
       <div className="turn-main">
         {m.role === 'assistant' ? (
-          <AssistantBody message={m} projectPath={projectPath} />
+          <AssistantBody
+            message={m}
+            projectPath={projectPath}
+            questionBusy={questionBusy}
+            onAnswerQuestion={answerQuestion}
+          />
         ) : (
           m.text && (
             <div className="msg-text">
@@ -1328,27 +1407,13 @@ const MessageRow = memo(function MessageRow({
             onExport={(content) => onExportPlan(m.id, content)}
           />
         )}
-        {m.questions && m.questions.length > 0 && (
-          <div className="chat-agent-questions">
-            <div className="chat-agent-questions-head">
-              <Codicon name="comment-discussion" /> Fabricator needs your input
-            </div>
-            {m.questions.map((q) => (
-              <PlanQuestionCard
-                key={q.id}
-                question={q}
-                busy={questionBusy}
-                onAnswer={(requestId, answer, wasFreeform) =>
-                  onAnswerPlanQuestion(m.id, requestId, answer, wasFreeform)
-                }
-              />
-            ))}
-            {m.questionError && (
-              <div className="chat-agent-questions-error">
-                <Codicon name="warning" /> {m.questionError}
-              </div>
-            )}
-          </div>
+        {unanchoredQuestions.length > 0 && (
+          <AgentQuestionBlock
+            questions={unanchoredQuestions}
+            busy={questionBusy}
+            error={m.questionError}
+            onAnswer={answerQuestion}
+          />
         )}
         {m.attachmentThumbs && m.attachmentThumbs.length > 0 ? (
           <div className="msg-shots">
