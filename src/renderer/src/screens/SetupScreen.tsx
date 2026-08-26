@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AuthStatus, DoctorReport, InstallResult, ProcLogEvent } from '@shared/ipc'
+import type {
+  AgentEngine,
+  AuthStatus,
+  DoctorReport,
+  InstallResult,
+  ProcLogEvent
+} from '@shared/ipc'
 import { FabricatorMark } from '../components/FabricatorMark'
 import nodeSvg from '../assets/brands/node.svg'
 import npmSvg from '../assets/brands/npm.svg'
 import gitSvg from '../assets/brands/git.svg'
 import azureSvg from '../assets/brands/azure.svg'
-import { CopilotLogo } from '../components/brand-icons'
+import { ClaudeLogo, CopilotLogo } from '../components/brand-icons'
 import { CheckIcon, DownloadIcon, ReloadIcon, TerminalIcon } from '../components/icons'
 
 /** Official product logo (as an <img> src) for each tool, keyed by the doctor's tool id. */
@@ -19,12 +25,21 @@ const TOOL_LOGOS: Record<string, string> = {
 interface Props {
   doctor: DoctorReport | null
   auth: AuthStatus | null
+  /** Which agent engine the app is set to use; decides which sign-in is required. */
+  engine: AgentEngine
   refreshing: boolean
   onRefresh: () => Promise<void> | void
   onEnter: () => void
 }
 
-export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnter }: Props): JSX.Element {
+export default function SetupScreen({
+  doctor,
+  auth,
+  engine,
+  refreshing,
+  onRefresh,
+  onEnter
+}: Props): JSX.Element {
   const [log, setLog] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [finalizing, setFinalizing] = useState(false)
@@ -95,10 +110,15 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
   // CLI is installed. Gate the card on that.
   const azReady = tools.find((t) => t.id === 'az')?.satisfied ?? false
 
-  const providers = [
-    auth?.copilot.signedIn ?? false,
-    auth?.az.signedIn ?? false
-  ]
+  // Only the engine actually in use has to be signed in: a Copilot user is never
+  // blocked on a Claude sign-in, and vice versa.
+  const usingClaude = engine === 'claude'
+  const agentSignedIn =
+    (usingClaude ? auth?.claude.signedIn : auth?.copilot.signedIn) ?? false
+  // Claude's CLI is user-installed, so its sign-in button can't work until it is.
+  const claudeReady = auth?.claude.installed ?? false
+
+  const providers = [agentSignedIn, auth?.az.signedIn ?? false]
   const signedInCount = providers.filter(Boolean).length
 
   const allReady = (doctor?.ready ?? false) && signedInCount === providers.length
@@ -111,9 +131,11 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
   const loginProvider =
     busy === 'login:copilot'
       ? 'GitHub Copilot'
-      : busy === 'login:az'
-        ? 'Azure'
-        : null
+      : busy === 'login:claude'
+        ? 'Claude'
+        : busy === 'login:az'
+          ? 'Azure'
+          : null
 
   // Show only the meaningful tail of the process output in the sign-in overlay:
   // drop our own "› <label>" echo lines and blank lines so it reads as clean
@@ -303,20 +325,47 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
               </div>
 
               <ul className="auth-list">
-                <AuthRow
-                  icon={<CopilotLogo />}
-                  title="GitHub Copilot"
-                  subtitle="The AI agent that writes your code"
-                  signedIn={auth?.copilot.signedIn ?? false}
-                  detail={auth?.copilot.user}
-                  disabled={busy !== null}
-                  busy={busy === 'login:copilot'}
-                  onSignIn={() =>
-                    runAction('login:copilot', 'Sign in to GitHub Copilot', () =>
-                      window.api.auth.loginCopilot()
-                    )
-                  }
-                />
+                {usingClaude ? (
+                  <AuthRow
+                    icon={<ClaudeLogo />}
+                    title="Claude"
+                    subtitle="The AI agent that writes your code"
+                    signedIn={auth?.claude.signedIn ?? false}
+                    detail={auth?.claude.user}
+                    extra={
+                      auth?.claude.subscription
+                        ? `Claude ${auth.claude.subscription}`
+                        : undefined
+                    }
+                    disabled={busy !== null || !claudeReady}
+                    disabledReason={
+                      !claudeReady
+                        ? 'Install the Claude Code CLI first: npm install -g @anthropic-ai/claude-code'
+                        : undefined
+                    }
+                    busy={busy === 'login:claude'}
+                    onSignIn={() =>
+                      runAction('login:claude', 'Sign in to Claude', () =>
+                        window.api.auth.loginClaude()
+                      )
+                    }
+                  />
+                ) : (
+                  <AuthRow
+                    icon={<CopilotLogo />}
+                    title="GitHub Copilot"
+                    subtitle="The AI agent that writes your code"
+                    signedIn={auth?.copilot.signedIn ?? false}
+                    detail={auth?.copilot.user}
+                    disabled={busy !== null}
+                    busy={busy === 'login:copilot'}
+                    onSignIn={() =>
+                      runAction('login:copilot', 'Sign in to GitHub Copilot', () =>
+                        window.api.auth.loginCopilot()
+                      )
+                    }
+                  />
+                )}
                 <AuthRow
                   icon={<img className="brand-glyph" src={azureSvg} alt="" />}
                   title="Azure CLI"

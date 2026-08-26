@@ -119,7 +119,14 @@ function App(): JSX.Element {
     <>
       <UpdateBanner />
       <UpdateModal />
-      <SetupScreen doctor={doctor} auth={auth} refreshing={refreshing} onRefresh={refresh} onEnter={enter} />
+      <SetupScreen
+        doctor={doctor}
+        auth={auth}
+        engine={settings?.agentEngine ?? 'copilot'}
+        refreshing={refreshing}
+        onRefresh={refresh}
+        onEnter={enter}
+      />
     </>
   )
 }

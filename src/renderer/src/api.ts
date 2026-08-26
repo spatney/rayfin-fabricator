@@ -77,6 +77,7 @@ export const api: RayfinStudioApi = {
   auth: {
     status: () => invoke('auth_status'),
     loginCopilot: () => invoke('auth_login_copilot'),
+    loginClaude: () => invoke('auth_login_claude'),
     loginRayfin: (tenant?: string) => invoke('auth_login_rayfin', { tenant }),
     loginAz: () => invoke('auth_login_az'),
     logoutRayfin: () => invoke('auth_logout_rayfin')

@@ -26,6 +26,17 @@ function installApi(exportImpl?: () => Promise<string>): {
       )
     },
     diagnostics: { export: exportFn },
+    // The engine picker probes Claude CLI availability on mount.
+    auth: {
+      status: vi.fn(() =>
+        Promise.resolve({
+          copilot: { signedIn: false },
+          claude: { installed: false, signedIn: false },
+          rayfin: { signedIn: false },
+          az: { signedIn: false }
+        })
+      )
+    },
     openLogs
   }
   return { export: exportFn, openLogs }

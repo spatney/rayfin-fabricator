@@ -25,6 +25,10 @@ pub struct AppVersions {
   /// determined (e.g. the platform isn't bundled).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub copilot_bundled: Option<String>,
+  /// The user-installed Claude Code CLI version (`claude --version`), when the
+  /// Claude engine's CLI is present. `None` when it isn't installed.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub claude_cli: Option<String>,
 }
 
 /* ----------------------------- updates ----------------------------- */
@@ -93,6 +97,27 @@ pub struct CopilotAuthStatus {
   pub user: Option<String>,
 }
 
+/// Claude Code CLI availability and sign-in state, for the Claude engine.
+/// Unlike Copilot's bundled CLI, this one is user-installed, so `installed`
+/// distinguishes "not set up" from "installed but signed out".
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeAuthStatus {
+  /// True when the `claude` binary resolves on this machine.
+  pub installed: bool,
+  pub signed_in: bool,
+  /// The signed-in account's email, as reported by `claude auth status`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub user: Option<String>,
+  /// Claude plan backing the sign-in (`"pro"` / `"max"`). Absent for an
+  /// Anthropic Console (API-billed) sign-in.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub subscription: Option<String>,
+  /// How the CLI is authenticated (`"claude.ai"` for a subscription).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub auth_method: Option<String>,
+}
+
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RayfinAuthStatus {
@@ -117,6 +142,7 @@ pub struct AzAuthStatus {
 #[serde(rename_all = "camelCase")]
 pub struct AuthStatus {
   pub copilot: CopilotAuthStatus,
+  pub claude: ClaudeAuthStatus,
   pub rayfin: RayfinAuthStatus,
   pub az: AzAuthStatus,
 }
@@ -521,6 +547,11 @@ pub struct StudioProject {
   pub last_deploy: Option<DeployInfo>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub copilot_session_id: Option<String>,
+  /// Conversation id for the Claude engine (`claude --resume <uuid>`), created
+  /// on the project's first Claude turn. Kept separate from
+  /// `copilot_session_id` so switching engines doesn't cross the two histories.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub claude_session_id: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub workspace: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -599,6 +630,11 @@ pub struct AppSettings {
   /// Settings → Diagnostics.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub full_diagnostics: Option<bool>,
+  /// Which agent engine drives chat turns: `"copilot"` (default, bundled) or
+  /// `"claude"` (the user's Claude Code CLI, signed in with a Claude
+  /// subscription). Absent means Copilot, so existing installs are unaffected.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub agent_engine: Option<String>,
 }
 
 fn default_theme() -> String {

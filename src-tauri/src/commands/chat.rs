@@ -28,9 +28,11 @@ use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
 use crate::commands::screenshot;
+use crate::services::claude;
 use crate::services::copilot::PlanModeHandler;
 use crate::services::diagnostics;
 use crate::services::emit::emit_chat_event;
+use crate::services::exec::{self, RunOptions};
 use crate::services::history;
 use crate::services::store;
 use crate::state::{AppState, TurnRoute};
@@ -595,6 +597,29 @@ pub(crate) async fn run_turn(
   let full = diagnostics::full_enabled();
   let app_version = app.package_info().version.to_string();
 
+  // Claude engine: the turn runs through the user's Claude Code CLI instead of
+  // the bundled Copilot session. Everything downstream of `map_event` — tool
+  // cards, `filesModified`, deploy detection, diagnostics — is shared, so only
+  // the transport differs. The Copilot path below is untouched.
+  if store::get_settings().agent_engine.as_deref() == Some(claude::ENGINE_ID) {
+    return run_claude_turn(
+      app,
+      state,
+      project,
+      ctx_info,
+      project_id,
+      turn_id,
+      text,
+      attachments,
+      mode,
+      token,
+      started,
+      full,
+      app_version,
+    )
+    .await;
+  }
+
   // Surface plan-approval prompts (`exit_plan_mode`) and structured questions
   // (`ask_user`) to this turn's UI. Both are backed by the same handler/gate and
   // installed on every chat turn (cheap, harmless when neither fires) because the
@@ -886,6 +911,238 @@ pub(crate) async fn run_turn(
   })
 }
 
+/// Drive one turn through the Claude Code CLI (`claude --print --output-format
+/// stream-json`), the alternative to the bundled Copilot session.
+///
+/// One process per turn: conversation context is carried by the project's stored
+/// `claude_session_id`, created on the first Claude turn and `--resume`d after
+/// that. The CLI's stream-json is rewritten by
+/// [`claude::Translator`](crate::services::claude::Translator) into the same
+/// event shapes the Copilot SDK emits, so [`map_event`] and everything after it
+/// is shared between the two engines.
+#[allow(clippy::too_many_arguments)]
+async fn run_claude_turn(
+  app: AppHandle,
+  state: &AppState,
+  project: crate::types::StudioProject,
+  ctx_info: ProjectContext,
+  project_id: String,
+  turn_id: String,
+  text: String,
+  attachments: Vec<String>,
+  mode: Option<String>,
+  token: exec::CancelToken,
+  started: std::time::Instant,
+  full: bool,
+  app_version: String,
+) -> Result<ChatTurnResult, String> {
+  // Close out a turn that never got as far as running the CLI.
+  macro_rules! fail_early {
+    ($msg:expr) => {{
+      let msg: String = $msg;
+      emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: msg.clone() });
+      emit_chat_event(
+        &app,
+        &project_id,
+        &turn_id,
+        ChatEvent::Result { ok: false, files_modified: vec![], ran_deploy: false },
+      );
+      screenshot::cleanup(&attachments);
+      state.end_chat(&project_id);
+      record_turn_diagnostics(
+        &app_version,
+        &ctx_info.session_id,
+        &project_id,
+        &turn_id,
+        &project.model,
+        &mode,
+        &project.effort,
+        &text,
+        attachments.len(),
+        full,
+        started.elapsed().as_millis() as u64,
+        1,
+        "error",
+        Some(msg.clone()),
+        &TurnCtx::new(full),
+      );
+      return Ok(ChatTurnResult { ok: false, error: Some(msg), files_modified: vec![], ran_deploy: false });
+    }};
+  }
+
+  let Some((program, prefix)) = claude::cli() else {
+    fail_early!(
+      "The Claude Code CLI was not found. Install it with `npm install -g @anthropic-ai/claude-code`, then sign in from Setup."
+        .to_string()
+    );
+  };
+
+  // The project's Claude conversation: created on the first Claude turn, resumed
+  // on every one after, so context survives both turns and app restarts.
+  let (session_id, resume) = match project.claude_session_id.clone() {
+    Some(id) => (id, true),
+    None => {
+      let id = Uuid::new_v4().to_string();
+      let stored = id.clone();
+      store::mutate_project(&project_id, move |p| p.claude_session_id = Some(stored));
+      (id, false)
+    }
+  };
+
+  // Publish where this turn is streaming so `chat_steer` can address the user's
+  // mid-turn message to the right conversation.
+  state.plan.set_route(
+    &ctx_info.session_id,
+    TurnRoute {
+      project_id: project_id.clone(),
+      turn_id: turn_id.clone(),
+      plan_context: mode.as_deref() == Some("plan"),
+    },
+  );
+
+  let prompt = claude::compose_prompt(&text, &attachments);
+  let args = claude::turn_args(&prompt, &session_id, resume, &project.model, &project.effort, &mode);
+  let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+
+  // The exec layer pumps stdout from its own task, so the translator and the
+  // turn accumulator are shared with it behind a mutex. No await happens while
+  // it is held.
+  let shared = Arc::new(std::sync::Mutex::new((claude::Translator::new(), TurnCtx::new(full))));
+  let stderr_log = Arc::new(std::sync::Mutex::new(String::new()));
+  let on_data: exec::OnData = {
+    let shared = shared.clone();
+    let stderr_log = stderr_log.clone();
+    let app = app.clone();
+    let project_id = project_id.clone();
+    let turn_id = turn_id.clone();
+    Arc::new(move |stream, chunk: &str| {
+      if stream != exec::Stream::Stdout {
+        // Keep a bounded tail of stderr to explain a turn that dies without
+        // ever emitting a `result` line.
+        let mut log = stderr_log.lock().unwrap();
+        if log.len() < 8192 {
+          log.push_str(chunk);
+        }
+        return;
+      }
+      let mut guard = shared.lock().unwrap();
+      let (translator, ctx) = &mut *guard;
+      for (kind, data) in translator.push(chunk) {
+        let mut sink = |e: ChatEvent| emit_chat_event(&app, &project_id, &turn_id, e);
+        let _ = map_event(&kind, &data, &mut sink, ctx);
+      }
+    })
+  };
+
+  let res = exec::run_resolved(
+    program,
+    prefix,
+    &arg_refs,
+    RunOptions {
+      cwd: Some(PathBuf::from(&ctx_info.cwd)),
+      on_data: Some(on_data),
+      timeout_ms: Some(TURN_TIMEOUT_MS),
+      cancel: Some(token.clone()),
+      ..Default::default()
+    },
+  )
+  .await;
+
+  let mut guard = shared.lock().unwrap();
+  let (translator, ctx) = &mut *guard;
+  // Flush a final line the process emitted without a trailing newline.
+  for (kind, data) in translator.finish() {
+    let mut sink = |e: ChatEvent| emit_chat_event(&app, &project_id, &turn_id, e);
+    let _ = map_event(&kind, &data, &mut sink, ctx);
+  }
+
+  let finished = translator.finished();
+  let cancelled = token.is_cancelled();
+  // `RunResult` reports neither timeout nor cancellation distinctly, so infer:
+  // the turn ran the full cap without a terminal `result` line.
+  let timed_out =
+    !cancelled && !finished && started.elapsed().as_millis() as u64 >= TURN_TIMEOUT_MS;
+  let ok = finished && ctx.errored.is_none() && !cancelled && !timed_out;
+
+  // `session.error` already emitted its own Error event; cancellation is the
+  // user's own doing and needs no error card.
+  let mut failure: Option<String> = ctx.errored.clone();
+  if !ok && !cancelled && failure.is_none() {
+    let detail = if timed_out {
+      "Claude timed out after an hour.".to_string()
+    } else if res.not_found {
+      "The Claude Code CLI could not be started. Reinstall it with `npm install -g @anthropic-ai/claude-code`.".to_string()
+    } else {
+      let tail = stderr_log.lock().unwrap();
+      match last_meaningful_line(&tail) {
+        Some(line) => format!("Claude ended unexpectedly: {line}"),
+        None => "Claude ended unexpectedly. Check that `claude auth status` reports a signed-in account.".to_string(),
+      }
+    };
+    emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: detail.clone() });
+    failure = Some(detail);
+  }
+
+  let outcome = if cancelled {
+    "cancelled"
+  } else if timed_out {
+    "timed_out"
+  } else if ctx.errored.is_some() {
+    "error"
+  } else if finished {
+    "ok"
+  } else {
+    "incomplete"
+  };
+  record_turn_diagnostics(
+    &app_version,
+    &session_id,
+    &project_id,
+    &turn_id,
+    &project.model,
+    &mode,
+    &project.effort,
+    &text,
+    attachments.len(),
+    full,
+    started.elapsed().as_millis() as u64,
+    1,
+    outcome,
+    failure,
+    ctx,
+  );
+
+  emit_chat_event(
+    &app,
+    &project_id,
+    &turn_id,
+    ChatEvent::Result {
+      ok,
+      files_modified: ctx.files_modified.clone(),
+      ran_deploy: ctx.ran_deploy,
+    },
+  );
+  screenshot::cleanup(&attachments);
+  state.end_chat(&project_id);
+  state.plan.clear_route(&ctx_info.session_id);
+  Ok(ChatTurnResult {
+    ok,
+    error: if ok { None } else { Some("Turn failed.".into()) },
+    files_modified: ctx.files_modified.clone(),
+    ran_deploy: ctx.ran_deploy,
+  })
+}
+
+/// Last non-empty line of CLI stderr, clipped — the useful part of a crash.
+fn last_meaningful_line(text: &str) -> Option<String> {
+  text
+    .lines()
+    .map(str::trim)
+    .filter(|l| !l.is_empty())
+    .next_back()
+    .map(|l| truncate(l, 300))
+}
+
 #[tauri::command]
 pub fn chat_cancel(state: State<'_, AppState>, project_id: String) {
   state.cancel_chat(&project_id);
@@ -918,6 +1175,23 @@ pub async fn chat_steer(
   // Where the live turn is streaming, so any plan/question card dismisses on
   // the right turn.
   let active_turn = state.plan.route(&ctx_info.session_id).map(|r| r.turn_id);
+
+  // The Claude engine runs each turn as a one-shot CLI process with no channel
+  // to interject on. Say so rather than silently swallowing the message.
+  if store::get_settings().agent_engine.as_deref() == Some(claude::ENGINE_ID) {
+    if let Some(turn) = &active_turn {
+      emit_chat_event(
+        &app,
+        &project_id,
+        turn,
+        ChatEvent::Notice {
+          text: "The Claude engine can't take a message mid-turn — stop the turn first, or wait for it to finish.".into(),
+        },
+      );
+    }
+    screenshot::cleanup(&attachments);
+    return Ok(SteerResult { steered: true });
+  }
 
   // Plan mode: a plan card is awaiting the user's decision, so the agent is
   // blocked on that choice rather than "thinking". Treat the typed message as
@@ -1006,7 +1280,10 @@ pub async fn chat_reset(state: State<'_, AppState>, project_id: String) -> Resul
   // Drop the cached SDK session so the next turn starts a brand-new conversation.
   state.copilot.forget(&project_id).await;
   history::clear_history(&project_id);
-  store::mutate_project(&project_id, |p| p.copilot_session_id = None);
+  store::mutate_project(&project_id, |p| {
+    p.copilot_session_id = None;
+    p.claude_session_id = None;
+  });
   Ok(())
 }
 
@@ -1158,11 +1435,16 @@ pub fn chat_set_options(project_id: String, options: ChatOptions) {
   });
 }
 
-/// List the Copilot models available to the signed-in user, for the chat model
-/// picker. Returns an `Err` (the renderer then falls back to its static
-/// suggestions) when the engine can't be reached or the user isn't signed in.
+/// List the models available for the chat model picker on the active engine.
+/// Copilot answers per-seat from its `models.list` RPC; the Claude Code CLI has
+/// no machine-readable listing, so that engine serves a curated catalog. Returns
+/// an `Err` (the renderer then falls back to its static suggestions) when the
+/// engine can't be reached or the user isn't signed in.
 #[tauri::command]
 pub async fn chat_models(state: State<'_, AppState>) -> Result<Vec<CopilotModel>, String> {
+  if store::get_settings().agent_engine.as_deref() == Some(claude::ENGINE_ID) {
+    return Ok(claude::models());
+  }
   state.copilot.list_models().await
 }
 

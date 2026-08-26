@@ -20,12 +20,14 @@ pub async fn get_versions(app: AppHandle) -> AppVersions {
   let app_version = app.package_info().version.to_string();
   let copilot = crate::services::copilot::bundled_cli_version().await;
   let copilot_bundled = crate::services::copilot::bundled_cli_pinned_version();
+  let claude_cli = crate::services::claude::cli_version().await;
   AppVersions {
     app: app_version,
     tauri: tauri::VERSION.to_string(),
     webview2: webview_version(),
     copilot,
     copilot_bundled,
+    claude_cli,
   }
 }
 

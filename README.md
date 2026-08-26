@@ -3,7 +3,7 @@
 
   <h1>Fabricator</h1>
 
-  <p><strong>The all-in-one workbench for building Rayfin apps — chat to build, preview inline, and ship to Microsoft Fabric, all in one window. No CLI wrangling, no new account: just your GitHub Copilot sign-in.</strong></p>
+  <p><strong>The all-in-one workbench for building Rayfin apps — chat to build, preview inline, and ship to Microsoft Fabric, all in one window. No CLI wrangling, no new account: just your GitHub Copilot or Claude sign-in.</strong></p>
 
   <p>
     <a href="https://github.com/spatney/rayfin-fabricator/releases/latest"><img alt="Download Fabricator" src="https://img.shields.io/badge/Download-Fabricator-0078D4?style=for-the-badge" /></a>
@@ -30,7 +30,7 @@ Building a Rayfin app usually means living in your terminal: scaffold with one C
 
 You chat, the app gets built, you watch it come together inline, and you manage every deployment from one panel. No commands to memorize, no terminal tabs to juggle.
 
-Best of all, it runs on the **GitHub Copilot account you already have**. Nothing new to sign up for and no extra subscription — sign in and start building.
+Best of all, it runs on an **AI subscription you already have**. Use the bundled GitHub Copilot CLI — nothing new to sign up for — or switch the engine to **Claude** and build with your own Claude Pro/Max subscription. Either way: sign in and start building.
 
 ### New to Rayfin?
 
@@ -40,7 +40,7 @@ Fabricator is the desktop shell that makes building those apps effortless.
 
 ## Everything in one window
 
-1. **Chat to build.** Describe what you want in plain English. The built-in GitHub Copilot agent writes and edits the project files for you — you never touch a command line. Git quietly snapshots every change, so you can diff and roll back anytime.
+1. **Chat to build.** Describe what you want in plain English. The built-in agent — GitHub Copilot, or Claude if you'd rather use your Claude subscription — writes and edits the project files for you, and you never touch a command line. Git quietly snapshots every change, so you can diff and roll back anytime.
 2. **See it as it's built.** Inspect and edit any file in a built-in Monaco editor, and watch the app itself in a live inline preview — no separate browser, no copy-pasting URLs.
 3. **Deploy with a click.** Hit deploy and Fabricator runs `rayfin up` for you, shipping the app to Microsoft Fabric. Create, switch, and redeploy across workspaces from a single deployments panel — then share the app with teammates in your tenant straight from that panel.
 4. **Harden it.** The Advisor runs Copilot-driven security and policy checks — unprotected routes, over-permissive database policies, that kind of thing — and flags them when the project changes.
@@ -68,15 +68,28 @@ Fabricator runs on **Windows 10/11** and **macOS (Apple Silicon)**.
 
    > This is a one-time step. Without it macOS may report the app as *"damaged and can't be opened"* — that's the quarantine flag, not real corruption. (Control-click → **Open** also works, but the `xattr` command is the most reliable.) These steps go away once the app is notarized.
 
-Then launch the app. The onboarding doctor checks the rest and walks you through signing in to GitHub Copilot and Microsoft Fabric.
+Then launch the app. The onboarding doctor checks the rest and walks you through signing in to your AI engine and Microsoft Fabric.
 
 To build apps you'll create a Rayfin project with `npm create @microsoft/rayfin@latest`. Fabricator uses that project's pinned Rayfin CLI, so there's nothing to install globally. The app keeps itself up to date with in-app auto-updates on both platforms.
 
 Want to build from source instead? Jump to [Build from source](#build-from-source).
 
+## Choosing the AI engine
+
+Fabricator can drive either agent, picked in **Settings → AI engine**:
+
+| Engine | What it needs |
+| --- | --- |
+| **GitHub Copilot** (default) | Nothing extra — the CLI is bundled with the app. Sign in once from the setup screen. |
+| **Claude** | The Claude Code CLI, installed with `npm install -g @anthropic-ai/claude-code`. Sign in from the setup screen and the agent runs on your **Claude Pro/Max subscription** (an Anthropic Console API key works too). |
+
+Each engine keeps its own conversation per project, so switching starts a fresh chat rather than mixing the two histories.
+
+Two things behave differently on the Claude engine today: mid-turn steering is unavailable (each turn is a one-shot CLI run, so stop the turn instead), and a Plan-mode turn posts its plan into the chat rather than showing the approve/reject card. The Advisor, design tooling, and suggestions keep using Copilot.
+
 ## What's inside
 
-**Author.** Chat with a built-in GitHub Copilot agent — pick the model and reasoning effort, steer it mid-turn, and keep separate threads (plus optional parallel side threads) with full history. Every turn runs in **Agent** mode; enable the experimental mode selector (Settings → Experiments) to also choose **Plan** or **Autopilot**. Inspect and edit any generated file in a built-in Monaco editor, see your data model as an entity diagram, browse the agent's reusable Skills, and lean on a git timeline you can diff and restore.
+**Author.** Chat with a built-in agent — GitHub Copilot or Claude — pick the model and reasoning effort, steer it mid-turn, and keep separate threads (plus optional parallel side threads) with full history. Every turn runs in **Agent** mode; enable the experimental mode selector (Settings → Experiments) to also choose **Plan** or **Autopilot**. Inspect and edit any generated file in a built-in Monaco editor, see your data model as an entity diagram, browse the agent's reusable Skills, and lean on a git timeline you can diff and restore.
 
 **Ship.** One-click `rayfin up` deploys to Microsoft Fabric. A deployments panel handles create, switch, and redeploy across workspaces — and share a deployed app with people in your Entra tenant by email (each recipient gets Contributor on its workspace, and any semantic model the app uses in another workspace is automatically shared with Build access).
 
@@ -152,6 +165,7 @@ You'll need:
 | Git | Used for local project history. |
 | Rayfin CLI | Ships with each Rayfin project (`npm create @microsoft/rayfin@latest`); Fabricator runs the project-pinned version via `npx rayfin`. Sign in to Microsoft Fabric in-app. |
 | GitHub Copilot CLI | Available as a command; sign in to GitHub Copilot. |
+| Claude Code CLI | Only for the Claude engine: `npm install -g @anthropic-ai/claude-code`, then `claude auth login` (Claude subscription) — or sign in from the app's setup screen. |
 
 Clone, install, and run:
 
