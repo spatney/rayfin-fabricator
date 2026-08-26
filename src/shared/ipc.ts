@@ -19,6 +19,9 @@ export interface AppVersions {
    * to disambiguate the two. Absent when it can't be determined.
    */
   copilotBundled?: string | null
+  /** User-installed Claude Code CLI version, when the Claude engine's CLI is
+   *  present. Absent when it isn't installed. */
+  claudeCli?: string | null
 }
 
 /** An available application update (mirrors the Rust `UpdateInfo`). */
@@ -93,6 +96,24 @@ export interface CopilotAuthStatus {
   user?: string
 }
 
+/**
+ * Claude Code CLI availability and sign-in state, backing the Claude engine.
+ * Unlike Copilot's bundled CLI this one is user-installed, so `installed`
+ * separates "not set up yet" from "installed but signed out".
+ */
+export interface ClaudeAuthStatus {
+  /** True when the `claude` binary resolves on this machine. */
+  installed: boolean
+  signedIn: boolean
+  /** Signed-in account email, from `claude auth status`. */
+  user?: string
+  /** Claude plan backing the sign-in ('pro' / 'max'). Absent for an Anthropic
+   *  Console (API-billed) sign-in. */
+  subscription?: string
+  /** How the CLI is authenticated ('claude.ai' for a subscription). */
+  authMethod?: string
+}
+
 export interface RayfinAuthStatus {
   signedIn: boolean
   user?: string
@@ -107,6 +128,7 @@ export interface AzAuthStatus {
 
 export interface AuthStatus {
   copilot: CopilotAuthStatus
+  claude: ClaudeAuthStatus
   rayfin: RayfinAuthStatus
   az: AzAuthStatus
 }
@@ -713,6 +735,15 @@ export interface ProjectsState {
 
 export type ThemePreference = 'dark' | 'light' | 'system'
 
+/**
+ * Which agent engine drives chat turns.
+ *
+ * - `copilot` — the bundled GitHub Copilot CLI (default; nothing extra to install).
+ * - `claude` — the user's own Claude Code CLI, signed in with a Claude
+ *   subscription (Pro/Max). Requires `npm install -g @anthropic-ai/claude-code`.
+ */
+export type AgentEngine = 'copilot' | 'claude'
+
 export interface AppSettings {
   /** UI theme; 'system' follows the OS dark/light setting. */
   theme: ThemePreference
@@ -726,6 +757,11 @@ export interface AppSettings {
    * Settings → Diagnostics.
    */
   fullDiagnostics?: boolean
+  /**
+   * Agent engine for chat turns. Absent means `'copilot'`, so existing installs
+   * keep their current behaviour.
+   */
+  agentEngine?: AgentEngine
 }
 
 /** Opt-in experimental feature flags (Settings → Experiments). */
@@ -1491,6 +1527,7 @@ export const IpcChannels = {
 
   authStatus: 'auth:status',
   authLoginCopilot: 'auth:loginCopilot',
+  authLoginClaude: 'auth:loginClaude',
   authLoginRayfin: 'auth:loginRayfin',
   authLoginAz: 'auth:loginAz',
   authLogoutRayfin: 'auth:logoutRayfin',
@@ -1637,6 +1674,8 @@ export interface RayfinStudioApi {
   auth: {
     status: () => Promise<AuthStatus>
     loginCopilot: () => Promise<ProcResult>
+    /** Sign in to Claude with a Claude subscription (`claude auth login`). */
+    loginClaude: () => Promise<ProcResult>
     loginRayfin: (tenant?: string) => Promise<ProcResult>
     loginAz: () => Promise<ProcResult>
     logoutRayfin: () => Promise<ProcResult>

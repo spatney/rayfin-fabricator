@@ -40,6 +40,7 @@ fn default_settings() -> AppSettings {
       local_dev_preview: Some(false),
     }),
     full_diagnostics: Some(false),
+    agent_engine: None,
   }
 }
 
@@ -124,6 +125,7 @@ pub fn set_settings(
   ui_scale: Option<f64>,
   experiments: Option<ExperimentFlags>,
   full_diagnostics: Option<bool>,
+  agent_engine: Option<String>,
 ) -> AppSettings {
   with_cache(|c| {
     if let Some(t) = theme {
@@ -134,6 +136,9 @@ pub fn set_settings(
     }
     if let Some(v) = full_diagnostics {
       c.settings.full_diagnostics = Some(v);
+    }
+    if let Some(v) = agent_engine {
+      c.settings.agent_engine = Some(v);
     }
     if let Some(patch) = experiments {
       let current = c.settings.experiments.get_or_insert(ExperimentFlags {

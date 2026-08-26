@@ -1,5 +1,11 @@
 import { useEffect, useId, useState } from 'react'
-import type { AppSettings, AppVersions, ThemePreference } from '@shared/ipc'
+import type {
+  AgentEngine,
+  AppSettings,
+  AppVersions,
+  ClaudeAuthStatus,
+  ThemePreference
+} from '@shared/ipc'
 import { applyTheme, applyUiScale, UI_SCALES } from '../theme'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
@@ -20,6 +26,26 @@ const THEMES: Array<{ value: ThemePreference; label: string }> = [
   { value: 'dark', label: 'Dark' },
   { value: 'light', label: 'Light' }
 ]
+
+const ENGINES: Array<{ value: AgentEngine; label: string }> = [
+  { value: 'copilot', label: 'GitHub Copilot' },
+  { value: 'claude', label: 'Claude' }
+]
+
+/** Explain what the selected engine will use, and what is still missing. */
+function engineHint(engine: AgentEngine, claude: ClaudeAuthStatus | null): string {
+  if (engine === 'copilot') {
+    return 'Builds with the bundled GitHub Copilot CLI — nothing extra to install.'
+  }
+  if (!claude?.installed) {
+    return 'The Claude Code CLI isn’t installed. Run npm install -g @anthropic-ai/claude-code, then sign in from Setup.'
+  }
+  if (!claude.signedIn) {
+    return 'The Claude Code CLI is installed but signed out. Sign in from Setup to use your Claude subscription.'
+  }
+  const plan = claude.subscription ? `Claude ${claude.subscription}` : claude.authMethod ?? 'Claude'
+  return `Builds with your ${plan} subscription${claude.user ? ` (${claude.user})` : ''}.`
+}
 
 function ToggleRow({
   label,
@@ -58,6 +84,8 @@ export default function SettingsModal({
   const [showExperiments, setShowExperiments] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
+  // Claude CLI availability, so the engine picker can say what's still missing.
+  const [claudeAuth, setClaudeAuth] = useState<ClaudeAuthStatus | null>(null)
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
   // Compatibility rendering is applied at startup, so any change only takes effect
@@ -76,6 +104,15 @@ export default function SettingsModal({
 
   useEffect(() => {
     void window.api.projects.state().then((s) => setWorkspaceRoot(s.workspaceRoot))
+  }, [])
+
+  useEffect(() => {
+    void window.api.auth
+      .status()
+      .then((s) => setClaudeAuth(s.claude))
+      .catch(() => {
+        /* the picker falls back to its "not installed" hint */
+      })
   }, [])
 
   useEffect(() => {
@@ -117,6 +154,7 @@ export default function SettingsModal({
     }
   }
 
+  const engine: AgentEngine = settings.agentEngine ?? 'copilot'
   const updateBusy =
     updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'installing'
   let updateMsg: string
@@ -155,6 +193,27 @@ export default function SettingsModal({
           </div>
 
           <div className="modal-body">
+            <div className="field">
+              <span className="field-label">AI engine</span>
+              <div className="seg">
+                {ENGINES.map((e) => (
+                  <button
+                    key={e.value}
+                    type="button"
+                    className={`seg-btn${engine === e.value ? ' seg-btn--active' : ''}`}
+                    onClick={() => onChange({ agentEngine: e.value })}
+                  >
+                    {e.label}
+                  </button>
+                ))}
+              </div>
+              <span className="field-hint">{engineHint(engine, claudeAuth)}</span>
+              <span className="field-hint">
+                Each engine keeps its own conversation, so switching starts a fresh chat for the
+                project.
+              </span>
+            </div>
+
             <div className="field">
               <span className="field-label">Theme</span>
               <div className="seg">

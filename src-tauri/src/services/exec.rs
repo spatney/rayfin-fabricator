@@ -186,6 +186,33 @@ fn resolve_program(file: &str) -> Resolved {
     _ => which_resolved(file),
   }
 }
+/// Resolve a CLI on `PATH` to something spawnable directly, unwrapping the
+/// Windows npm cmd-shim so we never have to go through a shell. A shim may point
+/// at a native binary (the Claude Code CLI's `claude.exe`) or at a JS entry
+/// point, which needs `node` in front. Returns `None` when the CLI isn't
+/// installed.
+pub fn resolve_cli(name: &str) -> Option<(PathBuf, Vec<PathBuf>)> {
+  let found = which::which(name).ok()?;
+  if !is_batch(&found) {
+    return Some((found, Vec::new()));
+  }
+  match parse_shim(&found).filter(|t| t.exists()) {
+    Some(target) => {
+      let is_script = matches!(
+        target.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()),
+        Some(ref e) if e == "js" || e == "mjs" || e == "cjs"
+      );
+      if is_script {
+        Some((which::which("node").ok()?, vec![target]))
+      } else {
+        Some((target, Vec::new()))
+      }
+    }
+    // Unparseable shim: fall back to running the batch file through cmd.exe.
+    None => Some((PathBuf::from("cmd.exe"), vec![PathBuf::from("/c"), found])),
+  }
+}
+
 
 /// Resolve the global rayfin-cli's auth entry module (`dist/auth/index.js`),
 /// reusing the same CLI the app already drives. Derives the global package root
@@ -449,6 +476,13 @@ pub async fn run_program(program: PathBuf, args: &[&str], opts: RunOptions) -> R
   let missing = !program.is_file();
   spawn_and_run(Resolved { program, prefix: vec![], not_found: missing }, args, opts).await
 }
+/// Run a program already resolved by [`resolve_cli`] (program plus any prefix
+/// args). Spawn failures surface as `not_found` on the result, so no existence
+/// check is done here — the program may be `cmd.exe` rather than a real path.
+pub async fn run_resolved(program: PathBuf, prefix: Vec<PathBuf>, args: &[&str], opts: RunOptions) -> RunResult {
+  spawn_and_run(Resolved { program, prefix, not_found: false }, args, opts).await
+}
+
 
 /// Run a project's pinned Rayfin CLI (the `npx rayfin` equivalent) by resolving
 /// the project-local `@microsoft/rayfin-cli` script and spawning node directly,

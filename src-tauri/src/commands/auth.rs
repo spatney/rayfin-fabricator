@@ -1,8 +1,9 @@
 //! Authentication — the Rust port of `src/main/services/auth.ts`.
 //! Copilot auth is a cheap, non-interactive probe of `~/.copilot/config.json`
-//! (JSONC); Fabric/Rayfin auth runs `rayfin login status` via the active
-//! project's locally-installed CLI (falling back to a global `rayfin` on PATH).
-//! Login/logout stream their CLI output to the renderer.
+//! (JSONC); Claude auth asks the user-installed Claude Code CLI via
+//! `claude auth status --json`; Fabric/Rayfin auth runs `rayfin login status`
+//! via the active project's locally-installed CLI (falling back to a global
+//! `rayfin` on PATH). Login/logout stream their CLI output to the renderer.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,6 +12,7 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use tauri::AppHandle;
+use tauri_plugin_opener::OpenerExt;
 
 use crate::services::crashlog;
 use crate::services::emit::proc_streamer;
@@ -211,13 +213,74 @@ pub async fn get_az_auth() -> AzAuthStatus {
 #[tauri::command]
 pub async fn auth_status() -> AuthStatus {
   let copilot = get_copilot_auth();
-  // Rayfin and Azure both shell out to their CLIs; run them concurrently so the
-  // startup check isn't the sum of two slow process spawns.
-  let (rayfin, az) = tokio::join!(get_rayfin_auth(), get_az_auth());
+  // Claude, Rayfin and Azure all shell out to their CLIs; run them concurrently
+  // so the startup check isn't the sum of three slow process spawns.
+  let (claude, rayfin, az) = tokio::join!(
+    crate::services::claude::auth_status(),
+    get_rayfin_auth(),
+    get_az_auth()
+  );
   if rayfin.signed_in && !STARTUP_SIGNIN_SENT.swap(true, Ordering::SeqCst) {
     telemetry::track_signin(cached_identity().as_ref(), "startup");
   }
-  AuthStatus { copilot, rayfin, az }
+  AuthStatus { copilot, claude, rayfin, az }
+}
+
+/// First https URL in a chunk of CLI output — the Claude sign-in flow prints its
+/// OAuth authorize link when it has no terminal to take over.
+static AUTH_URL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"https://[^\s"'<>]+"#).unwrap());
+
+/// Sign in to Claude with a Claude subscription (`claude auth login --claudeai`).
+///
+/// The CLI drives an OAuth flow in the browser. Launched from a GUI app it has no
+/// terminal to take over, so it prints the authorize URL rather than opening it —
+/// we watch the stream for that URL and open it once, which is what makes this a
+/// working click-to-sign-in button instead of a silent hang.
+#[tauri::command]
+pub async fn auth_login_claude(app: AppHandle) -> ProcResult {
+  let stream_out = proc_streamer(&app, "login:claude");
+  stream_out(exec::Stream::Stdout, "Starting Claude sign-in…\n");
+  let Some((program, prefix)) = crate::services::claude::cli() else {
+    let msg = "The Claude Code CLI was not found. Install it with `npm install -g @anthropic-ai/claude-code`, then try again.";
+    stream_out(exec::Stream::Stderr, &format!("{msg}\n"));
+    return ProcResult {
+      ok: false,
+      exit_code: None,
+      error: Some(msg.into()),
+    };
+  };
+
+  // Open the printed authorize URL at most once, however often it is echoed.
+  let opened = std::sync::Arc::new(AtomicBool::new(false));
+  let app_for_open = app.clone();
+  let on_data: exec::OnData = std::sync::Arc::new(move |stream, chunk: &str| {
+    stream_out(stream, chunk);
+    if opened.load(Ordering::SeqCst) {
+      return;
+    }
+    if let Some(m) = AUTH_URL_RE.find(chunk) {
+      if !opened.swap(true, Ordering::SeqCst) {
+        let _ = app_for_open.opener().open_url(m.as_str().to_string(), None::<&str>);
+      }
+    }
+  });
+
+  let res = exec::run_resolved(
+    program,
+    prefix,
+    &["auth", "login", "--claudeai"],
+    RunOptions {
+      on_data: Some(on_data),
+      timeout_ms: Some(5 * 60_000),
+      ..Default::default()
+    },
+  )
+  .await;
+  ProcResult {
+    ok: res.ok,
+    exit_code: res.exit_code,
+    error: None,
+  }
 }
 
 #[tauri::command]

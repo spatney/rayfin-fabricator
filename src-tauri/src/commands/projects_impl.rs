@@ -239,6 +239,7 @@ fn register_project(dir: &Path, display_name: Option<&str>) -> StudioProject {
     added_at: now_iso(),
     last_deploy: None,
     copilot_session_id: None,
+    claude_session_id: None,
     workspace: None,
     workspace_name: None,
     deployment_names: None,

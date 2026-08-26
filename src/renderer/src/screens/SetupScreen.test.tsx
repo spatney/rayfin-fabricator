@@ -29,6 +29,7 @@ const doctor: DoctorReport = {
 
 const auth: AuthStatus = {
   copilot: { signedIn: false },
+  claude: { installed: false, signedIn: false },
   rayfin: { signedIn: false },
   az: { signedIn: false }
 }
@@ -42,6 +43,7 @@ beforeEach(() => {
     },
     auth: {
       loginCopilot: vi.fn(),
+      loginClaude: vi.fn(),
       loginAz: vi.fn()
     },
     relaunch: vi.fn()
@@ -59,6 +61,7 @@ describe('SetupScreen sign-in providers', () => {
       <SetupScreen
         doctor={doctor}
         auth={auth}
+        engine="copilot"
         refreshing={false}
         onRefresh={() => {}}
         onEnter={() => {}}
@@ -68,5 +71,48 @@ describe('SetupScreen sign-in providers', () => {
     expect(screen.getByText('GitHub Copilot')).toBeTruthy()
     expect(screen.getAllByText('Azure CLI').length).toBeGreaterThan(0)
     expect(screen.queryByText('Microsoft Fabric')).toBeNull()
+  })
+
+  it('asks for the Claude sign-in instead of Copilot on the Claude engine', () => {
+    render(
+      <SetupScreen
+        doctor={doctor}
+        auth={auth}
+        engine="claude"
+        refreshing={false}
+        onRefresh={() => {}}
+        onEnter={() => {}}
+      />
+    )
+
+    expect(screen.getByText('Claude')).toBeTruthy()
+    // Only the engine in use is required, so the other one isn't asked for.
+    expect(screen.queryByText('GitHub Copilot')).toBeNull()
+  })
+
+  it('blocks the Claude sign-in until its CLI is installed', () => {
+    const { rerender } = render(
+      <SetupScreen
+        doctor={doctor}
+        auth={auth}
+        engine="claude"
+        refreshing={false}
+        onRefresh={() => {}}
+        onEnter={() => {}}
+      />
+    )
+    expect(screen.getByText(/Install the Claude Code CLI first/i)).toBeTruthy()
+
+    rerender(
+      <SetupScreen
+        doctor={doctor}
+        auth={{ ...auth, claude: { installed: true, signedIn: false } }}
+        engine="claude"
+        refreshing={false}
+        onRefresh={() => {}}
+        onEnter={() => {}}
+      />
+    )
+    expect(screen.queryByText(/Install the Claude Code CLI first/i)).toBeNull()
   })
 })
