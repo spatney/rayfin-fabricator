@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { AuthStatus, DoctorReport, ToolStatus } from '@shared/ipc'
 import SetupScreen from './SetupScreen'
 
@@ -54,6 +54,67 @@ afterEach(() => {
 })
 
 describe('SetupScreen sign-in providers', () => {
+  it('does not treat a remembered Copilot user as a verified connection', () => {
+    render(
+      <SetupScreen
+        doctor={doctor}
+        auth={{ ...auth, copilot: { signedIn: false, user: 'remembered', error: 'Copilot token expired' }, az: { signedIn: true } }}
+        refreshing={false}
+        onRefresh={() => {}}
+        onEnter={() => {}}
+      />
+    )
+    expect(screen.getByText('Copilot token expired')).toBeTruthy()
+    expect(screen.queryByText('All checks passed')).toBeNull()
+    expect((screen.getByRole('button', { name: /Enter Fabricator/ }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('blocks entry and removes the all-clear while checks are pending or failed', () => {
+    const ready = { ...auth, copilot: { signedIn: true }, az: { signedIn: true } }
+    const props = { doctor, auth: ready, onRefresh: vi.fn(), onEnter: vi.fn() }
+    const { rerender } = render(<SetupScreen {...props} refreshing={false} />)
+    expect(screen.getByText('All checks passed')).toBeTruthy()
+    rerender(<SetupScreen {...props} refreshing />)
+    expect(screen.queryByText('All checks passed')).toBeNull()
+    expect((screen.getByRole('button', { name: /Enter Fabricator/ }) as HTMLButtonElement).disabled).toBe(true)
+    rerender(<SetupScreen {...props} refreshing={false} error="Could not check accounts" />)
+    expect(screen.getByRole('alert').textContent).toContain('Could not check accounts')
+    expect(screen.queryByText('All checks passed')).toBeNull()
+  })
+
+  it('surfaces a failed CLI sign-in result instead of silently refreshing', async () => {
+    vi.mocked(window.api.auth.loginCopilot).mockResolvedValue({
+      ok: false, exitCode: 1, error: 'Credential store is unavailable'
+    })
+    const refresh = vi.fn()
+    render(<SetupScreen doctor={doctor} auth={auth} refreshing={false} onRefresh={refresh} onEnter={() => {}} />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sign in' })[0])
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Credential store is unavailable'))
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.queryByText('All checks passed')).toBeNull()
+  })
+
+  it('requires the post-login auth check, not merely a zero exit code', async () => {
+    vi.mocked(window.api.auth.loginCopilot).mockResolvedValue({ ok: true, exitCode: 0 })
+    const refresh = vi.fn()
+    render(<SetupScreen doctor={doctor} auth={auth} refreshing={false} onRefresh={refresh} onEnter={() => {}} />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sign in' })[0])
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect((screen.getByRole('button', { name: /Enter Fabricator/ }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('leaves a retryable screen when post-login verification rejects', async () => {
+    vi.mocked(window.api.auth.loginCopilot).mockResolvedValue({ ok: true, exitCode: 0 })
+    render(
+      <SetupScreen doctor={doctor} auth={auth} refreshing={false}
+        onRefresh={() => Promise.reject(new Error('Connection lost'))} onEnter={() => {}} />
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sign in' })[0])
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Connection lost'))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
   it('does not show Microsoft Fabric sign-in before a project exists', () => {
     render(
       <SetupScreen

@@ -91,6 +91,8 @@ pub struct CopilotAuthStatus {
   pub signed_in: bool,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub user: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -101,6 +103,8 @@ pub struct RayfinAuthStatus {
   pub user: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub tenant: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -111,6 +115,8 @@ pub struct AzAuthStatus {
   pub user: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub tenant: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -633,7 +639,7 @@ pub struct ProjectActionResult {
 pub struct GithubStatus {
   /// True when the `gh` binary is resolvable on `PATH`.
   pub gh_installed: bool,
-  /// True when `gh auth status` reports a signed-in account.
+  /// True only after the GitHub API verifies the CLI's active identity.
   pub signed_in: bool,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub user: Option<String>,

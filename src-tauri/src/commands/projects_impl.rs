@@ -418,6 +418,7 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
     &arg_refs,
     RunOptions {
       cwd: Some(Path::new(&root).to_path_buf()),
+      env: crate::services::npm_cache::fresh_registry_env(),
       on_data: Some(on.clone()),
       timeout_ms: Some(600_000),
       ..Default::default()

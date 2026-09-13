@@ -4,6 +4,7 @@ import SemanticModelView from './SemanticModelView'
 import type { SemanticModelRef } from '../model/fabricConfig'
 import { clearSchemaCache } from '../model/schemaCache'
 import type { SemanticSchemaResult } from '@shared/ipc'
+import { ToastProvider } from '../toast'
 
 /**
  * SemanticModelView renders a Fabric/Power BI semantic model as an interactive ER
@@ -152,5 +153,67 @@ describe('SemanticModelView', () => {
     expect(hasCard('Orders')).toBe(true)
     expect(hasCard('Customers')).toBe(true)
     expect(hasCard('Regions')).toBe(true)
+  })
+
+  it.each([
+    ['rayfin', 'failed login'],
+    ['rayfin', 'rejected login'],
+    ['rayfin', 'rejected verification'],
+    ['az', 'failed login'],
+    ['az', 'rejected login'],
+    ['az', 'rejected verification']
+  ])('does not reload the schema after %s %s', async (kind, failure) => {
+    const fetchSchema = installApi({
+      ...schema(),
+      ok: false,
+      needsLogin: kind === 'rayfin',
+      needsAz: kind === 'az'
+    })
+    const login = vi.fn().mockResolvedValue({ ok: true, exitCode: 0 })
+    const onSignedIn = vi.fn().mockResolvedValue(undefined)
+    if (failure === 'failed login') {
+      login.mockResolvedValueOnce({ ok: false, exitCode: 1, error: 'Model sign-in failed' })
+    } else if (failure === 'rejected login') {
+      login.mockRejectedValueOnce('Model sign-in failed')
+    } else {
+      onSignedIn.mockRejectedValueOnce(new Error('Model sign-in failed'))
+    }
+    Object.assign(window.api, { auth: { loginRayfin: login, loginAz: login } })
+    render(
+      <ToastProvider>
+        <SemanticModelView projectId="p1" models={[MODEL]} refreshKey={0} onSignedIn={onSignedIn} />
+      </ToastProvider>
+    )
+    const buttonName = kind === 'az' ? 'Sign in to Azure' : 'Sign in to Fabric'
+    fireEvent.click(await screen.findByRole('button', { name: buttonName }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Model sign-in failed')
+    expect(fetchSchema).toHaveBeenCalledTimes(1)
+    expect((screen.getByRole('button', { name: buttonName }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('does not resurrect a cached successful schema after a live auth check fails', async () => {
+    const fetchSchema = installApi(schema())
+    const first = render(
+      <ToastProvider>
+        <SemanticModelView projectId="p1" models={[MODEL]} refreshKey={0} />
+      </ToastProvider>
+    )
+    await screen.findByText('Orders')
+    const expired = { ...schema(), ok: false, needsLogin: true }
+    fetchSchema.mockResolvedValueOnce(expired)
+    fireEvent.click(screen.getByTitle('Refresh from Fabric'))
+    await screen.findByRole('button', { name: 'Sign in to Fabric' })
+    first.unmount()
+    fetchSchema.mockResolvedValueOnce(expired)
+
+    render(
+      <ToastProvider>
+        <SemanticModelView projectId="p1" models={[MODEL]} refreshKey={0} />
+      </ToastProvider>
+    )
+    await screen.findByRole('button', { name: 'Sign in to Fabric' })
+    expect(fetchSchema).toHaveBeenCalledTimes(3)
+    expect(screen.queryByText('Orders')).toBeNull()
   })
 })

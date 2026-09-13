@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { authErrorMessage } from '../authErrors'
 import type {
   CommunityGallery,
   FabricWorkspacesResult,
@@ -26,8 +27,8 @@ interface Props {
   onContinueWithoutDeploy: () => void
   /** True while a `rayfin up` is already streaming for this project (disables the submit). */
   deploying?: boolean
-  /** Notify the parent that a Fabric sign-in just succeeded (refresh app auth). */
-  onSignedIn?: () => void
+  /** Refresh app auth after sign-in; rejection prevents retrying with an unverified account. */
+  onSignedIn?: () => Promise<void> | void
 }
 
 const keyOf = (t: { path?: string; name: string }): string => t.path || t.name
@@ -150,15 +151,28 @@ export default function CreateProjectScreen({
   // ----- Deploy step -----
   const [wsResult, setWsResult] = useState<FabricWorkspacesResult | null>(null)
   const [loadingWs, setLoadingWs] = useState(false)
+  const wsSeqRef = useRef(0)
+
+  useEffect(() => () => {
+    ++wsSeqRef.current
+  }, [])
 
   async function loadWorkspaces(): Promise<void> {
+    const seq = ++wsSeqRef.current
     setLoadingWs(true)
+    setWsResult(null)
     try {
-      setWsResult(await window.api.fabric.listWorkspaces())
+      const result = await window.api.fabric.listWorkspaces()
+      if (seq === wsSeqRef.current) setWsResult(result)
     } catch (err) {
-      setWsResult({ ok: false, error: String(err) })
+      if (seq === wsSeqRef.current) {
+        setWsResult({
+          ok: false,
+          error: authErrorMessage(err, 'Could not load workspaces. Please retry.')
+        })
+      }
     } finally {
-      setLoadingWs(false)
+      if (seq === wsSeqRef.current) setLoadingWs(false)
     }
   }
 
@@ -621,7 +635,7 @@ export default function CreateProjectScreen({
               <DeploymentCreateForm
                 wsResult={wsResult}
                 loadingWs={loadingWs}
-                onReload={() => void loadWorkspaces()}
+                onReload={loadWorkspaces}
                 onSignedIn={onSignedIn}
                 running={deploying}
                 submitLabel="Deploy app"

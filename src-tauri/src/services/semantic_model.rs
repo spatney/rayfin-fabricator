@@ -3,12 +3,13 @@
 //! ([`crate::services::agent_tools`]).
 //!
 //! Like [`crate::commands::fabric`], the heavy lifting runs in a short-lived
-//! `node` child so we can reuse the globally-installed Rayfin CLI's own MSAL
+//! `node` child so we can reuse the active project's (or global) Rayfin CLI MSAL
 //! token cache (native modules — DPAPI / msal-node-extensions — own that cache,
 //! so a pure-Rust port is impractical). The helper script
 //! ([`HELPER_SOURCE`], embedded from `semantic_model_helper.mjs`) mints the
 //! tokens *silently*, performs the REST calls, and writes exactly one JSON line
-//! to stdout. All orchestration, timeouts and error classification are Rust.
+//! to stdout. Authentication rejection is classified by the shared helper;
+//! Rust checks the process exit status and deserializes the result.
 //!
 //! Two modes:
 //! - **locate** — id / URL → model. Pure Power BI REST with the silently-minted
@@ -21,11 +22,11 @@
 
 use std::path::PathBuf;
 
-use once_cell::sync::Lazy;
-use regex::Regex;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::services::exec::{self, RunOptions};
+use crate::services::fabric_auth;
 use crate::services::paths;
 use crate::services::store;
 
@@ -38,14 +39,6 @@ const HELPER_TIMEOUT_MS: u64 = 120_000;
 /// The Node helper, embedded at compile time. Written to the app data dir at
 /// runtime (see [`write_helper`]) so the system `node` can execute it.
 const HELPER_SOURCE: &str = include_str!("semantic_model_helper.mjs");
-
-/// Parse-failure classification (when the child dies before emitting JSON).
-/// Mirrors the heuristics the helper itself uses for its `needsLogin` flag.
-static NEEDS_LOGIN_RE: Lazy<Regex> =
-  Lazy::new(|| Regex::new(r"(?i)silent|cached|account|login|token|interactive|sign").unwrap());
-/// Parse-failure classification for a missing / signed-out Azure CLI.
-static NEEDS_AZ_RE: Lazy<Regex> =
-  Lazy::new(|| Regex::new(r"(?i)\baz\b|azure cli|az login|az account").unwrap());
 
 /// One semantic model in a result. A Power BI `dataset` *is* a Fabric
 /// semantic-model item, so [`item_id`](SemanticModel::item_id) ==
@@ -116,8 +109,7 @@ pub struct SemanticModelResult {
 impl SemanticModelResult {
   /// Build an `ok: false` failure with login/az classification from a message.
   fn failure(error: String) -> Self {
-    let needs_az = NEEDS_AZ_RE.is_match(&error);
-    let needs_login = !needs_az && NEEDS_LOGIN_RE.is_match(&error);
+    let (needs_login, needs_az) = fabric_auth::failure_flags(&error);
     SemanticModelResult {
       ok: false,
       needs_login,
@@ -206,8 +198,7 @@ pub struct SemanticSchemaResult {
 impl SemanticSchemaResult {
   /// Build an `ok: false` failure with login/az classification from a message.
   fn failure(error: String) -> Self {
-    let needs_az = NEEDS_AZ_RE.is_match(&error);
-    let needs_login = !needs_az && NEEDS_LOGIN_RE.is_match(&error);
+    let (needs_login, needs_az) = fabric_auth::failure_flags(&error);
     SemanticSchemaResult {
       ok: false,
       needs_login,
@@ -245,8 +236,7 @@ pub struct WorkspaceModelsResult {
 
 impl WorkspaceModelsResult {
   fn failure(error: String) -> Self {
-    let needs_az = NEEDS_AZ_RE.is_match(&error);
-    let needs_login = !needs_az && NEEDS_LOGIN_RE.is_match(&error);
+    let (needs_login, needs_az) = fabric_auth::failure_flags(&error);
     WorkspaceModelsResult {
       ok: false,
       needs_login,
@@ -264,6 +254,7 @@ impl WorkspaceModelsResult {
 /// by a previous app version) and caches the path; later calls skip the write
 /// entirely. This removes a redundant file write from every semantic-model lookup.
 fn write_helper() -> std::io::Result<PathBuf> {
+  fabric_auth::write_helper()?;
   static HELPER_PATH: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
   if let Some(path) = HELPER_PATH.get() {
     return Ok(path.clone());
@@ -278,20 +269,25 @@ fn write_helper() -> std::io::Result<PathBuf> {
 }
 
 /// Prepare (locate the Rayfin CLI auth module + write the helper) and run the
-/// node helper with `request`, returning its single JSON stdout line on success,
+/// node helper with `request`, returning its decoded JSON result on success,
 /// or a human-readable error string the caller turns into an `ok:false` result.
 /// The helper itself emits well-formed `{ok:false,…}` JSON for login/az needs,
 /// so an `Err` here means the child died before writing anything.
-async fn invoke_helper(request: &serde_json::Value) -> Result<String, String> {
-  let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
-  if let Some(dir) = project_dir.as_deref() {
-    exec::ensure_project_dependencies(dir, None)
-      .await
-      .map_err(|error| format!("Could not install this project's dependencies: {error}"))?;
-  }
-  let auth_path = exec::project_rayfin_auth_module(project_dir.as_deref()).ok_or_else(|| {
-    "Could not locate the Rayfin CLI. Open a Rayfin project to reach Fabric.".to_string()
-  })?;
+async fn invoke_helper<T: DeserializeOwned>(request: &serde_json::Value) -> Result<T, String> {
+  let auth_path = if request["mode"] == "schema" {
+    // Model definitions use the Azure CLI, not Rayfin/MSAL.
+    PathBuf::from("-")
+  } else {
+    let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
+    if let Some(dir) = project_dir.as_deref() {
+      exec::ensure_project_dependencies(dir, None)
+        .await
+        .map_err(|error| format!("Could not install this project's dependencies: {error}"))?;
+    }
+    exec::project_rayfin_auth_module(project_dir.as_deref()).ok_or_else(|| {
+      "Could not locate the Rayfin CLI. Open a Rayfin project to reach Fabric.".to_string()
+    })?
+  };
   let script_path =
     write_helper().map_err(|err| format!("Could not prepare the semantic-model helper: {err}"))?;
 
@@ -305,24 +301,7 @@ async fn invoke_helper(request: &serde_json::Value) -> Result<String, String> {
   )
   .await;
 
-  if res.not_found {
-    return Err("Node.js was not found on PATH.".to_string());
-  }
-
-  let out = res.stdout.trim();
-  if !out.is_empty() {
-    return Ok(out.to_string());
-  }
-  let detail = if !res.stderr.trim().is_empty() {
-    res.stderr.trim().to_string()
-  } else {
-    let code = res
-      .exit_code
-      .map(|c| c.to_string())
-      .unwrap_or_else(|| "unknown".to_string());
-    format!("semantic-model lookup failed (exit {code}).")
-  };
-  Err(detail)
+  fabric_auth::parse_helper_output(&res)
 }
 
 /// Run the helper with a request JSON string and parse its reply. Never panics —
@@ -330,9 +309,7 @@ async fn invoke_helper(request: &serde_json::Value) -> Result<String, String> {
 /// can render.
 async fn run_helper(request: &serde_json::Value) -> SemanticModelResult {
   match invoke_helper(request).await {
-    Ok(out) => {
-      serde_json::from_str::<SemanticModelResult>(&out).unwrap_or_else(|_| SemanticModelResult::failure(out))
-    }
+    Ok(result) => result,
     Err(detail) => SemanticModelResult::failure(detail),
   }
 }
@@ -374,8 +351,8 @@ pub async fn search_semantic_models(
 
 /// Read the schema (tables/columns/measures/relationships) of the semantic model
 /// `item_id` in workspace `workspace_id` — the data behind the Model tab's
-/// semantic-model diagram. Queries the model *live* via DAX `INFO.VIEW.*` through
-/// the Power BI `executeQueries` endpoint (the helper's `schema` mode). Never
+/// semantic-model diagram. Reads the model definition with the Azure CLI's
+/// Fabric token (the helper's `schema` mode), independently of Rayfin auth. Never
 /// panics — every failure path returns an `ok:false` [`SemanticSchemaResult`]
 /// the UI can render (with login classification for a sign-in CTA).
 pub async fn schema_semantic_model(workspace_id: &str, item_id: &str) -> SemanticSchemaResult {
@@ -385,14 +362,13 @@ pub async fn schema_semantic_model(workspace_id: &str, item_id: &str) -> Semanti
     "itemId": item_id,
   });
   match invoke_helper(&request).await {
-    Ok(out) => serde_json::from_str::<SemanticSchemaResult>(&out)
-      .unwrap_or_else(|_| SemanticSchemaResult::failure(out)),
+    Ok(result) => result,
     Err(detail) => SemanticSchemaResult::failure(detail),
   }
 }
 
 /// List the semantic models (datasets) in `workspace_id` — the data behind the
-/// "connect a model from your workspace" picker. Uses the silent Power BI token
+/// "connect a model from your workspace" picker. Uses the silent Fabric token
 /// (the helper's `listWorkspaceModels` mode). Never panics — a failure returns an
 /// `ok:false` [`WorkspaceModelsResult`] with login classification.
 pub async fn list_workspace_models(workspace_id: &str) -> WorkspaceModelsResult {
@@ -401,8 +377,7 @@ pub async fn list_workspace_models(workspace_id: &str) -> WorkspaceModelsResult 
     "workspaceId": workspace_id,
   });
   match invoke_helper(&request).await {
-    Ok(out) => serde_json::from_str::<WorkspaceModelsResult>(&out)
-      .unwrap_or_else(|_| WorkspaceModelsResult::failure(out)),
+    Ok(result) => result,
     Err(detail) => WorkspaceModelsResult::failure(detail),
   }
 }
@@ -416,15 +391,11 @@ mod tests {
   /// Skips gracefully if `node` isn't on PATH (parsing is JS-only).
   #[test]
   fn helper_selftest_parses_known_urls() {
-    let script = std::env::temp_dir().join("semantic-model-selftest.mjs");
-    if std::fs::write(&script, HELPER_SOURCE).is_err() {
-      return;
-    }
+    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src").join("services").join("semantic_model_helper.mjs");
     let out = std::process::Command::new("node")
       .arg(&script)
       .arg("--selftest")
       .output();
-    let _ = std::fs::remove_file(&script);
     match out {
       Ok(o) => assert!(
         o.status.success(),

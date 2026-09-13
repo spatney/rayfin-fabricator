@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useState } from 'react'
-import type { FabricDeployment, StudioProject, WorkspaceModel } from '@shared/ipc'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import type { StudioProject, WorkspaceModel } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { useToast } from '../toast'
+import { authErrorMessage } from '../authErrors'
 import { Codicon } from './icons'
 
 interface Props {
@@ -10,8 +11,8 @@ interface Props {
   onClose: () => void
   /** Hand a ready-to-send "connect this model" prompt to the chat composer. */
   onConnect: (prompt: string) => void
-  /** Notify the parent that a Fabric sign-in just succeeded. */
-  onSignedIn?: () => void
+  /** Refresh app auth after sign-in; rejection prevents retrying with an unverified account. */
+  onSignedIn?: () => Promise<void> | void
 }
 
 type LoadState =
@@ -57,48 +58,66 @@ export default function ConnectModelModal({
   const [filter, setFilter] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
+  const [reauthing, setReauthing] = useState(false)
+  const loginSeqRef = useRef(0)
+  const loginBusyRef = useRef(false)
 
-  // Resolve the app's deployed workspace from the active deployment.
   useEffect(() => {
     let alive = true
+    let workspaceName = ''
+    ++loginSeqRef.current
+    loginBusyRef.current = false
+    setReauthing(false)
+    setWorkspaceId(null)
+    setSelectedId(null)
+    setConnectedIds(new Set())
     setState({ status: 'resolving' })
-    void window.api.deploy.list(project.id).then((deps: FabricDeployment[]) => {
-      if (!alive) return
-      const target =
-        deps.find((d) => d.active && d.workspaceId) ?? deps.find((d) => d.workspaceId) ?? null
-      if (!target?.workspaceId) {
-        setWorkspaceId(null)
-        setState({ status: 'no-workspace' })
-        return
+    void (async () => {
+      try {
+        const deps = await window.api.deploy.list(project.id)
+        if (!alive) return
+        const target =
+          deps.find((d) => d.active && d.workspaceId) ?? deps.find((d) => d.workspaceId) ?? null
+        if (!target?.workspaceId) {
+          setState({ status: 'no-workspace' })
+          return
+        }
+        workspaceName = target.workspaceName
+        setWorkspaceId(target.workspaceId)
+        setState({ status: 'loading', workspaceName })
+        const res = await window.api.fabric.listWorkspaceModels(target.workspaceId)
+        if (!alive) return
+        if (res.ok) setState({ status: 'ready', workspaceName, models: res.models })
+        else if (res.needsLogin) setState({ status: 'needs-login', workspaceName })
+        else setState({ status: 'error', workspaceName, error: res.error || 'Could not load models.' })
+      } catch (reason) {
+        if (alive) {
+          setState({
+            status: 'error',
+            workspaceName,
+            error: authErrorMessage(reason, 'Could not load models. Please retry.')
+          })
+        }
       }
-      setWorkspaceId(target.workspaceId)
-      setState({ status: 'loading', workspaceName: target.workspaceName })
-    })
+    })()
     // Existing connections (to badge already-added models).
-    void window.api.fabric.projectSemanticModels(project.id).then((models) => {
-      if (alive) setConnectedIds(new Set(models.map((m) => m.itemId)))
-    })
+    void window.api.fabric.projectSemanticModels(project.id).then(
+      (models) => {
+        if (alive) setConnectedIds(new Set(models.map((m) => m.itemId)))
+      },
+      (reason) => {
+        if (alive) {
+          toast.error(authErrorMessage(reason, 'Could not read existing model connections.'), {
+            title: 'Model check failed'
+          })
+        }
+      }
+    )
     return () => {
       alive = false
+      ++loginSeqRef.current
     }
-  }, [project.id])
-
-  // Load the workspace's models once we know the workspace.
-  useEffect(() => {
-    if (!workspaceId) return
-    let alive = true
-    const wsName = 'workspaceName' in state ? state.workspaceName : ''
-    setState({ status: 'loading', workspaceName: wsName })
-    void window.api.fabric.listWorkspaceModels(workspaceId).then((res) => {
-      if (!alive) return
-      if (res.ok) setState({ status: 'ready', workspaceName: wsName, models: res.models })
-      else if (res.needsLogin) setState({ status: 'needs-login', workspaceName: wsName })
-      else setState({ status: 'error', workspaceName: wsName, error: res.error ?? 'Could not load models.' })
-    })
-    return () => {
-      alive = false
-    }
-  }, [workspaceId, reloadTick])
+  }, [project.id, reloadTick, toast])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -116,14 +135,31 @@ export default function ConnectModelModal({
   }, [models, filter])
 
   async function reauthAndReload(): Promise<void> {
-    const login = await window.api.auth.loginRayfin()
-    if (login.ok) {
-      onSignedIn?.()
-      setReloadTick((n) => n + 1)
-    } else {
-      toast.error(login.error ?? 'Fabric sign-in did not complete. Please try again.', {
-        title: 'Sign-in failed'
-      })
+    if (loginBusyRef.current) return
+    loginBusyRef.current = true
+    const seq = ++loginSeqRef.current
+    setReauthing(true)
+    try {
+      const login = await window.api.auth.loginRayfin()
+      if (seq !== loginSeqRef.current) return
+      if (!login.ok) {
+        throw new Error(
+          authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.')
+        )
+      }
+      await onSignedIn?.()
+      if (seq === loginSeqRef.current) setReloadTick((n) => n + 1)
+    } catch (reason) {
+      if (seq === loginSeqRef.current) {
+        toast.error(authErrorMessage(reason, 'Fabric sign-in did not complete. Please try again.'), {
+          title: 'Sign-in failed'
+        })
+      }
+    } finally {
+      if (seq === loginSeqRef.current) {
+        loginBusyRef.current = false
+        setReauthing(false)
+      }
     }
   }
 
@@ -169,14 +205,23 @@ export default function ConnectModelModal({
           {state.status === 'needs-login' && (
             <div className="share-banner">
               <span>Your Fabric session expired. Sign in to list this workspace's models.</span>
-              <button className="btn btn--sm btn--primary" onClick={() => void reauthAndReload()}>
-                Sign in &amp; retry
+              <button
+                className="btn btn--sm btn--primary"
+                disabled={reauthing}
+                onClick={() => void reauthAndReload()}
+              >
+                {reauthing ? 'Signing in…' : 'Sign in & retry'}
               </button>
             </div>
           )}
 
           {state.status === 'error' && (
-            <div className="share-banner share-banner--bad">{state.error}</div>
+            <div className="share-banner share-banner--bad" role="alert">
+              {state.error}
+              <button className="btn btn--sm" onClick={() => setReloadTick((n) => n + 1)}>
+                Retry
+              </button>
+            </div>
           )}
 
           {(state.status === 'loading' ||
@@ -253,7 +298,11 @@ export default function ConnectModelModal({
           <button className="btn btn--ghost" onClick={onClose}>
             Close
           </button>
-          <button className="btn btn--primary" onClick={() => addToChat()} disabled={!selectedId}>
+          <button
+            className="btn btn--primary"
+            onClick={() => addToChat()}
+            disabled={!selectedId || state.status !== 'ready' || reauthing}
+          >
             Add to chat
           </button>
         </div>

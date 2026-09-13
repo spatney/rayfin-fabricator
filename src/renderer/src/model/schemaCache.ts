@@ -26,6 +26,11 @@ export function setCachedSchema(key: string, model: SemanticModel): void {
   cache.set(key, model)
 }
 
+/** A failed live read must not become a cached success when the view remounts. */
+export function invalidateCachedSchema(key: string): void {
+  cache.delete(key)
+}
+
 /** Clears the whole cache. Intended for tests. */
 export function clearSchemaCache(): void {
   cache.clear()

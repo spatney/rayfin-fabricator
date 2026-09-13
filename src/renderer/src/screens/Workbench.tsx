@@ -42,6 +42,7 @@ import RayfinVersionControl from '../components/RayfinVersionControl'
 import AdvisorView, { categoryMeta } from '../components/AdvisorView'
 import ModelTab from '../components/ModelTab'
 import { useToast } from '../toast'
+import { authErrorMessage } from '../authErrors'
 import { reportIssue as runReportIssue } from './reportIssue'
 import { InfoIcon, GearIcon, SignOutIcon, CompareIcon } from '../components/icons'
 import { FabricatorMark } from '../components/FabricatorMark'
@@ -124,6 +125,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
 interface Props {
   auth: AuthStatus
   onSignOut: () => Promise<void> | void
+  /** Recheck live auth without leaving the workbench; reject when verification fails. */
   onAuthChanged: () => Promise<void> | void
   settings: AppSettings | null
   onSettingsChange: (patch: Partial<AppSettings>) => void
@@ -140,6 +142,8 @@ export default function Workbench({
   const [versions, setVersions] = useState<AppVersions | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
+  const authActionRef = useRef(false)
+  const mountedRef = useRef(false)
   const [showSettings, setShowSettings] = useState(false)
   const [projects, setProjects] = useState<ProjectsState | null>(null)
   /** Fullscreen create/deploy flow: 'create' = new-project wizard, 'deploy' = first-deploy gate CTA. */
@@ -257,6 +261,13 @@ export default function Workbench({
 
   /** Projects with a deploy queued behind the running one (coalesced). */
   const pendingDeployRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      pendingDeployRef.current.clear()
+    }
+  }, [])
   /** Stable handle to runDeploy for use inside its own completion path. */
   const runDeployRef = useRef<((projectId: string) => void) | null>(null)
   /** Project ids with a deployment reconcile in flight (dedupes overlapping calls). */
@@ -291,6 +302,18 @@ export default function Workbench({
   const refreshProjects = useCallback(async (): Promise<void> => {
     setProjects(await window.api.projects.state())
   }, [])
+
+  const refreshAuthWithFeedback = useCallback(async (): Promise<void> => {
+    if (!mountedRef.current) return
+    try {
+      await onAuthChanged()
+    } catch (reason) {
+      if (!mountedRef.current) return
+      toast.error(authErrorMessage(reason, 'Could not verify sign-in. Please retry.'), {
+        title: 'Sign-in check failed'
+      })
+    }
+  }, [onAuthChanged, toast])
 
   /** Re-read the active project's local Rayfin versions (after deploys / chat turns). */
   const refreshRayfinVer = useCallback(async (projectId: string): Promise<void> => {
@@ -354,12 +377,40 @@ export default function Workbench({
       deployingIdRef.current = projectId
       setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
       try {
-        let result = await window.api.deploy.run(projectId, workspace)
-        // A deploy that failed only because the Fabric/Rayfin login expired: re-sign-in
-        // once and retry, so an expired token doesn't force a manual sign out / back in.
+        let result: DeployResult = { ok: false, outcome: 'error' }
+        try {
+          result = await window.api.deploy.run(projectId, workspace)
+          if (!mountedRef.current) return
+          // Retry once, only after sign-in and its app-level verification succeed.
+          if (!result.ok && result.outcome === 'not-signed-in') {
+            const login = await window.api.auth.loginRayfin()
+            if (!mountedRef.current) return
+            if (!login.ok) {
+              result = {
+                ...result,
+                error: authErrorMessage(
+                  login.error,
+                  'Fabric sign-in did not complete. Please try again.'
+                )
+              }
+            } else {
+              await onAuthChanged()
+              if (!mountedRef.current) return
+              result = await window.api.deploy.run(projectId, workspace)
+              if (!mountedRef.current) return
+            }
+          }
+        } catch (reason) {
+          if (!mountedRef.current) return
+          result = {
+            ok: false,
+            outcome: result.outcome,
+            error: authErrorMessage(reason, 'The deployment did not complete. Please try again.')
+          }
+        }
         if (!result.ok && result.outcome === 'not-signed-in') {
-          const login = await window.api.auth.loginRayfin()
-          if (login.ok) result = await window.api.deploy.run(projectId, workspace)
+          // Don't open more sign-in flows for deploys queued behind a failed login.
+          pendingDeployRef.current.clear()
         }
         setDeploys((all) => {
           const cur = all[projectId] ?? { running: false, log: [] }
@@ -373,23 +424,28 @@ export default function Workbench({
             title: 'Deploy failed'
           })
         }
-        await refreshProjects()
-        // A completed deploy proves Fabric sign-in (and may have signed the user
-        // in via the not-signed-in retry above), so refresh the titlebar auth.
-        void onAuthChanged()
+        try {
+          await refreshProjects()
+        } catch (reason) {
+          toast.error(authErrorMessage(reason, 'Could not refresh the project after deploying.'), {
+            title: 'Project refresh failed'
+          })
+        }
+        // Failures can reveal an expired session; never leave the titlebar stale.
+        await refreshAuthWithFeedback()
       } finally {
         deployingIdRef.current = null
         setGitRefresh((n) => n + 1)
-        void refreshRayfinVer(projectId)
+        if (mountedRef.current) void refreshRayfinVer(projectId)
         // Run the next coalesced deploy, if one was requested mid-flight.
-        if (pendingDeployRef.current.size > 0) {
+        if (mountedRef.current && pendingDeployRef.current.size > 0) {
           const next = pendingDeployRef.current.values().next().value as string
           pendingDeployRef.current.delete(next)
           runDeployRef.current?.(next)
         }
       }
     },
-    [refreshProjects, refreshRayfinVer, toast, onAuthChanged]
+    [refreshProjects, refreshRayfinVer, toast, onAuthChanged, refreshAuthWithFeedback]
   )
   runDeployRef.current = (projectId: string) => void runDeploy(projectId)
 
@@ -420,11 +476,15 @@ export default function Workbench({
   const switchDeployment = useCallback(
     async (projectId: string, workspace: string, byId: boolean): Promise<DeployResult> => {
       const result = await window.api.deploy.switch(projectId, workspace, byId)
+      if (!result.ok) {
+        if (result.outcome === 'not-signed-in') await refreshAuthWithFeedback()
+        return result
+      }
       await refreshProjects()
       setGitRefresh((n) => n + 1)
       return result
     },
-    [refreshProjects]
+    [refreshProjects, refreshAuthWithFeedback]
   )
 
   // Kick off the live local preview (experiment) when a turn starts: run the
@@ -652,8 +712,8 @@ export default function Workbench({
 
   useEffect(() => {
     if (!active?.id) return
-    void onAuthChanged()
-  }, [active?.id, onAuthChanged])
+    void refreshAuthWithFeedback()
+  }, [active?.id, refreshAuthWithFeedback])
 
   // Reflect the active project in the OS window title so users running one
   // instance per project can tell them apart in the taskbar / Alt-Tab. The
@@ -777,33 +837,52 @@ export default function Workbench({
   }
 
   async function signOut(): Promise<void> {
+    if (authActionRef.current) return
+    authActionRef.current = true
     setSigningOut(true)
     try {
-      await window.api.auth.logoutRayfin()
-    } finally {
-      try {
-        // Keep the overlay up through the auth re-check + screen swap; this
-        // component normally unmounts when the app returns to the setup screen.
-        await onSignOut()
-      } finally {
-        setSigningOut(false)
+      const result = await window.api.auth.logoutRayfin()
+      if (!mountedRef.current) return
+      if (!result.ok) {
+        throw new Error(
+          authErrorMessage(result.error, 'Fabric sign-out did not complete. Please try again.')
+        )
       }
+      // Only a verified sign-out may leave the workbench and its unsent drafts.
+      await onSignOut()
+    } catch (reason) {
+      if (!mountedRef.current) return
+      toast.error(authErrorMessage(reason, 'Fabric sign-out did not complete. Please try again.'), {
+        title: 'Sign-out failed'
+      })
+      await refreshAuthWithFeedback()
+    } finally {
+      authActionRef.current = false
+      if (mountedRef.current) setSigningOut(false)
     }
   }
 
   async function signIn(): Promise<void> {
+    if (authActionRef.current) return
+    authActionRef.current = true
     setSigningIn(true)
     try {
       const res = await window.api.auth.loginRayfin()
+      if (!mountedRef.current) return
       if (!res.ok) {
-        // Don't silently reset the button (issue #17) — tell the user why.
-        toast.error(res.error ?? 'Fabric sign-in did not complete. Please try again.', {
-          title: 'Sign-in failed'
-        })
+        throw new Error(
+          authErrorMessage(res.error, 'Fabric sign-in did not complete. Please try again.')
+        )
       }
       await onAuthChanged()
+    } catch (reason) {
+      if (!mountedRef.current) return
+      toast.error(authErrorMessage(reason, 'Fabric sign-in did not complete. Please try again.'), {
+        title: 'Sign-in failed'
+      })
     } finally {
-      setSigningIn(false)
+      authActionRef.current = false
+      if (mountedRef.current) setSigningIn(false)
     }
   }
 
@@ -844,12 +923,17 @@ export default function Workbench({
               Settings
             </button>
             {auth.rayfin.signedIn ? (
-              <button className="seg-btn" disabled={signingOut} onClick={signOut} title="Sign out">
+              <button
+                className="seg-btn"
+                disabled={signingOut || signingIn}
+                onClick={signOut}
+                title="Sign out"
+              >
                 <SignOutIcon />
                 {signingOut ? 'Signing out…' : 'Sign out'}
               </button>
             ) : (
-              <button className="seg-btn" disabled={signingIn} onClick={signIn}>
+              <button className="seg-btn" disabled={signingIn || signingOut} onClick={signIn}>
                 {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
               </button>
             )}
@@ -872,7 +956,7 @@ export default function Workbench({
           deploying={Boolean(active && deploys[active.id]?.running)}
           onCancel={() => setCreateMode(null)}
           onCreated={() => void refreshProjects()}
-          onSignedIn={() => void onAuthChanged()}
+          onSignedIn={onAuthChanged}
           onDeploy={(depName, workspaceId) => {
             if (!active) {
               setCreateMode(null)
@@ -970,7 +1054,7 @@ export default function Workbench({
                         }}
                         onSwitch={(workspace, byId) => switchDeployment(active.id, workspace, byId)}
                         onChanged={() => void refreshProjects()}
-                        onSignedIn={() => void onAuthChanged()}
+                        onSignedIn={onAuthChanged}
                       />
                     </div>
                   </div>
@@ -994,6 +1078,7 @@ export default function Workbench({
                       refreshKey={gitRefresh}
                       onOpenFile={openFileInCode}
                       onSendToChat={sendModelToChat}
+                      onSignedIn={onAuthChanged}
                     />
                   ) : viewMode === 'build' ? (
                     <div
@@ -1013,6 +1098,8 @@ export default function Workbench({
                         <ChatPanel
                           key={active.id}
                           project={active}
+                          copilotAuth={auth.copilot}
+                          onCopilotAuthChanged={onAuthChanged}
                           messages={chats[active.id] ?? []}
                           onChange={(updater) => setMessagesFor(active.id, updater)}
                           onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
@@ -1219,6 +1306,7 @@ export default function Workbench({
       {confirmDelete && (
         <DeleteProjectModal
           project={confirmDelete}
+          onSignedIn={onAuthChanged}
           onRemoved={(next) => setProjects(next)}
           onClose={() => setConfirmDelete(null)}
         />

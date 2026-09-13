@@ -10,6 +10,7 @@ pub mod diagnostics;
 pub mod emit;
 pub mod env_path;
 pub mod exec;
+pub mod fabric_auth;
 pub mod fingerprint;
 pub mod history;
 pub mod npm_cache;

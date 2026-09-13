@@ -23,14 +23,9 @@
 //
 // Writes exactly one JSON line to stdout; all library logging is routed to stderr.
 
-// Keep stdout clean for the JSON result; route any library logging to stderr.
-console.log = (...a) => process.stderr.write(a.map(String).join(' ') + '\n')
-console.debug = console.log
-console.info = console.log
-console.warn = console.log
-
-import { pathToFileURL } from 'node:url'
-import { execFile } from 'node:child_process'
+import {
+  makeRayfinTokens, azToken, makeApi, errorResult, isMain, runHelper,
+} from './fabric_auth_helper.mjs'
 
 const FABRIC_BASE = 'https://api.fabric.microsoft.com/v1'
 const PBI_BASE = 'https://api.powerbi.com/v1.0/myorg'
@@ -39,95 +34,6 @@ const GRAPH_RESOURCE = 'https://graph.microsoft.com'
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
 const DEFAULT_ROLE = 'Contributor'
 const DEFAULT_MODEL_RIGHT = 'ReadExplore' // Power BI "Build" permission.
-
-// ── Auth ────────────────────────────────────────────────────────────────────
-class NeedsLogin extends Error {}
-class NeedsAz extends Error {}
-
-// Mint Fabric (default scope) and Power BI tokens silently via the Rayfin MSAL
-// cache. `scopes === undefined` yields the CLI's default (Fabric) token, matching
-// the delete helper in commands/fabric.rs.
-async function makeRayfinTokens(authPath) {
-  const auth = await import(pathToFileURL(authPath).href)
-  const rf = await auth.getRayfinAuth()
-  const cache = {}
-  return async function token(scopes) {
-    const key = scopes ? scopes.join(' ') : '(default)'
-    if (cache[key]) return cache[key]
-    let res
-    try {
-      // silentOnly: never pop a browser — fail fast if there's no cached session.
-      res = await rf.acquireToken(scopes, { silentOnly: true })
-    } catch (e) {
-      throw new NeedsLogin(String((e && e.message) || e))
-    }
-    cache[key] = res.token
-    return res.token
-  }
-}
-
-// A Microsoft Graph token, minted via the Azure CLI (a required, signed-in
-// Fabricator tool). Used only to resolve recipient emails -> object ids for the
-// workspace role assignment, which requires a principal object id.
-function azToken(resource) {
-  return new Promise((resolve, reject) => {
-    const args = ['account', 'get-access-token', '--resource', resource, '--query', 'accessToken', '-o', 'tsv']
-    // `az` is `az.cmd` on Windows; invoke through cmd.exe so we don't need
-    // shell:true (which Node deprecates when args are passed as an array).
-    const isWin = process.platform === 'win32'
-    const file = isWin ? process.env.ComSpec || 'cmd.exe' : 'az'
-    const argv = isWin ? ['/d', '/s', '/c', 'az', ...args] : args
-    execFile(file, argv, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const errText = (stderr || (err && err.message) || '').trim()
-      if (err) return reject(new NeedsAz(errText || 'az account get-access-token failed'))
-      const t = (stdout || '').trim()
-      if (!t) return reject(new NeedsAz(errText || 'az returned no token'))
-      resolve(t)
-    })
-  })
-}
-
-// ── HTTP ──────────────────────────────────────────────────────────────────--
-function makeApi(token) {
-  const authHeader = { Authorization: 'Bearer ' + token }
-  async function req(method, url, bodyObj, extraHeaders) {
-    for (let attempt = 0; attempt < 4; attempt++) {
-      let r
-      try {
-        r = await fetch(url, {
-          method,
-          headers: {
-            ...authHeader,
-            ...(bodyObj ? { 'Content-Type': 'application/json' } : {}),
-            ...(extraHeaders || {}),
-          },
-          body: bodyObj ? JSON.stringify(bodyObj) : undefined,
-        })
-      } catch (e) {
-        return [0, { error: String((e && e.message) || e) }]
-      }
-      if (r.status === 429 && attempt < 3) {
-        const wait = Math.min(parseInt(r.headers.get('retry-after') || '5', 10) || 5, 30)
-        await new Promise((res) => setTimeout(res, wait * 1000))
-        continue
-      }
-      const ct = r.headers.get('content-type') || ''
-      let body = null
-      if (ct.includes('application/json')) body = await r.json().catch(() => null)
-      else {
-        const t = await r.text().catch(() => '')
-        body = t ? { _text: t } : null
-      }
-      return [r.status, body]
-    }
-    return [429, null]
-  }
-  return {
-    get: (url, headers) => req('GET', url, null, headers),
-    post: (url, body, headers) => req('POST', url, body, headers),
-    put: (url, body, headers) => req('PUT', url, body, headers),
-  }
-}
 
 // ── Pure helpers (covered by --selftest) ────────────────────────────────────
 // Escape a value for an OData string literal (single quotes are doubled).
@@ -193,7 +99,7 @@ function apiError(label, status, body) {
 // Resolve a recipient email to a directory principal. Users take precedence over
 // mail-enabled groups. Returns { objectId, principalType, identifier } or null
 // when nothing matches. Throws NeedsAz when Graph rejects the token itself.
-async function resolvePrincipal(graph, email) {
+export async function resolvePrincipal(graph, email) {
   const raw = String(email).trim()
   const enc = encodeURIComponent(raw)
   const filt = odata(raw)
@@ -201,7 +107,7 @@ async function resolvePrincipal(graph, email) {
   // 1) Direct UPN lookup — the common case where email === userPrincipalName.
   let [s, j] = await graph.get(`${GRAPH_BASE}/users/${enc}?$select=id,userPrincipalName`)
   if (s === 200 && j && j.id) return { objectId: j.id, principalType: 'User', identifier: j.userPrincipalName || raw }
-  if (s === 401 || s === 403) throw new NeedsAz(`Microsoft Graph rejected the directory lookup (${s}). Run 'az login' with an account that can read the directory.`)
+  if (s !== 200 && s !== 400 && s !== 404) throw new Error(apiError('Microsoft Graph directory lookup', s, j))
 
   // 2) By primary mail or UPN.
   ;[s, j] = await graph.get(`${GRAPH_BASE}/users?$filter=mail eq '${filt}' or userPrincipalName eq '${filt}'&$select=id,userPrincipalName`)
@@ -209,7 +115,7 @@ async function resolvePrincipal(graph, email) {
     const u = j.value[0]
     return { objectId: u.id, principalType: 'User', identifier: u.userPrincipalName || raw }
   }
-  if (s === 401 || s === 403) throw new NeedsAz(`Microsoft Graph rejected the directory lookup (${s}). Run 'az login' with an account that can read the directory.`)
+  if (s !== 200) throw new Error(apiError('Microsoft Graph directory lookup', s, j))
 
   // 3) Alias / secondary address (proxyAddresses needs advanced query params).
   ;[s, j] = await graph.get(
@@ -220,6 +126,7 @@ async function resolvePrincipal(graph, email) {
     const u = j.value[0]
     return { objectId: u.id, principalType: 'User', identifier: u.userPrincipalName || raw }
   }
+  if (s !== 200 && s !== 400 && s !== 403) throw new Error(apiError('Microsoft Graph alias lookup', s, j))
 
   // 4) Mail-enabled security / distribution group. A Group principal is
   //    identified by its object id (not an email) in the Power BI users API.
@@ -227,6 +134,7 @@ async function resolvePrincipal(graph, email) {
   if (s === 200 && j && j.value && j.value.length) {
     return { objectId: j.value[0].id, principalType: 'Group', identifier: j.value[0].id }
   }
+  if (s !== 200) throw new Error(apiError('Microsoft Graph group lookup', s, j))
 
   return null
 }
@@ -235,20 +143,18 @@ async function resolvePrincipal(graph, email) {
 // Share dialog's autocomplete. Uses only the Azure CLI Graph token — no Rayfin
 // tokens — so it stays fast and independent of the project's CLI. Returns up to
 // 10 people with a display name + email.
-async function searchDirectory(query) {
+export async function searchDirectory(query, graph) {
   const q = String(query || '').trim()
   if (!q) return { ok: true, people: [] }
-  const graph = makeApi(await azToken(GRAPH_RESOURCE))
+  graph ||= makeApi(await azToken(GRAPH_RESOURCE), GRAPH_BASE, 'az')
   const { search, startswith } = directorySearchUrls(q)
   // Prefer relevance search; fall back to a prefix filter if it's unavailable.
   let [s, j] = await graph.get(search, { ConsistencyLevel: 'eventual' })
   if (s !== 200 || !j || !Array.isArray(j.value)) {
     ;[s, j] = await graph.get(startswith)
   }
-  if (s === 401 || s === 403) {
-    throw new NeedsAz(`Microsoft Graph rejected the directory search (${s}). Run 'az login'.`)
-  }
-  const value = s === 200 && j && Array.isArray(j.value) ? j.value : []
+  if (s !== 200 || !Array.isArray(j?.value)) throw new Error(apiError('Microsoft Graph directory search', s, j))
+  const value = j.value
   const people = value
     .map((u) => ({
       id: u.id,
@@ -260,7 +166,7 @@ async function searchDirectory(query) {
 }
 
 // ── Grants ──────────────────────────────────────────────────────────────────
-async function shareApp(fabric, appWorkspaceId, principal, role) {
+export async function shareApp(fabric, appWorkspaceId, principal, role) {
   const url = `${FABRIC_BASE}/workspaces/${appWorkspaceId}/roleAssignments`
   const [s, body] = await fabric.post(url, {
     principal: { id: principal.objectId, type: principal.principalType },
@@ -268,13 +174,13 @@ async function shareApp(fabric, appWorkspaceId, principal, role) {
   })
   if (s === 200 || s === 201) return { ok: true }
   if (isAlreadyAssigned(s, body)) return { ok: true, skipped: true }
-  if (s === 401 || s === 403) {
+  if (s === 403) {
     return { ok: false, error: `You need the Admin role on the app's workspace to share it (Fabric returned ${s}).` }
   }
   return { ok: false, error: apiError('Workspace role assignment', s, body) }
 }
 
-async function shareModel(pbi, model, principal, right) {
+export async function shareModel(pbi, model, principal, right) {
   const url = modelUsersUrl(model)
   const payload = {
     identifier: principal.identifier,
@@ -289,7 +195,7 @@ async function shareModel(pbi, model, principal, right) {
     ;[s, body] = await pbi.put(url, payload)
     if (s === 200 || s === 201) return { ok: true, skipped: true }
   }
-  if (s === 401 || s === 403) {
+  if (s === 403) {
     const name = model.alias || model.itemId
     return { ok: false, error: `You need to be an owner or admin of model '${name}' to grant Build (Power BI returned ${s}).` }
   }
@@ -308,35 +214,44 @@ async function run(authPath, req) {
   if (!recipients.length) return { ok: false, error: 'Enter at least one email to share with.' }
 
   const token = await makeRayfinTokens(authPath)
-  const fabric = makeApi(await token(undefined))
-  const pbi = models.length ? makeApi(await token(PBI_SCOPES)) : null
+  const fabric = makeApi(await token(undefined), FABRIC_BASE)
+  const pbi = models.length ? makeApi(await token(PBI_SCOPES), PBI_BASE) : null
   // The app grant always needs a resolved object id, so Graph (via az) is required.
-  const graph = makeApi(await azToken(GRAPH_RESOURCE))
+  const graph = makeApi(await azToken(GRAPH_RESOURCE), GRAPH_BASE, 'az')
 
+  return shareRecipients({ fabric, pbi, graph }, { recipients, appWorkspaceId, models, role, right })
+}
+
+export async function shareRecipients({ fabric, pbi, graph }, { recipients, appWorkspaceId, models, role, right }) {
   const out = []
   for (const email of recipients) {
-    let principal = null
+    const result = {
+      email,
+      resolved: false,
+      app: { ok: false, error: 'Not shared because an earlier operation failed.' },
+      models: models.map((m) => ({
+        alias: m.alias, itemId: m.itemId, workspaceId: m.workspaceId,
+        ok: false, error: 'Not shared because an earlier operation failed.',
+      })),
+    }
+    out.push(result)
     try {
-      principal = await resolvePrincipal(graph, email)
+      const principal = await resolvePrincipal(graph, email)
+      if (!principal) {
+        result.app.error = `Couldn't find '${email}' in your directory.`
+        for (const model of result.models) model.error = 'Recipient not resolved.'
+        continue
+      }
+      result.resolved = true
+      result.principalType = principal.principalType
+      result.app = await shareApp(fabric, appWorkspaceId, principal, role)
+      for (let i = 0; i < models.length; i++) {
+        Object.assign(result.models[i], { error: undefined }, await shareModel(pbi, models[i], principal, right))
+      }
     } catch (e) {
-      if (e instanceof NeedsAz) throw e
-      principal = null
+      // Keep completed grants visible when a token expires midway through sharing.
+      return { ...errorResult(e), recipients: out }
     }
-    if (!principal) {
-      out.push({
-        email,
-        resolved: false,
-        app: { ok: false, error: `Couldn't find '${email}' in your directory.` },
-        models: models.map((m) => ({ alias: m.alias, itemId: m.itemId, workspaceId: m.workspaceId, ok: false, error: 'Recipient not resolved.' })),
-      })
-      continue
-    }
-    const app = await shareApp(fabric, appWorkspaceId, principal, role)
-    const modelResults = []
-    for (const m of models) {
-      modelResults.push({ alias: m.alias, itemId: m.itemId, workspaceId: m.workspaceId, ...(await shareModel(pbi, m, principal, right)) })
-    }
-    out.push({ email, resolved: true, principalType: principal.principalType, app, models: modelResults })
   }
 
   const ok = out.every((r) => r.app.ok && r.models.every((m) => m.ok))
@@ -389,12 +304,7 @@ async function main() {
   const req = JSON.parse(reqJson)
   const result =
     req.mode === 'searchDirectory' ? await searchDirectory(req.query) : await run(authPath, req)
-  process.stdout.write(JSON.stringify(result))
+  return result
 }
 
-main().catch((err) => {
-  const msg = err && err.message ? String(err.message) : String(err)
-  const needsAz = err instanceof NeedsAz || /\baz\b.*(login|sign|token|account)|run 'az login'|az account/i.test(msg)
-  const needsLogin = !needsAz && (err instanceof NeedsLogin || /silent|cached|account|login|token|interactive|sign/i.test(msg))
-  process.stdout.write(JSON.stringify({ ok: false, recipients: [], needsLogin, needsAz, error: msg }))
-})
+if (isMain(import.meta.url)) runHelper(main, { recipients: [] })

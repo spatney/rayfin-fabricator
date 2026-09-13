@@ -91,18 +91,22 @@ export interface DoctorReport {
 export interface CopilotAuthStatus {
   signedIn: boolean
   user?: string
+  /** Why authentication could not be verified by the bundled chat engine. */
+  error?: string
 }
 
 export interface RayfinAuthStatus {
   signedIn: boolean
   user?: string
   tenant?: string
+  error?: string
 }
 
 export interface AzAuthStatus {
   signedIn: boolean
   user?: string
   tenant?: string
+  error?: string
 }
 
 export interface AuthStatus {
@@ -119,7 +123,7 @@ export interface AuthStatus {
 export interface GithubStatus {
   /** True when the `gh` binary is on PATH. */
   ghInstalled: boolean
-  /** True when `gh auth status` reports a signed-in account. */
+  /** True only after the GitHub API verifies the CLI's active identity. */
   signedIn: boolean
   user?: string
 }
@@ -392,12 +396,14 @@ export interface SemanticSchemaResult {
 export type ProcStreamId =
   | 'login:copilot'
   | 'login:rayfin'
+  | 'login:az'
   | 'logout:rayfin'
   | 'install:rayfin'
   | 'install:copilot'
   | 'install:node'
   | 'install:git'
   | 'install:gh'
+  | 'install:az'
   | 'install:setup'
   | 'create:project'
   | 'clone:project'

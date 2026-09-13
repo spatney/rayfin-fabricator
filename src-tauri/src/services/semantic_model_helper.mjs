@@ -12,14 +12,10 @@
 //
 // Writes exactly one JSON line to stdout; all library logging is routed to stderr.
 
-// Keep stdout clean for the JSON result; route any library logging to stderr.
-console.log = (...a) => process.stderr.write(a.map(String).join(' ') + '\n')
-console.debug = console.log
-console.info = console.log
-console.warn = console.log
-
-import { pathToFileURL } from 'node:url'
-import { execFile } from 'node:child_process'
+import {
+  makeRayfinTokens as makeTokens, azToken, makeApi, apiUrl, apiError,
+  fetchAllPages, checkAuthentication, isMain, runHelper,
+} from './fabric_auth_helper.mjs'
 
 const PBI_SCOPES = ['https://analysis.windows.net/powerbi/api/.default']
 const FABRIC_RESOURCE = 'https://api.fabric.microsoft.com'
@@ -35,92 +31,17 @@ const TYPE_ALIASES = {
 }
 const DEFAULT_TYPES = ['Report', 'SemanticModel']
 
-// ── Auth ────────────────────────────────────────────────────────────────────
-class NeedsLogin extends Error {}
-class NeedsAz extends Error {}
-
-async function makeTokens(authPath) {
-  const auth = await import(pathToFileURL(authPath).href)
-  const rf = await auth.getRayfinAuth()
-  const cache = {}
-  return async function token(scopes) {
-    const key = scopes ? scopes.join(' ') : '(default)'
-    if (cache[key]) return cache[key]
-    let res
-    try {
-      // silentOnly: never pop a browser — fail fast if there's no cached session.
-      // `scopes` undefined → the CLI's default (Fabric) token.
-      res = await rf.acquireToken(scopes, { silentOnly: true })
-    } catch (e) {
-      throw new NeedsLogin(String((e && e.message) || e))
-    }
-    cache[key] = res.token
-    return res.token
-  }
-}
-
 // The Fabric OneLake catalog search endpoint requires the delegated
 // `Catalog.Read.All` scope, which the Rayfin CLI app registration is not
 // preauthorized for (so MSAL cannot mint it silently). The Azure CLI's
 // first-party client *is* preauthorized, and `az` is a required, signed-in tool
 // in Fabricator — so the catalog token comes from `az` (or a pre-supplied
 // FABRIC_CATALOG_TOKEN env var). Power BI calls still use the MSAL token.
-function azToken(resource) {
-  return new Promise((resolve, reject) => {
-    const args = ['account', 'get-access-token', '--resource', resource, '--query', 'accessToken', '-o', 'tsv']
-    // `az` is `az.cmd` on Windows; invoke through cmd.exe so we don't need
-    // shell:true (which Node deprecates when args are passed as an array).
-    const isWin = process.platform === 'win32'
-    const file = isWin ? process.env.ComSpec || 'cmd.exe' : 'az'
-    const argv = isWin ? ['/d', '/s', '/c', 'az', ...args] : args
-    execFile(file, argv, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const errText = (stderr || (err && err.message) || '').trim()
-      if (err) return reject(new NeedsAz(errText || 'az account get-access-token failed'))
-      const t = (stdout || '').trim()
-      if (!t) return reject(new NeedsAz(errText || 'az returned no token'))
-      resolve(t)
-    })
-  })
-}
-
 async function fabricCatalogToken() {
   const env = (process.env.FABRIC_CATALOG_TOKEN || '').trim()
-  if (env) return env
-  return azToken(FABRIC_RESOURCE)
-}
-
-// ── HTTP ──────────────────────────────────────────────────────────────────--
-function makeApi(token, base = '') {
-  const headers = { Authorization: 'Bearer ' + token }
-  async function req(method, url, bodyObj) {
-    const full = url.startsWith('http') ? url : base + url
-    for (let attempt = 0; attempt < 4; attempt++) {
-      let r
-      try {
-        r = await fetch(full, {
-          method,
-          headers: bodyObj ? { ...headers, 'Content-Type': 'application/json' } : headers,
-          body: bodyObj ? JSON.stringify(bodyObj) : undefined,
-        })
-      } catch (e) {
-        return [0, { error: String((e && e.message) || e) }]
-      }
-      if (r.status === 429 && attempt < 3) {
-        const wait = Math.min(parseInt(r.headers.get('retry-after') || '5', 10) || 5, 30)
-        await new Promise((res) => setTimeout(res, wait * 1000))
-        continue
-      }
-      const ct = r.headers.get('content-type') || ''
-      let body = null
-      if (ct.includes('application/json')) body = await r.json().catch(() => null)
-      return [r.status, body]
-    }
-    return [429, null]
-  }
-  return {
-    get: (url) => req('GET', url),
-    post: (url, body) => req('POST', url, body),
-  }
+  return env
+    ? { token: env, provider: 'catalogOverride' }
+    : { token: await azToken(FABRIC_RESOURCE), provider: 'az' }
 }
 
 // Probe a per-item endpoint across many items; resolve to the first hit. Stops
@@ -207,7 +128,8 @@ function modelObj(ds, wsId, wsName) {
 
 async function workspaceIndex(pbi) {
   const [s, j] = await pbi.get('/groups?$top=5000')
-  const wss = s === 200 && j ? (j.value || []) : []
+  if (s !== 200 || !Array.isArray(j?.value)) throw new Error(apiError('Power BI workspace lookup', s, j))
+  const wss = j.value
   const names = {}
   for (const w of wss) names[w.id] = w.name
   return { wss, names }
@@ -381,7 +303,7 @@ async function autoDetect(pbi, gid, wsHint, wss) {
   return 'report' // default; report locator handles fast path + full scan
 }
 
-async function runLocate(token, req) {
+export async function runLocate(token, req) {
   const pbiToken = await token(PBI_SCOPES)
   const pbi = makeApi(pbiToken, PBI_BASE)
   const t = parseTarget(req.target)
@@ -476,7 +398,8 @@ async function runSearch(token, req) {
   const limit = req.limit || 30
   const pageSize = req.pageSize || 100
 
-  const fab = makeApi(await fabricCatalogToken())
+  const catalog = await fabricCatalogToken()
+  const fab = makeApi(catalog.token, FABRIC_RESOURCE, catalog.provider)
   const entries = await searchCatalog(fab, query, filt, limit, pageSize)
 
   const models = []
@@ -617,28 +540,44 @@ function fabricError(status, body) {
 // POST `getDefinition?format=TMSL`, follow the long-running-operation poll, and
 // return the parsed `model.bim` `model` node. A 401 means the `az` token was
 // rejected → NeedsAz; a 403 means the caller lacks write access to the model.
-async function fetchModelBim(token, wsId, dsId) {
+export async function fetchModelBim(token, wsId, dsId) {
   const headers = { Authorization: 'Bearer ' + token }
-  const url = `${fabricApiBase()}/workspaces/${wsId}/semanticModels/${dsId}/getDefinition?format=TMSL`
-  let r = await fetch(url, { method: 'POST', headers })
+  const base = fabricApiBase()
+  async function request(url, method = 'GET') {
+    const response = await fetch(apiUrl(url, base), {
+      method, headers, redirect: 'error', signal: AbortSignal.timeout(30_000),
+    })
+    checkAuthentication(response, 'az')
+    return response
+  }
+  const url = `${base}/workspaces/${wsId}/semanticModels/${dsId}/getDefinition?format=TMSL`
+  let r = await request(url, 'POST')
   if (r.status === 202) {
     const loc = r.headers.get('location')
     if (!loc) throw new Error('getDefinition was accepted but returned no polling URL.')
+    const pollUrl = apiUrl(loc, base)
     const deadline = Date.now() + 100000
     for (;;) {
       if (Date.now() > deadline) throw new Error('Timed out reading the semantic model definition.')
       await sleep(1500)
-      const pr = await fetch(loc, { headers })
-      if (pr.status === 401) throw new NeedsAz('Azure CLI token was rejected (401).')
+      const pr = await request(pollUrl)
+      if (pr.status === 403) throw new Error('You need edit (write) access to this semantic model to read its definition.')
+      if (pr.status >= 400 && pr.status < 500 && pr.status !== 429) {
+        throw new Error(fabricError(pr.status, await pr.json().catch(() => null)))
+      }
       if (pr.status !== 200) continue
       let st = {}
       try { st = await pr.json() } catch { st = {} }
       const state = String(st.status || '').toLowerCase()
-      if (state === 'succeeded') { r = await fetch(loc.replace(/\/$/, '') + '/result', { headers }); break }
+      if (state === 'succeeded') {
+        const resultUrl = new URL(pollUrl)
+        resultUrl.pathname = resultUrl.pathname.replace(/\/$/, '') + '/result'
+        r = await request(resultUrl.href)
+        break
+      }
       if (state === 'failed') throw new Error(fabricError(pr.status, st))
     }
   }
-  if (r.status === 401) throw new NeedsAz('Azure CLI token was rejected (401).')
   if (r.status === 403) throw new Error('You need edit (write) access to this semantic model to read its definition.')
   if (r.status !== 200) {
     let body = null
@@ -679,27 +618,12 @@ function workspaceModelsUrl(workspaceId) {
 // same token the workspace picker uses) — the Rayfin app can't mint the Power BI
 // scope silently, so a signed-in user was wrongly told to re-auth. Follows the
 // Fabric 100/page continuation the same way the workspace list does.
-async function runListWorkspaceModels(token, req) {
+export async function runListWorkspaceModels(token, req) {
   const wsId = String(req.workspaceId || req.workspace || '').trim()
   if (!wsId) return { ok: false, error: 'A workspaceId is required.' }
-  const fabric = makeApi(await token(), '') // default scopes → Fabric token
+  const fabric = makeApi(await token(), FABRIC_RESOURCE) // default scopes → Fabric token
   const start = workspaceModelsUrl(wsId)
-  const items = []
-  let url = start
-  for (let i = 0; i < 100 && url; i++) {
-    const [s, j] = await fabric.get(url)
-    if (s === 401) throw new NeedsLogin('Fabric rejected the request (401).')
-    if (s === 403) return { ok: false, error: "You don't have access to this workspace's semantic models." }
-    if (s !== 200 || !j) return { ok: false, error: 'Fabric semantic models request failed (' + s + ').' }
-    for (const v of j.value || []) items.push(v)
-    if (j.continuationUri) {
-      url = j.continuationUri.startsWith('http') ? j.continuationUri : FABRIC_RESOURCE + j.continuationUri
-    } else if (j.continuationToken) {
-      url = start + '?continuationToken=' + encodeURIComponent(j.continuationToken)
-    } else {
-      url = null
-    }
-  }
+  const items = await fetchAllPages(fabric, start, { label: 'Fabric semantic models request' })
   const models = items
     .map((d) => ({ id: d.id, name: d.displayName || d.name }))
     .filter((m) => m.id)
@@ -783,18 +707,19 @@ async function main() {
   const [authPath, reqJson] = process.argv.slice(2)
   if (!authPath || !reqJson) throw new Error('usage: <authModulePath> <requestJson>')
   const req = JSON.parse(reqJson)
-  const token = await makeTokens(authPath)
+  // Schema reads only need Azure. Do not initialize Rayfin/MSAL until a mode
+  // actually requests one of its tokens.
+  let tokens
+  const token = async (scopes) => {
+    tokens ||= makeTokens(authPath)
+    return (await tokens)(scopes)
+  }
   const result =
     req.mode === 'search' ? await runSearch(token, req)
     : req.mode === 'schema' ? await runSchema(token, req)
     : req.mode === 'listWorkspaceModels' ? await runListWorkspaceModels(token, req)
     : await runLocate(token, req)
-  process.stdout.write(JSON.stringify(result))
+  return result
 }
 
-main().catch((err) => {
-  const msg = err && err.message ? String(err.message) : String(err)
-  const needsAz = err instanceof NeedsAz || /\baz\b.*(login|sign|token|account)|run 'az login'|az account/i.test(msg)
-  const needsLogin = !needsAz && (err instanceof NeedsLogin || /silent|cached|account|login|token|interactive|sign/i.test(msg))
-  process.stdout.write(JSON.stringify({ ok: false, needsLogin, needsAz, error: msg }))
-})
+if (isMain(import.meta.url)) runHelper(main)

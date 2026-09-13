@@ -68,11 +68,19 @@ Fabricator runs on **Windows 10/11** and **macOS (Apple Silicon)**.
 
    > This is a one-time step. Without it macOS may report the app as *"damaged and can't be opened"* — that's the quarantine flag, not real corruption. (Control-click → **Open** also works, but the `xattr` command is the most reliable.) These steps go away once the app is notarized.
 
-Then launch the app. The onboarding doctor checks the rest and walks you through signing in to GitHub Copilot and Microsoft Fabric.
+Then launch the app. The onboarding doctor checks the rest and walks you through signing in to GitHub Copilot and Azure. Sign in to Microsoft Fabric when you open a project and deploy.
 
 To build apps you'll create a Rayfin project with `npm create @microsoft/rayfin@latest`. Fabricator uses that project's pinned Rayfin CLI, so there's nothing to install globally. The app keeps itself up to date with in-app auto-updates on both platforms.
 
 Want to build from source instead? Jump to [Build from source](#build-from-source).
+
+### Sign-in and recovery
+
+Copilot ships with Fabricator; you do not need a separate global Copilot installation or a terminal login. Setup verifies authentication and model access through the same bundled engine that runs chat, rather than trusting a remembered username. Complete the browser or device-code instructions shown in the app. A failed or timed-out check stays unverified and displays a reason.
+
+If Copilot credentials expire while you are working, use **Sign in to Copilot** in chat, then retry your message. Sign-in refreshes the engine and available models without clearing your conversation or unsent draft. Missing Copilot sessions are reconnected when possible; if the saved engine session is gone, Fabricator explains that it has started a new one and keeps the displayed chat history. Prompts are not automatically replayed after work has started.
+
+Fabric and Azure checks also verify usable credentials, and the GitHub repository picker verifies the active GitHub identity through its API. Sign-in failures are shown in the app rather than silently continuing; expired credentials and permission failures are handled separately. Signing in does not automatically replay sharing or deletion operations.
 
 ## What's inside
 
@@ -151,7 +159,7 @@ You'll need:
 | Tauri prerequisites | For local desktop development and packaging. |
 | Git | Used for local project history. |
 | Rayfin CLI | Ships with each Rayfin project (`npm create @microsoft/rayfin@latest`); Fabricator runs the project-pinned version via `npx rayfin`. Sign in to Microsoft Fabric in-app. |
-| GitHub Copilot CLI | Available as a command; sign in to GitHub Copilot. |
+| GitHub Copilot CLI | Bundled by the Rust SDK; sign in through Fabricator. No global install is required. |
 
 Clone, install, and run:
 
@@ -168,11 +176,10 @@ Build the desktop app and platform installer (NSIS `.exe` on Windows, `.dmg` + u
 npm run build
 ```
 
-Sanity-check the external CLIs and sign-ins before deploying or previewing:
+Sanity-check the project-local Rayfin CLI before deploying or previewing:
 
 ```bash
 npx rayfin --help
-copilot --help
 ```
 
 Scripts worth knowing:
@@ -184,6 +191,7 @@ Scripts worth knowing:
 | `npm run dev:renderer` | Run the Vite renderer on its own. |
 | `npm run build:renderer` | Build the Vite renderer on its own. |
 | `npm run typecheck` | Type-check the Node and web TypeScript projects. |
+| `npm test` | Run renderer regression tests (also run in CI). |
 | `npm run lint` | Run ESLint. |
 | `npm run format` | Format renderer source with Prettier. |
 

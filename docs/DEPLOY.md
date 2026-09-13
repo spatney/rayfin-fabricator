@@ -48,11 +48,13 @@ git push origin v0.1.0
 
 ## Warm npm cache (fast first-run installs)
 
-Creating a Universal App and deploying it triggers a first `npm install`. To keep that fast, the app ships a **warm npm cache** — a prebuilt cacache of the Universal App's dependencies (base template + every capability pack) — bundled under `resources/npm-cache/` and seeded into the user's app-data on first launch. Every npm Fabricator spawns runs against it with `--prefer-offline`, falling back to the network only on a cache miss.
+Creating a Universal App and deploying it triggers a first dependency install. To keep that fast, the app ships a **warm npm cache** — a prebuilt cacache of the Universal App's dependencies (base template + every capability pack) — bundled under `resources/npm-cache/` and seeded into the user's app-data on first launch. Every npm Fabricator spawns uses this cache. Lockfile-backed `npm ci` uses `--prefer-offline`; `npm install` keeps normal registry freshness checks while reusing cached tarballs.
 
+- **Fresh scaffold metadata.** `npm create @microsoft/rayfin@latest` explicitly disables `prefer-offline` and enables `prefer-online` for itself and its children. npm gives `prefer-offline` precedence: enabling both can resolve the latest scaffolder against an older cached CLI manifest and fail with `ETARGET` even though that CLI version is published (issue #28). The fix retains the cache and the selected package versions; it does not clear caches or silently substitute an older CLI.
 - **Generated in CI, per platform.** `.github/workflows/release.yml` runs `node scripts/warm-npm-cache.mjs` on both the Windows and macOS jobs before the Tauri build, so each installer carries the native optional deps (esbuild / SWC / tailwind-oxide / rollup) for its own OS+arch. The cache is **never committed** (see `.gitignore`); a `.gitkeep` keeps the bundled-resource directory present.
 - **Regenerate locally** with `npm run warm-cache` (writes `resources/npm-cache/_cacache`).
 - **Determinism.** The base is warmed from the template's committed `package-lock.json`, so the cached tarballs match what the runtime `npm ci` installs. When you change the template's or a pack's dependencies, regenerate the template lockfile (`npm install --package-lock-only` in `resources/fabricator-templates/fabricator-universal`) so the two stay in sync.
+- **Regression coverage.** `cargo test --manifest-path src-tauri\Cargo.toml --lib npm` (PowerShell, from the repo root) checks the cache policy and reproduces stale-metadata `ETARGET` against a loopback registry. Requires Node.js/npm; no packages are installed, and the user's npm configuration and cache are not used.
 
 ## Auto-update
 

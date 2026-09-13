@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AuthStatus, DoctorReport, InstallResult, ProcLogEvent } from '@shared/ipc'
+import type { AuthStatus, DoctorReport, InstallResult, ProcLogEvent, ProcResult } from '@shared/ipc'
 import { FabricatorMark } from '../components/FabricatorMark'
 import nodeSvg from '../assets/brands/node.svg'
 import npmSvg from '../assets/brands/npm.svg'
@@ -7,6 +7,7 @@ import gitSvg from '../assets/brands/git.svg'
 import azureSvg from '../assets/brands/azure.svg'
 import { CopilotLogo } from '../components/brand-icons'
 import { CheckIcon, DownloadIcon, ReloadIcon, TerminalIcon } from '../components/icons'
+import { signInToCopilot } from '../copilotAuth'
 
 /** Official product logo (as an <img> src) for each tool, keyed by the doctor's tool id. */
 const TOOL_LOGOS: Record<string, string> = {
@@ -20,20 +21,27 @@ interface Props {
   doctor: DoctorReport | null
   auth: AuthStatus | null
   refreshing: boolean
+  error?: string
   onRefresh: () => Promise<void> | void
   onEnter: () => void
 }
 
-export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnter }: Props): JSX.Element {
+export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh, onEnter }: Props): JSX.Element {
   const [log, setLog] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [finalizing, setFinalizing] = useState(false)
   const [showLog, setShowLog] = useState(false)
   const [needsRelaunch, setNeedsRelaunch] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
   const logRef = useRef<HTMLPreElement>(null)
+  const activeProc = useRef<string | null>(null)
 
   useEffect(() => {
     return window.api.onProcLog((e: ProcLogEvent) => {
+      if (
+        e.channel !== activeProc.current &&
+        !(activeProc.current?.startsWith('install:') && e.channel.startsWith('install:'))
+      ) return
       setLog((prev) => prev + e.data)
     })
   }, [])
@@ -42,13 +50,21 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [log])
 
-  async function runAction(key: string, label: string, fn: () => Promise<unknown>): Promise<void> {
+  async function runAction(key: string, label: string, fn: () => Promise<ProcResult>): Promise<void> {
+    activeProc.current = key
     setBusy(key)
+    setActionError(null)
     setShowLog(true)
-    setLog((p) => `${p}\n\u203a ${label}\n`)
+    setLog(`\u203a ${label}\n`)
     try {
-      await fn()
+      const result = await fn()
+      if (!result.ok) {
+        const detail = result.error ?? `${label} did not complete. Please try again.`
+        setActionError(detail)
+        setLog((p) => `${p}\n[error] ${detail}\n`)
+      }
     } catch (err) {
+      setActionError(String(err))
       setLog((p) => `${p}\n[error] ${String(err)}\n`)
     } finally {
       // Keep the sign-in overlay up through the auth re-check and the screen swap
@@ -57,7 +73,10 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
       setFinalizing(true)
       try {
         await onRefresh()
+      } catch (err) {
+        setActionError(`Could not verify sign-in: ${String(err)}`)
       } finally {
+        activeProc.current = null
         setBusy(null)
         setFinalizing(false)
       }
@@ -70,6 +89,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
     label: string,
     fn: () => Promise<InstallResult>
   ): Promise<void> {
+    activeProc.current = key
     setBusy(key)
     setShowLog(true)
     setLog((p) => `${p}\n\u203a ${label}\n`)
@@ -82,6 +102,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
     } catch (err) {
       setLog((p) => `${p}\n[error] ${String(err)}\n`)
     } finally {
+      activeProc.current = null
       setBusy(null)
       await onRefresh()
     }
@@ -101,7 +122,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
   ]
   const signedInCount = providers.filter(Boolean).length
 
-  const allReady = (doctor?.ready ?? false) && signedInCount === providers.length
+  const allReady = !refreshing && !error && (doctor?.ready ?? false) && signedInCount === providers.length
 
   const totalSteps = tools.length + providers.length
   const doneSteps = toolsSatisfied + signedInCount
@@ -122,7 +143,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
     .split('\n')
     .map((line) => line.replace(/\s+$/, ''))
     .filter((line) => line.trim().length > 0 && !line.trimStart().startsWith('\u203a'))
-    .slice(-6)
+    .slice(-20)
     .join('\n')
 
   return (
@@ -164,6 +185,12 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
               <span className="setup-meter-fill" style={{ width: `${pct}%` }} />
             </div>
           </div>
+
+          {(error || actionError) && (
+            <div className="alert alert--error" role="alert">
+              {error || actionError}
+            </div>
+          )}
 
           {needsRelaunch && (
             <div className="setup-relaunch">
@@ -309,12 +336,12 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
                   subtitle="The AI agent that writes your code"
                   signedIn={auth?.copilot.signedIn ?? false}
                   detail={auth?.copilot.user}
-                  disabled={busy !== null}
+                  error={auth?.copilot.error}
+                  checking={refreshing}
+                  disabled={busy !== null || refreshing}
                   busy={busy === 'login:copilot'}
                   onSignIn={() =>
-                    runAction('login:copilot', 'Sign in to GitHub Copilot', () =>
-                      window.api.auth.loginCopilot()
-                    )
+                    runAction('login:copilot', 'Sign in to GitHub Copilot', signInToCopilot)
                   }
                 />
                 <AuthRow
@@ -324,7 +351,9 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
                   signedIn={auth?.az.signedIn ?? false}
                   detail={auth?.az.user}
                   extra={auth?.az.tenant}
-                  disabled={busy !== null || !azReady}
+                  error={auth?.az.error}
+                  checking={refreshing}
+                  disabled={busy !== null || refreshing || !azReady}
                   disabledReason={!azReady ? 'Install the Azure CLI first' : undefined}
                   busy={busy === 'login:az'}
                   onSignIn={() =>
@@ -354,7 +383,9 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
           </button>
           <div className="setup-actionbar-right">
             <span className="setup-actionbar-status">
-              {allReady
+              {refreshing
+                ? 'Checking...'
+                : allReady
                 ? 'All checks passed'
                 : `${remaining} ${remaining === 1 ? 'step' : 'steps'} left`}
             </span>
@@ -368,7 +399,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
             </button>
             <button
               className="btn btn--primary setup-enter"
-              disabled={!allReady || busy !== null}
+              disabled={!allReady || busy !== null || needsRelaunch}
               onClick={() => onEnter()}
             >
               Enter Fabricator
@@ -392,7 +423,7 @@ export default function SetupScreen({ doctor, auth, refreshing, onRefresh, onEnt
               <span>
                 {finalizing
                   ? 'Getting things ready…'
-                  : `Finish signing in to ${loginProvider} in the window that opened.`}
+                  : `Finish signing in to ${loginProvider} in your browser, or follow the device-code instructions below.`}
               </span>
             </div>
             {logTail && <pre className="signin-log">{logTail}</pre>}
@@ -410,6 +441,8 @@ interface AuthRowProps {
   signedIn: boolean
   detail?: string
   extra?: string
+  error?: string
+  checking?: boolean
   disabled: boolean
   disabledReason?: string
   busy: boolean
@@ -422,19 +455,25 @@ function AuthRow(props: AuthRowProps): JSX.Element {
       <span className="auth-ico">{props.icon}</span>
       <div className="auth-row-main">
         <span className="auth-row-title">{props.title}</span>
-        {props.signedIn ? (
+        {props.checking ? (
+          <span className="auth-row-meta">Checking authentication...</span>
+        ) : props.signedIn ? (
           <span className="auth-row-meta auth-row-meta--ok">
             {props.detail ?? 'Signed in'}
             {props.extra ? ` · ${props.extra}` : ''}
           </span>
         ) : props.disabledReason ? (
           <span className="auth-row-meta auth-row-meta--warn">{props.disabledReason}</span>
+        ) : props.error ? (
+          <span className="auth-row-meta auth-row-meta--warn">{props.error}</span>
         ) : (
           <span className="auth-row-meta">{props.subtitle}</span>
         )}
       </div>
       <div className="auth-row-action">
-        {props.signedIn ? (
+        {props.checking ? (
+          <span className="tool-chip">Checking...</span>
+        ) : props.signedIn ? (
           <span className="tool-chip">
             <CheckIcon className="tool-chip-ico" />
             Connected

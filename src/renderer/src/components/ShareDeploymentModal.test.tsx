@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { FabricDeployment } from '@shared/ipc'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { FabricDeployment, FabricDirectoryResult } from '@shared/ipc'
 import ShareDeploymentModal from './ShareDeploymentModal'
 import { makeProject } from '../../test/harness'
+import { deferred } from '../../test/deferred'
+import { ToastProvider } from '../toast'
 
 interface ApiOverrides {
   projectSemanticModels?: ReturnType<typeof vi.fn>
@@ -178,5 +180,228 @@ describe('ShareDeploymentModal', () => {
     await waitFor(() => expect(loginAz).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(shareApp).toHaveBeenCalledTimes(2))
     expect(await screen.findByText('dev@contoso.com', { selector: '.share-result-email' })).toBeTruthy()
+  })
+
+  it.each([
+    ['rayfin', 'failed login'],
+    ['rayfin', 'rejected login'],
+    ['rayfin', 'rejected verification'],
+    ['az', 'failed login'],
+    ['az', 'rejected login'],
+    ['az', 'rejected verification']
+  ])('does not retry sharing after %s %s', async (kind, failure) => {
+    const login = vi.fn().mockResolvedValue({ ok: true, exitCode: 0 })
+    const onSignedIn = vi.fn().mockResolvedValue(undefined)
+    if (failure === 'failed login') {
+      login.mockResolvedValueOnce({ ok: false, exitCode: 1, error: 'Session verification failed' })
+    } else if (failure === 'rejected login') {
+      login.mockRejectedValueOnce('Session verification failed')
+    } else {
+      onSignedIn.mockRejectedValueOnce(new Error('Session verification failed'))
+    }
+    const shareApp = vi.fn().mockResolvedValue({
+      ok: false,
+      recipients: [],
+      needsLogin: kind === 'rayfin',
+      needsAz: kind === 'az'
+    })
+    installApi({ shareApp, ...(kind === 'az' ? { loginAz: login } : { loginRayfin: login }) })
+    render(
+      <ToastProvider>
+        <ShareDeploymentModal
+          project={makeProject('p1')}
+          deployment={deployment}
+          onClose={vi.fn()}
+          onSignedIn={onSignedIn}
+        />
+      </ToastProvider>
+    )
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'dev@contoso.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    const buttonName = kind === 'az' ? 'Sign in to Azure & retry' : 'Sign in & retry'
+    fireEvent.click(await screen.findByRole('button', { name: buttonName }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Session verification failed')
+    expect(shareApp).toHaveBeenCalledTimes(1)
+    expect((screen.getByRole('button', { name: buttonName }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getByText('dev@contoso.com', { selector: '.share-chip-name' })).toBeTruthy()
+  })
+
+  it('waits for the parent auth refresh before retrying a share', async () => {
+    const verification = deferred<void>()
+    const shareApp = vi.fn()
+      .mockResolvedValueOnce({ ok: false, recipients: [], needsAz: true })
+      .mockResolvedValue({ ok: true, recipients: [] })
+    const onSignedIn = vi.fn(() => verification.promise)
+    installApi({ shareApp })
+    render(
+      <ToastProvider>
+        <ShareDeploymentModal
+          project={makeProject('p1')}
+          deployment={deployment}
+          onClose={vi.fn()}
+          onSignedIn={onSignedIn}
+        />
+      </ToastProvider>
+    )
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'dev@contoso.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in to Azure & retry' }))
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledTimes(1))
+    expect(shareApp).toHaveBeenCalledTimes(1)
+    expect((screen.getByRole('button', { name: 'Signing in…' }) as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => verification.resolve(undefined))
+    expect(shareApp).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows directory auth failures rather than silently claiming there are no matches', async () => {
+    const api = installApi({
+      directorySearch: vi.fn().mockRejectedValue('Directory sign-in check unavailable')
+    })
+    render(
+      <ToastProvider>
+        <ShareDeploymentModal project={makeProject('p1')} deployment={deployment} onClose={vi.fn()} />
+      </ToastProvider>
+    )
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Ada' } })
+    expect((await screen.findByRole('alert')).textContent).toContain('Directory sign-in check unavailable')
+    expect(screen.queryByText('No matches')).toBeNull()
+    expect((screen.getByRole('combobox') as HTMLInputElement).value).toBe('Ada')
+    expect(api.shareApp).not.toHaveBeenCalled()
+  })
+
+  it('ignores directory results that arrive after the query is cleared', async () => {
+    const search = deferred<FabricDirectoryResult>()
+    const directorySearch = vi.fn(() => search.promise)
+    installApi({ directorySearch })
+    render(
+      <ToastProvider>
+        <ShareDeploymentModal project={makeProject('p1')} deployment={deployment} onClose={vi.fn()} />
+      </ToastProvider>
+    )
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Ada' } })
+    await waitFor(() => expect(directorySearch).toHaveBeenCalledTimes(1))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } })
+    await act(async () => search.resolve({
+      ok: true,
+      people: [{ displayName: 'Ada', email: 'ada@contoso.com' }]
+    }))
+    expect(screen.queryByRole('option')).toBeNull()
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it.each(['rayfin', 'az'])('recovers a %s directory session without sharing or losing the query', async (kind) => {
+    const verification = deferred<void>()
+    const onSignedIn = vi.fn(() => verification.promise)
+    const api = installApi({
+      directorySearch: vi.fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          people: [],
+          needsLogin: kind === 'rayfin',
+          needsAz: kind === 'az',
+          error: 'Directory session expired'
+        })
+        .mockResolvedValue({
+          ok: true,
+          people: [{ displayName: 'Ada Lovelace', email: 'ada@contoso.com' }]
+        })
+    })
+    render(
+      <ToastProvider>
+        <ShareDeploymentModal
+          project={makeProject('p1')}
+          deployment={deployment}
+          onClose={vi.fn()}
+          onSignedIn={onSignedIn}
+        />
+      </ToastProvider>
+    )
+    const input = screen.getByRole('combobox') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'Ada Lovelace' } })
+    const provider = kind === 'az' ? 'Azure' : 'Fabric'
+    fireEvent.click(await screen.findByRole('button', { name: `Sign in to ${provider} to search` }))
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledTimes(1))
+
+    expect(kind === 'az' ? api.loginAz : api.loginRayfin).toHaveBeenCalledTimes(1)
+    expect(kind === 'az' ? api.loginRayfin : api.loginAz).not.toHaveBeenCalled()
+    expect(api.directorySearch).toHaveBeenCalledTimes(1)
+    expect(api.shareApp).not.toHaveBeenCalled()
+    expect(input.value).toBe('Ada Lovelace')
+
+    await act(async () => verification.resolve(undefined))
+    expect((await screen.findByRole('option')).textContent).toContain('Ada Lovelace')
+    expect(api.directorySearch).toHaveBeenLastCalledWith('Ada Lovelace')
+    expect(api.directorySearch).toHaveBeenCalledTimes(2)
+    expect(api.shareApp).not.toHaveBeenCalled()
+    expect(input.value).toBe('Ada Lovelace')
+  })
+
+  it.each([
+    ['rayfin', 'failed login'],
+    ['rayfin', 'rejected login'],
+    ['rayfin', 'rejected verification'],
+    ['az', 'failed login'],
+    ['az', 'rejected login'],
+    ['az', 'rejected verification']
+  ])('does not retry a directory lookup after %s %s', async (kind, failure) => {
+    const login = vi.fn().mockResolvedValue({ ok: true, exitCode: 0 })
+    const onSignedIn = vi.fn().mockResolvedValue(undefined)
+    if (failure === 'failed login') {
+      login.mockResolvedValueOnce({ ok: false, exitCode: 1, error: 'Directory sign-in failed' })
+    } else if (failure === 'rejected login') {
+      login.mockRejectedValueOnce('Directory sign-in failed')
+    } else {
+      onSignedIn.mockRejectedValueOnce(new Error('Directory sign-in failed'))
+    }
+    const api = installApi({
+      ...(kind === 'az' ? { loginAz: login } : { loginRayfin: login }),
+      directorySearch: vi.fn().mockResolvedValue({
+        ok: false,
+        people: [],
+        needsLogin: kind === 'rayfin',
+        needsAz: kind === 'az',
+        error: 'Session expired'
+      })
+    })
+    render(
+      <ToastProvider>
+        <ShareDeploymentModal
+          project={makeProject('p1')}
+          deployment={deployment}
+          onClose={vi.fn()}
+          onSignedIn={onSignedIn}
+        />
+      </ToastProvider>
+    )
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Ada Lovelace' } })
+    const buttonName = `Sign in to ${kind === 'az' ? 'Azure' : 'Fabric'} to search`
+    fireEvent.click(await screen.findByRole('button', { name: buttonName }))
+
+    await screen.findByText('Directory sign-in failed')
+    expect(api.directorySearch).toHaveBeenCalledTimes(1)
+    expect(api.shareApp).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: buttonName }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('combobox') as HTMLInputElement).value).toBe('Ada Lovelace')
+  })
+
+  it('does not turn a directory permission error into a sign-in prompt', async () => {
+    const api = installApi({
+      directorySearch: vi.fn().mockResolvedValue({
+        ok: false,
+        people: [],
+        error: '403: Directory access forbidden'
+      })
+    })
+    render(
+      <ToastProvider>
+        <ShareDeploymentModal project={makeProject('p1')} deployment={deployment} onClose={vi.fn()} />
+      </ToastProvider>
+    )
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Ada' } })
+    expect((await screen.findByRole('alert')).textContent).toContain('403: Directory access forbidden')
+    expect(screen.queryByRole('button', { name: /Sign in/ })).toBeNull()
+    expect(api.loginAz).not.toHaveBeenCalled()
+    expect(api.loginRayfin).not.toHaveBeenCalled()
   })
 })

@@ -11,6 +11,7 @@ import type {
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { useToast } from '../toast'
+import { authErrorMessage } from '../authErrors'
 import { Codicon } from './icons'
 
 interface Props {
@@ -18,8 +19,8 @@ interface Props {
   /** The deployment being shared (its `workspaceId` hosts the app). */
   deployment: FabricDeployment
   onClose: () => void
-  /** Notify the parent that a Fabric/Azure sign-in just succeeded. */
-  onSignedIn?: () => void
+  /** Refresh app auth after sign-in; rejection prevents retrying the share. */
+  onSignedIn?: () => Promise<void> | void
 }
 
 /** A chosen recipient: always an email, with a friendly name when resolved. */
@@ -120,12 +121,18 @@ export default function ShareDeploymentModal({
   const [sharing, setSharing] = useState(false)
   const [reauthing, setReauthing] = useState(false)
   const [result, setResult] = useState<FabricShareResult | null>(null)
+  const loginSeqRef = useRef(0)
+  const loginBusyRef = useRef(false)
+  const sharingRef = useRef(false)
 
   // Directory autocomplete (Graph people search).
   const [suggestions, setSuggestions] = useState<FabricDirectoryPerson[]>([])
   const [showSuggest, setShowSuggest] = useState(false)
   const [searching, setSearching] = useState(false)
   const [activeSuggest, setActiveSuggest] = useState(-1)
+  const [directoryError, setDirectoryError] = useState<string | null>(null)
+  const [directoryAuth, setDirectoryAuth] = useState<'rayfin' | 'az' | null>(null)
+  const [directoryReloadTick, setDirectoryReloadTick] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const searchSeq = useRef(0)
@@ -142,13 +149,27 @@ export default function ShareDeploymentModal({
 
   useEffect(() => {
     let alive = true
-    void window.api.fabric.projectSemanticModels(project.id).then((m) => {
-      if (alive) setModels(m)
-    })
+    loginBusyRef.current = false
+    setReauthing(false)
+    setModels(null)
+    void window.api.fabric.projectSemanticModels(project.id).then(
+      (m) => {
+        if (alive) setModels(m)
+      },
+      (reason) => {
+        if (alive) {
+          setModels([])
+          toast.error(authErrorMessage(reason, 'Could not check the app’s semantic models.'), {
+            title: 'Model check failed'
+          })
+        }
+      }
+    )
     return () => {
       alive = false
+      ++loginSeqRef.current
     }
-  }, [project.id])
+  }, [project.id, workspaceId, toast])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -162,20 +183,23 @@ export default function ShareDeploymentModal({
   }, [busy, onClose, showSuggest])
 
   // Debounced directory search. The dropdown opens immediately with a spinner so
-  // typing feels responsive; it degrades to an "add email" / "no matches" row
-  // (and, silently, to nothing when `az` is signed out — submit still prompts).
+  // typing feels responsive. Failed lookups still allow entering an email, but
+  // explain the failure rather than presenting an auth error as "no matches".
   useEffect(() => {
+    const seq = ++searchSeq.current
     const q = draft.trim()
+    setDirectoryError(null)
+    setDirectoryAuth(null)
+    setSuggestions([])
+    setActiveSuggest(-1)
     // Spaces are allowed — people search by full name ("Ada Lovelace"). Only a
     // comma/semicolon (explicit email separators) skips the lookup; those are
     // handled as a bulk commit instead.
     if (q.length < 1 || /[,;]/.test(q)) {
-      setSuggestions([])
       setShowSuggest(false)
       setSearching(false)
       return
     }
-    const seq = ++searchSeq.current
     setShowSuggest(true)
     setSearching(true)
     const t = setTimeout(() => {
@@ -183,6 +207,17 @@ export default function ShareDeploymentModal({
         .directorySearch(q)
         .then((res) => {
           if (seq !== searchSeq.current) return
+          if (!res.ok) {
+            setDirectoryAuth(res.needsAz ? 'az' : res.needsLogin ? 'rayfin' : null)
+            setDirectoryError(authErrorMessage(
+              res.error,
+              res.needsAz
+                ? 'Sign in to Azure to search the directory.'
+                : res.needsLogin
+                  ? 'Sign in to Fabric to search the directory.'
+                  : 'Could not search the directory. You can still enter an email.'
+            ))
+          }
           const taken = new Set(recipients.map((r) => r.email.toLowerCase()))
           const people = (res.ok ? res.people : []).filter(
             (p) => p.email && !taken.has(p.email.toLowerCase())
@@ -191,14 +226,24 @@ export default function ShareDeploymentModal({
           setActiveSuggest(people.length ? 0 : -1)
           setSearching(false)
         })
-        .catch(() => {
+        .catch((reason) => {
           if (seq !== searchSeq.current) return
           setSuggestions([])
           setSearching(false)
+          setDirectoryError(
+            authErrorMessage(reason, 'Could not search the directory. You can still enter an email.')
+          )
         })
     }, 150)
-    return () => clearTimeout(t)
-  }, [draft, recipients])
+    return () => {
+      clearTimeout(t)
+      ++searchSeq.current
+    }
+  }, [draft, recipients, directoryReloadTick])
+
+  useEffect(() => {
+    if (directoryReloadTick > 0) inputRef.current?.focus()
+  }, [directoryReloadTick])
 
   // Keep the keyboard-highlighted suggestion scrolled into view.
   useEffect(() => {
@@ -284,6 +329,7 @@ export default function ShareDeploymentModal({
   const canShare = effectiveCount > 0 && invalidEmails.length === 0 && !!workspaceId && !busy
 
   async function runShare(): Promise<void> {
+    if (sharingRef.current) return
     // Fold a valid pending draft into the recipient list before sharing.
     let list = recipients
     if (validDraft && !recipients.some((r) => r.email.toLowerCase() === pendingDraft.toLowerCase())) {
@@ -293,6 +339,7 @@ export default function ShareDeploymentModal({
     }
     const emails = list.map((r) => r.email)
     if (emails.length === 0 || invalidEmails.length > 0 || !workspaceId) return
+    sharingRef.current = true
     setSharing(true)
     try {
       const res = await window.api.fabric.shareApp(project.id, workspaceId, emails)
@@ -303,30 +350,53 @@ export default function ShareDeploymentModal({
         })
       }
     } catch (err) {
-      setResult({ ok: false, recipients: [], error: String(err) })
+      setResult({
+        ok: false,
+        recipients: [],
+        error: authErrorMessage(err, 'Could not share the app. Please retry.')
+      })
     } finally {
+      sharingRef.current = false
       setSharing(false)
     }
   }
 
-  /** Re-authenticate (Fabric or Azure) then retry the share automatically. */
-  async function reauthAndRetry(kind: 'rayfin' | 'az'): Promise<void> {
+  /** Directory recovery is read-only; only an explicit share retry can grant access. */
+  async function reauthAndRetry(
+    kind: 'rayfin' | 'az',
+    target: 'share' | 'directory' = 'share'
+  ): Promise<void> {
+    if (loginBusyRef.current || sharingRef.current) return
+    loginBusyRef.current = true
+    const seq = ++loginSeqRef.current
     setReauthing(true)
     try {
       const login =
         kind === 'az' ? await window.api.auth.loginAz() : await window.api.auth.loginRayfin()
+      if (seq !== loginSeqRef.current) return
       if (!login.ok) {
-        toast.error(login.error ?? 'Sign-in did not complete. Please try again.', {
+        throw new Error(authErrorMessage(login.error, 'Sign-in did not complete. Please try again.'))
+      }
+      await onSignedIn?.()
+      if (seq !== loginSeqRef.current) return
+      if (target === 'directory') {
+        setDirectoryReloadTick((n) => n + 1)
+      } else {
+        setResult(null)
+        await runShare()
+      }
+    } catch (reason) {
+      if (seq === loginSeqRef.current) {
+        toast.error(authErrorMessage(reason, 'Sign-in did not complete. Please try again.'), {
           title: 'Sign-in failed'
         })
-        return
       }
-      onSignedIn?.()
-      setResult(null)
     } finally {
-      setReauthing(false)
+      if (seq === loginSeqRef.current) {
+        loginBusyRef.current = false
+        setReauthing(false)
+      }
     }
-    await runShare()
   }
 
   /** Copy the deployed app's link to the clipboard (to send to recipients). */
@@ -470,9 +540,9 @@ export default function ShareDeploymentModal({
                           <span className="share-suggest-name">Add “{pendingDraft}”</span>
                         </span>
                       </li>
-                    ) : (
+                    ) : !directoryError ? (
                       <li className="share-suggest-state">No matches</li>
-                    ))}
+                    ) : null)}
                 </ul>
               )}
             </div>
@@ -480,6 +550,24 @@ export default function ShareDeploymentModal({
               <span className="share-hint share-hint--bad">
                 Not a valid email: {invalidEmails.join(', ')}
               </span>
+            )}
+            {directoryError && (
+              <div className="share-banner share-banner--bad" role="alert">
+                <span>{directoryError}</span>
+                {directoryAuth && (
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--primary"
+                    disabled={busy}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => void reauthAndRetry(directoryAuth, 'directory')}
+                  >
+                    {reauthing
+                      ? 'Signing in…'
+                      : `Sign in to ${directoryAuth === 'az' ? 'Azure' : 'Fabric'} to search`}
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -532,7 +620,9 @@ export default function ShareDeploymentModal({
               </button>
             </div>
           )}
-          {globalError && <div className="share-banner share-banner--bad">{result?.error}</div>}
+          {globalError && (
+            <div className="share-banner share-banner--bad" role="alert">{result?.error}</div>
+          )}
 
           {result && result.recipients.length > 0 && (
             <ul className="share-results">

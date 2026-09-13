@@ -271,6 +271,13 @@ impl AppState {
     self.chat_cancels.lock().unwrap().contains_key(project_id)
   }
 
+  pub fn is_copilot_busy(&self) -> bool {
+    !self.chat_cancels.lock().unwrap().is_empty()
+      || !self.advisor_cancels.lock().unwrap().is_empty()
+      || !self.suggest_cancels.lock().unwrap().is_empty()
+      || !self.explain_cancels.lock().unwrap().is_empty()
+  }
+
   /// Register a fresh advisor-run cancel token for a project only if none is
   /// already running. Returns `None` when a run is already in flight.
   pub fn try_begin_advisor(&self, project_id: &str) -> Option<CancelToken> {

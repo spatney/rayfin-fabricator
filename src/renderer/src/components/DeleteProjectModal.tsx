@@ -1,6 +1,7 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
+import { authErrorMessage } from '../authErrors'
 import { FabricIcon } from './icons'
 import type { DeleteProgressEvent, ProjectsState, StudioProject } from '@shared/ipc'
 
@@ -8,6 +9,8 @@ interface Props {
   project: StudioProject
   onRemoved: (projects: ProjectsState) => void
   onClose: () => void
+  /** Refresh app auth after sign-in; rejection prevents retrying destructive work. */
+  onSignedIn?: () => Promise<void> | void
 }
 
 type StepStatus = 'pending' | 'active' | 'done' | 'error'
@@ -94,7 +97,12 @@ function localStepHint(
  * A focused, stepped dialog for moving a project to trash. It can additionally
  * remove deployed Fabric app(s), only when that separate option is selected.
  */
-export default function DeleteProjectModal({ project, onRemoved, onClose }: Props): JSX.Element {
+export default function DeleteProjectModal({
+  project,
+  onRemoved,
+  onClose,
+  onSignedIn
+}: Props): JSX.Element {
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -111,8 +119,13 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
   const [localProgress, setLocalProgress] = useState<DeleteProgressEvent | null>(null)
   /** Seconds elapsed during the (countless) OS trash move, for reassurance. */
   const [trashElapsed, setTrashElapsed] = useState(0)
+  const runSeqRef = useRef(0)
 
   const running = phase === 'running'
+
+  useEffect(() => () => {
+    ++runSeqRef.current
+  }, [project.id])
 
   // Stream the backend's file-count progress for *this* project's delete.
   useEffect(() => {
@@ -156,6 +169,8 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
    * locally even when the Fabric cleanup keeps failing.
    */
   async function run(skipFabric: boolean): Promise<void> {
+    if (running) return
+    const seq = ++runSeqRef.current
     const wantFabric = alsoDeleteFabric && !skipFabric
     const plan: Step[] = []
     if (wantFabric) {
@@ -183,12 +198,20 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
       mark('fabric', 'active')
       try {
         let res = await withTimeout(window.api.fabric.deleteApps(project.id), 130_000)
+        if (seq !== runSeqRef.current) return
         let loginErr: string | undefined
         if (!res.ok && res.needsLogin) {
           // The Fabric session expired — re-sign-in once, then retry.
           const login = await window.api.auth.loginRayfin()
-          if (login.ok) res = await withTimeout(window.api.fabric.deleteApps(project.id), 130_000)
-          else loginErr = login.error
+          if (seq !== runSeqRef.current) return
+          if (login.ok) {
+            await onSignedIn?.()
+            if (seq !== runSeqRef.current) return
+            res = await withTimeout(window.api.fabric.deleteApps(project.id), 130_000)
+            if (seq !== runSeqRef.current) return
+          } else {
+            loginErr = authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.')
+          }
         }
         if (!res.ok) {
           mark('fabric', 'error')
@@ -202,11 +225,17 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
           setPhase('error')
           return
         }
-      } catch {
+      } catch (reason) {
+        if (seq !== runSeqRef.current) return
         mark('fabric', 'error')
         setFailedAt('fabric')
         setError(
-          'Deleting from Fabric is taking longer than expected — it may be a slow connection. Try again, or delete locally only.'
+          reason instanceof Error && reason.message === 'timeout'
+            ? 'Deleting from Fabric is taking longer than expected — it may be a slow connection. Try again, or delete locally only.'
+            : authErrorMessage(
+                reason,
+                'Could not verify Fabric sign-in or delete the app. Try again, or delete locally only.'
+              )
         )
         setPhase('error')
         return
@@ -218,7 +247,9 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
     let next: ProjectsState
     try {
       next = await withTimeout(window.api.projects.remove(project.id, true), 90_000)
+      if (seq !== runSeqRef.current) return
     } catch {
+      if (seq !== runSeqRef.current) return
       mark('local', 'error')
       setFailedAt('local')
       setError(
@@ -231,6 +262,7 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
     setPhase('done')
     // Let the finished checklist land before the dialog closes.
     setTimeout(() => {
+      if (seq !== runSeqRef.current) return
       onRemoved(next)
       onClose()
     }, 550)
@@ -238,13 +270,17 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
 
   /** Error recovery: drop the project from the list without deleting its files. */
   async function removeFromListOnly(): Promise<void> {
+    if (running) return
+    const seq = ++runSeqRef.current
     setPhase('running')
     setError(null)
     try {
       const next = await withTimeout(window.api.projects.remove(project.id, false), 30_000)
+      if (seq !== runSeqRef.current) return
       onRemoved(next)
       onClose()
     } catch {
+      if (seq !== runSeqRef.current) return
       setError('Could not remove the project. Please try again.')
       setPhase('error')
     }

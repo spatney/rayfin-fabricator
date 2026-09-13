@@ -157,6 +157,7 @@ fn parse_deploy_list_opt(
 }
 
 /// Parse `rayfin up list --json` (last line that parses as an array wins).
+#[cfg(test)]
 fn parse_deploy_list(stdout: &str, names: &std::collections::HashMap<String, String>) -> Vec<FabricDeployment> {
   parse_deploy_list_opt(stdout, names).unwrap_or_default()
 }
@@ -480,15 +481,30 @@ pub async fn deploy_has_changes(project_id: String) -> bool {
 
 #[tauri::command]
 pub async fn deploy_list(project_id: String) -> Vec<FabricDeployment> {
-  let Some(project) = store::find_project(&project_id) else {
-    return vec![];
-  };
+  deploy_list_checked(&project_id).await.unwrap_or_default()
+}
+
+/// Destructive callers must distinguish "nothing deployed" from a failed
+/// query; an auth/CLI failure must not silently permit deleting the local app.
+pub(crate) async fn deploy_list_checked(project_id: &str) -> Result<Vec<FabricDeployment>, String> {
+  let project = store::find_project(project_id).ok_or_else(|| "Project not found.".to_string())?;
   let names = project.deployment_names.clone().unwrap_or_default();
   let res = exec::run_project_rayfin(Path::new(&project.path), &["up", "list", "--json"], RunOptions::timeout(60_000)).await;
-  if !res.ok {
-    return vec![];
+  checked_deploy_list(&res, &names)
+}
+
+fn checked_deploy_list(
+  res: &exec::RunResult,
+  names: &std::collections::HashMap<String, String>,
+) -> Result<Vec<FabricDeployment>, String> {
+  if !res.ok || res.not_found {
+    return Err(format!(
+      "Could not read recorded Fabric deployments. {}",
+      crate::services::fabric_auth::failure_message(res)
+    ));
   }
-  parse_deploy_list(&res.stdout, &names)
+  parse_deploy_list_opt(&res.stdout, names)
+    .ok_or_else(|| "Could not read recorded Fabric deployments: invalid CLI response. Nothing was deleted.".into())
 }
 
 /// Reconcile the Studio store's recorded deployment with on-disk reality
@@ -679,6 +695,26 @@ pub fn deploy_set_name(project_id: String, workspace_key: String, name: String) 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn checked_deployment_list_rejects_auth_failures_and_malformed_output() {
+    let names = std::collections::HashMap::new();
+    let mut res = exec::RunResult {
+      ok: false,
+      exit_code: Some(1),
+      stdout: "[]".into(),
+      stderr: "No cached account; run rayfin login".into(),
+      not_found: false,
+    };
+    let error = checked_deploy_list(&res, &names).err().expect("authentication failure");
+    assert_eq!(crate::services::fabric_auth::failure_flags(&error), (true, false));
+    res.ok = true;
+    res.stderr.clear();
+    res.stdout = "not JSON".into();
+    assert!(checked_deploy_list(&res, &names).is_err());
+    res.stdout = "[]".into();
+    assert!(checked_deploy_list(&res, &names).unwrap().is_empty());
+  }
   use std::collections::HashMap;
 
   #[test]

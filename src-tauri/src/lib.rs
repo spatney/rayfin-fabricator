@@ -124,11 +124,11 @@ pub fn run() {
   // store (issue #17). Must run before anything spawns the CLI or its helpers.
   enable_rayfin_encryption_fallback();
 
-  // Point every spawned npm at Fabricator's warm offline cache (prefer-offline),
-  // so the first `npm install` after creating a project resolves from the bundled
-  // package cache instead of downloading ~30+ packages. Set before any child
-  // spawns so `npm create`, deploy-time installs, and agent pack installs inherit
-  // it. The cache is populated by the background seed in `setup` below.
+  // Point every spawned npm at Fabricator's warm cache without freezing registry
+  // metadata at the bundled snapshot. Locked `npm ci` installs prefer offline
+  // data; scaffolding revalidates metadata for the latest CLI. Set before any
+  // child spawns so deploy-time installs and agent pack installs inherit it.
+  // The cache is populated by the background seed in `setup` below.
   services::npm_cache::configure_env();
 
   // Apply the "compatibility rendering" preference before the webview is created

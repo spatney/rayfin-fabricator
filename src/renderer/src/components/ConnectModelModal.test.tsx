@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { FabricDeployment } from '@shared/ipc'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { FabricDeployment, ProcResult } from '@shared/ipc'
 import ConnectModelModal from './ConnectModelModal'
 import { makeProject } from '../../test/harness'
+import { deferred } from '../../test/deferred'
+import { ToastProvider } from '../toast'
 
 interface Over {
   list?: ReturnType<typeof vi.fn>
@@ -96,5 +98,81 @@ describe('ConnectModelModal', () => {
     installApi({ list: vi.fn(() => Promise.resolve([])) })
     render(<ConnectModelModal project={makeProject('p1')} onClose={vi.fn()} onConnect={vi.fn()} />)
     expect(await screen.findByText(/Deploy this app to a Fabric workspace first/)).toBeTruthy()
+  })
+
+  it.each(['deployment', 'models'])('makes a rejected %s check retryable instead of spinning forever', async (check) => {
+    installApi({
+      ...(check === 'deployment'
+        ? { list: vi.fn().mockRejectedValue('Fabric lookup disconnected') }
+        : { listWorkspaceModels: vi.fn().mockRejectedValue('Fabric lookup disconnected') })
+    })
+    render(
+      <ToastProvider>
+        <ConnectModelModal project={makeProject('p1')} onClose={vi.fn()} onConnect={vi.fn()} />
+      </ToastProvider>
+    )
+    expect((await screen.findByRole('alert')).textContent).toContain('Fabric lookup disconnected')
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+    expect(screen.queryByText('Finding your deployment…')).toBeNull()
+    expect((screen.getByRole('button', { name: 'Add to chat' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it.each(['failed login', 'rejected login', 'rejected verification'])(
+    'does not reload models after %s',
+    async (failure) => {
+      const listWorkspaceModels = vi.fn().mockResolvedValue({ ok: false, models: [], needsLogin: true })
+      const loginRayfin = vi.fn().mockResolvedValue({ ok: true, exitCode: 0 })
+      const onSignedIn = vi.fn().mockResolvedValue(undefined)
+      if (failure === 'failed login') {
+        loginRayfin.mockResolvedValueOnce({ ok: false, exitCode: 1, error: 'Sign-in rejected' })
+      } else if (failure === 'rejected login') {
+        loginRayfin.mockRejectedValueOnce('Sign-in rejected')
+      } else {
+        onSignedIn.mockRejectedValueOnce(new Error('Sign-in rejected'))
+      }
+      installApi({ listWorkspaceModels, loginRayfin })
+      render(
+        <ToastProvider>
+          <ConnectModelModal
+            project={makeProject('p1')}
+            onClose={vi.fn()}
+            onConnect={vi.fn()}
+            onSignedIn={onSignedIn}
+          />
+        </ToastProvider>
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign in & retry' }))
+
+      expect((await screen.findByRole('alert')).textContent).toContain('Sign-in rejected')
+      expect(listWorkspaceModels).toHaveBeenCalledTimes(1)
+      expect((screen.getByRole('button', { name: 'Sign in & retry' }) as HTMLButtonElement).disabled).toBe(false)
+    }
+  )
+
+  it('disables duplicate sign-in attempts and ignores completion after dismissal', async () => {
+    const login = deferred<ProcResult>()
+    const loginRayfin = vi.fn(() => login.promise)
+    const listWorkspaceModels = vi.fn().mockResolvedValue({ ok: false, models: [], needsLogin: true })
+    const onSignedIn = vi.fn()
+    installApi({ listWorkspaceModels, loginRayfin })
+    const view = render(
+      <ToastProvider>
+        <ConnectModelModal
+          project={makeProject('p1')}
+          onClose={vi.fn()}
+          onConnect={vi.fn()}
+          onSignedIn={onSignedIn}
+        />
+      </ToastProvider>
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in & retry' }))
+    const pending = screen.getByRole('button', { name: 'Signing in…' }) as HTMLButtonElement
+    expect(pending.disabled).toBe(true)
+    fireEvent.click(pending)
+    expect(loginRayfin).toHaveBeenCalledTimes(1)
+    view.unmount()
+    await act(async () => login.resolve({ ok: true, exitCode: 0 }))
+    expect(onSignedIn).not.toHaveBeenCalled()
+    expect(listWorkspaceModels).toHaveBeenCalledTimes(1)
   })
 })

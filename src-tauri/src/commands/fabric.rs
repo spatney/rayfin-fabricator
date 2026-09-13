@@ -5,7 +5,7 @@
 //! There is no `rayfin workspace list` command, so we call the Fabric REST API
 //! (`/workspaces` + `/capacities`) ourselves. The bearer token is acquired
 //! *silently* by reusing the Rayfin CLI's own MSAL token cache: we spawn a tiny
-//! Node helper that imports the globally-installed `@microsoft/rayfin-cli` auth
+//! Node helper that imports the active project's (or global) Rayfin CLI auth
 //! module, runs its silent-only token path, performs the fetches, and emits only
 //! the resulting JSON. The access token never leaves that short-lived child
 //! process. We keep this as a `node` helper (rather than a pure-Rust port)
@@ -17,11 +17,9 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::services::{exec, paths, store};
+use crate::services::{exec, fabric_auth, paths, store};
 use crate::services::exec::RunOptions;
 use crate::types::{FabricDeleteResult, FabricWorkspacesResult};
 use crate::types::{FabricCapacitiesResult, FabricCreateWorkspaceResult};
@@ -30,74 +28,39 @@ use crate::types::FabricDirectoryResult;
 
 const FABRIC_API_BASE: &str = "https://api.fabric.microsoft.com/v1";
 
-/// `ok:false` parse-failure paths classify the error as a login problem with
-/// the same heuristic the TS used (note: no `interactive` here, matching
-/// `listFabricWorkspaces`/`deleteFabricApps`).
-static NEEDS_LOGIN_RE: Lazy<Regex> =
-  Lazy::new(|| Regex::new(r"(?i)silent|cached|account|login|token|sign").unwrap());
-
-/// Helper executed by the system `node`. argv: <authModulePath> <apiBase>.
-/// Writes exactly one JSON line to stdout; library logging is routed to stderr.
-const HELPER_SOURCE: &str = r#"// Keep stdout clean for the JSON result; route any library logging to stderr.
-console.log = (...a) => process.stderr.write(a.map(String).join(' ') + '\n')
-console.debug = console.log
-console.info = console.log
-
-import { pathToFileURL } from 'node:url'
-
-const API_HOST = 'https://api.fabric.microsoft.com'
-
-// Fabric list endpoints page at 100 items each, returning a continuationUri /
-// continuationToken when more remain. Follow every page so the result is
-// complete — otherwise workspaces (or capacities) past the first page silently
-// vanish from the picker. tolerate: degrade to what we have instead of throwing.
-async function fetchAllPages(startUrl, headers, { tolerate = false, label = '' } = {}) {
-  const out = []
-  const seen = new Set()
-  let url = startUrl
-  for (let i = 0; i < 100 && url; i++) {
-    if (seen.has(url)) break
-    seen.add(url)
-    let res
-    try {
-      res = await fetch(url, { headers })
-    } catch (e) {
-      if (tolerate) break
-      throw e
-    }
-    if (!res.ok) {
-      if (tolerate) break
-      throw new Error('Fabric ' + (label || startUrl) + ' request failed (' + res.status + ')')
-    }
-    const json = await res.json()
-    for (const v of json.value || []) out.push(v)
-    if (json.continuationUri) {
-      url = json.continuationUri.startsWith('http') ? json.continuationUri : API_HOST + json.continuationUri
-    } else if (json.continuationToken) {
-      url = startUrl + (startUrl.includes('?') ? '&' : '?') + '$continuationToken=' + encodeURIComponent(json.continuationToken)
-    } else {
-      url = null
-    }
-  }
-  return out
-}
+const AUTH_PROBE_HELPER_SOURCE: &str = r#"import { makeRayfinTokens, makeApi, apiError, runHelper } from './fabric_auth_helper.mjs'
 
 async function main() {
   const [authPath, base] = process.argv.slice(2)
-  const auth = await import(pathToFileURL(authPath).href)
-  const rf = await auth.getRayfinAuth()
-  // silentOnly: never pop a browser — fail fast if there's no cached session.
-  const { token } = await rf.acquireToken(undefined, { silentOnly: true })
-  const headers = { Authorization: 'Bearer ' + token }
+  const token = await makeRayfinTokens(authPath)
+  const api = makeApi(await token(), base)
+  const [status, body] = await api.get('/workspaces')
+  // 401/claims challenges already throw. An ordinary 403 is a permissions
+  // problem, not a reason to discard an otherwise authenticated session.
+  if (status === 403 || (status === 200 && Array.isArray(body?.value))) return { ok: true }
+  throw new Error(apiError('Fabric authentication check', status, body))
+}
+
+runHelper(main)
+"#;
+
+/// Helper executed by the system `node`. argv: <authModulePath> <apiBase>.
+/// Writes exactly one JSON line to stdout; library logging is routed to stderr.
+const HELPER_SOURCE: &str = r#"import { makeRayfinTokens, makeApi, fetchAllPages, runHelper } from './fabric_auth_helper.mjs'
+
+async function main() {
+  const [authPath, base] = process.argv.slice(2)
+  const token = await makeRayfinTokens(authPath)
+  const api = makeApi(await token(), base)
 
   // Follow pagination (100/page) so no workspace past the first page is lost.
-  const wsValue = await fetchAllPages(base + '/workspaces', headers, { label: '/workspaces' })
+  const wsValue = await fetchAllPages(api, base + '/workspaces', { label: 'Fabric workspaces' })
 
   // Capacities give us the SKU (F-SKU detection); tolerate failure (some
   // tenants restrict the endpoint) by degrading to workspaces without SKUs.
   // Paginate too — a capacity past page 1 would otherwise leave its workspace
   // SKU-less and wrongly ineligible.
-  const caps = await fetchAllPages(base + '/capacities', headers, { tolerate: true, label: '/capacities' })
+  const caps = await fetchAllPages(api, base + '/capacities', { tolerate: true, label: 'Fabric capacities' })
   // Index by lower-cased id — /workspaces and /capacities can disagree on GUID casing.
   const capById = new Map(caps.map((c) => [String(c.id).toLowerCase(), c]))
 
@@ -134,34 +97,23 @@ async function main() {
       eligible: capacityKind === 'fabric' || capacityKind === 'premium' || capacityKind === 'unknown'
     }
   })
-  process.stdout.write(JSON.stringify({ ok: true, workspaces }))
+  return { ok: true, workspaces }
 }
 
-main().catch((err) => {
-  const msg = err && err.message ? String(err.message) : String(err)
-  const needsLogin = /silent|cached|account|login|token|interactive|sign/i.test(msg)
-  process.stdout.write(JSON.stringify({ ok: false, needsLogin, error: msg }))
-})
+runHelper(main)
 "#;
 
 /// Helper executed by the system `node` to delete Fabric items. argv:
 /// <authModulePath> <apiBase> <itemsJsonPath>, where the JSON file is an array
 /// of `{ workspaceId, itemId, name }`.
-const DELETE_HELPER_SOURCE: &str = r#"console.log = (...a) => process.stderr.write(a.map(String).join(' ') + '\n')
-console.debug = console.log
-console.info = console.log
-
-import { pathToFileURL } from 'node:url'
+const DELETE_HELPER_SOURCE: &str = r#"import { makeRayfinTokens, makeApi, apiError, errorResult, runHelper } from './fabric_auth_helper.mjs'
 import { readFileSync } from 'node:fs'
 
 async function main() {
   const [authPath, base, itemsPath] = process.argv.slice(2)
   const items = JSON.parse(readFileSync(itemsPath, 'utf8'))
-  const auth = await import(pathToFileURL(authPath).href)
-  const rf = await auth.getRayfinAuth()
-  // silentOnly: never pop a browser — fail fast if there's no cached session.
-  const { token } = await rf.acquireToken(undefined, { silentOnly: true })
-  const headers = { Authorization: 'Bearer ' + token }
+  const token = await makeRayfinTokens(authPath)
+  const api = makeApi(await token(), base)
 
   let deleted = 0
   const failures = []
@@ -169,61 +121,31 @@ async function main() {
     const label = it.name || it.itemId
     try {
       const url = base + '/workspaces/' + it.workspaceId + '/items/' + it.itemId
-      const res = await fetch(url, { method: 'DELETE', headers })
-      if (res.status === 404) continue // already gone — nothing to do
-      if (res.ok) { deleted++; continue }
-      const body = await res.text().catch(() => '')
-      failures.push({ name: label, error: 'Fabric returned ' + res.status + (body ? ': ' + body.slice(0, 200) : '') })
+      const [status, body] = await api.delete(url)
+      if (status === 404) continue // already gone — nothing to do
+      if (status >= 200 && status < 300) { deleted++; continue }
+      failures.push({ name: label, error: apiError('Fabric delete', status, body) })
     } catch (e) {
-      failures.push({ name: label, error: String((e && e.message) || e) })
+      const failure = errorResult(e)
+      failures.push({ name: label, error: failure.error })
+      if (failure.needsLogin || failure.needsAz) return { ...failure, deleted, failures }
     }
   }
-  process.stdout.write(JSON.stringify({ ok: failures.length === 0, deleted, failures }))
+  return { ok: failures.length === 0, deleted, failures }
 }
 
-main().catch((err) => {
-  const msg = err && err.message ? String(err.message) : String(err)
-  const needsLogin = /silent|cached|account|login|token|interactive|sign/i.test(msg)
-  process.stdout.write(JSON.stringify({ ok: false, deleted: 0, failures: [], needsLogin, error: msg }))
-})
+runHelper(main, { deleted: 0, failures: [] })
 "#;
 
 /// Helper executed by the system `node` to list dedicated capacities the user
 /// can create a workspace on. argv: <authModulePath> <apiBase>.
-const CAPACITIES_HELPER_SOURCE: &str = r#"console.log = (...a) => process.stderr.write(a.map(String).join(' ') + '\n')
-console.debug = console.log
-console.info = console.log
-
-import { pathToFileURL } from 'node:url'
-
-const API_HOST = 'https://api.fabric.microsoft.com'
-
-async function fetchAllPages(startUrl, headers, { tolerate = false } = {}) {
-  const out = []
-  const seen = new Set()
-  let url = startUrl
-  for (let i = 0; i < 100 && url; i++) {
-    if (seen.has(url)) break
-    seen.add(url)
-    let res
-    try { res = await fetch(url, { headers }) } catch (e) { if (tolerate) break; throw e }
-    if (!res.ok) { if (tolerate) break; throw new Error('Fabric request failed (' + res.status + ')') }
-    const json = await res.json()
-    for (const v of json.value || []) out.push(v)
-    if (json.continuationUri) url = json.continuationUri.startsWith('http') ? json.continuationUri : API_HOST + json.continuationUri
-    else if (json.continuationToken) url = startUrl + (startUrl.includes('?') ? '&' : '?') + '$continuationToken=' + encodeURIComponent(json.continuationToken)
-    else url = null
-  }
-  return out
-}
+const CAPACITIES_HELPER_SOURCE: &str = r#"import { makeRayfinTokens, makeApi, fetchAllPages, runHelper } from './fabric_auth_helper.mjs'
 
 async function main() {
   const [authPath, base] = process.argv.slice(2)
-  const auth = await import(pathToFileURL(authPath).href)
-  const rf = await auth.getRayfinAuth()
-  const { token } = await rf.acquireToken(undefined, { silentOnly: true })
-  const headers = { Authorization: 'Bearer ' + token }
-  const caps = await fetchAllPages(base + '/capacities', headers, {})
+  const token = await makeRayfinTokens(authPath)
+  const api = makeApi(await token(), base)
+  const caps = await fetchAllPages(api, base + '/capacities', { label: 'Fabric capacities' })
   const kindOf = (sku) => {
     const s = String(sku).toUpperCase()
     if (s.startsWith('F')) return 'fabric'
@@ -241,46 +163,29 @@ async function main() {
       }
     })
     .filter((c) => c.eligible)
-  process.stdout.write(JSON.stringify({ ok: true, capacities }))
+  return { ok: true, capacities }
 }
 
-main().catch((err) => {
-  const msg = err && err.message ? String(err.message) : String(err)
-  const needsLogin = /silent|cached|account|login|token|interactive|sign/i.test(msg)
-  process.stdout.write(JSON.stringify({ ok: false, needsLogin, error: msg }))
-})
+runHelper(main)
 "#;
 
 /// Helper executed by the system `node` to create + assign a workspace. argv:
 /// <authModulePath> <apiBase> <displayName> <capacityId>.
-const CREATE_WS_HELPER_SOURCE: &str = r#"console.log = (...a) => process.stderr.write(a.map(String).join(' ') + '\n')
-console.debug = console.log
-console.info = console.log
-
-import { pathToFileURL } from 'node:url'
+const CREATE_WS_HELPER_SOURCE: &str = r#"import { makeRayfinTokens, makeApi, apiError, runHelper } from './fabric_auth_helper.mjs'
 
 async function main() {
   const [authPath, base, name, capacityId] = process.argv.slice(2)
-  const auth = await import(pathToFileURL(authPath).href)
-  const rf = await auth.getRayfinAuth()
-  const { token } = await rf.acquireToken(undefined, { silentOnly: true })
-  const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
+  const token = await makeRayfinTokens(authPath)
+  const api = makeApi(await token(), base)
   const body = { displayName: name }
   if (capacityId) body.capacityId = capacityId
-  const res = await fetch(base + '/workspaces', { method: 'POST', headers, body: JSON.stringify(body) })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error('Fabric create workspace failed (' + res.status + ')' + (text ? ': ' + text.slice(0, 200) : ''))
-  }
-  const ws = await res.json()
-  process.stdout.write(JSON.stringify({ ok: true, workspaceId: ws.id }))
+  const [status, ws] = await api.post(base + '/workspaces', body)
+  if (status < 200 || status >= 300) throw new Error(apiError('Fabric create workspace', status, ws))
+  if (!ws || typeof ws.id !== 'string' || !ws.id.trim()) throw new Error('Fabric returned no workspace id.')
+  return { ok: true, workspaceId: ws.id }
 }
 
-main().catch((err) => {
-  const msg = err && err.message ? String(err.message) : String(err)
-  const needsLogin = /silent|cached|account|login|token|interactive|sign/i.test(msg)
-  process.stdout.write(JSON.stringify({ ok: false, needsLogin, error: msg }))
-})
+runHelper(main)
 "#;
 
 /// One item passed to the delete helper (serialized to the items JSON file).
@@ -294,6 +199,7 @@ struct DeleteItem {
 
 /// Write a helper script to the app data dir and return its path.
 fn write_helper(name: &str, source: &str) -> std::io::Result<PathBuf> {
+  fabric_auth::write_helper()?;
   let dir = paths::ensure_data_dir()?;
   let path = dir.join(name);
   std::fs::write(&path, source)?;
@@ -302,19 +208,9 @@ fn write_helper(name: &str, source: &str) -> std::io::Result<PathBuf> {
 
 /// Classify a parse-failure error string as a login problem, falling back to a
 /// generic message built from stderr/stdout/exit code.
-fn failure_error(res: &exec::RunResult, out: &str) -> (bool, String) {
-  let err = if !res.stderr.trim().is_empty() {
-    res.stderr.trim().to_string()
-  } else if !out.is_empty() {
-    out.to_string()
-  } else {
-    let code = res
-      .exit_code
-      .map(|c| c.to_string())
-      .unwrap_or_else(|| "unknown".to_string());
-    format!("Workspace lookup failed (exit {code}).")
-  };
-  let needs_login = NEEDS_LOGIN_RE.is_match(&err);
+fn failure_error(res: &exec::RunResult, _out: &str) -> (bool, String) {
+  let err = fabric_auth::failure_message(res);
+  let (needs_login, _) = fabric_auth::failure_flags(&err);
   (needs_login, err)
 }
 
@@ -329,6 +225,42 @@ async fn project_auth_module(project_dir: Option<&Path>) -> Result<PathBuf, Stri
   exec::project_rayfin_auth_module(project_dir).ok_or_else(|| {
     "Could not locate the Rayfin CLI. Open a Rayfin project to reach Fabric.".to_string()
   })
+}
+
+/// Verify the CLI's current Fabric credential, not its remembered account.
+/// Performs one authenticated GET, with no pagination, browser, or dependency
+/// install. A normal 403 confirms authentication but leaves permission errors
+/// to the requesting workflow; 401/claims challenges require another sign-in.
+///
+/// The helper owns no persistent token cache: every invocation opens the CLI's
+/// MSAL cache afresh. CLI login/logout is the only token-cache mutation needed.
+pub async fn probe_rayfin_auth() -> Result<(), String> {
+  #[derive(Deserialize)]
+  struct ProbeResult {
+    ok: bool,
+    error: Option<String>,
+  }
+
+  let project_dir = store::active_project().map(|project| PathBuf::from(project.path));
+  let auth_path = exec::project_rayfin_auth_module(project_dir.as_deref()).ok_or_else(|| {
+    "Could not locate the Rayfin CLI authentication module. Open a Rayfin project to reach Fabric.".to_string()
+  })?;
+  let script_path = write_helper("fabric-auth-probe.mjs", AUTH_PROBE_HELPER_SOURCE)
+    .map_err(|error| format!("Could not prepare the Fabric authentication check: {error}"))?;
+  let auth_str = auth_path.to_string_lossy();
+  let script_str = script_path.to_string_lossy();
+  let result = exec::run(
+    "node",
+    &[&script_str, &auth_str, FABRIC_API_BASE],
+    RunOptions::timeout(30_000),
+  )
+  .await;
+  let probe: ProbeResult = fabric_auth::parse_helper_output(&result)?;
+  if probe.ok {
+    Ok(())
+  } else {
+    Err(probe.error.unwrap_or_else(|| "Could not verify the current Fabric session.".into()))
+  }
 }
 
 /// List the signed-in user's Fabric workspaces, each annotated with its
@@ -379,7 +311,7 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
   }
 
   let out = res.stdout.trim();
-  match serde_json::from_str::<FabricWorkspacesResult>(out) {
+  match fabric_auth::parse_helper_output::<FabricWorkspacesResult>(&res) {
     Ok(mut parsed) => {
       if parsed.ok {
         if let Some(ws) = parsed.workspaces.as_mut() {
@@ -457,7 +389,7 @@ pub async fn fabric_capacities() -> FabricCapacitiesResult {
     };
   }
   let out = res.stdout.trim();
-  match serde_json::from_str::<FabricCapacitiesResult>(out) {
+  match fabric_auth::parse_helper_output::<FabricCapacitiesResult>(&res) {
     Ok(parsed) => parsed,
     Err(_) => {
       let (needs_login, err) = failure_error(&res, out);
@@ -515,7 +447,7 @@ pub async fn fabric_create_workspace(name: String, capacity_id: String) -> Fabri
     };
   }
   let out = res.stdout.trim();
-  match serde_json::from_str::<FabricCreateWorkspaceResult>(out) {
+  match fabric_auth::parse_helper_output::<FabricCreateWorkspaceResult>(&res) {
     Ok(parsed) => parsed,
     Err(_) => {
       let (needs_login, err) = failure_error(&res, out);
@@ -545,7 +477,19 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
     };
   }
 
-  let deployments = crate::commands::deploy::deploy_list(project_id.clone()).await;
+  let deployments = match crate::commands::deploy::deploy_list_checked(&project_id).await {
+    Ok(deployments) => deployments,
+    Err(error) => {
+      let (needs_login, _) = fabric_auth::failure_flags(&error);
+      return FabricDeleteResult {
+        ok: false,
+        deleted: 0,
+        failures: vec![],
+        needs_login: Some(needs_login),
+        error: Some(error),
+      };
+    }
+  };
   let items: Vec<DeleteItem> = deployments
     .iter()
     .filter_map(|d| match (&d.workspace_id, &d.item_id) {
@@ -558,7 +502,17 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
     })
     .collect();
 
-  // Nothing recorded in Fabric (never deployed, or list unavailable) — no-op.
+  if items.len() != deployments.len() {
+    return FabricDeleteResult {
+      ok: false,
+      deleted: 0,
+      failures: vec![],
+      needs_login: None,
+      error: Some("Some recorded deployments have no Fabric workspace/item ID. Nothing was deleted.".into()),
+    };
+  }
+
+  // A successful query confirmed that the project has never been deployed.
   if items.is_empty() {
     return FabricDeleteResult {
       ok: true,
@@ -585,7 +539,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
 
   let prep = (|| -> std::io::Result<(PathBuf, PathBuf)> {
     let script_path = write_helper("fabric-delete.mjs", DELETE_HELPER_SOURCE)?;
-    let items_path = paths::ensure_data_dir()?.join("fabric-delete-items.json");
+    let items_path = paths::ensure_data_dir()?.join(format!("fabric-delete-items-{}.json", uuid::Uuid::new_v4()));
     let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
     std::fs::write(&items_path, json)?;
     Ok((script_path, items_path))
@@ -612,6 +566,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
     RunOptions::timeout(120_000),
   )
   .await;
+  let _ = std::fs::remove_file(&items_path);
 
   if res.not_found {
     return FabricDeleteResult {
@@ -624,7 +579,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
   }
 
   let out = res.stdout.trim();
-  match serde_json::from_str::<FabricDeleteResult>(out) {
+  match fabric_auth::parse_helper_output::<FabricDeleteResult>(&res) {
     Ok(parsed) => parsed,
     Err(_) => {
       let (needs_login, err) = failure_error(&res, out);
@@ -662,11 +617,6 @@ const SHARE_HELPER_SOURCE: &str = include_str!("../services/fabric_share_helper.
 /// Sharing fans out across recipients × (app + models) with a Graph lookup each,
 /// so allow a generous budget before the child is killed.
 const SHARE_TIMEOUT_MS: u64 = 120_000;
-
-/// Parse-failure classification for a missing / signed-out Azure CLI (the share
-/// helper needs an `az` Graph token to resolve recipients to object ids).
-static NEEDS_AZ_RE: Lazy<Regex> =
-  Lazy::new(|| Regex::new(r"(?i)\baz\b|azure cli|az login|az account").unwrap());
 
 /// `fabric.yaml` shape — only the fields we read (keys are camelCase).
 #[derive(Deserialize)]
@@ -830,12 +780,12 @@ pub async fn fabric_share_app(
   }
 
   let out = res.stdout.trim();
-  match serde_json::from_str::<FabricShareResult>(out) {
+  match fabric_auth::parse_helper_output::<FabricShareResult>(&res) {
     Ok(parsed) => parsed,
     Err(_) => {
       // The child died before emitting JSON — classify the raw error.
       let (needs_login, err) = failure_error(&res, out);
-      let needs_az = NEEDS_AZ_RE.is_match(&err);
+      let (_, needs_az) = fabric_auth::failure_flags(&err);
       FabricShareResult {
         ok: false,
         recipients: vec![],
@@ -892,11 +842,11 @@ pub async fn fabric_directory_search(query: String) -> FabricDirectoryResult {
   }
 
   let out = res.stdout.trim();
-  match serde_json::from_str::<FabricDirectoryResult>(out) {
+  match fabric_auth::parse_helper_output::<FabricDirectoryResult>(&res) {
     Ok(parsed) => parsed,
     Err(_) => {
       let (needs_login, err) = failure_error(&res, out);
-      let needs_az = NEEDS_AZ_RE.is_match(&err);
+      let (_, needs_az) = fabric_auth::failure_flags(&err);
       FabricDirectoryResult {
         ok: false,
         people: vec![],
@@ -1039,21 +989,21 @@ mod tests {
 
   #[test]
   fn helper_sources_have_clean_stdout_contract() {
-    assert!(HELPER_SOURCE.contains("getRayfinAuth"));
-    assert!(HELPER_SOURCE.contains("silentOnly: true"));
-    assert!(HELPER_SOURCE.contains("process.stdout.write(JSON.stringify({ ok: true, workspaces }))"));
+    assert!(fabric_auth::HELPER_SOURCE.contains("getRayfinAuth"));
+    assert!(fabric_auth::HELPER_SOURCE.contains("silentOnly: true"));
+    assert!(HELPER_SOURCE.contains("runHelper(main)"));
     // The helper must follow Fabric's 100/page pagination for both lists.
     assert!(HELPER_SOURCE.contains("fetchAllPages"));
-    assert!(HELPER_SOURCE.contains("continuationUri"));
-    assert!(HELPER_SOURCE.contains("continuationToken"));
+    assert!(fabric_auth::HELPER_SOURCE.contains("continuationUri"));
+    assert!(fabric_auth::HELPER_SOURCE.contains("continuationToken"));
     // A workspace with a capacity but no visible SKU is 'unknown' (still eligible).
     assert!(HELPER_SOURCE.contains("'unknown'"));
     // PPU (PP* SKU) must be classified ineligible 'other', not premium.
     assert!(HELPER_SOURCE.contains("s.startsWith('PP')"));
-    assert!(DELETE_HELPER_SOURCE.contains("method: 'DELETE'"));
-    assert!(DELETE_HELPER_SOURCE.contains("res.status === 404"));
+    assert!(DELETE_HELPER_SOURCE.contains("api.delete"));
+    assert!(DELETE_HELPER_SOURCE.contains("status === 404"));
     // Create-workspace helper POSTs a workspace; capacities helper excludes PPU.
-    assert!(CREATE_WS_HELPER_SOURCE.contains("method: 'POST'"));
+    assert!(CREATE_WS_HELPER_SOURCE.contains("api.post"));
     assert!(CAPACITIES_HELPER_SOURCE.contains("s.startsWith('PP')"));
   }
 
@@ -1151,8 +1101,8 @@ profiles:
   fn share_helper_source_contract() {
     // Silent token reuse + the two grant endpoints + Build access right, and a
     // single clean stdout write.
-    assert!(SHARE_HELPER_SOURCE.contains("getRayfinAuth"));
-    assert!(SHARE_HELPER_SOURCE.contains("silentOnly: true"));
+    assert!(SHARE_HELPER_SOURCE.contains("makeRayfinTokens"));
+    assert!(fabric_auth::HELPER_SOURCE.contains("silentOnly: true"));
     assert!(SHARE_HELPER_SOURCE.contains("roleAssignments"));
     assert!(SHARE_HELPER_SOURCE.contains("/datasets/"));
     assert!(SHARE_HELPER_SOURCE.contains("ReadExplore"));

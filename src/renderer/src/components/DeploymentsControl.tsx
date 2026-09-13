@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   DeployResult,
   FabricDeployment,
@@ -8,6 +8,7 @@ import type {
 } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useToast } from '../toast'
+import { authErrorMessage } from '../authErrors'
 import { Codicon } from './icons'
 import DeploymentCreateForm from './DeploymentCreateForm'
 import ShareDeploymentModal from './ShareDeploymentModal'
@@ -26,8 +27,8 @@ interface Props {
   onSwitch: (workspace: string, byId: boolean) => Promise<DeployResult>
   /** Refresh the project list after a rename / switch. */
   onChanged: () => void
-  /** Notify the parent that a Fabric sign-in just succeeded (refresh app auth). */
-  onSignedIn?: () => void
+  /** Refresh app auth after sign-in; rejection prevents retrying with an unverified account. */
+  onSignedIn?: () => Promise<void> | void
 }
 
 /** "F-SKU · F2" style label for a workspace's capacity. */
@@ -68,44 +69,75 @@ export default function DeploymentsControl({
   const [renameValue, setRenameValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [sharing, setSharing] = useState<FabricDeployment | null>(null)
+  const wsBusyRef = useRef(false)
+  const wsSeqRef = useRef(0)
+  const depsSeqRef = useRef(0)
+
+  useEffect(() => () => {
+    ++wsSeqRef.current
+    ++depsSeqRef.current
+    wsBusyRef.current = false
+  }, [])
 
   async function loadDeployments(): Promise<void> {
+    const seq = ++depsSeqRef.current
     setLoadingDeps(true)
     try {
-      setDeployments(await window.api.deploy.list(project.id))
+      const next = await window.api.deploy.list(project.id)
+      if (seq === depsSeqRef.current) setDeployments(next)
+    } catch (reason) {
+      if (seq === depsSeqRef.current) {
+        setDeployments(null)
+        toast.error(authErrorMessage(reason, 'Could not load deployments. Please retry.'), {
+          title: 'Deployment check failed'
+        })
+      }
     } finally {
-      setLoadingDeps(false)
+      if (seq === depsSeqRef.current) setLoadingDeps(false)
     }
   }
 
   async function loadWorkspaces(): Promise<void> {
+    if (wsBusyRef.current) return
+    wsBusyRef.current = true
+    const seq = ++wsSeqRef.current
     setLoadingWs(true)
+    setWsResult(null)
+    let needsLogin = false
     try {
       let res = await window.api.fabric.listWorkspaces()
+      if (seq !== wsSeqRef.current) return
       // A missing/expired Fabric session: re-sign-in once and retry automatically,
       // so an expired token doesn't force the user to manually sign out and back in
       // just to list their workspaces.
       if (!res.ok && res.needsLogin) {
+        needsLogin = true
         setReauthing(true)
-        try {
-          const login = await window.api.auth.loginRayfin()
-          if (login.ok) {
-            onSignedIn?.()
-            res = await window.api.fabric.listWorkspaces()
-          } else {
-            toast.error(login.error ?? 'Fabric sign-in did not complete. Please try again.', {
-              title: 'Sign-in failed'
-            })
-          }
-        } finally {
-          setReauthing(false)
+        const login = await window.api.auth.loginRayfin()
+        if (seq !== wsSeqRef.current) return
+        if (login.ok) {
+          await onSignedIn?.()
+          if (seq !== wsSeqRef.current) return
+          res = await window.api.fabric.listWorkspaces()
+        } else {
+          const error = authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.')
+          res = { ...res, error }
+          toast.error(error, { title: 'Sign-in failed' })
         }
       }
-      setWsResult(res)
-    } catch (err) {
-      setWsResult({ ok: false, error: String(err) })
+      if (seq === wsSeqRef.current) setWsResult(res)
+    } catch (reason) {
+      if (seq === wsSeqRef.current) {
+        const error = authErrorMessage(reason, 'Could not load workspaces. Please retry.')
+        setWsResult({ ok: false, needsLogin, error })
+        toast.error(error, { title: needsLogin ? 'Sign-in failed' : 'Workspace check failed' })
+      }
     } finally {
-      setLoadingWs(false)
+      if (seq === wsSeqRef.current) {
+        wsBusyRef.current = false
+        setLoadingWs(false)
+        setReauthing(false)
+      }
     }
   }
 
@@ -115,10 +147,19 @@ export default function DeploymentsControl({
     if (!open) {
       setCreating(false)
       setRenamingKey(null)
+      setLoadingWs(false)
+      setLoadingDeps(false)
+      setReauthing(false)
       return
     }
     void loadDeployments()
-    if (!wsResult) void loadWorkspaces()
+    // Reopening must not reuse workspaces from an expired or different account.
+    void loadWorkspaces()
+    return () => {
+      ++wsSeqRef.current
+      ++depsSeqRef.current
+      wsBusyRef.current = false
+    }
   }, [open, project.id])
 
   // The deployments popover floats above all HTML; hide the native preview
@@ -163,8 +204,21 @@ export default function DeploymentsControl({
     if (!target || running) return
     setSwitching(target)
     try {
-      await onSwitch(target, byId)
+      const result = await onSwitch(target, byId)
+      if (!result.ok) {
+        toast.error(authErrorMessage(
+          result.error,
+          result.outcome === 'not-signed-in'
+            ? 'Sign in to Fabric before switching deployments.'
+            : 'Could not switch deployments. Please retry.'
+        ), { title: 'Switch failed' })
+        return
+      }
       await loadDeployments()
+    } catch (reason) {
+      toast.error(authErrorMessage(reason, 'Could not switch deployments. Please retry.'), {
+        title: 'Switch failed'
+      })
     } finally {
       setSwitching(null)
     }
@@ -193,19 +247,25 @@ export default function DeploymentsControl({
    * the popover hasn't populated it yet). */
   async function openShareForActive(): Promise<void> {
     if (running) return
-    let deps = deployments
-    if (!deps) {
-      deps = await window.api.deploy.list(project.id)
-      setDeployments(deps)
+    try {
+      let deps = deployments
+      if (!deps) {
+        deps = await window.api.deploy.list(project.id)
+        setDeployments(deps)
+      }
+      const target =
+        deps.find((d) => d.active && d.workspaceId) ?? deps.find((d) => d.workspaceId) ?? null
+      if (!target) {
+        toast.error('Deploy this app to a workspace before sharing.', { title: 'Nothing to share yet' })
+        return
+      }
+      setOpen(false)
+      setSharing(target)
+    } catch (reason) {
+      toast.error(authErrorMessage(reason, 'Could not load the deployment to share. Please retry.'), {
+        title: 'Deployment check failed'
+      })
     }
-    const target =
-      deps.find((d) => d.active && d.workspaceId) ?? deps.find((d) => d.workspaceId) ?? null
-    if (!target) {
-      toast.error('Deploy this app to a workspace before sharing.', { title: 'Nothing to share yet' })
-      return
-    }
-    setOpen(false)
-    setSharing(target)
   }
 
   /** Copy the active deployment's app URL to the clipboard. */
@@ -297,7 +357,7 @@ export default function DeploymentsControl({
               wsResult={wsResult}
               loadingWs={loadingWs}
               reauthing={reauthing}
-              onReload={() => void loadWorkspaces()}
+              onReload={loadWorkspaces}
               onSignedIn={onSignedIn}
               running={running}
               onCancel={() => setCreating(false)}

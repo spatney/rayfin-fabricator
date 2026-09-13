@@ -8801,6 +8801,18 @@ code {
   border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
 }
 
+.copilot-auth-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.copilot-auth-notice .log-console {
+  width: 100%;
+}
+
 /* ------------------------------------------------------------------ *
  * Chat panel
  * ------------------------------------------------------------------ */

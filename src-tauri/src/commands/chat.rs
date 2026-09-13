@@ -28,7 +28,7 @@ use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
 use crate::commands::screenshot;
-use crate::services::copilot::PlanModeHandler;
+use crate::services::copilot::{is_recoverable_session_error, PlanModeHandler};
 use crate::services::diagnostics;
 use crate::services::emit::emit_chat_event;
 use crate::services::history;
@@ -346,6 +346,7 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
       let total = content.chars().count();
       let have = *ctx.streamed.get(&id).unwrap_or(&0);
       if total > have {
+        ctx.saw_activity = true;
         ensure_separator(&id, sink, ctx);
         let rest: String = content.chars().skip(have).collect();
         ctx.push_response(&rest);
@@ -433,7 +434,9 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
         .filter(|s| !s.is_empty())
         .unwrap_or("Copilot reported an error.")
         .to_string();
-      sink(ChatEvent::Error { text: msg.clone() });
+      if ctx.saw_activity || !is_recoverable_session_error(&msg) {
+        sink(ChatEvent::Error { text: msg.clone() });
+      }
       ctx.errored = Some(msg);
       return Flow::Stop;
     }
@@ -610,20 +613,17 @@ pub(crate) async fn run_turn(
   let fab_tools = crate::services::agent_tools::fabricator_tools(app.clone(), project_id.clone());
 
   // Open (or resume) this project's persistent SDK session, reconciling model/effort.
-  let session = match state
-    .copilot
-    .turn_session(
+  let open_turn_session = || state.copilot.turn_session(
       &project_id,
       &ctx_info.cwd,
       &ctx_info.session_id,
       project.model.clone(),
       project.effort.clone(),
-      Some(plan_handler),
-      Some(user_input_handler),
-      fab_tools,
-    )
-    .await
-  {
+      Some(plan_handler.clone()),
+      Some(user_input_handler.clone()),
+      fab_tools.clone(),
+    );
+  let opened = match open_turn_session().await {
     Ok(s) => s,
     Err(e) => {
       emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: e.clone() });
@@ -650,6 +650,12 @@ pub(crate) async fn run_turn(
       return Ok(ChatTurnResult { ok: false, error: Some(e), files_modified: vec![], ran_deploy: false });
     }
   };
+  if opened.recreated && project.copilot_session_id.is_some() {
+    emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
+      text: "The saved Copilot session is no longer available. Started a new session; your Fabricator chat history is still here.".into(),
+    });
+  }
+  let mut session = opened.session;
 
   // Apply the requested mode (Agent / Plan / Autopilot) to the session before
   // sending. Mode is sticky on the session, so this also handles switching modes
@@ -690,12 +696,39 @@ pub(crate) async fn run_turn(
   let mut timed_out = false;
   let mut send_error: Option<String> = None;
   let mut attempt: u32 = 1;
+  let mut reconnect = false;
+  let mut reconnected = false;
 
   loop {
+    if token.is_cancelled() {
+      cancelled = true;
+      break;
+    }
     if attempt > 1 {
       ctx = TurnCtx::new(full);
       cancelled = false;
       timed_out = false;
+    }
+    if reconnect {
+      state.copilot.forget(&project_id).await;
+      match open_turn_session().await {
+        Ok(opened) => {
+          session = opened.session;
+          if opened.recreated {
+            emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
+              text: "Copilot's saved session is unavailable. Started a new session; your Fabricator chat history is still here.".into(),
+            });
+          }
+          if let Err(e) = session.rpc().mode().set(ModeSetRequest { mode: session_mode.clone() }).await {
+            log::warn!("failed to set recovered session mode {session_mode:?}: {e}");
+          }
+        }
+        Err(error) => {
+          send_error = Some(error);
+          break;
+        }
+      }
+      reconnect = false;
     }
 
     // Subscribe before sending so the turn's events can't be missed.
@@ -711,6 +744,20 @@ pub(crate) async fn run_turn(
       opts = opts.with_attachments(attach.clone());
     }
     if let Err(e) = session.send(opts).await {
+      // An explicit rejection means the message was not accepted. Reopen once,
+      // but never replay an ambiguous transport failure or a turn that did work.
+      if !reconnected && is_recoverable_session_error(&e.to_string()) {
+        reconnect = true;
+        reconnected = true;
+        attempt += 1;
+        emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
+          text: "Reconnecting to the Copilot session...".into(),
+        });
+        continue;
+      }
+      if e.is_transport_failure() {
+        state.copilot.invalidate_transport(&project_id, &session).await;
+      }
       send_error = Some(e.to_string());
       break;
     }
@@ -789,11 +836,24 @@ pub(crate) async fn run_turn(
       }
     }
 
+    if !cancelled && !timed_out && !ctx.saw_activity && ctx.lagged_events == 0 && !reconnected
+      && ctx.errored.as_deref().is_some_and(is_recoverable_session_error)
+    {
+      reconnect = true;
+      reconnected = true;
+      attempt += 1;
+      emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
+        text: "Reconnecting to the Copilot session...".into(),
+      });
+      continue;
+    }
+
     // Retry only a transient failure that struck before any work happened —
     // re-sending the same prompt is then side-effect free.
     let transient = !cancelled
       && !timed_out
       && !ctx.saw_activity
+      && ctx.lagged_events == 0
       && attempt < MAX_ATTEMPTS
       && ctx.errored.as_deref().map(|m| TRANSIENT_RE.is_match(m)).unwrap_or(false);
     if !transient {
@@ -810,6 +870,9 @@ pub(crate) async fn run_turn(
   }
 
   screenshot::cleanup(&attachments);
+  if ctx.stream_closed {
+    state.copilot.forget(&project_id).await;
+  }
   state.end_chat(&project_id);
   // Drop this turn's plan route and unblock any handler still awaiting a decision
   // (covers Stop / timeout while an approval card or a structured question is open).
@@ -862,6 +925,11 @@ pub(crate) async fn run_turn(
   }
 
   let ok = ctx.saw_result && ctx.errored.is_none() && !cancelled && !timed_out;
+  if !ctx.saw_activity {
+    if let Some(error) = ctx.errored.as_ref().filter(|e| is_recoverable_session_error(e)) {
+      emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: error.clone() });
+    }
+  }
   // `session.error` already emitted its own Error; cancellation is user-initiated.
   if !ok && !cancelled && ctx.errored.is_none() {
     let detail = if timed_out {
@@ -880,7 +948,7 @@ pub(crate) async fn run_turn(
   );
   Ok(ChatTurnResult {
     ok,
-    error: if ok { None } else { Some("Turn failed.".into()) },
+    error: if ok || cancelled { None } else { ctx.errored.or_else(|| Some("Turn failed.".into())) },
     files_modified: ctx.files_modified,
     ran_deploy: ctx.ran_deploy,
   })
@@ -1230,6 +1298,42 @@ mod tests {
   }
 
   #[test]
+  fn missing_session_before_work_is_deferred_for_recovery() {
+    let mut ctx = TurnCtx::new(false);
+    let mut events = Vec::new();
+    let flow = map_event(
+      "session.error", &json!({"message":"Session not found abc"}),
+      &mut |event| events.push(event), &mut ctx,
+    );
+    assert!(matches!(flow, Flow::Stop));
+    assert_eq!(ctx.errored.as_deref(), Some("Session not found abc"));
+    assert!(events.is_empty());
+  }
+
+  #[test]
+  fn missing_session_after_work_remains_an_error_not_a_replay() {
+    let mut ctx = TurnCtx::new(false);
+    ctx.saw_activity = true;
+    let mut events = Vec::new();
+    map_event(
+      "session.error", &json!({"message":"Session not found abc"}),
+      &mut |event| events.push(event), &mut ctx,
+    );
+    assert!(matches!(&events[..], [ChatEvent::Error { .. }]));
+  }
+
+  #[test]
+  fn a_complete_non_streamed_reply_counts_as_work_before_recovery() {
+    let mut ctx = TurnCtx::new(false);
+    let events = collect(&[
+      ("assistant.message", json!({"messageId":"m1","content":"Work completed"})),
+      ("session.error", json!({"message":"Session not found abc"})),
+    ], &mut ctx);
+    assert!(ctx.saw_activity);
+    assert!(matches!(events.last(), Some(ChatEvent::Error { .. })));
+  }
+
+  #[test]
   fn assistant_message_only_emits_untyped_remainder() {
     let mut ctx = TurnCtx::new(false);
     // 5 chars already streamed as a delta; the full message adds " world".
@@ -1477,4 +1581,3 @@ mod tests {
     assert_eq!(sanitize_export_name("normal-name_1"), "normal-name_1");
   }
 }
-

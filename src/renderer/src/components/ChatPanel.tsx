@@ -19,12 +19,15 @@ import {
   type ChatSegment,
   type ChatToolCall,
   type ChatTurnResult,
+  type CopilotAuthStatus,
   type FileNode,
   type ReasoningEffort,
   type StudioProject,
   type Suggestion
 } from '@shared/ipc'
 import { useCopilotModels } from '@renderer/copilotModels'
+import { isCopilotAuthError } from '../copilotAuth'
+import CopilotSignInNotice from './CopilotSignInNotice'
 import type { PendingShot } from './PreviewPane'
 import Markdown from './Markdown'
 import { MentionText, splitMentions } from './MentionText'
@@ -71,6 +74,8 @@ export interface UIChatMessage extends ChatMessage {
   notice?: string
   /** Transient error from answering a standalone Agent-mode question; not persisted. */
   questionError?: string
+  /** This live turn's authentication error has been resolved by in-app sign-in. */
+  authResolved?: boolean
 }
 
 /**
@@ -146,6 +151,8 @@ interface Props {
   draft?: string
   /** Called whenever the composer draft changes so the parent can persist it. */
   onDraftChange?: (value: string) => void
+  copilotAuth?: CopilotAuthStatus
+  onCopilotAuthChanged?: () => Promise<void> | void
 }
 
 /** Reasoning efforts shown when the engine's per-model list is unavailable
@@ -1500,7 +1507,9 @@ export default function ChatPanel({
   eventsManagedExternally = false,
   onOpenMention,
   draft,
-  onDraftChange
+  onDraftChange,
+  copilotAuth,
+  onCopilotAuthChanged
 }: Props): JSX.Element {
   // The composer draft is seeded from — and mirrored back to — the parent so a
   // typed-but-unsent prompt survives this panel unmounting. Switching to the Code
@@ -1526,6 +1535,14 @@ export default function ChatPanel({
   // (plus the Clear / model-switch locks) silently vanished. Completed history
   // hydrates non-pending, so this never sticks after a turn settles.
   const hasLiveTurn = messages.some((m) => m.role === 'assistant' && m.pending)
+  const latestAssistant = useMemo(
+    () => [...messages].reverse().find((m) => m.role === 'assistant'),
+    [messages]
+  )
+  const authFailed = Boolean(
+    latestAssistant?.turnId && !latestAssistant.authResolved && isCopilotAuthError(latestAssistant.error)
+  )
+  const needsCopilotSignIn = copilotAuth?.signedIn === false || authFailed
   useEffect(() => {
     setSending((s) => (s === hasLiveTurn ? s : hasLiveTurn))
   }, [hasLiveTurn])
@@ -2146,6 +2163,23 @@ export default function ChatPanel({
     }
   }
 
+  function finishTurn(turnId: string, result: ChatTurnResult): void {
+    onChange((previous) =>
+      previous.map((message) =>
+        message.turnId === turnId
+          ? {
+              ...message,
+              pending: false,
+              error: result.ok ? undefined : message.error ?? result.error,
+              tools: settleRunningTools(message.tools, result.ok ? 'success' : 'error'),
+              elapsedMs: message.elapsedMs ?? (message.startedAt ? Date.now() - message.startedAt : undefined)
+            }
+          : message
+      )
+    )
+    onTurnComplete?.(result)
+  }
+
   /** Append a fresh turn and stream its result. Shared by send + retry. */
   async function dispatch(
     displayText: string,
@@ -2190,14 +2224,14 @@ export default function ChatPanel({
         shots.map((s) => s.path),
         sendMode
       )
-      onChange((prev) =>
-        prev.map((m) =>
-          m.turnId === turnId
-            ? { ...m, pending: false, tools: settleRunningTools(m.tools, 'success'), elapsedMs: m.elapsedMs ?? (m.startedAt ? Date.now() - m.startedAt : undefined) }
-            : m
-        )
-      )
-      onTurnComplete?.(result)
+      finishTurn(turnId, result)
+    } catch (error) {
+      finishTurn(turnId, {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+        filesModified: [],
+        ranDeploy: false
+      })
     } finally {
       setSending(false)
     }
@@ -2241,14 +2275,14 @@ export default function ChatPanel({
     onTurnStart?.()
     try {
       const result = await window.api.chat.send(project.id, turnId, user.text, [], activeMode)
-      onChange((prev) =>
-        prev.map((m) =>
-          m.turnId === turnId
-            ? { ...m, pending: false, tools: settleRunningTools(m.tools, 'success'), elapsedMs: m.elapsedMs ?? (m.startedAt ? Date.now() - m.startedAt : undefined) }
-            : m
-        )
-      )
-      onTurnComplete?.(result)
+      finishTurn(turnId, result)
+    } catch (error) {
+      finishTurn(turnId, {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+        filesModified: [],
+        ranDeploy: false
+      })
     } finally {
       setSending(false)
     }
@@ -2698,6 +2732,20 @@ export default function ChatPanel({
       </div>
 
       <div className="chat-scroll" ref={scrollRef} onScroll={onScrollChat}>
+        {needsCopilotSignIn && (
+          <CopilotSignInNotice
+            detail={copilotAuth?.error}
+            disabled={sending}
+            onSignedIn={async () => {
+              await onCopilotAuthChanged?.()
+              onChange((previous) =>
+                previous.map((message) =>
+                  isCopilotAuthError(message.error) ? { ...message, authResolved: true } : message
+                )
+              )
+            }}
+          />
+        )}
         {messages.length === 0 && (
           <div className="chat-welcome">
             <div className="chat-welcome-badge">
@@ -3137,6 +3185,7 @@ export default function ChatPanel({
         <ConnectModelModal
           project={project}
           onClose={() => setConnectOpen(false)}
+          onSignedIn={onCopilotAuthChanged}
           onConnect={(prompt) =>
             setInput((prev) => (prev.trim() ? `${prev}\n\n${prompt}` : prompt))
           }

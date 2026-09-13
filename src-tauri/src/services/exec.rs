@@ -274,13 +274,22 @@ fn use_npm_ci(has_lockfile: bool, has_node_modules: bool) -> bool {
   has_lockfile && !has_node_modules
 }
 
-/// Run one npm install-family command for a project against the warm offline
-/// cache. `subcommand` is `"ci"` or `"install"`; both skip audit/fund and prefer
-/// the cache (belt-and-suspenders with the process-wide `npm_config_*` env).
+fn npm_install_args(subcommand: &str) -> [&str; 4] {
+  [
+    subcommand,
+    if subcommand == "ci" { "--prefer-offline" } else { "--prefer-offline=false" },
+    "--no-audit",
+    "--no-fund",
+  ]
+}
+
+/// Use the warm cache for both install modes, but only skip metadata freshness
+/// checks when `ci` installs a locked tree. `install` may need published versions
+/// that a bundled packument doesn't know about yet.
 async fn run_npm_install(project_dir: &Path, subcommand: &str, on_data: Option<OnData>) -> RunResult {
   run(
     "npm",
-    &[subcommand, "--prefer-offline", "--no-audit", "--no-fund"],
+    &npm_install_args(subcommand),
     RunOptions {
       cwd: Some(project_dir.to_path_buf()),
       on_data,
@@ -319,14 +328,14 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
   }
 
   if let Some(on) = &on_data {
-    on(Stream::System, "Project dependencies are missing; installing from the offline cache...\n");
+    on(Stream::System, "Project dependencies are missing; installing with the warm npm cache...\n");
   }
 
   // Fresh scaffold with a committed lockfile → `npm ci` is fastest and fully
   // deterministic (skips resolution, and every locked tarball is in the warm
   // cache). Otherwise (no lockfile, or a partial `node_modules`) fall back to a
-  // cache-backed `npm install`. Both prefer the offline cache and skip the slow
-  // audit/fund passes.
+  // cache-backed `npm install`, allowing stale registry metadata to refresh.
+  // Both skip the slow audit/fund passes.
   let use_ci = use_npm_ci(
     project_dir.join("package-lock.json").is_file(),
     project_dir.join("node_modules").exists(),
@@ -667,5 +676,17 @@ mod tests {
     // strict about sync); let install reconcile instead.
     assert!(!use_npm_ci(true, true));
     assert!(!use_npm_ci(false, true));
+  }
+
+  #[test]
+  fn npm_install_only_prefers_offline_for_a_locked_tree() {
+    assert_eq!(
+      npm_install_args("ci"),
+      ["ci", "--prefer-offline", "--no-audit", "--no-fund"]
+    );
+    assert_eq!(
+      npm_install_args("install"),
+      ["install", "--prefer-offline=false", "--no-audit", "--no-fund"]
+    );
   }
 }

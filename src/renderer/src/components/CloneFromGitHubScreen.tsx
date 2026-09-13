@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GithubRepo, GithubStatus, InstallResult } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
+import { authErrorMessage } from '../authErrors'
 
 interface Props {
   /** Abandon the flow (no clone happened). */
@@ -10,6 +11,7 @@ interface Props {
 }
 
 const INITIAL_REPO_RENDER_COUNT = 40
+const LOGIN_WAIT_MS = 10 * 60 * 1000
 
 /** Case-insensitive match of a repo against the filter box (name / desc / language). */
 function matches(repo: GithubRepo, query: string): boolean {
@@ -20,10 +22,6 @@ function matches(repo: GithubRepo, query: string): boolean {
     (repo.description ?? '').toLowerCase().includes(q) ||
     (repo.primaryLanguage ?? '').toLowerCase().includes(q)
   )
-}
-
-function errorMessage(reason: unknown, fallback: string): string {
-  return reason instanceof Error && reason.message ? reason.message : fallback
 }
 
 type ClonePhase = 'cloning' | 'verifying' | 'installing' | 'opening'
@@ -137,7 +135,13 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
 
   // sign-in
   const [waitingLogin, setWaitingLogin] = useState(false)
+  const [startingLogin, setStartingLogin] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
+  const loginBusyRef = useRef(false)
+  const loginSeqRef = useRef(0)
+  const statusSeqRef = useRef(0)
+  const reposSeqRef = useRef(0)
+  const statusRef = useRef<GithubStatus | null>(null)
 
   // repos
   const [repos, setRepos] = useState<GithubRepo[] | null>(null)
@@ -158,30 +162,51 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
   const [cloneStartedAt, setCloneStartedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
-  const busy = checking || installing || cloning
+  const busy = checking || installing || cloning || startingLogin
 
-  async function recheck(): Promise<void> {
+  function clearRepos(): void {
+    ++reposSeqRef.current
+    setRepos(null)
+    setReposError(null)
+    setSelected(null)
+    setLoadingRepos(false)
+  }
+
+  async function recheck(): Promise<GithubStatus | null> {
+    const seq = ++statusSeqRef.current
     setChecking(true)
     setStatusError(null)
     try {
       const next = await window.api.github.status()
-      setStatus(next)
-      if (!next.signedIn) {
-        setRepos(null)
-        setReposError(null)
-        setSelected(null)
+      if (seq !== statusSeqRef.current) return null
+      if (!next.signedIn || next.user !== statusRef.current?.user) {
+        clearRepos()
       }
+      statusRef.current = next
+      setStatus(next)
+      if (next.signedIn || !next.ghInstalled) setWaitingLogin(false)
+      return next
     } catch (reason) {
+      if (seq !== statusSeqRef.current) return null
+      statusRef.current = null
       setStatus(null)
-      setStatusError(errorMessage(reason, 'Could not check the GitHub CLI. Please try again.'))
+      clearRepos()
+      setWaitingLogin(false)
+      setStatusError(authErrorMessage(reason, 'Could not check the GitHub CLI. Please try again.'))
+      return null
     } finally {
-      setChecking(false)
+      if (seq === statusSeqRef.current) setChecking(false)
     }
   }
 
   // Initial gh + auth probe.
   useEffect(() => {
     void recheck()
+    return () => {
+      ++statusSeqRef.current
+      ++reposSeqRef.current
+      ++loginSeqRef.current
+    }
   }, [])
 
   // Esc abandons the flow when nothing is in flight.
@@ -205,35 +230,49 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
   useEffect(() => {
     if (!waitingLogin) return
     let cancelled = false
+    let id: ReturnType<typeof setTimeout>
+    const deadline = Date.now() + LOGIN_WAIT_MS
     const tick = async (): Promise<void> => {
-      const next = await window.api.github.status().catch(() => null)
-      if (cancelled || !next) return
-      setStatus(next)
-      if (next.signedIn) setWaitingLogin(false)
+      if (cancelled) return
+      if (Date.now() >= deadline) {
+        setWaitingLogin(false)
+        setLoginError('GitHub sign-in was not detected. Try again, or finish signing in and click Re-check.')
+        return
+      }
+      await recheck()
+      if (!cancelled) id = setTimeout(() => void tick(), 2000)
     }
-    const id = window.setInterval(() => void tick(), 2000)
+    id = setTimeout(() => void tick(), 2000)
     return () => {
       cancelled = true
-      window.clearInterval(id)
+      clearTimeout(id)
+      ++statusSeqRef.current
     }
   }, [waitingLogin])
 
   async function loadRepos(): Promise<void> {
+    const seq = ++reposSeqRef.current
     setLoadingRepos(true)
     setReposError(null)
     try {
       const res = await window.api.github.listRepos()
+      if (seq !== reposSeqRef.current) return
       if (res.ok) {
         setRepos(res.repos)
       } else {
         setRepos([])
+        setSelected(null)
         setReposError(res.error ?? 'Could not load your repositories.')
+        await recheck()
       }
     } catch (reason) {
+      if (seq !== reposSeqRef.current) return
       setRepos([])
-      setReposError(errorMessage(reason, 'Could not load your repositories.'))
+      setSelected(null)
+      setReposError(authErrorMessage(reason, 'Could not load your repositories.'))
+      await recheck()
     } finally {
-      setLoadingRepos(false)
+      if (seq === reposSeqRef.current) setLoadingRepos(false)
     }
   }
 
@@ -265,31 +304,53 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       setInstallResult(res)
       // An in-process install that needs no relaunch (rare) — re-probe immediately.
       if (res.ok && !res.requiresRelaunch) await recheck()
+    } catch (reason) {
+      setInstallResult({
+        ok: false,
+        exitCode: null,
+        error: authErrorMessage(reason, 'Could not install the GitHub CLI. Please retry.')
+      })
     } finally {
       setInstalling(false)
     }
   }
 
   async function beginLogin(): Promise<void> {
+    if (loginBusyRef.current || busy || waitingLogin) return
+    loginBusyRef.current = true
+    const seq = ++loginSeqRef.current
+    setStartingLogin(true)
     setLoginError(null)
     try {
       const res = await window.api.github.login()
+      if (seq !== loginSeqRef.current) return
       if (!res.ok) {
         setLoginError(
-          'Could not open a terminal automatically. Run "gh auth login" in your terminal, then click Re-check.'
+          authErrorMessage(
+            res.error,
+            'Could not open a terminal automatically. Run "gh auth login" in your terminal, then click Re-check.'
+          )
         )
         return
       }
       setWaitingLogin(true)
     } catch (reason) {
-      setLoginError(errorMessage(reason, 'Could not start GitHub sign-in. Please try again.'))
+      if (seq === loginSeqRef.current) {
+        setLoginError(authErrorMessage(reason, 'Could not start GitHub sign-in. Please try again.'))
+      }
+    } finally {
+      if (seq === loginSeqRef.current) {
+        loginBusyRef.current = false
+        setStartingLogin(false)
+      }
     }
   }
 
   const cloneTarget = (manual.trim() || selected || '').trim()
 
   async function clone(): Promise<void> {
-    if (!cloneTarget) return
+    if (!cloneTarget || busy || waitingLogin || !statusRef.current?.signedIn) return
+    const user = statusRef.current.user
     setCloning(true)
     setCloneError(null)
     setCloneLog('')
@@ -297,16 +358,24 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
     setCloneStartedAt(Date.now())
     setNow(Date.now())
     try {
+      const verified = await recheck()
+      if (!verified?.signedIn) return
+      if (!manual.trim() && verified.user !== user) {
+        setCloneError('Your GitHub account changed. Choose a repository again before cloning.')
+        return
+      }
       const res = await window.api.github.clone(cloneTarget)
       if (res.ok) {
         onCloned()
       } else {
         setCloneError(res.error ?? 'Clone failed.')
         setShowCloneLog(true)
+        await recheck()
       }
     } catch (reason) {
-      setCloneError(errorMessage(reason, 'Clone failed. Please try again.'))
+      setCloneError(authErrorMessage(reason, 'Clone failed. Please try again.'))
       setShowCloneLog(true)
+      await recheck()
     } finally {
       setCloning(false)
     }
@@ -401,7 +470,12 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                 <h2>Could not check GitHub</h2>
                 <p>{statusError}</p>
               </div>
-              <button type="button" className="btn btn--sm" onClick={() => void recheck()}>
+              <button
+                type="button"
+                className="btn btn--sm"
+                disabled={checking || startingLogin}
+                onClick={() => void recheck()}
+              >
                 Try again
               </button>
             </section>
@@ -419,7 +493,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                   <button
                     type="button"
                     className="btn btn--primary btn--sm"
-                    disabled={installing}
+                    disabled={installing || checking}
                     onClick={() => void installGh()}
                   >
                     {installing ? 'Installing...' : 'Install GitHub CLI'}
@@ -436,7 +510,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                     <button
                       type="button"
                       className="btn btn--sm"
-                      disabled={installing}
+                      disabled={installing || checking}
                       onClick={() => void recheck()}
                     >
                       Re-check
@@ -454,6 +528,11 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                   <p className="field-hint">
                     The installer was opened in your browser. After installing, click Restart.
                   </p>
+                )}
+                {installResult && !installResult.ok && (
+                  <div className="alert alert--error" role="alert">
+                    {installResult.error || 'Could not install the GitHub CLI. Please retry.'}
+                  </div>
                 )}
                 {(installing || installLog) && (
                   <pre className="log-console log-console--sm clone-install-log">
@@ -476,13 +555,22 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                       Fabricator will detect your sign-in.
                     </p>
                     <div className="clone-state-actions">
-                      <button type="button" className="btn btn--sm" onClick={() => void recheck()}>
+                      <button
+                        type="button"
+                        className="btn btn--sm"
+                        disabled={checking}
+                        onClick={() => void recheck()}
+                      >
                         Re-check now
                       </button>
                       <button
                         type="button"
                         className="link-btn"
-                        onClick={() => setWaitingLogin(false)}
+                        onClick={() => {
+                          ++statusSeqRef.current
+                          setChecking(false)
+                          setWaitingLogin(false)
+                        }}
                       >
                         Cancel
                       </button>
@@ -499,17 +587,23 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                       <button
                         type="button"
                         className="btn btn--primary btn--sm"
+                        disabled={startingLogin || checking}
                         onClick={() => void beginLogin()}
                       >
-                        Sign in with GitHub
+                        {startingLogin ? 'Opening sign-in…' : 'Sign in with GitHub'}
                       </button>
-                      <button type="button" className="btn btn--sm" onClick={() => void recheck()}>
+                      <button
+                        type="button"
+                        className="btn btn--sm"
+                        disabled={checking || startingLogin}
+                        onClick={() => void recheck()}
+                      >
                         Re-check
                       </button>
                     </div>
                   </>
                 )}
-                {loginError && <div className="alert alert--error">{loginError}</div>}
+                {loginError && <div className="alert alert--error" role="alert">{loginError}</div>}
               </div>
             </section>
           )}
@@ -757,9 +851,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
                 </div>
               )}
 
-              {cloneError && <div className="alert alert--error">{cloneError}</div>}
             </>
           )}
+          {cloneError && <div className="alert alert--error" role="alert">{cloneError}</div>}
         </div>
 
         <footer className="create-foot clone-foot">
@@ -770,7 +864,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
             <button
               className="btn btn--primary"
               onClick={() => void clone()}
-              disabled={cloning || !cloneTarget}
+              disabled={busy || waitingLogin || !cloneTarget}
             >
               {cloning ? 'Cloning...' : 'Clone and open'}
             </button>

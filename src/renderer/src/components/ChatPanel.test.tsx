@@ -22,6 +22,7 @@ const PLACEHOLDER = /Message Fabricator about/i
 
 interface InstalledApi {
   onChatEvent: ReturnType<typeof vi.fn>
+  auth: { loginCopilot: ReturnType<typeof vi.fn> }
   chat: {
     send: ReturnType<typeof vi.fn>
     steer: ReturnType<typeof vi.fn>
@@ -35,6 +36,8 @@ interface InstalledApi {
 function installApi(): InstalledApi {
   const api = {
     onChatEvent: vi.fn(() => () => {}),
+    onProcLog: vi.fn(() => () => {}),
+    auth: { loginCopilot: vi.fn(() => Promise.resolve({ ok: true, exitCode: 0 })) },
     chat: {
       suggest: vi.fn(() => Promise.resolve({ ok: false, suggestions: [] })),
       cancelSuggest: vi.fn(() => Promise.resolve(true)),
@@ -171,6 +174,46 @@ afterEach(() => {
     cancelRaf = undefined
   }
   delete (window as unknown as { api?: unknown }).api
+})
+
+function AuthHarness({ onAuthChanged }: { onAuthChanged?: () => Promise<void> }): JSX.Element {
+  const [messages, setMessages] = useState<UIChatMessage[]>([])
+  const [draft, setDraft] = useState('')
+  return (
+    <ChatPanel project={makeProject('p1')} messages={messages} onChange={setMessages}
+      draft={draft} onDraftChange={setDraft} onCopilotAuthChanged={onAuthChanged} />
+  )
+}
+
+describe('ChatPanel authentication recovery', () => {
+  it('handles a failed result without streamed events and signs in without losing drafts or replaying', async () => {
+    const api = installApi()
+    api.chat.send.mockResolvedValue({ ok: false, error: 'Not logged in', filesModified: [], ranDeploy: false })
+    const onAuthChanged = vi.fn(async () => {})
+    render(<AuthHarness onAuthChanged={onAuthChanged} />)
+    const composer = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    fireEvent.change(composer, { target: { value: 'Build my dashboard' } })
+    fireEvent.keyDown(composer, { key: 'Enter' })
+    const signIn = await screen.findByRole('button', { name: 'Sign in to Copilot' })
+    fireEvent.change(composer, { target: { value: 'Keep this unsent draft' } })
+    fireEvent.click(signIn)
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sign in to Copilot' })).toBeNull())
+    expect(onAuthChanged).toHaveBeenCalledOnce()
+    expect(api.chat.send).toHaveBeenCalledOnce()
+    expect(composer.value).toBe('Keep this unsent draft')
+    expect(screen.getByText('Build my dashboard')).toBeTruthy()
+  })
+
+  it('settles a rejected send and exposes the in-app sign-in action', async () => {
+    const api = installApi()
+    api.chat.send.mockRejectedValue(new Error('Not authenticated'))
+    render(<AuthHarness />)
+    const composer = screen.getByPlaceholderText(PLACEHOLDER)
+    fireEvent.change(composer, { target: { value: 'Build my dashboard' } })
+    fireEvent.keyDown(composer, { key: 'Enter' })
+    await screen.findByText('Not authenticated')
+    expect(screen.getByRole('button', { name: 'Sign in to Copilot' })).toBeTruthy()
+  })
 })
 
 describe('ChatPanel composer draft', () => {

@@ -28,6 +28,22 @@ const CLONE_CHANNEL: &str = "clone:project";
 const REPO_LIST_FIELDS: &str =
   "nameWithOwner,name,description,visibility,updatedAt,url,isPrivate,isFork,primaryLanguage";
 
+const AUTH_PROBE_ARGS: &[&str] =
+  &["api", "--hostname", "github.com", "user", "--jq", "{login: .login, id: .id}"];
+
+fn gh_options(timeout_ms: u64) -> RunOptions {
+  RunOptions {
+    env: vec![
+      ("GH_HOST".into(), "github.com".into()),
+      ("GH_PROMPT_DISABLED".into(), "1".into()),
+      ("GIT_TERMINAL_PROMPT".into(), "0".into()),
+      ("GCM_INTERACTIVE".into(), "Never".into()),
+    ],
+    timeout_ms: Some(timeout_ms),
+    ..Default::default()
+  }
+}
+
 fn err(msg: impl Into<String>) -> ProjectActionResult {
   ProjectActionResult {
     ok: false,
@@ -43,36 +59,32 @@ fn say(on: &OnData, msg: &str) {
 /* --------------------------------- status --------------------------------- */
 
 static AUTH_USER_RE: Lazy<Regex> =
-  Lazy::new(|| Regex::new(r"(?i)\b(?:account|as)\s+([A-Za-z0-9][A-Za-z0-9-]*)").unwrap());
+  Lazy::new(|| Regex::new(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$").unwrap());
 
-/// Extract the signed-in GitHub username from `gh auth status` output, tolerating
-/// both the current ("Logged in to github.com account <user>") and older
-/// ("Logged in to github.com as <user>") phrasings.
-fn parse_auth_user(text: &str) -> Option<String> {
-  AUTH_USER_RE
-    .captures(text)
-    .and_then(|c| c.get(1))
-    .map(|m| m.as_str().to_string())
+#[derive(Deserialize)]
+struct ApiIdentity {
+  id: u64,
+  login: String,
 }
 
-/// Report whether `gh` is installed and whether the user is signed in.
+fn status_from_result(res: &exec::RunResult) -> GithubStatus {
+  let identity = serde_json::from_str::<ApiIdentity>(&res.stdout)
+    .ok()
+    .filter(|identity| identity.id > 0 && AUTH_USER_RE.is_match(&identity.login));
+  let signed_in = res.ok && !res.not_found && identity.is_some();
+  GithubStatus {
+    gh_installed: !res.not_found,
+    signed_in,
+    user: if signed_in { identity.map(|identity| identity.login) } else { None },
+  }
+}
+
+/// Verify the active github.com credential with a read-only API request.
+/// `gh auth status` can describe a different host or an inactive account.
 #[tauri::command]
 pub async fn github_status() -> GithubStatus {
-  let res = exec::run("gh", &["auth", "status"], RunOptions::timeout(20_000)).await;
-  if res.not_found {
-    return GithubStatus {
-      gh_installed: false,
-      signed_in: false,
-      user: None,
-    };
-  }
-  // `gh auth status` exits 0 only when signed in to at least one host.
-  let text = format!("{}\n{}", res.stdout, res.stderr);
-  GithubStatus {
-    gh_installed: true,
-    signed_in: res.ok,
-    user: if res.ok { parse_auth_user(&text) } else { None },
-  }
+  let res = exec::run("gh", AUTH_PROBE_ARGS, gh_options(20_000)).await;
+  status_from_result(&res)
 }
 
 /* ---------------------------------- login --------------------------------- */
@@ -93,11 +105,22 @@ pub fn github_login() -> ProcResult {
       error: Some("The GitHub CLI (gh) is not installed or not on PATH.".into()),
     };
   }
+  for name in ["GH_TOKEN", "GITHUB_TOKEN"] {
+    if std::env::var_os(name).is_some_and(|value| !value.is_empty()) {
+      return ProcResult {
+        ok: false,
+        exit_code: None,
+        error: Some(format!(
+          "{name} overrides the GitHub CLI's saved credentials. Update or unset that environment variable before signing in; browser sign-in cannot replace it."
+        )),
+      };
+    }
+  }
   let ok = launch_login_terminal();
   ProcResult {
     ok,
     exit_code: None,
-    error: None,
+    error: (!ok).then(|| "Could not open a terminal for GitHub sign-in. Run `gh auth login --hostname github.com` in your terminal.".into()),
   }
 }
 
@@ -136,6 +159,25 @@ fn launch_login_terminal() -> bool {
 }
 
 /* --------------------------------- list ----------------------------------- */
+
+static AUTH_FAILURE_RE: Lazy<Regex> = Lazy::new(|| {
+  Regex::new(r"(?i)\bHTTP[ /:]*(?:401)\b|\bbad credentials\b|\brequires authentication\b|\bauthentication (?:failed|required)\b|\bgh auth login\b|\binvalid (?:oauth |authentication )?token\b").unwrap()
+});
+
+fn command_error(operation: &str, res: &exec::RunResult) -> String {
+  if res.exit_code == Some(4) || AUTH_FAILURE_RE.is_match(&res.stderr) {
+    return format!("{operation}: GitHub authentication is required or has expired. Sign in to github.com again.");
+  }
+  let detail = res.stderr.trim();
+  if detail.is_empty() {
+    format!(
+      "{operation} (exit {}).",
+      res.exit_code.map(|code| code.to_string()).unwrap_or_else(|| "unknown".into())
+    )
+  } else {
+    format!("{operation}: {detail}")
+  }
+}
 
 #[derive(Deserialize)]
 struct RawLang {
@@ -193,7 +235,7 @@ pub async fn github_list_repos() -> GithubReposResult {
   let res = exec::run(
     "gh",
     &["repo", "list", "--json", REPO_LIST_FIELDS, "--limit", "200"],
-    RunOptions::timeout(30_000),
+    gh_options(30_000),
   )
   .await;
   if res.not_found {
@@ -204,15 +246,9 @@ pub async fn github_list_repos() -> GithubReposResult {
     };
   }
   if !res.ok {
-    let detail = res.stderr.trim();
-    let msg = if detail.is_empty() {
-      "Could not list your repositories. Make sure you're signed in to GitHub.".to_string()
-    } else {
-      format!("Could not list your repositories: {detail}")
-    };
     return GithubReposResult {
       ok: false,
-      error: Some(msg),
+      error: Some(command_error("Could not list your repositories", &res)),
       repos: vec![],
     };
   }
@@ -232,37 +268,35 @@ pub async fn github_list_repos() -> GithubReposResult {
 
 /* --------------------------------- clone ---------------------------------- */
 
-/// Extract the repo URL's `name` component (group 2), tolerating a `.git` suffix,
-/// a trailing slash, and query/fragment tails. Matches `https://…` and `git@…`.
+/// Accept only github.com repositories, never credentials or arbitrary hosts.
 static GH_URL_RE: Lazy<Regex> = Lazy::new(|| {
-  Regex::new(r"(?i)github\.com[/:]([^/\s]+)/([^/\s#?]+?)(?:\.git)?/?(?:[#?].*)?$").unwrap()
+  Regex::new(r"(?i)^(?:https://github\.com(?::443)?/|git@github\.com:|ssh://git@github\.com/)?([a-z0-9][a-z0-9-]{0,38})/([a-z0-9_.-]{1,100}?)(?:\.git)?/?(?:[#?].*)?$").unwrap()
 });
 
 /// Reject anything that isn't a safe single path segment (no separators / dot dirs).
 fn sanitize_repo_name(name: &str) -> Option<String> {
-  let n = name.trim().trim_end_matches(".git").trim();
-  if n.is_empty() || n == "." || n == ".." || n.contains('/') || n.contains('\\') {
+  let n = name.trim();
+  if n.is_empty() || n == "." || n == ".." || n.eq_ignore_ascii_case(".git") || n.ends_with('.') || n.contains('/') || n.contains('\\') {
+    return None;
+  }
+  let stem = n.split('.').next()?.to_ascii_uppercase();
+  if matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+    || (stem.len() == 4
+      && (stem.starts_with("COM") || stem.starts_with("LPT"))
+      && matches!(stem.as_bytes()[3], b'1'..=b'9'))
+  {
     return None;
   }
   Some(n.to_string())
 }
 
-/// Derive the destination folder name for a clone input, which may be a full
-/// GitHub URL, an `git@github.com:owner/name.git` SCP form, or an `owner/name`
-/// shorthand. Returns `None` for inputs that aren't cloneable (e.g. a bare name).
-fn clone_target_name(input: &str) -> Option<String> {
-  let s = input.trim();
-  if s.is_empty() {
-    return None;
-  }
-  if let Some(caps) = GH_URL_RE.captures(s) {
-    return sanitize_repo_name(caps.get(2)?.as_str());
-  }
-  if s.contains('/') {
-    let last = s.rsplit('/').next()?.trim();
-    return sanitize_repo_name(last);
-  }
-  None
+/// Normalize URL/SSH/shorthand inputs to HTTPS so clone uses the same gh
+/// credential as the status and repository-list probes, not a separate SSH key.
+fn clone_target(input: &str) -> Option<(String, String)> {
+  let caps = GH_URL_RE.captures(input.trim())?;
+  let owner = caps.get(1)?.as_str();
+  let name = sanitize_repo_name(caps.get(2)?.as_str())?;
+  Some((format!("https://github.com/{owner}/{name}.git"), name))
 }
 
 /// Clone a repository (`owner/name` or a GitHub URL) into the workspace root,
@@ -275,7 +309,7 @@ fn clone_target_name(input: &str) -> Option<String> {
 pub async fn github_clone(app: AppHandle, input: String) -> ProjectActionResult {
   let on = proc_streamer(&app, CLONE_CHANNEL);
 
-  let Some(target_name) = clone_target_name(&input) else {
+  let Some((repository, target_name)) = clone_target(&input) else {
     return err("Enter a repository as owner/name or a GitHub URL.");
   };
 
@@ -293,15 +327,14 @@ pub async fn github_clone(app: AppHandle, input: String) -> ProjectActionResult 
   }
   let dir_str = dir.to_string_lossy().to_string();
 
-  say(&on, &format!("Cloning {} …\n", input.trim()));
+  say(&on, &format!("Cloning {repository} …\n"));
   let res = exec::run(
     "gh",
-    &["repo", "clone", input.trim(), &dir_str],
+    &["repo", "clone", &repository, &dir_str],
     RunOptions {
       cwd: Some(Path::new(&root).to_path_buf()),
       on_data: Some(on.clone()),
-      timeout_ms: Some(300_000),
-      ..Default::default()
+      ..gh_options(300_000)
     },
   )
   .await;
@@ -312,16 +345,7 @@ pub async fn github_clone(app: AppHandle, input: String) -> ProjectActionResult 
   if !res.ok {
     // Remove any partial checkout so a retry starts clean (dir didn't exist before).
     let _ = std::fs::remove_dir_all(&dir);
-    let code = res
-      .exit_code
-      .map(|c| c.to_string())
-      .unwrap_or_else(|| "unknown".into());
-    let detail = res.stderr.trim();
-    return err(if detail.is_empty() {
-      format!("Clone failed (exit code {code}).")
-    } else {
-      format!("Clone failed (exit code {code}): {detail}")
-    });
+    return err(command_error("Clone failed", &res));
   }
 
   say(&on, "\nVerifying Rayfin project…\n");
@@ -374,12 +398,52 @@ mod tests {
   use super::*;
 
   #[test]
-  fn parse_auth_user_handles_both_phrasings() {
-    let current = "github.com\n  ✓ Logged in to github.com account octocat (keyring)\n";
-    assert_eq!(parse_auth_user(current), Some("octocat".to_string()));
-    let older = "✓ Logged in to github.com as hub-user (oauth_token)\n";
-    assert_eq!(parse_auth_user(older), Some("hub-user".to_string()));
-    assert_eq!(parse_auth_user("You are not logged into any GitHub hosts."), None);
+  fn status_requires_a_verified_api_identity() {
+    let mut res = exec::RunResult {
+      ok: true,
+      exit_code: Some(0),
+      stdout: r#"{"login":"octocat","id":1}"#.into(),
+      stderr: String::new(),
+      not_found: false,
+    };
+    assert!(status_from_result(&res).signed_in);
+    assert_eq!(status_from_result(&res).user.as_deref(), Some("octocat"));
+    for text in ["", "null", "Logged in to github.example account octocat", "{}", r#"{"login":null,"id":1}"#, r#"{"login":"octocat","id":0}"#] {
+      res.stdout = text.into();
+      assert!(!status_from_result(&res).signed_in);
+    }
+    res.stdout = r#"{"login":"octocat","id":1}"#.into();
+    res.ok = false;
+    assert!(!status_from_result(&res).signed_in);
+    assert!(status_from_result(&res).user.is_none());
+    res.not_found = true;
+    assert!(!status_from_result(&res).gh_installed);
+  }
+
+  #[test]
+  fn gh_operations_pin_host_and_disable_interactive_prompts() {
+    assert!(AUTH_PROBE_ARGS.windows(2).any(|args| args == ["--hostname", "github.com"]));
+    let options = gh_options(1000);
+    assert!(options.env.contains(&("GH_HOST".into(), "github.com".into())));
+    assert!(options.env.contains(&("GH_PROMPT_DISABLED".into(), "1".into())));
+    assert!(options.env.contains(&("GIT_TERMINAL_PROMPT".into(), "0".into())));
+  }
+
+  #[test]
+  fn expired_credentials_are_not_permission_errors() {
+    let mut res = exec::RunResult {
+      ok: false,
+      exit_code: Some(1),
+      stdout: String::new(),
+      stderr: "HTTP 401: Bad credentials".into(),
+      not_found: false,
+    };
+    assert!(command_error("List failed", &res).contains("Sign in to github.com again"));
+    res.stderr = "HTTP 403: Resource not accessible by integration".into();
+    assert!(!command_error("List failed", &res).contains("Sign in"));
+    res.stderr.clear();
+    res.exit_code = Some(4);
+    assert!(command_error("Clone failed", &res).contains("Sign in"));
   }
 
   #[test]
@@ -412,6 +476,7 @@ mod tests {
 
   #[test]
   fn clone_target_name_derives_folder_from_various_forms() {
+    let clone_target_name = |input| clone_target(input).map(|(_, name)| name);
     assert_eq!(clone_target_name("octocat/Hello-World"), Some("Hello-World".into()));
     assert_eq!(
       clone_target_name("https://github.com/octocat/Hello-World"),
@@ -434,5 +499,28 @@ mod tests {
     assert_eq!(clone_target_name(""), None);
     assert_eq!(clone_target_name("   "), None);
     assert_eq!(clone_target_name("owner/"), None);
+  }
+
+  #[test]
+  fn clone_rejects_other_hosts_credentials_and_unsafe_destinations() {
+    for input in [
+      "https://github.com.evil.invalid/owner/repo",
+      "https://other.invalid/github.com/owner/repo",
+      "https://user:synthetic@github.com/owner/repo",
+      "http://github.com/owner/repo",
+      "--config/option",
+      "owner/../repo",
+      "owner/.git",
+      "owner/CON",
+      "owner/NUL.txt",
+      "owner/repo.",
+      "owner/repo:stream",
+    ] {
+      assert!(clone_target(input).is_none(), "{input}");
+    }
+    assert_eq!(
+      clone_target("git@github.com:octocat/app.git"),
+      Some(("https://github.com/octocat/app.git".into(), "app".into()))
+    );
   }
 }

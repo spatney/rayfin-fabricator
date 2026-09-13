@@ -10,6 +10,7 @@ interface Props {
   refreshKey: number
   onOpenFile: (path: string) => void
   onSendToChat: (display: string, prompt: string, stage?: boolean) => void
+  onSignedIn?: () => Promise<void> | void
 }
 
 type ViewChoice = 'data' | 'semantic'
@@ -38,7 +39,8 @@ export default function ModelTab({
   project,
   refreshKey,
   onOpenFile,
-  onSendToChat
+  onSendToChat,
+  onSignedIn
 }: Props): JSX.Element {
   const [detecting, setDetecting] = useState(true)
   const [dataModel, setDataModel] = useState<DataModel | null>(null)
@@ -92,7 +94,12 @@ export default function ModelTab({
 
   const view =
     active === 'semantic' ? (
-      <SemanticModelView projectId={project.id} models={semanticModels} refreshKey={refreshKey} />
+      <SemanticModelView
+        projectId={project.id}
+        models={semanticModels}
+        refreshKey={refreshKey}
+        onSignedIn={onSignedIn}
+      />
     ) : (
       <ModelView
         project={project}

@@ -25,9 +25,15 @@ import {
 } from '../model/semanticModel'
 import type { SemanticModelRef } from '../model/fabricConfig'
 import { tokenizeDax } from '../model/daxHighlight'
-import { getCachedSchema, schemaCacheKey, setCachedSchema } from '../model/schemaCache'
+import {
+  getCachedSchema,
+  invalidateCachedSchema,
+  schemaCacheKey,
+  setCachedSchema
+} from '../model/schemaCache'
 import { useSuppressPreview } from '../overlay'
 import { useToast } from '../toast'
+import { authErrorMessage } from '../authErrors'
 import { Codicon } from './icons'
 
 interface Props {
@@ -37,6 +43,8 @@ interface Props {
   models: SemanticModelRef[]
   /** Bumped by the parent when the model may have changed (e.g. after a deploy). */
   refreshKey: number
+  /** Refresh app auth after sign-in; rejection prevents retrying the schema query. */
+  onSignedIn?: () => Promise<void> | void
 }
 
 interface XY {
@@ -135,14 +143,29 @@ function loadStoredPositions(projectId: string): Record<string, XY> {
   }
 }
 
-export default function SemanticModelView({ projectId, models, refreshKey }: Props): JSX.Element {
+export default function SemanticModelView({
+  projectId,
+  models,
+  refreshKey,
+  onSignedIn
+}: Props): JSX.Element {
   const [selectedIdx, setSelectedIdx] = useState(0)
   const selected = models[Math.min(selectedIdx, models.length - 1)] ?? models[0]
 
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [reloadTick, setReloadTick] = useState(0)
   const [reauthing, setReauthing] = useState(false)
+  const loginSeqRef = useRef(0)
+  const loginBusyRef = useRef(false)
   const toast = useToast()
+
+  useEffect(() => {
+    loginBusyRef.current = false
+    setReauthing(false)
+    return () => {
+      ++loginSeqRef.current
+    }
+  }, [projectId, selected?.workspaceId, selected?.itemId])
 
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState<string | null>(null)
@@ -222,12 +245,18 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
           const built = buildSemanticModel(res)
           setCachedSchema(key, built)
           setState({ status: 'ok', model: built })
-        } else if (res.needsAz) setState({ status: 'needs-az' })
-        else if (res.needsLogin) setState({ status: 'needs-login' })
-        else setState({ status: 'error', error: res.error || 'Could not read the semantic model.' })
+        } else {
+          invalidateCachedSchema(key)
+          if (res.needsAz) setState({ status: 'needs-az' })
+          else if (res.needsLogin) setState({ status: 'needs-login' })
+          else setState({ status: 'error', error: res.error || 'Could not read the semantic model.' })
+        }
       })
       .catch((err) => {
-        if (alive) setState({ status: 'error', error: String(err) })
+        if (alive) {
+          invalidateCachedSchema(key)
+          setState({ status: 'error', error: authErrorMessage(err, 'Could not read the semantic model.') })
+        }
       })
     return () => {
       alive = false
@@ -640,33 +669,34 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
     setView({ scale, tx: cx - (cx - v.tx) * kk, ty: cy - (cy - v.ty) * kk })
   }, [])
 
-  const signInAndReload = useCallback(async (): Promise<void> => {
+  const signInAndReload = useCallback(async (kind: 'rayfin' | 'az'): Promise<void> => {
+    if (loginBusyRef.current) return
+    loginBusyRef.current = true
+    const seq = ++loginSeqRef.current
     setReauthing(true)
     try {
-      const res = await window.api.auth.loginRayfin()
-      if (res.ok) setReloadTick((n) => n + 1)
-      else
-        toast.error(res.error ?? 'Fabric sign-in did not complete. Please try again.', {
+      const res = kind === 'az'
+        ? await window.api.auth.loginAz()
+        : await window.api.auth.loginRayfin()
+      if (seq !== loginSeqRef.current) return
+      if (!res.ok) {
+        throw new Error(authErrorMessage(res.error, 'Sign-in did not complete. Please try again.'))
+      }
+      await onSignedIn?.()
+      if (seq === loginSeqRef.current) setReloadTick((n) => n + 1)
+    } catch (reason) {
+      if (seq === loginSeqRef.current) {
+        toast.error(authErrorMessage(reason, 'Sign-in did not complete. Please try again.'), {
           title: 'Sign-in failed'
         })
+      }
     } finally {
-      setReauthing(false)
+      if (seq === loginSeqRef.current) {
+        loginBusyRef.current = false
+        setReauthing(false)
+      }
     }
-  }, [toast])
-
-  const signInAzAndReload = useCallback(async (): Promise<void> => {
-    setReauthing(true)
-    try {
-      const res = await window.api.auth.loginAz()
-      if (res.ok) setReloadTick((n) => n + 1)
-      else
-        toast.error(res.error ?? 'Azure sign-in did not complete. Please try again.', {
-          title: 'Sign-in failed'
-        })
-    } finally {
-      setReauthing(false)
-    }
-  }, [toast])
+  }, [onSignedIn, toast])
 
   const openMeasure = useCallback(
     (_e: ReactMouseEvent<HTMLButtonElement>, table: string, measure: SemanticMeasure): void => {
@@ -723,7 +753,7 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
           <button
             className="btn btn--primary"
             disabled={reauthing}
-            onClick={() => void signInAndReload()}
+            onClick={() => void signInAndReload('rayfin')}
           >
             {reauthing ? 'Signing in…' : 'Sign in to Fabric'}
           </button>
@@ -744,7 +774,7 @@ export default function SemanticModelView({ projectId, models, refreshKey }: Pro
           <button
             className="btn btn--primary"
             disabled={reauthing}
-            onClick={() => void signInAzAndReload()}
+            onClick={() => void signInAndReload('az')}
           >
             {reauthing ? 'Signing in…' : 'Sign in to Azure'}
           </button>

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { GithubRepo, GithubReposResult, GithubStatus } from '@shared/ipc'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { GithubRepo, GithubReposResult, GithubStatus, ProcResult } from '@shared/ipc'
 import { OverlayProvider } from '../overlay'
 import CloneFromGitHubScreen from './CloneFromGitHubScreen'
+import { deferred } from '../../test/deferred'
 
 /**
  * Guards the Clone-from-GitHub flow's state machine: gh-missing -> Install,
@@ -14,14 +15,6 @@ type GithubApi = {
   login: ReturnType<typeof vi.fn>
   listRepos: ReturnType<typeof vi.fn>
   clone: ReturnType<typeof vi.fn>
-}
-
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((done) => {
-    resolve = done
-  })
-  return { promise, resolve }
 }
 
 function makeRepo(overrides: Partial<GithubRepo> = {}): GithubRepo {
@@ -67,6 +60,7 @@ function renderScreen(): { onCancel: () => void; onCloned: () => void } {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   delete (window as unknown as { api?: unknown }).api
 })
 
@@ -277,5 +271,180 @@ describe('CloneFromGitHubScreen', () => {
     await act(async () => {
       cloneCall.resolve({ ok: true })
     })
+  })
+
+  it.each(['failed result', 'rejected IPC'])('preserves the actual GitHub login error from a %s', async (failure) => {
+    const login = vi.fn()
+    if (failure === 'failed result') {
+      login.mockResolvedValue({ ok: false, exitCode: 1, error: 'Credential helper failed' })
+    } else {
+      login.mockRejectedValue('Credential helper failed')
+    }
+    installApi({ login })
+    renderScreen()
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in with GitHub' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Credential helper failed')
+    expect(screen.queryByText('Waiting for GitHub sign-in')).toBeNull()
+    expect((screen.getByRole('button', { name: 'Sign in with GitHub' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('does not open duplicate terminals while starting sign-in', async () => {
+    const pending = deferred<ProcResult>()
+    const api = installApi({ login: vi.fn(() => pending.promise) })
+    renderScreen()
+    const button = await screen.findByRole('button', { name: 'Sign in with GitHub' })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    expect(api.login).toHaveBeenCalledTimes(1)
+    expect((screen.getByRole('button', { name: 'Opening sign-in…' }) as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => pending.resolve({ ok: false, exitCode: 1, error: 'Cancelled' }))
+  })
+
+  it('stops polling and shows rejected status checks instead of waiting forever', async () => {
+    vi.useFakeTimers()
+    const api = installApi({
+      status: vi.fn()
+        .mockResolvedValueOnce({ ghInstalled: true, signedIn: false })
+        .mockRejectedValueOnce('GitHub verification disconnected')
+    })
+    await act(async () => renderScreen())
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Sign in with GitHub' })))
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(screen.getByRole('alert').textContent).toContain('GitHub verification disconnected')
+    expect(screen.queryByText('Waiting for GitHub sign-in')).toBeNull()
+    await act(async () => vi.advanceTimersByTimeAsync(10_000))
+    expect(api.status).toHaveBeenCalledTimes(2)
+  })
+
+  it('serializes slow polling checks and stops after live sign-in succeeds', async () => {
+    vi.useFakeTimers()
+    const pending = deferred<GithubStatus>()
+    const api = installApi({
+      status: vi.fn()
+        .mockResolvedValueOnce({ ghInstalled: true, signedIn: false })
+        .mockReturnValueOnce(pending.promise)
+    })
+    await act(async () => renderScreen())
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Sign in with GitHub' })))
+    await act(async () => vi.advanceTimersByTimeAsync(10_000))
+    expect(api.status).toHaveBeenCalledTimes(2)
+    await act(async () => pending.resolve({ ghInstalled: true, signedIn: true, user: 'octocat' }))
+    await act(async () => vi.advanceTimersByTimeAsync(6000))
+    expect(api.status).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('Connected as octocat')).toBeTruthy()
+  })
+
+  it('ignores a late successful poll after sign-in waiting is cancelled', async () => {
+    vi.useFakeTimers()
+    const pending = deferred<GithubStatus>()
+    const api = installApi({
+      status: vi.fn()
+        .mockResolvedValueOnce({ ghInstalled: true, signedIn: false })
+        .mockReturnValueOnce(pending.promise)
+    })
+    await act(async () => renderScreen())
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Sign in with GitHub' })))
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+    const panel = screen.getByText('Waiting for GitHub sign-in').closest('section') as HTMLElement
+    fireEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+    await act(async () => pending.resolve({ ghInstalled: true, signedIn: true, user: 'octocat' }))
+
+    expect(screen.getByRole('button', { name: 'Sign in with GitHub' })).toBeTruthy()
+    expect(screen.queryByText('Connected as octocat')).toBeNull()
+    expect(api.listRepos).not.toHaveBeenCalled()
+  })
+
+  it('ends waiting with recovery guidance when no sign-in is detected before the deadline', async () => {
+    vi.useFakeTimers()
+    installApi({})
+    await act(async () => renderScreen())
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Sign in with GitHub' })))
+    vi.setSystemTime(Date.now() + 10 * 60 * 1000)
+    await act(async () => vi.advanceTimersByTimeAsync(2000))
+
+    expect(screen.getByRole('alert').textContent).toContain('GitHub sign-in was not detected')
+    expect(screen.getByRole('button', { name: 'Sign in with GitHub' })).toBeTruthy()
+  })
+
+  it('revalidates auth before cloning and does not clone after credentials expire', async () => {
+    const api = installApi({
+      status: vi.fn()
+        .mockResolvedValueOnce({ ghInstalled: true, signedIn: true, user: 'octocat' })
+        .mockResolvedValue({ ghInstalled: true, signedIn: false }),
+      listRepos: vi.fn().mockResolvedValue({ ok: true, repos: [makeRepo()] })
+    })
+    const { onCloned } = renderScreen()
+    fireEvent.click(await screen.findByRole('button', { name: /alpha-app/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clone and open' }))
+
+    await screen.findByRole('button', { name: 'Sign in with GitHub' })
+    expect(api.clone).not.toHaveBeenCalled()
+    expect(onCloned).not.toHaveBeenCalled()
+    expect(screen.queryByText('Connected as octocat')).toBeNull()
+  })
+
+  it('rechecks sign-in after a repository request fails', async () => {
+    const api = installApi({
+      status: vi.fn()
+        .mockResolvedValueOnce({ ghInstalled: true, signedIn: true, user: 'octocat' })
+        .mockResolvedValue({ ghInstalled: true, signedIn: false }),
+      listRepos: vi.fn().mockResolvedValue({ ok: false, repos: [], error: 'Not logged in' })
+    })
+    renderScreen()
+    await screen.findByRole('button', { name: 'Sign in with GitHub' })
+    expect(api.status).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('Connected as octocat')).toBeNull()
+  })
+
+  it.each(['failed result', 'rejected IPC'])('rechecks sign-in after a clone %s and retains the failure message', async (failure) => {
+    const clone = vi.fn()
+    if (failure === 'failed result') clone.mockResolvedValue({ ok: false, error: 'GitHub session expired' })
+    else clone.mockRejectedValue('GitHub session expired')
+    const api = installApi({
+      status: vi.fn()
+        .mockResolvedValueOnce({ ghInstalled: true, signedIn: true, user: 'octocat' })
+        .mockResolvedValueOnce({ ghInstalled: true, signedIn: true, user: 'octocat' })
+        .mockResolvedValue({ ghInstalled: true, signedIn: false }),
+      listRepos: vi.fn().mockResolvedValue({ ok: true, repos: [makeRepo()] }),
+      clone
+    })
+    const { onCloned } = renderScreen()
+    fireEvent.click(await screen.findByRole('button', { name: /alpha-app/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clone and open' }))
+
+    await screen.findByRole('button', { name: 'Sign in with GitHub' })
+    expect(screen.getByRole('alert').textContent).toContain('GitHub session expired')
+    expect(api.status).toHaveBeenCalledTimes(3)
+    expect(screen.queryByText('Connected as octocat')).toBeNull()
+    expect(onCloned).not.toHaveBeenCalled()
+  })
+
+  it('keeps a verified GitHub account and repository selected after a clone permission failure', async () => {
+    const api = installApi({
+      status: vi.fn().mockResolvedValue({ ghInstalled: true, signedIn: true, user: 'octocat' }),
+      listRepos: vi.fn().mockResolvedValue({ ok: true, repos: [makeRepo()] }),
+      clone: vi.fn().mockResolvedValue({ ok: false, error: 'Repository permission denied' })
+    })
+    renderScreen()
+    fireEvent.click(await screen.findByRole('button', { name: /alpha-app/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clone and open' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Repository permission denied')
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Clone and open' }) as HTMLButtonElement).disabled).toBe(false))
+    expect(api.status).toHaveBeenCalledTimes(3)
+    expect(screen.getByText('Connected as octocat')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /alpha-app/ }).classList.contains('clone-repo--active')).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Sign in with GitHub' })).toBeNull()
+  })
+
+  it('shows rejected GitHub CLI installation errors and releases the install button', async () => {
+    installApi({ status: vi.fn().mockResolvedValue({ ghInstalled: false, signedIn: false }) })
+    vi.mocked(window.api.doctor.install).mockRejectedValueOnce('Installer could not start')
+    renderScreen()
+    fireEvent.click(await screen.findByRole('button', { name: 'Install GitHub CLI' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Installer could not start')
+    expect((screen.getByRole('button', { name: 'Install GitHub CLI' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })
