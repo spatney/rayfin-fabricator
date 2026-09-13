@@ -135,31 +135,47 @@ const DESIGN_DRAIN_AI_JS: &str =
 const DESIGN_DRAIN_AI_EDIT_JS: &str =
   "(function(){try{return window.__rayfinDesign?window.__rayfinDesign.drainAiEdit():null}catch(e){return null}})()";
 
-/// Logical-pixel rectangle reported by the renderer (its host element's bounds,
-/// relative to the window client area — i.e. `getBoundingClientRect()`).
+/// Renderer visual-viewport CSS bounds plus its physical-pixel ratio. Legacy
+/// callers without a ratio use native logical coordinates.
 #[derive(Debug, Clone, Copy, serde::Deserialize)]
 pub struct PreviewBounds {
   pub x: f64,
   pub y: f64,
   pub width: f64,
   pub height: f64,
+  #[serde(default, rename = "pixelRatio")]
+  pub pixel_ratio: Option<f64>,
 }
 
 impl PreviewBounds {
-  fn position(self) -> LogicalPosition<f64> {
-    LogicalPosition::new(self.x, self.y)
-  }
-
-  fn size(self) -> LogicalSize<f64> {
-    // Guard against zero/negative sizes that some layouts briefly report.
-    LogicalSize::new(self.width.max(1.0), self.height.max(1.0))
-  }
-
-  fn to_rect(self) -> tauri::Rect {
-    tauri::Rect {
-      position: self.position().into(),
-      size: self.size().into(),
+  fn to_rect(self) -> AppResult<tauri::Rect> {
+    let ratio = self.pixel_ratio.unwrap_or(1.0);
+    if !ratio.is_finite() || ratio <= 0.0
+      || !self.width.is_finite() || !self.height.is_finite()
+      || self.width < 0.0 || self.height < 0.0
+      || [self.x, self.y, self.width.max(1.0), self.height.max(1.0)].iter().any(|n| {
+        !n.is_finite() || !(i32::MIN as f64..=i32::MAX as f64).contains(&(n * ratio).round())
+      })
+    {
+      return Err(AppError::Msg("Invalid native preview bounds or pixel ratio.".into()));
     }
+    let position = LogicalPosition::new(self.x, self.y);
+    let size = LogicalSize::new(self.width.max(1.0), self.height.max(1.0));
+    Ok(match self.pixel_ratio {
+      Some(ratio) => {
+        let physical_size = size.to_physical::<u32>(ratio);
+        tauri::Rect {
+          position: position.to_physical::<i32>(ratio).into(),
+          size: tauri::PhysicalSize::new(physical_size.width.max(1), physical_size.height.max(1)).into(),
+        }
+      }
+      None => tauri::Rect { position: position.into(), size: size.into() },
+    })
+  }
+
+  #[cfg(windows)]
+  fn parked(self) -> Self {
+    Self { x: OFFSCREEN_COORD, y: OFFSCREEN_COORD, ..self }
   }
 }
 
@@ -242,6 +258,7 @@ impl Inner {
 /// (`add_child` dispatches to the event loop and blocks on the result), so this
 /// is only ever called from the async [`preview_show_url`] command.
 fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
+  let rect = bounds.to_rect()?;
   let main = app
     .get_webview_window("main")
     .ok_or_else(|| AppError::Msg("main window not found".into()))?;
@@ -284,7 +301,7 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
   // `agent_capture`). Do NOT set per-webview `additional_browser_args` here: a
   // mismatch makes WebView2 fail creation with ERROR_INVALID_STATE (0x8007139F).
   window
-    .add_child(builder, bounds.position(), bounds.size())
+    .add_child(builder, rect.position, rect.size)
     .map_err(|e| AppError::Msg(format!("failed to create preview webview: {e}")))?;
   Ok(())
 }
@@ -406,15 +423,15 @@ pub async fn preview_show_url(
     }
     state.inner.lock().unwrap().reset_to(&url);
     if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-      let _ = wv.set_bounds(bounds.to_rect());
-      let _ = wv.show();
+      wv.set_bounds(bounds.to_rect()?).map_err(|e| AppError::Msg(e.to_string()))?;
+      wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
       state.inner.lock().unwrap().visible = true;
     }
     return Ok(());
   }
 
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    let _ = wv.set_bounds(bounds.to_rect());
+    wv.set_bounds(bounds.to_rect()?).map_err(|e| AppError::Msg(e.to_string()))?;
     // Navigate only when the *commanded* URL changes — never when the webview's
     // live URL has merely drifted (SPA route, trailing slash, AAD redirect, query
     // params). A re-show after an overlay closes passes the same URL, so it stays
@@ -428,7 +445,7 @@ pub async fn preview_show_url(
         .map_err(|e| AppError::Msg(e.to_string()))?;
       state.inner.lock().unwrap().reset_to(&url);
     }
-    let _ = wv.show();
+    wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
     state.inner.lock().unwrap().visible = true;
   }
   Ok(())
@@ -456,7 +473,7 @@ pub fn preview_navigate(
     .parse()
     .map_err(|e| AppError::Msg(format!("invalid preview url {url:?}: {e}")))?;
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    let _ = wv.set_bounds(bounds.to_rect());
+    wv.set_bounds(bounds.to_rect()?).map_err(|e| AppError::Msg(e.to_string()))?;
     wv.navigate(parsed)
       .map_err(|e| AppError::Msg(e.to_string()))?;
     state.inner.lock().unwrap().reset_to(&url);
@@ -470,7 +487,7 @@ pub fn preview_navigate(
 pub fn preview_set_bounds(app: AppHandle, bounds: PreviewBounds) -> AppResult<()> {
   let _guard = watchdog::activity(Activity::PreviewSetBounds);
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    wv.set_bounds(bounds.to_rect())
+    wv.set_bounds(bounds.to_rect()?)
       .map_err(|e| AppError::Msg(e.to_string()))?;
   }
   Ok(())
@@ -494,7 +511,9 @@ pub fn preview_hide(app: AppHandle) -> AppResult<()> {
   let _guard = watchdog::activity(Activity::PreviewHide);
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
     #[cfg(windows)]
-    let _ = wv.set_bounds(offscreen_bounds().to_rect());
+    if let Err(error) = wv.set_bounds(offscreen_bounds().to_rect()?) {
+      log::warn!("Could not park the native preview before hiding: {error}");
+    }
     wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
     app.state::<PreviewState>().inner.lock().unwrap().visible = false;
   }
@@ -525,18 +544,19 @@ pub fn preview_suppress(app: AppHandle, bounds: PreviewBounds) -> AppResult<()> 
       // size ⇒ the reveal is a pure move (no viewport resize, no repaint), so the
       // live frame reappears instantly. If parking fails, fall back to a hard
       // hide so it can't occlude the overlay.
-      let parked = PreviewBounds {
-        x: OFFSCREEN_COORD,
-        y: OFFSCREEN_COORD,
-        width: bounds.width.max(1.0),
-        height: bounds.height.max(1.0),
-      };
-      if wv.set_bounds(parked.to_rect()).is_ok() {
-        wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
-        app.state::<PreviewState>().inner.lock().unwrap().visible = true;
-      } else {
-        wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
-        app.state::<PreviewState>().inner.lock().unwrap().visible = false;
+      let parked = bounds.parked().to_rect().and_then(|rect| {
+        wv.set_bounds(rect).map_err(|e| AppError::Msg(e.to_string()))
+      });
+      match parked {
+        Ok(()) => {
+          wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
+          app.state::<PreviewState>().inner.lock().unwrap().visible = true;
+        }
+        Err(error) => {
+          log::warn!("Could not park the native preview; falling back to hiding: {error}");
+          wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
+          app.state::<PreviewState>().inner.lock().unwrap().visible = false;
+        }
       }
     }
     #[cfg(not(windows))]
@@ -970,6 +990,7 @@ fn offscreen_bounds() -> PreviewBounds {
     y: OFFSCREEN_COORD,
     width: OFFSCREEN_SIZE.0,
     height: OFFSCREEN_SIZE.1,
+    pixel_ratio: None,
   }
 }
 
@@ -1174,7 +1195,77 @@ unsafe fn snapshot_image_to_png(
 
 #[cfg(test)]
 mod tests {
-  use super::DesignAiEditRequest;
+  use super::{DesignAiEditRequest, PreviewBounds};
+
+  fn bounds(pixel_ratio: Option<f64>) -> PreviewBounds {
+    PreviewBounds { x: 100.0, y: 80.0, width: 900.0, height: 600.0, pixel_ratio }
+  }
+
+  #[test]
+  fn renderer_pixels_are_not_rescaled_by_native_window_dpi() {
+    for (ratio, native_dpi, x, y, width, height) in [
+      (1.0, 1.0, 100, 80, 900, 600),
+      (1.25, 1.0, 125, 100, 1125, 750),
+      (1.5, 1.0, 150, 120, 1350, 900),
+      (2.0, 1.0, 200, 160, 1800, 1200),
+      (1.5625, 1.25, 156, 125, 1406, 938),
+      (2.5, 2.0, 250, 200, 2250, 1500),
+    ] {
+      let rect = bounds(Some(ratio)).to_rect().unwrap();
+      assert!(matches!(rect.position, tauri::Position::Physical(_)));
+      assert_eq!(rect.position.to_physical::<i32>(native_dpi), tauri::PhysicalPosition::new(x, y));
+      assert_eq!(rect.size.to_physical::<u32>(native_dpi), tauri::PhysicalSize::new(width, height));
+    }
+  }
+
+  #[test]
+  fn legacy_bounds_without_pixel_ratio_still_use_native_logical_units() {
+    let bounds: PreviewBounds = serde_json::from_str(
+      r#"{"x":100,"y":80,"width":900,"height":600}"#,
+    ).unwrap();
+    let rect = bounds.to_rect().unwrap();
+    assert!(matches!(rect.position, tauri::Position::Logical(_)));
+    assert_eq!(rect.position.to_physical::<i32>(1.5), tauri::PhysicalPosition::new(150, 120));
+    assert_eq!(rect.size.to_physical::<u32>(1.5), tauri::PhysicalSize::new(1350, 900));
+  }
+
+  #[test]
+  fn renderer_pixel_ratio_round_trips_from_ipc() {
+    let bounds: PreviewBounds = serde_json::from_str(
+      r#"{"x":100,"y":80,"width":900,"height":600,"pixelRatio":1.25}"#,
+    ).unwrap();
+    assert_eq!(bounds.pixel_ratio, Some(1.25));
+    assert_eq!(bounds.to_rect().unwrap().position.to_physical::<i32>(2.0), tauri::PhysicalPosition::new(125, 100));
+  }
+
+  #[test]
+  fn invalid_bounds_are_rejected_and_tiny_sizes_remain_nonzero() {
+    for invalid in [
+      PreviewBounds { x: f64::NAN, ..bounds(Some(1.0)) },
+      PreviewBounds { width: f64::NAN, ..bounds(Some(1.0)) },
+      PreviewBounds { height: f64::INFINITY, ..bounds(Some(1.0)) },
+      PreviewBounds { width: -1.0, ..bounds(Some(1.0)) },
+      PreviewBounds { x: f64::MAX, ..bounds(Some(1.0)) },
+      bounds(Some(0.0)), bounds(Some(-1.0)), bounds(Some(f64::INFINITY)),
+    ] {
+      assert!(invalid.to_rect().is_err(), "{invalid:?}");
+    }
+    let tiny = PreviewBounds { width: 1.0, height: 1.0, ..bounds(Some(0.25)) };
+    assert_eq!(tiny.to_rect().unwrap().size.to_physical::<u32>(2.0), tauri::PhysicalSize::new(1, 1));
+  }
+
+  #[cfg(windows)]
+  #[test]
+  fn parking_preserves_the_actual_physical_viewport_size() {
+    let current = bounds(Some(1.875));
+    let parked = current.parked();
+    assert_eq!(parked.pixel_ratio, current.pixel_ratio);
+    assert_eq!(
+      parked.to_rect().unwrap().size.to_physical::<u32>(1.25),
+      current.to_rect().unwrap().size.to_physical::<u32>(1.25),
+    );
+    assert!(parked.to_rect().unwrap().position.to_physical::<i32>(1.25).x > 20_000);
+  }
 
   // Guards the multi-select bug: the controller's drained request carries `ids`
   // (all selected element ids); it must survive deserialization so the renderer

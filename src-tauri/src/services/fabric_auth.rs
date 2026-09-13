@@ -18,6 +18,7 @@ static LOGIN_ERROR: Lazy<Regex> = Lazy::new(|| {
     r"\bno (?:cached )?(?:account|credentials?|tokens?|session)\b|",
     r"\bnot (?:signed|logged) in\b|",
     r"\b(?:sign[ -]?in|log[ -]?in|interactive authentication) (?:is )?required\b|",
+    r"\binteractive\s+(?:log[ -]?in|authentication)\s+(?:(?:was|is)\s+)?not\s+allowed\b|",
     r"\b(?:please|must|need to) (?:sign|log)[ -]?in\b|",
     r"\b(?:access|refresh) token\b[^\n]*(?:expired|revoked)|",
     r"\bAADSTS(?:50058|50076|50079|50173|65001|70043|700082|700084)\b|",
@@ -92,11 +93,19 @@ mod tests {
     assert_eq!(failure_flags("invalid_grant: AADSTS700082"), (true, false));
     assert_eq!(failure_flags("Please run 'az login'"), (false, true));
     for message in [
+      "Silent token acquisition failed and interactive login was not allowed",
+      "Silent token acquisition failed and interactive login is not allowed",
+      "Interactive login not allowed",
+    ] {
+      assert_eq!(failure_flags(message), (true, false), "{message}");
+    }
+    for message in [
       "Unexpected token in JSON",
       "Workspace role assignment failed (403)",
       "Account limit exceeded",
       "az account get-access-token timed out",
       "Network request failed: token endpoint",
+      "Silent token acquisition failed and interactive login was not allowed: request timed out",
     ] {
       assert_eq!(failure_flags(message), (false, false), "{message}");
     }

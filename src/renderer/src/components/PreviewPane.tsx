@@ -12,6 +12,7 @@ import type {
 } from '@shared/ipc'
 import { loadCopilotModels, pickFastModel, isFastModel } from '../copilotModels'
 import { usePreviewSuppressed } from '../overlay'
+import { measurePreviewBounds, watchPreviewPixelRatio } from '../previewBounds'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -314,10 +315,7 @@ export default function PreviewPane({
 
   const measureHost = useCallback((): PreviewBounds | null => {
     const host = hostRef.current
-    if (!host) return null
-    const r = host.getBoundingClientRect()
-    if (r.width < 1 || r.height < 1) return null
-    return { x: r.left, y: r.top, width: r.width, height: r.height }
+    return host ? measurePreviewBounds(host) : null
   }, [])
 
   // Which URL the embedded webview actually loads. Falls back to the direct URL
@@ -502,16 +500,12 @@ export default function PreviewPane({
     // has been hidden (e.g. the pane collapsed to 0×0 when chat is focused) it
     // must be re-`show()`n — not merely repositioned — once its host reappears.
     let shownKey = ''
-    const measure = (): PreviewBounds | null => {
-      const r = host.getBoundingClientRect()
-      if (r.width < 1 || r.height < 1) return null
-      return { x: r.left, y: r.top, width: r.width, height: r.height }
-    }
+    const measure = (): PreviewBounds | null => measurePreviewBounds(host)
     // The native side flips the y-origin using the window height, so a window
     // resize that leaves the host's CSS rect unchanged still needs a re-push;
     // fold the window size into the key so any resize repositions the surface.
     const keyOf = (b: PreviewBounds): string =>
-      `${b.x}|${b.y}|${b.width}|${b.height}|${window.innerWidth}|${window.innerHeight}`
+      `${b.x}|${b.y}|${b.width}|${b.height}|${b.pixelRatio}|${window.innerWidth}|${window.innerHeight}`
 
     // Coalesce reposition IPC to ~30Hz: per-frame `setBounds` calls during a drag
     // are pure cost on a software-rendered VM. Show/hide stay immediate; only the
@@ -590,6 +584,11 @@ export default function PreviewPane({
       startTracking()
     }
     window.addEventListener('resize', onResize)
+    window.addEventListener('scroll', onResize)
+    const viewport = window.visualViewport
+    viewport?.addEventListener('resize', onResize)
+    viewport?.addEventListener('scroll', onResize)
+    const stopWatchingPixelRatio = watchPreviewPixelRatio(onResize)
 
     const initial = measure()
     if (initial) {
@@ -608,6 +607,10 @@ export default function PreviewPane({
 
     return () => {
       window.removeEventListener('resize', onResize)
+      window.removeEventListener('scroll', onResize)
+      viewport?.removeEventListener('resize', onResize)
+      viewport?.removeEventListener('scroll', onResize)
+      stopWatchingPixelRatio()
       ro.disconnect()
       io.disconnect()
       if (raf !== 0) cancelAnimationFrame(raf)

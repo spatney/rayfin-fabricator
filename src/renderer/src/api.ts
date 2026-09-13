@@ -10,6 +10,7 @@
  */
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { serializePreviewMutations } from './previewSurface'
 import {
   IpcChannels,
   type AppSettings,
@@ -243,14 +244,16 @@ export const api: RayfinStudioApi = {
   },
 
   preview: {
-    showUrl: (url: string, bounds: PreviewBounds) => invoke('preview_show_url', { url, bounds }),
-    navigate: (url: string, bounds: PreviewBounds) => invoke('preview_navigate', { url, bounds }),
-    setBounds: (bounds: PreviewBounds) => invoke('preview_set_bounds', { bounds }),
-    hide: () => invoke('preview_hide'),
-    suppress: (bounds: PreviewBounds) => invoke('preview_suppress', { bounds }),
-    reload: () => invoke('preview_reload'),
-    back: () => invoke('preview_back'),
-    forward: () => invoke('preview_forward'),
+    ...serializePreviewMutations({
+      showUrl: (url: string, bounds: PreviewBounds) => invoke('preview_show_url', { url, bounds }),
+      navigate: (url: string, bounds: PreviewBounds) => invoke('preview_navigate', { url, bounds }),
+      setBounds: (bounds: PreviewBounds) => invoke('preview_set_bounds', { bounds }),
+      hide: () => invoke('preview_hide'),
+      suppress: (bounds: PreviewBounds) => invoke('preview_suppress', { bounds }),
+      reload: () => invoke('preview_reload'),
+      back: () => invoke('preview_back'),
+      forward: () => invoke('preview_forward')
+    }),
     capture: () => invoke('preview_capture'),
     onNavState: (cb: (state: PreviewNavState) => void) =>
       subscribe<PreviewNavState>(IpcChannels.previewNav, cb),

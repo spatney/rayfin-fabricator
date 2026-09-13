@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { StudioProject } from '@shared/ipc'
 import { OverlayProvider, SuppressPreview } from '../overlay'
 import PreviewPane, { type DeployUiState, __resetPreviewSurfaceState } from './PreviewPane'
 import { installPreviewEnv, makeProject, type PreviewEnv } from '../../test/harness'
+import { deferred } from '../../test/deferred'
 
 /**
  * These tests exercise PreviewPane's native-surface visibility state machine —
@@ -57,15 +58,107 @@ beforeEach(() => {
   // The surface-shown-url tracker is module-scoped (the native surface outlives a
   // PreviewPane mount); reset it so each test starts as a fresh app.
   __resetPreviewSurfaceState()
+  vi.stubGlobal('devicePixelRatio', 1)
+  vi.stubGlobal('visualViewport', undefined)
   e = installPreviewEnv()
 })
 
 afterEach(() => {
   cleanup()
   e.teardown()
+  vi.unstubAllGlobals()
 })
 
 describe('PreviewPane visibility', () => {
+  it('does not leave a ghost preview when creation finishes after unmount', async () => {
+    const created = deferred<void>()
+    let nativeCreated = false
+    let nativeVisible = false
+    e.api.showUrl.mockImplementationOnce(() => created.promise.then(() => {
+      nativeCreated = true
+      nativeVisible = true
+    }))
+    e.api.suppress.mockImplementation(() => {
+      if (nativeCreated) nativeVisible = false
+      return Promise.resolve()
+    })
+    const { unmount } = render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+    unmount()
+    expect(e.api.suppress).not.toHaveBeenCalled()
+    await act(async () => created.resolve(undefined))
+    await settle(e)
+    expect(e.api.suppress).toHaveBeenCalledOnce()
+    expect(nativeVisible).toBe(false)
+  })
+
+  it('applies the latest host bounds even when resize happens during creation', async () => {
+    const created = deferred<void>()
+    let nativeCreated = false
+    let nativeBounds: unknown
+    e.api.showUrl.mockImplementationOnce((_url, bounds) => created.promise.then(() => {
+      nativeCreated = true
+      nativeBounds = bounds
+    }))
+    e.api.setBounds.mockImplementation((bounds) => {
+      if (nativeCreated) nativeBounds = bounds
+      return Promise.resolve()
+    })
+    render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+    e.setHostRect({ left: 300, top: 100, width: 1000, height: 650 })
+    act(() => window.dispatchEvent(new Event('resize')))
+    await settle(e)
+    expect(e.api.setBounds).not.toHaveBeenCalled()
+    await act(async () => created.resolve(undefined))
+    await settle(e)
+    expect(nativeBounds).toEqual({ x: 300, y: 100, width: 1000, height: 650, pixelRatio: 1 })
+  })
+
+  it('repositions on a display-scale change without a CSS resize', async () => {
+    const changes: Array<() => void> = []
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      addEventListener: (_type: string, listener: () => void) => changes.push(listener),
+      removeEventListener: vi.fn()
+    })))
+    render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+    vi.stubGlobal('devicePixelRatio', 1.25)
+    act(() => changes[0]())
+    await settle(e)
+    expect(e.api.setBounds).toHaveBeenLastCalledWith({
+      x: 100, y: 80, width: 900, height: 600, pixelRatio: 1.25
+    })
+  })
+
+  it('tracks visual-viewport zoom and panning, then removes its listeners', async () => {
+    const viewport = Object.assign(new EventTarget(), { scale: 1, offsetLeft: 0, offsetTop: 0 })
+    vi.stubGlobal('visualViewport', viewport)
+    const { unmount } = render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+    viewport.scale = 1.25
+    viewport.offsetLeft = 20
+    viewport.offsetTop = 10
+    act(() => viewport.dispatchEvent(new Event('resize')))
+    await settle(e)
+    expect(e.api.setBounds).toHaveBeenLastCalledWith({
+      x: 80, y: 70, width: 900, height: 600, pixelRatio: 1.25
+    })
+    viewport.offsetLeft = 40
+    act(() => viewport.dispatchEvent(new Event('scroll')))
+    await settle(e)
+    expect(e.api.setBounds).toHaveBeenLastCalledWith({
+      x: 60, y: 70, width: 900, height: 600, pixelRatio: 1.25
+    })
+    unmount()
+    await settle(e)
+    const count = e.api.setBounds.mock.calls.length
+    viewport.scale = 2
+    act(() => viewport.dispatchEvent(new Event('resize')))
+    await settle(e)
+    expect(e.api.setBounds.mock.calls.length).toBe(count)
+  })
+
   it('reveals the webview at host bounds on initial deployed mount', async () => {
     render(<Harnessed project={makeProject('p1')} suppressed={false} />)
     await settle(e)
@@ -472,4 +565,3 @@ function lastShowUrl(
   }
   return null
 }
-

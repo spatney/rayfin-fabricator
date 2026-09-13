@@ -82,6 +82,8 @@ If Copilot credentials expire while you are working, use **Sign in to Copilot** 
 
 Fabric and Azure checks also verify usable credentials, and the GitHub repository picker verifies the active GitHub identity through its API. Sign-in failures are shown in the app rather than silently continuing; expired credentials and permission failures are handled separately. Signing in does not automatically replay sharing or deletion operations.
 
+The app preview's browser sign-in is separate from Fabricator's Fabric CLI session. If silent token acquisition needs interaction, the semantic-model dialog offers **Sign in & retry** rather than repeatedly retrying without credentials.
+
 ## What's inside
 
 **Author.** Chat with a built-in GitHub Copilot agent — pick the model and reasoning effort, steer it mid-turn, and keep separate threads (plus optional parallel side threads) with full history. Every turn runs in **Agent** mode; enable the experimental mode selector (Settings → Experiments) to also choose **Plan** or **Autopilot**. Inspect and edit any generated file in a built-in Monaco editor, see your data model as an entity diagram, browse the agent's reusable Skills, and lean on a git timeline you can diff and restore.
@@ -89,6 +91,8 @@ Fabric and Azure checks also verify usable credentials, and the GitHub repositor
 **Ship.** One-click `rayfin up` deploys to Microsoft Fabric. A deployments panel handles create, switch, and redeploy across workspaces — and share a deployed app with people in your Entra tenant by email (each recipient gets Contributor on its workspace, and any semantic model the app uses in another workspace is automatically shared with Build access).
 
 **Preview.** A native inline preview loads your running app — navigation, reload, browser devtools (inspector), focus mode, a Fabric portal shell toggle, and annotate-a-screenshot-straight-into-chat.
+
+The native preview follows the renderer's display scale and browser/pinch zoom, including moves between monitors. Creation, positioning, and visibility commands stay ordered so a slow-starting preview cannot leave an old surface over the chat or other tabs.
 
 **Validate.** The Advisor runs AI security and policy checks, saves the results, and tells you when they've gone stale. The Model tab flags loose access on any entity and hands a one-click *harden* prompt to the agent.
 

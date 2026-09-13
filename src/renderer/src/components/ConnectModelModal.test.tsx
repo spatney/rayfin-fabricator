@@ -77,16 +77,21 @@ describe('ConnectModelModal', () => {
     expect((screen.getByRole('option', { name: /Sales/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('prompts to sign in when the Fabric session lapsed', async () => {
+  it('offers in-dialog sign-in when silent token acquisition requires interaction', async () => {
     const loginRayfin = vi.fn(() => Promise.resolve({ ok: true, exitCode: 0 }))
     const listWorkspaceModels = vi
       .fn()
-      .mockResolvedValueOnce({ ok: false, models: [], needsLogin: true })
+      .mockResolvedValueOnce({
+        ok: false, models: [], needsLogin: true,
+        error: 'Silent token acquisition failed and interactive login was not allowed'
+      })
       .mockResolvedValueOnce({ ok: true, models: [{ id: 'ds-1', name: 'Sales' }] })
     installApi({ loginRayfin, listWorkspaceModels })
     render(<ConnectModelModal project={makeProject('p1')} onClose={vi.fn()} onConnect={vi.fn()} />)
 
     const retry = await screen.findByRole('button', { name: /Sign in/ })
+    expect(screen.getByText(/preview uses a separate sign-in/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
     fireEvent.click(retry)
 
     await waitFor(() => expect(loginRayfin).toHaveBeenCalledTimes(1))

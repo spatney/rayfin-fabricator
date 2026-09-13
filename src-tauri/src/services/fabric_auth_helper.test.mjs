@@ -60,11 +60,29 @@ test('revocation is a login failure; transport and syntax errors are not', async
     'Unexpected token in JSON', 'Workspace role assignment failed (403)',
     'Account limit exceeded', 'Token endpoint network request failed',
     'invalid_grant request timed out',
+    'Silent token acquisition failed and interactive login was not allowed: request timed out',
   ]) {
     assert.equal(needsLogin(new Error(text)), false, text)
   }
   const network = new Error('Token endpoint request timed out')
   await assert.rejects(acquireRayfinToken({ acquireToken: async () => { throw network } }), (error) => error === network)
+})
+
+test('silent-only token failures offer explicit Fabric sign-in instead of a blind retry', async () => {
+  for (const message of [
+    'Silent token acquisition failed and interactive login was not allowed',
+    'Silent token acquisition failed and interactive login is not allowed',
+    'Interactive login not allowed',
+  ]) {
+    const error = new Error(message)
+    assert.deepEqual(errorResult(error), {
+      ok: false, needsLogin: true, needsAz: false, error: message,
+    })
+    await assert.rejects(
+      acquireRayfinToken({ acquireToken: async () => { throw error } }, ['scope']),
+      (failure) => failure instanceof NeedsLogin && errorResult(failure).needsLogin,
+    )
+  }
 })
 
 test('Azure token failures distinguish reauthentication from outages without spawning az', async () => {

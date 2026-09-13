@@ -8,10 +8,12 @@ export class NeedsAz extends Error {}
 
 const LOGIN_ERROR = /\b(interaction_required|login_required|consent_required|invalid_grant|no_account_error|no_account_in_silent_request|no_tokens_found)\b|\bno (?:cached )?(?:account|credentials?|tokens?|session)\b|\bnot (?:signed|logged) in\b|\b(?:sign[ -]?in|log[ -]?in|interactive authentication) (?:is )?required\b|\b(?:please|must|need to) (?:sign|log)[ -]?in\b|\b(?:access|refresh) token\b[^\n]*(?:expired|revoked)|\bAADSTS(?:50058|50076|50079|50173|65001|70043|700082|700084)\b|(?:run|use)\s+[`'"]?(?:az|rayfin) login\b/i
 const TRANSPORT_ERROR = /\b(ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN)\b|timed? ?out|network (?:error|request failed)|fetch failed/i
+// Rayfin's silentOnly path can report this plain message without an MSAL code.
+const INTERACTIVE_LOGIN_BLOCKED = /\binteractive\s+(?:log[ -]?in|authentication)\s+(?:(?:was|is)\s+)?not\s+allowed\b/i
 
 export function needsLogin(error) {
   const text = [error?.errorCode, error?.code, error?.subError, error?.message || error].filter(Boolean).join(' ')
-  return !TRANSPORT_ERROR.test(text) && LOGIN_ERROR.test(text)
+  return !TRANSPORT_ERROR.test(text) && (LOGIN_ERROR.test(text) || INTERACTIVE_LOGIN_BLOCKED.test(text))
 }
 
 export function errorMessage(error) {

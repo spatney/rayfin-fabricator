@@ -1334,15 +1334,16 @@ export interface ChatMessage {
  * ------------------------------------------------------------------ */
 
 /**
- * Logical-pixel rectangle for the native preview webview, expressed in the
- * renderer's client coordinates (i.e. the host element's `getBoundingClientRect`,
- * which map 1:1 to the child webview's logical coordinates).
+ * CSS-pixel rectangle relative to the renderer's visual viewport. `pixelRatio`
+ * maps it to native physical pixels, including display/browser/pinch zoom.
+ * Without `pixelRatio`, coordinates retain the legacy native logical units.
  */
 export interface PreviewBounds {
   x: number
   y: number
   width: number
   height: number
+  pixelRatio?: number
 }
 
 /** Navigation state of the preview webview, pushed on the `preview:nav` event. */

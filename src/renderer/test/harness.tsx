@@ -1,5 +1,6 @@
 import { vi } from 'vitest'
 import type { PreviewNavState, StudioProject } from '@shared/ipc'
+import { serializePreviewMutations } from '../src/previewSurface'
 
 /**
  * Test harness for {@link PreviewPane}. jsdom has no layout engine and no
@@ -54,12 +55,14 @@ export function env(): PreviewEnv {
 function makeApi(calls: PreviewCall[], getCaptureResult: () => string) {
   let navCb: ((s: PreviewNavState) => void) | null = null
 
-  const rec =
-    (method: string, ret: () => unknown = () => undefined) =>
-    (...args: unknown[]) => {
+  function rec(method: string): (...args: unknown[]) => Promise<void>
+  function rec<T>(method: string, ret: () => T): (...args: unknown[]) => Promise<T>
+  function rec(method: string, ret: () => unknown = () => undefined) {
+    return (...args: unknown[]) => {
       calls.push({ method, args })
       return Promise.resolve(ret())
     }
+  }
 
   const preview = {
     capture: vi.fn(rec('capture', getCaptureResult)),
@@ -89,7 +92,7 @@ function makeApi(calls: PreviewCall[], getCaptureResult: () => string) {
   }
 
   const api = {
-    preview,
+    preview: { ...preview, ...serializePreviewMutations(preview) },
     openExternal: vi.fn(),
     screenshot: { save: vi.fn(() => Promise.resolve('C:/tmp/shot.png')) },
     projects: { setPreviewMode: vi.fn(() => Promise.resolve(undefined)) },
@@ -105,9 +108,8 @@ export function installPreviewEnv(): PreviewEnv {
   let captureResult = 'data:image/png;base64,AAAA'
   let hostRect: Rect | null = { left: 100, top: 80, width: 900, height: 600 }
 
-  // Fake only the timer functions (not rAF/Date/performance — we install our own
-  // controllable rAF below) so tests can advance the dissolve + frozen-clear.
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+  // Keep the positioning throttle on the same clock as the transition timers.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance'] })
 
   const { api, preview, getNavCb } = makeApi(calls, () => captureResult)
   ;(window as unknown as { api: unknown }).api = api

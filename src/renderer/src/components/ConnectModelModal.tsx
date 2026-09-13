@@ -204,7 +204,9 @@ export default function ConnectModelModal({
 
           {state.status === 'needs-login' && (
             <div className="share-banner">
-              <span>Your Fabric session expired. Sign in to list this workspace's models.</span>
+              <span>
+                Sign in to Fabric to list this workspace's models. The preview uses a separate sign-in.
+              </span>
               <button
                 className="btn btn--sm btn--primary"
                 disabled={reauthing}
