@@ -114,9 +114,8 @@ fn enable_rayfin_encryption_fallback() {
 pub fn run() {
   services::crashlog::install_panic_hook();
 
-  // Repair PATH before anything spawns a child process: a Finder/Dock-launched
-  // macOS app inherits a minimal PATH that omits Homebrew and Node version
-  // managers, so the doctor would otherwise report Node/npm/Rayfin CLI as missing.
+  // GUI launchers can inherit a stale Windows PATH or a minimal macOS PATH
+  // that omits installed CLIs. Repair it before spawning any child processes.
   services::env_path::repair();
 
   // Allow the Rayfin CLI to use a plaintext token cache when the OS keychain is

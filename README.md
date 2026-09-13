@@ -84,6 +84,8 @@ Fabric and Azure checks also verify usable credentials, and the GitHub repositor
 
 The app preview's browser sign-in is separate from Fabricator's Fabric CLI session. If silent token acquisition needs interaction, the semantic-model dialog offers **Sign in & retry** rather than repeatedly retrying without credentials.
 
+On Windows, startup and **Re-check** refresh CLI discovery from the saved user/machine PATH and common Scoop/pnpm locations. If a CLI is found but its version check fails, setup shows the failure and offers **Re-check** instead of installing another copy. **GitHub CLI (gh)** is optional repository tooling; it is separate from the bundled Copilot engine, so a pnpm Copilot installation does not satisfy the `gh` check.
+
 ## What's inside
 
 **Author.** Chat with a built-in GitHub Copilot agent — pick the model and reasoning effort, steer it mid-turn, and keep separate threads (plus optional parallel side threads) with full history. Every turn runs in **Agent** mode; enable the experimental mode selector (Settings → Experiments) to also choose **Plan** or **Autopilot**. Inspect and edit any generated file in a built-in Monaco editor, see your data model as an entity diagram, browse the agent's reusable Skills, and lean on a git timeline you can diff and restore.

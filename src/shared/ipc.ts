@@ -63,9 +63,11 @@ export interface ToolStatus {
   id: ToolId
   name: string
   found: boolean
-  /** True when found AND meeting any minimum-version requirement. */
+  /** True when the version check succeeds and meets any minimum requirement. */
   satisfied: boolean
   version: string | null
+  /** The executable was found, but its version check failed. Do not auto-install another copy. */
+  checkError?: string
   /** Minimum required version (`major.minor[.patch]`), when version-gated. */
   minVersion?: string | null
   /** Short human guidance shown when the tool is missing. */
@@ -1635,8 +1637,8 @@ export interface RayfinStudioApi {
     install: (id: ToolId) => Promise<InstallResult>
     /**
      * Install every missing required tool in dependency order. Installs system
-     * tools (Node/Git) first; if any are installed it returns requiresRelaunch so
-     * the caller can restart before the npm-based CLIs are installed.
+     * tools first. Detected tools with failed checks are not reinstalled.
+     * Successful system installs return requiresRelaunch.
      */
     installAll: () => Promise<InstallResult>
   }

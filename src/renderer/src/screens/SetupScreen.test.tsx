@@ -54,6 +54,66 @@ afterEach(() => {
 })
 
 describe('SetupScreen sign-in providers', () => {
+  it('offers re-check rather than reinstall when an existing CLI cannot be verified', async () => {
+    const error = 'Azure CLI was found, but its version check failed.'
+    const report: DoctorReport = {
+      ready: false,
+      tools: doctor.tools.map((item) => item.id === 'az'
+        ? { ...item, found: true, satisfied: false, version: null, autoInstallable: true, checkError: error }
+        : item)
+    }
+    const refresh = vi.fn()
+    render(<SetupScreen doctor={report} auth={auth} refreshing={false} onRefresh={refresh} onEnter={() => {}} />)
+    expect(screen.getByRole('alert').textContent).toBe(error)
+    expect(screen.getByText('Resolve the Azure CLI check error first')).toBeTruthy()
+    expect(screen.queryByText('Install the Azure CLI first')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Install all' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Update' })).toBeNull()
+    expect(screen.queryByText(/null.*update to/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Re-check Azure CLI' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(window.api.doctor.install).not.toHaveBeenCalled()
+    expect(window.api.doctor.installAll).not.toHaveBeenCalled()
+  })
+
+  it('does not bulk-install over a failed required tool check', () => {
+    const report: DoctorReport = {
+      ready: false,
+      tools: [
+        tool({ id: 'node', name: 'Node.js', found: false, satisfied: false, autoInstallable: true }),
+        tool({ id: 'az', name: 'Azure CLI', satisfied: false, autoInstallable: true, checkError: 'Shim failed' })
+      ]
+    }
+    render(<SetupScreen doctor={report} auth={auth} refreshing={false} onRefresh={() => {}} onEnter={() => {}} />)
+    expect((screen.getByRole('button', { name: 'Install all' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('still offers an update for a verified but outdated Node installation', () => {
+    const report: DoctorReport = {
+      ready: false,
+      tools: [tool({
+        id: 'node', name: 'Node.js', version: '18.20.4', minVersion: '20',
+        satisfied: false, autoInstallable: true
+      })]
+    }
+    render(<SetupScreen doctor={report} auth={auth} refreshing={false} onRefresh={() => {}} onEnter={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Update' })).toBeTruthy()
+    expect(screen.getByText(/18.20.4.*update to 20/)).toBeTruthy()
+  })
+
+  it('shows a blocked-install result instead of silently returning to setup', async () => {
+    vi.mocked(window.api.doctor.installAll).mockResolvedValue({
+      ok: false, exitCode: null, error: 'Resolve the existing CLI check failure first.'
+    })
+    const report: DoctorReport = {
+      ready: false,
+      tools: [tool({ id: 'node', name: 'Node.js', found: false, satisfied: false, autoInstallable: true })]
+    }
+    render(<SetupScreen doctor={report} auth={auth} refreshing={false} onRefresh={() => {}} onEnter={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Install all' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Resolve the existing CLI check failure'))
+  })
+
   it('does not treat a remembered Copilot user as a verified connection', () => {
     render(
       <SetupScreen

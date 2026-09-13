@@ -91,30 +91,52 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
   ): Promise<void> {
     activeProc.current = key
     setBusy(key)
+    setActionError(null)
     setShowLog(true)
     setLog((p) => `${p}\n\u203a ${label}\n`)
     try {
       const res = await fn()
+      if (!res.ok && !res.manual) {
+        const detail = res.error ?? `${label} did not complete. Check the process output.`
+        setActionError(detail)
+        setLog((p) => `${p}\n[error] ${detail}\n`)
+      }
       if (res?.requiresRelaunch) setNeedsRelaunch(true)
       if (res?.manual) {
         setLog((p) => `${p}\nFinish the install in the page that opened, then click “Restart”.\n`)
       }
     } catch (err) {
+      setActionError(String(err))
       setLog((p) => `${p}\n[error] ${String(err)}\n`)
     } finally {
       activeProc.current = null
       setBusy(null)
+      try {
+        await onRefresh()
+      } catch (err) {
+        setActionError(`Could not re-check the environment: ${String(err)}`)
+      }
+    }
+  }
+
+  async function recheck(): Promise<void> {
+    setActionError(null)
+    try {
       await onRefresh()
+    } catch (error) {
+      setActionError(`Could not re-check the environment: ${String(error)}`)
     }
   }
 
   const tools = doctor?.tools ?? []
-  const needsAuto = tools.filter((t) => t.required && !t.satisfied && t.autoInstallable)
+  const needsAuto = tools.filter((t) => t.required && !t.satisfied && !t.checkError && t.autoInstallable)
+  const hasToolCheckErrors = tools.some((t) => t.required && t.checkError)
   const toolsSatisfied = tools.filter((t) => t.satisfied).length
 
   // Azure sign-in shells out to the global `az` CLI, so it can't work until that
   // CLI is installed. Gate the card on that.
-  const azReady = tools.find((t) => t.id === 'az')?.satisfied ?? false
+  const azTool = tools.find((t) => t.id === 'az')
+  const azReady = azTool?.satisfied ?? false
 
   const providers = [
     auth?.copilot.signedIn ?? false,
@@ -171,7 +193,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
                     <span className="setup-meter-check">
                       <CheckIcon />
                     </span>
-                    You’re all set — everything’s installed and you’re signed in.
+                    You’re all set — required tools are ready and you’re signed in.
                   </>
                 ) : (
                   'Getting your environment ready'
@@ -225,7 +247,8 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
                   {needsAuto.length > 0 && (
                     <button
                       className="btn btn--primary btn--sm"
-                      disabled={busy !== null}
+                      disabled={busy !== null || refreshing || hasToolCheckErrors}
+                      title={hasToolCheckErrors ? 'Resolve the CLI check errors first' : undefined}
                       onClick={() =>
                         runInstall('install:all', 'Install everything', () =>
                           window.api.doctor.installAll()
@@ -253,8 +276,10 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
                       </span>
                       <div className="tool-main">
                         <span className="tool-name">{t.name}</span>
-                        <span className="tool-meta">
-                          {t.satisfied
+                        <span className="tool-meta" role={t.checkError ? 'alert' : undefined} title={t.checkError}>
+                          {t.checkError
+                            ? t.checkError
+                            : t.satisfied
                             ? t.version
                             : t.found
                               ? `${t.version} · update to ${t.minVersion}+ needed`
@@ -267,6 +292,16 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
                             <CheckIcon className="tool-chip-ico" />
                             Installed
                           </span>
+                        ) : t.checkError ? (
+                          <button
+                            className="btn btn--sm"
+                            disabled={busy !== null || refreshing}
+                            aria-label={`Re-check ${t.name}`}
+                            onClick={() => void recheck()}
+                          >
+                            <ReloadIcon className={`btn-ico ${refreshing ? 'icon-spin' : ''}`} />
+                            Re-check
+                          </button>
                         ) : t.autoInstallable ? (
                           <button
                             className="btn btn--sm"
@@ -354,7 +389,11 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
                   error={auth?.az.error}
                   checking={refreshing}
                   disabled={busy !== null || refreshing || !azReady}
-                  disabledReason={!azReady ? 'Install the Azure CLI first' : undefined}
+                  disabledReason={!azReady
+                    ? azTool?.checkError
+                      ? 'Resolve the Azure CLI check error first'
+                      : 'Install the Azure CLI first'
+                    : undefined}
                   busy={busy === 'login:az'}
                   onSignIn={() =>
                     runAction('login:az', 'Sign in to Azure', () => window.api.auth.loginAz())
@@ -392,7 +431,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
             <button
               className="btn btn--ghost"
               disabled={refreshing || busy !== null}
-              onClick={() => onRefresh()}
+              onClick={() => void recheck()}
             >
               <ReloadIcon className={`btn-ico ${refreshing ? 'icon-spin' : ''}`} />
               {refreshing ? 'Checking…' : 'Re-check'}

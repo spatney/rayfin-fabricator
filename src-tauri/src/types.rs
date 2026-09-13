@@ -64,9 +64,11 @@ pub struct ToolStatus {
   pub id: String,
   pub name: String,
   pub found: bool,
-  /// True when the tool is present *and* meets any minimum-version requirement.
+  /// True when the version check succeeds and meets any minimum requirement.
   pub satisfied: bool,
   pub version: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub check_error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub min_version: Option<String>,
   pub install_hint: String,
@@ -357,6 +359,8 @@ pub struct OpenInEditorResult {
 pub struct InstallResult {
   pub ok: bool,
   pub exit_code: Option<i32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub requires_relaunch: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
