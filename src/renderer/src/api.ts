@@ -77,10 +77,12 @@ export const api: RayfinStudioApi = {
 
   auth: {
     status: () => invoke('auth_status'),
-    loginCopilot: () => invoke('auth_login_copilot'),
+    loginCopilot: (host?: string) => invoke('auth_login_copilot', { host }),
     loginRayfin: (tenant?: string) => invoke('auth_login_rayfin', { tenant }),
     loginAz: () => invoke('auth_login_az'),
-    logoutRayfin: () => invoke('auth_logout_rayfin')
+    logoutCopilot: () => invoke('auth_logout_copilot'),
+    logoutRayfin: () => invoke('auth_logout_rayfin'),
+    logoutAz: () => invoke('auth_logout_az')
   },
 
   github: {

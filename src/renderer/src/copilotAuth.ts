@@ -1,10 +1,40 @@
 import type { ProcResult } from '@shared/ipc'
 import { invalidateCopilotModels } from './copilotModels'
 
-export async function signInToCopilot(): Promise<ProcResult> {
-  const result = await window.api.auth.loginCopilot()
-  if (result.ok) invalidateCopilotModels()
-  return result
+const HOST_KEY = 'fabricator.copilotHost'
+
+export function getCopilotHost(): string {
+  try {
+    return localStorage.getItem(HOST_KEY) ?? 'github.com'
+  } catch (error) {
+    console.warn('Could not read the saved Copilot host', error)
+    return 'github.com'
+  }
+}
+
+export async function signInToCopilot(host?: string): Promise<ProcResult> {
+  try {
+    const result = await window.api.auth.loginCopilot(host)
+    if (result.ok && host) {
+      try {
+        localStorage.setItem(HOST_KEY, host.trim())
+      } catch (error) {
+        console.warn('Could not save the Copilot host', error)
+      }
+    }
+    return result
+  } finally {
+    // Credentials may change even when the final verification fails.
+    invalidateCopilotModels()
+  }
+}
+
+export async function signOutOfCopilot(): Promise<ProcResult> {
+  try {
+    return await window.api.auth.logoutCopilot()
+  } finally {
+    invalidateCopilotModels()
+  }
 }
 
 /** Only inspect engine errors, never assistant prose or individual tool output. */

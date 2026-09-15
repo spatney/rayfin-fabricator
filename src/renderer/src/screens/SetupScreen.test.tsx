@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { AuthStatus, DoctorReport, ToolStatus } from '@shared/ipc'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { AuthStatus, DoctorReport, ProcResult, ToolStatus } from '@shared/ipc'
 import SetupScreen from './SetupScreen'
 
 function tool(overrides: Partial<ToolStatus>): ToolStatus {
@@ -34,6 +34,7 @@ const auth: AuthStatus = {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   ;(window as unknown as { api: unknown }).api = {
     onProcLog: vi.fn(() => () => {}),
     doctor: {
@@ -42,7 +43,9 @@ beforeEach(() => {
     },
     auth: {
       loginCopilot: vi.fn(),
-      loginAz: vi.fn()
+      loginAz: vi.fn(),
+      logoutCopilot: vi.fn(),
+      logoutAz: vi.fn()
     },
     relaunch: vi.fn()
   }
@@ -50,10 +53,110 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  localStorage.clear()
   delete (window as unknown as { api?: unknown }).api
 })
 
 describe('SetupScreen sign-in providers', () => {
+  it('passes the selected Enterprise host to Copilot sign-in', async () => {
+    vi.mocked(window.api.auth.loginCopilot).mockResolvedValue({ ok: true, exitCode: 0 })
+    const refresh = vi.fn()
+    render(<SetupScreen doctor={doctor} auth={auth} refreshing={false} onRefresh={refresh} onEnter={() => {}} />)
+    expect((screen.getByLabelText('GitHub host') as HTMLInputElement).value).toBe('github.com')
+    fireEvent.change(screen.getByLabelText('GitHub host'), { target: { value: 'https://company.ghe.com' } })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sign in' })[0])
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(window.api.auth.loginCopilot).toHaveBeenCalledWith('https://company.ghe.com')
+  })
+
+  it.each([
+    ['GitHub Copilot', 'logoutCopilot', 'copilot'],
+    ['Azure CLI', 'logoutAz', 'az']
+  ] as const)('signs out of %s and refreshes readiness without signing out the other provider', async (name, method, provider) => {
+    const ready: AuthStatus = {
+      ...auth,
+      copilot: { signedIn: true, user: 'enterprise-user', host: 'https://company.ghe.com' },
+      az: { signedIn: true, user: 'azure-user' }
+    }
+    vi.mocked(window.api.auth[method]).mockResolvedValue({ ok: true, exitCode: 0 })
+    const refresh = vi.fn()
+    const props = { doctor, refreshing: false, onRefresh: refresh, onEnter: vi.fn() }
+    const { rerender } = render(<SetupScreen {...props} auth={ready} />)
+    fireEvent.click(screen.getByRole('button', { name: `Sign out of ${name}` }))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(window.api.auth[method]).toHaveBeenCalledOnce()
+    expect(window.api.auth[method === 'logoutCopilot' ? 'logoutAz' : 'logoutCopilot']).not.toHaveBeenCalled()
+    rerender(<SetupScreen {...props} auth={{ ...ready, [provider]: { signedIn: false } }} />)
+    expect(screen.queryByRole('button', { name: `Sign out of ${name}` })).toBeNull()
+    expect(screen.getAllByText('Connected')).toHaveLength(1)
+    expect((screen.getByRole('button', { name: /Enter Fabricator/ }) as HTMLButtonElement).disabled).toBe(true)
+    if (provider === 'copilot') {
+      expect((screen.getByLabelText('GitHub host') as HTMLInputElement).value).toBe('https://company.ghe.com')
+    }
+  })
+
+  it('serializes sign-out and keeps account actions and entry disabled through the re-check', async () => {
+    let finishLogout!: (result: ProcResult) => void
+    let finishRefresh!: () => void
+    vi.mocked(window.api.auth.logoutCopilot).mockReturnValue(new Promise((resolve) => { finishLogout = resolve }))
+    const refresh = vi.fn(() => new Promise<void>((resolve) => { finishRefresh = resolve }))
+    const ready = { ...auth, copilot: { signedIn: true }, az: { signedIn: true } }
+    const enter = vi.fn()
+    render(<SetupScreen doctor={doctor} auth={ready} refreshing={false} onRefresh={refresh} onEnter={enter} />)
+    const signOut = screen.getByRole('button', { name: 'Sign out of GitHub Copilot' }) as HTMLButtonElement
+    fireEvent.click(signOut)
+    fireEvent.click(signOut)
+    expect(window.api.auth.logoutCopilot).toHaveBeenCalledOnce()
+    expect(signOut.disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Sign out of Azure CLI' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByText('All checks passed')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Enter Fabricator/ }))
+    expect(enter).not.toHaveBeenCalled()
+    await act(async () => finishLogout({ ok: true, exitCode: 0 }))
+    expect(refresh).toHaveBeenCalledOnce()
+    expect(signOut.disabled).toBe(true)
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await act(async () => finishRefresh())
+    expect(signOut.disabled).toBe(false)
+  })
+
+  it.each([
+    ['GitHub Copilot', 'logoutCopilot'],
+    ['Azure CLI', 'logoutAz']
+  ] as const)('surfaces %s sign-out failures and leaves the account retryable', async (name, method) => {
+    const ready = { ...auth, copilot: { signedIn: true }, az: { signedIn: true } }
+    vi.mocked(window.api.auth[method]).mockResolvedValue({ ok: false, exitCode: 1, error: 'Could not remove credentials' })
+    const refresh = vi.fn()
+    render(<SetupScreen doctor={doctor} auth={ready} refreshing={false} onRefresh={refresh} onEnter={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: `Sign out of ${name}` }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Could not remove credentials'))
+    expect(refresh).toHaveBeenCalledOnce()
+    expect((screen.getByRole('button', { name: `Sign out of ${name}` }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getAllByText('Connected')).toHaveLength(2)
+    expect(screen.queryByText('All checks passed')).toBeNull()
+  })
+
+  it('surfaces rejected sign-out calls and refreshes the account status', async () => {
+    vi.mocked(window.api.auth.logoutCopilot).mockRejectedValue(new Error('IPC unavailable'))
+    const refresh = vi.fn()
+    render(<SetupScreen doctor={doctor} auth={{ ...auth, copilot: { signedIn: true } }}
+      refreshing={false} onRefresh={refresh} onEnter={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out of GitHub Copilot' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('IPC unavailable'))
+    expect(refresh).toHaveBeenCalledOnce()
+  })
+
+  it('does not allow entry using stale connected accounts when post-logout verification rejects', async () => {
+    vi.mocked(window.api.auth.logoutCopilot).mockResolvedValue({ ok: true, exitCode: 0 })
+    const ready = { ...auth, copilot: { signedIn: true }, az: { signedIn: true } }
+    render(<SetupScreen doctor={doctor} auth={ready} refreshing={false}
+      onRefresh={() => Promise.reject(new Error('Connection lost'))} onEnter={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out of GitHub Copilot' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Could not verify account status'))
+    expect((screen.getByRole('button', { name: /Enter Fabricator/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByText('All checks passed')).toBeNull()
+  })
+
   it('offers re-check rather than reinstall when an existing CLI cannot be verified', async () => {
     const error = 'Azure CLI was found, but its version check failed.'
     const report: DoctorReport = {

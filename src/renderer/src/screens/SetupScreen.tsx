@@ -7,7 +7,8 @@ import gitSvg from '../assets/brands/git.svg'
 import azureSvg from '../assets/brands/azure.svg'
 import { CopilotLogo } from '../components/brand-icons'
 import { CheckIcon, DownloadIcon, ReloadIcon, TerminalIcon } from '../components/icons'
-import { signInToCopilot } from '../copilotAuth'
+import { getCopilotHost, signInToCopilot, signOutOfCopilot } from '../copilotAuth'
+import CopilotHostInput from '../components/CopilotHostInput'
 
 /** Official product logo (as an <img> src) for each tool, keyed by the doctor's tool id. */
 const TOOL_LOGOS: Record<string, string> = {
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh, onEnter }: Props): JSX.Element {
+  const [copilotHost, setCopilotHost] = useState(() => auth?.copilot.host ?? getCopilotHost())
   const [log, setLog] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [finalizing, setFinalizing] = useState(false)
@@ -51,6 +53,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
   }, [log])
 
   async function runAction(key: string, label: string, fn: () => Promise<ProcResult>): Promise<void> {
+    if (activeProc.current || refreshing) return
     activeProc.current = key
     setBusy(key)
     setActionError(null)
@@ -74,7 +77,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
       try {
         await onRefresh()
       } catch (err) {
-        setActionError(`Could not verify sign-in: ${String(err)}`)
+        setActionError(`Could not verify account status: ${String(err)}`)
       } finally {
         activeProc.current = null
         setBusy(null)
@@ -144,7 +147,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
   ]
   const signedInCount = providers.filter(Boolean).length
 
-  const allReady = !refreshing && !error && (doctor?.ready ?? false) && signedInCount === providers.length
+  const allReady = busy === null && !refreshing && !error && !actionError && (doctor?.ready ?? false) && signedInCount === providers.length
 
   const totalSteps = tools.length + providers.length
   const doneSteps = toolsSatisfied + signedInCount
@@ -371,12 +374,24 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
                   subtitle="The AI agent that writes your code"
                   signedIn={auth?.copilot.signedIn ?? false}
                   detail={auth?.copilot.user}
+                  extra={auth?.copilot.host?.replace(/^https:\/\//, '')}
                   error={auth?.copilot.error}
                   checking={refreshing}
                   disabled={busy !== null || refreshing}
                   busy={busy === 'login:copilot'}
+                  signingOut={busy === 'logout:copilot'}
                   onSignIn={() =>
-                    runAction('login:copilot', 'Sign in to GitHub Copilot', signInToCopilot)
+                    runAction('login:copilot', 'Sign in to GitHub Copilot', () => signInToCopilot(copilotHost))
+                  }
+                  onSignOut={() =>
+                    runAction('logout:copilot', 'Sign out of GitHub Copilot', signOutOfCopilot)
+                  }
+                  signInOptions={
+                    <CopilotHostInput
+                      value={copilotHost}
+                      disabled={busy !== null || refreshing}
+                      onChange={setCopilotHost}
+                    />
                   }
                 />
                 <AuthRow
@@ -395,8 +410,12 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
                       : 'Install the Azure CLI first'
                     : undefined}
                   busy={busy === 'login:az'}
+                  signingOut={busy === 'logout:az'}
                   onSignIn={() =>
                     runAction('login:az', 'Sign in to Azure', () => window.api.auth.loginAz())
+                  }
+                  onSignOut={() =>
+                    runAction('logout:az', 'Sign out of Azure', () => window.api.auth.logoutAz())
                   }
                 />
               </ul>
@@ -424,6 +443,10 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
             <span className="setup-actionbar-status">
               {refreshing
                 ? 'Checking...'
+                : busy?.startsWith('logout:')
+                ? 'Signing out...'
+                : error || actionError
+                ? 'Re-check required'
                 : allReady
                 ? 'All checks passed'
                 : `${remaining} ${remaining === 1 ? 'step' : 'steps'} left`}
@@ -485,7 +508,10 @@ interface AuthRowProps {
   disabled: boolean
   disabledReason?: string
   busy: boolean
+  signingOut: boolean
   onSignIn: () => void
+  onSignOut: () => void
+  signInOptions?: JSX.Element
 }
 
 function AuthRow(props: AuthRowProps): JSX.Element {
@@ -497,7 +523,10 @@ function AuthRow(props: AuthRowProps): JSX.Element {
         {props.checking ? (
           <span className="auth-row-meta">Checking authentication...</span>
         ) : props.signedIn ? (
-          <span className="auth-row-meta auth-row-meta--ok">
+          <span
+            className="auth-row-meta auth-row-meta--ok"
+            title={[props.detail ?? 'Signed in', props.extra].filter(Boolean).join(' · ')}
+          >
             {props.detail ?? 'Signed in'}
             {props.extra ? ` · ${props.extra}` : ''}
           </span>
@@ -513,10 +542,20 @@ function AuthRow(props: AuthRowProps): JSX.Element {
         {props.checking ? (
           <span className="tool-chip">Checking...</span>
         ) : props.signedIn ? (
-          <span className="tool-chip">
-            <CheckIcon className="tool-chip-ico" />
-            Connected
-          </span>
+          <>
+            <span className="tool-chip">
+              <CheckIcon className="tool-chip-ico" />
+              Connected
+            </span>
+            <button
+              className="btn btn--ghost btn--sm"
+              aria-label={`Sign out of ${props.title}`}
+              disabled={props.disabled}
+              onClick={props.onSignOut}
+            >
+              {props.signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          </>
         ) : (
           <button
             className="btn btn--primary btn--sm"
@@ -527,6 +566,9 @@ function AuthRow(props: AuthRowProps): JSX.Element {
           </button>
         )}
       </div>
+      {!props.signedIn && props.signInOptions && (
+        <div className="auth-row-options">{props.signInOptions}</div>
+      )}
     </li>
   )
 }

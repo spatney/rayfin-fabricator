@@ -153,11 +153,19 @@ pub async fn auth_status(state: State<'_, AppState>) -> Result<AuthStatus, Strin
 }
 
 #[tauri::command]
-pub async fn auth_login_copilot(app: AppHandle, state: State<'_, AppState>) -> Result<ProcResult, String> {
+pub async fn auth_login_copilot(
+  app: AppHandle,
+  state: State<'_, AppState>,
+  host: Option<String>,
+) -> Result<ProcResult, String> {
   let Ok(_guard) = COPILOT_AUTH_ACTION.try_lock() else {
-    return Ok(auth_failure("copilot-login", None, "Copilot sign-in is already in progress.".into()));
+    return Ok(auth_failure("copilot-login", None, "A Copilot sign-in or sign-out is already in progress.".into()));
   };
-  let login_guard = match state.copilot.begin_login() {
+  let args = match copilot_login_args(host.as_deref()) {
+    Ok(args) => args,
+    Err(error) => return Ok(auth_failure("copilot-login", None, error)),
+  };
+  let login_guard = match state.copilot.begin_auth_change() {
     Ok(guard) => guard,
     Err(error) => return Ok(auth_failure("copilot-login", None, error)),
   };
@@ -169,7 +177,7 @@ pub async fn auth_login_copilot(app: AppHandle, state: State<'_, AppState>) -> R
     ));
   }
   let on_data = proc_streamer(&app, "login:copilot");
-  on_data(exec::Stream::Stdout, "Starting GitHub Copilot sign-in…\n");
+  on_data(exec::Stream::Stdout, &format!("Starting GitHub Copilot sign-in at {}...\n", args[2]));
   let Some(cli) = crate::services::copilot::bundled_cli_path() else {
     on_data(exec::Stream::Stderr, "The bundled Copilot CLI is unavailable on this platform.\n");
     return Ok(auth_failure(
@@ -180,7 +188,7 @@ pub async fn auth_login_copilot(app: AppHandle, state: State<'_, AppState>) -> R
   };
   let res = exec::run_program(
     cli,
-    &["login"],
+    &args.iter().map(String::as_str).collect::<Vec<_>>(),
     RunOptions {
       on_data: Some(on_data.clone()),
       timeout_ms: Some(5 * 60_000),
@@ -188,6 +196,7 @@ pub async fn auth_login_copilot(app: AppHandle, state: State<'_, AppState>) -> R
     },
   )
   .await;
+  state.copilot.reload_auth().await;
   if !res.ok {
     let detail = cli_failure_detail(
       &res,
@@ -198,10 +207,91 @@ pub async fn auth_login_copilot(app: AppHandle, state: State<'_, AppState>) -> R
     return Ok(auth_failure("copilot-login", res.exit_code, detail));
   }
   on_data(exec::Stream::Stdout, "Verifying access in the Copilot chat engine...\n");
-  state.copilot.reload_auth().await;
   drop(login_guard);
   let auth = get_copilot_auth(state.inner()).await;
-  Ok(verified_login("copilot-login", "GitHub Copilot", &res, auth.signed_in, auth.error))
+  let host_error = copilot_host_error(&args[2], &auth);
+  Ok(verified_login(
+    "copilot-login",
+    "GitHub Copilot",
+    &res,
+    auth.signed_in && host_error.is_none(),
+    host_error.or(auth.error),
+  ))
+}
+
+fn normalize_copilot_host(host: &str) -> Result<String, String> {
+  let invalid = || {
+    "Enter github.com or a GitHub Enterprise Cloud hostname such as company.ghe.com (optionally with https://). Do not include a path, credentials, or a non-HTTPS port."
+      .to_string()
+  };
+  let host = host.trim();
+  if host.is_empty() || host.contains('\\') || host.chars().any(char::is_whitespace) {
+    return Err(invalid());
+  }
+  let url = if host.contains("://") { host.to_string() } else { format!("https://{host}") };
+  let url = reqwest::Url::parse(&url).map_err(|_| invalid())?;
+  let domain = url.host_str().ok_or_else(invalid)?;
+  let valid_domain = domain.len() <= 253 && domain.split('.').all(|label| {
+    !label.is_empty()
+      && label.len() <= 63
+      && !label.starts_with('-')
+      && !label.ends_with('-')
+      && label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+  });
+  if url.scheme() != "https"
+    || !url.username().is_empty()
+    || url.password().is_some()
+    || url.port().is_some()
+    || url.path() != "/"
+    || url.query().is_some()
+    || url.fragment().is_some()
+    || !valid_domain
+    || !(domain == "github.com" || domain.ends_with(".ghe.com"))
+  {
+    return Err(invalid());
+  }
+  Ok(format!("https://{domain}"))
+}
+
+fn copilot_login_args(host: Option<&str>) -> Result<[String; 3], String> {
+  Ok(["login".into(), "--host".into(), normalize_copilot_host(host.unwrap_or("github.com"))?])
+}
+
+fn copilot_host_error(requested_host: &str, auth: &CopilotAuthStatus) -> Option<String> {
+  let actual_host = auth.host.as_deref().and_then(|host| normalize_copilot_host(host).ok());
+  (auth.signed_in && actual_host.as_deref() != Some(requested_host)).then(|| format!(
+    "Copilot sign-in completed, but the chat engine is not using {requested_host}. Check for COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN overrides, remove unintended overrides, and sign in again."
+  ))
+}
+
+#[tauri::command]
+pub async fn auth_logout_copilot(app: AppHandle, state: State<'_, AppState>) -> Result<ProcResult, String> {
+  let Ok(_guard) = COPILOT_AUTH_ACTION.try_lock() else {
+    return Ok(auth_failure("copilot-logout", None, "A Copilot sign-in or sign-out is already in progress.".into()));
+  };
+  let _auth_guard = match state.copilot.begin_auth_change() {
+    Ok(guard) => guard,
+    Err(error) => return Ok(auth_failure("copilot-logout", None, error)),
+  };
+  if state.is_copilot_busy() {
+    return Ok(auth_failure(
+      "copilot-logout",
+      None,
+      "Wait for active Copilot tasks to finish or stop them, then sign out again.".into(),
+    ));
+  }
+  let on_data = proc_streamer(&app, "logout:copilot");
+  on_data(exec::Stream::Stdout, "Signing out of GitHub Copilot...\n");
+  Ok(match state.copilot.logout().await {
+    Ok(()) => {
+      on_data(exec::Stream::Stdout, "Signed out of GitHub Copilot.\n");
+      ProcResult { ok: true, exit_code: None, error: None }
+    }
+    Err(error) => {
+      on_data(exec::Stream::Stderr, &format!("{error}\n"));
+      auth_failure("copilot-logout", None, error)
+    }
+  })
 }
 
 fn auth_failure(context: &str, exit_code: Option<i32>, error: String) -> ProcResult {
@@ -395,7 +485,7 @@ pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>) -> ProcRe
 #[tauri::command]
 pub async fn auth_login_az(app: AppHandle) -> ProcResult {
   let Ok(_guard) = AZ_AUTH_ACTION.try_lock() else {
-    return auth_failure("azure-login", None, "Azure sign-in is already in progress.".into());
+    return auth_failure("azure-login", None, "An Azure sign-in or sign-out is already in progress.".into());
   };
   let on_data = proc_streamer(&app, "login:az");
   on_data(exec::Stream::Stdout, "Starting Azure sign-in…\n");
@@ -418,6 +508,59 @@ pub async fn auth_login_az(app: AppHandle) -> ProcResult {
   }
   let auth = get_az_auth().await;
   verified_login("azure-login", "Azure", &res, auth.signed_in, auth.error)
+}
+
+#[tauri::command]
+pub async fn auth_logout_az(app: AppHandle) -> ProcResult {
+  let Ok(_guard) = AZ_AUTH_ACTION.try_lock() else {
+    return auth_failure("azure-logout", None, "An Azure sign-in or sign-out is already in progress.".into());
+  };
+  let on_data = proc_streamer(&app, "logout:az");
+  on_data(exec::Stream::Stdout, "Signing out of Azure...\n");
+  let res = exec::run(
+    "az",
+    &["logout"],
+    RunOptions {
+      on_data: Some(on_data.clone()),
+      timeout_ms: Some(60_000),
+      ..Default::default()
+    },
+  )
+  .await;
+  if !res.ok {
+    return auth_failure(
+      "azure-logout",
+      res.exit_code,
+      cli_failure_detail(&res, "Azure sign-out", "Try signing out again."),
+    );
+  }
+  let accounts = exec::run(
+    "az",
+    &["account", "list", "--output", "json"],
+    RunOptions::timeout(30_000),
+  )
+  .await;
+  if let Err(error) = verify_azure_signed_out(&accounts) {
+    return auth_failure("azure-logout", res.exit_code, error);
+  }
+  on_data(exec::Stream::Stdout, "Signed out of Azure.\n");
+  ProcResult { ok: true, exit_code: res.exit_code, error: None }
+}
+
+fn verify_azure_signed_out(accounts: &exec::RunResult) -> Result<(), String> {
+  if !accounts.ok {
+    return Err(cli_failure_detail(
+      accounts,
+      "Azure sign-out verification",
+      "Re-check your account status or try signing out again.",
+    ));
+  }
+  let accounts: Vec<serde_json::Value> = serde_json::from_str(&accounts.stdout)
+    .map_err(|_| "Azure returned an invalid account list after sign-out. Re-check your account status.".to_string())?;
+  if !accounts.is_empty() {
+    return Err("Azure still has signed-in accounts. Try signing out again.".into());
+  }
+  Ok(())
 }
 
 #[tauri::command]
@@ -467,6 +610,65 @@ mod tests {
       stderr: stderr.to_string(),
       not_found,
     }
+  }
+
+  #[test]
+  fn copilot_login_pins_the_normalized_host_before_requesting_a_code() {
+    assert_eq!(copilot_login_args(None).unwrap(), ["login", "--host", "https://github.com"]);
+    for (input, expected) in [
+      ("github.com", "https://github.com"),
+      (" https://GitHub.com/ ", "https://github.com"),
+      ("company.ghe.com", "https://company.ghe.com"),
+      ("https://Company.GHE.com/", "https://company.ghe.com"),
+      ("my-company.ghe.com", "https://my-company.ghe.com"),
+    ] {
+      assert_eq!(copilot_login_args(Some(input)).unwrap(), ["login", "--host", expected]);
+    }
+  }
+
+  #[test]
+  fn copilot_login_rejects_invalid_or_unsupported_hosts() {
+    for host in [
+      "", " ", "ghe.com", "git.company.com", "http://company.ghe.com",
+      "https://company.ghe.com/login/device", "company.ghe.com?query=1",
+      "company.ghe.com#fragment", "https://user:secret@company.ghe.com",
+      "https://company.ghe.com:8443", "company.ghe.com.attacker.example",
+      "https://github.com@attacker.example", "--host=company.ghe.com",
+      "company_name.ghe.com", "-company.ghe.com", "company-.ghe.com",
+      "company..ghe.com", "https://company.ghe.com\\login\\device", "company\n.ghe.com",
+    ] {
+      assert!(copilot_login_args(Some(host)).is_err(), "{host}");
+    }
+  }
+
+  #[test]
+  fn copilot_login_verification_cannot_succeed_on_the_wrong_host() {
+    let mut auth = CopilotAuthStatus {
+      signed_in: true,
+      host: Some("https://Company.GHE.com/".into()),
+      ..Default::default()
+    };
+    assert!(copilot_host_error("https://company.ghe.com", &auth).is_none());
+    auth.host = Some("https://github.com".into());
+    assert!(copilot_host_error("https://company.ghe.com", &auth).unwrap().contains("GH_TOKEN"));
+    auth.host = None;
+    assert!(copilot_host_error("https://company.ghe.com", &auth).is_some());
+    auth.signed_in = false;
+    assert!(copilot_host_error("https://company.ghe.com", &auth).is_none());
+  }
+
+  #[test]
+  fn azure_logout_requires_a_successful_empty_account_list() {
+    let mut empty = res(Some(0), false, "[]", "");
+    assert!(verify_azure_signed_out(&empty).is_err());
+    empty.ok = true;
+    assert!(verify_azure_signed_out(&empty).is_ok());
+    for stdout in ["", "not json", "{}", "null", r#"[{"user":{"name":"still-signed-in"}}]"#] {
+      let mut result = res(Some(0), false, stdout, "");
+      result.ok = true;
+      assert!(verify_azure_signed_out(&result).is_err(), "{stdout}");
+    }
+    assert!(verify_azure_signed_out(&res(None, false, "", "")).unwrap_err().contains("timed out"));
   }
 
   #[test]

@@ -208,7 +208,9 @@ pub fn run() {
       commands::auth::auth_login_copilot,
       commands::auth::auth_login_rayfin,
       commands::auth::auth_login_az,
+      commands::auth::auth_logout_copilot,
       commands::auth::auth_logout_rayfin,
+      commands::auth::auth_logout_az,
       // github (optional gh CLI: clone-from-GitHub)
       commands::github::github_status,
       commands::github::github_login,

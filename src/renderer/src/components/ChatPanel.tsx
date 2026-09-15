@@ -2735,6 +2735,7 @@ export default function ChatPanel({
         {needsCopilotSignIn && (
           <CopilotSignInNotice
             detail={copilotAuth?.error}
+            host={copilotAuth?.host}
             disabled={sending}
             onSignedIn={async () => {
               await onCopilotAuthChanged?.()

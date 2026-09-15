@@ -22,6 +22,7 @@ use async_trait::async_trait;
 use github_copilot_sdk::handler::{
   ApproveAllHandler, ExitPlanModeHandler, ExitPlanModeResult, UserInputHandler, UserInputResponse,
 };
+use github_copilot_sdk::rpc::AccountLogoutRequest;
 use github_copilot_sdk::session::Session;
 use github_copilot_sdk::types::GetAuthStatusResponse;
 use github_copilot_sdk::{
@@ -67,7 +68,7 @@ struct Entry {
 #[derive(Default)]
 pub struct CopilotManager {
   engine: Mutex<Engine>,
-  signing_in: AtomicBool,
+  changing_auth: AtomicBool,
 }
 
 #[derive(Default)]
@@ -84,9 +85,9 @@ pub struct TurnSession {
   pub recreated: bool,
 }
 
-pub struct CopilotSignInGuard<'a>(&'a AtomicBool);
+pub struct CopilotAuthGuard<'a>(&'a AtomicBool);
 
-impl Drop for CopilotSignInGuard<'_> {
+impl Drop for CopilotAuthGuard<'_> {
   fn drop(&mut self) {
     self.0.store(false, Ordering::SeqCst);
   }
@@ -387,6 +388,24 @@ fn map_model(m: &Model) -> Option<crate::types::CopilotModel> {
   })
 }
 
+fn remaining_auth_error(auth_type: Option<&str>) -> String {
+  match auth_type {
+    Some("user") => "A Copilot account is still signed in after sign-out. Another remembered account may be active; re-check and sign out of that account if needed.",
+    Some("gh-cli") => "Copilot is authenticated through GitHub CLI. Sign out of that account with `gh auth logout`, then restart Fabricator. GitHub CLI credentials were not changed.",
+    Some("env" | "token" | "copilot-api-token") => "Copilot is authenticated by a token supplied outside Fabricator. Unset COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN (or remove the configured SDK token), then restart Fabricator.",
+    _ => "Copilot is using credentials managed outside Fabricator. Remove them at their source, then restart Fabricator to sign out.",
+  }.to_string()
+}
+
+async fn current_account(client: &Client) -> Result<Option<serde_json::Value>, String> {
+  let current = client.rpc().account().get_current_auth().await
+    .map_err(|e| format!("Could not read the Copilot account for sign-out: {e}"))?;
+  if current.auth_errors.as_ref().is_some_and(|errors| !errors.is_empty()) {
+    return Err("Copilot could not resolve its credentials. Re-check your account status before signing out.".into());
+  }
+  Ok(current.auth_info)
+}
+
 impl Engine {
   async fn ensure_client(&mut self) -> Result<Client, String> {
     if let Some(c) = self.client.as_ref() {
@@ -431,6 +450,39 @@ impl Engine {
     }
   }
 
+  async fn remove_current_account(&mut self) -> Result<(), String> {
+    let client = self.ensure_client().await?;
+    let Some(auth_info) = current_account(&client).await? else {
+      return Ok(());
+    };
+    let auth = client.get_auth_status().await
+      .map_err(|e| format!("Could not identify the Copilot credential source: {e}"))?;
+    if auth.auth_type.as_deref() != Some("user") {
+      return Err(remaining_auth_error(auth.auth_type.as_deref()));
+    }
+    // Keep the credential payload in the backend and let the CLI remove its
+    // own keychain/config entries, rather than editing shared credential files.
+    client.rpc().account().logout(AccountLogoutRequest { auth_info }).await
+      .map_err(|e| format!("Could not remove the Copilot account: {e}"))?;
+    Ok(())
+  }
+
+  async fn verify_signed_out(&mut self, retry_delay: Duration) -> Result<(), String> {
+    let client = self.ensure_client().await?;
+    for attempt in 0..3 {
+      if attempt > 0 {
+        tokio::time::sleep(retry_delay).await;
+      }
+      let account = current_account(&client).await?;
+      let auth = client.get_auth_status().await
+        .map_err(|e| format!("Could not verify Copilot sign-out: {e}. Re-check your account status."))?;
+      if account.is_some() || auth.is_authenticated {
+        return Err(remaining_auth_error(auth.auth_type.as_deref()));
+      }
+    }
+    Ok(())
+  }
+
   /// Tear down the shared client (e.g. after a transport failure) so the next
   /// call restarts a fresh CLI server.
   async fn reset_client(&mut self) {
@@ -456,15 +508,15 @@ impl Engine {
 }
 
 impl CopilotManager {
-  pub fn begin_login(&self) -> Result<CopilotSignInGuard<'_>, String> {
-    self.signing_in.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-      .map_err(|_| "Copilot sign-in is already in progress.".to_string())?;
-    Ok(CopilotSignInGuard(&self.signing_in))
+  pub fn begin_auth_change(&self) -> Result<CopilotAuthGuard<'_>, String> {
+    self.changing_auth.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+      .map_err(|_| "A Copilot sign-in or sign-out is already in progress.".to_string())?;
+    Ok(CopilotAuthGuard(&self.changing_auth))
   }
 
   fn check_available(&self) -> Result<(), String> {
-    if self.signing_in.load(Ordering::SeqCst) {
-      return Err("Copilot sign-in is in progress. Finish signing in, then retry your message.".into());
+    if self.changing_auth.load(Ordering::SeqCst) {
+      return Err("Copilot sign-in or sign-out is in progress. Finish the account change, then retry your message.".into());
     }
     Ok(())
   }
@@ -518,15 +570,29 @@ impl CopilotManager {
       Ok(status) => status,
       Err(error) => {
         log::warn!("Copilot authentication check failed: {error}");
-        CopilotAuthStatus { signed_in: false, user: None, error: Some(error) }
+        CopilotAuthStatus { error: Some(error), ..Default::default() }
       }
     }
   }
 
-  /// Discard the old runtime's credentials and live session handles after login.
+  /// Discard the old runtime's credentials and live session handles after an account change.
   /// Detach rather than destroy sessions so their persisted conversations resume.
   pub async fn reload_auth(&self) {
     self.engine.lock().await.reset_client().await;
+  }
+
+  pub async fn logout(&self) -> Result<(), String> {
+    let removal = tokio::time::timeout(AUTH_TIMEOUT, async {
+      self.engine.lock().await.remove_current_account().await
+    }).await.unwrap_or_else(|_| Err(
+      "Copilot sign-out timed out. Re-check your account status before trying again.".into(),
+    ));
+    // Even a failed removal may have partially changed persisted credentials.
+    self.reload_auth().await;
+    removal?;
+    tokio::time::timeout(AUTH_TIMEOUT, async {
+      self.engine.lock().await.verify_signed_out(AUTH_RETRY_DELAY).await
+    }).await.map_err(|_| "Verifying Copilot sign-out timed out. Re-check your account status.".to_string())?
   }
 
   /// List the Copilot models available to the signed-in user. The SDK caches the
@@ -580,7 +646,7 @@ impl CopilotManager {
         "Could not verify GitHub Copilot access: {e}. Check your connection and Copilot access, then re-check or sign in again."
       )
     })?;
-    Ok(CopilotAuthStatus { signed_in: true, user: auth.login, error: None })
+    Ok(CopilotAuthStatus { signed_in: true, user: auth.login, host: auth.host, error: None })
   }
 
   /// Get the persistent, cached session for a project turn, creating or
@@ -863,6 +929,110 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn enterprise_auth_reports_the_host_used_by_the_chat_engine() {
+    let (client, server) = fake_client(vec![
+      ("auth.getStatus", json!({ "result": {
+        "isAuthenticated": true, "login": "enterprise-user", "host": "https://company.ghe.com"
+      } })),
+      ("models.list", json!({ "result": { "models": [] } })),
+    ]);
+    let status = manager_with(client).check_auth(Duration::from_secs(2), Duration::ZERO).await;
+    assert!(status.signed_in);
+    assert_eq!(status.host.as_deref(), Some("https://company.ghe.com"));
+    server.await.unwrap();
+  }
+
+  #[tokio::test]
+  async fn logout_removes_only_the_current_account_using_the_sdk() {
+    let account = json!({ "type": "user", "login": "enterprise-user", "host": "https://company.ghe.com" });
+    let (client, server) = fake_client(vec![
+      ("account.getCurrentAuth", json!({ "result": { "authInfo": account } })),
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": true, "authType": "user" } })),
+      ("account.logout", json!({ "result": { "hasMoreUsers": true } })),
+    ]);
+    manager_with(client).engine.lock().await.remove_current_account().await.unwrap();
+    let requests = server.await.unwrap();
+    assert_eq!(requests[2]["params"]["authInfo"], account);
+    assert_eq!(requests.len(), 3);
+  }
+
+  #[tokio::test]
+  async fn logout_refuses_to_remove_credentials_owned_by_other_tools() {
+    for (auth_type, hint) in [("env", "COPILOT_GITHUB_TOKEN"), ("gh-cli", "gh auth logout"), ("token", "SDK token")] {
+      let (client, server) = fake_client(vec![
+        ("account.getCurrentAuth", json!({ "result": { "authInfo": { "type": auth_type } } })),
+        ("auth.getStatus", json!({ "result": { "isAuthenticated": true, "authType": auth_type } })),
+      ]);
+      let error = manager_with(client).engine.lock().await.remove_current_account().await.unwrap_err();
+      assert!(error.contains(hint), "{error}");
+      assert_eq!(server.await.unwrap().len(), 2);
+    }
+  }
+
+  #[tokio::test]
+  async fn failed_logout_discards_the_old_runtime_without_reporting_success() {
+    let (client, server) = fake_client(vec![
+      ("account.getCurrentAuth", json!({ "result": { "authInfo": { "type": "user" } } })),
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": true, "authType": "user" } })),
+      ("account.logout", rpc_error("Credential store is unavailable")),
+    ]);
+    let manager = manager_with(client);
+    let _guard = manager.begin_auth_change().unwrap();
+    let error = manager.logout().await.unwrap_err();
+    assert!(error.contains("Credential store is unavailable"));
+    let engine = manager.engine.lock().await;
+    assert!(engine.client.is_none());
+    assert_eq!(engine.generation, 1);
+    server.await.unwrap();
+  }
+
+  #[tokio::test]
+  async fn logout_does_not_treat_credential_resolution_errors_as_an_empty_account() {
+    let (client, server) = fake_client(vec![
+      ("account.getCurrentAuth", json!({ "result": { "authErrors": ["Credential store is unavailable"] } })),
+    ]);
+    let error = manager_with(client).engine.lock().await.remove_current_account().await.unwrap_err();
+    assert!(error.contains("could not resolve"));
+    assert_eq!(server.await.unwrap().len(), 1);
+  }
+
+  #[tokio::test]
+  async fn logout_verification_requires_an_explicit_stable_signed_out_state() {
+    let mut steps = Vec::new();
+    for _ in 0..3 {
+      steps.push(("account.getCurrentAuth", json!({ "result": {} })));
+      steps.push(("auth.getStatus", json!({ "result": { "isAuthenticated": false } })));
+    }
+    let (client, server) = fake_client(steps);
+    manager_with(client).engine.lock().await.verify_signed_out(Duration::ZERO).await.unwrap();
+    assert_eq!(server.await.unwrap().len(), 6);
+  }
+
+  #[tokio::test]
+  async fn logout_verification_catches_fallback_credentials_after_initialization() {
+    let (client, server) = fake_client(vec![
+      ("account.getCurrentAuth", json!({ "result": {} })),
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": false } })),
+      ("account.getCurrentAuth", json!({ "result": { "authInfo": { "type": "gh-cli" } } })),
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": true, "authType": "gh-cli" } })),
+    ]);
+    let error = manager_with(client).engine.lock().await.verify_signed_out(Duration::ZERO).await.unwrap_err();
+    assert!(error.contains("GitHub CLI"));
+    server.await.unwrap();
+  }
+
+  #[tokio::test]
+  async fn logout_verification_does_not_mistake_rpc_failure_for_signed_out() {
+    let (client, server) = fake_client(vec![
+      ("account.getCurrentAuth", json!({ "result": {} })),
+      ("auth.getStatus", rpc_error("Authentication service unavailable")),
+    ]);
+    let error = manager_with(client).engine.lock().await.verify_signed_out(Duration::ZERO).await.unwrap_err();
+    assert!(error.contains("Could not verify"));
+    server.await.unwrap();
+  }
+
+  #[tokio::test]
   async fn auth_waits_for_runtime_initialization() {
     let (client, server) = fake_client(vec![
       ("auth.getStatus", json!({ "result": { "isAuthenticated": false } })),
@@ -1068,10 +1238,10 @@ mod tests {
   }
 
   #[test]
-  fn login_excludes_new_engine_work_until_the_guard_is_dropped() {
+  fn account_changes_exclude_new_engine_work_until_the_guard_is_dropped() {
     let manager = CopilotManager::default();
-    let guard = manager.begin_login().unwrap();
-    assert!(manager.begin_login().is_err());
+    let guard = manager.begin_auth_change().unwrap();
+    assert!(manager.begin_auth_change().is_err());
     assert!(manager.check_available().is_err());
     drop(guard);
     assert!(manager.check_available().is_ok());

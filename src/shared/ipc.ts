@@ -93,6 +93,7 @@ export interface DoctorReport {
 export interface CopilotAuthStatus {
   signedIn: boolean
   user?: string
+  host?: string
   /** Why authentication could not be verified by the bundled chat engine. */
   error?: string
 }
@@ -399,7 +400,9 @@ export type ProcStreamId =
   | 'login:copilot'
   | 'login:rayfin'
   | 'login:az'
+  | 'logout:copilot'
   | 'logout:rayfin'
+  | 'logout:az'
   | 'install:rayfin'
   | 'install:copilot'
   | 'install:node'
@@ -1502,7 +1505,9 @@ export const IpcChannels = {
   authLoginCopilot: 'auth:loginCopilot',
   authLoginRayfin: 'auth:loginRayfin',
   authLoginAz: 'auth:loginAz',
+  authLogoutCopilot: 'auth:logoutCopilot',
   authLogoutRayfin: 'auth:logoutRayfin',
+  authLogoutAz: 'auth:logoutAz',
 
   githubStatus: 'github:status',
   githubLogin: 'github:login',
@@ -1645,10 +1650,12 @@ export interface RayfinStudioApi {
 
   auth: {
     status: () => Promise<AuthStatus>
-    loginCopilot: () => Promise<ProcResult>
+    loginCopilot: (host?: string) => Promise<ProcResult>
     loginRayfin: (tenant?: string) => Promise<ProcResult>
     loginAz: () => Promise<ProcResult>
+    logoutCopilot: () => Promise<ProcResult>
     logoutRayfin: () => Promise<ProcResult>
+    logoutAz: () => Promise<ProcResult>
   }
 
   /** Optional GitHub integration (backed by the `gh` CLI) for cloning repos. */

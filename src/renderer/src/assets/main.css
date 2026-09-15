@@ -1690,6 +1690,24 @@ code {
 .auth-row-action {
   justify-self: end;
   flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.auth-row-options {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.copilot-host-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.copilot-host-field .field-input {
+  min-width: 0;
 }
 
 /* Sticky action bar */

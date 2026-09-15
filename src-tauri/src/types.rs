@@ -94,6 +94,8 @@ pub struct CopilotAuthStatus {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub user: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
+  pub host: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
 }
 

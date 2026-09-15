@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { signInToCopilot } from '../copilotAuth'
+import { getCopilotHost, signInToCopilot } from '../copilotAuth'
+import CopilotHostInput from './CopilotHostInput'
 
 interface Props {
   detail?: string
+  host?: string
   disabled?: boolean
   onSignedIn: () => Promise<void> | void
 }
 
-export default function CopilotSignInNotice({ detail, disabled, onSignedIn }: Props): JSX.Element {
+export default function CopilotSignInNotice({ detail, host, disabled, onSignedIn }: Props): JSX.Element {
+  const [copilotHost, setCopilotHost] = useState(() => host ?? getCopilotHost())
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -28,7 +31,7 @@ export default function CopilotSignInNotice({ detail, disabled, onSignedIn }: Pr
           setLog((previous) => (previous + event.data).slice(-16000))
         }
       })
-      const result = await signInToCopilot()
+      const result = await signInToCopilot(copilotHost)
       if (!result.ok) {
         setError(result.error ?? 'Copilot sign-in did not complete. Please try again.')
         return
@@ -48,6 +51,7 @@ export default function CopilotSignInNotice({ detail, disabled, onSignedIn }: Pr
     <div className="alert alert--error copilot-auth-notice" role="alert">
       <strong>Copilot needs your attention</strong>
       <div>{error ?? detail ?? 'Sign in to GitHub Copilot here, then retry your message.'}</div>
+      <CopilotHostInput value={copilotHost} disabled={busy || disabled} onChange={setCopilotHost} />
       <button className="btn btn--primary btn--sm" disabled={busy || disabled} onClick={() => void signIn()}>
         {busy ? 'Signing in to Copilot...' : 'Sign in to Copilot'}
       </button>
