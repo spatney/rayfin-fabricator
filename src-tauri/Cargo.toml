@@ -1,6 +1,6 @@
 [package]
 name = "rayfin-fabricator"
-version = "0.63.2"
+version = "1.3.3"
 description = "Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
 authors = ["Fabricator"]
 license = "MIT"
@@ -44,7 +44,7 @@ async-trait = "0.1"
 # %LOCALAPPDATA%\github-copilot-sdk\cli\<ver>\copilot.exe at runtime, so the app is
 # self-contained (no separate install). Build requires network; cache via
 # BUNDLED_CLI_CACHE_DIR in CI.
-github-copilot-sdk = "1.0.3"
+github-copilot-sdk = "1.0.7"
 
 uuid = { version = "1", features = ["v4"] }
 sha2 = "0.10"
@@ -62,6 +62,10 @@ trash = "5"
 thiserror = "2"
 anyhow = "1"
 
+# Extract user-uploaded custom-skill `.zip` bundles (see commands/custom_skills.rs).
+# `enclosed_name()` is used on entries to guard against zip-slip path traversal.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
 # Windows-only: capture the native WebView2 preview to a PNG (ICoreWebView2::CapturePreview).
 # webview2-com / windows versions are pinned to what the vendored wry (and tauri) resolve to,
 # so Cargo unifies them rather than pulling a second copy. See services/preview.rs.
@@ -73,6 +77,7 @@ windows = { version = "0.61", features = [
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Memory",
   "Win32_System_ProcessStatus",
+  "Win32_System_Registry",
   "Win32_System_Threading",
 ] }
 

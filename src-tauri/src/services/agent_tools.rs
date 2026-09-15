@@ -95,14 +95,9 @@ pub fn fabricator_tools(_app: AppHandle, _project_id: String) -> Vec<Tool> {
 /// A failure tool result carrying a message the agent can act on.
 fn failure(message: impl Into<String>) -> ToolResult {
   let message = message.into();
-  ToolResult::Expanded(ToolResultExpanded {
-    text_result_for_llm: message.clone(),
-    result_type: "failure".to_string(),
-    binary_results_for_llm: None,
-    session_log: None,
-    error: Some(message),
-    tool_telemetry: None,
-  })
+  // `ToolResultExpanded` is `#[non_exhaustive]` in the SDK; build it via the
+  // `new(...).with_*` chain rather than a struct literal.
+  ToolResult::Expanded(ToolResultExpanded::new(message.clone(), "failure").with_error(message))
 }
 
 /* ------------------------ semantic-model locator -------------------------- */

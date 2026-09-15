@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { authErrorMessage } from '../authErrors'
 import type {
   CommunityGallery,
   FabricWorkspacesResult,
@@ -26,6 +27,8 @@ interface Props {
   onContinueWithoutDeploy: () => void
   /** True while a `rayfin up` is already streaming for this project (disables the submit). */
   deploying?: boolean
+  /** Refresh app auth after sign-in; rejection prevents retrying with an unverified account. */
+  onSignedIn?: () => Promise<void> | void
 }
 
 const keyOf = (t: { path?: string; name: string }): string => t.path || t.name
@@ -114,6 +117,7 @@ export default function CreateProjectScreen({
   onCreated,
   onDeploy,
   onContinueWithoutDeploy,
+  onSignedIn,
   deploying = false
 }: Props): JSX.Element {
   // The native preview webview floats above HTML; suppress it while this covers the body.
@@ -147,15 +151,28 @@ export default function CreateProjectScreen({
   // ----- Deploy step -----
   const [wsResult, setWsResult] = useState<FabricWorkspacesResult | null>(null)
   const [loadingWs, setLoadingWs] = useState(false)
+  const wsSeqRef = useRef(0)
+
+  useEffect(() => () => {
+    ++wsSeqRef.current
+  }, [])
 
   async function loadWorkspaces(): Promise<void> {
+    const seq = ++wsSeqRef.current
     setLoadingWs(true)
+    setWsResult(null)
     try {
-      setWsResult(await window.api.fabric.listWorkspaces())
+      const result = await window.api.fabric.listWorkspaces()
+      if (seq === wsSeqRef.current) setWsResult(result)
     } catch (err) {
-      setWsResult({ ok: false, error: String(err) })
+      if (seq === wsSeqRef.current) {
+        setWsResult({
+          ok: false,
+          error: authErrorMessage(err, 'Could not load workspaces. Please retry.')
+        })
+      }
     } finally {
-      setLoadingWs(false)
+      if (seq === wsSeqRef.current) setLoadingWs(false)
     }
   }
 
@@ -316,7 +333,9 @@ export default function CreateProjectScreen({
   const sub =
     step === 'deploy'
       ? `Publish ${createdName || 'your app'} to a Fabric workspace to start building with chat.`
-      : 'Name your app and pick a template to start from.'
+      : busy
+        ? `Setting up ${name.trim() || 'your app'}…`
+        : 'Name your app and pick a template to start from.'
   const skipLabel = mode === 'deploy' ? 'Maybe later' : 'Continue without deploying →'
 
   return (
@@ -348,7 +367,7 @@ export default function CreateProjectScreen({
         {step === 'details' ? (
           <>
             <div className="create-body">
-              <label className="field">
+              <label className={`field${busy ? ' create-field-hidden' : ''}`}>
                 <span className="field-label">Project name</span>
                 <input
                   className="field-input"
@@ -369,7 +388,7 @@ export default function CreateProjectScreen({
                 )}
               </label>
 
-              <div className="field">
+              <div className={`field${busy ? ' create-field-hidden' : ''}`}>
                 <span className="field-label">Template</span>
                 <div className="seg">
                   <button
@@ -390,10 +409,16 @@ export default function CreateProjectScreen({
                   </button>
                 </div>
 
+                <p className="template-caption">
+                  {source === 'builtin'
+                    ? 'Curated, ready-to-run starting points — each deploys straight to a Fabric test workspace, then you keep building with chat.'
+                    : 'Start from any community template published in an awesome-rayfin GitHub repo.'}
+                </p>
+
                 {source === 'builtin' ? (
                   loadingTemplates ? (
                     <div className="template-grid" aria-busy="true">
-                      {Array.from({ length: 4 }).map((_, i) => (
+                      {Array.from({ length: 3 }).map((_, i) => (
                         <div key={i} className="template-card template-card--skel">
                           <span className="skel-line skel-line--title" />
                           <span className="skel-line" />
@@ -412,14 +437,6 @@ export default function CreateProjectScreen({
                           onClick={() => setTemplate(t.name)}
                         >
                           <span className="template-card-name">{t.displayName}</span>
-                          {t.defaultPreviewMode === 'fabric' && (
-                            <span
-                              className="template-card-badge"
-                              title="Opens embedded in the Fabric portal view by default — you can switch to the direct view any time."
-                            >
-                              Opens in Fabric view
-                            </span>
-                          )}
                           <span className="template-card-desc">{t.description}</span>
                         </button>
                       ))}
@@ -618,7 +635,8 @@ export default function CreateProjectScreen({
               <DeploymentCreateForm
                 wsResult={wsResult}
                 loadingWs={loadingWs}
-                onReload={() => void loadWorkspaces()}
+                onReload={loadWorkspaces}
+                onSignedIn={onSignedIn}
                 running={deploying}
                 submitLabel="Deploy app"
                 busyLabel="Deploying…"

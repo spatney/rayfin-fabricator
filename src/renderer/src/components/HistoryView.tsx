@@ -12,6 +12,7 @@ import { GIT_WORKING_REF } from '@shared/ipc'
 import { monacoLanguage } from '../monaco'
 import { ChatIcon, CompareIcon, CopyIcon, HistoryIcon, SearchIcon } from './icons'
 import ConfirmModal from './ConfirmModal'
+import Skeleton from './Skeleton'
 
 interface Props {
   project: StudioProject
@@ -596,7 +597,7 @@ export default function HistoryView({
             onKeyDown={onRailKey}
           >
             {history === null ? (
-              <div className="code-tree-empty">Loading…</div>
+              <Skeleton rows={5} avatar />
             ) : (
               <>
                 {showWorking && (
@@ -715,7 +716,7 @@ export default function HistoryView({
 
           <div className="hist-files-body">
             {changesLoading ? (
-              <div className="code-tree-empty">Loading…</div>
+              <Skeleton rows={4} />
             ) : !changes || changes.length === 0 ? (
               <div className="code-tree-empty">
                 {compareMode
@@ -779,7 +780,7 @@ export default function HistoryView({
                     <div className="hist-filelog-title">History of this file</div>
                     <div className="hist-filelog-body">
                       {fileLogLoading ? (
-                        <div className="code-tree-empty">Loading…</div>
+                        <Skeleton rows={3} avatar />
                       ) : !fileLog || fileLog.length === 0 ? (
                         <div className="code-tree-empty">No earlier versions found.</div>
                       ) : (

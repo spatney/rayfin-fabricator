@@ -42,7 +42,7 @@ Fabricator is the desktop shell that makes building those apps effortless.
 
 1. **Chat to build.** Describe what you want in plain English. The built-in GitHub Copilot agent writes and edits the project files for you — you never touch a command line. Git quietly snapshots every change, so you can diff and roll back anytime.
 2. **See it as it's built.** Inspect and edit any file in a built-in Monaco editor, and watch the app itself in a live inline preview — no separate browser, no copy-pasting URLs.
-3. **Deploy with a click.** Hit deploy and Fabricator runs `rayfin up` for you, shipping the app to Microsoft Fabric. Create, switch, and redeploy across workspaces from a single deployments panel.
+3. **Deploy with a click.** Hit deploy and Fabricator runs `rayfin up` for you, shipping the app to Microsoft Fabric. Create, switch, and redeploy across workspaces from a single deployments panel — then share the app with teammates in your tenant straight from that panel.
 4. **Harden it.** The Advisor runs Copilot-driven security and policy checks — unprotected routes, over-permissive database policies, that kind of thing — and flags them when the project changes.
 5. **Repeat** until it's exactly what you wanted.
 
@@ -68,19 +68,33 @@ Fabricator runs on **Windows 10/11** and **macOS (Apple Silicon)**.
 
    > This is a one-time step. Without it macOS may report the app as *"damaged and can't be opened"* — that's the quarantine flag, not real corruption. (Control-click → **Open** also works, but the `xattr` command is the most reliable.) These steps go away once the app is notarized.
 
-Then launch the app. The onboarding doctor checks the rest and walks you through signing in to GitHub Copilot and Microsoft Fabric.
+Then launch the app. The onboarding doctor checks the rest and walks you through signing in to GitHub Copilot and Azure. Sign in to Microsoft Fabric when you open a project and deploy.
 
 To build apps you'll create a Rayfin project with `npm create @microsoft/rayfin@latest`. Fabricator uses that project's pinned Rayfin CLI, so there's nothing to install globally. The app keeps itself up to date with in-app auto-updates on both platforms.
 
 Want to build from source instead? Jump to [Build from source](#build-from-source).
 
+### Sign-in and recovery
+
+Copilot ships with Fabricator; you do not need a separate global Copilot installation or a terminal login. Setup verifies authentication and model access through the same bundled engine that runs chat, rather than trusting a remembered username. Complete the browser or device-code instructions shown in the app. A failed or timed-out check stays unverified and displays a reason.
+
+If Copilot credentials expire while you are working, use **Sign in to Copilot** in chat, then retry your message. Sign-in refreshes the engine and available models without clearing your conversation or unsent draft. Missing Copilot sessions are reconnected when possible; if the saved engine session is gone, Fabricator explains that it has started a new one and keeps the displayed chat history. Prompts are not automatically replayed after work has started.
+
+Fabric and Azure checks also verify usable credentials, and the GitHub repository picker verifies the active GitHub identity through its API. Sign-in failures are shown in the app rather than silently continuing; expired credentials and permission failures are handled separately. Signing in does not automatically replay sharing or deletion operations.
+
+The app preview's browser sign-in is separate from Fabricator's Fabric CLI session. If silent token acquisition needs interaction, the semantic-model dialog offers **Sign in & retry** rather than repeatedly retrying without credentials.
+
+On Windows, startup and **Re-check** refresh CLI discovery from the saved user/machine PATH and common Scoop/pnpm locations. If a CLI is found but its version check fails, setup shows the failure and offers **Re-check** instead of installing another copy. **GitHub CLI (gh)** is optional repository tooling; it is separate from the bundled Copilot engine, so a pnpm Copilot installation does not satisfy the `gh` check.
+
 ## What's inside
 
 **Author.** Chat with a built-in GitHub Copilot agent — pick the model and reasoning effort, steer it mid-turn, and keep separate threads (plus optional parallel side threads) with full history. Every turn runs in **Agent** mode; enable the experimental mode selector (Settings → Experiments) to also choose **Plan** or **Autopilot**. Inspect and edit any generated file in a built-in Monaco editor, see your data model as an entity diagram, browse the agent's reusable Skills, and lean on a git timeline you can diff and restore.
 
-**Ship.** One-click `rayfin up` deploys to Microsoft Fabric. A deployments panel handles create, switch, and redeploy across workspaces.
+**Ship.** One-click `rayfin up` deploys to Microsoft Fabric. A deployments panel handles create, switch, and redeploy across workspaces — and share a deployed app with people in your Entra tenant by email (each recipient gets Contributor on its workspace, and any semantic model the app uses in another workspace is automatically shared with Build access).
 
 **Preview.** A native inline preview loads your running app — navigation, reload, browser devtools (inspector), focus mode, a Fabric portal shell toggle, and annotate-a-screenshot-straight-into-chat.
+
+The native preview follows the renderer's display scale and browser/pinch zoom, including moves between monitors. Creation, positioning, and visibility commands stay ordered so a slow-starting preview cannot leave an old surface over the chat or other tabs.
 
 **Validate.** The Advisor runs AI security and policy checks, saves the results, and tells you when they've gone stale. The Model tab flags loose access on any entity and hands a one-click *harden* prompt to the agent.
 
@@ -151,7 +165,7 @@ You'll need:
 | Tauri prerequisites | For local desktop development and packaging. |
 | Git | Used for local project history. |
 | Rayfin CLI | Ships with each Rayfin project (`npm create @microsoft/rayfin@latest`); Fabricator runs the project-pinned version via `npx rayfin`. Sign in to Microsoft Fabric in-app. |
-| GitHub Copilot CLI | Available as a command; sign in to GitHub Copilot. |
+| GitHub Copilot CLI | Bundled by the Rust SDK; sign in through Fabricator. No global install is required. |
 
 Clone, install, and run:
 
@@ -168,11 +182,10 @@ Build the desktop app and platform installer (NSIS `.exe` on Windows, `.dmg` + u
 npm run build
 ```
 
-Sanity-check the external CLIs and sign-ins before deploying or previewing:
+Sanity-check the project-local Rayfin CLI before deploying or previewing:
 
 ```bash
 npx rayfin --help
-copilot --help
 ```
 
 Scripts worth knowing:
@@ -184,6 +197,7 @@ Scripts worth knowing:
 | `npm run dev:renderer` | Run the Vite renderer on its own. |
 | `npm run build:renderer` | Build the Vite renderer on its own. |
 | `npm run typecheck` | Type-check the Node and web TypeScript projects. |
+| `npm test` | Run renderer regression tests (also run in CI). |
 | `npm run lint` | Run ESLint. |
 | `npm run format` | Format renderer source with Prettier. |
 

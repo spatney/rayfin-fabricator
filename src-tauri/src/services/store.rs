@@ -32,13 +32,14 @@ fn default_state() -> ProjectsState {
 
 fn default_settings() -> AppSettings {
   AppSettings {
-    theme: "dark".to_string(),
+    theme: "system".to_string(),
     ui_scale: Some(1.0),
     experiments: Some(ExperimentFlags {
       compatibility_rendering: Some(false),
       chat_mode_selector: Some(false),
-      preview_design_mode: Some(false),
+      local_dev_preview: Some(false),
     }),
+    full_diagnostics: Some(false),
   }
 }
 
@@ -122,6 +123,7 @@ pub fn set_settings(
   theme: Option<String>,
   ui_scale: Option<f64>,
   experiments: Option<ExperimentFlags>,
+  full_diagnostics: Option<bool>,
 ) -> AppSettings {
   with_cache(|c| {
     if let Some(t) = theme {
@@ -130,11 +132,14 @@ pub fn set_settings(
     if let Some(s) = ui_scale {
       c.settings.ui_scale = Some(s.clamp(0.8, 2.0));
     }
+    if let Some(v) = full_diagnostics {
+      c.settings.full_diagnostics = Some(v);
+    }
     if let Some(patch) = experiments {
       let current = c.settings.experiments.get_or_insert(ExperimentFlags {
         compatibility_rendering: Some(false),
         chat_mode_selector: Some(false),
-        preview_design_mode: Some(false),
+        local_dev_preview: Some(false),
       });
       if let Some(v) = patch.compatibility_rendering {
         current.compatibility_rendering = Some(v);
@@ -142,8 +147,8 @@ pub fn set_settings(
       if let Some(v) = patch.chat_mode_selector {
         current.chat_mode_selector = Some(v);
       }
-      if let Some(v) = patch.preview_design_mode {
-        current.preview_design_mode = Some(v);
+      if let Some(v) = patch.local_dev_preview {
+        current.local_dev_preview = Some(v);
       }
     }
     persist(c);
@@ -216,4 +221,13 @@ pub fn mutate_project(id: &str, f: impl FnOnce(&mut StudioProject)) -> ProjectsS
 
 pub fn find_project(id: &str) -> Option<StudioProject> {
   with_cache(|c| c.state.projects.iter().find(|p| p.id == id).cloned())
+}
+
+/// The currently-active project (resolved from `active_project_id`), if any. Used
+/// to locate the project-local Rayfin CLI for Fabric auth / REST calls.
+pub fn active_project() -> Option<StudioProject> {
+  with_cache(|c| {
+    let id = c.state.active_project_id.clone()?;
+    c.state.projects.iter().find(|p| p.id == id).cloned()
+  })
 }

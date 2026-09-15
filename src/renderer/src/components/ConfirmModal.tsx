@@ -1,5 +1,6 @@
 import { useEffect, useId } from 'react'
 import { useSuppressPreview } from '../overlay'
+import { useModalFocus } from '../modalFocus'
 
 interface Props {
   title: string
@@ -45,6 +46,7 @@ export default function ConfirmModal({
   useSuppressPreview()
   const working = busy || secondaryBusy
   const titleId = useId()
+  const dialogRef = useModalFocus<HTMLDivElement>()
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && !working) onCancel()
@@ -60,6 +62,7 @@ export default function ConfirmModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        ref={dialogRef}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">

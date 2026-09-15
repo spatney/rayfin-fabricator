@@ -1,0 +1,12 @@
+# Installed on demand; the committed package-lock.json pins the exact versions,
+# so node_modules is disposable and stays out of git.
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Logs & OS/editor cruft
+*.log
+npm-debug.log*
+.DS_Store

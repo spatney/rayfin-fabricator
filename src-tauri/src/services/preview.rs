@@ -117,12 +117,16 @@ const CONSOLE_INIT_JS: &str = r#";(function () {
 })();"#;
 
 /// The in-page "design mode" controller (see `services/design_agent.js`).
-/// Evaluated on demand by [`preview_design_set`] (never bundled into the
-/// document-start script, so the deployed app stays untouched unless the user
-/// opens design mode). Idempotent: defines `window.__rayfinDesign` once. Combined
-/// with a trailing `.enable()` when turning design mode on; re-evaluated on every
-/// finished page load while a design session is active so it survives SPA
-/// navigations and reloads.
+/// Injected at document-start into **all frames**
+/// ([`WebviewBuilder::initialization_script_for_all_frames`]) so it is present in
+/// the deployed app even when the app is embedded in a *cross-origin* iframe inside
+/// the Fabric portal — the top-frame `wv.eval` used for the direct view can't reach
+/// a cross-origin iframe. The controller stays dormant (defines
+/// `window.__rayfinDesign` + a passive `postMessage` listener) until
+/// [`preview_design_set`] enables it. In the Fabric-embedded view the top (Fabric
+/// shell) frame runs as a *relay* that bridges host calls to the app iframe over
+/// `postMessage`; in the direct view the app is the top frame and runs the full
+/// controller locally. Idempotent: defines `window.__rayfinDesign` once.
 const DESIGN_AGENT_JS: &str = include_str!("design_agent.js");
 
 /// JS that reads the design controller's lightweight status (returns an object or
@@ -140,31 +144,52 @@ const DESIGN_DRAIN_JS: &str =
 const DESIGN_DRAIN_AI_JS: &str =
   "(function(){try{return window.__rayfinDesign?window.__rayfinDesign.drainAi():null}catch(e){return null}})()";
 
-/// Logical-pixel rectangle reported by the renderer (its host element's bounds,
-/// relative to the window client area — i.e. `getBoundingClientRect()`).
+/// JS that drains a pending "Edit with AI" restyle request for a selected element
+/// (returns `{id, description, model, context}` once, then clears it), or `null`.
+const DESIGN_DRAIN_AI_EDIT_JS: &str =
+  "(function(){try{return window.__rayfinDesign?window.__rayfinDesign.drainAiEdit():null}catch(e){return null}})()";
+
+/// Renderer visual-viewport CSS bounds plus its physical-pixel ratio. Legacy
+/// callers without a ratio use native logical coordinates.
 #[derive(Debug, Clone, Copy, serde::Deserialize)]
 pub struct PreviewBounds {
   pub x: f64,
   pub y: f64,
   pub width: f64,
   pub height: f64,
+  #[serde(default, rename = "pixelRatio")]
+  pub pixel_ratio: Option<f64>,
 }
 
 impl PreviewBounds {
-  fn position(self) -> LogicalPosition<f64> {
-    LogicalPosition::new(self.x, self.y)
-  }
-
-  fn size(self) -> LogicalSize<f64> {
-    // Guard against zero/negative sizes that some layouts briefly report.
-    LogicalSize::new(self.width.max(1.0), self.height.max(1.0))
-  }
-
-  fn to_rect(self) -> tauri::Rect {
-    tauri::Rect {
-      position: self.position().into(),
-      size: self.size().into(),
+  fn to_rect(self) -> AppResult<tauri::Rect> {
+    let ratio = self.pixel_ratio.unwrap_or(1.0);
+    if !ratio.is_finite() || ratio <= 0.0
+      || !self.width.is_finite() || !self.height.is_finite()
+      || self.width < 0.0 || self.height < 0.0
+      || [self.x, self.y, self.width.max(1.0), self.height.max(1.0)].iter().any(|n| {
+        !n.is_finite() || !(i32::MIN as f64..=i32::MAX as f64).contains(&(n * ratio).round())
+      })
+    {
+      return Err(AppError::Msg("Invalid native preview bounds or pixel ratio.".into()));
     }
+    let position = LogicalPosition::new(self.x, self.y);
+    let size = LogicalSize::new(self.width.max(1.0), self.height.max(1.0));
+    Ok(match self.pixel_ratio {
+      Some(ratio) => {
+        let physical_size = size.to_physical::<u32>(ratio);
+        tauri::Rect {
+          position: position.to_physical::<i32>(ratio).into(),
+          size: tauri::PhysicalSize::new(physical_size.width.max(1), physical_size.height.max(1)).into(),
+        }
+      }
+      None => tauri::Rect { position: position.into(), size: size.into() },
+    })
+  }
+
+  #[cfg(windows)]
+  fn parked(self) -> Self {
+    Self { x: OFFSCREEN_COORD, y: OFFSCREEN_COORD, ..self }
   }
 }
 
@@ -213,6 +238,11 @@ struct Inner {
   /// of the design controller on every finished page load (so it survives SPA
   /// navigations / reloads) — see [`preview_design_set`] and [`on_page_load`].
   design_active: bool,
+  /// When the active design session targets the Fabric-embedded view, the origin
+  /// of the deployed app (the cross-origin iframe inside the Fabric portal). The
+  /// top frame is then re-enabled as a `relay` for that origin on every finished
+  /// page load; `None` means the direct view (top frame is the app itself).
+  design_relay: Option<String>,
 }
 
 impl Inner {
@@ -234,6 +264,7 @@ impl Inner {
     // toggle) is a different app — end any active design session so the
     // controller isn't re-injected into it (see `on_page_load`).
     self.design_active = false;
+    self.design_relay = None;
   }
 }
 
@@ -241,6 +272,7 @@ impl Inner {
 /// (`add_child` dispatches to the event loop and blocks on the result), so this
 /// is only ever called from the async [`preview_show_url`] command.
 fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
+  let rect = bounds.to_rect()?;
   let main = app
     .get_webview_window("main")
     .ok_or_else(|| AppError::Msg("main window not found".into()))?;
@@ -262,6 +294,12 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
     // them back later via `fabricator_console`. Must be set before the webview
     // is created so it runs at document start on every page.
     .initialization_script(CONSOLE_INIT_JS)
+    // The design-mode controller is baked in at document-start into ALL frames
+    // (dormant until `preview_design_set` enables it). This is the only way to
+    // reach the app when it is embedded in a cross-origin iframe inside the
+    // Fabric portal, since `wv.eval` only runs in the top frame. See
+    // [`DESIGN_AGENT_JS`].
+    .initialization_script_for_all_frames(DESIGN_AGENT_JS)
     .on_navigation(move |u| {
       on_navigation(&nav_app, u);
       true
@@ -289,7 +327,7 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
   // `agent_capture`). Do NOT set per-webview `additional_browser_args` here: a
   // mismatch makes WebView2 fail creation with ERROR_INVALID_STATE (0x8007139F).
   window
-    .add_child(builder, bounds.position(), bounds.size())
+    .add_child(builder, rect.position, rect.size)
     .map_err(|e| AppError::Msg(format!("failed to create preview webview: {e}")))?;
   Ok(())
 }
@@ -320,7 +358,7 @@ fn on_navigation(app: &AppHandle, u: &Url) {
 fn on_page_load(app: &AppHandle, event: PageLoadEvent, u: &Url) {
   let loading = matches!(event, PageLoadEvent::Started);
   let state = app.state::<PreviewState>();
-  let (can_back, can_fwd, design_active) = {
+  let (can_back, can_fwd, design_active, design_relay) = {
     let mut inner = state.inner.lock().unwrap();
     // A finished load releases anyone blocked in `navigate_and_wait`.
     if !loading {
@@ -328,14 +366,21 @@ fn on_page_load(app: &AppHandle, event: PageLoadEvent, u: &Url) {
         let _ = tx.send(());
       }
     }
-    (inner.can_back(), inner.can_forward(), inner.design_active)
+    (
+      inner.can_back(),
+      inner.can_forward(),
+      inner.design_active,
+      inner.design_relay.clone(),
+    )
   };
-  // Re-inject + re-enable the design controller after a finished load so an
-  // active design session survives SPA navigations and reloads (eval'd code,
-  // unlike an initialization_script, does not persist across page loads).
+  // Re-enable the design controller after a finished load so an active design
+  // session survives SPA navigations and reloads. The controller itself is a
+  // document-start init script (present in every frame after each load); this
+  // only re-arms the top frame — in relay mode it re-adopts the app iframe via
+  // the postMessage handshake.
   if !loading && design_active {
     if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-      let _ = wv.eval(design_enable_js());
+      let _ = wv.eval(design_enable_js(design_relay.as_deref()));
     }
   }
   emit_nav(app, &u.to_string(), loading, can_back, can_fwd);
@@ -404,15 +449,15 @@ pub async fn preview_show_url(
     }
     state.inner.lock().unwrap().reset_to(&url);
     if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-      let _ = wv.set_bounds(bounds.to_rect());
-      let _ = wv.show();
+      wv.set_bounds(bounds.to_rect()?).map_err(|e| AppError::Msg(e.to_string()))?;
+      wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
       state.inner.lock().unwrap().visible = true;
     }
     return Ok(());
   }
 
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    let _ = wv.set_bounds(bounds.to_rect());
+    wv.set_bounds(bounds.to_rect()?).map_err(|e| AppError::Msg(e.to_string()))?;
     // Navigate only when the *commanded* URL changes — never when the webview's
     // live URL has merely drifted (SPA route, trailing slash, AAD redirect, query
     // params). A re-show after an overlay closes passes the same URL, so it stays
@@ -426,7 +471,7 @@ pub async fn preview_show_url(
         .map_err(|e| AppError::Msg(e.to_string()))?;
       state.inner.lock().unwrap().reset_to(&url);
     }
-    let _ = wv.show();
+    wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
     state.inner.lock().unwrap().visible = true;
   }
   Ok(())
@@ -454,7 +499,7 @@ pub fn preview_navigate(
     .parse()
     .map_err(|e| AppError::Msg(format!("invalid preview url {url:?}: {e}")))?;
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    let _ = wv.set_bounds(bounds.to_rect());
+    wv.set_bounds(bounds.to_rect()?).map_err(|e| AppError::Msg(e.to_string()))?;
     wv.navigate(parsed)
       .map_err(|e| AppError::Msg(e.to_string()))?;
     state.inner.lock().unwrap().reset_to(&url);
@@ -468,7 +513,7 @@ pub fn preview_navigate(
 pub fn preview_set_bounds(app: AppHandle, bounds: PreviewBounds) -> AppResult<()> {
   let _guard = watchdog::activity(Activity::PreviewSetBounds);
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    wv.set_bounds(bounds.to_rect())
+    wv.set_bounds(bounds.to_rect()?)
       .map_err(|e| AppError::Msg(e.to_string()))?;
   }
   Ok(())
@@ -492,7 +537,9 @@ pub fn preview_hide(app: AppHandle) -> AppResult<()> {
   let _guard = watchdog::activity(Activity::PreviewHide);
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
     #[cfg(windows)]
-    let _ = wv.set_bounds(offscreen_bounds().to_rect());
+    if let Err(error) = wv.set_bounds(offscreen_bounds().to_rect()?) {
+      log::warn!("Could not park the native preview before hiding: {error}");
+    }
     wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
     app.state::<PreviewState>().inner.lock().unwrap().visible = false;
   }
@@ -523,18 +570,19 @@ pub fn preview_suppress(app: AppHandle, bounds: PreviewBounds) -> AppResult<()> 
       // size ⇒ the reveal is a pure move (no viewport resize, no repaint), so the
       // live frame reappears instantly. If parking fails, fall back to a hard
       // hide so it can't occlude the overlay.
-      let parked = PreviewBounds {
-        x: OFFSCREEN_COORD,
-        y: OFFSCREEN_COORD,
-        width: bounds.width.max(1.0),
-        height: bounds.height.max(1.0),
-      };
-      if wv.set_bounds(parked.to_rect()).is_ok() {
-        wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
-        app.state::<PreviewState>().inner.lock().unwrap().visible = true;
-      } else {
-        wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
-        app.state::<PreviewState>().inner.lock().unwrap().visible = false;
+      let parked = bounds.parked().to_rect().and_then(|rect| {
+        wv.set_bounds(rect).map_err(|e| AppError::Msg(e.to_string()))
+      });
+      match parked {
+        Ok(()) => {
+          wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
+          app.state::<PreviewState>().inner.lock().unwrap().visible = true;
+        }
+        Err(error) => {
+          log::warn!("Could not park the native preview; falling back to hiding: {error}");
+          wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
+          app.state::<PreviewState>().inner.lock().unwrap().visible = false;
+        }
       }
     }
     #[cfg(not(windows))]
@@ -621,6 +669,10 @@ pub struct DesignStatus {
   /// persists this so the choice survives across sessions). `None` when unset.
   #[serde(default)]
   pub ai_model: Option<String>,
+  /// True once the user hit "Apply" on an element's "Edit with AI" card — the
+  /// renderer then drains the request, restyles via the model, and applies it.
+  #[serde(default)]
+  pub ai_edit_pending: bool,
 }
 
 /// A drained "Send to chat" handoff: the composed instruction + change count.
@@ -647,10 +699,55 @@ pub struct DesignAiRequest {
   pub model: Option<String>,
 }
 
-/// The controller source plus a guarded `enable()` call, evaluated to (re)install
-/// and turn on design mode.
-fn design_enable_js() -> String {
-  format!("{DESIGN_AGENT_JS}\n;try{{window.__rayfinDesign&&window.__rayfinDesign.enable()}}catch(e){{}}")
+/// A drained "Edit with AI" restyle request for a selected element. Mirrors
+/// `window.__rayfinDesign.drainAiEdit()`. `context` is opaque here — the renderer
+/// forwards it straight to `design_restyle_element` (which decodes it into a
+/// `RestyleContext`); the resulting patch is applied back via
+/// [`preview_design_apply_restyle`] targeting `id`.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignAiEditRequest {
+  /// Stable element id (`data-rayfin-edit-id`) to target with the patch.
+  pub id: String,
+  /// All target element ids for a multi-selection — the one patch applies to each
+  /// (empty/absent for a single selection, which falls back to `id`).
+  #[serde(default)]
+  pub ids: Vec<String>,
+  pub description: String,
+  /// Model id chosen in the picker (`None` → the fast model resolved by the host).
+  #[serde(default)]
+  pub model: Option<String>,
+  /// Compact element context (tag/text/classes/component/styles/chart spec).
+  #[serde(default)]
+  pub context: serde_json::Value,
+}
+
+/// Build the JS that enables the (already document-start-injected) design
+/// controller in the top frame. In the direct view the top frame *is* the app and
+/// runs the controller locally (`enable('direct')`); in the Fabric-embedded view
+/// the top frame becomes a relay for the app iframe at `relay_origin`
+/// (`enable('relay', "<origin>")`), which bridges host calls over `postMessage`.
+fn design_enable_js(relay_origin: Option<&str>) -> String {
+  match relay_origin {
+    Some(origin) => format!(
+      "try{{window.__rayfinDesign&&window.__rayfinDesign.enable('relay',{})}}catch(e){{}}",
+      serde_json::to_string(origin).unwrap_or_else(|_| "\"\"".into())
+    ),
+    None => {
+      "try{window.__rayfinDesign&&window.__rayfinDesign.enable('direct')}catch(e){}".to_string()
+    }
+  }
+}
+
+/// The scheme://host:port origin of `url` (e.g. `https://app.example.com`), or
+/// `None` if it can't be parsed / has an opaque origin. Used to tell the design
+/// relay which cross-origin iframe (the deployed app) to drive inside the Fabric
+/// portal shell.
+fn url_origin(url: &str) -> Option<String> {
+  match Url::parse(url).map(|u| u.origin()) {
+    Ok(origin) if origin.is_tuple() => Some(origin.ascii_serialization()),
+    _ => None,
+  }
 }
 
 /// Evaluate `js` on the preview webview and return its JSON completion value
@@ -685,19 +782,36 @@ async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) 
   }
 }
 
-/// Turn the in-preview "design mode" on/off. Evaluates (and, when enabling,
-/// re-installs) the design controller in the preview webview and records the
-/// session state so the controller is re-injected on subsequent page loads.
+/// Turn the in-preview "design mode" on/off. Enables (or disables) the design
+/// controller — which is already injected at document-start into every frame — and
+/// records the session so it is re-armed on subsequent page loads. `embedded` +
+/// `app_url` select the mode: when the app is shown embedded in the Fabric portal
+/// (`embedded == true`), the top (Fabric shell) frame runs as a relay for the app
+/// iframe at `app_url`'s origin; otherwise the top frame is the app and runs the
+/// controller directly.
 #[tauri::command]
 pub fn preview_design_set(
   app: AppHandle,
   state: State<'_, PreviewState>,
   enabled: bool,
+  embedded: Option<bool>,
+  app_url: Option<String>,
 ) -> AppResult<()> {
-  state.inner.lock().unwrap().design_active = enabled;
+  // Relay mode only when enabling an embedded (Fabric) view for which we can
+  // resolve the app's origin; anything else is the direct (top-frame) view.
+  let relay_origin = if enabled && embedded.unwrap_or(false) {
+    app_url.as_deref().and_then(url_origin)
+  } else {
+    None
+  };
+  {
+    let mut inner = state.inner.lock().unwrap();
+    inner.design_active = enabled;
+    inner.design_relay = relay_origin.clone();
+  }
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
     let js = if enabled {
-      design_enable_js()
+      design_enable_js(relay_origin.as_deref())
     } else {
       "try{window.__rayfinDesign&&window.__rayfinDesign.disable()}catch(e){}".to_string()
     };
@@ -729,6 +843,14 @@ pub async fn preview_design_drain_ai(app: AppHandle) -> AppResult<Option<DesignA
   design_eval(&app, DESIGN_DRAIN_AI_JS).await
 }
 
+/// Drain a pending "Edit with AI" restyle request for a selected element (clearing
+/// it). The renderer forwards `context` to `design_restyle_element` and applies the
+/// resulting patch via [`preview_design_apply_restyle`].
+#[tauri::command]
+pub async fn preview_design_drain_ai_edit(app: AppHandle) -> AppResult<Option<DesignAiEditRequest>> {
+  design_eval(&app, DESIGN_DRAIN_AI_EDIT_JS).await
+}
+
 /// Inject AI-generated HTML into the placeholder `id` (the controller sanitizes
 /// it before rendering and records it on the placeholder's `insert` change). Both
 /// arguments are JSON-encoded so arbitrary markup rides safely into the eval.
@@ -745,7 +867,26 @@ pub fn preview_design_apply_generated(app: AppHandle, id: String, html: String) 
   Ok(())
 }
 
-/// A model choice for the placeholder AI picker (mirrors the renderer's list).
+/// Apply an AI restyle `patch` to the element tagged `id` (`data-rayfin-edit-id`).
+/// `patch` is the JSON `RestylePatch` from `design_restyle_element`; the controller
+/// applies each whitelisted style prop (and any Graphein spec patch) as revertable
+/// change-set entries. Both arguments are JSON-encoded into the eval.
+#[tauri::command]
+pub fn preview_design_apply_restyle(
+  app: AppHandle,
+  id: String,
+  patch: serde_json::Value,
+) -> AppResult<()> {
+  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    let js = format!(
+      "try{{window.__rayfinDesign&&window.__rayfinDesign.applyRestyle({},{})}}catch(e){{}}",
+      serde_json::to_string(&id).unwrap_or_else(|_| "\"\"".into()),
+      serde_json::to_string(&patch).unwrap_or_else(|_| "null".into()),
+    );
+    wv.eval(js).map_err(|e| AppError::Msg(e.to_string()))?;
+  }
+  Ok(())
+}
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesignModel {
@@ -770,6 +911,21 @@ pub fn preview_design_set_models(
     let js = format!(
       "try{{window.__rayfinDesign&&window.__rayfinDesign.setModels({json},{pref})}}catch(e){{}}"
     );
+    wv.eval(js).map_err(|e| AppError::Msg(e.to_string()))?;
+  }
+  Ok(())
+}
+
+/// Push Fabricator's own theme into the design controller so the tools match the
+/// host app's look + zoom (the tools are Fabricator UI, not the previewed app's).
+/// `theme` is an opaque JSON object the renderer builds from its CSS tokens
+/// (`--accent` / `--bg-elev` / `--text` / `--border` …) plus the UI scale.
+#[tauri::command]
+pub fn preview_design_set_theme(app: AppHandle, theme: serde_json::Value) -> AppResult<()> {
+  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    let json = serde_json::to_string(&theme).unwrap_or_else(|_| "null".into());
+    let js =
+      format!("try{{window.__rayfinDesign&&window.__rayfinDesign.setTheme({json})}}catch(e){{}}");
     wv.eval(js).map_err(|e| AppError::Msg(e.to_string()))?;
   }
   Ok(())
@@ -860,6 +1016,7 @@ fn offscreen_bounds() -> PreviewBounds {
     y: OFFSCREEN_COORD,
     width: OFFSCREEN_SIZE.0,
     height: OFFSCREEN_SIZE.1,
+    pixel_ratio: None,
   }
 }
 
@@ -1060,4 +1217,97 @@ unsafe fn snapshot_image_to_png(
     .representationUsingType_properties(NSBitmapImageFileType::PNG, &empty)
     .ok_or_else(|| "could not encode the snapshot as PNG".to_string())?;
   Ok(png.to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{DesignAiEditRequest, PreviewBounds};
+
+  fn bounds(pixel_ratio: Option<f64>) -> PreviewBounds {
+    PreviewBounds { x: 100.0, y: 80.0, width: 900.0, height: 600.0, pixel_ratio }
+  }
+
+  #[test]
+  fn renderer_pixels_are_not_rescaled_by_native_window_dpi() {
+    for (ratio, native_dpi, x, y, width, height) in [
+      (1.0, 1.0, 100, 80, 900, 600),
+      (1.25, 1.0, 125, 100, 1125, 750),
+      (1.5, 1.0, 150, 120, 1350, 900),
+      (2.0, 1.0, 200, 160, 1800, 1200),
+      (1.5625, 1.25, 156, 125, 1406, 938),
+      (2.5, 2.0, 250, 200, 2250, 1500),
+    ] {
+      let rect = bounds(Some(ratio)).to_rect().unwrap();
+      assert!(matches!(rect.position, tauri::Position::Physical(_)));
+      assert_eq!(rect.position.to_physical::<i32>(native_dpi), tauri::PhysicalPosition::new(x, y));
+      assert_eq!(rect.size.to_physical::<u32>(native_dpi), tauri::PhysicalSize::new(width, height));
+    }
+  }
+
+  #[test]
+  fn legacy_bounds_without_pixel_ratio_still_use_native_logical_units() {
+    let bounds: PreviewBounds = serde_json::from_str(
+      r#"{"x":100,"y":80,"width":900,"height":600}"#,
+    ).unwrap();
+    let rect = bounds.to_rect().unwrap();
+    assert!(matches!(rect.position, tauri::Position::Logical(_)));
+    assert_eq!(rect.position.to_physical::<i32>(1.5), tauri::PhysicalPosition::new(150, 120));
+    assert_eq!(rect.size.to_physical::<u32>(1.5), tauri::PhysicalSize::new(1350, 900));
+  }
+
+  #[test]
+  fn renderer_pixel_ratio_round_trips_from_ipc() {
+    let bounds: PreviewBounds = serde_json::from_str(
+      r#"{"x":100,"y":80,"width":900,"height":600,"pixelRatio":1.25}"#,
+    ).unwrap();
+    assert_eq!(bounds.pixel_ratio, Some(1.25));
+    assert_eq!(bounds.to_rect().unwrap().position.to_physical::<i32>(2.0), tauri::PhysicalPosition::new(125, 100));
+  }
+
+  #[test]
+  fn invalid_bounds_are_rejected_and_tiny_sizes_remain_nonzero() {
+    for invalid in [
+      PreviewBounds { x: f64::NAN, ..bounds(Some(1.0)) },
+      PreviewBounds { width: f64::NAN, ..bounds(Some(1.0)) },
+      PreviewBounds { height: f64::INFINITY, ..bounds(Some(1.0)) },
+      PreviewBounds { width: -1.0, ..bounds(Some(1.0)) },
+      PreviewBounds { x: f64::MAX, ..bounds(Some(1.0)) },
+      bounds(Some(0.0)), bounds(Some(-1.0)), bounds(Some(f64::INFINITY)),
+    ] {
+      assert!(invalid.to_rect().is_err(), "{invalid:?}");
+    }
+    let tiny = PreviewBounds { width: 1.0, height: 1.0, ..bounds(Some(0.25)) };
+    assert_eq!(tiny.to_rect().unwrap().size.to_physical::<u32>(2.0), tauri::PhysicalSize::new(1, 1));
+  }
+
+  #[cfg(windows)]
+  #[test]
+  fn parking_preserves_the_actual_physical_viewport_size() {
+    let current = bounds(Some(1.875));
+    let parked = current.parked();
+    assert_eq!(parked.pixel_ratio, current.pixel_ratio);
+    assert_eq!(
+      parked.to_rect().unwrap().size.to_physical::<u32>(1.25),
+      current.to_rect().unwrap().size.to_physical::<u32>(1.25),
+    );
+    assert!(parked.to_rect().unwrap().position.to_physical::<i32>(1.25).x > 20_000);
+  }
+
+  // Guards the multi-select bug: the controller's drained request carries `ids`
+  // (all selected element ids); it must survive deserialization so the renderer
+  // applies the one patch to every element (not just the primary).
+  #[test]
+  fn design_ai_edit_request_roundtrips_ids() {
+    let json = r#"{"id":"a","ids":["a","b","c"],"description":"x","context":{}}"#;
+    let req: DesignAiEditRequest = serde_json::from_str(json).expect("parse");
+    assert_eq!(req.id, "a");
+    assert_eq!(req.ids, vec!["a", "b", "c"]);
+  }
+
+  #[test]
+  fn design_ai_edit_request_ids_default_empty() {
+    let req: DesignAiEditRequest =
+      serde_json::from_str(r#"{"id":"a","description":"x"}"#).expect("parse");
+    assert!(req.ids.is_empty());
+  }
 }

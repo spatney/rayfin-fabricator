@@ -1,5 +1,7 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useSuppressPreview } from '../overlay'
+import { useModalFocus } from '../modalFocus'
+import { authErrorMessage } from '../authErrors'
 import { FabricIcon } from './icons'
 import type { DeleteProgressEvent, ProjectsState, StudioProject } from '@shared/ipc'
 
@@ -7,6 +9,8 @@ interface Props {
   project: StudioProject
   onRemoved: (projects: ProjectsState) => void
   onClose: () => void
+  /** Refresh app auth after sign-in; rejection prevents retrying destructive work. */
+  onSignedIn?: () => Promise<void> | void
 }
 
 type StepStatus = 'pending' | 'active' | 'done' | 'error'
@@ -90,15 +94,21 @@ function localStepHint(
 }
 
 /**
- * A focused, stepped dialog for deleting a project. Owns the full delete flow —
- * removing the deployed app(s) from Fabric (optional) and moving the local files
- * to trash — surfacing each step's live status so the action never feels hung,
- * with hard timeouts and clear recovery actions when a step stalls or fails.
+ * A focused, stepped dialog for moving a project to trash. It can additionally
+ * remove deployed Fabric app(s), only when that separate option is selected.
  */
-export default function DeleteProjectModal({ project, onRemoved, onClose }: Props): JSX.Element {
+export default function DeleteProjectModal({
+  project,
+  onRemoved,
+  onClose,
+  onSignedIn
+}: Props): JSX.Element {
   useSuppressPreview()
   const titleId = useId()
+  const dialogRef = useModalFocus<HTMLDivElement>()
   const hasDeploy = Boolean(project.lastDeploy?.url)
+  // Default the destructive Fabric cleanup on when there's actually a deployed app
+  // to remove (the toggle is only shown when `hasDeploy`); opt-out, not opt-in.
   const [alsoDeleteFabric, setAlsoDeleteFabric] = useState(hasDeploy)
   const [phase, setPhase] = useState<'confirm' | 'running' | 'error' | 'done'>('confirm')
   const [steps, setSteps] = useState<Step[]>([])
@@ -109,8 +119,13 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
   const [localProgress, setLocalProgress] = useState<DeleteProgressEvent | null>(null)
   /** Seconds elapsed during the (countless) OS trash move, for reassurance. */
   const [trashElapsed, setTrashElapsed] = useState(0)
+  const runSeqRef = useRef(0)
 
   const running = phase === 'running'
+
+  useEffect(() => () => {
+    ++runSeqRef.current
+  }, [project.id])
 
   // Stream the backend's file-count progress for *this* project's delete.
   useEffect(() => {
@@ -140,8 +155,8 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
   const fabricLabel = useMemo(
     () =>
       project.workspaceName
-        ? `Deleting the app from ${project.workspaceName}`
-        : 'Deleting the app from Fabric',
+        ? `Removing the deployed app from ${project.workspaceName}`
+        : 'Removing the deployed app from Fabric',
     [project.workspaceName]
   )
 
@@ -154,6 +169,8 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
    * locally even when the Fabric cleanup keeps failing.
    */
   async function run(skipFabric: boolean): Promise<void> {
+    if (running) return
+    const seq = ++runSeqRef.current
     const wantFabric = alsoDeleteFabric && !skipFabric
     const plan: Step[] = []
     if (wantFabric) {
@@ -181,27 +198,44 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
       mark('fabric', 'active')
       try {
         let res = await withTimeout(window.api.fabric.deleteApps(project.id), 130_000)
+        if (seq !== runSeqRef.current) return
+        let loginErr: string | undefined
         if (!res.ok && res.needsLogin) {
           // The Fabric session expired — re-sign-in once, then retry.
           const login = await window.api.auth.loginRayfin()
-          if (login.ok) res = await withTimeout(window.api.fabric.deleteApps(project.id), 130_000)
+          if (seq !== runSeqRef.current) return
+          if (login.ok) {
+            await onSignedIn?.()
+            if (seq !== runSeqRef.current) return
+            res = await withTimeout(window.api.fabric.deleteApps(project.id), 130_000)
+            if (seq !== runSeqRef.current) return
+          } else {
+            loginErr = authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.')
+          }
         }
         if (!res.ok) {
           mark('fabric', 'error')
           setFailedAt('fabric')
           setError(
             res.needsLogin
-              ? 'Your Fabric session expired and sign-in was cancelled. Sign in and try again, or delete locally only.'
+              ? (loginErr ??
+                'Your Fabric session expired and sign-in was cancelled. Sign in and try again, or delete locally only.')
               : (res.failures[0]?.error ?? res.error ?? 'Could not delete the app from Fabric.')
           )
           setPhase('error')
           return
         }
-      } catch {
+      } catch (reason) {
+        if (seq !== runSeqRef.current) return
         mark('fabric', 'error')
         setFailedAt('fabric')
         setError(
-          'Deleting from Fabric is taking longer than expected — it may be a slow connection. Try again, or delete locally only.'
+          reason instanceof Error && reason.message === 'timeout'
+            ? 'Deleting from Fabric is taking longer than expected — it may be a slow connection. Try again, or delete locally only.'
+            : authErrorMessage(
+                reason,
+                'Could not verify Fabric sign-in or delete the app. Try again, or delete locally only.'
+              )
         )
         setPhase('error')
         return
@@ -213,7 +247,9 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
     let next: ProjectsState
     try {
       next = await withTimeout(window.api.projects.remove(project.id, true), 90_000)
+      if (seq !== runSeqRef.current) return
     } catch {
+      if (seq !== runSeqRef.current) return
       mark('local', 'error')
       setFailedAt('local')
       setError(
@@ -226,6 +262,7 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
     setPhase('done')
     // Let the finished checklist land before the dialog closes.
     setTimeout(() => {
+      if (seq !== runSeqRef.current) return
       onRemoved(next)
       onClose()
     }, 550)
@@ -233,13 +270,17 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
 
   /** Error recovery: drop the project from the list without deleting its files. */
   async function removeFromListOnly(): Promise<void> {
+    if (running) return
+    const seq = ++runSeqRef.current
     setPhase('running')
     setError(null)
     try {
       const next = await withTimeout(window.api.projects.remove(project.id, false), 30_000)
+      if (seq !== runSeqRef.current) return
       onRemoved(next)
       onClose()
     } catch {
+      if (seq !== runSeqRef.current) return
       setError('Could not remove the project. Please try again.')
       setPhase('error')
     }
@@ -247,12 +288,16 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
 
   const headerTitle =
     phase === 'confirm'
-      ? 'Delete project?'
+      ? 'Remove project'
       : phase === 'error'
-        ? 'Couldn’t finish deleting'
+        ? 'Couldn’t finish removing the project'
         : phase === 'done'
-          ? 'Project deleted'
-          : 'Deleting project…'
+          ? alsoDeleteFabric
+            ? 'Project files and Fabric app removed'
+            : 'Local project folder moved to trash'
+          : alsoDeleteFabric
+            ? 'Removing project files and Fabric app...'
+            : 'Moving local project folder to trash...'
 
   return (
     <div className="modal-backdrop" onClick={running ? undefined : onClose}>
@@ -261,6 +306,7 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        ref={dialogRef}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
@@ -271,35 +317,56 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
           {phase === 'confirm' ? (
             <div className="confirm-message">
               <p>
-                <strong>{project.name}</strong> and all its files will be moved to your system
-                trash:
+                Choose what to remove for <strong>{project.name}</strong>.
               </p>
-              <p className="confirm-path">{project.path}</p>
+              <div className="delete-scope">
+                <span className="delete-scope-label">Local project folder</span>
+                <span className="delete-scope-hint">
+                  Move it to your system trash. You can restore it from there.
+                </span>
+                <p className="confirm-path">{project.path}</p>
+              </div>
               {hasDeploy ? (
-                <label className="confirm-check">
-                  <input
-                    type="checkbox"
-                    checked={alsoDeleteFabric}
-                    onChange={(e) => setAlsoDeleteFabric(e.target.checked)}
-                  />
-                  <span>
-                    Also delete the deployed app from Fabric
+                <label
+                  className={`confirm-check confirm-check--toggle${
+                    alsoDeleteFabric ? ' confirm-check--selected' : ''
+                  }`}
+                >
+                  <span className="confirm-check-copy">
+                    <span className="confirm-check-label">
+                      Also permanently delete the deployed Fabric app
+                    </span>
                     <span className="confirm-check-hint">
                       {project.workspaceName ? (
                         <>
                           {' '}
-                          — permanently removes the app and its data in{' '}
-                          <strong>{project.workspaceName}</strong>
+                          — deletes this app and its data in{' '}
+                          <strong>{project.workspaceName}</strong>. The Fabric workspace itself is
+                          not deleted.
                         </>
                       ) : (
-                        <> — permanently removes the app and its data</>
+                        <>
+                          {' '}
+                          — deletes this app and its data. The Fabric workspace itself is not
+                          deleted.
+                        </>
                       )}
                     </span>
+                  </span>
+                  <span className={`switch${alsoDeleteFabric ? ' switch--on' : ''}`}>
+                    <input
+                      type="checkbox"
+                      aria-label="Also permanently delete the deployed Fabric app"
+                      checked={alsoDeleteFabric}
+                      onChange={(e) => setAlsoDeleteFabric(e.target.checked)}
+                    />
+                    <span className="switch-knob" />
                   </span>
                 </label>
               ) : (
                 <p className="confirm-note">
-                  The deployed Fabric app is not affected — only the local code is removed.
+                  No deployed Fabric app is linked to this project. Only the local folder will be
+                  moved to trash.
                 </p>
               )}
             </div>
@@ -348,7 +415,9 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
                 Cancel
               </button>
               <button className="btn btn--danger" onClick={() => void run(false)} autoFocus>
-                {alsoDeleteFabric ? 'Delete everywhere' : 'Move to trash'}
+                {alsoDeleteFabric
+                  ? 'Move folder to trash and delete Fabric app'
+                  : 'Move folder to trash'}
               </button>
             </>
           )}
@@ -365,11 +434,11 @@ export default function DeleteProjectModal({ project, onRemoved, onClose }: Prop
               </button>
               {failedAt === 'fabric' ? (
                 <button className="btn btn--danger" onClick={() => void run(true)}>
-                  Delete locally only
+                  Move local folder to trash
                 </button>
               ) : (
                 <button className="btn btn--ghost" onClick={() => void removeFromListOnly()}>
-                  Remove from list only
+                  Remove from recent projects
                 </button>
               )}
               <button className="btn btn--primary" onClick={() => void run(false)}>

@@ -1,0 +1,314 @@
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import type { StudioProject, WorkspaceModel } from '@shared/ipc'
+import { useSuppressPreview } from '../overlay'
+import { useModalFocus } from '../modalFocus'
+import { useToast } from '../toast'
+import { authErrorMessage } from '../authErrors'
+import { Codicon } from './icons'
+
+interface Props {
+  project: StudioProject
+  onClose: () => void
+  /** Hand a ready-to-send "connect this model" prompt to the chat composer. */
+  onConnect: (prompt: string) => void
+  /** Refresh app auth after sign-in; rejection prevents retrying with an unverified account. */
+  onSignedIn?: () => Promise<void> | void
+}
+
+type LoadState =
+  | { status: 'resolving' }
+  | { status: 'no-workspace' }
+  | { status: 'loading'; workspaceName: string }
+  | { status: 'needs-login'; workspaceName: string }
+  | { status: 'error'; workspaceName: string; error: string }
+  | { status: 'ready'; workspaceName: string; models: WorkspaceModel[] }
+
+/** Compose the prompt the agent acts on to wire the chosen model. */
+function connectPrompt(model: WorkspaceModel, workspaceId: string): string {
+  const name = model.name ?? model.id
+  return (
+    `Connect the Fabric semantic model "${name}" to this app and use it as a data source.\n\n` +
+    `Workspace ID: ${workspaceId}\n` +
+    `Semantic model (dataset) ID: ${model.id}\n\n` +
+    `Add it as a Fabric data connection (use the fabric-data skill / capability router to enable ` +
+    `Fabric analytics and wire it up), regenerate the config, then help me build with it.`
+  )
+}
+
+/**
+ * Browse the semantic models in the workspace this app deploys to, and hand a
+ * "connect this model" prompt to the chat — the agent enables the Fabric data
+ * capability and wires it (this works across templates, including ones that
+ * install the Fabric tooling on demand).
+ */
+export default function ConnectModelModal({
+  project,
+  onClose,
+  onConnect,
+  onSignedIn
+}: Props): JSX.Element {
+  const toast = useToast()
+  useSuppressPreview()
+  const titleId = useId()
+  const dialogRef = useModalFocus<HTMLDivElement>()
+
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [state, setState] = useState<LoadState>({ status: 'resolving' })
+  const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set())
+  const [filter, setFilter] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [reloadTick, setReloadTick] = useState(0)
+  const [reauthing, setReauthing] = useState(false)
+  const loginSeqRef = useRef(0)
+  const loginBusyRef = useRef(false)
+
+  useEffect(() => {
+    let alive = true
+    let workspaceName = ''
+    ++loginSeqRef.current
+    loginBusyRef.current = false
+    setReauthing(false)
+    setWorkspaceId(null)
+    setSelectedId(null)
+    setConnectedIds(new Set())
+    setState({ status: 'resolving' })
+    void (async () => {
+      try {
+        const deps = await window.api.deploy.list(project.id)
+        if (!alive) return
+        const target =
+          deps.find((d) => d.active && d.workspaceId) ?? deps.find((d) => d.workspaceId) ?? null
+        if (!target?.workspaceId) {
+          setState({ status: 'no-workspace' })
+          return
+        }
+        workspaceName = target.workspaceName
+        setWorkspaceId(target.workspaceId)
+        setState({ status: 'loading', workspaceName })
+        const res = await window.api.fabric.listWorkspaceModels(target.workspaceId)
+        if (!alive) return
+        if (res.ok) setState({ status: 'ready', workspaceName, models: res.models })
+        else if (res.needsLogin) setState({ status: 'needs-login', workspaceName })
+        else setState({ status: 'error', workspaceName, error: res.error || 'Could not load models.' })
+      } catch (reason) {
+        if (alive) {
+          setState({
+            status: 'error',
+            workspaceName,
+            error: authErrorMessage(reason, 'Could not load models. Please retry.')
+          })
+        }
+      }
+    })()
+    // Existing connections (to badge already-added models).
+    void window.api.fabric.projectSemanticModels(project.id).then(
+      (models) => {
+        if (alive) setConnectedIds(new Set(models.map((m) => m.itemId)))
+      },
+      (reason) => {
+        if (alive) {
+          toast.error(authErrorMessage(reason, 'Could not read existing model connections.'), {
+            title: 'Model check failed'
+          })
+        }
+      }
+    )
+    return () => {
+      alive = false
+      ++loginSeqRef.current
+    }
+  }, [project.id, reloadTick, toast])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const models = state.status === 'ready' ? state.models : []
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    if (!q) return models
+    return models.filter((m) => (m.name ?? '').toLowerCase().includes(q))
+  }, [models, filter])
+
+  async function reauthAndReload(): Promise<void> {
+    if (loginBusyRef.current) return
+    loginBusyRef.current = true
+    const seq = ++loginSeqRef.current
+    setReauthing(true)
+    try {
+      const login = await window.api.auth.loginRayfin()
+      if (seq !== loginSeqRef.current) return
+      if (!login.ok) {
+        throw new Error(
+          authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.')
+        )
+      }
+      await onSignedIn?.()
+      if (seq === loginSeqRef.current) setReloadTick((n) => n + 1)
+    } catch (reason) {
+      if (seq === loginSeqRef.current) {
+        toast.error(authErrorMessage(reason, 'Fabric sign-in did not complete. Please try again.'), {
+          title: 'Sign-in failed'
+        })
+      }
+    } finally {
+      if (seq === loginSeqRef.current) {
+        loginBusyRef.current = false
+        setReauthing(false)
+      }
+    }
+  }
+
+  function addToChat(modelId?: string): void {
+    const id = modelId ?? selectedId
+    if (!workspaceId || !id) return
+    const model = models.find((m) => m.id === id)
+    if (!model) return
+    onConnect(connectPrompt(model, workspaceId))
+    onClose()
+  }
+
+  const wsLabel = 'workspaceName' in state ? state.workspaceName : ''
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal connect-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        ref={dialogRef}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <h2 id={titleId}>Connect a semantic model</h2>
+        </div>
+
+        <div className="modal-body">
+          {state.status === 'resolving' && (
+            <div className="connect-state">
+              <span className="btn-spin" aria-hidden="true" /> Finding your deployment…
+            </div>
+          )}
+
+          {state.status === 'no-workspace' && (
+            <div className="connect-state connect-state--empty">
+              Deploy this app to a Fabric workspace first — then you can connect the semantic models
+              in that workspace.
+            </div>
+          )}
+
+          {state.status === 'needs-login' && (
+            <div className="share-banner">
+              <span>
+                Sign in to Fabric to list this workspace's models. The preview uses a separate sign-in.
+              </span>
+              <button
+                className="btn btn--sm btn--primary"
+                disabled={reauthing}
+                onClick={() => void reauthAndReload()}
+              >
+                {reauthing ? 'Signing in…' : 'Sign in & retry'}
+              </button>
+            </div>
+          )}
+
+          {state.status === 'error' && (
+            <div className="share-banner share-banner--bad" role="alert">
+              {state.error}
+              <button className="btn btn--sm" onClick={() => setReloadTick((n) => n + 1)}>
+                Retry
+              </button>
+            </div>
+          )}
+
+          {(state.status === 'loading' ||
+            state.status === 'ready' ||
+            state.status === 'needs-login' ||
+            state.status === 'error') && (
+            <p className="connect-sub">
+              Models in <strong>{wsLabel || 'your workspace'}</strong>
+              {' — '}the workspace this app deploys to. Pick one to hand the agent a ready-to-send
+              request that wires it up.
+            </p>
+          )}
+
+          {state.status === 'loading' && (
+            <div className="connect-state">
+              <span className="btn-spin" aria-hidden="true" /> Loading semantic models…
+            </div>
+          )}
+
+          {state.status === 'ready' && models.length === 0 && (
+            <div className="connect-state connect-state--empty">
+              No semantic models in this workspace.
+            </div>
+          )}
+
+          {state.status === 'ready' && models.length > 0 && (
+            <>
+              {models.length > 6 && (
+                <input
+                  className="ws-input connect-filter"
+                  placeholder="Filter models…"
+                  spellCheck={false}
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                />
+              )}
+              <ul className="connect-list" role="listbox" aria-label="Semantic models">
+                {filtered.map((m) => {
+                  const already = m.id ? connectedIds.has(m.id) : false
+                  const selected = m.id === selectedId
+                  return (
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        className={`connect-item${selected ? ' connect-item--sel' : ''}${already ? ' connect-item--done' : ''}`}
+                        disabled={already}
+                        onClick={() => m.id && setSelectedId(m.id)}
+                        onDoubleClick={() => m.id && addToChat(m.id)}
+                      >
+                        <Codicon name="database" />
+                        <span className="connect-item-text">
+                          <span className="connect-item-name">{m.name ?? m.id}</span>
+                        </span>
+                        {already ? (
+                          <span className="connect-badge">Connected</span>
+                        ) : selected ? (
+                          <Codicon name="check" className="connect-item-check" />
+                        ) : null}
+                      </button>
+                    </li>
+                  )
+                })}
+                {filtered.length === 0 && (
+                  <li className="connect-state connect-state--empty">No models match “{filter}”.</li>
+                )}
+              </ul>
+            </>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn--ghost" onClick={onClose}>
+            Close
+          </button>
+          <button
+            className="btn btn--primary"
+            onClick={() => addToChat()}
+            disabled={!selectedId || state.status !== 'ready' || reauthing}
+          >
+            Add to chat
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

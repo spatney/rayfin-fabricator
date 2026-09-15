@@ -28,6 +28,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test renderer
+        run: npm test
+
       - name: Lint
         run: npm run lint
 
@@ -45,6 +48,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Node for helper regressions
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -52,3 +60,6 @@ jobs:
 
       - name: Cargo check
         run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Test backend and CLI helpers
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked

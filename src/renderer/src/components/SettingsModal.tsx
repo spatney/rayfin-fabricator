@@ -2,7 +2,9 @@ import { useEffect, useId, useState } from 'react'
 import type { AppSettings, AppVersions, ThemePreference } from '@shared/ipc'
 import { applyTheme, applyUiScale, UI_SCALES } from '../theme'
 import { useSuppressPreview } from '../overlay'
+import { useModalFocus } from '../modalFocus'
 import { useUpdates } from '../update'
+import { formatCopilotCli } from '../copilotVersion'
 import ConfirmModal from './ConfirmModal'
 
 interface Props {
@@ -54,8 +56,10 @@ export default function SettingsModal({
   const { status: updateStatus, info: updateInfo, checkNow } = useUpdates()
   const [checkedUpdates, setCheckedUpdates] = useState(false)
   const [showExperiments, setShowExperiments] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
   const titleId = useId()
+  const dialogRef = useModalFocus<HTMLDivElement>()
   // Compatibility rendering is applied at startup, so any change only takes effect
   // after a relaunch. Toggling it opens a mandatory restart prompt; `restartPrompt`
   // holds the value to revert to if the user declines, keeping the setting from
@@ -99,6 +103,20 @@ export default function SettingsModal({
     setWorkspaceRoot(next.workspaceRoot)
   }
 
+  // Build and reveal a shareable diagnostics bundle. Best-effort: the backend
+  // reveals the logs folder on success, and a failure must never throw.
+  async function exportDiagnostics(): Promise<void> {
+    if (exporting) return
+    setExporting(true)
+    try {
+      await window.api.diagnostics.export()
+    } catch {
+      /* diagnostics export is best-effort */
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const updateBusy =
     updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'installing'
   let updateMsg: string
@@ -122,6 +140,7 @@ export default function SettingsModal({
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
+          ref={dialogRef}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="modal-header">
@@ -219,14 +238,32 @@ export default function SettingsModal({
 
             <div className="field">
               <span className="field-label">Diagnostics</span>
+              <ToggleRow
+                label="Full diagnostics"
+                hint="Also capture prompts, responses, and tool output for each chat turn. Off by default — only lightweight metadata (timing, tools used, errors) is recorded. Turn on to include more detail in a bug report."
+                checked={Boolean(settings.fullDiagnostics)}
+                onChange={(v) => onChange({ fullDiagnostics: v })}
+              />
               <div className="settings-row">
-                <span className="field-hint">Logs are saved on this device.</span>
-                <button
-                  className="btn btn--sm btn--ghost"
-                  onClick={() => void window.api.openLogs()}
-                >
-                  Open logs folder
-                </button>
+                <span className="field-hint">
+                  Diagnostics for your chat sessions are saved on this device. Export them to
+                  attach to a bug report.
+                </span>
+                <span className="diagnostics-actions">
+                  <button
+                    className="btn btn--sm btn--ghost"
+                    disabled={exporting}
+                    onClick={() => void exportDiagnostics()}
+                  >
+                    {exporting ? 'Exporting…' : 'Export diagnostics'}
+                  </button>
+                  <button
+                    className="btn btn--sm btn--ghost"
+                    onClick={() => void window.api.openLogs()}
+                  >
+                    Open logs folder
+                  </button>
+                </span>
               </div>
             </div>
 
@@ -258,15 +295,15 @@ export default function SettingsModal({
                   </div>
                   <ToggleRow
                     label="Chat mode selector"
-                    hint="Show the Agent / Plan / Autopilot dropdown in the composer. Off runs every turn in Agent mode."
+                    hint="Show Agent, Plan, and Autopilot in the composer. Plan researches, clarifies, and waits for approval before building."
                     checked={Boolean(settings.experiments?.chatModeSelector)}
                     onChange={(v) => onChange({ experiments: { chatModeSelector: v } })}
                   />
                   <ToggleRow
-                    label="Preview design mode"
-                    hint="Click elements in the live preview to tweak them (move, resize, color, text, chart specs), then hand the changes to chat for review."
-                    checked={Boolean(settings.experiments?.previewDesignMode)}
-                    onChange={(v) => onChange({ experiments: { previewDesignMode: v } })}
+                    label="Live local preview"
+                    hint="While an agent turn runs, start the app's Vite dev server and show it in the preview so edits appear live. Stopped at turn end; needs a project with a dev script."
+                    checked={Boolean(settings.experiments?.localDevPreview)}
+                    onChange={(v) => onChange({ experiments: { localDevPreview: v } })}
                   />
                 </div>
               )}
@@ -276,7 +313,7 @@ export default function SettingsModal({
           <div className="modal-footer settings-footer">
             <span className="settings-version">
               {versions
-                ? `Fabricator ${versions.app} · Tauri ${versions.tauri} · WebView2 ${versions.webview2} · Copilot CLI ${versions.copilot ?? 'unknown'}`
+                ? `Fabricator ${versions.app} · Tauri ${versions.tauri} · WebView2 ${versions.webview2} · Copilot CLI ${formatCopilotCli(versions)}`
                 : ''}
             </span>
             <button className="btn btn--primary" onClick={onClose}>

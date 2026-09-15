@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Codicon } from './icons'
+import { authErrorMessage } from '../authErrors'
 import type {
   FabricCapacity,
   FabricWorkspace,
@@ -48,7 +49,9 @@ interface Props {
   /** True while re-signing-in after an expired session (shown during the reload). */
   reauthing?: boolean
   /** Re-fetch the workspace list (the error-state "Retry"). */
-  onReload: () => void
+  onReload: () => Promise<void> | void
+  /** Refresh app auth after sign-in; rejection prevents retrying with an unverified account. */
+  onSignedIn?: () => Promise<void> | void
   /** True while a `rayfin up` is streaming (disables submit). */
   running?: boolean
   /** Primary button label (idle). */
@@ -78,6 +81,7 @@ export default function DeploymentCreateForm({
   loadingWs,
   reauthing = false,
   onReload,
+  onSignedIn,
   running = false,
   submitLabel = 'Create & deploy',
   busyLabel = 'Deploying…',
@@ -98,14 +102,35 @@ export default function DeploymentCreateForm({
   const [selectedCap, setSelectedCap] = useState<string>('')
   const [creatingBusy, setCreatingBusy] = useState(false)
   const [createErr, setCreateErr] = useState<string | null>(null)
+  const [signingIn, setSigningIn] = useState(false)
+  const [signInErr, setSignInErr] = useState<string | null>(null)
+  const [authExpired, setAuthExpired] = useState(false)
+  const loginSeqRef = useRef(0)
+  const loginBusyRef = useRef(false)
+
+  useEffect(() => () => {
+    ++loginSeqRef.current
+  }, [])
+  useEffect(() => {
+    if (wsResult?.ok) setAuthExpired(false)
+  }, [wsResult])
 
   async function loadCaps(): Promise<void> {
     setLoadingCaps(true)
+    setCreateErr(null)
     try {
       const res = await window.api.fabric.listCapacities()
       const list = res.ok && res.capacities ? res.capacities : []
       setCaps(list)
-      if (list.length > 0 && !selectedCap) setSelectedCap(list[0].id)
+      setSelectedCap(list.find((c) => c.id === selectedCap)?.id ?? list[0]?.id ?? '')
+      if (!res.ok) {
+        setCreateErr(authErrorMessage(res.error, 'Could not load capacities. Please try again.'))
+        if (res.needsLogin) setAuthExpired(true)
+      }
+    } catch (reason) {
+      setCaps([])
+      setSelectedCap('')
+      setCreateErr(authErrorMessage(reason, 'Could not load capacities. Please try again.'))
     } finally {
       setLoadingCaps(false)
     }
@@ -118,25 +143,67 @@ export default function DeploymentCreateForm({
   }
 
   async function submitNewWs(): Promise<void> {
-    if (!selectedCap || !newWsName.trim()) return
+    if (
+      !selectedCap || !newWsName.trim() || creatingBusy || loadingCaps || !wsResult?.ok || authExpired
+    ) return
     setCreatingBusy(true)
     setCreateErr(null)
     try {
       const res = await window.api.fabric.createWorkspace(newWsName.trim(), selectedCap)
       if (!res.ok) {
         setCreateErr(res.error || 'Could not create the workspace.')
+        if (res.needsLogin) setAuthExpired(true)
         return
       }
       setCreatingWs(false)
       setNewWsName('')
-      onReload()
+      await onReload()
       if (res.workspaceId) setSelectedWs(res.workspaceId)
+    } catch (reason) {
+      setCreateErr(authErrorMessage(reason, 'Could not create the workspace. Please try again.'))
     } finally {
       setCreatingBusy(false)
     }
   }
 
-  const all = wsResult?.ok && wsResult.workspaces ? wsResult.workspaces : []
+  async function signInToFabric(): Promise<void> {
+    if (loginBusyRef.current) return
+    loginBusyRef.current = true
+    const seq = ++loginSeqRef.current
+    setSigningIn(true)
+    setSignInErr(null)
+    try {
+      const res = await window.api.auth.loginRayfin()
+      if (seq !== loginSeqRef.current) return
+      if (res.ok) {
+        await onSignedIn?.()
+        if (seq !== loginSeqRef.current) return
+        setCaps(null)
+        setSelectedCap('')
+        await onReload()
+        if (seq === loginSeqRef.current) {
+          setAuthExpired(false)
+          if (creatingWs) await loadCaps()
+        }
+      } else {
+        // Surface why sign-in failed instead of silently resetting the button
+        // (issue #17). The backend returns the CLI's reason and also logs it to
+        // the diagnostics bundle.
+        setSignInErr(authErrorMessage(res.error, 'Fabric sign-in did not complete. Please try again.'))
+      }
+    } catch (reason) {
+      if (seq === loginSeqRef.current) {
+        setSignInErr(authErrorMessage(reason, 'Fabric sign-in did not complete. Please try again.'))
+      }
+    } finally {
+      if (seq === loginSeqRef.current) {
+        loginBusyRef.current = false
+        setSigningIn(false)
+      }
+    }
+  }
+
+  const all = !authExpired && wsResult?.ok && wsResult.workspaces ? wsResult.workspaces : []
   const eligible = all.filter((w) => w.eligible)
   const ineligible = all.filter((w) => !w.eligible)
   const showWsSearch = all.length > SEARCH_THRESHOLD
@@ -150,12 +217,13 @@ export default function DeploymentCreateForm({
   // are no eligible workspaces (it's the only list to show) or while searching
   // (matches must be visible since search spans every workspace).
   const ineligibleExpanded = eligible.length === 0 || Boolean(q) || showIneligible
+  const selectedWorkspace = eligible.find((w) => w.id === selectedWs)
+  const canSubmit = Boolean(selectedWorkspace) && !running && !loadingWs && !reauthing && !signingIn
 
   function submit(): void {
-    if (!selectedWs || running) return
-    const ws = eligible.find((w) => w.id === selectedWs)
-    const friendly = name.trim() || ws?.displayName || ''
-    onSubmit(friendly, selectedWs)
+    if (!canSubmit || !selectedWorkspace) return
+    const friendly = name.trim() || selectedWorkspace.displayName || ''
+    onSubmit(friendly, selectedWorkspace.id)
   }
 
   return (
@@ -185,7 +253,7 @@ export default function DeploymentCreateForm({
               className="ws-create-link"
               type="button"
               onClick={openCreateWs}
-              disabled={loadingWs || creatingWs}
+              disabled={loadingWs || creatingWs || signingIn || reauthing || authExpired || !wsResult?.ok}
               title="Create a new Fabric workspace on a capacity you have access to"
             >
               + New workspace
@@ -195,7 +263,7 @@ export default function DeploymentCreateForm({
               type="button"
               title="Refresh workspaces"
               aria-label="Refresh workspaces"
-              disabled={loadingWs}
+              disabled={loadingWs || signingIn || reauthing}
               onClick={onReload}
             >
               <Codicon name="refresh" />
@@ -237,7 +305,7 @@ export default function DeploymentCreateForm({
             ) : (
               <p className="ws-empty-sub">No eligible capacities available.</p>
             )}
-            {createErr && <p className="ws-create-err">{createErr}</p>}
+            {createErr && <p className="ws-create-err" role="alert">{createErr}</p>}
             <div className="dep-create-actions">
               <button
                 className="btn btn--xs btn--ghost"
@@ -248,7 +316,10 @@ export default function DeploymentCreateForm({
               </button>
               <button
                 className="btn btn--xs btn--primary"
-                disabled={!selectedCap || !newWsName.trim() || creatingBusy}
+                disabled={
+                  !selectedCap || !newWsName.trim() || creatingBusy || loadingCaps ||
+                  authExpired || !wsResult?.ok
+                }
                 onClick={() => void submitNewWs()}
               >
                 {creatingBusy ? 'Creating…' : 'Create workspace'}
@@ -399,7 +470,7 @@ export default function DeploymentCreateForm({
               </div>
             )}
           </>
-        ) : wsResult?.ok ? (
+        ) : wsResult?.ok && !authExpired ? (
           <div className="ws-empty">
             <p className="ws-empty-title">No workspaces found</p>
             <p className="ws-empty-sub">
@@ -423,14 +494,32 @@ export default function DeploymentCreateForm({
           </div>
         ) : (
           <div className="ws-empty">
-            <p className="ws-empty-sub">
-              {wsResult?.needsLogin
-                ? 'Your Fabric session has expired — sign out and back in to list workspaces.'
-                : `Couldn’t load workspaces${wsResult?.error ? `: ${wsResult.error}` : '.'}`}
-            </p>
-            <button className="btn btn--xs btn--ghost" onClick={onReload}>
-              Retry
-            </button>
+            {wsResult?.needsLogin || authExpired ? (
+              <>
+                <p className="ws-empty-sub">
+                  Sign in to Microsoft Fabric to list your workspaces.
+                </p>
+                <button
+                  className="btn btn--xs btn--primary"
+                  disabled={signingIn}
+                  onClick={() => void signInToFabric()}
+                >
+                  {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
+                </button>
+                {(signInErr || wsResult?.error) && (
+                  <p className="ws-empty-err" role="alert">{signInErr || wsResult?.error}</p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="ws-empty-sub">
+                  Couldn’t load workspaces{wsResult?.error ? `: ${wsResult.error}` : '.'}
+                </p>
+                <button className="btn btn--xs btn--ghost" onClick={onReload}>
+                  Retry
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -441,7 +530,7 @@ export default function DeploymentCreateForm({
             {cancelLabel}
           </button>
         )}
-        <button className="btn btn--xs btn--primary" disabled={!selectedWs || running} onClick={submit}>
+        <button className="btn btn--xs btn--primary" disabled={!canSubmit} onClick={submit}>
           {running ? busyLabel : submitLabel}
         </button>
       </div>

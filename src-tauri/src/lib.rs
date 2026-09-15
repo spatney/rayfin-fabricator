@@ -16,6 +16,7 @@ use state::AppState;
 
 use services::preview::PreviewState;
 use services::updater::UpdaterState;
+use services::dev_server::DevServers;
 
 /// Read the bundled telemetry connection string (App Insights) if present.
 /// Mirrors the Electron build, which injects `resources/telemetry.json` at
@@ -74,14 +75,60 @@ fn apply_compatibility_rendering() {
 #[cfg(not(windows))]
 fn apply_compatibility_rendering() {}
 
+/// Env var the Rayfin CLI reads to permit a plaintext token cache when the OS
+/// credential store is unavailable.
+const RAYFIN_ENCRYPTION_FALLBACK_ENV: &str = "RAYFIN_ENCRYPTION_FALLBACK_ENABLED";
+
+/// Decide what to set [`RAYFIN_ENCRYPTION_FALLBACK_ENV`] to, given whatever the
+/// process already inherited: default it to `"true"` when unset, but never
+/// clobber a value the user set deliberately (either direction). Kept pure so
+/// the policy is unit-tested without mutating global process state.
+fn rayfin_encryption_fallback_value(existing: Option<&str>) -> Option<&'static str> {
+  match existing {
+    Some(_) => None,
+    None => Some("true"),
+  }
+}
+
+/// Let the Rayfin CLI fall back to a plaintext token cache when the OS keychain
+/// (DPAPI on Windows, Keychain on macOS, libsecret on Linux) is unavailable.
+///
+/// By default the CLI *aborts* when it can't reach the credential store —
+/// `createCachePlugin` throws "OS keychain is not available and plaintext token
+/// storage is not enabled". On locked-down machines where the native binding
+/// can't load, that made `rayfin login` — and every silent token read used to
+/// list Fabric workspaces or deploy — fail, so the Sign-in button looked like it
+/// did nothing (issue #17). The CLI still prefers encrypted storage whenever the
+/// keychain works (it only reaches the plaintext branch after the native path
+/// throws), so opting in here is a no-op in the common case and only degrades to
+/// plaintext when there is genuinely no credential store to use. Setting it in
+/// this process propagates to every spawned CLI/auth-helper child.
+fn enable_rayfin_encryption_fallback() {
+  let existing = std::env::var(RAYFIN_ENCRYPTION_FALLBACK_ENV).ok();
+  if let Some(value) = rayfin_encryption_fallback_value(existing.as_deref()) {
+    std::env::set_var(RAYFIN_ENCRYPTION_FALLBACK_ENV, value);
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   services::crashlog::install_panic_hook();
 
-  // Repair PATH before anything spawns a child process: a Finder/Dock-launched
-  // macOS app inherits a minimal PATH that omits Homebrew and Node version
-  // managers, so the doctor would otherwise report Node/npm/Rayfin CLI as missing.
+  // GUI launchers can inherit a stale Windows PATH or a minimal macOS PATH
+  // that omits installed CLIs. Repair it before spawning any child processes.
   services::env_path::repair();
+
+  // Allow the Rayfin CLI to use a plaintext token cache when the OS keychain is
+  // unavailable, so Fabric sign-in works on machines without a usable credential
+  // store (issue #17). Must run before anything spawns the CLI or its helpers.
+  enable_rayfin_encryption_fallback();
+
+  // Point every spawned npm at Fabricator's warm cache without freezing registry
+  // metadata at the bundled snapshot. Locked `npm ci` installs prefer offline
+  // data; scaffolding revalidates metadata for the latest CLI. Set before any
+  // child spawns so deploy-time installs and agent pack installs inherit it.
+  // The cache is populated by the background seed in `setup` below.
+  services::npm_cache::configure_env();
 
   // Apply the "compatibility rendering" preference before the webview is created
   // (WebView2 reads this env var at environment creation). Fixes freezing/hangs in
@@ -95,6 +142,7 @@ pub fn run() {
     .manage(AppState::default())
     .manage(PreviewState::default())
     .manage(UpdaterState::default())
+    .manage(DevServers::default())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -115,6 +163,23 @@ pub fn run() {
       // is never mistaken for a hang.
       services::watchdog::start(app.handle().clone());
 
+      // Seed the bundled warm npm cache into the writable per-user cache (once
+      // per app version) so the first project's `npm install` resolves offline.
+      // Backgrounded so it never delays startup; idempotent and best-effort, and
+      // `npm_config_cache` already points here (see `configure_env` above), so a
+      // project created before it finishes just falls back to the network.
+      {
+        let handle = app.handle().clone();
+        let version = app.package_info().version.to_string();
+        std::thread::spawn(move || {
+          services::npm_cache::ensure_seeded(&handle, &version);
+        });
+      }
+
+      // Trim old chat-session diagnostics so the logs directory stays bounded.
+      // Runs once at startup so per-turn capture adds no pruning I/O.
+      services::diagnostics::prune();
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -125,6 +190,8 @@ pub fn run() {
       commands::misc::open_logs,
       commands::misc::open_in_editor,
       commands::misc::relaunch,
+      // diagnostics
+      commands::diagnostics::diagnostics_export,
       // updates
       commands::updates::update_check,
       commands::updates::update_download,
@@ -142,11 +209,21 @@ pub fn run() {
       commands::auth::auth_login_rayfin,
       commands::auth::auth_login_az,
       commands::auth::auth_logout_rayfin,
+      // github (optional gh CLI: clone-from-GitHub)
+      commands::github::github_status,
+      commands::github::github_login,
+      commands::github::github_list_repos,
+      commands::github::github_clone,
       // fabric
       commands::fabric::fabric_workspaces,
       commands::fabric::fabric_capacities,
       commands::fabric::fabric_create_workspace,
       commands::fabric::fabric_delete_apps,
+      commands::fabric::fabric_semantic_model_schema,
+      commands::fabric::fabric_project_semantic_models,
+      commands::fabric::fabric_share_app,
+      commands::fabric::fabric_directory_search,
+      commands::fabric::fabric_list_workspace_models,
       // projects
       commands::projects::projects_state,
       commands::projects::projects_templates,
@@ -156,6 +233,7 @@ pub fn run() {
       commands::projects::projects_set_workspace_root,
       commands::projects::projects_create,
       commands::projects::projects_open,
+      commands::projects::projects_prepare_dependencies,
       commands::projects::projects_set_active,
       commands::projects::projects_rename,
       commands::projects::projects_set_workspace,
@@ -182,6 +260,15 @@ pub fn run() {
       commands::skills::skills_list,
       commands::skills::skills_set,
       commands::skills::skills_source,
+      // custom-skill library
+      commands::custom_skills::custom_skills_list,
+      commands::custom_skills::custom_skills_source,
+      commands::custom_skills::custom_skills_save,
+      commands::custom_skills::custom_skills_pick_folder_preview,
+      commands::custom_skills::custom_skills_pick_file_preview,
+      commands::custom_skills::custom_skills_add_from_path,
+      commands::custom_skills::custom_skills_promote,
+      commands::custom_skills::custom_skills_remove,
       // advisor
       commands::advisor::advisor_run,
       commands::advisor::advisor_cancel,
@@ -194,6 +281,8 @@ pub fn run() {
       commands::chat::chat_cancel,
       commands::chat::chat_reset,
       commands::chat::chat_resolve_plan,
+      commands::chat::chat_resolve_question,
+      commands::chat::chat_export_plan,
       commands::chat::chat_history,
       commands::chat::chat_save_history,
       commands::chat::chat_set_options,
@@ -212,6 +301,10 @@ pub fn run() {
       commands::deploy::deploy_switch,
       commands::deploy::deploy_set_name,
       commands::deploy::deploy_reconcile,
+
+            services::dev_server::dev_start,
+            services::dev_server::dev_stop,
+            services::dev_server::dev_supported_cmd,
       // preview
       services::preview::preview_show_url,
       services::preview::preview_navigate,
@@ -226,11 +319,41 @@ pub fn run() {
       services::preview::preview_design_poll,
       services::preview::preview_design_drain,
       services::preview::preview_design_drain_ai,
+      services::preview::preview_design_drain_ai_edit,
       services::preview::preview_design_apply_generated,
+      services::preview::preview_design_apply_restyle,
       services::preview::preview_design_set_models,
+      services::preview::preview_design_set_theme,
       commands::design::design_generate_html,
+      commands::design::design_restyle_element,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
-    .run(|_app, _event| services::watchdog::beat());
+    .run(|app, event| {
+      services::watchdog::beat();
+      // Kill any live Vite dev servers when the app exits so they never orphan.
+      if let tauri::RunEvent::Exit = event {
+        services::dev_server::kill_all(app);
+      }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn defaults_rayfin_encryption_fallback_on_when_unset() {
+    // Regression for #17: with no inherited value the CLI would abort on
+    // keychain-less machines, so we must default the fallback on.
+    assert_eq!(rayfin_encryption_fallback_value(None), Some("true"));
+  }
+
+  #[test]
+  fn respects_an_explicit_rayfin_encryption_fallback_override() {
+    // A value the user set deliberately (either direction) is left untouched.
+    assert_eq!(rayfin_encryption_fallback_value(Some("true")), None);
+    assert_eq!(rayfin_encryption_fallback_value(Some("false")), None);
+    assert_eq!(rayfin_encryption_fallback_value(Some("")), None);
+  }
 }

@@ -16,26 +16,36 @@ import {
   type ChatMessage,
   type ChatTurnResult,
   type DeployResult,
+  type DevServerResult,
   type ProjectsState,
   type RayfinVersionInfo,
   type StudioProject
 } from '@shared/ipc'
 import CreateProjectScreen from '../components/CreateProjectScreen'
+import CloneFromGitHubScreen from '../components/CloneFromGitHubScreen'
 import HomeView from '../components/HomeView'
+import ManageProjectModal from '../components/ManageProjectModal'
 import DeleteProjectModal from '../components/DeleteProjectModal'
 import ConfirmModal from '../components/ConfirmModal'
 import SettingsModal from '../components/SettingsModal'
+import { applyUiScale, UI_SCALES } from '../theme'
 import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../components/ChatPanel'
+import { planForStorage, planFromStorage } from '../chatPlan'
+import { useChatEventStore } from '../chatEventStore'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
 import DeploymentsControl from '../components/DeploymentsControl'
 import GitControl from '../components/GitControl'
+import ProjectDependencyGuard from '../components/ProjectDependencyGuard'
+import WorkspaceStatus from '../components/WorkspaceStatus'
 import { SuppressPreview } from '../overlay'
 import RayfinVersionControl from '../components/RayfinVersionControl'
 import AdvisorView, { categoryMeta } from '../components/AdvisorView'
-import ModelView from '../components/ModelView'
+import ModelTab from '../components/ModelTab'
 import { useToast } from '../toast'
+import { authErrorMessage } from '../authErrors'
+import { reportIssue as runReportIssue } from './reportIssue'
 import { InfoIcon, GearIcon, SignOutIcon, CompareIcon } from '../components/icons'
-import logo from '../assets/logo.png'
+import { FabricatorMark } from '../components/FabricatorMark'
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
@@ -52,7 +62,16 @@ function avatarInitials(email: string | null | undefined): string {
 
 /** Hydrate a persisted message into a live (non-pending) UI message. */
 function toUi(m: ChatMessage): UIChatMessage {
-  return { ...m, pending: false }
+  return {
+    ...m,
+    plan: planFromStorage(m.plan),
+    // A standalone question left pending at persist time can't be answered on a
+    // reloaded transcript (its turn/session is gone) — show it as interrupted.
+    questions: m.questions?.map((q) =>
+      q.state === 'pending' ? { ...q, state: 'interrupted' } : q
+    ),
+    pending: false
+  }
 }
 
 /** Strip transient fields (turnId, pending) before persisting to disk. A turn
@@ -61,7 +80,21 @@ function toUi(m: ChatMessage): UIChatMessage {
  *  keeps the marker until it's resumed (which removes the message). */
 function toStored(messages: UIChatMessage[]): ChatMessage[] {
   return messages.map(
-    ({ id, role, text, tools, segments, error, attachments, attachmentThumbs, pending, interrupted, elapsedMs }) => {
+    ({
+      id,
+      role,
+      text,
+      tools,
+      segments,
+      error,
+      attachments,
+      attachmentThumbs,
+      pending,
+      interrupted,
+      elapsedMs,
+      plan,
+      questions
+    }) => {
       const cutOff = (role === 'assistant' && pending) || interrupted
       return {
         id,
@@ -69,12 +102,20 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         text,
         // A turn cut off mid-command leaves a tool 'running'; settle it so the
         // reloaded transcript shows a finished (errored) tile, not a spinner.
-        tools: cutOff ? tools.map((t) => (t.state === 'running' ? { ...t, state: 'error' } : t)) : tools,
+        tools: cutOff
+          ? tools.map((t) => (t.state === 'running' ? { ...t, state: 'error' } : t))
+          : tools,
         segments,
         error,
         attachments,
         attachmentThumbs,
         elapsedMs,
+        plan: planForStorage(plan, Boolean(cutOff)),
+        // Mirror plan-question handling: a question still pending when the turn
+        // was cut off can never be answered, so persist it as interrupted.
+        questions: cutOff
+          ? questions?.map((q) => (q.state === 'pending' ? { ...q, state: 'interrupted' } : q))
+          : questions,
         interrupted: cutOff ? true : undefined
       }
     }
@@ -84,6 +125,8 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
 interface Props {
   auth: AuthStatus
   onSignOut: () => Promise<void> | void
+  /** Recheck live auth without leaving the workbench; reject when verification fails. */
+  onAuthChanged: () => Promise<void> | void
   settings: AppSettings | null
   onSettingsChange: (patch: Partial<AppSettings>) => void
 }
@@ -91,16 +134,22 @@ interface Props {
 export default function Workbench({
   auth,
   onSignOut,
+  onAuthChanged,
   settings,
   onSettingsChange
 }: Props): JSX.Element {
   const toast = useToast()
   const [versions, setVersions] = useState<AppVersions | null>(null)
   const [signingOut, setSigningOut] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
+  const authActionRef = useRef(false)
+  const mountedRef = useRef(false)
   const [showSettings, setShowSettings] = useState(false)
   const [projects, setProjects] = useState<ProjectsState | null>(null)
   /** Fullscreen create/deploy flow: 'create' = new-project wizard, 'deploy' = first-deploy gate CTA. */
   const [createMode, setCreateMode] = useState<'create' | 'deploy' | null>(null)
+  /** Fullscreen "Open existing… → Clone from GitHub" flow. */
+  const [showClone, setShowClone] = useState(false)
   const [opening, setOpening] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   /** Lazy-mount the Advisor view on first visit, then keep it mounted (hidden when
@@ -112,10 +161,8 @@ export default function Workbench({
    * different project is opened. Going to the launcher never deactivates a project;
    * only opening a *different* one closes the current. */
   const [showHome, setShowHome] = useState(false)
-  /** Sidebar per-project actions menu / inline-rename / delete-confirm state. */
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
-  const [renamingId, setRenamingId] = useState<string | null>(null)
-  const [renameValue, setRenameValue] = useState('')
+  /** Launcher project-management and local-trash confirmation state. */
+  const [managingProject, setManagingProject] = useState<StudioProject | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<StudioProject | null>(null)
   /** Bumped whenever the working tree likely changed (deploy / chat turn). */
   const [gitRefresh, setGitRefresh] = useState(0)
@@ -132,13 +179,11 @@ export default function Workbench({
   /** Active project's local Rayfin (CLI + SDK) version + upgrade availability. */
   const [rayfinVer, setRayfinVer] = useState<RayfinVersionInfo | null>(null)
   /** A prompt queued for the chat composer (e.g. the Rayfin upgrade hand-off). */
-  const [chatOutbound, setChatOutbound] = useState<
-    (OutboundPrompt & { projectId: string }) | null
-  >(null)
+  const [chatOutbound, setChatOutbound] = useState<(OutboundPrompt & { projectId: string }) | null>(
+    null
+  )
   /** Project content view: the build loop (chat + preview) or the code browser. */
-  const [viewMode, setViewMode] = useState<
-    'build' | 'code' | 'model' | 'advisor'
-  >('build')
+  const [viewMode, setViewMode] = useState<'build' | 'code' | 'model' | 'advisor'>('build')
   /** A pending request to open a specific file in the Code tab (Model → file). */
   const [codeOpen, setCodeOpen] = useState<{ path: string; nonce: number } | null>(null)
   /** Build-view focus: expand a single pane to fill the area (null = split). */
@@ -180,7 +225,15 @@ export default function Workbench({
     localStorage.setItem('rayfin.splitFrac', '0.5')
   }
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
+  useChatEventStore(setChats)
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
+  /** Live local preview (experiment): per-project Vite dev-server state. Present
+   *  only while a turn runs — started at turn start, cleared/stopped at turn end. */
+  const [devServers, setDevServers] = useState<
+    Record<string, { status: 'starting' | 'running'; url?: string }>
+  >({})
+  const devServersRef = useRef(devServers)
+  devServersRef.current = devServers
   /** Region screenshots staged per project for the next chat message. */
   const [shots, setShots] = useState<Record<string, PendingShot[]>>({})
   /** Composer drafts staged per project — a typed-but-unsent prompt persists here
@@ -191,6 +244,10 @@ export default function Workbench({
   /** Latest chats snapshot, for reading inside async callbacks / save timers. */
   const chatsRef = useRef(chats)
   chatsRef.current = chats
+  /** Last transcript reference persisted per project. The debounce below compares
+   *  against this so it only rewrites the (up to 1000-message) file of a project
+   *  whose messages actually changed — not every hydrated project on each edit. */
+  const savedChatsRef = useRef<Record<string, UIChatMessage[]>>({})
   /** Latest active project id, for guarding async (per-project) responses. */
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = projects?.activeProjectId ?? null
@@ -204,6 +261,13 @@ export default function Workbench({
 
   /** Projects with a deploy queued behind the running one (coalesced). */
   const pendingDeployRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      pendingDeployRef.current.clear()
+    }
+  }, [])
   /** Stable handle to runDeploy for use inside its own completion path. */
   const runDeployRef = useRef<((projectId: string) => void) | null>(null)
   /** Project ids with a deployment reconcile in flight (dedupes overlapping calls). */
@@ -238,6 +302,18 @@ export default function Workbench({
   const refreshProjects = useCallback(async (): Promise<void> => {
     setProjects(await window.api.projects.state())
   }, [])
+
+  const refreshAuthWithFeedback = useCallback(async (): Promise<void> => {
+    if (!mountedRef.current) return
+    try {
+      await onAuthChanged()
+    } catch (reason) {
+      if (!mountedRef.current) return
+      toast.error(authErrorMessage(reason, 'Could not verify sign-in. Please retry.'), {
+        title: 'Sign-in check failed'
+      })
+    }
+  }, [onAuthChanged, toast])
 
   /** Re-read the active project's local Rayfin versions (after deploys / chat turns). */
   const refreshRayfinVer = useCallback(async (projectId: string): Promise<void> => {
@@ -301,12 +377,40 @@ export default function Workbench({
       deployingIdRef.current = projectId
       setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
       try {
-        let result = await window.api.deploy.run(projectId, workspace)
-        // A deploy that failed only because the Fabric/Rayfin login expired: re-sign-in
-        // once and retry, so an expired token doesn't force a manual sign out / back in.
+        let result: DeployResult = { ok: false, outcome: 'error' }
+        try {
+          result = await window.api.deploy.run(projectId, workspace)
+          if (!mountedRef.current) return
+          // Retry once, only after sign-in and its app-level verification succeed.
+          if (!result.ok && result.outcome === 'not-signed-in') {
+            const login = await window.api.auth.loginRayfin()
+            if (!mountedRef.current) return
+            if (!login.ok) {
+              result = {
+                ...result,
+                error: authErrorMessage(
+                  login.error,
+                  'Fabric sign-in did not complete. Please try again.'
+                )
+              }
+            } else {
+              await onAuthChanged()
+              if (!mountedRef.current) return
+              result = await window.api.deploy.run(projectId, workspace)
+              if (!mountedRef.current) return
+            }
+          }
+        } catch (reason) {
+          if (!mountedRef.current) return
+          result = {
+            ok: false,
+            outcome: result.outcome,
+            error: authErrorMessage(reason, 'The deployment did not complete. Please try again.')
+          }
+        }
         if (!result.ok && result.outcome === 'not-signed-in') {
-          const login = await window.api.auth.loginRayfin()
-          if (login.ok) result = await window.api.deploy.run(projectId, workspace)
+          // Don't open more sign-in flows for deploys queued behind a failed login.
+          pendingDeployRef.current.clear()
         }
         setDeploys((all) => {
           const cur = all[projectId] ?? { running: false, log: [] }
@@ -316,22 +420,32 @@ export default function Workbench({
         // failures wherever they are. Success needs no toast — it's already
         // reflected in the preview pane and deploy status.
         if (!result.ok) {
-          toast.error(result.error ?? 'The deployment did not complete.', { title: 'Deploy failed' })
+          toast.error(result.error ?? 'The deployment did not complete.', {
+            title: 'Deploy failed'
+          })
         }
-        await refreshProjects()
+        try {
+          await refreshProjects()
+        } catch (reason) {
+          toast.error(authErrorMessage(reason, 'Could not refresh the project after deploying.'), {
+            title: 'Project refresh failed'
+          })
+        }
+        // Failures can reveal an expired session; never leave the titlebar stale.
+        await refreshAuthWithFeedback()
       } finally {
         deployingIdRef.current = null
         setGitRefresh((n) => n + 1)
-        void refreshRayfinVer(projectId)
+        if (mountedRef.current) void refreshRayfinVer(projectId)
         // Run the next coalesced deploy, if one was requested mid-flight.
-        if (pendingDeployRef.current.size > 0) {
+        if (mountedRef.current && pendingDeployRef.current.size > 0) {
           const next = pendingDeployRef.current.values().next().value as string
           pendingDeployRef.current.delete(next)
           runDeployRef.current?.(next)
         }
       }
     },
-    [refreshProjects, refreshRayfinVer, toast]
+    [refreshProjects, refreshRayfinVer, toast, onAuthChanged, refreshAuthWithFeedback]
   )
   runDeployRef.current = (projectId: string) => void runDeploy(projectId)
 
@@ -362,17 +476,73 @@ export default function Workbench({
   const switchDeployment = useCallback(
     async (projectId: string, workspace: string, byId: boolean): Promise<DeployResult> => {
       const result = await window.api.deploy.switch(projectId, workspace, byId)
+      if (!result.ok) {
+        if (result.outcome === 'not-signed-in') await refreshAuthWithFeedback()
+        return result
+      }
       await refreshProjects()
       setGitRefresh((n) => n + 1)
       return result
     },
-    [refreshProjects]
+    [refreshProjects, refreshAuthWithFeedback]
+  )
+
+  // Kick off the live local preview (experiment) when a turn starts: run the
+  // project's Vite dev server so edits show live at localhost for the turn's
+  // duration. No-op unless the experiment is on and the project supports it — the
+  // backend reports `unsupported` for projects without a `dev` script.
+  const handleTurnStart = useCallback(
+    (projectId: string): void => {
+      if (!settings?.experiments?.localDevPreview) return
+      if (deployingIdRef.current === projectId) return // a deploy owns the surface
+      if (devServersRef.current[projectId]) return // already starting / running
+      setDevServers((all) => ({ ...all, [projectId]: { status: 'starting' } }))
+      void (async () => {
+        let res: DevServerResult
+        try {
+          res = await window.api.dev.start(projectId)
+        } catch (err) {
+          res = {
+            ok: false,
+            outcome: 'error',
+            error: err instanceof Error ? err.message : String(err)
+          }
+        }
+        if (!res.ok && res.outcome === 'error') {
+          toast.error(res.error ?? 'The local Vite server could not be started.', {
+            title: 'Local preview failed'
+          })
+        }
+        setDevServers((all) => {
+          // The turn already ended (entry cleared in handleTurnComplete) — don't
+          // resurrect a preview whose server was just stopped.
+          if (!all[projectId]) return all
+          if (res.ok && res.url) {
+            return { ...all, [projectId]: { status: 'running', url: res.url } }
+          }
+          const next = { ...all }
+          delete next[projectId]
+          return next
+        })
+      })()
+    },
+    [settings, toast]
   )
 
   // After a chat turn, persist the transcript and auto-deploy when the agent left
   // undeployed changes.
   const handleTurnComplete = useCallback(
     async (projectId: string, result: ChatTurnResult): Promise<void> => {
+      // Stop the live local preview (if any) first, so the surface returns to the
+      // deployed app and the after-turn deploy can take the stage (DeployStage).
+      if (devServersRef.current[projectId]) {
+        setDevServers((all) => {
+          const next = { ...all }
+          delete next[projectId]
+          return next
+        })
+        void window.api.dev.stop(projectId)
+      }
       await refreshProjects()
       setGitRefresh((n) => n + 1)
       void window.api.chat.saveHistory(projectId, toStored(chatsRef.current[projectId] ?? []))
@@ -392,7 +562,14 @@ export default function Workbench({
     if (hydratedRef.current.has(id)) return
     hydratedRef.current.add(id)
     void window.api.chat.history(id).then((stored) => {
-      setChats((all) => (all[id] !== undefined ? all : { ...all, [id]: stored.map(toUi) }))
+      setChats((all) => {
+        if (all[id] !== undefined) return all
+        const hydrated = stored.map(toUi)
+        // Seed the saved snapshot so a hydrated-but-untouched transcript isn't
+        // immediately written straight back to disk by the debounce below.
+        savedChatsRef.current[id] = hydrated
+        return { ...all, [id]: hydrated }
+      })
     })
   }, [active?.id])
 
@@ -510,22 +687,19 @@ export default function Workbench({
 
   // Hand a Model-tab prompt to the Build chat. `stage` drops the text in the
   // composer (for open-ended asks) instead of sending it immediately.
-  const sendModelToChat = useCallback(
-    (display: string, prompt: string, stage = false): void => {
-      const id = activeIdRef.current
-      if (!id) return
-      setViewMode('build')
-      setFocusPane(null)
-      setChatOutbound({
-        id: `model-${Date.now()}`,
-        projectId: id,
-        display,
-        prompt,
-        stage
-      })
-    },
-    []
-  )
+  const sendModelToChat = useCallback((display: string, prompt: string, stage = false): void => {
+    const id = activeIdRef.current
+    if (!id) return
+    setViewMode('build')
+    setFocusPane(null)
+    setChatOutbound({
+      id: `model-${Date.now()}`,
+      projectId: id,
+      display,
+      prompt,
+      stage
+    })
+  }, [])
   useEffect(() => {
     const id = projects?.activeProjectId
     if (!id) {
@@ -535,6 +709,11 @@ export default function Workbench({
     setRayfinVer(null)
     void refreshRayfinVer(id)
   }, [projects?.activeProjectId, refreshRayfinVer])
+
+  useEffect(() => {
+    if (!active?.id) return
+    void refreshAuthWithFeedback()
+  }, [active?.id, refreshAuthWithFeedback])
 
   // Reflect the active project in the OS window title so users running one
   // instance per project can tell them apart in the taskbar / Alt-Tab. The
@@ -546,11 +725,15 @@ export default function Workbench({
   }, [active?.name])
 
   // Debounce-persist chat transcripts whenever they change (after streaming settles).
+  // Only projects whose message array changed reference (i.e. actually mutated) are
+  // written — untouched hydrated projects keep the same reference and are skipped.
   useEffect(() => {
     const t = setTimeout(() => {
       for (const projectId of hydratedRef.current) {
         const msgs = chatsRef.current[projectId]
         if (!msgs) continue
+        if (savedChatsRef.current[projectId] === msgs) continue
+        savedChatsRef.current[projectId] = msgs
         void window.api.chat.saveHistory(projectId, toStored(msgs))
       }
     }, 600)
@@ -561,14 +744,6 @@ export default function Workbench({
     void window.api.getVersions().then(setVersions)
     void refreshProjects()
   }, [refreshProjects])
-
-  // Close the open sidebar actions menu on any outside click.
-  useEffect(() => {
-    if (!menuOpenId) return
-    const close = (): void => setMenuOpenId(null)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
-  }, [menuOpenId])
 
   // When a Fabricator validation tool wants to show the running app, make sure
   // the preview pane is actually on screen AND has a deploy URL to load:
@@ -645,101 +820,143 @@ export default function Workbench({
   }
 
   async function removeFromList(p: StudioProject): Promise<void> {
-    setMenuOpenId(null)
     setProjects(await window.api.projects.remove(p.id, false))
   }
 
-  function startRename(p: StudioProject): void {
-    setMenuOpenId(null)
-    setRenameValue(p.name)
-    setRenamingId(p.id)
-  }
-
-  async function submitRename(p: StudioProject): Promise<void> {
-    const next = renameValue.trim()
-    setRenamingId(null)
-    if (!next || next === p.name) return
-    const result = await window.api.projects.rename(p.id, next)
-    if (!result.ok) {
-      setNotice(result.error ?? 'Could not rename the project.')
-      return
+  async function renameProject(p: StudioProject, name: string): Promise<string | null> {
+    try {
+      const result = await window.api.projects.rename(p.id, name)
+      if (!result.ok) return result.error ?? 'Could not rename the project.'
+      await refreshProjects()
+      return null
+    } catch (error) {
+      return error instanceof Error && error.message
+        ? error.message
+        : 'Could not rename the project. Please try again.'
     }
-    await refreshProjects()
   }
 
   async function signOut(): Promise<void> {
+    if (authActionRef.current) return
+    authActionRef.current = true
     setSigningOut(true)
     try {
-      await window.api.auth.logoutRayfin()
-    } finally {
-      try {
-        // Keep the overlay up through the auth re-check + screen swap; this
-        // component normally unmounts when the app returns to the setup screen.
-        await onSignOut()
-      } finally {
-        setSigningOut(false)
+      const result = await window.api.auth.logoutRayfin()
+      if (!mountedRef.current) return
+      if (!result.ok) {
+        throw new Error(
+          authErrorMessage(result.error, 'Fabric sign-out did not complete. Please try again.')
+        )
       }
+      // Only a verified sign-out may leave the workbench and its unsent drafts.
+      await onSignOut()
+    } catch (reason) {
+      if (!mountedRef.current) return
+      toast.error(authErrorMessage(reason, 'Fabric sign-out did not complete. Please try again.'), {
+        title: 'Sign-out failed'
+      })
+      await refreshAuthWithFeedback()
+    } finally {
+      authActionRef.current = false
+      if (mountedRef.current) setSigningOut(false)
+    }
+  }
+
+  async function signIn(): Promise<void> {
+    if (authActionRef.current) return
+    authActionRef.current = true
+    setSigningIn(true)
+    try {
+      const res = await window.api.auth.loginRayfin()
+      if (!mountedRef.current) return
+      if (!res.ok) {
+        throw new Error(
+          authErrorMessage(res.error, 'Fabric sign-in did not complete. Please try again.')
+        )
+      }
+      await onAuthChanged()
+    } catch (reason) {
+      if (!mountedRef.current) return
+      toast.error(authErrorMessage(reason, 'Fabric sign-in did not complete. Please try again.'), {
+        title: 'Sign-in failed'
+      })
+    } finally {
+      authActionRef.current = false
+      if (mountedRef.current) setSigningIn(false)
     }
   }
 
   // Open a prefilled GitHub issue (app + system info) in the browser so bug
-  // reports arrive with the version/environment details already filled in.
-  function reportIssue(): void {
-    const repo = 'https://github.com/spatney/rayfin-fabricator'
-    const body = [
-      '### What happened?',
-      '',
-      '',
-      '### Steps to reproduce',
-      '',
-      '1. ',
-      '',
-      '### Environment',
-      `- App: Fabricator ${versions?.app ?? 'unknown'}`,
-      `- Tauri: ${versions?.tauri ?? 'unknown'}`,
-      `- WebView2: ${versions?.webview2 ?? 'unknown'}`,
-      `- Copilot CLI: ${versions?.copilot ?? 'unknown'}`,
-      `- User agent: ${navigator.userAgent}`
-    ].join('\n')
-    const url = `${repo}/issues/new?labels=bug&title=${encodeURIComponent('[Bug] ')}&body=${encodeURIComponent(body)}`
-    void window.api.openExternal(url)
+  // reports arrive with the version/environment details already filled in. A
+  // diagnostics bundle is exported first (best-effort) and referenced in the
+  // body; export failures never block the report. See ./reportIssue.
+  async function reportIssue(): Promise<void> {
+    const bundlePath = await runReportIssue(window.api, versions)
+    if (bundlePath) {
+      toast.info(
+        'A diagnostics file was saved and the logs folder opened — attach it to your bug report.',
+        { title: 'Diagnostics exported' }
+      )
+    }
   }
 
   return (
     <div className="app-shell">
       <header className="titlebar">
         <div className="brand">
-          <img className="brand-mark" src={logo} alt="" />
+          <FabricatorMark className="brand-mark" />
           <span className="brand-name">Fabricator</span>
         </div>
         <div className="titlebar-status">
-          <div
-            className="who-avatar"
-            title={auth.rayfin.user ?? 'Signed in'}
-            aria-label={auth.rayfin.user ? `Signed in as ${auth.rayfin.user}` : 'Signed in'}
-          >
-            {avatarInitials(auth.rayfin.user)}
-          </div>
+          {auth.rayfin.signedIn && (
+            <div
+              className="who-avatar"
+              title={auth.rayfin.user ?? 'Signed in'}
+              aria-label={auth.rayfin.user ? `Signed in as ${auth.rayfin.user}` : 'Signed in'}
+            >
+              {avatarInitials(auth.rayfin.user)}
+            </div>
+          )}
           <div className="seg seg--toolbar">
             <button className="seg-btn" onClick={() => setShowSettings(true)} title="Settings">
               <GearIcon />
               Settings
             </button>
-            <button className="seg-btn" disabled={signingOut} onClick={signOut} title="Sign out">
-              <SignOutIcon />
-              {signingOut ? 'Signing out…' : 'Sign out'}
-            </button>
+            {auth.rayfin.signedIn ? (
+              <button
+                className="seg-btn"
+                disabled={signingOut || signingIn}
+                onClick={signOut}
+                title="Sign out"
+              >
+                <SignOutIcon />
+                {signingOut ? 'Signing out…' : 'Sign out'}
+              </button>
+            ) : (
+              <button className="seg-btn" disabled={signingIn || signingOut} onClick={signIn}>
+                {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      {createMode ? (
+      {showClone ? (
+        <CloneFromGitHubScreen
+          onCancel={() => setShowClone(false)}
+          onCloned={() => {
+            void refreshProjects()
+            setShowClone(false)
+          }}
+        />
+      ) : createMode ? (
         <CreateProjectScreen
           mode={createMode}
           projectName={active?.name}
           deploying={Boolean(active && deploys[active.id]?.running)}
           onCancel={() => setCreateMode(null)}
           onCreated={() => void refreshProjects()}
+          onSignedIn={onAuthChanged}
           onDeploy={(depName, workspaceId) => {
             if (!active) {
               setCreateMode(null)
@@ -760,264 +977,260 @@ export default function Workbench({
           onContinueWithoutDeploy={() => setCreateMode(null)}
         />
       ) : (
-      <div className="workbench">
-        <main className="content">
-          {notice && <div className="alert alert--error content-alert">{notice}</div>}
-          {active ? (
-            <div className={`project-pane${showHome ? ' project-pane--hidden' : ''}`}>
-              <div className="project-header">
-                <div className="project-id">
-                  <button
-                    className="switch-projects-btn"
-                    onClick={goHome}
-                    title="Switch projects — open a recent project or create a new one (keeps this project running)"
-                  >
-                    <CompareIcon />
-                    Switch projects
-                  </button>
-                  <div className="project-id-text">
-                    <h1 className="project-title">{active.name}</h1>
-                    <span className="project-subpath">{active.path}</span>
+        <div className="workbench">
+          <main className="content">
+            {notice && <div className="alert alert--error content-alert">{notice}</div>}
+            {active ? (
+              <ProjectDependencyGuard project={active} onSwitchProjects={goHome} hidden={showHome}>
+                <div className={`project-pane${showHome ? ' project-pane--hidden' : ''}`}>
+                  <div className="project-header">
+                    <div className="project-id">
+                      <button
+                        className="switch-projects-btn"
+                        onClick={goHome}
+                        title="Switch projects — open a recent project or create a new one (keeps this project running)"
+                      >
+                        <CompareIcon />
+                        Switch projects
+                      </button>
+                      <div className="project-id-text">
+                        <h1 className="project-title">{active.name}</h1>
+                        <span className="project-subpath">{active.path}</span>
+                      </div>
+                    </div>
+                    <div className="project-tabs" role="tablist">
+                      <button
+                        className={`project-tab${viewMode === 'build' ? ' project-tab--active' : ''}`}
+                        role="tab"
+                        aria-selected={viewMode === 'build'}
+                        onClick={() => setViewMode('build')}
+                      >
+                        Build
+                      </button>
+                      <button
+                        className={`project-tab${viewMode === 'code' ? ' project-tab--active' : ''}`}
+                        role="tab"
+                        aria-selected={viewMode === 'code'}
+                        onClick={() => setViewMode('code')}
+                      >
+                        Code
+                      </button>
+                      <button
+                        className={`project-tab${viewMode === 'model' ? ' project-tab--active' : ''}`}
+                        role="tab"
+                        aria-selected={viewMode === 'model'}
+                        onClick={() => setViewMode('model')}
+                      >
+                        Model
+                      </button>
+                      <button
+                        className={`project-tab${viewMode === 'advisor' ? ' project-tab--active' : ''}`}
+                        role="tab"
+                        aria-selected={viewMode === 'advisor'}
+                        onClick={() => setViewMode('advisor')}
+                      >
+                        Advisor
+                      </button>
+                    </div>
+                    <div className="project-meta">
+                      <DeploymentsControl
+                        project={active}
+                        running={Boolean(deploys[active.id]?.running)}
+                        reconciling={reconciling.has(active.id)}
+                        onCreate={(name, workspaceId) => {
+                          setViewMode('build')
+                          void (async () => {
+                            try {
+                              await window.api.deploy.setName(active.id, workspaceId, name)
+                            } catch {
+                              /* naming is best-effort; deploy anyway */
+                            }
+                            await requestUserDeploy(active.id, workspaceId)
+                          })()
+                        }}
+                        onRedeploy={() => {
+                          setViewMode('build')
+                          void requestUserDeploy(active.id)
+                        }}
+                        onSwitch={(workspace, byId) => switchDeployment(active.id, workspace, byId)}
+                        onChanged={() => void refreshProjects()}
+                        onSignedIn={onAuthChanged}
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="project-tabs" role="tablist">
-                  <button
-                    className={`project-tab${viewMode === 'build' ? ' project-tab--active' : ''}`}
-                    role="tab"
-                    aria-selected={viewMode === 'build'}
-                    onClick={() => setViewMode('build')}
-                  >
-                    Build
-                  </button>
-                  <button
-                    className={`project-tab${viewMode === 'code' ? ' project-tab--active' : ''}`}
-                    role="tab"
-                    aria-selected={viewMode === 'code'}
-                    onClick={() => setViewMode('code')}
-                  >
-                    Code
-                  </button>
-                  <button
-                    className={`project-tab${viewMode === 'model' ? ' project-tab--active' : ''}`}
-                    role="tab"
-                    aria-selected={viewMode === 'model'}
-                    onClick={() => setViewMode('model')}
-                  >
-                    Model
-                  </button>
-                  <button
-                    className={`project-tab${viewMode === 'advisor' ? ' project-tab--active' : ''}`}
-                    role="tab"
-                    aria-selected={viewMode === 'advisor'}
-                    onClick={() => setViewMode('advisor')}
-                  >
-                    Advisor
-                  </button>
-                </div>
-                <div className="project-meta">
-                  <DeploymentsControl
-                    project={active}
-                    running={Boolean(deploys[active.id]?.running)}
-                    reconciling={reconciling.has(active.id)}
-                    onCreate={(name, workspaceId) => {
-                      setViewMode('build')
-                      void (async () => {
-                        try {
-                          await window.api.deploy.setName(active.id, workspaceId, name)
-                        } catch {
-                          /* naming is best-effort; deploy anyway */
-                        }
-                        await requestUserDeploy(active.id, workspaceId)
-                      })()
-                    }}
-                    onRedeploy={() => {
-                      setViewMode('build')
-                      void requestUserDeploy(active.id)
-                    }}
-                    onSwitch={(workspace, byId) => switchDeployment(active.id, workspace, byId)}
-                    onChanged={() => void refreshProjects()}
-                  />
-                </div>
-              </div>
-              {viewMode === 'code' ? (
-                <Suspense fallback={<div className="code-empty">Loading editor…</div>}>
-                  <CodeViewer
-                    project={active}
-                    refreshKey={gitRefresh}
-                    onRequestDeploy={() => {
-                      setViewMode('build')
-                      void requestUserDeploy(active.id)
-                    }}
-                    onSendToChat={sendHistoryToChat}
-                    openRequest={codeOpen ?? undefined}
-                    onSkillsChanged={() => setGitRefresh((n) => n + 1)}
-                  />
-                </Suspense>
-              ) : viewMode === 'model' ? (
-                <ModelView
-                  project={active}
-                  refreshKey={gitRefresh}
-                  onOpenFile={openFileInCode}
-                  onSendToChat={sendModelToChat}
-                />
-              ) : viewMode === 'build' ? (
-                <div
-                  className={`panes${focusPane ? ` panes--focus-${focusPane}` : ''}${
-                    resizing ? ' panes--resizing' : ''
-                  }`}
-                  ref={panesRef}
-                  style={
-                    focusPane
-                      ? undefined
-                      : {
-                          gridTemplateColumns: `minmax(0, ${chatFrac}fr) 7px minmax(0, ${1 - chatFrac}fr)`
-                        }
-                  }
-                >
-                  <section className="pane pane--chat">
-                    <ChatPanel
-                      key={active.id}
+                  {viewMode === 'code' ? (
+                    <Suspense fallback={<div className="code-empty">Loading editor…</div>}>
+                      <CodeViewer
+                        project={active}
+                        refreshKey={gitRefresh}
+                        onRequestDeploy={() => {
+                          setViewMode('build')
+                          void requestUserDeploy(active.id)
+                        }}
+                        onSendToChat={sendHistoryToChat}
+                        openRequest={codeOpen ?? undefined}
+                        onSkillsChanged={() => setGitRefresh((n) => n + 1)}
+                      />
+                    </Suspense>
+                  ) : viewMode === 'model' ? (
+                    <ModelTab
                       project={active}
-                      messages={chats[active.id] ?? []}
-                      onChange={(updater) => setMessagesFor(active.id, updater)}
-                      onTurnComplete={(result) =>
-                        void handleTurnComplete(active.id, result)
-                      }
-                      attachments={shots[active.id] ?? []}
-                      onAddAttachment={(shot) => addShot(active.id, shot)}
-                      onRemoveAttachment={(path) => removeShot(active.id, path)}
-                      onAttachmentsConsumed={() => clearShots(active.id)}
-                      onClearHistory={() =>
-                        void window.api.chat.saveHistory(active.id, [])
-                      }
-                      onOptionsChanged={() => void refreshProjects()}
-                      outbound={
-                        chatOutbound?.projectId === active.id ? chatOutbound : null
-                      }
-                      onOutboundConsumed={() => setChatOutbound(null)}
-                      focused={focusPane === 'chat'}
-                      onToggleFocus={() =>
-                        setFocusPane((f) => (f === 'chat' ? null : 'chat'))
-                      }
-                      deployLock={active.awaitingFirstDeploy === true}
-                      deploying={Boolean(deploys[active.id]?.running)}
-                      onRequestDeploy={() => setCreateMode('deploy')}
-                      modeSelectorEnabled={Boolean(settings?.experiments?.chatModeSelector)}
-                      onOpenMention={openMention}
-                      draft={drafts[active.id] ?? ''}
-                      onDraftChange={(value) => setDraftFor(active.id, value)}
+                      refreshKey={gitRefresh}
+                      onOpenFile={openFileInCode}
+                      onSendToChat={sendModelToChat}
+                      onSignedIn={onAuthChanged}
                     />
-                  </section>
-                  {!focusPane && (
+                  ) : viewMode === 'build' ? (
                     <div
-                      className="pane-divider"
-                      role="separator"
-                      aria-orientation="vertical"
-                      aria-label="Resize chat and preview"
-                      title="Drag to resize · double-click to reset"
-                      onMouseDown={onDividerDown}
-                      onDoubleClick={resetSplit}
+                      className={`panes${focusPane ? ` panes--focus-${focusPane}` : ''}${
+                        resizing ? ' panes--resizing' : ''
+                      }`}
+                      ref={panesRef}
+                      style={
+                        focusPane
+                          ? undefined
+                          : {
+                              gridTemplateColumns: `minmax(0, ${chatFrac}fr) 7px minmax(0, ${1 - chatFrac}fr)`
+                            }
+                      }
                     >
-                      <span className="pane-divider-grip" />
+                      <section className="pane pane--chat">
+                        <ChatPanel
+                          key={active.id}
+                          project={active}
+                          copilotAuth={auth.copilot}
+                          onCopilotAuthChanged={onAuthChanged}
+                          messages={chats[active.id] ?? []}
+                          onChange={(updater) => setMessagesFor(active.id, updater)}
+                          onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
+                          onTurnStart={() => handleTurnStart(active.id)}
+                          onPlanExecutionStart={() => handleTurnStart(active.id)}
+                          attachments={shots[active.id] ?? []}
+                          onAddAttachment={(shot) => addShot(active.id, shot)}
+                          onRemoveAttachment={(path) => removeShot(active.id, path)}
+                          onAttachmentsConsumed={() => clearShots(active.id)}
+                          onClearHistory={() => void window.api.chat.saveHistory(active.id, [])}
+                          onOptionsChanged={() => void refreshProjects()}
+                          outbound={chatOutbound?.projectId === active.id ? chatOutbound : null}
+                          onOutboundConsumed={() => setChatOutbound(null)}
+                          focused={focusPane === 'chat'}
+                          onToggleFocus={() => setFocusPane((f) => (f === 'chat' ? null : 'chat'))}
+                          deployLock={active.awaitingFirstDeploy === true}
+                          deploying={Boolean(deploys[active.id]?.running)}
+                          blockSubmitWhileDeploying={Boolean(
+                            settings?.experiments?.localDevPreview
+                          )}
+                          onRequestDeploy={() => setCreateMode('deploy')}
+                          modeSelectorEnabled={Boolean(settings?.experiments?.chatModeSelector)}
+                          eventsManagedExternally
+                          onOpenMention={openMention}
+                          draft={drafts[active.id] ?? ''}
+                          onDraftChange={(value) => setDraftFor(active.id, value)}
+                        />
+                      </section>
+                      {!focusPane && (
+                        <div
+                          className="pane-divider"
+                          role="separator"
+                          aria-orientation="vertical"
+                          aria-label="Resize chat and preview"
+                          title="Drag to resize · double-click to reset"
+                          onMouseDown={onDividerDown}
+                          onDoubleClick={resetSplit}
+                        >
+                          <span className="pane-divider-grip" />
+                        </div>
+                      )}
+                      <section className="pane pane--preview">
+                        <PreviewPane
+                          project={active}
+                          deploy={deploys[active.id]}
+                          localPreviewUrl={
+                            devServers[active.id]?.status === 'running'
+                              ? (devServers[active.id]?.url ?? null)
+                              : null
+                          }
+                          focused={focusPane === 'preview'}
+                          onToggleFocus={() =>
+                            setFocusPane((f) => (f === 'preview' ? null : 'preview'))
+                          }
+                          onPreviewModeChanged={() => void refreshProjects()}
+                          onDesignHandoff={(instruction, shot) => {
+                            if (shot) addShot(active.id, shot)
+                            // Make the composer visible (design mode may have focused
+                            // the preview), then stage the instruction for review.
+                            setFocusPane((f) => (f === 'preview' ? null : f))
+                            setChatOutbound({
+                              id: `design-${Date.now()}`,
+                              projectId: active.id,
+                              display: 'Design-mode tweaks',
+                              prompt: instruction,
+                              stage: true
+                            })
+                          }}
+                          onLoadingChange={setPreviewLoading}
+                        />
+                        {previewLoading && (
+                          <div
+                            className={`project-loading${previewLoading.fading ? ' project-loading--out' : ''}`}
+                            role="status"
+                            aria-label="Loading project"
+                          >
+                            <span className="project-loading-spinner" />
+                            <span className="project-loading-label">
+                              Loading {previewLoading.name}…
+                            </span>
+                          </div>
+                        )}
+                      </section>
+                      {resizing && (
+                        <div
+                          className="pane-resize-overlay"
+                          onMouseMove={onResizeMove}
+                          onMouseUp={endResize}
+                          onMouseLeave={endResize}
+                        />
+                      )}
                     </div>
-                  )}
-                  <section className="pane pane--preview">
-                    <PreviewPane
-                      project={active}
-                      deploy={deploys[active.id]}
-                      onCapture={(shot) => addShot(active.id, shot)}
-                      focused={focusPane === 'preview'}
-                      onToggleFocus={() =>
-                        setFocusPane((f) => (f === 'preview' ? null : 'preview'))
-                      }
-                      onPreviewModeChanged={() => void refreshProjects()}
-                      designModeEnabled={Boolean(settings?.experiments?.previewDesignMode)}
-                      onDesignHandoff={(instruction, shot) => {
-                        if (shot) addShot(active.id, shot)
-                        // Make the composer visible (design mode may have focused
-                        // the preview), then stage the instruction for review.
-                        setFocusPane((f) => (f === 'preview' ? null : f))
-                        setChatOutbound({
-                          id: `design-${Date.now()}`,
-                          projectId: active.id,
-                          display: 'Design-mode tweaks',
-                          prompt: instruction,
-                          stage: true
-                        })
-                      }}
-                      onLoadingChange={setPreviewLoading}
-                    />
-                  </section>
-                  {resizing && (
+                  ) : null}
+                  {advisorMounted && (
                     <div
-                      className="pane-resize-overlay"
-                      onMouseMove={onResizeMove}
-                      onMouseUp={endResize}
-                      onMouseLeave={endResize}
-                    />
-                  )}
-                  {previewLoading && (
-                    <div
-                      className={`project-loading${previewLoading.fading ? ' project-loading--out' : ''}`}
-                      role="status"
-                      aria-label="Loading project"
+                      className={`advisor-host${viewMode === 'advisor' ? '' : ' advisor-host--hidden'}`}
                     >
-                      <span className="project-loading-spinner" />
-                      <span className="project-loading-label">
-                        Loading {previewLoading.name}…
-                      </span>
+                      <AdvisorView
+                        project={active}
+                        onFix={fixWithCopilot}
+                        onFixAll={fixAllFindings}
+                        chatBusy={(chats[active.id] ?? []).some(
+                          (m) => m.role === 'assistant' && m.pending
+                        )}
+                      />
                     </div>
                   )}
                 </div>
-              ) : null}
-              {advisorMounted && (
-                <div
-                  className={`advisor-host${viewMode === 'advisor' ? '' : ' advisor-host--hidden'}`}
-                >
-                  <AdvisorView
-                    project={active}
-                    onFix={fixWithCopilot}
-                    onFixAll={fixAllFindings}
-                    chatBusy={(chats[active.id] ?? []).some(
-                      (m) => m.role === 'assistant' && m.pending
-                    )}
-                  />
-                </div>
-              )}
-            </div>
-          ) : null}
-          {showHome || !active ? (
-            <>
-              {/* Project stays mounted underneath; hide the native preview (it paints
+              </ProjectDependencyGuard>
+            ) : null}
+            {showHome || !active ? (
+              <>
+                {/* Project stays mounted underneath; hide the native preview (it paints
                   above all HTML) while the launcher covers it. */}
-              {active && <SuppressPreview />}
-              <HomeView
-                projects={projects?.projects ?? []}
-                activeId={active?.id}
-                workspaceRoot={projects?.workspaceRoot ?? ''}
-                opening={opening}
-                menuOpenId={menuOpenId}
-                setMenuOpenId={setMenuOpenId}
-                renamingId={renamingId}
-                renameValue={renameValue}
-                setRenameValue={setRenameValue}
-                onSelect={(p) => void selectProject(p)}
-                onStartRename={startRename}
-                onSubmitRename={(p) => void submitRename(p)}
-                onCancelRename={() => setRenamingId(null)}
-                onRemoveFromList={(p) => void removeFromList(p)}
-                onDeleteFromDisk={(p) => {
-                  setMenuOpenId(null)
-                  setConfirmDelete(p)
-                }}
-                onNewProject={() => setCreateMode('create')}
-                onOpenExisting={openExisting}
-                onChangeWorkspaceRoot={changeWorkspaceRoot}
-              />
-            </>
-          ) : null}
-        </main>
-      </div>
+                {active && <SuppressPreview />}
+                <HomeView
+                  projects={projects?.projects ?? []}
+                  activeId={active?.id}
+                  workspaceRoot={projects?.workspaceRoot ?? ''}
+                  opening={opening}
+                  onSelect={(p) => void selectProject(p)}
+                  onManageProject={setManagingProject}
+                  onNewProject={() => setCreateMode('create')}
+                  onOpenExisting={openExisting}
+                  onCloneFromGitHub={() => setShowClone(true)}
+                  onChangeWorkspaceRoot={changeWorkspaceRoot}
+                />
+              </>
+            ) : null}
+          </main>
+        </div>
       )}
 
       <footer className="statusbar">
@@ -1029,30 +1242,41 @@ export default function Workbench({
               onSynced={() => setGitRefresh((n) => n + 1)}
             />
             <span className="statusbar-sep">·</span>
-          </>
-        )}
-        <span className="statusbar-item">Fabricator v{versions?.app ?? '—'}</span>
-        <span className="statusbar-sep">·</span>
-        <span
-          className="statusbar-item"
-          title={
-            auth.copilot.signedIn
-              ? `Copilot CLI signed in${auth.copilot.user ? ` as ${auth.copilot.user}` : ''}`
-              : 'Copilot CLI not signed in'
-          }
-        >
-          Copilot {versions?.copilot ?? (auth.copilot.signedIn ? '✓' : '—')}
-        </span>
-        {active && (
-          <>
-            <span className="statusbar-sep">·</span>
             <RayfinVersionControl info={rayfinVer} onUpdate={requestRayfinUpdate} />
           </>
         )}
+        {active && (active.workspaceName || active.workspace) && (
+          <>
+            <span className="statusbar-sep">·</span>
+            <WorkspaceStatus project={active} />
+          </>
+        )}
         <span className="statusbar-spacer" />
+        <select
+          className="statusbar-zoom"
+          value={String(settings?.uiScale ?? 1)}
+          onChange={(e) => {
+            const uiScale = Number(e.target.value)
+            applyUiScale(uiScale)
+            onSettingsChange({ uiScale })
+          }}
+          title="Interface zoom — scales the whole UI (and the design tools)"
+          aria-label="Interface zoom"
+        >
+          {UI_SCALES.map((s) => (
+            <option key={s} value={String(s)}>
+              {Math.round(s * 100)}%
+            </option>
+          ))}
+        </select>
+        <span className="statusbar-sep">·</span>
+        <span className="statusbar-item" title="Rayfin Fabricator version">
+          v{versions?.app ?? '—'}
+        </span>
+        <span className="statusbar-sep">·</span>
         <button
           className="statusbar-report"
-          onClick={reportIssue}
+          onClick={() => void reportIssue()}
           title="Report an issue on GitHub — opens a prefilled bug report with app & system info"
         >
           <InfoIcon />
@@ -1069,9 +1293,20 @@ export default function Workbench({
         />
       )}
 
+      {managingProject && (
+        <ManageProjectModal
+          project={managingProject}
+          onRename={renameProject}
+          onRemoveFromList={(p) => void removeFromList(p)}
+          onMoveToTrash={setConfirmDelete}
+          onClose={() => setManagingProject(null)}
+        />
+      )}
+
       {confirmDelete && (
         <DeleteProjectModal
           project={confirmDelete}
+          onSignedIn={onAuthChanged}
           onRemoved={(next) => setProjects(next)}
           onClose={() => setConfirmDelete(null)}
         />
@@ -1118,8 +1353,8 @@ export default function Workbench({
                 <strong>
                   {confirmDeploy.behind} change{confirmDeploy.behind === 1 ? '' : 's'}
                 </strong>{' '}
-                you haven’t downloaded yet. Deploying now publishes your current version
-                without them.
+                you haven’t downloaded yet. Deploying now publishes your current version without
+                them.
               </p>
               {deployGuardError && <p className="confirm-error">{deployGuardError}</p>}
             </>
@@ -1137,7 +1372,7 @@ export default function Workbench({
           <SuppressPreview />
           <div className="signout-card">
             <div className="signout-mark">
-              <img src={logo} alt="" />
+              <FabricatorMark />
               <span className="signout-ring" />
             </div>
             <div className="signout-text">

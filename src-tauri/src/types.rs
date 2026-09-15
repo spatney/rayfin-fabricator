@@ -15,9 +15,16 @@ pub struct AppVersions {
   pub tauri: String,
   /// WebView2 runtime version on Windows (the embedded browser engine).
   pub webview2: String,
-  /// The bundled GitHub Copilot CLI version (self-reported via `--version`).
-  /// `None` if the platform isn't bundled or the probe failed.
+  /// The GitHub Copilot CLI version actually running, self-reported via
+  /// `--version`. The CLI self-updates past the SDK's bundled pin, so this can
+  /// be newer than `copilot_bundled`. `None` if the platform isn't bundled or
+  /// the probe failed.
   pub copilot: Option<String>,
+  /// The SDK's *pinned* bundled CLI version (from the install dir). The renderer
+  /// shows it alongside `copilot` when the two differ. Omitted when it can't be
+  /// determined (e.g. the platform isn't bundled).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub copilot_bundled: Option<String>,
 }
 
 /* ----------------------------- updates ----------------------------- */
@@ -57,9 +64,11 @@ pub struct ToolStatus {
   pub id: String,
   pub name: String,
   pub found: bool,
-  /// True when the tool is present *and* meets any minimum-version requirement.
+  /// True when the version check succeeds and meets any minimum requirement.
   pub satisfied: bool,
   pub version: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub check_error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub min_version: Option<String>,
   pub install_hint: String,
@@ -84,6 +93,8 @@ pub struct CopilotAuthStatus {
   pub signed_in: bool,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub user: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -94,6 +105,8 @@ pub struct RayfinAuthStatus {
   pub user: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub tenant: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -104,6 +117,8 @@ pub struct AzAuthStatus {
   pub user: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub tenant: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -207,6 +222,117 @@ pub struct FabricDeleteResult {
   pub error: Option<String>,
 }
 
+/// One semantic-model connection declared in a project's `fabric.yaml`
+/// (active profile). `item_id` is the Power BI dataset id. Surfaced to the Share
+/// dialog so the user can see which models will be auto-shared.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticModelRef {
+  pub alias: String,
+  pub workspace_id: String,
+  pub item_id: String,
+}
+
+/// The outcome of one grant (the app role assignment, or one model share).
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricShareGrant {
+  pub ok: bool,
+  /// True when the principal already had the access (idempotent no-op).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub skipped: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// The outcome of granting Build on one semantic model, carrying its identity so
+/// the UI can label the row.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricShareModelGrant {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub alias: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub item_id: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub workspace_id: Option<String>,
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub skipped: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// Per-recipient result: whether the email resolved to a directory principal, and
+/// the outcome of the app grant plus each different-workspace model grant.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricShareRecipientResult {
+  pub email: String,
+  pub resolved: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub principal_type: Option<String>,
+  pub app: FabricShareGrant,
+  pub models: Vec<FabricShareModelGrant>,
+}
+
+/// Outcome of sharing a deployment's app (+ its different-workspace semantic
+/// models) with a set of recipients. Never throws across IPC — a global failure
+/// (no cached session / missing Azure CLI) sets `ok:false` with
+/// `needs_login`/`needs_az`/`error`; partial failures are reported per recipient.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricShareResult {
+  pub ok: bool,
+  pub recipients: Vec<FabricShareRecipientResult>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_login: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_az: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+impl FabricShareResult {
+  /// Build a global `ok:false` failure (no recipients processed).
+  pub fn failure(error: String) -> Self {
+    FabricShareResult {
+      ok: false,
+      recipients: vec![],
+      needs_login: None,
+      needs_az: None,
+      error: Some(error),
+    }
+  }
+}
+
+/// One directory person matched by the Share dialog's autocomplete.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricDirectoryPerson {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub id: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub display_name: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub email: Option<String>,
+}
+
+/// Outcome of a directory (people) search. Never throws — a missing/expired
+/// Azure CLI sets `needs_az` so the dialog can degrade autocomplete gracefully.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FabricDirectoryResult {
+  pub ok: bool,
+  pub people: Vec<FabricDirectoryPerson>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_az: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_login: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
 /* ----------------------------- processes ----------------------------- */
 
 #[derive(Serialize, Clone)]
@@ -214,6 +340,10 @@ pub struct FabricDeleteResult {
 pub struct ProcResult {
   pub ok: bool,
   pub exit_code: Option<i32>,
+  /// User-facing reason a process failed (e.g. the CLI's `❌ Login failed: …`
+  /// stderr line). `None` on success or when no detail could be extracted.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -229,6 +359,8 @@ pub struct OpenInEditorResult {
 pub struct InstallResult {
   pub ok: bool,
   pub exit_code: Option<i32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub requires_relaunch: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -268,11 +400,6 @@ pub struct TemplateInfo {
   pub name: String,
   pub display_name: String,
   pub description: String,
-  /// When `Some("fabric")`, projects scaffolded from this template default to the
-  /// embedded Fabric portal preview (the toolbar Fabric toggle is on at creation).
-  /// Absent for templates that open in the direct app view.
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub default_preview_mode: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -339,6 +466,21 @@ pub struct DeployResult {
   pub api_url: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub portal_url: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// Result of starting a project's Vite dev server for the live local preview
+/// (experimental). `outcome` is one of `running` (started or already running),
+/// `unsupported` (no `dev` script / no local Vite), or `error`.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DevServerResult {
+  pub ok: bool,
+  pub outcome: String,
+  /// The `localhost` URL Vite is serving on, when it started successfully.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub url: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
 }
@@ -411,6 +553,12 @@ pub struct StudioProject {
   /// honour the same view the user is looking at.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub preview_mode: Option<String>,
+  /// Set once the automatic "semantic-model app ⇒ embedded Fabric preview" default
+  /// has been applied (see [`crate::commands::deploy::run_deploy`]). It makes that
+  /// default fire at most once per project, so a later manual switch to the direct
+  /// view (persisted as `None`) is never re-overridden on subsequent deploys.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub fabric_preview_defaulted: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub missing: Option<bool>,
 }
@@ -437,12 +585,12 @@ pub struct ExperimentFlags {
   /// runs in the standard Agent mode. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub chat_mode_selector: Option<bool>,
-  /// Preview design mode: enable the in-preview click-to-edit "design mode" —
-  /// select live elements and edit them (move / resize / recolor / text, plus a
-  /// structured Graphein chart-spec editor), then hand the collected changes to
-  /// the chat composer as a structured instruction. Opt-in (off by default).
+  /// Live local preview: while an agent turn runs, start the project's Vite dev
+  /// server and point the preview at `localhost` so edits show live (HMR); the
+  /// server is stopped at turn end and the normal after-turn deploy takes over.
+  /// Opt-in (off by default) and only for projects that declare a `dev` script.
   #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub preview_design_mode: Option<bool>,
+  pub local_dev_preview: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -456,10 +604,15 @@ pub struct AppSettings {
   pub ui_scale: Option<f64>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub experiments: Option<ExperimentFlags>,
+  /// Capture full chat diagnostics (prompt/response text + tool I/O) for bug
+  /// reports. Off by default — only lightweight metadata is captured. Opt-in via
+  /// Settings → Diagnostics.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub full_diagnostics: Option<bool>,
 }
 
 fn default_theme() -> String {
-  "dark".to_string()
+  "system".to_string()
 }
 
 #[derive(Deserialize, Clone)]
@@ -479,6 +632,51 @@ pub struct ProjectActionResult {
   pub error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub project: Option<StudioProject>,
+}
+
+/* ----------------------------- github ----------------------------- */
+
+/// Sign-in / availability state for the optional `gh` CLI, powering the
+/// "Clone from GitHub" flow's gating (install → sign in → browse).
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubStatus {
+  /// True when the `gh` binary is resolvable on `PATH`.
+  pub gh_installed: bool,
+  /// True only after the GitHub API verifies the CLI's active identity.
+  pub signed_in: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub user: Option<String>,
+}
+
+/// One repository entry from `gh repo list` (fields flattened/normalized for the UI).
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubRepo {
+  pub name_with_owner: String,
+  pub name: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub description: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub visibility: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub updated_at: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub url: Option<String>,
+  pub is_private: bool,
+  pub is_fork: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub primary_language: Option<String>,
+}
+
+/// Result of listing the signed-in user's repositories.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubReposResult {
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  pub repos: Vec<GithubRepo>,
 }
 
 /* ----------------------------- git ----------------------------- */
@@ -659,17 +857,95 @@ pub struct ChatToolCall {
   pub output: Option<String>,
 }
 
-/// One chronological slice of an assistant turn (prose or a tool call), used to
-/// persist the interleaved order of the model's text and the tools it ran. A
-/// `Tool` segment references a `ChatToolCall` in `tools` by id.
+/// One chronological slice of an assistant turn (prose, a tool call, or a
+/// question), used to persist the interleaved order of the model's text and the
+/// tools it ran. A `Tool` segment references a `ChatToolCall` in `tools` by id;
+/// a `Question` segment references a `ChatPlanQuestion` in `questions` by id so
+/// the card re-renders docked where it was asked.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ChatSegment {
   Text { text: String },
   Tool { id: String },
+  Question { id: String },
   /// A message the user injected mid-turn (conversation steering), shown inline
   /// in the assistant feed as a small "you interjected" bubble.
   Interjection { text: String },
+}
+
+/// One structured todo item from the session's SQL `todos` table (via
+/// `session.plan.readSqlTodosWithDependencies`), normalized for the renderer.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPlanTodo {
+  pub id: String,
+  pub title: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub description: Option<String>,
+  /// One of `"pending" | "in_progress" | "done" | "blocked"`.
+  pub status: String,
+}
+
+/// One dependency edge from the session's SQL `todo_deps` table: `todo_id`
+/// depends on (must follow) `depends_on`.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPlanDependency {
+  pub todo_id: String,
+  pub depends_on: String,
+}
+
+/// One structured question asked via the `ask_user` tool, persisted alongside
+/// its resolution so a reloaded transcript can render the exchange.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPlanQuestion {
+  pub id: String,
+  pub question: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub choices: Option<Vec<String>>,
+  pub allow_freeform: bool,
+  /// One of `"pending" | "answered" | "interrupted"`.
+  pub state: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub answer: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub was_freeform: Option<bool>,
+}
+
+/// A persisted snapshot of a Plan-mode plan card, attached to the assistant
+/// message it belongs to so a reloaded transcript can re-render it (including
+/// any edits/questions/todos that accumulated while it was live).
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPlanArtifact {
+  pub id: String,
+  /// Renderer-owned Plan lifecycle phase, e.g. `"researching"` | `"clarifying"`
+  /// | `"drafting"` | `"review"` | `"revising"` | `"executing"` | `"completed"`
+  /// | `"failed"` | `"interrupted"` (exact set/naming owned by the frontend;
+  /// this DTO passes the string through opaquely for persistence/round-trip).
+  pub phase: String,
+  pub summary: String,
+  pub content: String,
+  #[serde(default)]
+  pub actions: Vec<String>,
+  pub recommended_action: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub selected_action: Option<String>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub todos: Vec<ChatPlanTodo>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub dependencies: Vec<ChatPlanDependency>,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub questions: Vec<ChatPlanQuestion>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub edited: Option<bool>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub revision_count: Option<u32>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub live_request_id: Option<String>,
 }
 
 /// Streamed chat events (main -> renderer), tagged by `type`.
@@ -717,6 +993,55 @@ pub enum ChatEvent {
   PlanResolved {
     #[serde(rename = "requestId")]
     request_id: String,
+  },
+  /// The session plan file changed (`session.plan_changed`); `content` is empty
+  /// when `operation` is `"delete"`.
+  #[serde(rename = "plan-content")]
+  PlanContent { content: String, operation: String },
+  /// A full snapshot of the session's SQL todos + dependencies
+  /// (`session.todos_changed`, re-read via `readSqlTodosWithDependencies`).
+  #[serde(rename = "plan-todos")]
+  PlanTodos {
+    todos: Vec<ChatPlanTodo>,
+    dependencies: Vec<ChatPlanDependency>,
+  },
+  /// The session's agent mode changed (`session.mode_changed`).
+  #[serde(rename = "mode-changed")]
+  ModeChanged { mode: String },
+  /// The `ask_user` tool asked a structured question and is awaiting the user's
+  /// answer, sent back via `chat_resolve_question`.
+  #[serde(rename = "plan-question")]
+  PlanQuestion {
+    #[serde(rename = "requestId")]
+    request_id: String,
+    question: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    choices: Option<Vec<String>>,
+    #[serde(rename = "allowFreeform")]
+    allow_freeform: bool,
+  },
+  /// A previously-asked question was resolved (so its card can dismiss itself).
+  /// Shared by both Plan-mode and Agent-mode questions (routed by `request_id`).
+  #[serde(rename = "plan-question-resolved")]
+  PlanQuestionResolved {
+    #[serde(rename = "requestId")]
+    request_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    answer: Option<String>,
+  },
+  /// The `ask_user` tool asked a structured question during an **Agent-mode**
+  /// turn (no Plan artifact to attach to). Rendered as a standalone question
+  /// card on the assistant turn; answered via `chat_resolve_question`, the same
+  /// path Plan-mode questions use.
+  #[serde(rename = "agent-question")]
+  AgentQuestion {
+    #[serde(rename = "requestId")]
+    request_id: String,
+    question: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    choices: Option<Vec<String>>,
+    #[serde(rename = "allowFreeform")]
+    allow_freeform: bool,
   },
 }
 
@@ -799,6 +1124,16 @@ pub struct ChatMessage {
   /// "resume" (re-run the prompt) on the next launch; cleared on completion.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub interrupted: Option<bool>,
+  /// A Plan-mode plan card attached to this assistant message, so a reloaded
+  /// transcript can re-render its proposed/resolved state.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub plan: Option<ChatPlanArtifact>,
+  /// Standalone clarifying questions raised by the `ask_user` tool during an
+  /// Agent-mode turn (no Plan artifact). Retained so a reloaded transcript can
+  /// re-render the exchange; must round-trip through this DTO or it is dropped
+  /// when the renderer persists history.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub questions: Option<Vec<ChatPlanQuestion>>,
 }
 
 /* ----------------------------- rayfin versions ----------------------------- */
@@ -837,6 +1172,10 @@ pub struct SkillInfo {
   pub category: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub custom: Option<bool>,
+  /// True when this custom skill comes from the global, reusable custom-skill
+  /// library (as opposed to a project-local, agent-authored skill).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub library: Option<bool>,
 }
 
 #[derive(Serialize, Clone)]
@@ -857,6 +1196,60 @@ pub struct SkillSource {
   pub content: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
+}
+
+/* ------------------------- custom-skill library ------------------------- */
+
+/// One entry in the global, reusable custom-skill library (stored under the app
+/// data dir). Presentation fields come from the library folder's `meta.json`.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomSkillInfo {
+  pub id: String,
+  pub title: String,
+  pub description: String,
+  pub icon: String,
+  /// True when the library skill ships extra files under `references/`.
+  pub has_references: bool,
+}
+
+/// Result of a library mutation (save/import/remove): ok plus the refreshed
+/// library, and the affected id when a skill was created or edited.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomSkillActionResult {
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub id: Option<String>,
+  pub library: Vec<CustomSkillInfo>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// A read-only preview of a picked skill folder / `.md` / `.zip`, shown before the
+/// user commits to adding it. Carries the validated SKILL.md plus the source path
+/// to install from on confirm.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomSkillPreview {
+  pub ok: bool,
+  /// True when the user dismissed the picker (a no-op, not an error).
+  pub cancelled: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  /// Absolute path of the picked folder / file, passed back to install on confirm.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub source_path: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub content: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub title: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub description: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub icon: Option<String>,
+  /// How many `references/*.md` files would come along.
+  pub reference_count: u32,
 }
 
 /* ----------------------------- advisor ----------------------------- */
@@ -1009,4 +1402,193 @@ pub struct SuggestionSet {
 pub struct SuggestionRaw {
   #[serde(default)]
   pub suggestions: Vec<Suggestion>,
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn plan_content_event_serializes_camelcase_with_type_tag() {
+    let event = ChatEvent::PlanContent { content: "# Plan".into(), operation: "update".into() };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "plan-content");
+    assert_eq!(json["content"], "# Plan");
+    assert_eq!(json["operation"], "update");
+  }
+
+  #[test]
+  fn plan_todos_event_nests_normalized_todo_dtos() {
+    let event = ChatEvent::PlanTodos {
+      todos: vec![ChatPlanTodo {
+        id: "t1".into(),
+        title: "Write tests".into(),
+        description: None,
+        status: "pending".into(),
+      }],
+      dependencies: vec![ChatPlanDependency { todo_id: "t2".into(), depends_on: "t1".into() }],
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "plan-todos");
+    assert_eq!(json["todos"][0]["id"], "t1");
+    assert_eq!(json["todos"][0]["status"], "pending");
+    assert!(json["todos"][0].get("description").is_none());
+    assert_eq!(json["dependencies"][0]["todoId"], "t2");
+    assert_eq!(json["dependencies"][0]["dependsOn"], "t1");
+  }
+
+  #[test]
+  fn mode_changed_event_serializes() {
+    let event = ChatEvent::ModeChanged { mode: "plan".into() };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "mode-changed");
+    assert_eq!(json["mode"], "plan");
+  }
+
+  #[test]
+  fn plan_question_event_uses_camelcase_field_names() {
+    let event = ChatEvent::PlanQuestion {
+      request_id: "req-1".into(),
+      question: "Which approach?".into(),
+      choices: Some(vec!["A".into(), "B".into()]),
+      allow_freeform: true,
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "plan-question");
+    assert_eq!(json["requestId"], "req-1");
+    assert_eq!(json["allowFreeform"], true);
+    assert_eq!(json["choices"][0], "A");
+  }
+
+  #[test]
+  fn plan_question_resolved_omits_absent_answer() {
+    let event = ChatEvent::PlanQuestionResolved { request_id: "req-1".into(), answer: None };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "plan-question-resolved");
+    assert!(json.get("answer").is_none());
+  }
+
+  #[test]
+  fn agent_question_event_uses_camelcase_field_names() {
+    let event = ChatEvent::AgentQuestion {
+      request_id: "req-2".into(),
+      question: "What theme?".into(),
+      choices: Some(vec!["Light".into(), "Dark".into()]),
+      allow_freeform: false,
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "agent-question");
+    assert_eq!(json["requestId"], "req-2");
+    assert_eq!(json["allowFreeform"], false);
+    assert_eq!(json["choices"][1], "Dark");
+  }
+
+  #[test]
+  fn agent_question_event_omits_absent_choices() {
+    let event = ChatEvent::AgentQuestion {
+      request_id: "req-3".into(),
+      question: "Describe the tone.".into(),
+      choices: None,
+      allow_freeform: true,
+    };
+    let json = serde_json::to_value(&event).unwrap();
+    assert_eq!(json["type"], "agent-question");
+    assert!(json.get("choices").is_none());
+    assert_eq!(json["allowFreeform"], true);
+  }
+
+  #[test]
+  fn chat_message_round_trips_with_plan_artifact() {
+    let msg = ChatMessage {
+      id: "m1".into(),
+      role: "assistant".into(),
+      text: "Here's the plan".into(),
+      tools: vec![],
+      segments: None,
+      error: None,
+      attachments: None,
+      attachment_thumbs: None,
+      kind: None,
+      interrupted: None,
+      plan: Some(ChatPlanArtifact {
+        id: "req-1".into(),
+        phase: "proposed".into(),
+        summary: "Refactor the widget".into(),
+        content: "# Plan\n1. Do it".into(),
+        actions: vec!["interactive".into(), "autopilot".into()],
+        recommended_action: "interactive".into(),
+        selected_action: None,
+        todos: vec![ChatPlanTodo {
+          id: "t1".into(),
+          title: "Do it".into(),
+          description: None,
+          status: "pending".into(),
+        }],
+        dependencies: vec![],
+        questions: vec![ChatPlanQuestion {
+          id: "q1".into(),
+          question: "Ready?".into(),
+          choices: None,
+          allow_freeform: true,
+          state: "pending".into(),
+          answer: None,
+          was_freeform: None,
+        }],
+        edited: Some(false),
+        revision_count: Some(0),
+        error: None,
+        live_request_id: Some("req-1".into()),
+      }),
+      questions: None,
+    };
+    let json = serde_json::to_string(&msg).unwrap();
+    let back: ChatMessage = serde_json::from_str(&json).unwrap();
+    let plan = back.plan.expect("plan round-trips");
+    assert_eq!(plan.id, "req-1");
+    assert_eq!(plan.todos[0].id, "t1");
+    assert_eq!(plan.questions[0].id, "q1");
+    assert!(plan.dependencies.is_empty());
+  }
+
+  #[test]
+  fn chat_message_round_trips_standalone_agent_questions() {
+    let msg = ChatMessage {
+      id: "m1".into(),
+      role: "assistant".into(),
+      text: "".into(),
+      tools: vec![],
+      segments: None,
+      error: None,
+      attachments: None,
+      attachment_thumbs: None,
+      kind: None,
+      interrupted: None,
+      plan: None,
+      questions: Some(vec![ChatPlanQuestion {
+        id: "q1".into(),
+        question: "Which theme?".into(),
+        choices: Some(vec!["Light".into(), "Dark".into()]),
+        allow_freeform: false,
+        state: "answered".into(),
+        answer: Some("Dark".into()),
+        was_freeform: Some(false),
+      }]),
+    };
+    let json = serde_json::to_string(&msg).unwrap();
+    let back: ChatMessage = serde_json::from_str(&json).unwrap();
+    let questions = back.questions.expect("standalone questions round-trip");
+    assert_eq!(questions[0].id, "q1");
+    assert_eq!(questions[0].state, "answered");
+    assert_eq!(questions[0].answer.as_deref(), Some("Dark"));
+    assert!(back.plan.is_none());
+  }
+
+  #[test]
+  fn chat_message_without_plan_deserializes_from_legacy_json() {
+    // Old transcripts saved before the `plan` field existed must still load.
+    let legacy = r#"{"id":"m1","role":"user","text":"hi"}"#;
+    let msg: ChatMessage = serde_json::from_str(legacy).unwrap();
+    assert!(msg.plan.is_none());
+    assert!(msg.tools.is_empty());
+  }
 }

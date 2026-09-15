@@ -160,7 +160,9 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
       >
         <BranchIcon className="git-branch-ico" />
         <span className="git-branch">{status.branch ?? 'git'}</span>
-        <span className="git-dot">·</span>
+        <span className="git-dot" aria-hidden="true">
+          ·
+        </span>
         <span className="git-count">{countLabel}</span>
         {(behind > 0 || ahead > 0) && (
           <span className="git-sync-badges">

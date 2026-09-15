@@ -11,6 +11,7 @@ These queries run in Azure Portal → the `rayfin-fabricator-insights` Applicati
 | How many users deployed an app? | Total distinct users who DEPLOYED |
 | How many tenants deployed an app? | Total distinct tenants who deployed |
 | MAU/DAU/WAU? | DAU (daily active users, last 30 days); WAU (rolling 7-day distinct users per day, last 90 days); MAU (rolling 30-day distinct users per day, last 90 days); MAU/DAU stickiness ratio (latest period) |
+| Which domains have the most active users? | MAU by domain (distinct active users per domain, last 30 days) |
 | What's my tried→deployed conversion? | Tried -> Deployed conversion (users); Funnel summary |
 
 ## Schema notes

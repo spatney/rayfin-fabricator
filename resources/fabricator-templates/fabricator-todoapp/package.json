@@ -9,7 +9,9 @@
     "description": "A polished Fabric-authenticated todo app — per-user row-level security on a Rayfin data model, ready to deploy to Fabric"
   },
   "scripts": {
+    "predev": "rayfin env --framework vite",
     "prebuild": "rayfin env --framework vite",
+    "dev": "rayfin up --exclude-services staticHosting && vite",
     "build": "tsc -b && vite build",
     "build:fabric": "tsc -b && vite build",
     "lint": "eslint .",

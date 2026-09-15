@@ -10,6 +10,7 @@
  */
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { serializePreviewMutations } from './previewSurface'
 import {
   IpcChannels,
   type AppSettings,
@@ -20,9 +21,13 @@ import {
   type ChatMode,
   type ChatOptions,
   type CreateProjectInput,
+  type CustomSkillSaveInput,
   type PreviewBounds,
   type PreviewNavState,
   type PreviewAgentEvent,
+  type PreviewDesignRestylePatch,
+  type PreviewDesignRestyleContext,
+  type PreviewDesignTheme,
   type ProcLogEvent,
   type DeleteProgressEvent,
   type RayfinStudioApi,
@@ -50,6 +55,9 @@ export const api: RayfinStudioApi = {
   getVersions: () => invoke('get_versions'),
   openExternal: (url: string) => invoke('open_external', { url }),
   openLogs: () => invoke('open_logs'),
+  diagnostics: {
+    export: () => invoke('diagnostics_export')
+  },
   openInEditor: (id: string) => invoke('open_in_editor', { id }),
   relaunch: () => invoke('relaunch'),
 
@@ -75,12 +83,28 @@ export const api: RayfinStudioApi = {
     logoutRayfin: () => invoke('auth_logout_rayfin')
   },
 
+  github: {
+    status: () => invoke('github_status'),
+    login: () => invoke('github_login'),
+    listRepos: () => invoke('github_list_repos'),
+    clone: (repo: string) => invoke('github_clone', { input: repo })
+  },
+
   fabric: {
     listWorkspaces: () => invoke('fabric_workspaces'),
     listCapacities: () => invoke('fabric_capacities'),
     createWorkspace: (name: string, capacityId: string) =>
       invoke('fabric_create_workspace', { name, capacityId }),
-    deleteApps: (projectId: string) => invoke('fabric_delete_apps', { projectId })
+    deleteApps: (projectId: string) => invoke('fabric_delete_apps', { projectId }),
+    semanticModelSchema: (workspaceId: string, itemId: string) =>
+      invoke('fabric_semantic_model_schema', { workspaceId, itemId }),
+    projectSemanticModels: (projectId: string) =>
+      invoke('fabric_project_semantic_models', { projectId }),
+    shareApp: (projectId: string, workspaceId: string, recipients: string[]) =>
+      invoke('fabric_share_app', { projectId, workspaceId, recipients }),
+    directorySearch: (query: string) => invoke('fabric_directory_search', { query }),
+    listWorkspaceModels: (workspaceId: string) =>
+      invoke('fabric_list_workspace_models', { workspaceId })
   },
 
   projects: {
@@ -92,12 +116,12 @@ export const api: RayfinStudioApi = {
     setWorkspaceRoot: (path: string) => invoke('projects_set_workspace_root', { path }),
     create: (input: CreateProjectInput) => invoke('projects_create', { input }),
     open: (path: string) => invoke('projects_open', { path }),
+    ensureDependencies: (id: string) => invoke('projects_prepare_dependencies', { id }),
     setActive: (id: string | null) => invoke('projects_set_active', { id }),
     rename: (id: string, name: string) => invoke('projects_rename', { id, name }),
     setWorkspace: (id: string, workspace?: string, workspaceName?: string) =>
       invoke('projects_set_workspace', { id, workspace, workspaceName }),
-    setPreviewMode: (id: string, mode: string) =>
-      invoke('projects_set_preview_mode', { id, mode }),
+    setPreviewMode: (id: string, mode: string) => invoke('projects_set_preview_mode', { id, mode }),
     remove: (id: string, deleteFiles?: boolean) => invoke('projects_remove', { id, deleteFiles }),
     git: {
       status: (id: string) => invoke('projects_git_status', { id }),
@@ -134,6 +158,19 @@ export const api: RayfinStudioApi = {
     source: (id: string, skillId: string) => invoke('skills_source', { id, skillId })
   },
 
+  customSkills: {
+    list: () => invoke('custom_skills_list'),
+    source: (id: string) => invoke('custom_skills_source', { id }),
+    save: (input: CustomSkillSaveInput, projectId: string, toLibrary: boolean) =>
+      invoke('custom_skills_save', { projectId, input, toLibrary }),
+    pickFolderPreview: () => invoke('custom_skills_pick_folder_preview'),
+    pickFilePreview: () => invoke('custom_skills_pick_file_preview'),
+    addFromPath: (projectId: string, sourcePath: string, toLibrary: boolean) =>
+      invoke('custom_skills_add_from_path', { projectId, sourcePath, toLibrary }),
+    promote: (projectId: string, id: string) => invoke('custom_skills_promote', { projectId, id }),
+    remove: (id: string) => invoke('custom_skills_remove', { id })
+  },
+
   advisor: {
     run: (projectId: string, model?: string) => invoke('advisor_run', { projectId, model }),
     cancel: (projectId: string) => invoke('advisor_cancel', { projectId }),
@@ -153,15 +190,21 @@ export const api: RayfinStudioApi = {
       attachments?: string[],
       mode?: ChatMode
     ) => invoke('chat_send', { projectId, turnId, text, attachments, mode }),
-    steer: (
-      projectId: string,
-      text: string,
-      attachments?: string[]
-    ) => invoke('chat_steer', { projectId, text, attachments }),
+    steer: (projectId: string, text: string, attachments?: string[]) =>
+      invoke('chat_steer', { projectId, text, attachments }),
     cancel: (projectId: string) => invoke('chat_cancel', { projectId }),
     reset: (projectId: string) => invoke('chat_reset', { projectId }),
-    resolvePlan: (requestId: string, action: string, feedback?: string) =>
-      invoke('chat_resolve_plan', { requestId, action, feedback }),
+    resolvePlan: (
+      projectId: string,
+      requestId: string,
+      action: string,
+      planContent: string,
+      feedback?: string
+    ) => invoke('chat_resolve_plan', { projectId, requestId, action, planContent, feedback }),
+    resolveQuestion: (requestId: string, answer: string, wasFreeform: boolean) =>
+      invoke('chat_resolve_question', { requestId, answer, wasFreeform }),
+    exportPlan: (suggestedName: string, content: string) =>
+      invoke('chat_export_plan', { suggestedName, content }),
     history: (projectId: string) => invoke('chat_history', { projectId }),
     saveHistory: (projectId: string, messages: ChatMessage[]) =>
       invoke('chat_save_history', { projectId, messages }),
@@ -178,8 +221,7 @@ export const api: RayfinStudioApi = {
   },
 
   deploy: {
-    run: (projectId: string, workspace?: string) =>
-      invoke('deploy_run', { projectId, workspace }),
+    run: (projectId: string, workspace?: string) => invoke('deploy_run', { projectId, workspace }),
     list: (projectId: string) => invoke('deploy_list', { projectId }),
     switch: (projectId: string, workspace: string, byId?: boolean) =>
       invoke('deploy_switch', { projectId, workspace, byId }),
@@ -190,27 +232,40 @@ export const api: RayfinStudioApi = {
     reconcile: (projectId: string) => invoke('deploy_reconcile', { projectId })
   },
 
+  dev: {
+    start: (projectId: string) => invoke('dev_start', { projectId }),
+    stop: (projectId: string) => invoke('dev_stop', { projectId }),
+    supported: (projectId: string) => invoke('dev_supported_cmd', { projectId })
+  },
+
   settings: {
     get: () => invoke('settings_get'),
     set: (patch: Partial<AppSettings>) => invoke('settings_set', { patch })
   },
 
   preview: {
-    showUrl: (url: string, bounds: PreviewBounds) => invoke('preview_show_url', { url, bounds }),
-    navigate: (url: string, bounds: PreviewBounds) => invoke('preview_navigate', { url, bounds }),
-    setBounds: (bounds: PreviewBounds) => invoke('preview_set_bounds', { bounds }),
-    hide: () => invoke('preview_hide'),
-    suppress: (bounds: PreviewBounds) => invoke('preview_suppress', { bounds }),
-    reload: () => invoke('preview_reload'),
-    back: () => invoke('preview_back'),
-    forward: () => invoke('preview_forward'),
+    ...serializePreviewMutations({
+      showUrl: (url: string, bounds: PreviewBounds) => invoke('preview_show_url', { url, bounds }),
+      navigate: (url: string, bounds: PreviewBounds) => invoke('preview_navigate', { url, bounds }),
+      setBounds: (bounds: PreviewBounds) => invoke('preview_set_bounds', { bounds }),
+      hide: () => invoke('preview_hide'),
+      suppress: (bounds: PreviewBounds) => invoke('preview_suppress', { bounds }),
+      reload: () => invoke('preview_reload'),
+      back: () => invoke('preview_back'),
+      forward: () => invoke('preview_forward')
+    }),
     capture: () => invoke('preview_capture'),
     onNavState: (cb: (state: PreviewNavState) => void) =>
       subscribe<PreviewNavState>(IpcChannels.previewNav, cb),
     onAgentPreview: (cb: (event: PreviewAgentEvent) => void) =>
       subscribe<PreviewAgentEvent>(IpcChannels.previewAgent, cb),
     design: {
-      setEnabled: (enabled: boolean) => invoke('preview_design_set', { enabled }),
+      setEnabled: (enabled: boolean, embedded?: boolean, appUrl?: string) =>
+        invoke('preview_design_set', {
+          enabled,
+          embedded: embedded ?? false,
+          appUrl: appUrl ?? null
+        }),
       poll: () => invoke('preview_design_poll'),
       drain: () => invoke('preview_design_drain'),
       drainAi: () => invoke('preview_design_drain_ai'),
@@ -218,13 +273,23 @@ export const api: RayfinStudioApi = {
         invoke('preview_design_apply_generated', { id, html }),
       setModels: (models: { id: string; name: string; fast: boolean }[], preferred?: string) =>
         invoke('preview_design_set_models', { models, preferred: preferred ?? null }),
+      setTheme: (theme: PreviewDesignTheme) => invoke('preview_design_set_theme', { theme }),
       generateHtml: (
         projectId: string,
         description: string,
         width: number,
         height: number,
         model?: string
-      ) => invoke('design_generate_html', { projectId, description, width, height, model })
+      ) => invoke('design_generate_html', { projectId, description, width, height, model }),
+      drainAiEdit: () => invoke('preview_design_drain_ai_edit'),
+      applyRestyle: (id: string, patch: PreviewDesignRestylePatch) =>
+        invoke('preview_design_apply_restyle', { id, patch }),
+      restyleElement: (
+        projectId: string,
+        description: string,
+        context: PreviewDesignRestyleContext,
+        model?: string
+      ) => invoke('design_restyle_element', { projectId, description, context, model })
     }
   },
 

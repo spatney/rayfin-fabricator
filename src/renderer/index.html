@@ -10,9 +10,10 @@
     <title>Fabricator</title>
     <link rel="icon" type="image/png" href="./src/assets/logo.png" />
     <style>
-      /* Paint the dark app background on the very first frame so there is no white
-         flash before the bundled stylesheet (main.css) and theme are applied. The
-         app's initial render is always dark (default :root), so this matches it. */
+      /* Paint the app background on the very first frame so there is no flash before
+         the bundled stylesheet (main.css) and theme are applied. The default theme is
+         'system', so match the OS here via prefers-color-scheme — CSP forbids inline
+         scripts, so this stays pure CSS. Backgrounds mirror --bg in main.css. */
       html,
       body {
         margin: 0;
@@ -21,6 +22,15 @@
       }
       :root {
         color-scheme: dark;
+      }
+      @media (prefers-color-scheme: light) {
+        html,
+        body {
+          background: #eceff4;
+        }
+        :root {
+          color-scheme: light;
+        }
       }
     </style>
   </head>

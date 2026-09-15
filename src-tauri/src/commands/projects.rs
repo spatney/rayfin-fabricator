@@ -70,6 +70,11 @@ pub async fn projects_open(path: String) -> ProjectActionResult {
 }
 
 #[tauri::command]
+pub async fn projects_prepare_dependencies(id: String) -> ProjectActionResult {
+  crate::commands::projects_impl::prepare_project_dependencies(id).await
+}
+
+#[tauri::command]
 pub fn projects_set_active(id: Option<String>) -> ProjectsState {
   annotate_state(store::set_active(id))
 }

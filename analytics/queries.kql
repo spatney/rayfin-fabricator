@@ -89,6 +89,15 @@ range Day from OutputStart to OutputEnd step 1d
 | project Day, MAU = coalesce(MAU, tolong(0))
 | order by Day asc
 
+// ===== MAU by domain (distinct active users per domain, last 30 days) =====
+customEvents
+| where name == "signin"
+| where timestamp > ago(30d)
+| extend tenantDomain = tostring(customDimensions.tenantDomain)
+| where isnotempty(tenantDomain)
+| summarize MAU = dcount(user_Id) by tenantDomain
+| order by MAU desc
+
 // ===== MAU/DAU stickiness ratio (latest period) =====
 let LatestDay = startofday(now());
 let DAU = toscalar(

@@ -8,6 +8,7 @@
     </filter>
     <clipPath id="winClip"><rect x="20" y="16" width="1240" height="780" rx="16"/></clipPath>
     <clipPath id="appClip"><rect x="792" y="200" width="444" height="572" rx="14"/></clipPath>
+    <linearGradient id="fabgrad" gradientUnits="userSpaceOnUse" x1="2" y1="2" x2="98" y2="98"><stop offset="0%" stop-color="#1183dd"/><stop offset="52%" stop-color="#15a4d3"/><stop offset="100%" stop-color="#41c795"/></linearGradient>
   </defs>
 
   <!-- window base + shadow -->
@@ -22,15 +23,15 @@
     <circle cx="80" cy="43" r="4.5" fill="#3ddc84"/>
     <!-- brand mark (Fabricator block-F icon) -->
     <g transform="translate(98 29) scale(0.28)">
-      <rect x="8" y="8" width="27" height="52" rx="5" fill="#76c2c5"/>
-      <rect x="38" y="8" width="60" height="23" rx="5" fill="#76c2c5"/>
-      <rect x="38" y="63" width="22" height="23" rx="5" fill="#76c2c5"/>
-      <rect x="38" y="36" width="46" height="24" rx="5" fill="#dfe2de"/>
-      <rect x="8" y="63" width="27" height="35" rx="5" fill="#dfe2de"/>
-      <rect x="2" y="2" width="11" height="3" rx="1.5" fill="#76c2c5"/>
-      <rect x="2" y="2" width="3" height="11" rx="1.5" fill="#76c2c5"/>
-      <rect x="87" y="85" width="11" height="3" rx="1.5" fill="#76c2c5"/>
-      <rect x="95" y="77" width="3" height="11" rx="1.5" fill="#76c2c5"/>
+      <rect x="8" y="8" width="27" height="52" rx="5" fill="url(#fabgrad)"/>
+      <rect x="38" y="8" width="60" height="23" rx="5" fill="url(#fabgrad)"/>
+      <rect x="38" y="63" width="22" height="23" rx="5" fill="url(#fabgrad)"/>
+      <rect x="38" y="36" width="46" height="24" rx="5" fill="url(#fabgrad)"/>
+      <rect x="8" y="63" width="27" height="35" rx="5" fill="url(#fabgrad)"/>
+      <rect x="2" y="2" width="11" height="3" rx="1.5" fill="url(#fabgrad)"/>
+      <rect x="2" y="2" width="3" height="11" rx="1.5" fill="url(#fabgrad)"/>
+      <rect x="87" y="85" width="11" height="3" rx="1.5" fill="url(#fabgrad)"/>
+      <rect x="95" y="77" width="3" height="11" rx="1.5" fill="url(#fabgrad)"/>
     </g>
     <text x="132" y="47" font-size="15" font-weight="700" fill="#eceff5">Fabricator</text>
     <!-- signed-in pill -->
@@ -50,11 +51,11 @@
     <line x1="250" y1="70" x2="250" y2="796" stroke="#232a39" stroke-width="1"/>
     <text x="40" y="100" font-size="11" letter-spacing="1.5" fill="#6b7488">PROJECTS</text>
     <!-- new project button -->
-    <rect x="40" y="112" width="170" height="36" rx="9" fill="#34b4ba"/>
-    <text x="125" y="135" font-size="13" font-weight="700" fill="#042220" text-anchor="middle">+  New project</text>
+    <rect x="40" y="112" width="170" height="36" rx="9" fill="#35a3ea"/>
+    <text x="125" y="135" font-size="13" font-weight="700" fill="#04273f" text-anchor="middle">+  New project</text>
     <!-- active project -->
-    <rect x="28" y="162" width="200" height="46" rx="10" fill="#34b4ba" fill-opacity="0.14"/>
-    <rect x="28" y="162" width="3" height="46" fill="#34b4ba"/>
+    <rect x="28" y="162" width="200" height="46" rx="10" fill="#35a3ea" fill-opacity="0.14"/>
+    <rect x="28" y="162" width="3" height="46" fill="#35a3ea"/>
     <text x="48" y="184" font-size="13.5" font-weight="600" fill="#eceff5">expense-tracker</text>
     <circle cx="50" cy="196" r="3" fill="#3ddc84"/>
     <text x="60" y="200" font-size="11" fill="#9aa4b8">deployed · just now</text>
@@ -65,13 +66,13 @@
     <text x="48" y="304" font-size="11" fill="#6b7488">deployed</text>
     <line x1="40" y1="332" x2="210" y2="332" stroke="#232a39" stroke-width="1"/>
     <text x="40" y="358" font-size="11" letter-spacing="1.5" fill="#6b7488">RECENT THREADS</text>
-    <circle cx="42" cy="376" r="2.5" fill="#34b4ba" fill-opacity="0.7"/>
+    <circle cx="42" cy="376" r="2.5" fill="#35a3ea" fill-opacity="0.7"/>
     <text x="54" y="380" font-size="12.5" fill="#9aa4b8">Add expense categories</text>
-    <circle cx="42" cy="404" r="2.5" fill="#34b4ba" fill-opacity="0.7"/>
+    <circle cx="42" cy="404" r="2.5" fill="#35a3ea" fill-opacity="0.7"/>
     <text x="54" y="408" font-size="12.5" fill="#9aa4b8">Group list by category</text>
-    <circle cx="42" cy="432" r="2.5" fill="#34b4ba" fill-opacity="0.7"/>
+    <circle cx="42" cy="432" r="2.5" fill="#35a3ea" fill-opacity="0.7"/>
     <text x="54" y="436" font-size="12.5" fill="#9aa4b8">Protect /reports route</text>
-    <circle cx="42" cy="460" r="2.5" fill="#34b4ba" fill-opacity="0.7"/>
+    <circle cx="42" cy="460" r="2.5" fill="#35a3ea" fill-opacity="0.7"/>
     <text x="54" y="464" font-size="12.5" fill="#9aa4b8">Seed sample data</text>
     <!-- account chip -->
     <line x1="40" y1="740" x2="210" y2="740" stroke="#232a39" stroke-width="1"/>
@@ -86,7 +87,7 @@
     <text x="274" y="123" font-size="12" fill="#6b7488">~/projects/expense-tracker</text>
     <!-- tabs -->
     <text x="560" y="108" font-size="13.5" font-weight="600" fill="#eceff5">Build</text>
-    <rect x="560" y="118" width="40" height="3" rx="1.5" fill="#34b4ba"/>
+    <rect x="560" y="118" width="40" height="3" rx="1.5" fill="#35a3ea"/>
     <text x="636" y="108" font-size="13.5" fill="#9aa4b8">Code</text>
     <text x="700" y="108" font-size="13.5" fill="#9aa4b8">Skills</text>
     <text x="762" y="108" font-size="13.5" fill="#9aa4b8">Advisor</text>
@@ -95,8 +96,8 @@
     <circle cx="998" cy="102" r="4" fill="#3ddc84"/>
     <text x="1010" y="106" font-size="12.5" fill="#eceff5">Production</text>
     <text x="1112" y="106" font-size="11" fill="#9aa4b8">▾</text>
-    <rect x="1138" y="86" width="98" height="32" rx="8" fill="#34b4ba"/>
-    <text x="1187" y="106" font-size="12.5" font-weight="700" fill="#042220" text-anchor="middle">Redeploy</text>
+    <rect x="1138" y="86" width="98" height="32" rx="8" fill="#35a3ea"/>
+    <text x="1187" y="106" font-size="12.5" font-weight="700" fill="#04273f" text-anchor="middle">Redeploy</text>
 
     <!-- chat / preview divider -->
     <line x1="760" y1="136" x2="760" y2="796" stroke="#232a39" stroke-width="1"/>
@@ -104,7 +105,7 @@
     <!-- chat column -->
     <text x="274" y="166" font-size="13" font-weight="600" fill="#9aa4b8">Chat</text>
     <!-- user message -->
-    <rect x="446" y="176" width="290" height="52" rx="12" fill="#34b4ba" fill-opacity="0.16" stroke="#34b4ba" stroke-opacity="0.32"/>
+    <rect x="446" y="176" width="290" height="52" rx="12" fill="#35a3ea" fill-opacity="0.16" stroke="#35a3ea" stroke-opacity="0.32"/>
     <text x="462" y="199" font-size="12.5" fill="#eceff5">Add an Expenses page: a form to log</text>
     <text x="462" y="217" font-size="12.5" fill="#eceff5">expenses and a list grouped by category.</text>
     <!-- assistant message -->
@@ -117,11 +118,11 @@
     <text x="324" y="370" font-size="12" xml:space="preserve" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', monospace"><tspan fill="#76c2c5">@field</tspan><tspan fill="#c7d0e0">() amount: </tspan><tspan fill="#9aa4b8">number</tspan></text>
     <text x="324" y="392" font-size="12" xml:space="preserve" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', monospace"><tspan fill="#76c2c5">@field</tspan><tspan fill="#c7d0e0">() category: </tspan><tspan fill="#9aa4b8">string</tspan></text>
     <text x="308" y="414" font-size="12" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', monospace" fill="#c7d0e0">}</text>
-    <text x="292" y="446" font-size="12.5" font-weight="600" fill="#34b4ba">Deploy to see it live  →</text>
+    <text x="292" y="446" font-size="12.5" font-weight="600" fill="#35a3ea">Deploy to see it live  →</text>
     <!-- status line -->
     <text x="274" y="480" font-size="11" fill="#6b7488">Redeployed to Production · just now</text>
     <!-- second user message -->
-    <rect x="506" y="494" width="230" height="40" rx="12" fill="#34b4ba" fill-opacity="0.16" stroke="#34b4ba" stroke-opacity="0.32"/>
+    <rect x="506" y="494" width="230" height="40" rx="12" fill="#35a3ea" fill-opacity="0.16" stroke="#35a3ea" stroke-opacity="0.32"/>
     <text x="522" y="519" font-size="12.5" fill="#eceff5">Group the list by category.</text>
     <!-- assistant typing -->
     <rect x="274" y="550" width="92" height="40" rx="12" fill="#1a1f2b" stroke="#232a39"/>
@@ -131,8 +132,8 @@
     <!-- composer -->
     <rect x="274" y="726" width="462" height="52" rx="12" fill="#12161f" stroke="#232a39"/>
     <text x="294" y="757" font-size="13" fill="#6b7488">Message Fabricator about expense-tracker…</text>
-    <circle cx="712" cy="752" r="17" fill="#34b4ba"/>
-    <path d="M712 760 L712 744 M705 751 L712 744 L719 751" fill="none" stroke="#042220" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="712" cy="752" r="17" fill="#35a3ea"/>
+    <path d="M712 760 L712 744 M705 751 L712 744 L719 751" fill="none" stroke="#04273f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- preview column header -->
     <rect x="792" y="150" width="358" height="30" rx="8" fill="#1a1f2b" stroke="#232a39"/>
@@ -150,25 +151,25 @@
     <g clip-path="url(#appClip)">
       <rect x="792" y="200" width="444" height="572" fill="#f5f7fa"/>
       <!-- app header -->
-      <rect x="792" y="200" width="444" height="50" fill="#34b4ba"/>
+      <rect x="792" y="200" width="444" height="50" fill="#0f6cbd"/>
       <text x="814" y="231" font-size="16" font-weight="700" fill="#ffffff">Expenses</text>
       <circle cx="1212" cy="225" r="13" fill="#ffffff" fill-opacity="0.22"/>
       <text x="1212" y="229" font-size="10" fill="#ffffff" text-anchor="middle">SP</text>
       <!-- summary -->
       <text x="814" y="286" font-size="11" letter-spacing="1.2" fill="#586173">THIS MONTH</text>
       <text x="814" y="318" font-size="26" font-weight="700" fill="#131720">$2,480.00</text>
-      <text x="814" y="340" font-size="12" fill="#2bacb2">▲ 12% vs last month</text>
+      <text x="814" y="340" font-size="12" fill="#1aa1be">▲ 12% vs last month</text>
       <!-- mini bar chart -->
-      <rect x="1012" y="394" width="14" height="36" rx="2" fill="#76c2c5"/>
-      <rect x="1038" y="372" width="14" height="58" rx="2" fill="#34b4ba"/>
-      <rect x="1064" y="386" width="14" height="44" rx="2" fill="#76c2c5"/>
-      <rect x="1090" y="360" width="14" height="70" rx="2" fill="#34b4ba"/>
-      <rect x="1116" y="378" width="14" height="52" rx="2" fill="#76c2c5"/>
-      <rect x="1142" y="350" width="14" height="80" rx="2" fill="#34b4ba"/>
+      <rect x="1012" y="394" width="14" height="36" rx="2" fill="#5cb0e0"/>
+      <rect x="1038" y="372" width="14" height="58" rx="2" fill="#0f6cbd"/>
+      <rect x="1064" y="386" width="14" height="44" rx="2" fill="#5cb0e0"/>
+      <rect x="1090" y="360" width="14" height="70" rx="2" fill="#0f6cbd"/>
+      <rect x="1116" y="378" width="14" height="52" rx="2" fill="#5cb0e0"/>
+      <rect x="1142" y="350" width="14" height="80" rx="2" fill="#0f6cbd"/>
       <!-- list -->
       <line x1="814" y1="462" x2="1214" y2="462" stroke="#e3e8f0" stroke-width="1"/>
       <text x="814" y="486" font-size="11" letter-spacing="1.2" fill="#586173">RECENT</text>
-      <circle cx="820" cy="519" r="5" fill="#34b4ba"/>
+      <circle cx="820" cy="519" r="5" fill="#0f6cbd"/>
       <text x="836" y="524" font-size="14" fill="#131720">Groceries</text>
       <text x="1214" y="524" font-size="14" font-weight="600" fill="#131720" text-anchor="end">$86.20</text>
       <line x1="814" y1="542" x2="1214" y2="542" stroke="#edf0f6" stroke-width="1"/>
@@ -176,7 +177,7 @@
       <text x="836" y="568" font-size="14" fill="#131720">Transport</text>
       <text x="1214" y="568" font-size="14" font-weight="600" fill="#131720" text-anchor="end">$42.00</text>
       <line x1="814" y1="586" x2="1214" y2="586" stroke="#edf0f6" stroke-width="1"/>
-      <circle cx="820" cy="607" r="5" fill="#76c2c5"/>
+      <circle cx="820" cy="607" r="5" fill="#5cb0e0"/>
       <text x="836" y="612" font-size="14" fill="#131720">Dining</text>
       <text x="1214" y="612" font-size="14" font-weight="600" fill="#131720" text-anchor="end">$58.75</text>
       <line x1="814" y1="630" x2="1214" y2="630" stroke="#edf0f6" stroke-width="1"/>
@@ -184,7 +185,7 @@
       <text x="836" y="656" font-size="14" fill="#131720">Utilities</text>
       <text x="1214" y="656" font-size="14" font-weight="600" fill="#131720" text-anchor="end">$120.00</text>
       <!-- add button -->
-      <rect x="1092" y="704" width="122" height="40" rx="10" fill="#34b4ba"/>
+      <rect x="1092" y="704" width="122" height="40" rx="10" fill="#0f6cbd"/>
       <text x="1153" y="729" font-size="13.5" font-weight="600" fill="#ffffff" text-anchor="middle">+ Add expense</text>
     </g>
     <rect x="792" y="200" width="444" height="572" rx="14" fill="none" stroke="#11151d" stroke-width="1"/>

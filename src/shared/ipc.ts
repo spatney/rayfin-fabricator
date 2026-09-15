@@ -11,8 +11,14 @@ export interface AppVersions {
   app: string
   tauri: string
   webview2: string
-  /** Bundled GitHub Copilot CLI version, or null if unavailable. */
+  /** GitHub Copilot CLI version actually running (self-reported), or null. */
   copilot: string | null
+  /**
+   * The SDK's pinned bundled CLI version (from the install dir). The CLI
+   * self-updates past this, so it can be older than `copilot`; surfaced only
+   * to disambiguate the two. Absent when it can't be determined.
+   */
+  copilotBundled?: string | null
 }
 
 /** An available application update (mirrors the Rust `UpdateInfo`). */
@@ -51,15 +57,17 @@ export interface DeleteProgressEvent {
  * Environment doctor
  * ------------------------------------------------------------------ */
 
-export type ToolId = 'node' | 'npm' | 'git' | 'rayfin' | 'copilot' | 'az'
+export type ToolId = 'node' | 'npm' | 'git' | 'rayfin' | 'copilot' | 'az' | 'gh'
 
 export interface ToolStatus {
   id: ToolId
   name: string
   found: boolean
-  /** True when found AND meeting any minimum-version requirement. */
+  /** True when the version check succeeds and meets any minimum requirement. */
   satisfied: boolean
   version: string | null
+  /** The executable was found, but its version check failed. Do not auto-install another copy. */
+  checkError?: string
   /** Minimum required version (`major.minor[.patch]`), when version-gated. */
   minVersion?: string | null
   /** Short human guidance shown when the tool is missing. */
@@ -85,24 +93,61 @@ export interface DoctorReport {
 export interface CopilotAuthStatus {
   signedIn: boolean
   user?: string
+  /** Why authentication could not be verified by the bundled chat engine. */
+  error?: string
 }
 
 export interface RayfinAuthStatus {
   signedIn: boolean
   user?: string
   tenant?: string
+  error?: string
 }
 
 export interface AzAuthStatus {
   signedIn: boolean
   user?: string
   tenant?: string
+  error?: string
 }
 
 export interface AuthStatus {
   copilot: CopilotAuthStatus
   rayfin: RayfinAuthStatus
   az: AzAuthStatus
+}
+
+/* ------------------------------------------------------------------ *
+ * GitHub (optional gh CLI: clone-from-GitHub)
+ * ------------------------------------------------------------------ */
+
+/** Availability + sign-in state for the optional `gh` CLI. */
+export interface GithubStatus {
+  /** True when the `gh` binary is on PATH. */
+  ghInstalled: boolean
+  /** True only after the GitHub API verifies the CLI's active identity. */
+  signedIn: boolean
+  user?: string
+}
+
+/** One repository from `gh repo list` (fields normalized for the picker). */
+export interface GithubRepo {
+  nameWithOwner: string
+  name: string
+  description?: string
+  /** 'PUBLIC' | 'PRIVATE' | 'INTERNAL' (as reported by gh). */
+  visibility?: string
+  updatedAt?: string
+  url?: string
+  isPrivate: boolean
+  isFork: boolean
+  primaryLanguage?: string
+}
+
+export interface GithubReposResult {
+  ok: boolean
+  error?: string
+  repos: GithubRepo[]
 }
 
 /** A Fabric workspace the signed-in user can access, with capacity details. */
@@ -181,6 +226,170 @@ export interface FabricDeleteResult {
   error?: string
 }
 
+/**
+ * One semantic-model connection declared in a project's `fabric.yaml` (active
+ * profile). `itemId` is the Power BI dataset id. Surfaced to the Share dialog so
+ * the user can see which models will be auto-shared.
+ */
+export interface SemanticModelRef {
+  alias: string
+  workspaceId: string
+  itemId: string
+}
+
+/** The outcome of one grant — the app role assignment, or one model share. */
+export interface FabricShareGrant {
+  ok: boolean
+  /** True when the principal already had the access (idempotent no-op). */
+  skipped?: boolean
+  error?: string
+}
+
+/** The outcome of granting Build on one semantic model, with its identity. */
+export interface FabricShareModelGrant {
+  alias?: string
+  itemId?: string
+  workspaceId?: string
+  ok: boolean
+  skipped?: boolean
+  error?: string
+}
+
+/** Per-recipient share outcome: directory resolution + app + model grants. */
+export interface FabricShareRecipientResult {
+  email: string
+  resolved: boolean
+  principalType?: string
+  app: FabricShareGrant
+  models: FabricShareModelGrant[]
+}
+
+/**
+ * Outcome of sharing a deployment's app (+ its different-workspace semantic
+ * models) with a set of recipients. Never throws across IPC — a global failure
+ * (no cached Fabric session / missing Azure CLI) sets `ok:false` with
+ * `needsLogin`/`needsAz`/`error`; partial failures are reported per recipient.
+ */
+export interface FabricShareResult {
+  ok: boolean
+  recipients: FabricShareRecipientResult[]
+  /** True when there was no cached Fabric session (Rayfin re-login needed). */
+  needsLogin?: boolean
+  /** True when the Azure CLI isn't signed in (needed to resolve recipients). */
+  needsAz?: boolean
+  error?: string
+}
+
+/** One directory person matched by the Share dialog's autocomplete. */
+export interface FabricDirectoryPerson {
+  id?: string
+  displayName?: string
+  email?: string
+}
+
+/** Outcome of a directory (people) search — powers Share-dialog autocomplete. */
+export interface FabricDirectoryResult {
+  ok: boolean
+  people: FabricDirectoryPerson[]
+  /** True when the Azure CLI isn't signed in (autocomplete degrades quietly). */
+  needsAz?: boolean
+  needsLogin?: boolean
+  error?: string
+}
+
+/** One semantic model (dataset) in a workspace, for the connect-model picker. */
+export interface WorkspaceModel {
+  id?: string
+  name?: string
+  isRefreshable?: boolean
+  configuredBy?: string
+  webUrl?: string
+}
+
+/** Outcome of listing a workspace's semantic models (never throws). */
+export interface WorkspaceModelsResult {
+  ok: boolean
+  models: WorkspaceModel[]
+  /** True when there was no cached Fabric session (Rayfin re-login needed). */
+  needsLogin?: boolean
+  needsAz?: boolean
+  error?: string
+}
+
+/** One table in a semantic model's schema (a node in the Model-tab diagram). */
+export interface SemanticTable {
+  name?: string
+  description?: string
+  isHidden: boolean
+  storageMode?: string
+}
+
+/** One column on a semantic-model table; `expression` is set only for a calculated column. */
+export interface SemanticColumn {
+  table?: string
+  name?: string
+  dataType?: string
+  isHidden: boolean
+  isKey: boolean
+  dataCategory?: string
+  formatString?: string
+  displayFolder?: string
+  expression?: string
+}
+
+/** One measure on a semantic-model table (its DAX `expression` is shown on click). */
+export interface SemanticMeasure {
+  table?: string
+  name?: string
+  expression?: string
+  dataType?: string
+  formatString?: string
+  displayFolder?: string
+  description?: string
+  isHidden: boolean
+}
+
+/** One relationship (an edge) with cardinality, cross-filter direction and active state. */
+export interface SemanticRelationship {
+  name?: string
+  fromTable?: string
+  fromColumn?: string
+  /** 'One' | 'Many' (as reported by INFO.VIEW.RELATIONSHIPS). */
+  fromCardinality?: string
+  toTable?: string
+  toColumn?: string
+  toCardinality?: string
+  isActive: boolean
+  /** 'OneDirection' | 'BothDirections' | 'Automatic'. */
+  crossFilter?: string
+}
+
+/**
+ * Outcome of reading a semantic model's schema for the Model-tab diagram (never
+ * throws across IPC). The schema is queried live from Fabric with the Azure CLI
+ * Power BI token (like `@microsoft/fabric-app-data-cli`), so `needsAz` drives an
+ * `az login` CTA, `needsLogin` a Fabric sign-in, and `error` covers the "not
+ * deployed / no access" cases.
+ */
+export interface SemanticSchemaResult {
+  ok: boolean
+  /** True when at least one table came back. */
+  matched: boolean
+  /** True when the failure was a missing/expired Fabric session. */
+  needsLogin?: boolean
+  /** True when the failure was a missing/signed-out Azure CLI. */
+  needsAz?: boolean
+  error?: string
+  workspaceId?: string
+  itemId?: string
+  tables: SemanticTable[]
+  columns: SemanticColumn[]
+  measures: SemanticMeasure[]
+  relationships: SemanticRelationship[]
+  /** Non-fatal notes (e.g. a sub-query that failed while tables succeeded). */
+  notes: string[]
+}
+
 /* ------------------------------------------------------------------ *
  * Long-running / streaming processes (logins, installs, deploys)
  * ------------------------------------------------------------------ */
@@ -189,14 +398,19 @@ export interface FabricDeleteResult {
 export type ProcStreamId =
   | 'login:copilot'
   | 'login:rayfin'
+  | 'login:az'
   | 'logout:rayfin'
   | 'install:rayfin'
   | 'install:copilot'
   | 'install:node'
   | 'install:git'
+  | 'install:gh'
+  | 'install:az'
   | 'install:setup'
   | 'create:project'
+  | 'clone:project'
   | 'deploy:run'
+  | 'dev:run'
 
 export interface ProcLogEvent {
   channel: ProcStreamId
@@ -207,6 +421,11 @@ export interface ProcLogEvent {
 export interface ProcResult {
   ok: boolean
   exitCode: number | null
+  /**
+   * User-facing reason the process failed (e.g. the Rayfin CLI's
+   * `❌ Login failed: …` output). Present only on failure; absent on success.
+   */
+  error?: string
 }
 
 /** Result of a tool install, including whether the app must relaunch to see it. */
@@ -233,12 +452,6 @@ export interface TemplateInfo {
   name: string
   displayName: string
   description: string
-  /**
-   * When `'fabric'`, projects created from this template default to the embedded
-   * Fabric portal preview (the toolbar Fabric toggle starts on). Absent for
-   * templates that open in the direct app view.
-   */
-  defaultPreviewMode?: PreviewMode
 }
 
 /** One template entry from a community gallery repo's root `rayfin-template.yml`. */
@@ -318,6 +531,19 @@ export interface DeployStatus {
   portalUrl?: string
 }
 
+/**
+ * Result of starting a project's Vite dev server for the live local preview
+ * (experimental). `outcome` is `running` (started, or already up), `unsupported`
+ * (the project has no `dev` script / no local Vite), or `error`.
+ */
+export interface DevServerResult {
+  ok: boolean
+  outcome: 'running' | 'unsupported' | 'error'
+  /** The `localhost` URL Vite is serving on, when it started successfully. */
+  url?: string
+  error?: string
+}
+
 /** One Fabric deployment recorded for a project (`rayfin up list`). */
 export interface FabricDeployment {
   workspaceName: string
@@ -346,6 +572,66 @@ export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'ma
  * - `autopilot`: run autonomously end-to-end, auto-approving tools.
  */
 export type ChatMode = 'agent' | 'plan' | 'autopilot'
+
+/** Durable lifecycle of a Plan-mode artifact in the chat transcript. */
+export type ChatPlanPhase =
+  | 'researching'
+  | 'clarifying'
+  | 'drafting'
+  | 'review'
+  | 'revising'
+  | 'executing'
+  | 'completed'
+  | 'failed'
+  | 'interruptedReview'
+  | 'interruptedExecution'
+
+/** Status values written by the agent to the session SQL `todos` table. */
+export type ChatPlanTodoStatus = 'pending' | 'in_progress' | 'done' | 'blocked'
+
+export interface ChatPlanTodo {
+  id: string
+  title: string
+  description?: string
+  status: ChatPlanTodoStatus
+}
+
+export interface ChatPlanDependency {
+  todoId: string
+  dependsOn: string
+}
+
+export interface ChatPlanQuestion {
+  id: string
+  question: string
+  choices?: string[]
+  allowFreeform: boolean
+  state: 'pending' | 'answered' | 'interrupted'
+  answer?: string
+  wasFreeform?: boolean
+}
+
+/**
+ * Durable Plan-mode artifact attached to the assistant turn that created it.
+ * `liveRequestId` is populated only while this process owns the SDK callback;
+ * persisted/reloaded artifacts clear it and use a continuation turn to resume.
+ */
+export interface ChatPlanArtifact {
+  id: string
+  phase: ChatPlanPhase
+  summary: string
+  content: string
+  actions: string[]
+  recommendedAction: string
+  selectedAction?: string
+  todos: ChatPlanTodo[]
+  dependencies: ChatPlanDependency[]
+  questions: ChatPlanQuestion[]
+  edited?: boolean
+  revisionCount?: number
+  error?: string
+  liveRequestId?: string
+}
 
 /**
  * A Copilot model available to the signed-in user, as reported by the engine
@@ -442,6 +728,12 @@ export interface AppSettings {
   uiScale?: number
   /** Experimental, opt-in features (off by default). */
   experiments?: ExperimentFlags
+  /**
+   * Capture full chat diagnostics (prompt/response text + tool I/O) for bug
+   * reports. Off by default — only lightweight metadata is captured. Opt-in via
+   * Settings → Diagnostics.
+   */
+  fullDiagnostics?: boolean
 }
 
 /** Opt-in experimental feature flags (Settings → Experiments). */
@@ -454,24 +746,24 @@ export interface ExperimentFlags {
   compatibilityRendering?: boolean
   /**
    * Chat mode selector: show the Agent / Plan / Autopilot dropdown in the chat
-   * composer. When off (the default), the selector is hidden and every turn runs
-   * in the standard Agent mode.
+   * composer. Plan mode researches, clarifies, and waits for approval before
+   * building. When off (the default), every turn runs in standard Agent mode.
    */
   chatModeSelector?: boolean
   /**
-   * Preview design mode: enable the in-preview click-to-edit "design mode" —
-   * select live elements and edit them (move / resize / recolor / text, plus a
-   * structured Graphein chart-spec editor), then hand the collected changes to
-   * the chat composer as a structured instruction for review.
+   * Live local preview: while an agent turn runs, start the project's Vite dev
+   * server and point the preview at `localhost` so edits show live (HMR). The
+   * server is stopped at turn end and the normal after-turn deploy takes over.
+   * Off by default; only affects projects that declare a `dev` script.
    */
-  previewDesignMode?: boolean
+  localDevPreview?: boolean
 }
 
 export interface CreateProjectInput {
   name: string
   /**
    * Template the project is scaffolded from. Either a built-in (bundled) name
-   * ('fabricator-dataapp' | 'fabricator-todoapp') or a community template URL
+   * ('fabricator-universal' | 'fabricator-todoapp') or a community template URL
    * (e.g. an awesome-rayfin git/tarball URL) — `npm create @microsoft/rayfin -- -t`
    * accepts either.
    */
@@ -672,13 +964,17 @@ export interface ChatToolCall {
  * One chronological slice of an assistant turn, used to interleave the model's
  * prose with the tool calls it makes (instead of grouping all tools, then all
  * text). A `'tool'` segment references a {@link ChatToolCall} in `tools` by id so
- * tool-state updates stay in one place. Persisted so reloaded turns keep order.
+ * tool-state updates stay in one place; a `'question'` segment likewise
+ * references a {@link ChatPlanQuestion} in `questions` by id, which docks the
+ * question card at the point in the feed where it was asked instead of letting
+ * it drift to the bottom as the turn keeps streaming. Persisted so reloaded
+ * turns keep order.
  */
 export type ChatSegment =
   | { kind: 'text'; text: string }
   | { kind: 'tool'; id: string }
+  | { kind: 'question'; id: string }
   | { kind: 'interjection'; text: string; thumbs?: string[] }
-
 
 /**
  * Streamed chat events sent from main -> renderer during a turn. The renderer
@@ -701,6 +997,24 @@ export type ChatEvent =
       recommendedAction: string
     }
   | { type: 'plan-resolved'; requestId: string }
+  | { type: 'plan-content'; content: string; operation: string }
+  | { type: 'plan-todos'; todos: ChatPlanTodo[]; dependencies: ChatPlanDependency[] }
+  | { type: 'mode-changed'; mode: ChatMode }
+  | {
+      type: 'plan-question'
+      requestId: string
+      question: string
+      choices?: string[]
+      allowFreeform: boolean
+    }
+  | { type: 'plan-question-resolved'; requestId: string; answer?: string }
+  | {
+      type: 'agent-question'
+      requestId: string
+      question: string
+      choices?: string[]
+      allowFreeform: boolean
+    }
 
 /** Envelope so the renderer can route events to the right project's conversation. */
 export interface ChatEventEnvelope {
@@ -788,6 +1102,12 @@ export interface SkillInfo {
   category?: string
   /** True for an on-disk skill that isn't part of our curated catalog. */
   custom?: boolean
+  /**
+   * True when this custom skill comes from the global, reusable custom-skill
+   * library (vs. a project-local, agent-authored skill). Library skills can be
+   * edited or deleted from the library, and toggled into any project.
+   */
+  library?: boolean
 }
 
 /** Result of toggling a skill: ok plus the refreshed skill list. */
@@ -808,6 +1128,68 @@ export interface SkillSource {
   content?: string
   /** Set when ok is false. */
   error?: string
+}
+
+/**
+ * One entry in the global, reusable custom-skill library (stored under the app
+ * data dir). Presentation fields come from the library folder's `meta.json`.
+ */
+export interface CustomSkillInfo {
+  /** Stable slug id, e.g. 'team-brand'. */
+  id: string
+  /** Human title shown on the card. */
+  title: string
+  /** Short one-line description for the card. */
+  description: string
+  /** Emoji/glyph for the card. */
+  icon: string
+  /** True when the library skill ships extra files under `references/`. */
+  hasReferences: boolean
+}
+
+/** Payload to create or edit a library skill from the in-app authoring form. */
+export interface CustomSkillSaveInput {
+  /** Present when editing an existing library skill; omit to create a new one. */
+  id?: string
+  /** Human title (also slugified into the id on create). */
+  title: string
+  /** Short card description; falls back to the frontmatter description when empty. */
+  description: string
+  /** Emoji/glyph; defaults to a puzzle piece when empty. */
+  icon?: string
+  /** The full SKILL.md the user authored/edited (frontmatter + body). */
+  content: string
+}
+
+/** Result of a library mutation (save/import/remove): ok plus the refreshed library. */
+export interface CustomSkillActionResult {
+  ok: boolean
+  /** The id created or edited, when ok. */
+  id?: string
+  /** The refreshed custom-skill library. */
+  library: CustomSkillInfo[]
+  /** Set when ok is false and it was a real failure (absent on a cancelled dialog). */
+  error?: string
+}
+
+/**
+ * A read-only preview of a picked skill folder / `.md` / `.zip`, shown before the
+ * user commits to adding it.
+ */
+export interface CustomSkillPreview {
+  ok: boolean
+  /** True when the user dismissed the picker (a no-op, not an error). */
+  cancelled: boolean
+  error?: string
+  /** Absolute path of the picked folder/file, passed back to install on confirm. */
+  sourcePath?: string
+  /** The picked SKILL.md content. */
+  content?: string
+  title?: string
+  description?: string
+  icon?: string
+  /** How many `references/*.md` files would come along. */
+  referenceCount: number
 }
 
 /**
@@ -879,7 +1261,6 @@ export interface AdvisorEventEnvelope {
   event: AdvisorEvent
 }
 
-
 /** Per-project chat configuration (model + reasoning effort). */
 export interface ChatOptions {
   /** Copilot model id (`--model`); 'auto' or undefined lets Copilot pick. */
@@ -940,6 +1321,14 @@ export interface ChatMessage {
   interrupted?: boolean
   /** Wall-clock duration of the assistant turn, in ms. Set when the turn finishes. */
   elapsedMs?: number
+  /** Durable Plan-mode artifact owned by this assistant turn, when present. */
+  plan?: ChatPlanArtifact
+  /**
+   * Standalone clarifying questions raised by the `ask_user` tool during an
+   * Agent-mode turn (no Plan artifact). Rendered as inline question cards on
+   * this assistant turn and answered via `chat_resolve_question`.
+   */
+  questions?: ChatPlanQuestion[]
 }
 
 /* ------------------------------------------------------------------ *
@@ -947,15 +1336,16 @@ export interface ChatMessage {
  * ------------------------------------------------------------------ */
 
 /**
- * Logical-pixel rectangle for the native preview webview, expressed in the
- * renderer's client coordinates (i.e. the host element's `getBoundingClientRect`,
- * which map 1:1 to the child webview's logical coordinates).
+ * CSS-pixel rectangle relative to the renderer's visual viewport. `pixelRatio`
+ * maps it to native physical pixels, including display/browser/pinch zoom.
+ * Without `pixelRatio`, coordinates retain the legacy native logical units.
  */
 export interface PreviewBounds {
   x: number
   y: number
   width: number
   height: number
+  pixelRatio?: number
 }
 
 /** Navigation state of the preview webview, pushed on the `preview:nav` event. */
@@ -1000,6 +1390,10 @@ export interface PreviewDesignStatus {
   hasModels?: boolean
   /** The AI picker's currently selected model id — persisted by the renderer. */
   aiModel?: string | null
+  /** True once the user hit "Apply" on an element's "Edit with AI" card. */
+  aiEditPending?: boolean
+  /** Whether the controller currently holds the Fabricator theme (re-pushed if not). */
+  hasTheme?: boolean
 }
 
 /**
@@ -1023,6 +1417,66 @@ export interface PreviewDesignAiRequest {
 export interface PreviewDesignHandoff {
   instruction: string
   changeCount: number
+}
+
+/**
+ * Compact element context the controller sends with an "Edit with AI" restyle
+ * request; forwarded verbatim to `design.restyleElement`.
+ */
+export interface PreviewDesignRestyleContext {
+  tag: string
+  text?: string
+  classes?: string
+  component?: string
+  /** Current (relevant) computed styles, keyed by CSS property. */
+  styles: Record<string, string>
+  isChart: boolean
+  chartType?: string
+  /** Current Graphein spec (data omitted) for charts. */
+  spec?: unknown
+  /** Notable descendants the model can target via `rules`. */
+  children?: { tag: string; classes?: string; text?: string }[]
+}
+
+/**
+ * A drained "Edit with AI" restyle request for a selected element: the target
+ * element id (`data-rayfin-edit-id`), the natural-language change, the chosen
+ * model, and the element context the renderer forwards to the model.
+ */
+export interface PreviewDesignAiEditRequest {
+  id: string
+  /** All target element ids (multi-select) — the one patch applies to each. */
+  ids?: string[]
+  description: string
+  model?: string
+  context: PreviewDesignRestyleContext
+}
+
+/**
+ * Fabricator's own theme pushed into the design controller so the tools match
+ * the host app's look + zoom (built by the renderer from its CSS tokens +
+ * `uiScale`). Colors are CSS color strings; `scale` is the UI zoom (1 = 100%).
+ */
+export interface PreviewDesignTheme {
+  accent: string
+  accentHi?: string
+  panel: string
+  panel2?: string
+  border?: string
+  txt: string
+  txtDim?: string
+  scale?: number
+}
+
+/**
+ * The structured restyle patch returned by `design.restyleElement`: whitelisted
+ * inline CSS property→value pairs, plus an optional Graphein spec patch (charts).
+ */
+export interface PreviewDesignRestylePatch {
+  styles: Record<string, string>
+  graphein?: unknown
+  /** Descendant rules: whitelisted CSS applied to elements matching `selector`. */
+  rules?: { selector: string; styles: Record<string, string> }[]
 }
 
 /* ------------------------------------------------------------------ *
@@ -1049,6 +1503,11 @@ export const IpcChannels = {
   authLoginRayfin: 'auth:loginRayfin',
   authLoginAz: 'auth:loginAz',
   authLogoutRayfin: 'auth:logoutRayfin',
+
+  githubStatus: 'github:status',
+  githubLogin: 'github:login',
+  githubListRepos: 'github:listRepos',
+  githubClone: 'github:clone',
 
   fabricWorkspaces: 'fabric:workspaces',
   fabricDeleteApps: 'fabric:deleteApps',
@@ -1140,6 +1599,18 @@ export interface RayfinStudioApi {
   /** Open the logs folder (userData/logs) in the OS file manager; returns its path. */
   openLogs: () => Promise<string>
   /**
+   * Chat-session diagnostics captured for bug reports (metadata by default; full
+   * capture is opt-in via {@link AppSettings.fullDiagnostics}).
+   */
+  diagnostics: {
+    /**
+     * Build a single consolidated diagnostics file (environment + recent
+     * chat-turn diagnostics + crash/hang log tail), reveal it in the OS file
+     * manager, and return its path so it can be attached to a bug report.
+     */
+    export: () => Promise<string>
+  }
+  /**
    * Open the project folder in VS Code (`code <dir>`). When VS Code's CLI isn't
    * found, the project folder is revealed in the OS file manager instead and
    * `opened` is false, so the UI can nudge the user to install VS Code.
@@ -1166,8 +1637,8 @@ export interface RayfinStudioApi {
     install: (id: ToolId) => Promise<InstallResult>
     /**
      * Install every missing required tool in dependency order. Installs system
-     * tools (Node/Git) first; if any are installed it returns requiresRelaunch so
-     * the caller can restart before the npm-based CLIs are installed.
+     * tools first. Detected tools with failed checks are not reinstalled.
+     * Successful system installs return requiresRelaunch.
      */
     installAll: () => Promise<InstallResult>
   }
@@ -1178,6 +1649,21 @@ export interface RayfinStudioApi {
     loginRayfin: (tenant?: string) => Promise<ProcResult>
     loginAz: () => Promise<ProcResult>
     logoutRayfin: () => Promise<ProcResult>
+  }
+
+  /** Optional GitHub integration (backed by the `gh` CLI) for cloning repos. */
+  github: {
+    /** gh CLI availability + sign-in state. */
+    status: () => Promise<GithubStatus>
+    /** Launch an external terminal running `gh auth login --web` (browser flow). */
+    login: () => Promise<ProcResult>
+    /** List the signed-in user's repositories. */
+    listRepos: () => Promise<GithubReposResult>
+    /**
+     * Clone a repo (`owner/name` or a GitHub URL) into the workspace, then
+     * register + open it. Fails if the clone isn't a Rayfin project.
+     */
+    clone: (repo: string) => Promise<ProjectActionResult>
   }
 
   fabric: {
@@ -1193,6 +1679,42 @@ export interface RayfinStudioApi {
      * is cleaned up too. Never throws — reports per-deployment failures.
      */
     deleteApps: (projectId: string) => Promise<FabricDeleteResult>
+    /**
+     * Read a semantic model's schema (tables/columns/measures/relationships) for
+     * the Model tab's diagram. Queried live from Fabric via DAX `INFO.VIEW.*`
+     * using the Azure CLI Power BI token; never throws — reports
+     * `needsAz`/`needsLogin`/`error` for the UI to render.
+     */
+    semanticModelSchema: (workspaceId: string, itemId: string) => Promise<SemanticSchemaResult>
+    /**
+     * List the semantic-model connections declared in the project's `fabric.yaml`
+     * active profile — surfaced in the Share dialog so the user can see which
+     * models will also be shared. Never throws (empty list when there are none).
+     */
+    projectSemanticModels: (projectId: string) => Promise<SemanticModelRef[]>
+    /**
+     * Share a deployment's app with tenant users/groups (by email): grant each
+     * Contributor on the app's hosting workspace, and Build on every semantic
+     * model the app uses that lives in a different workspace. Never throws —
+     * reports per-recipient results plus `needsLogin`/`needsAz`/`error`.
+     */
+    shareApp: (
+      projectId: string,
+      workspaceId: string,
+      recipients: string[]
+    ) => Promise<FabricShareResult>
+    /**
+     * Search the directory (Microsoft Graph via the Azure CLI) for people
+     * matching a name/email fragment — powers the Share dialog's autocomplete.
+     * Never throws; reports `needsAz` when the Azure CLI isn't signed in.
+     */
+    directorySearch: (query: string) => Promise<FabricDirectoryResult>
+    /**
+     * List the semantic models (datasets) in a Fabric workspace — the data behind
+     * the "connect a model from your workspace" picker. Never throws; reports
+     * `needsLogin` when the Fabric session has lapsed.
+     */
+    listWorkspaceModels: (workspaceId: string) => Promise<WorkspaceModelsResult>
   }
 
   projects: {
@@ -1211,6 +1733,8 @@ export interface RayfinStudioApi {
     create: (input: CreateProjectInput) => Promise<ProjectActionResult>
     /** Register an existing Rayfin project by path and make it active. */
     open: (path: string) => Promise<ProjectActionResult>
+    /** Install missing dependencies so this project's pinned Rayfin CLI is ready. */
+    ensureDependencies: (id: string) => Promise<ProjectActionResult>
     setActive: (id: string | null) => Promise<ProjectsState>
     /** Rename a project (updates the display name and rayfin/rayfin.yml `name`). */
     rename: (id: string, name: string) => Promise<ProjectActionResult>
@@ -1303,6 +1827,41 @@ export interface RayfinStudioApi {
     source: (id: string, skillId: string) => Promise<SkillSource>
   }
 
+  /**
+   * Your reusable custom-skill **library** (stored under the app data dir). Adding
+   * or uploading a skill installs it into the given project's `.agents/skills/`;
+   * pass `toLibrary: true` to also save it to the library for reuse in other apps.
+   */
+  customSkills: {
+    /** The current custom-skill library. */
+    list: () => Promise<CustomSkillInfo[]>
+    /** Read the raw SKILL.md of a library skill, for the authoring/preview editor. */
+    source: (id: string) => Promise<SkillSource>
+    /**
+     * Create a skill in `projectId` (with `id` unset), or edit an existing library
+     * skill in place (with `id` set). `toLibrary` also saves a new skill to the library.
+     */
+    save: (
+      input: CustomSkillSaveInput,
+      projectId: string,
+      toLibrary: boolean
+    ) => Promise<CustomSkillActionResult>
+    /** Pick a skill folder and return a read-only preview (no install yet). */
+    pickFolderPreview: () => Promise<CustomSkillPreview>
+    /** Pick a SKILL.md or `.zip` bundle and return a read-only preview (no install yet). */
+    pickFilePreview: () => Promise<CustomSkillPreview>
+    /** Confirm a previewed upload: install the skill at `sourcePath` into the app. */
+    addFromPath: (
+      projectId: string,
+      sourcePath: string,
+      toLibrary: boolean
+    ) => Promise<CustomSkillActionResult>
+    /** Save a skill that's only in this app into the reusable library. */
+    promote: (projectId: string, id: string) => Promise<CustomSkillActionResult>
+    /** Remove a skill from the library (installed app copies are kept). */
+    remove: (id: string) => Promise<CustomSkillActionResult>
+  }
+
   /** Advisor: a Copilot-driven, read-only security review of the app. */
   advisor: {
     /**
@@ -1360,11 +1919,7 @@ export interface RayfinStudioApi {
      * feedback) and resolves with `{ steered: true }`. When nothing is running it
      * resolves with `{ steered: false }`, so the caller sends it as a new turn.
      */
-    steer: (
-      projectId: string,
-      text: string,
-      attachments?: string[]
-    ) => Promise<SteerResult>
+    steer: (projectId: string, text: string, attachments?: string[]) => Promise<SteerResult>
     /** Cancel the in-flight turn for a project. */
     cancel: (projectId: string) => Promise<void>
     /** Start a fresh conversation (drops the persisted Copilot session id). */
@@ -1375,7 +1930,17 @@ export interface RayfinStudioApi {
      * continue with that route, or 'keep_planning' to send the agent back to revise
      * the plan (optionally with `feedback`).
      */
-    resolvePlan: (requestId: string, action: string, feedback?: string) => Promise<void>
+    resolvePlan: (
+      projectId: string,
+      requestId: string,
+      action: string,
+      planContent: string,
+      feedback?: string
+    ) => Promise<void>
+    /** Answer a structured clarification raised by the Plan-mode `ask_user` tool. */
+    resolveQuestion: (requestId: string, answer: string, wasFreeform: boolean) => Promise<void>
+    /** Export a plan to a user-selected Markdown file. Null means the dialog was cancelled. */
+    exportPlan: (suggestedName: string, content: string) => Promise<string | null>
     /** Load the persisted conversation history for a project. */
     history: (projectId: string) => Promise<ChatMessage[]>
     /** Persist the conversation history for a project (empty array clears it). */
@@ -1436,6 +2001,25 @@ export interface RayfinStudioApi {
     reconcile: (projectId: string) => Promise<ProjectsState>
   }
 
+  /**
+   * Live local preview (experimental, opt-in via {@link ExperimentFlags.localDevPreview}).
+   * Runs the project's Vite dev server directly (no `rayfin up`) so edits show
+   * live at `localhost` during an agent turn; stopped at turn end. Output streams
+   * on the `dev:run` channel (see {@link onProcLog}).
+   */
+  dev: {
+    /**
+     * Start (or reuse) the project's Vite dev server. Resolves once Vite is
+     * serving with its `localhost` URL, or with `unsupported` / `error`. The
+     * process keeps running until {@link stop}.
+     */
+    start: (projectId: string) => Promise<DevServerResult>
+    /** Stop the project's Vite dev server (no-op when none is running). */
+    stop: (projectId: string) => Promise<void>
+    /** True when the project supports a local preview (declares a `dev` script). */
+    supported: (projectId: string) => Promise<boolean>
+  }
+
   /** App-wide settings (theme, telemetry opt-in). */
   settings: {
     get: () => Promise<AppSettings>
@@ -1493,14 +2077,19 @@ export interface RayfinStudioApi {
      */
     onAgentPreview: (cb: (event: PreviewAgentEvent) => void) => () => void
     /**
-     * In-preview "design mode" (experiment, `previewDesignMode`). Injects a
-     * click-to-edit controller into the preview webview so the user can tweak
-     * live elements (move / resize / recolor / text + a Graphein spec editor),
-     * then hand the collected changes to the chat composer.
+     * In-preview "design mode". Injects a click-to-edit controller into the
+     * preview webview so the user can tweak live elements (move / resize /
+     * recolor / text + a Graphein spec editor), then hand the collected changes
+     * to the chat composer. Works in both the direct and Fabric-embedded views.
      */
     design: {
-      /** Turn design mode on/off (installs + enables/disables the controller). */
-      setEnabled: (enabled: boolean) => Promise<void>
+      /**
+       * Turn design mode on/off (enables/disables the controller). `embedded`
+       * marks the Fabric-embedded view, where the app is a cross-origin iframe;
+       * `appUrl` (the direct app URL) supplies the origin the top-frame relay
+       * uses to find and drive that iframe.
+       */
+      setEnabled: (enabled: boolean, embedded?: boolean, appUrl?: string) => Promise<void>
       /** Read the controller status (change count + handoff-ready). Polled while on. */
       poll: () => Promise<PreviewDesignStatus | null>
       /** Drain a pending "Send to chat" hand-off (call after capturing a shot). */
@@ -1510,7 +2099,16 @@ export interface RayfinStudioApi {
       /** Inject AI-generated HTML into the placeholder `id` (controller sanitizes it). */
       applyGenerated: (id: string, html: string) => Promise<void>
       /** Supply the placeholder AI model picker with the available models. */
-      setModels: (models: { id: string; name: string; fast: boolean }[], preferred?: string) => Promise<void>
+      setModels: (
+        models: { id: string; name: string; fast: boolean }[],
+        preferred?: string
+      ) => Promise<void>
+      /**
+       * Push Fabricator's own theme (accent/surfaces/text/border + UI scale) so
+       * the design tools match the host app's look and zoom. Re-sent after a
+       * preview reload (when `poll().hasTheme` is false) and on theme/scale change.
+       */
+      setTheme: (theme: PreviewDesignTheme) => Promise<void>
       /**
        * Generate a self-contained HTML/CSS snippet for a placeholder from a
        * description, on a transient fast-model session. Returns the raw HTML
@@ -1524,6 +2122,21 @@ export interface RayfinStudioApi {
         height: number,
         model?: string
       ) => Promise<string>
+      /** Drain a pending "Edit with AI" restyle request for a selected element. */
+      drainAiEdit: () => Promise<PreviewDesignAiEditRequest | null>
+      /** Apply a restyle patch to the element tagged `id` (controller records it). */
+      applyRestyle: (id: string, patch: PreviewDesignRestylePatch) => Promise<void>
+      /**
+       * Restyle an existing element from a natural-language change, on a transient
+       * fast-model session. Returns a structured patch (whitelisted inline CSS +
+       * optional Graphein spec patch) the controller applies via `applyRestyle`.
+       */
+      restyleElement: (
+        projectId: string,
+        description: string,
+        context: PreviewDesignRestyleContext,
+        model?: string
+      ) => Promise<PreviewDesignRestylePatch>
     }
   }
 

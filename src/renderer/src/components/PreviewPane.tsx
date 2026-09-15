@@ -3,23 +3,26 @@ import type {
   DeployResult,
   PreviewBounds,
   PreviewDesignAiRequest,
+  PreviewDesignAiEditRequest,
   PreviewDesignHandoff,
+  PreviewDesignRestylePatch,
+  PreviewDesignTheme,
   PreviewMode,
   StudioProject
 } from '@shared/ipc'
 import { loadCopilotModels, pickFastModel, isFastModel } from '../copilotModels'
 import { usePreviewSuppressed } from '../overlay'
-import AnnotateOverlay from './AnnotateOverlay'
+import { measurePreviewBounds, watchPreviewPixelRatio } from '../previewBounds'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ReloadIcon,
   FabricIcon,
-  AnnotateIcon,
   DesignIcon,
   ExpandIcon,
   CollapseIcon
 } from './icons'
+import DeployStage from './DeployStage'
 
 export interface DeployUiState {
   running: boolean
@@ -28,9 +31,9 @@ export interface DeployUiState {
 }
 
 /**
- * An annotated screenshot pending attachment to the next chat message. Produced
- * by {@link AnnotateOverlay} after the user draws on a frozen capture of the
- * preview, and consumed by the chat composer (see {@link Props.onCapture}).
+ * A highlighted screenshot pending attachment to the next chat message. Produced
+ * by design mode's "Send to chat" hand-off (a capture of the preview with the
+ * changed elements ringed), and consumed by the chat composer.
  */
 export interface PendingShot {
   /** Absolute temp-file path passed to copilot as `--attachment`. */
@@ -41,6 +44,28 @@ export interface PendingShot {
 
 /** localStorage key persisting the design-mode AI model choice across sessions. */
 const DESIGN_MODEL_KEY = 'rayfin.design.aiModel'
+
+/**
+ * Read Fabricator's own theme (accent / surfaces / text / border) + UI zoom from
+ * the renderer's CSS tokens so the in-preview design tools can match the host
+ * app's look and scale (the tools are Fabricator UI, not the previewed app's).
+ * Falls back to the dark-teal defaults if a token is missing.
+ */
+function readFabricatorTheme(): PreviewDesignTheme {
+  const cs = getComputedStyle(document.documentElement)
+  const v = (n: string): string => cs.getPropertyValue(n).trim()
+  const scale = Number(v('--ui-scale') || document.documentElement.style.zoom) || 1
+  return {
+    accent: v('--accent') || '#34b4ba',
+    accentHi: v('--accent-2') || undefined,
+    panel: v('--bg-elev') || '#12161f',
+    panel2: v('--bg-elev-2') || undefined,
+    border: v('--border') || undefined,
+    txt: v('--text') || '#eceff5',
+    txtDim: v('--text-dim') || undefined,
+    scale
+  }
+}
 
 /** How long the frozen still-frame lingers as a backstop after the native preview
  *  is revealed again (an overlay closed). The live surface is opaque and paints
@@ -78,8 +103,6 @@ export function __resetPreviewSurfaceState(): void {
 interface Props {
   project: StudioProject
   deploy: DeployUiState | undefined
-  /** Called with an annotated screenshot to stage as a chat attachment. */
-  onCapture: (shot: PendingShot) => void
   /** True when the preview pane is expanded to fill the build view (chat hidden). */
   focused: boolean
   /** Toggle preview focus (full-width preview ⇄ split with chat). */
@@ -87,9 +110,6 @@ interface Props {
   /** Notify the parent that the persisted preview mode changed (so it can refresh
    *  project state — the selection lives on the project, store-backed). */
   onPreviewModeChanged?: () => void
-  /** Experiment (`previewDesignMode`): show the in-preview "Design" toggle that
-   *  lets the user click + live-edit elements, then hand the changes to chat. */
-  designModeEnabled?: boolean
   /** Hand a composed design-mode instruction (+ optional highlighted screenshot)
    *  to the chat composer for review. Fired when the user hits "Send to chat". */
   onDesignHandoff?: (instruction: string, shot?: PendingShot) => void
@@ -98,6 +118,11 @@ interface Props {
    *  chat + preview, so the indicator belongs at the content level, not the
    *  preview pane). `null` when not loading. */
   onLoadingChange?: (state: { name: string; fading: boolean } | null) => void
+  /** Live local preview (experiment): the `localhost` URL of the project's running
+   *  Vite dev server, or null/undefined when none. When set (and no deploy is
+   *  running), the preview surface shows this instead of the deployed app, with a
+   *  "Local" badge. See {@link RayfinStudioApi.dev}. */
+  localPreviewUrl?: string | null
 }
 
 function statusLabel(running: boolean, status: string | undefined): string {
@@ -159,13 +184,12 @@ function makeThumbFromDataUrl(dataUrl: string): Promise<string> {
 export default function PreviewPane({
   project,
   deploy,
-  onCapture,
   focused,
   onToggleFocus,
   onPreviewModeChanged,
-  designModeEnabled,
   onDesignHandoff,
-  onLoadingChange
+  onLoadingChange,
+  localPreviewUrl
 }: Props): JSX.Element {
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
@@ -183,16 +207,11 @@ export default function PreviewPane({
   const needsWorkspace = !running && outcome === 'needs-workspace'
 
   const hostRef = useRef<HTMLDivElement>(null)
-  const logRef = useRef<HTMLPreElement>(null)
   const prevRunningRef = useRef(running)
   const [displayUrl, setDisplayUrl] = useState(deployedUrl ?? '')
   const [loading, setLoading] = useState(false)
   const [canBack, setCanBack] = useState(false)
   const [canForward, setCanForward] = useState(false)
-  // Annotate-and-attach: `captured` holds the frozen PNG (data URL) being drawn on.
-  const [captured, setCaptured] = useState<string | null>(null)
-  const [capturing, setCapturing] = useState(false)
-  const [captureErr, setCaptureErr] = useState<string | null>(null)
   // While an HTML overlay suppresses the native preview, `frozen` holds a PNG of
   // the last visible frame so the placeholder shows that still image, not black.
   const [frozen, setFrozen] = useState<string | null>(null)
@@ -296,25 +315,29 @@ export default function PreviewPane({
 
   const measureHost = useCallback((): PreviewBounds | null => {
     const host = hostRef.current
-    if (!host) return null
-    const r = host.getBoundingClientRect()
-    if (r.width < 1 || r.height < 1) return null
-    return { x: r.left, y: r.top, width: r.width, height: r.height }
+    return host ? measurePreviewBounds(host) : null
   }, [])
 
-  const showWebview = !running && Boolean(deployedUrl)
   // Which URL the embedded webview actually loads. Falls back to the direct URL
   // whenever the Fabric link is unavailable or the toggle is off.
   const [previewMode, setPreviewMode] = useState<PreviewMode>(() => readPreviewMode(project))
-  const previewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
+  const deployedPreviewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
+  // Live local preview (experiment): while a Vite dev server is running for this
+  // project, the surface shows its localhost URL instead of the deployed app. A
+  // running deploy still wins (DeployStage), so this only applies mid-turn.
+  const isLocal = Boolean(localPreviewUrl) && !running
+  const previewUrl = isLocal ? (localPreviewUrl as string) : deployedPreviewUrl
+  const showWebview = !running && Boolean(previewUrl)
 
   // Re-init from the persisted project on project switch (don't carry a prior
-  // project's Fabric view over). Within a project this component's toggle handler
-  // is the only writer, so local state stays authoritative — no need to re-sync
-  // from the prop (which avoids a flicker on a rapid double-toggle).
+  // project's Fabric view over) and whenever the persisted mode changes underneath
+  // us — notably the after-deploy default that flips a newly semantic-model-backed
+  // app to the embedded Fabric view (see `run_deploy`). The manual toggle sets local
+  // state optimistically and persists the same value, so this resync is a no-op for
+  // it (bar a transient, self-correcting echo on a rapid double-toggle).
   useEffect(() => {
     setPreviewMode(readPreviewMode(project))
-  }, [project.id])
+  }, [project.id, project.previewMode])
 
   // After a successful (re)deploy the URL is usually unchanged but the server
   // code changed, so force a reload — hidden behind the spinner so the previous
@@ -331,10 +354,6 @@ export default function PreviewPane({
   useEffect(() => {
     if (deployedUrl) setDisplayUrl(deployedUrl)
   }, [deployedUrl])
-
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [deploy?.log])
 
   // Subscribe to navigation state pushed from the native webview (Rust side).
   useEffect(() => {
@@ -384,9 +403,9 @@ export default function PreviewPane({
   // covering modal, the pane collapsed to 0×0) we hide it instead.
   useEffect(() => {
     const visible =
-      showWebview && !suppressed && !transitioningRef.current && Boolean(deployedUrl)
+      showWebview && !suppressed && !transitioningRef.current && Boolean(previewUrl)
     const host = hostRef.current
-    if (!visible || !host || !deployedUrl || !previewUrl) {
+    if (!visible || !host || !previewUrl) {
       // An HTML overlay covering a live preview suppresses the native webview,
       // which paints above ALL HTML and would otherwise cover the overlay. Two
       // cases, handled differently (only while the preview is otherwise STABLE —
@@ -399,7 +418,7 @@ export default function PreviewPane({
       //   • PARTIAL overlay (dropdown/menu/modal over the visible preview): SNAPSHOT
       //     the live frame FIRST and paint it as a backstop, THEN park — so the
       //     overlay floats over a still preview and the pane never flashes bare.
-      if (suppressed && showWebview && deployedUrl && !transitioningRef.current) {
+      if (suppressed && showWebview && previewUrl && !transitioningRef.current) {
         const hostBounds = measureHost()
         if (!hostBounds) {
           void window.api.preview.suppress(
@@ -446,7 +465,7 @@ export default function PreviewPane({
         }
       }
       setFrozen(null)
-      if (transitioningRef.current && deployedUrl) {
+      if (transitioningRef.current && previewUrl) {
         // A fresh page is loading (project switch / redeploy / Fabric toggle): park
         // the surface OFF-SCREEN but keep it RENDERING (at host size) so it paints
         // the new page before we reveal it. A hard-hidden (IsVisible=false) webview
@@ -481,16 +500,12 @@ export default function PreviewPane({
     // has been hidden (e.g. the pane collapsed to 0×0 when chat is focused) it
     // must be re-`show()`n — not merely repositioned — once its host reappears.
     let shownKey = ''
-    const measure = (): PreviewBounds | null => {
-      const r = host.getBoundingClientRect()
-      if (r.width < 1 || r.height < 1) return null
-      return { x: r.left, y: r.top, width: r.width, height: r.height }
-    }
+    const measure = (): PreviewBounds | null => measurePreviewBounds(host)
     // The native side flips the y-origin using the window height, so a window
     // resize that leaves the host's CSS rect unchanged still needs a re-push;
     // fold the window size into the key so any resize repositions the surface.
     const keyOf = (b: PreviewBounds): string =>
-      `${b.x}|${b.y}|${b.width}|${b.height}|${window.innerWidth}|${window.innerHeight}`
+      `${b.x}|${b.y}|${b.width}|${b.height}|${b.pixelRatio}|${window.innerWidth}|${window.innerHeight}`
 
     // Coalesce reposition IPC to ~30Hz: per-frame `setBounds` calls during a drag
     // are pure cost on a software-rendered VM. Show/hide stay immediate; only the
@@ -569,6 +584,11 @@ export default function PreviewPane({
       startTracking()
     }
     window.addEventListener('resize', onResize)
+    window.addEventListener('scroll', onResize)
+    const viewport = window.visualViewport
+    viewport?.addEventListener('resize', onResize)
+    viewport?.addEventListener('scroll', onResize)
+    const stopWatchingPixelRatio = watchPreviewPixelRatio(onResize)
 
     const initial = measure()
     if (initial) {
@@ -587,6 +607,10 @@ export default function PreviewPane({
 
     return () => {
       window.removeEventListener('resize', onResize)
+      window.removeEventListener('scroll', onResize)
+      viewport?.removeEventListener('resize', onResize)
+      viewport?.removeEventListener('scroll', onResize)
+      stopWatchingPixelRatio()
       ro.disconnect()
       io.disconnect()
       if (raf !== 0) cancelAnimationFrame(raf)
@@ -649,22 +673,8 @@ export default function PreviewPane({
     const u = displayUrl || deployedUrl
     if (u) void window.api.openExternal(u)
   }
-  // Freeze the current preview to a PNG, then open the annotate overlay on top.
-  // Capture runs while the webview is still visible; the overlay then hides it.
-  const startAnnotate = useCallback(async (): Promise<void> => {
-    setCaptureErr(null)
-    setCapturing(true)
-    try {
-      const dataUrl = await window.api.preview.capture()
-      setCaptured(dataUrl)
-    } catch (e) {
-      setCaptureErr(e instanceof Error ? e.message : String(e))
-    } finally {
-      setCapturing(false)
-    }
-  }, [])
 
-  // ── In-preview design mode (experiment) ──────────────────────────────────
+  // ── In-preview design mode ────────────────────────────────────────────────
   // A click-to-edit controller injected into the preview webview lets the user
   // tweak live elements (move/resize/recolor/text + a Graphein spec editor); the
   // collected changes are handed to the chat composer. See `preview.design.*`
@@ -685,12 +695,24 @@ export default function PreviewPane({
   const designModelRef = useRef<string | null>(
     typeof localStorage !== 'undefined' ? localStorage.getItem(DESIGN_MODEL_KEY) : null
   )
+  // Signature of the last Fabricator theme pushed to the controller, so the poll
+  // re-pushes only when the theme/zoom actually changes (or after a reload).
+  const lastThemeSigRef = useRef('')
 
   // Resolve a fast model once design mode is on, and push the model list to the
   // controller's placeholder AI picker (fast models first), preselecting the
-  // persisted choice when present. Best-effort.
+  // persisted choice when present. Also push Fabricator's theme so the tools
+  // match the host look + zoom. Best-effort.
   useEffect(() => {
     if (!designActive) return
+    // Push the current Fabricator theme (accent/surfaces/text/border + UI scale).
+    try {
+      const theme = readFabricatorTheme()
+      lastThemeSigRef.current = JSON.stringify(theme)
+      void window.api.preview.design.setTheme(theme)
+    } catch {
+      /* non-fatal — the controller falls back to its default palette */
+    }
     let cancelled = false
     void loadCopilotModels()
       .then((models) => {
@@ -730,7 +752,7 @@ export default function PreviewPane({
         req.description,
         req.width,
         req.height,
-        req.model || fastModelRef.current
+        req.model || undefined
       )
     } catch {
       html = ''
@@ -746,14 +768,55 @@ export default function PreviewPane({
     aiGenRef.current = runAiGenerate
   }, [runAiGenerate])
 
+  // Restyle a selected element from a natural-language change and apply it live.
+  // Best-effort: on any failure, `applyRestyle(id, empty)` clears the controller's
+  // "Applying…" busy state, and the poll's `aiEditRef` guard is always released.
+  const runAiEdit = useCallback(async (): Promise<void> => {
+    let req: PreviewDesignAiEditRequest | null = null
+    try {
+      req = await window.api.preview.design.drainAiEdit()
+    } catch {
+      req = null
+    }
+    if (!req) return
+    let patch: PreviewDesignRestylePatch = { styles: {} }
+    try {
+      patch = await window.api.preview.design.restyleElement(
+        project.id,
+        req.description,
+        req.context,
+        req.model || undefined
+      )
+    } catch {
+      patch = { styles: {} }
+    }
+    try {
+      const ids = req.ids && req.ids.length ? req.ids : [req.id]
+      // One patch, applied to every selected element (consistent multi-select edit).
+      for (const id of ids) {
+        await window.api.preview.design.applyRestyle(id, patch)
+      }
+    } catch {
+      // ignore — the controller clears its busy state on the next select
+    }
+  }, [project.id])
+  const aiEditRef = useRef(false)
+  const runAiEditRef = useRef(runAiEdit)
+  useEffect(() => {
+    runAiEditRef.current = runAiEdit
+  }, [runAiEdit])
+
   const toggleDesign = useCallback((): void => {
     setDesignActive((prev) => {
       const next = !prev
-      void window.api.preview.design.setEnabled(next)
+      // In the Fabric-embedded view the app runs in a cross-origin iframe; tell
+      // the host to drive the controller through the top-frame relay by passing
+      // the embedded flag + the direct app URL (its origin identifies the iframe).
+      void window.api.preview.design.setEnabled(next, previewMode === 'fabric', deployedUrl)
       if (!next) setDesignCount(0)
       return next
     })
-  }, [])
+  }, [previewMode, deployedUrl])
 
   // Capture the highlighted screenshot, drain the composed instruction, hand it
   // to chat, then leave design mode. Fired when the poll sees `handoffReady`.
@@ -826,12 +889,30 @@ export default function PreviewPane({
             designModelRef.current ?? undefined
           )
         }
+        // Keep the tools on Fabricator's theme: re-push after a reload (the
+        // controller lost it) or whenever the theme/UI-zoom changed live.
+        if (status) {
+          const theme = readFabricatorTheme()
+          const sig = JSON.stringify(theme)
+          if (status.hasTheme === false || sig !== lastThemeSigRef.current) {
+            lastThemeSigRef.current = sig
+            void window.api.preview.design.setTheme(theme)
+          }
+        }
         if (status?.aiPending && !aiRef.current) {
           aiRef.current = true
           try {
             await aiGenRef.current()
           } finally {
             aiRef.current = false
+          }
+        }
+        if (status?.aiEditPending && !aiEditRef.current) {
+          aiEditRef.current = true
+          try {
+            await runAiEditRef.current()
+          } finally {
+            aiEditRef.current = false
           }
         }
         if (status?.handoffReady && !handoffRef.current) {
@@ -857,15 +938,15 @@ export default function PreviewPane({
     }
   }, [designActive])
 
-  // Leave design mode if the preview goes away (project switch / undeploy) or the
-  // experiment is turned off, and always disable on unmount.
+  // Leave design mode if the preview goes away (project switch / undeploy), and
+  // always disable on unmount.
   useEffect(() => {
-    if (designActive && (!showWebview || !designModeEnabled)) {
+    if (designActive && !showWebview) {
       setDesignActive(false)
       setDesignCount(0)
       void window.api.preview.design.setEnabled(false)
     }
-  }, [designActive, showWebview, designModeEnabled])
+  }, [designActive, showWebview])
   useEffect(() => () => void window.api.preview.design.setEnabled(false), [])
 
   // End the design session whenever the preview navigates to a different URL — a
@@ -930,6 +1011,11 @@ export default function PreviewPane({
             <span className="preview-dot" />
             <span className="preview-status-label">{statusLabel(running, status)}</span>
           </span>
+          {isLocal && (
+            <span className="preview-local-badge" title="Live local preview — your app is running from a local Vite dev server for this turn">
+              Local
+            </span>
+          )}
           {(displayUrl || deployedUrl) && (
             <button
               className="preview-url"
@@ -955,7 +1041,7 @@ export default function PreviewPane({
                   .setPreviewMode(project.id, next)
                   .then(() => onPreviewModeChanged?.())
               }}
-              disabled={!showWebview || !fabricUrl || transitioning}
+              disabled={!showWebview || !fabricUrl || transitioning || isLocal}
               title={
                 !fabricUrl
                   ? 'The Fabric portal view is unavailable for this deployment'
@@ -967,38 +1053,25 @@ export default function PreviewPane({
               <FabricIcon />
               <span className="seg-btn-label">Fabric</span>
             </button>
-            {designModeEnabled && (
-              <button
-                className={`seg-btn ${designActive ? 'seg-btn--on' : ''}`}
-                onClick={toggleDesign}
-                disabled={!showWebview || transitioning || designBusy || previewMode === 'fabric'}
-                title={
-                  previewMode === 'fabric'
-                    ? "Design mode isn't available in the Fabric portal view — switch to the direct app view to edit"
-                    : 'Design mode — click elements in the preview to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
-                }
-              >
-                <DesignIcon />
-                <span className="seg-btn-label">
-                  {designBusy
-                    ? 'Sending…'
-                    : designActive
-                      ? `Design${designCount ? ` · ${designCount}` : ''}`
-                      : 'Design'}
-                </span>
-              </button>
-            )}
-            {!(designModeEnabled && previewMode !== 'fabric') && (
-              <button
-                className="seg-btn"
-                onClick={() => void startAnnotate()}
-                disabled={!showWebview || capturing || transitioning}
-                title="Take a screenshot of the preview, draw on it, and attach it to your message"
-              >
-                <AnnotateIcon />
-                <span className="seg-btn-label">{capturing ? 'Capturing…' : 'Annotate'}</span>
-              </button>
-            )}
+            <button
+              className={`seg-btn ${designActive ? 'seg-btn--on' : ''}`}
+              onClick={toggleDesign}
+              disabled={!showWebview || transitioning || designBusy || isLocal}
+              title={
+                previewMode === 'fabric'
+                  ? 'Design mode — click elements in the embedded app to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
+                  : 'Design mode — click elements in the preview to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
+              }
+            >
+              <DesignIcon />
+              <span className="seg-btn-label">
+                {designBusy
+                  ? 'Sending…'
+                  : designActive
+                    ? `Design${designCount ? ` · ${designCount}` : ''}`
+                    : 'Design'}
+              </span>
+            </button>
             <button
               className={`seg-btn seg-btn--icon ${focused ? 'seg-btn--on' : ''}`}
               onClick={onToggleFocus}
@@ -1013,12 +1086,6 @@ export default function PreviewPane({
         </div>
       </div>
 
-      {captureErr && (
-        <div className="preview-error-banner" title={captureErr}>
-          ⚠ Couldn’t capture the preview: {captureErr}
-        </div>
-      )}
-
       {status === 'error' && error && !running && !needsWorkspace && (
         <div className="preview-error-banner" title={error}>
           ⚠ {error}
@@ -1027,9 +1094,7 @@ export default function PreviewPane({
 
       <div className="preview-body">
         {running ? (
-          <pre className="deploy-log" ref={logRef}>
-            {deploy?.log.join('') || 'Starting deploy…'}
-          </pre>
+          <DeployStage log={deploy?.log ?? []} name={project.name} />
         ) : showWebview ? (
           <div className="preview-canvas">
             <div className="preview-stage">
@@ -1073,17 +1138,6 @@ export default function PreviewPane({
           </div>
         )}
       </div>
-
-      {captured && (
-        <AnnotateOverlay
-          image={captured}
-          onCancel={() => setCaptured(null)}
-          onConfirm={(shot) => {
-            onCapture(shot)
-            setCaptured(null)
-          }}
-        />
-      )}
     </div>
   )
 }

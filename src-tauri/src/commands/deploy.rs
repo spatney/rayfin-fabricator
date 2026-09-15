@@ -157,6 +157,7 @@ fn parse_deploy_list_opt(
 }
 
 /// Parse `rayfin up list --json` (last line that parses as an array wins).
+#[cfg(test)]
 fn parse_deploy_list(stdout: &str, names: &std::collections::HashMap<String, String>) -> Vec<FabricDeployment> {
   parse_deploy_list_opt(stdout, names).unwrap_or_default()
 }
@@ -222,6 +223,30 @@ async fn status_for(path: &str) -> DeployStatus {
   }
 }
 
+/// One-time Fabric-preview default applied after a successful deploy. Semantic-model
+/// apps only render correctly inside the Fabric portal shell, so the first deploy that
+/// carries a `fabric.yaml` semantic-model connection switches the preview to the
+/// embedded Fabric view — but only if the user hasn't already picked a view, and only
+/// once, so a later manual switch back to the direct view (persisted as `None`) is
+/// never re-overridden on subsequent (often after-turn) auto-deploys. Returns
+/// `Some(new_preview_mode)` to persist (marking the project defaulted), or `None` to
+/// leave the project untouched.
+fn fabric_preview_after_deploy(
+  preview_mode: Option<&str>,
+  already_defaulted: bool,
+  has_semantic_models: bool,
+) -> Option<Option<String>> {
+  if already_defaulted || !has_semantic_models {
+    return None;
+  }
+  // Adopt the Fabric view when the user hasn't chosen one; otherwise keep their
+  // choice. Either way the caller records that the default has now been applied.
+  Some(match preview_mode {
+    None => Some("fabric".to_string()),
+    Some(mode) => Some(mode.to_string()),
+  })
+}
+
 /* ------------------------------ commands ---------------------------------- */
 
 #[tauri::command]
@@ -280,6 +305,30 @@ pub(crate) async fn run_deploy(
       renderer(stream, chunk);
     })
   };
+
+  if let Err(error) =
+    exec::ensure_project_dependencies(Path::new(&project.path), Some(on_data.clone())).await
+  {
+    patch_deploy(&project_id, |d| {
+      d.status = Some("error".into());
+      d.outcome = Some("error".into());
+      d.error = Some(error.clone());
+      d.at = Some(now_iso());
+    });
+    telemetry::track_deploy(get_cached_identity().as_ref(), false);
+    renderer(Stream::System, &format!("\nDeploy failed: {error}\n"));
+    return DeployResult {
+      ok: false,
+      outcome: "error".into(),
+      url: None,
+      api_url: None,
+      portal_url: None,
+      error: Some(error),
+    };
+  }
+  // The dependency-recovery output is useful in the live log, but must not be
+  // mistaken for `rayfin up` output when classifying a later deploy failure.
+  captured.lock().unwrap().clear();
 
   // Always force so destructive datamodel/schema changes are applied — a deploy
   // must never leave the published datamodel stale.
@@ -378,6 +427,23 @@ pub(crate) async fn run_deploy(
   // First successful deploy clears the onboarding "deploy first" gate.
   store::mutate_project(&project_id, |p| p.awaiting_first_deploy = None);
 
+  // Semantic-model apps render correctly only inside the Fabric portal shell, so the
+  // first successful deploy that carries a `fabric.yaml` semantic-model connection
+  // defaults the preview to the embedded Fabric view (a one-time default; see
+  // `fabric_preview_after_deploy`).
+  let has_semantic_models =
+    !crate::commands::fabric::read_project_semantic_models(Path::new(&project.path)).is_empty();
+  store::mutate_project(&project_id, |p| {
+    if let Some(mode) = fabric_preview_after_deploy(
+      p.preview_mode.as_deref(),
+      p.fabric_preview_defaulted == Some(true),
+      has_semantic_models,
+    ) {
+      p.preview_mode = mode;
+      p.fabric_preview_defaulted = Some(true);
+    }
+  });
+
   commit_checkpoint(&project.path, &format!("Deploy {} ({})", project.name, now_iso())).await;
   if let Some(commit) = head_sha(&project.path).await {
     patch_deploy(&project_id, move |d| d.commit = Some(commit));
@@ -415,15 +481,30 @@ pub async fn deploy_has_changes(project_id: String) -> bool {
 
 #[tauri::command]
 pub async fn deploy_list(project_id: String) -> Vec<FabricDeployment> {
-  let Some(project) = store::find_project(&project_id) else {
-    return vec![];
-  };
+  deploy_list_checked(&project_id).await.unwrap_or_default()
+}
+
+/// Destructive callers must distinguish "nothing deployed" from a failed
+/// query; an auth/CLI failure must not silently permit deleting the local app.
+pub(crate) async fn deploy_list_checked(project_id: &str) -> Result<Vec<FabricDeployment>, String> {
+  let project = store::find_project(project_id).ok_or_else(|| "Project not found.".to_string())?;
   let names = project.deployment_names.clone().unwrap_or_default();
   let res = exec::run_project_rayfin(Path::new(&project.path), &["up", "list", "--json"], RunOptions::timeout(60_000)).await;
-  if !res.ok {
-    return vec![];
+  checked_deploy_list(&res, &names)
+}
+
+fn checked_deploy_list(
+  res: &exec::RunResult,
+  names: &std::collections::HashMap<String, String>,
+) -> Result<Vec<FabricDeployment>, String> {
+  if !res.ok || res.not_found {
+    return Err(format!(
+      "Could not read recorded Fabric deployments. {}",
+      crate::services::fabric_auth::failure_message(res)
+    ));
   }
-  parse_deploy_list(&res.stdout, &names)
+  parse_deploy_list_opt(&res.stdout, names)
+    .ok_or_else(|| "Could not read recorded Fabric deployments: invalid CLI response. Nothing was deleted.".into())
 }
 
 /// Reconcile the Studio store's recorded deployment with on-disk reality
@@ -614,6 +695,26 @@ pub fn deploy_set_name(project_id: String, workspace_key: String, name: String) 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn checked_deployment_list_rejects_auth_failures_and_malformed_output() {
+    let names = std::collections::HashMap::new();
+    let mut res = exec::RunResult {
+      ok: false,
+      exit_code: Some(1),
+      stdout: "[]".into(),
+      stderr: "No cached account; run rayfin login".into(),
+      not_found: false,
+    };
+    let error = checked_deploy_list(&res, &names).err().expect("authentication failure");
+    assert_eq!(crate::services::fabric_auth::failure_flags(&error), (true, false));
+    res.ok = true;
+    res.stderr.clear();
+    res.stdout = "not JSON".into();
+    assert!(checked_deploy_list(&res, &names).is_err());
+    res.stdout = "[]".into();
+    assert!(checked_deploy_list(&res, &names).unwrap().is_empty());
+  }
   use std::collections::HashMap;
 
   #[test]
@@ -688,5 +789,21 @@ mod tests {
     assert_eq!(last_lines("a\nb\nc\nd", 2), "c d");
     assert_eq!(last_lines("only", 3), "only");
   }
-}
 
+  #[test]
+  fn fabric_preview_after_deploy_switches_once_for_semantic_apps() {
+    // No semantic models → never touch the project's preview mode.
+    assert_eq!(fabric_preview_after_deploy(None, false, false), None);
+    assert_eq!(fabric_preview_after_deploy(Some("fabric"), false, false), None);
+    // First deploy with a connected model and no explicit view → adopt Fabric.
+    assert_eq!(fabric_preview_after_deploy(None, false, true), Some(Some("fabric".to_string())));
+    // Already defaulted once → never override again, even though a later manual
+    // switch to the direct view is persisted as `None` (indistinguishable from unset).
+    assert_eq!(fabric_preview_after_deploy(None, true, true), None);
+    // A model plus an existing explicit choice closes the window without changing it.
+    assert_eq!(
+      fabric_preview_after_deploy(Some("fabric"), false, true),
+      Some(Some("fabric".to_string()))
+    );
+  }
+}

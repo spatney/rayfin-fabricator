@@ -1,4 +1,4 @@
-//! macOS GUI `PATH` repair.
+//! GUI `PATH` repair.
 //!
 //! When the app is launched from Finder/Dock (rather than a terminal), macOS
 //! gives the process a minimal `PATH` — `/usr/bin:/bin:/usr/sbin:/sbin`. That
@@ -9,12 +9,17 @@
 //! CLI as missing only in the packaged app — never under `npm run dev`, which
 //! inherits the terminal's full `PATH`.
 //!
-//! [`repair`] asks the user's login shell for its real `PATH` and merges it into
-//! the process environment, so `which`/spawns resolve the same tools the
-//! terminal would. It runs once at startup, before any child processes spawn.
+//! On macOS, [`repair`] asks the user's login shell for its real `PATH`. On
+//! Windows, it reads the persistent machine/user environment and discovers
+//! common installer bins without running a shell. Inherited paths keep priority.
+//! Windows repair can also run again when checking for newly installed tools.
+
+#[cfg(windows)]
+#[path = "env_path_windows.rs"]
+mod windows_path;
 
 /// Merge the login shell's `PATH` (plus common Homebrew bins) into the process
-/// environment. No-op on non-macOS targets.
+/// environment.
 #[cfg(target_os = "macos")]
 pub fn repair() {
   if let Some(shell_path) = login_shell_path() {
@@ -29,8 +34,14 @@ pub fn repair() {
   }
 }
 
-/// No-op on Windows/Linux — those launchers already provide the user's `PATH`.
-#[cfg(not(target_os = "macos"))]
+/// Refresh Windows CLI search paths without changing the persistent environment.
+#[cfg(windows)]
+pub fn repair() {
+  windows_path::repair();
+}
+
+/// Other platforms keep their inherited `PATH`.
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn repair() {}
 
 /// Ask the user's login+interactive shell for its `PATH`. Interactive (`-i`) so

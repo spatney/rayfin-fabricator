@@ -1,9 +1,10 @@
 /*
- * Rayfin preview "design mode" controller (v2).
+ * Rayfin preview "design mode" controller (v4).
  *
- * Injected into the preview webview (the user's deployed app) on demand — see
- * `preview.rs` (`DESIGN_AGENT_JS`, evaluated by `preview_design_set`). A
- * Figma-like, click-to-edit layer over the LIVE app:
+ * Injected at document-start into EVERY frame of the preview webview (see
+ * `preview.rs` `DESIGN_AGENT_JS` / `initialization_script_for_all_frames`). Stays
+ * dormant until `preview_design_set` calls `enable(...)`. A Figma-like,
+ * click-to-edit layer over the LIVE app:
  *   - Select tool: pick any element and edit it in a docked inspector (size,
  *     spacing, typography, appearance, text) with always-on move/resize handles
  *     and arrow-key nudge; a structured Graphein spec editor for charts.
@@ -14,6 +15,15 @@
  * numbered instruction + a fenced JSON change-set and marks the elements so the
  * host can capture a screenshot whose numbered badges match the list.
  *
+ * Frames / roles: the host (Rust) can only `eval` in the TOP frame. In the direct
+ * view the top frame IS the app, so it runs the full controller locally
+ * (role `direct`). In the Fabric-embedded view the app runs in a CROSS-ORIGIN
+ * iframe inside the Fabric portal; the top (Fabric shell) frame then runs as a
+ * `relay` and the app iframe runs the full controller as role `app`. The relay
+ * bridges the host API (`enable/disable/peek/drain/drainAi/applyGenerated/
+ * setModels`) to the app frame over `postMessage`, discovered via a namespaced
+ * hello/enable handshake and origin-gated to the deployed app's origin.
+ *
  * Design constraints:
  *   - The native webview paints above all HTML, so ALL UI lives INSIDE this page,
  *     in a Shadow DOM attached to <html> (isolated from the app's CSS; survives
@@ -23,7 +33,7 @@
  */
 (function () {
   var NS = '__rayfinDesign';
-  var VERSION = 2;
+  var VERSION = 5;
   if (window[NS] && window[NS].__v === VERSION) return;
 
   var HOST_ID = '__rayfin_design_host';
@@ -32,6 +42,7 @@
   var TEAL = '#14b8a6';
   var TEAL_HI = '#2dd4bf';
   var AMBER = '#f59e0b';
+  var GUIDE = '#f43f5e'; // alignment-guide line colour (distinct from accent/amber)
   var PANEL_BG = '#0f1419';
   var PANEL_BG2 = '#161c24';
   var BORDER = '#26303b';
@@ -43,6 +54,21 @@
   var PANEL_GLASS = 'rgba(15,20,25,.84)';
   var GLASS_FX = 'backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%)';
 
+  // ---- type + icon scale (chrome) ------------------------------------------
+  // Base sizes (px) for the tool UI's own text/icons, multiplied by `themeScale`
+  // — which the host sets from Fabricator's UI zoom (100/110/125/150%) so the
+  // tools scale with the rest of the app. Injected as :host CSS vars; the
+  // shadow-DOM rules reference them via var(--fs-*). Scoped to the chrome — the
+  // light-DOM "building" animation (GEN_STYLE) keeps its own sizes.
+  var FS = { micro: 11, small: 12, base: 13, icon: 16 };
+  var themeScale = 1;
+  // On-accent / on-amber text + UI font — accent-derived text colors are set by
+  // applyHostTheme() to stay readable on Fabricator's accent; FONT stays the
+  // tool's own clean sans (we match Fabricator's colors + scale, not its font).
+  var ON_ACCENT = '#04211f'; // readable text on the accent fill
+  var ON_AMBER = '#241a04'; // readable text on the amber (annotation) fill
+  var FONT = 'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+
   // ---- state ---------------------------------------------------------------
   var state = {
     enabled: false,
@@ -51,20 +77,43 @@
     drawColor: AMBER,
     version: 0, // bumped on every change so the host poll detects activity
     changes: [], // ordered change-set entries (each has .revert, .el|.pinEl|.node)
-    selected: null,
-    selInline: null, // snapshot of the selected element's inline styles at select
+    redo: [], // reverted entries available to redo (cleared on any new edit)
+    selected: null, // the PRIMARY selected element (drives element-specific inspector bits)
+    selection: [], // all selected elements (multi-select); edits apply to every one
+    selInline: null, // primary's inline-style snapshot (at select) for value seeding
+    selInlineMap: null, // WeakMap el -> inline snapshot, for per-element revert on multi
     resizing: null,
     move: null, // active move gesture (or pending, pre-threshold)
     drawing: null, // active draw gesture
     hoverEl: null,
     handoff: null,
     aiRequest: null, // pending "Generate with AI" request for a placeholder
+    aiEditQueue: [], // queued "Edit with AI" restyle requests (multiple at once)
+    theme: null, // Fabricator theme pushed by the host via setTheme()
+    hasTheme: false, // re-pushed by the renderer after a reload when false
     models: null, // [{id,name,fast}] supplied by the host for the AI model picker
-    aiModel: '' // selected model id ('' → host default / fast)
+    aiModel: 'auto', // selected model id; 'auto' → let the engine pick (default)
+    debugView: null, // active transient full-screen Graphein debug inspection ({el,target,prevSpecAttr,prevTargetStyle,neutralized}) or null
+    debugBar: null // shadow-host "Exit debug" bar element while debugView is active
   };
 
   // ---- constants -----------------------------------------------------------
-  var CHART_TYPES = ['bar', 'line', 'area', 'scatter', 'combo', 'histogram', 'pie', 'funnel', 'waterfall', 'treemap', 'heatmap'];
+  // Every Graphein VISUAL chart type (spec/types.ts CHART_TYPES minus the five
+  // slicer controls — dropdown/search/list/range/dateRange — which are filters,
+  // not chart marks, and never appear in the chart-spec inspector's Type row).
+  var CHART_TYPES = ['bar', 'line', 'area', 'scatter', 'combo', 'histogram', 'pie', 'heatmap', 'funnel', 'treemap', 'waterfall', 'box', 'slope', 'dumbbell', 'sankey', 'choropleth', 'calendarHeatmap', 'kpi', 'gauge', 'bullet', 'table', 'matrix'];
+  // Grouping for the Type dropdown's <optgroup>s (purely presentational).
+  var TYPE_GROUPS = [
+    ['Cartesian', ['bar', 'line', 'area', 'scatter', 'box', 'histogram', 'combo']],
+    ['Part-to-whole', ['pie', 'funnel', 'treemap', 'waterfall']],
+    ['Comparison', ['slope', 'dumbbell']],
+    ['Grid / time', ['heatmap', 'calendarHeatmap']],
+    ['Flow / geo', ['sankey', 'choropleth']],
+    ['Single value', ['kpi', 'gauge', 'bullet']],
+    ['Tabular', ['table', 'matrix']]
+  ];
+  var TYPE_LABELS = { calendarHeatmap: 'Calendar heatmap', kpi: 'KPI' };
+  function typeLabel(t) { return TYPE_LABELS[t] || (t.charAt(0).toUpperCase() + t.slice(1)); }
   var PALETTES = ['graphein', 'colorblind', 'bright', 'muted'];
   var FORMATS = [['', 'Default'], [',.0f', '1,234'], [',.2f', '1,234.56'], ['$,.0f', '$1,234'], ['.1%', '12.3%'], ['.2s', '1.2k']];
   var WEIGHTS = ['300', '400', '500', '600', '700', '800'];
@@ -101,7 +150,7 @@
       if (c != null) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
     }
   }
-  function bump() { state.version++; }
+  function bump() { state.version++; if (frameRole === 'app') postStatus(); }
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
   function isOurs(node) { return !!(node && (node === host || (node.closest && node.closest('#' + HOST_ID)))); }
 
@@ -239,13 +288,16 @@
         if (c.el === entry.el && c.kind === entry.kind && (c.property || '') === (entry.property || '')) {
           c.to = entry.to; c.after = entry.after; c.target = entry.target || c.target;
           c.label = entry.label; c.selector = entry.selector;
+          if (entry.reapply) c.reapply = entry.reapply;
           state.changes.splice(i, 1); state.changes.push(c);
+          state.redo = [];
           bump(); renderBar(); return;
         }
       }
     }
     if (typeof entry.revert !== 'function') entry.revert = function () {};
     state.changes.push(entry);
+    state.redo = [];
     bump(); renderBar();
   }
   function revertEntry(entry) { try { if (entry && typeof entry.revert === 'function') entry.revert(); } catch (e) {} }
@@ -255,114 +307,203 @@
     var entry = state.changes.pop();
     if (!entry) return;
     revertEntry(entry);
+    if (entry.reapply) state.redo.push(entry);
     if (state.selected && !state.selected.isConnected) deselect();
     if (state.selected && state.selected.isConnected) renderInspector();
     bump(); reposition(); renderBar();
   }
+  // Re-apply the most recently undone change (only kinds that captured a reapply
+  // closure — style/resize/text/chart/nudge/move/remove).
+  function redoLast() {
+    var entry = state.redo.pop();
+    if (!entry) return;
+    try { entry.reapply(); } catch (e) {}
+    state.changes.push(entry);
+    if (state.selected && state.selected.isConnected) renderInspector();
+    bump(); reposition(); renderBar();
+  }
+  // Revert a single change-set entry (from the changes panel) without disturbing
+  // the others; it becomes redoable.
+  function removeChange(entry) {
+    var i = state.changes.indexOf(entry);
+    if (i < 0) return;
+    revertEntry(entry);
+    state.changes.splice(i, 1);
+    if (entry.reapply) state.redo.push(entry);
+    if (state.selected && !state.selected.isConnected) deselect();
+    else if (state.selected) renderInspector();
+    bump(); reposition(); renderBar();
+  }
+  // Scroll a change's element into view and flash it.
+  function jumpToChange(entry) {
+    var el = entry && (entry.el || entry.node);
+    if (!el || !el.isConnected) return;
+    try { el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' }); } catch (e) { try { el.scrollIntoView(); } catch (e2) {} }
+    var before = el.style.outline, beforeOff = el.style.outlineOffset;
+    el.style.outline = '2px solid ' + TEAL; el.style.outlineOffset = '2px';
+    setTimeout(function () { el.style.outline = before; el.style.outlineOffset = beforeOff; }, 700);
+  }
 
   // ---- Shadow-DOM UI -------------------------------------------------------
   var host, root;
-  var elHover, elLabel, elSel, elBadges, elHandles, elInsert, elToolbar, elInspector, elDraw, elPins, elLegend, elCommentEditor;
-  var elCount, btnUndo, btnDiscard, btnSend;
+  var elHover, elLabel, elSel, elSels, elBadges, elHandles, elInsert, elToolbar, elInspector, elDraw, elPins, elLegend, elCommentEditor, elStyle, elMoveTip;
+  var elCount, btnUndo, btnRedo, btnDiscard, btnSend, btnChanges, elChanges, elGuides, elMorph;
+  // Smart guides: snap resized edges to nearby sibling/parent edges + centers.
+  var SNAP_THR = 6, snapOn = true;
 
-  var STYLE = [
-    ':host{all:initial}',
-    '*{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
+  function buildStyle() {
+    return [
+    ':host{all:initial;--fs-micro:' + fpx(FS.micro) + ';--fs-small:' + fpx(FS.small) + ';--fs-base:' + fpx(FS.base) + ';--icon:' + fpx(FS.icon) + '}',
+    '*{box-sizing:border-box;font-family:' + FONT + '}',
     'button{all:unset;cursor:pointer}',
+    '::-webkit-scrollbar{width:8px;height:8px}',
+    '::-webkit-scrollbar-thumb{background:' + BORDER + ';border-radius:8px}',
+    '::-webkit-scrollbar-thumb:hover{background:' + TXT_DIM + '}',
+    '::-webkit-scrollbar-track{background:transparent}',
     // overlays
     '.box{position:fixed;pointer-events:none;z-index:2147483640;border-radius:3px}',
     '.hover{border:1.5px solid ' + TEAL + '88;background:' + TEAL + '11}',
     '.sel{border:1.5px solid ' + TEAL + ';box-shadow:0 0 0 1px ' + TEAL + '55}',
-    '.label{position:fixed;pointer-events:none;z-index:2147483644;background:' + TEAL + ';color:#04211f;font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px;white-space:nowrap}',
-    '.badge{position:fixed;pointer-events:none;z-index:2147483644;background:' + TEAL + ';color:#04211f;font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px}',
+    '.selm{border:1.5px solid ' + TEAL + '99}',
+    '.label{position:fixed;pointer-events:none;z-index:2147483644;background:' + TEAL + ';color:' + ON_ACCENT + ';font-size:var(--fs-small);font-weight:600;padding:2px 6px;border-radius:4px;white-space:nowrap}',
+    '.badge{position:fixed;pointer-events:none;z-index:2147483644;background:' + TEAL + ';color:' + ON_ACCENT + ';font-size:var(--fs-micro);font-weight:700;padding:1px 5px;border-radius:4px}',
     '.ring{position:fixed;pointer-events:none;z-index:2147483639;border:2px solid ' + AMBER + ';border-radius:4px;box-shadow:0 0 0 2px ' + AMBER + '44}',
-    '.marker{position:fixed;pointer-events:none;z-index:2147483645;min-width:18px;height:18px;line-height:18px;text-align:center;background:' + AMBER + ';color:#241a04;font-size:11px;font-weight:800;border-radius:9px;padding:0 4px;box-shadow:0 1px 4px rgba(0,0,0,.5)}',
     '.insert{position:fixed;pointer-events:none;z-index:2147483643;background:' + TEAL + ';box-shadow:0 0 6px ' + TEAL + '}',
     '.hnd{position:fixed;width:12px;height:12px;background:' + TEAL + ';border:2px solid #fff;border-radius:3px;z-index:2147483643;pointer-events:auto;box-shadow:0 1px 5px rgba(0,0,0,.45)}',
     '.hnd:hover{background:' + TEAL_HI + ';transform:scale(1.18)}',
     // draw layer + pins
     '.draw{position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:2147483638;pointer-events:none;overflow:visible}',
     '.pins{position:fixed;inset:0;z-index:2147483643;pointer-events:none}',
-    '.pin{position:fixed;transform:translate(-50%,-100%);z-index:2147483643;pointer-events:auto;cursor:pointer;width:22px;height:22px;line-height:20px;text-align:center;background:' + AMBER + ';color:#241a04;font-size:11px;font-weight:800;border:2px solid #fff;border-radius:50% 50% 50% 2px;box-shadow:0 2px 6px rgba(0,0,0,.5)}',
+    '.pin{position:fixed;transform:translate(-50%,-100%);z-index:2147483643;pointer-events:auto;cursor:pointer;width:22px;height:22px;line-height:20px;text-align:center;background:' + AMBER + ';color:' + ON_AMBER + ';font-size:var(--fs-small);font-weight:800;border:2px solid #fff;border-radius:50% 50% 50% 2px;box-shadow:0 2px 6px rgba(0,0,0,.5)}',
     // toolbar (top-center)
     '.tb{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483646;display:flex;flex-wrap:wrap;justify-content:center;max-width:94vw;align-items:center;gap:4px;padding:4px;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:11px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto;cursor:move}',
     '.seg{display:flex;background:' + PANEL_BG2 + ';border-radius:8px;padding:2px;gap:2px}',
-    '.seg button{display:flex;align-items:center;gap:6px;color:' + TXT_DIM + ';font-size:12px;font-weight:500;padding:6px 8px;border-radius:6px}',
+    '.seg button{display:flex;align-items:center;gap:6px;color:' + TXT_DIM + ';font-size:var(--fs-base);font-weight:500;padding:6px 8px;border-radius:6px}',
     '.seg button:hover{color:' + TXT + '}',
-    '.seg button.on{background:' + TEAL + ';color:#04211f}',
+    '.seg button.on{background:' + TEAL + ';color:' + ON_ACCENT + '}',
     '.tb .swatches{display:flex;gap:4px;align-items:center;padding-left:6px;border-left:1px solid ' + BORDER + '}',
     '.tb .sw-picker{width:26px;height:26px;padding:0;border:1px solid ' + BORDER + ';border-radius:7px;background:none;cursor:pointer}',
     '.tb .sw-picker:hover{border-color:' + TXT_DIM + '}',
     '.tb .sw-picker::-webkit-color-swatch-wrapper{padding:2px}',
     '.tb .sw-picker::-webkit-color-swatch{border:none;border-radius:5px}',
-    '.tb .shape{color:' + TXT_DIM + ';padding:5px 7px;border-radius:6px;font-size:12px}',
+    '.tb .shape{color:' + TXT_DIM + ';padding:5px 7px;border-radius:6px;font-size:var(--fs-base)}',
     '.tb .shape.on{background:' + PANEL_BG2 + ';color:' + TXT + '}',
     // inspector (right dock)
-    '.insp{position:fixed;right:12px;top:58px;max-height:calc(100vh - 70px);width:248px;z-index:2147483645;display:flex;flex-direction:column;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:11px;box-shadow:0 10px 40px rgba(0,0,0,.55);pointer-events:auto;color:' + TXT + ';overflow:hidden}',
-    '.insp-head{padding:9px 11px;border-bottom:1px solid ' + BORDER + ';cursor:move}',
-    '.crumb{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:11px;color:' + TXT_DIM + '}',
+    '.insp{position:fixed;right:12px;top:58px;max-height:calc(100vh - 70px);width:262px;z-index:2147483645;display:flex;flex-direction:column;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:11px;box-shadow:0 10px 40px rgba(0,0,0,.55);pointer-events:auto;color:' + TXT + ';overflow:hidden}',
+    '.insp-head{padding:10px 12px;border-bottom:1px solid ' + BORDER + ';cursor:move}',
+    '.crumb{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:var(--fs-small);color:' + TXT_DIM + '}',
     '.crumb button{color:' + TXT_DIM + ';padding:1px 4px;border-radius:4px}',
     '.crumb button:hover{background:' + PANEL_BG2 + ';color:' + TXT + '}',
     '.crumb .cur{color:' + TEAL + ';font-weight:600}',
-    '.insp-sz{font-size:11px;color:' + TXT_DIM + ';margin-top:4px}',
-    '.insp-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:5px 11px 11px}',
-    '.grp{margin-top:11px}',
-    '.grp>h5{margin:0 0 6px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:' + TXT_DIM + ';font-weight:700}',
-    '.row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:5px 0;min-width:0}',
-    '.row label{font-size:12px;color:#c7ccd3;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.insp-sz{font-size:var(--fs-small);color:' + TXT_DIM + ';margin-top:4px}',
+    '.insp-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:8px 12px 12px}',
+    '.grp{margin-top:14px}',
+    '.grp>h5{margin:0 0 7px;font-size:var(--fs-micro);letter-spacing:.06em;text-transform:uppercase;color:' + TXT_DIM + ';font-weight:700}',
+    '.row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0;min-width:0}',
+    '.row label{font-size:var(--fs-base);color:' + TXT + ';min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.row .ctl{display:flex;align-items:center;gap:6px;flex:none}',
-    '.insp input[type=text],.insp input[type=number],.insp select,.insp textarea{background:' + PANEL_BG2 + ';color:' + TXT + ';border:1px solid ' + BORDER + ';border-radius:6px;padding:5px 7px;font-size:12px;width:124px;max-width:58%}',
+    '.insp input[type=text],.insp input[type=number],.insp select,.insp textarea{background:' + PANEL_BG2 + ';color:' + TXT + ';border:1px solid ' + BORDER + ';border-radius:6px;padding:5px 8px;font-size:var(--fs-base);width:132px;max-width:60%}',
     '.insp textarea{width:100%;max-width:100%;min-height:74px;resize:none;margin-top:6px;line-height:1.45}',
-    '.insp input[type=number]{width:64px}',
+    // Number fields: wide enough for 4–5 digits, right-aligned, with the spin buttons
+    // removed (their arrows cropped the value in the old narrow field).
+    '.insp input[type=number]{width:88px;text-align:right;-moz-appearance:textfield;appearance:textfield}',
+    '.insp input[type=number]::-webkit-inner-spin-button,.insp input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}',
     '.insp input[type=range]{width:104px;accent-color:' + TEAL + '}',
     '.insp input[type=color]{width:34px;height:24px;background:' + PANEL_BG2 + ';border:1px solid ' + BORDER + ';border-radius:5px;padding:2px}',
-    '.insp .mini{color:' + TXT_DIM + ';font-size:11px;font-weight:600;padding:4px 8px;border-radius:6px;background:' + PANEL_BG2 + '}',
+    '.insp .mini{color:' + TXT_DIM + ';font-size:var(--fs-small);font-weight:600;padding:4px 8px;border-radius:6px;background:' + PANEL_BG2 + '}',
     '.insp .mini:hover{color:' + TXT + '}',
     '.insp .mini.danger:hover{background:#5b1a1a;color:#fff}',
+    // Row-level action button — sized to sit in the same right-hand control column
+    // as the dropdowns/inputs (width matches .insp select) so the panel stays tidy.
+    '.insp .gbtn{width:132px;max-width:60%;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + TXT + ';font-size:var(--fs-base);font-weight:600;padding:5px 8px;border-radius:6px;background:' + PANEL_BG2 + ';border:1px solid ' + BORDER + '}',
+    '.insp .gbtn:hover{border-color:' + TEAL + ';color:' + TEAL_HI + '}',
     '.insp-actions{display:flex;gap:6px;padding:7px 11px;border-top:1px solid ' + BORDER + '}',
-    // AI generate card
-    '.ai-card{margin:2px 0 4px;padding:11px 12px 12px;border:1px solid ' + TEAL + '3d;border-radius:11px;background:linear-gradient(155deg,' + TEAL + '1f,rgba(20,184,186,0) 72%)}',
-    '.ai-card h5{margin:0 0 8px;color:' + TEAL_HI + ';font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}',
-    '.ai-box{border:1px solid ' + BORDER + ';border-radius:9px;background:' + PANEL_BG + 'cc;overflow:hidden;transition:border-color .15s}',
-    '.ai-box:focus-within{border-color:' + TEAL + '}',
-    '.ai-box textarea{width:100%;max-width:100%;background:transparent;border:0;border-radius:0;margin:0;min-height:60px;resize:none;padding:9px 10px;font-size:12px;line-height:1.45;color:' + TXT + '}',
+    '.insp-multi{margin:2px 0 9px;padding:7px 10px;border-radius:8px;background:' + TEAL + '1f;border:1px solid ' + TEAL + '3d;color:' + TEAL_HI + ';font-size:var(--fs-small);font-weight:600}',
+    // Edit/Generate-with-AI card: flat (no gradient), light chrome, and a roomy box
+    // so the prompt has space to breathe. Nested padding was trimmed so the textarea
+    // gets the panel width rather than stacking card + box + textarea insets.
+    '.ai-card{margin:0 0 9px;padding:10px 10px 11px;border:1px solid ' + TEAL + '2e;border-radius:11px;background:' + TEAL + '12}',
+    '.ai-card h5{margin:0 0 8px;color:' + TEAL + ';font-size:var(--fs-small);font-weight:700;letter-spacing:.04em;text-transform:uppercase}',
+    '.ai-box{border:1px solid ' + BORDER + ';border-radius:9px;background:' + PANEL_BG + ';overflow:hidden;transition:border-color .15s,box-shadow .15s}',
+    '.ai-box:focus-within{border-color:' + TEAL + ';box-shadow:0 0 0 2px ' + TEAL + '33}',
+    '.ai-box textarea{width:100%;max-width:100%;display:block;background:transparent;border:0;border-radius:0;margin:0;min-height:104px;resize:none;padding:9px 10px;font-size:var(--fs-base);line-height:1.5;color:' + TXT + '}',
     '.ai-box textarea:focus{outline:none}',
     '.ai-foot{display:flex;align-items:center;gap:6px;padding:6px;border-top:1px solid ' + BORDER + '}',
-    '.ai-foot .ai-model{flex:1 1 auto;width:auto;min-width:0;max-width:none;background:' + PANEL_BG2 + ';color:' + TXT + ';border:1px solid ' + BORDER + ';border-radius:7px;padding:0 7px;font-size:11px;height:28px}',
-    '.ai-btn{flex:none;font-size:12px;font-weight:700;color:#04211f;background:' + TEAL + ';border-radius:7px;padding:0 13px;height:28px;display:inline-flex;align-items:center;white-space:nowrap}',
+    '.ai-foot .ai-model{flex:1 1 auto;width:auto;min-width:0;max-width:none;background:' + PANEL_BG2 + ';color:' + TXT + ';border:1px solid ' + BORDER + ';border-radius:7px;padding:0 8px;font-size:var(--fs-small);height:30px}',
+    '.ai-btn{flex:none;font-size:var(--fs-base);font-weight:700;color:' + ON_ACCENT + ';background:' + TEAL + ';border-radius:7px;padding:0 15px;height:30px;display:inline-flex;align-items:center;white-space:nowrap}',
     '.ai-btn:hover{background:' + TEAL_HI + '}',
     '.ai-btn.busy{opacity:.7;pointer-events:none}',
-    '.ai-note{margin-top:9px;font-size:10px;color:' + TXT_DIM + ';line-height:1.45}',
+    '.ai-note{margin:8px 2px 0;font-size:var(--fs-micro);color:' + TXT_DIM + ';line-height:1.45}',
     // toolbar actions (count / undo / discard / send)
     '.tb-sep{width:1px;align-self:stretch;background:' + BORDER + ';margin:0 2px}',
-    '.tb-count{font-size:11px;font-weight:700;color:#04211f;background:' + TEAL + ';border-radius:999px;padding:1px 7px;min-width:8px;text-align:center;white-space:nowrap}',
-    '.tb-act{font-size:12px;color:' + TXT_DIM + ';padding:6px 9px;border-radius:7px}',
-    '.tb-act:hover{color:#fff;background:' + PANEL_BG2 + '}',
+    '.tb-count{font-size:var(--fs-small);font-weight:700;color:' + ON_ACCENT + ';background:' + TEAL + ';border-radius:999px;padding:1px 7px;min-width:8px;text-align:center;white-space:nowrap}',
+    '.tb-act{font-size:var(--fs-base);color:' + TXT_DIM + ';padding:6px 9px;border-radius:7px}',
+    '.tb-act:hover{color:' + TXT + ';background:' + PANEL_BG2 + '}',
     '.tb-ico{display:flex;align-items:center;padding:6px 7px}',
-    '.tb-send{font-size:12px;font-weight:600;background:' + TEAL + ';color:#04211f;padding:6px 12px;border-radius:7px}',
+    '.tb-send{font-size:var(--fs-base);font-weight:600;background:' + TEAL + ';color:' + ON_ACCENT + ';padding:6px 12px;border-radius:7px}',
     '.tb-send:hover{background:' + TEAL_HI + '}',
     // hint / legend
-    '.hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147483647;background:' + TEAL + ';color:#04211f;font-weight:600;font-size:12px;padding:6px 14px;border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none}',
-    '.legend{position:fixed;left:12px;bottom:14px;z-index:2147483646;width:220px;padding:12px;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto;color:' + TXT + ';font-size:12px}',
-    '.legend h5{margin:0 0 8px;font-size:12px;color:' + TEAL + '}',
+    '.hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147483647;background:' + TEAL + ';color:' + ON_ACCENT + ';font-weight:600;font-size:var(--fs-base);padding:6px 14px;border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.4);pointer-events:none;display:flex;align-items:center;gap:7px}',
+    '.hint.err{background:#e5484d;color:#fff;box-shadow:0 6px 20px rgba(229,72,77,.45)}',
+    '.hint.err::before{content:"\\26A0";font-size:calc(var(--fs-base) + 1px)}',
+    // Full-screen debug view exit bar (bottom-center, above the debug chart).
+    '.dbgbar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:10px;padding:7px 8px 7px 14px;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:11px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto}',
+    '.dbgbar-t{font-size:var(--fs-base);font-weight:600;color:' + TXT + '}',
+    '.dbgbar-x{font-size:var(--fs-base);font-weight:700;color:' + ON_ACCENT + ';background:' + TEAL + ';border-radius:7px;padding:6px 12px}',
+    '.dbgbar-x:hover{background:' + TEAL_HI + '}',
+    '.legend{position:fixed;left:12px;bottom:14px;z-index:2147483646;width:220px;padding:12px;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto;color:' + TXT + ';font-size:var(--fs-base)}',
+    '.legend h5{margin:0 0 8px;font-size:var(--fs-base);color:' + TEAL + '}',
     '.legend div{color:' + TXT_DIM + ';margin:3px 0}',
     '.legend kbd{background:' + PANEL_BG2 + ';border:1px solid ' + BORDER + ';border-radius:4px;padding:0 4px;color:' + TXT + '}',
     '.legend .close{position:absolute;top:8px;right:10px;color:' + TXT_DIM + '}',
     // comment editor
     '.cmt{position:fixed;z-index:2147483647;width:220px;padding:8px;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.5);pointer-events:auto}',
-    '.cmt textarea{width:100%;min-height:56px;background:' + PANEL_BG2 + ';color:' + TXT + ';border:1px solid ' + BORDER + ';border-radius:6px;padding:6px;font-size:12px;resize:vertical}',
+    '.cmt textarea{width:100%;min-height:56px;background:' + PANEL_BG2 + ';color:' + TXT + ';border:1px solid ' + BORDER + ';border-radius:6px;padding:6px;font-size:var(--fs-base);resize:vertical}',
     '.cmt .r{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}',
-    '.cmt button{font-size:12px;padding:5px 10px;border-radius:6px;color:' + TXT_DIM + '}',
-    '.cmt button.ok{background:' + TEAL + ';color:#04211f;font-weight:600}',
-    '.editing-text{outline:2px dashed ' + TEAL + ' !important;outline-offset:2px}'
-  ].join('\n');
+    '.cmt button{font-size:var(--fs-base);padding:5px 10px;border-radius:6px;color:' + TXT_DIM + '}',
+    '.cmt button.ok{background:' + TEAL + ';color:' + ON_ACCENT + ';font-weight:600}',
+    '.editing-text{outline:2px dashed ' + TEAL + ' !important;outline-offset:2px}',
+    // changes panel (left dock)
+    '.changes{position:fixed;left:12px;top:58px;max-height:calc(100vh - 70px);width:236px;z-index:2147483645;display:flex;flex-direction:column;background:' + PANEL_GLASS + ';' + GLASS_FX + ';border:1px solid ' + BORDER + ';border-radius:11px;box-shadow:0 10px 40px rgba(0,0,0,.55);pointer-events:auto;color:' + TXT + ';overflow:hidden}',
+    '.chg-head{display:flex;align-items:center;justify-content:space-between;padding:9px 11px;border-bottom:1px solid ' + BORDER + ';font-size:var(--fs-small);font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:' + TXT_DIM + ';cursor:move}',
+    '.chg-x{color:' + TXT_DIM + ';padding:0 4px}',
+    '.chg-x:hover{color:' + TXT + '}',
+    '.chg-empty{padding:14px 12px;font-size:var(--fs-small);color:' + TXT_DIM + '}',
+    '.chg-list{overflow-y:auto;padding:6px}',
+    '.chg-row{display:flex;align-items:flex-start;gap:8px;padding:6px 7px;border-radius:7px}',
+    '.chg-row:hover{background:' + PANEL_BG2 + '}',
+    '.chg-n{flex:none;min-width:18px;height:18px;line-height:18px;text-align:center;background:' + TEAL + ';color:' + ON_ACCENT + ';font-size:var(--fs-micro);font-weight:800;border-radius:9px}',
+    '.chg-main{flex:1;min-width:0}',
+    '.chg-title{font-size:var(--fs-small);color:' + TXT + ';font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.chg-sub{font-size:var(--fs-micro);color:' + TXT_DIM + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}',
+    '.chg-rm{flex:none;color:' + TXT_DIM + ';padding:2px 5px;border-radius:5px;font-size:var(--fs-small)}',
+    '.chg-rm:hover{background:#5b1a1a;color:#fff}',
+    // smart-guide lines + snap toggle
+    '.guides{position:fixed;inset:0;z-index:2147483641;pointer-events:none}',
+    '.guide{position:fixed;background:' + GUIDE + ';box-shadow:0 0 4px ' + GUIDE + '}',
+    '.guide.v{top:0;width:1px;height:100vh}',
+    '.guide.hz{left:0;height:1px;width:100vw}',
+    '.move-tip{z-index:2147483645;box-shadow:0 2px 8px rgba(0,0,0,.4)}',
+    '.tb-ico.snap-on{color:' + TEAL + ';background:' + PANEL_BG2 + '}',
+    // AI "transforming" overlay (shown over each element being restyled)
+    '@keyframes rfMorphSweep{0%{transform:translateX(-130%) skewX(-12deg)}100%{transform:translateX(130%) skewX(-12deg)}}',
+    '@keyframes rfMorphGlow{0%,100%{box-shadow:0 0 0 1px ' + TEAL + 'cc,0 0 20px -6px ' + TEAL + ',inset 0 0 18px -10px ' + TEAL_HI + '}50%{box-shadow:0 0 0 2px ' + TEAL_HI + ',0 0 34px -3px ' + TEAL_HI + ',inset 0 0 26px -8px ' + TEAL_HI + '}}',
+    '@keyframes rfMorphScan{0%{top:-12%;opacity:0}12%{opacity:1}88%{opacity:1}100%{top:104%;opacity:0}}',
+    '.morphs{position:fixed;inset:0;z-index:2147483642;pointer-events:none}',
+    '.morph{position:fixed;border-radius:8px;overflow:hidden;animation:rfMorphGlow 1.5s ease-in-out infinite}',
+    '.morph::before{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 38%,' + TEAL_HI + '22 47%,' + TEAL_HI + '66 50%,' + TEAL_HI + '22 53%,transparent 62%);transform:translateX(-130%) skewX(-12deg);animation:rfMorphSweep 1.4s ease-in-out infinite}',
+    '.morph::after{content:"";position:absolute;left:6%;right:6%;height:2px;top:-12%;border-radius:2px;background:linear-gradient(90deg,transparent,' + TEAL_HI + ',transparent);box-shadow:0 0 14px 2px ' + TEAL_HI + 'cc;animation:rfMorphScan 1.7s cubic-bezier(.4,0,.2,1) infinite}',
+    '@media (prefers-reduced-motion: reduce){.morph,.morph::before,.morph::after{animation:none}.morph{box-shadow:0 0 0 2px ' + TEAL + '}.morph::after{display:none}}'
+    ].join('\n');
+  }
 
   // Light-DOM animation CSS for the placeholder "building" state (the placeholder
   // is a real element in the app's DOM, not in our shadow root, so its @keyframes
   // must live in the page). Injected on enable, removed on disable. Namespaced
   // `__rf_*` + honours prefers-reduced-motion.
   var GEN_STYLE_ID = '__rayfin_design_gen_style';
-  var GEN_STYLE = [
+  function buildGenStyle() {
+    return [
     '@keyframes __rfSweep{0%{transform:translateX(-130%) skewX(-12deg)}100%{transform:translateX(130%) skewX(-12deg)}}',
     '@keyframes __rfScan{0%{top:-8%;opacity:0}12%{opacity:1}88%{opacity:1}100%{top:104%;opacity:0}}',
     '@keyframes __rfGlow{0%,100%{box-shadow:0 0 0 1px ' + TEAL + '77,0 0 24px -6px ' + TEAL + 'aa,inset 0 0 22px -10px ' + TEAL_HI + '99}50%{box-shadow:0 0 0 1px ' + TEAL_HI + ',0 0 40px -4px ' + TEAL + ',inset 0 0 34px -8px ' + TEAL_HI + '}}',
@@ -379,14 +520,15 @@
     '.__rf_gdots::after{content:"";display:inline-block;width:16px;text-align:left;animation:__rfDots 1.3s steps(1,end) infinite}',
     '.__rf_reveal{animation:__rfReveal .5s cubic-bezier(.2,.7,.2,1)}',
     '@media (prefers-reduced-motion: reduce){.__rf_gen,.__rf_gen::before,.__rf_grid,.__rf_gscan,.__rf_gspark,.__rf_gdots::after,.__rf_reveal{animation:none !important}.__rf_gscan{display:none}}'
-  ].join('\n');
+    ].join('\n');
+  }
 
   function injectGenStyle() {
     try {
       if (document.getElementById(GEN_STYLE_ID)) return;
       var s = document.createElement('style');
       s.id = GEN_STYLE_ID;
-      s.textContent = GEN_STYLE;
+      s.textContent = buildGenStyle();
       (document.head || document.documentElement).appendChild(s);
     } catch (e) {}
   }
@@ -396,15 +538,19 @@
   }
 
   function icon(name) {
+    var isz = Math.round(FS.icon * themeScale);
     var p = {
       cursor: '<path d="M4 3l15 8-6 1.5L10 20 4 3z"/>',
       comment: '<path d="M4 5h16v10H9l-4 4v-4H4z"/>',
       frame: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 9v6M9 12h6"/>',
       pen: '<path d="M14 4l6 6L9 21l-6 1 1-6z"/>',
       undo: '<path d="M4 9h11a5 5 0 0 1 0 10h-4"/><path d="M4 9l4-4M4 9l4 4"/>',
-      trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>'
+      redo: '<path d="M20 9H9a5 5 0 0 0 0 10h4"/><path d="M20 9l-4-4M20 9l-4 4"/>',
+      list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+      trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>',
+      magnet: '<path d="M5 20V11a7 7 0 0 1 14 0v9M9 20v-9a3 3 0 0 1 6 0v9M5 16h4M15 16h4"/>'
     }[name] || '';
-    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
+    return '<svg width="' + isz + '" height="' + isz + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
   }
 
   function buildUI() {
@@ -413,7 +559,8 @@
     host = h('div', { id: HOST_ID });
     document.documentElement.appendChild(host);
     root = host.attachShadow({ mode: 'open' });
-    root.appendChild(h('style', { text: STYLE }));
+    elStyle = h('style', { text: buildStyle() });
+    root.appendChild(elStyle);
 
     elDraw = svg('svg', { class: 'draw' });
     elDraw.addEventListener('pointerdown', onDrawDown);
@@ -421,16 +568,22 @@
     elHover = h('div', { class: 'box hover', style: 'display:none' });
     elLabel = h('div', { class: 'label', style: 'display:none' });
     elSel = h('div', { class: 'box sel', style: 'display:none' });
+    elSels = h('div', { style: 'display:none' }); // pool of selection boxes (multi-select)
     elBadges = h('div', { style: 'display:none' });
     elInsert = h('div', { class: 'insert', style: 'display:none' });
     elHandles = h('div', { style: 'display:none' });
     elToolbar = h('div', { class: 'tb' });
     elInspector = h('div', { class: 'insp', style: 'display:none' });
-    [elDraw, elPins, elHover, elLabel, elSel, elBadges, elInsert, elHandles, elToolbar, elInspector]
+    elChanges = h('div', { class: 'changes', style: 'display:none' });
+    elGuides = h('div', { class: 'guides' });
+    elMorph = h('div', { class: 'morphs', style: 'display:none' });
+    elMoveTip = h('div', { class: 'badge move-tip', style: 'display:none' });
+    [elDraw, elPins, elGuides, elMorph, elHover, elLabel, elSels, elSel, elBadges, elInsert, elHandles, elMoveTip, elToolbar, elInspector, elChanges]
       .forEach(function (n) { root.appendChild(n); });
 
     makeDraggable(elToolbar, false);
     makeDraggable(elInspector, false);
+    makeDraggable(elChanges, true);
     buildToolbar();
     if (!localStorageFlag()) showLegend();
   }
@@ -476,6 +629,9 @@
       tools.appendChild(b);
     });
     elToolbar.appendChild(tools);
+    var btnSnap = h('button', { class: 'tb-act tb-ico' + (snapOn ? ' snap-on' : ''), html: icon('magnet'), title: 'Snap to guides — ' + (snapOn ? 'on' : 'off') + ' (hold Ctrl to bypass)', 'aria-label': 'Snap to guides' });
+    btnSnap.onclick = function (e) { e.stopPropagation(); snapOn = !snapOn; buildToolbar(); };
+    elToolbar.appendChild(btnSnap);
 
     if (state.tool === 'draw') {
       var shapes = h('div', { class: 'seg' });
@@ -497,14 +653,20 @@
 
     elToolbar.appendChild(h('div', { class: 'tb-sep' }));
     elCount = h('span', { class: 'tb-count' });
+    elCount.onclick = function (e) { e.stopPropagation(); toggleChanges(); };
     elToolbar.appendChild(elCount);
+    btnChanges = h('button', { class: 'tb-act tb-ico', html: icon('list'), title: 'Changes', 'aria-label': 'Changes' });
+    btnChanges.onclick = function (e) { e.stopPropagation(); toggleChanges(); };
     btnUndo = h('button', { class: 'tb-act tb-ico', html: icon('undo'), title: 'Undo (Ctrl/Cmd+Z)', 'aria-label': 'Undo' });
     btnUndo.onclick = function (e) { e.stopPropagation(); undoLast(); };
+    btnRedo = h('button', { class: 'tb-act tb-ico', html: icon('redo'), title: 'Redo (Ctrl/Cmd+Shift+Z)', 'aria-label': 'Redo' });
+    btnRedo.onclick = function (e) { e.stopPropagation(); redoLast(); };
     btnDiscard = h('button', { class: 'tb-act tb-ico', html: icon('trash'), title: 'Discard all changes', 'aria-label': 'Discard' });
     btnDiscard.onclick = function (e) { e.stopPropagation(); discardAll(); };
     btnSend = h('button', { class: 'tb-send', text: 'Send to chat' });
     btnSend.onclick = function (e) { e.stopPropagation(); beginHandoff(); };
-    elToolbar.appendChild(btnUndo); elToolbar.appendChild(btnDiscard); elToolbar.appendChild(btnSend);
+    elToolbar.appendChild(btnChanges); elToolbar.appendChild(btnUndo); elToolbar.appendChild(btnRedo);
+    elToolbar.appendChild(btnDiscard); elToolbar.appendChild(btnSend);
     renderBar();
   }
 
@@ -527,9 +689,9 @@
   }
 
   // ---- hint / legend -------------------------------------------------------
-  var hintEl = null;
-  function showHint(text) { hideHint(); if (!text) return; hintEl = h('div', { class: 'hint', text: text }); root.appendChild(hintEl); }
-  function hideHint() { if (hintEl) { hintEl.remove(); hintEl = null; } }
+  var hintEl = null, hintTimer = 0;
+  function showHint(text, kind) { hideHint(); if (!text) return; hintEl = h('div', { class: 'hint' + (kind === 'error' ? ' err' : ''), text: text }); root.appendChild(hintEl); hintTimer = setTimeout(hideHint, kind === 'error' ? 3600 : 2800); }
+  function hideHint() { if (hintTimer) { clearTimeout(hintTimer); hintTimer = 0; } if (hintEl) { hintEl.remove(); hintEl = null; } }
 
   function showLegend() {
     if (elLegend) elLegend.remove();
@@ -539,7 +701,7 @@
     elLegend.appendChild(close);
     elLegend.appendChild(h('h5', { text: 'Design mode' }));
     [
-      'Select (V) — click to pick, drag to move, handles to resize, arrows to nudge',
+      'Select (V) — click to pick, drag to reposition (snaps to guides), handles to resize, arrows to nudge',
       'Insert (I) — drop a placeholder where a new component goes',
       'Comment (C) — pin a note · Draw (D) — sketch over it',
       'Undo Ctrl/Cmd+Z · Remove Del · Deselect Esc · drag the toolbar to move it'
@@ -555,12 +717,101 @@
       elCount.title = count + (count === 1 ? ' change' : ' changes');
       elCount.style.display = count > 0 ? '' : 'none';
     }
-    [btnUndo, btnDiscard, btnSend].forEach(function (b) {
+    [btnUndo, btnDiscard, btnSend, btnChanges].forEach(function (b) {
       if (!b) return;
       var off = count === 0;
       b.style.opacity = off ? '.4' : '';
       b.style.pointerEvents = off ? 'none' : 'auto';
     });
+    if (btnRedo) {
+      var noRedo = state.redo.length === 0;
+      btnRedo.style.opacity = noRedo ? '.4' : '';
+      btnRedo.style.pointerEvents = noRedo ? 'none' : 'auto';
+    }
+    if (elChanges && elChanges.style.display !== 'none') renderChanges();
+  }
+
+  // ---- changes panel (review / per-item revert / jump-to) ------------------
+  // Human-friendly labels so the change list reads naturally.
+  var PROP_LABEL = {
+    'border-radius': 'Rounded corners', 'background': 'Background', 'background-color': 'Background',
+    'background-image': 'Background', 'color': 'Text colour', 'font-size': 'Font size', 'font-weight': 'Font weight',
+    'font-style': 'Font style', 'line-height': 'Line height', 'letter-spacing': 'Letter spacing',
+    'text-align': 'Alignment', 'text-transform': 'Text case', 'text-decoration': 'Text decoration',
+    'opacity': 'Opacity', 'box-shadow': 'Shadow', 'padding': 'Padding', 'margin': 'Margin', 'border': 'Border',
+    'border-color': 'Border colour', 'border-width': 'Border width', 'width': 'Width', 'height': 'Height',
+    'min-width': 'Min width', 'max-width': 'Max width', 'display': 'Display', 'gap': 'Gap'
+  };
+  function humanProp(p) { return PROP_LABEL[p] || (p ? p.replace(/-/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); }) : 'Style'); }
+  function chartDiff(c) {
+    try {
+      var a = c.before || {}, b = c.after || {}, parts = [];
+      for (var k in b) { if (typeof b[k] !== 'object' && JSON.stringify(a[k]) !== JSON.stringify(b[k])) parts.push(k + ' → ' + b[k]); }
+      return parts.length ? parts.slice(0, 2).join(', ') : 'spec updated';
+    } catch (e) { return 'spec updated'; }
+  }
+  // The human action a change performed (the row's title).
+  function changeAction(c) {
+    switch (c.kind) {
+      case 'style': return humanProp(c.property) + (c.to != null && c.to !== '' ? ' → ' + c.to : ' changed');
+      case 'resize': return 'Resized to ' + (c.to || '');
+      case 'move': return 'Moved ' + (c.to || 'to a new spot');
+      case 'text': return 'Text → “' + (c.to || '') + '”';
+      case 'remove': return 'Removed';
+      case 'comment': return 'Note: ' + (c.note || '(none)');
+      case 'annotation': return 'Sketch' + (c.property ? ' (' + c.property + ')' : '');
+      case 'insert': return 'Added a component';
+      case 'chart': return 'Chart · ' + chartDiff(c);
+      default: return c.property || c.kind;
+    }
+  }
+  // A friendly label for the element a change touched (the row's subtitle).
+  function changeTarget(c) {
+    var el = c.el;
+    if (!el || el.nodeType !== 1) return c.kind === 'annotation' ? (c.region || 'preview') : '';
+    var comp = componentHint(el);
+    if (comp) return comp;
+    var txt = shortText(el);
+    if (txt) return '“' + txt + '”';
+    var head = nearestHeading(el);
+    if (head) return 'in “' + head + '”';
+    var tag = el.tagName.toLowerCase();
+    var cls = (typeof el.className === 'string' && el.className.trim()) ? '.' + el.className.trim().split(/\s+/)[0] : '';
+    return tag + cls;
+  }
+  function toggleChanges() {
+    if (!elChanges) return;
+    if (elChanges.style.display === 'none') { renderChanges(); elChanges.style.display = 'flex'; }
+    else elChanges.style.display = 'none';
+  }
+  function renderChanges() {
+    if (!elChanges) return;
+    elChanges.textContent = '';
+    var head = h('div', { class: 'chg-head' }, [h('span', { text: 'Changes' })]);
+    var close = h('button', { class: 'chg-x', text: '✕', title: 'Close' });
+    close.onclick = function (e) { e.stopPropagation(); elChanges.style.display = 'none'; };
+    head.appendChild(close);
+    elChanges.appendChild(head);
+    if (!state.changes.length) {
+      elChanges.appendChild(h('div', { class: 'chg-empty', text: 'No changes yet.' }));
+      return;
+    }
+    var listEl = h('div', { class: 'chg-list' });
+    state.changes.forEach(function (c, i) {
+      var row = h('div', { class: 'chg-row' });
+      row.appendChild(h('span', { class: 'chg-n', text: String(i + 1) }));
+      var main = h('div', { class: 'chg-main' });
+      main.appendChild(h('div', { class: 'chg-title', text: changeAction(c) }));
+      var sub = changeTarget(c);
+      if (sub) main.appendChild(h('div', { class: 'chg-sub', text: sub }));
+      row.appendChild(main);
+      var rm = h('button', { class: 'chg-rm', text: '✕', title: 'Revert this change' });
+      rm.onclick = function (e) { e.stopPropagation(); removeChange(c); };
+      row.appendChild(rm);
+      if (c.el || c.node) { row.onclick = function () { jumpToChange(c); }; row.style.cursor = 'pointer'; }
+      listEl.appendChild(row);
+    });
+    elChanges.appendChild(listEl);
   }
 
   // ---- overlay positioning -------------------------------------------------
@@ -573,6 +824,7 @@
   }
 
   function reposition() {
+    if (state.debugView) return; // overlays are hidden while the debug view is full-screen
     // hover (Select only, no active selection drag)
     if (state.tool === 'select' && state.hoverEl && state.hoverEl !== state.selected && !state.move && !state.resizing) {
       place(elHover, state.hoverEl);
@@ -582,27 +834,83 @@
       elLabel.style.left = hr.left + 'px';
       elLabel.style.top = Math.max(2, hr.top - 20) + 'px';
     } else { elHover.style.display = 'none'; elLabel.style.display = 'none'; }
-    // selection
-    if (state.selected && state.selected.isConnected) {
-      place(elSel, state.selected);
-      positionHandles(); positionBadges();
-    } else { elSel.style.display = 'none'; elHandles.style.display = 'none'; elBadges.style.display = 'none'; }
+    // selection — one box per selected element (primary a touch stronger); resize
+    // handles + size badge only for a single selection (multi is style/AI-only in v1)
+    var sel = (state.selection || []).filter(function (e) { return e && e.isConnected; });
+    if (sel.length) {
+      elSel.style.display = 'none';
+      while (elSels.children.length < sel.length) elSels.appendChild(h('div', {}));
+      while (elSels.children.length > sel.length) elSels.removeChild(elSels.lastChild);
+      for (var si = 0; si < sel.length; si++) {
+        var sr = sel[si].getBoundingClientRect(), sb = elSels.children[si];
+        sb.className = 'box ' + (sel[si] === state.selected ? 'sel' : 'selm');
+        sb.style.left = sr.left + 'px'; sb.style.top = sr.top + 'px';
+        sb.style.width = sr.width + 'px'; sb.style.height = sr.height + 'px';
+      }
+      elSels.style.display = 'block';
+      if (sel.length === 1) { positionHandles(); positionBadges(); }
+      else { elHandles.style.display = 'none'; elBadges.style.display = 'none'; }
+    } else {
+      elSel.style.display = 'none'; elSels.style.display = 'none';
+      elHandles.style.display = 'none'; elBadges.style.display = 'none';
+    }
     // comment pins track their anchor elements
     positionPins();
+    positionMorphs();
+  }
+  // Position an animated "transforming" overlay over each element currently being
+  // restyled by AI (driven by the data-rayfin-editing marker), so several can
+  // animate at once.
+  function positionMorphs() {
+    if (!elMorph) return;
+    var busy = document.querySelectorAll('[data-rayfin-editing="1"]');
+    while (elMorph.children.length < busy.length) elMorph.appendChild(h('div', { class: 'morph' }));
+    while (elMorph.children.length > busy.length) elMorph.removeChild(elMorph.lastChild);
+    for (var i = 0; i < busy.length; i++) {
+      var mr = busy[i].getBoundingClientRect(), m = elMorph.children[i];
+      m.style.left = mr.left + 'px'; m.style.top = mr.top + 'px';
+      m.style.width = mr.width + 'px'; m.style.height = mr.height + 'px';
+    }
+    elMorph.style.display = busy.length ? 'block' : 'none';
   }
 
   // ---- selection -----------------------------------------------------------
   function select(el) {
     if (!el) return;
     if (state.editingText) commitText();
+    state.selection = [el];
+    state.selInlineMap = new WeakMap();
+    state.selInlineMap.set(el, snapshotInline(el));
     state.selected = el;
-    state.selInline = snapshotInline(el);
+    state.selInline = state.selInlineMap.get(el);
+    showHandles();
+    renderInspector();
+    reposition();
+  }
+  // Shift/Ctrl/Cmd-click: add/remove `el` from the multi-selection (primary =
+  // last touched). Edits then apply to every element in `state.selection`.
+  function toggleSelect(el) {
+    if (!el) return;
+    if (state.editingText) commitText();
+    if (!state.selection) state.selection = [];
+    if (!state.selInlineMap) state.selInlineMap = new WeakMap();
+    var i = state.selection.indexOf(el);
+    if (i >= 0) {
+      state.selection.splice(i, 1);
+      if (state.selected === el) state.selected = state.selection[state.selection.length - 1] || null;
+    } else {
+      state.selection.push(el);
+      state.selInlineMap.set(el, snapshotInline(el));
+      state.selected = el;
+    }
+    if (!state.selection.length) { deselect(); return; }
+    state.selInline = state.selInlineMap.get(state.selected) || snapshotInline(state.selected);
     showHandles();
     renderInspector();
     reposition();
   }
   function deselect() {
-    state.selected = null; state.selInline = null;
+    state.selection = []; state.selected = null; state.selInline = null; state.selInlineMap = null;
     closeInspector(); hideHandles();
     reposition();
   }
@@ -650,8 +958,12 @@
     var body = h('div', { class: 'insp-body' });
     elInspector.appendChild(body);
 
+    var multi = !!(state.selection && state.selection.length > 1);
+    if (multi) body.appendChild(h('div', { class: 'insp-multi', text: state.selection.length + ' elements selected — edits apply to all' }));
+
     if (isPlaceholder(el)) body.appendChild(aiGroup(el));
-    if (chartRoot(el)) body.appendChild(chartGroup(chartRoot(el)));
+    else body.appendChild(aiEditGroup(el));
+    if (!multi && chartRoot(el)) body.appendChild(chartGroup(chartRoot(el)));
 
     // Layout & spacing
     body.appendChild(group('Layout', [
@@ -666,7 +978,7 @@
       selRow('Weight', 'fontWeight', WEIGHTS, String(cs.fontWeight), el),
       selRow('Align', 'textAlign', ALIGNS, cs.textAlign, el),
       colorRow('Color', 'color', cs.color, el),
-      textContentRow(el)
+      multi ? null : textContentRow(el)
     ]));
     // Appearance
     body.appendChild(group('Appearance', [
@@ -677,8 +989,8 @@
     ]));
 
     var actions = h('div', { class: 'insp-actions' });
-    var reset = h('button', { class: 'mini', text: 'Reset element' }); reset.onclick = function (e) { e.stopPropagation(); resetSelected(); };
-    var rm = h('button', { class: 'mini danger', text: 'Remove' }); rm.onclick = function (e) { e.stopPropagation(); removeSelected(); };
+    var reset = h('button', { class: 'mini', text: multi ? 'Reset all' : 'Reset element' }); reset.onclick = function (e) { e.stopPropagation(); resetSelected(); };
+    var rm = h('button', { class: 'mini danger', text: multi ? 'Remove all' : 'Remove' }); rm.onclick = function (e) { e.stopPropagation(); removeSelected(); };
     actions.appendChild(reset); actions.appendChild(rm);
     elInspector.appendChild(actions);
   }
@@ -706,7 +1018,7 @@
 
     var foot = h('div', { class: 'ai-foot' });
     var sel = h('select', { class: 'ai-model', title: 'Model' });
-    var models = (state.models && state.models.length) ? state.models : [{ id: '', name: 'Fast model', fast: true }];
+    var models = [{ id: 'auto', name: 'Auto' }].concat(state.models && state.models.length ? state.models : []);
     models.forEach(function (m) {
       var o = h('option', { value: m.id, text: m.name });
       if (m.id === state.aiModel) o.setAttribute('selected', 'selected');
@@ -725,6 +1037,46 @@
     return card;
   }
 
+  // "Edit with AI" card shown atop any (non-placeholder) element's inspector:
+  // describe a change + pick a model → the host restyles the element live via a
+  // whitelisted inline-CSS patch (or a Graphein spec patch for charts), recorded
+  // as revertable change-set entries just like manual edits.
+  function aiEditGroup(el) {
+    var card = h('div', { class: 'ai-card' });
+    card.appendChild(h('h5', { text: 'Edit with AI' }));
+    var busy = el.getAttribute('data-rayfin-editing') === '1';
+    var chart = !!chartRoot(el);
+    var box = h('div', { class: 'ai-box' });
+    var ta = h('textarea', {
+      placeholder: chart
+        ? 'Describe a chart change — e.g. “make it a horizontal bar sorted descending”'
+        : 'Describe a change — e.g. “make this a pill button with a subtle shadow”',
+      text: el.getAttribute('data-rayfin-edit-desc') || ''
+    });
+    // Persist the prompt on the element so a failed edit keeps it for tweaking
+    // (cleared on a successful apply).
+    ta.oninput = function () { el.setAttribute('data-rayfin-edit-desc', ta.value); };
+    box.appendChild(ta);
+    var foot = h('div', { class: 'ai-foot' });
+    var sel = h('select', { class: 'ai-model', title: 'Model' });
+    var models = [{ id: 'auto', name: 'Auto' }].concat(state.models && state.models.length ? state.models : []);
+    models.forEach(function (m) {
+      var o = h('option', { value: m.id, text: m.name });
+      if (m.id === state.aiModel) o.setAttribute('selected', 'selected');
+      sel.appendChild(o);
+    });
+    sel.onchange = function () { state.aiModel = sel.value; };
+    if (busy) sel.disabled = true;
+    foot.appendChild(sel);
+    var btn = h('button', { class: 'ai-btn' + (busy ? ' busy' : ''), text: busy ? 'Applying…' : 'Apply' });
+    btn.onclick = function (e) { e.stopPropagation(); requestAiEditSelection(ta.value); };
+    foot.appendChild(btn);
+    box.appendChild(foot);
+    card.appendChild(box);
+    card.appendChild(h('div', { class: 'ai-note', text: 'Applied live as editable, revertable tweaks.' }));
+    return card;
+  }
+
   // Apply an inline style change + record it (revert restores the pre-select
   // inline value snapshot for that property).
   function applyStyle(el, jsProp, cssLabel, value, display) {
@@ -732,38 +1084,46 @@
     // Placeholders are captured wholesale by their single 'insert' entry (live
     // size/label/position read at hand-off), so don't record per-property edits.
     if (isPlaceholder(el)) return;
-    var before = state.selInline[jsProp];
+    var snap = (state.selInlineMap && state.selInlineMap.get(el)) || state.selInline || {};
+    var before = snap[jsProp];
     record({
       kind: 'style', property: cssLabel, selector: cssPath(el), label: describe(el), el: el,
       from: undefined, to: display != null ? display : value,
-      revert: function () { el.style[jsProp] = before; }
+      revert: function () { el.style[jsProp] = before; },
+      reapply: function () { el.style[jsProp] = value; }
     });
+  }
+  // Apply a style change to EVERY selected element (multi-select); each is its own
+  // revertable change-set entry.
+  function editSelection(jsProp, cssLabel, value, display) {
+    var sel = (state.selection && state.selection.length) ? state.selection.slice() : (state.selected ? [state.selected] : []);
+    sel.forEach(function (el) { applyStyle(el, jsProp, cssLabel, value, display); });
   }
 
   function numRow(label, jsProp, val, unit, el) {
     var inp = h('input', { type: 'number', value: String(val) });
-    inp.oninput = function () { applyStyle(el, jsProp, cssName(jsProp), inp.value === '' ? '' : (inp.value + unit), inp.value + unit); };
+    inp.oninput = function () { editSelection(jsProp, cssName(jsProp), inp.value === '' ? '' : (inp.value + unit), inp.value + unit); };
     return h('div', { class: 'row' }, [h('label', { text: label }), h('div', { class: 'ctl' }, [inp, h('span', { class: 'insp-sz', text: unit })])]);
   }
   function selRow(label, jsProp, opts, cur, el) {
     var sel = h('select');
     opts.forEach(function (o) { var op = h('option', { value: o, text: o }); if (String(o) === String(cur)) op.setAttribute('selected', 'selected'); sel.appendChild(op); });
-    sel.onchange = function () { applyStyle(el, jsProp, cssName(jsProp), sel.value); };
+    sel.onchange = function () { editSelection(jsProp, cssName(jsProp), sel.value); };
     return h('div', { class: 'row' }, [h('label', { text: label }), sel]);
   }
   function colorRow(label, jsProp, cur, el) {
     var inp = h('input', { type: 'color', value: rgbToHex(cur) });
-    inp.oninput = function () { applyStyle(el, jsProp, cssName(jsProp), inp.value); };
+    inp.oninput = function () { editSelection(jsProp, cssName(jsProp), inp.value); };
     return h('div', { class: 'row' }, [h('label', { text: label }), inp]);
   }
   function rangeRow(label, jsProp, cur, el) {
     var inp = h('input', { type: 'range', min: '0', max: '1', step: '0.05', value: String(isNaN(cur) ? 1 : cur) });
-    inp.oninput = function () { applyStyle(el, jsProp, cssName(jsProp), inp.value); };
+    inp.oninput = function () { editSelection(jsProp, cssName(jsProp), inp.value); };
     return h('div', { class: 'row' }, [h('label', { text: label }), inp]);
   }
   function textRow(label, jsProp, cur, el) {
     var inp = h('input', { type: 'text', value: cur || '' });
-    inp.onchange = function () { applyStyle(el, jsProp, cssName(jsProp), inp.value); };
+    inp.onchange = function () { editSelection(jsProp, cssName(jsProp), inp.value); };
     return h('div', { class: 'row' }, [h('label', { text: label }), inp]);
   }
   function textContentRow(el) {
@@ -798,16 +1158,301 @@
       } else {
         el.appendChild(document.createTextNode(ta.value));
       }
+      var afterHtml = el.innerHTML;
       record({
         kind: 'text', property: 'text', selector: cssPath(el), label: describe(el), el: el,
         from: fromTxt, to: ta.value.trim(),
-        revert: function () { el.innerHTML = beforeHtml; }
+        revert: function () { el.innerHTML = beforeHtml; },
+        reapply: function () { el.innerHTML = afterHtml; }
       });
       reposition();
     };
     return h('div', { class: 'row', style: 'display:block' }, [h('label', { text: 'Content' }), ta]);
   }
   function cssName(jsProp) { return jsProp.replace(/[A-Z]/g, function (m) { return '-' + m.toLowerCase(); }); }
+
+  // ---- chart type conversion -----------------------------------------------
+  // The Type dropdown lists every visual type and lets the user switch between
+  // them with a *smart* conversion: the current spec's encoding is normalized
+  // into abstract roles (categories / measures / series / …) and re-emitted in
+  // the target type's own channel names, so shape-compatible charts convert
+  // (bar↔pie↔funnel↔treemap↔waterfall, chart→kpi/table, …) instead of breaking.
+  // Targets whose required roles can't be satisfied are greyed out with a reason.
+  // The helpers are pure (no DOM / no mutation) so they're unit-testable.
+
+  // BaseSpec-level props safe to carry across a type change (structural /
+  // encoding props are always rebuilt from the normalized shape).
+  var CONVERT_CARRY = ['data', 'transform', 'theme', 'palette', 'title', 'description', 'legend', 'tooltip', 'animation', 'padding', 'background', 'sketch', 'dimensions', 'params', 'highlight', 'filter'];
+
+  function cloneVal(v) { try { return JSON.parse(JSON.stringify(v)); } catch (e) { return v; } }
+  function asField(v) {
+    if (v == null) return null;
+    if (typeof v === 'string') return { field: v };
+    if (typeof v === 'object' && v.field) return { field: v.field, type: v.type, aggregate: v.aggregate, title: v.title };
+    return null;
+  }
+  function isMeasureField(f) { return !!(f && (f.type === 'quantitative' || f.aggregate)); }
+  function isTemporalField(f) { return !!(f && f.type === 'temporal'); }
+
+  // Normalize any chart spec into abstract roles used for convertibility + remap.
+  function shapeOf(spec) {
+    var t = spec && spec.type;
+    var enc = (spec && spec.encoding) || {};
+    var dims = [], measures = [], roles = {};
+    function dim(f) { if (f) dims.push(f); }
+    function meas(f) { if (f) measures.push(f); }
+    var x = asField(enc.x), y = asField(enc.y), color = asField(enc.color), series = asField(enc.series),
+      theta = asField(enc.theta), value = asField(enc.value), stage = asField(enc.stage),
+      source = asField(enc.source), target = asField(enc.target), key = asField(enc.key),
+      size = asField(enc.size), category = asField(enc.category), group = asField(enc.group),
+      date = asField(enc.date);
+    switch (t) {
+      case 'bar': case 'line': case 'area': case 'box':
+        dim(x); meas(y);
+        if (series) { roles.series = series; dim(series); }
+        if (isTemporalField(x)) roles.date = x;
+        break;
+      case 'scatter':
+        if (isMeasureField(x)) meas(x); else dim(x);
+        meas(y); if (size) meas(size);
+        if (isTemporalField(x)) roles.date = x;
+        break;
+      case 'histogram':
+        meas(x || y);
+        break;
+      case 'combo':
+        dim(x); if (isTemporalField(x)) roles.date = x;
+        var layers = spec.layers || [];
+        for (var li = 0; li < layers.length; li++) { var ly = asField(layers[li] && layers[li].encoding && layers[li].encoding.y); if (ly) meas(ly); }
+        break;
+      case 'pie':
+        dim(color); meas(theta);
+        break;
+      case 'heatmap':
+        dim(x); dim(y); meas(color);
+        break;
+      case 'funnel': case 'waterfall':
+        dim(stage || x); meas(value || y);
+        break;
+      case 'treemap':
+        dim(category || color); meas(value || theta);
+        if (group) { roles.group = group; dim(group); }
+        break;
+      case 'slope':
+        dim(x); meas(y); if (series) { roles.series = series; dim(series); }
+        break;
+      case 'dumbbell':
+        dim(category || x); meas(value || y);
+        if (group) { roles.group = group; dim(group); }
+        break;
+      case 'sankey':
+        if (source) { roles.source = source; dim(source); }
+        if (target) { roles.target = target; dim(target); }
+        meas(value);
+        break;
+      case 'choropleth':
+        if (key) { roles.geoKey = key; dim(key); }
+        meas(color);
+        roles.hasGeo = !!spec.geo;
+        break;
+      case 'calendarHeatmap':
+        if (date) { roles.date = date; dim(date); }
+        meas(color || value);
+        break;
+      case 'kpi': case 'gauge': case 'bullet':
+        meas(asField(spec.value) || value || y);
+        break;
+      case 'table':
+        var cols = spec.columns || [];
+        for (var ci = 0; ci < cols.length; ci++) { var cf = asField(cols[ci]); if (!cf) continue; if (isMeasureField(cf)) meas(cf); else dim(cf); }
+        break;
+      case 'matrix':
+        var rws = spec.rows || [];
+        for (var ri = 0; ri < rws.length; ri++) dim(asField(rws[ri]));
+        var vals = spec.values || [];
+        for (var vi = 0; vi < vals.length; vi++) { var vv = vals[vi]; if (vv && vv.field) meas({ field: vv.field, aggregate: vv.op }); }
+        break;
+      default:
+        dim(x); meas(y || value || theta);
+    }
+    dims = dims.filter(Boolean); measures = measures.filter(Boolean);
+    return {
+      type: t, dims: dims, measures: measures, roles: roles,
+      dimCount: dims.length, measCount: measures.length,
+      series: roles.series || null, group: roles.group || null,
+      source: roles.source || null, target: roles.target || null,
+      geoKey: roles.geoKey || null, date: roles.date || null, hasGeo: !!roles.hasGeo
+    };
+  }
+
+  // Can `shape` become `target`? → { ok:true } or { ok:false, reason:'…' }.
+  function canConvert(shape, target) {
+    if (!shape || !target) return { ok: false, reason: '' };
+    if (target === shape.type) return { ok: true };
+    var d = shape.dimCount, m = shape.measCount;
+    function need(cond, reason) { return cond ? { ok: true } : { ok: false, reason: reason }; }
+    switch (target) {
+      case 'bar': case 'line': case 'area': case 'box':
+        return need(d >= 1 && m >= 1, 'needs a category and a value');
+      case 'scatter':
+        return need(m >= 1 && (d + m) >= 2, 'needs two numeric fields');
+      case 'histogram':
+        return need(m >= 1, 'needs a numeric field');
+      case 'combo':
+        return need(d >= 1 && m >= 1, 'needs a category and a value');
+      case 'pie': case 'funnel': case 'waterfall': case 'treemap':
+        return need(d >= 1 && m >= 1, 'needs a category and a value');
+      case 'heatmap':
+        return need(d >= 2 && m >= 1, 'needs two categories and a value');
+      case 'slope':
+        return need(m >= 1 && (!!shape.series || d >= 2), 'needs a series (or two categories)');
+      case 'dumbbell':
+        return need(m >= 1 && (!!shape.group || d >= 2), 'needs a group (or two categories)');
+      case 'sankey':
+        return need(m >= 1 && ((!!shape.source && !!shape.target) || d >= 2), 'needs source & target');
+      case 'choropleth':
+        return need(!!shape.hasGeo, 'needs map geometry');
+      case 'calendarHeatmap':
+        return need(m >= 1 && !!shape.date, 'needs a date field');
+      case 'kpi': case 'gauge': case 'bullet':
+        return need(m >= 1, 'needs a numeric value');
+      case 'table':
+        return need((d + m) >= 1, 'needs at least one field');
+      case 'matrix':
+        return need(d >= 1 && m >= 1, 'needs a category and a value');
+    }
+    return { ok: true };
+  }
+
+  // Pick a sensible full-scale for a gauge from the data when available (gauge
+  // requires `max`); fall back to 100.
+  function gaugeMax(spec, field) {
+    var data = spec && spec.data;
+    if (Array.isArray(data) && field) {
+      var mx = null;
+      for (var i = 0; i < data.length; i++) { var v = +(data[i] && data[i][field]); if (!isNaN(v)) mx = (mx == null ? v : Math.max(mx, v)); }
+      if (mx != null && mx > 0) { var mag = Math.pow(10, Math.floor(Math.log(mx) / Math.LN10)); return Math.ceil((mx * 1.1) / mag) * mag; }
+    }
+    return 100;
+  }
+
+  // Produce a NEW spec of `target` type, remapping the source's roles into the
+  // target's channel names. Pure (no mutation) so it's unit-testable.
+  function convertSpec(spec, target) {
+    var shape = shapeOf(spec);
+    var out = {};
+    for (var i = 0; i < CONVERT_CARRY.length; i++) { var k = CONVERT_CARRY[i]; if (spec[k] !== undefined) out[k] = cloneVal(spec[k]); }
+    out.type = target;
+    var dim0 = shape.dims[0], dim1 = shape.dims[1], meas0 = shape.measures[0], meas1 = shape.measures[1];
+    var cat = dim0 ? dim0.field : (meas0 ? meas0.field : 'category');
+    var cat2 = dim1 ? dim1.field : null;
+    var measure = meas0 ? meas0.field : (dim0 ? dim0.field : 'value');
+    var measure2 = meas1 ? meas1.field : null;
+    var agg = (meas0 && meas0.aggregate) || 'sum';
+    function F(field) { return { field: field }; }
+    switch (target) {
+      case 'bar': case 'line': case 'area': case 'box':
+        out.encoding = { x: F(cat), y: F(measure) };
+        if (shape.series) out.encoding.series = F(shape.series.field);
+        break;
+      case 'scatter':
+        out.encoding = { x: F(measure2 || cat), y: F(measure) };
+        break;
+      case 'histogram':
+        out.encoding = { x: F(measure) };
+        break;
+      case 'combo':
+        out.encoding = { x: F(cat) };
+        out.layers = [{ mark: 'bar', encoding: { y: F(measure) } }];
+        if (measure2) out.layers.push({ mark: 'line', encoding: { y: F(measure2) }, axis: 'right' });
+        break;
+      case 'pie':
+        out.encoding = { theta: F(measure), color: F(cat) };
+        break;
+      case 'funnel': case 'waterfall':
+        out.encoding = { stage: F(cat), value: F(measure) };
+        break;
+      case 'treemap':
+        out.encoding = { category: F(cat), value: F(measure) };
+        if (shape.group) out.encoding.group = F(shape.group.field); else if (cat2) out.encoding.group = F(cat2);
+        break;
+      case 'heatmap':
+        out.encoding = { x: F(cat), y: F(cat2 || cat), color: F(measure) };
+        break;
+      case 'slope':
+        out.encoding = { x: F(cat), y: F(measure), series: F((shape.series && shape.series.field) || cat2 || cat) };
+        break;
+      case 'dumbbell':
+        out.encoding = { category: F(cat), value: F(measure), group: F((shape.group && shape.group.field) || cat2 || cat) };
+        break;
+      case 'sankey':
+        out.encoding = { source: F((shape.source && shape.source.field) || cat), target: F((shape.target && shape.target.field) || cat2 || cat), value: F(measure) };
+        break;
+      case 'choropleth':
+        out.encoding = { key: F((shape.geoKey && shape.geoKey.field) || cat), color: F(measure) };
+        if (spec.geo) out.geo = cloneVal(spec.geo);
+        if (spec.featureId) out.featureId = spec.featureId;
+        if (spec.projection) out.projection = spec.projection;
+        break;
+      case 'calendarHeatmap':
+        out.encoding = { date: F((shape.date && shape.date.field) || cat), color: F(measure) };
+        break;
+      case 'kpi':
+        out.value = { field: measure, aggregate: agg };
+        if (meas0 && meas0.title) out.label = meas0.title;
+        break;
+      case 'gauge':
+        out.value = { field: measure, aggregate: agg };
+        out.max = gaugeMax(spec, measure);
+        break;
+      case 'bullet':
+        out.value = { field: measure, aggregate: agg };
+        break;
+      case 'table':
+        var tcols = shape.dims.concat(shape.measures).map(function (f) { var c = { field: f.field }; if (f.title) c.title = f.title; return c; });
+        if (tcols.length) out.columns = tcols;
+        break;
+      case 'matrix':
+        out.rows = [cat];
+        out.values = [{ field: measure, op: agg }];
+        if (cat2) out.columns = [cat2];
+        break;
+    }
+    return out;
+  }
+
+  // Type row: <select> with per-family <optgroup>s; non-convertible targets are
+  // disabled (greyed) with the reason appended. Choosing an enabled type applies
+  // convertSpec through the recorded `apply()` (unlike debug, a type change is a
+  // real, undoable edit that belongs in the change-set).
+  function chartTypeRow(spec, apply) {
+    var shape = shapeOf(spec);
+    var sel = h('select');
+    for (var gi = 0; gi < TYPE_GROUPS.length; gi++) {
+      var og = h('optgroup'); og.setAttribute('label', TYPE_GROUPS[gi][0]);
+      var list = TYPE_GROUPS[gi][1];
+      for (var ti = 0; ti < list.length; ti++) {
+        var ty = list[ti], res = canConvert(shape, ty), label = typeLabel(ty);
+        if (!res.ok && res.reason) label += ' · ' + res.reason;
+        var op = h('option', { value: ty, text: label });
+        if (!res.ok) op.setAttribute('disabled', 'disabled');
+        if (ty === spec.type) op.setAttribute('selected', 'selected');
+        og.appendChild(op);
+      }
+      sel.appendChild(og);
+    }
+    sel.onchange = function () {
+      var v = sel.value;
+      if (v === spec.type) return;
+      if (!canConvert(shape, v).ok) { sel.value = spec.type; return; }
+      apply(function (s) {
+        var conv = convertSpec(s, v), kk;
+        for (kk in s) { if (Object.prototype.hasOwnProperty.call(s, kk)) delete s[kk]; }
+        for (kk in conv) { if (Object.prototype.hasOwnProperty.call(conv, kk)) s[kk] = conv[kk]; }
+      });
+    };
+    return h('div', { class: 'row' }, [h('label', { text: 'Type' }), sel]);
+  }
 
   // ---- Graphein spec editor (inspector section) ----------------------------
   function chartGroup(chart) {
@@ -818,13 +1463,15 @@
     var beforeAttr = chart.getAttribute('data-graphein-spec');
     function apply(mut) {
       mut(spec); writeSpec(chart, spec);
+      var afterAttr = chart.getAttribute('data-graphein-spec');
       record({
         kind: 'chart', property: 'spec', selector: cssPath(chart), label: describe(chart), el: chart,
         before: stripData(before), after: stripData(spec),
-        revert: function () { if (beforeAttr != null) chart.setAttribute('data-graphein-spec', beforeAttr); }
+        revert: function () { if (beforeAttr != null) chart.setAttribute('data-graphein-spec', beforeAttr); },
+        reapply: function () { if (afterAttr != null) chart.setAttribute('data-graphein-spec', afterAttr); }
       });
     }
-    g.appendChild(gsel('Type', CHART_TYPES, spec.type, function (v) { apply(function (s) { s.type = v; }); }));
+    g.appendChild(chartTypeRow(spec, apply));
     var titleVal = (spec.title && typeof spec.title === 'object') ? (spec.title.text || '') : (spec.title || '');
     var ti = h('input', { type: 'text', value: titleVal });
     ti.oninput = function () { apply(function (s) { if (s.title && typeof s.title === 'object') s.title.text = ti.value; else s.title = ti.value; }); };
@@ -834,6 +1481,10 @@
     g.appendChild(gsel('Sort', ['none', 'ascending', 'descending'], spec.sort || 'none', function (v) { apply(function (s) { s.sort = v; }); }));
     var curFmt = (spec.encoding && spec.encoding.y && spec.encoding.y.format) || '';
     g.appendChild(gselPairs('Value fmt', FORMATS, curFmt, function (v) { apply(function (s) { s.encoding = s.encoding || {}; s.encoding.y = s.encoding.y || {}; if (v) s.encoding.y.format = v; else delete s.encoding.y.format; }); }));
+    // Transient full-screen Graphein debug inspection (never recorded / sent to chat).
+    var dbgBtn = h('button', { class: 'gbtn', text: 'Open debug view' });
+    dbgBtn.onclick = function (e) { e.stopPropagation(); enterDebugView(chart); };
+    g.appendChild(h('div', { class: 'row' }, [h('label', { text: 'Debug' }), dbgBtn]));
     return g;
   }
   function gsel(label, opts, cur, on) {
@@ -856,7 +1507,7 @@
   var HANDLE_DIRS = [['e', 1, 0.5, 'ew-resize'], ['s', 0.5, 1, 'ns-resize'], ['se', 1, 1, 'nwse-resize']];
   function hideHandles() { elHandles.style.display = 'none'; elHandles.textContent = ''; }
   function showHandles() {
-    if (!state.selected) return;
+    if (!state.selected || (state.selection && state.selection.length > 1)) { hideHandles(); return; }
     elHandles.textContent = ''; elHandles.style.display = 'block';
     HANDLE_DIRS.forEach(function (d) {
       var hd = h('div', { class: 'hnd' });
@@ -880,11 +1531,37 @@
     elBadges.appendChild(b);
   }
 
+  // ---- smart guides (snap resized edges to sibling/parent edges + centers) --
+  function collectSnapLines(el, exclude) {
+    var xs = [], ys = [];
+    function add(rect) { if (!rect) return; xs.push(rect.left, rect.right, (rect.left + rect.right) / 2); ys.push(rect.top, rect.bottom, (rect.top + rect.bottom) / 2); }
+    var p = el.parentElement;
+    if (p) add(p.getBoundingClientRect());
+    var sibs = p ? p.children : [];
+    for (var i = 0; i < sibs.length; i++) { if (sibs[i] !== el && !isOurs(sibs[i]) && !(exclude && exclude.indexOf(sibs[i]) >= 0)) add(sibs[i].getBoundingClientRect()); }
+    return { xs: xs, ys: ys };
+  }
+  function nearestLine(val, lines, thr) {
+    var best = null, bd = thr;
+    for (var i = 0; i < lines.length; i++) { var d = Math.abs(lines[i] - val); if (d < bd) { bd = d; best = lines[i]; } }
+    return best;
+  }
+  function clearGuides() { if (elGuides) elGuides.textContent = ''; }
+  function drawGuides(guides) {
+    if (!elGuides) return;
+    elGuides.textContent = '';
+    for (var i = 0; i < guides.length; i++) {
+      var gd = guides[i], line = h('div', { class: 'guide' + (gd.x != null ? ' v' : ' hz') });
+      if (gd.x != null) line.style.left = Math.round(gd.x) + 'px';
+      else line.style.top = Math.round(gd.y) + 'px';
+      elGuides.appendChild(line);
+    }
+  }
   function startResize(e, dir) {
     e.preventDefault(); e.stopPropagation();
     var el = state.selected; if (!el) return;
     var r = el.getBoundingClientRect();
-    state.resizing = { el: el, dir: dir[0], startX: e.clientX, startY: e.clientY, w0: r.width, h0: r.height, from: Math.round(r.width) + '×' + Math.round(r.height), beforeW: el.style.width, beforeH: el.style.height };
+    state.resizing = { el: el, dir: dir[0], startX: e.clientX, startY: e.clientY, w0: r.width, h0: r.height, left: r.left, top: r.top, from: Math.round(r.width) + '×' + Math.round(r.height), beforeW: el.style.width, beforeH: el.style.height, snapLines: collectSnapLines(el) };
     window.addEventListener('pointermove', onResizeMove, true);
     window.addEventListener('pointerup', onResizeUp, true);
   }
@@ -896,6 +1573,13 @@
     if (g.dir.indexOf('w') >= 0) w = g.w0 - dx;
     if (g.dir.indexOf('s') >= 0) ht = g.h0 + dy;
     if (g.dir.indexOf('n') >= 0) ht = g.h0 - dy;
+    // Snap the moving edge(s) to nearby sibling/parent lines + draw guides.
+    if (snapOn && !e.ctrlKey && !e.metaKey && g.snapLines) {
+      var guides = [];
+      if (g.dir.indexOf('e') >= 0) { var sx = nearestLine(g.left + w, g.snapLines.xs, SNAP_THR); if (sx != null) { w = sx - g.left; guides.push({ x: sx }); } }
+      if (g.dir.indexOf('s') >= 0) { var sy = nearestLine(g.top + ht, g.snapLines.ys, SNAP_THR); if (sy != null) { ht = sy - g.top; guides.push({ y: sy }); } }
+      drawGuides(guides);
+    } else clearGuides();
     g.el.style.width = Math.max(8, Math.round(w)) + 'px';
     g.el.style.height = Math.max(8, Math.round(ht)) + 'px';
     reposition();
@@ -904,53 +1588,124 @@
     var g = state.resizing; if (!g) return;
     window.removeEventListener('pointermove', onResizeMove, true);
     window.removeEventListener('pointerup', onResizeUp, true);
+    clearGuides();
     var r = g.el.getBoundingClientRect();
     if (isPlaceholder(g.el)) { state.resizing = null; renderInspector(); return; } // size captured by the insert entry
-    record({ kind: 'resize', property: 'size', selector: cssPath(g.el), label: describe(g.el), el: g.el, from: g.from, to: Math.round(r.width) + '×' + Math.round(r.height), revert: function () { g.el.style.width = g.beforeW; g.el.style.height = g.beforeH; } });
+    var afterW = g.el.style.width, afterH = g.el.style.height;
+    record({ kind: 'resize', property: 'size', selector: cssPath(g.el), label: describe(g.el), el: g.el, from: g.from, to: Math.round(r.width) + '×' + Math.round(r.height), revert: function () { g.el.style.width = g.beforeW; g.el.style.height = g.beforeH; }, reapply: function () { g.el.style.width = afterW; g.el.style.height = afterH; } });
     state.resizing = null; renderInspector();
   }
 
-  // ---- move (drag threshold) -----------------------------------------------
-  function beginPendingMove(e, el, downTarget) {
-    state.move = { el: el, downTarget: downTarget, startX: e.clientX, startY: e.clientY, active: false, origParent: el.parentNode, origNext: el.nextElementSibling, origOpacity: el.style.opacity };
+  // ---- move (freeform drag: live translate + alignment guides) -------------
+  // Dragging repositions the element(s) with a live `transform: translate()` that
+  // follows the cursor and snaps to nearby sibling/parent edges + centers (shared
+  // guide system; magnet toggle, Ctrl/Cmd bypasses). The offset is kept on release
+  // and recorded as a revertable `move`; Esc (or disabling) restores it. A multi-
+  // selection drags every selected element by the same delta (snapping on the
+  // grabbed one). A plain click (no drag) on a child drills in.
+  function parseTranslate(t) { var m = /translate\(\s*(-?\d+(?:\.\d+)?)px\s*,\s*(-?\d+(?:\.\d+)?)px\s*\)/.exec(t || ''); return m ? { x: Math.round(parseFloat(m[1])), y: Math.round(parseFloat(m[2])) } : { x: 0, y: 0 }; }
+  function stripTranslate(t) { return (t || '').replace(/translate\([^)]*\)/, '').replace(/\s{2,}/g, ' ').trim(); }
+  function beginPendingMove(e, anchorEl, downTarget) {
+    var sel = (state.selection && state.selection.length) ? state.selection.filter(function (x) { return x && x.isConnected; }) : [];
+    if (sel.indexOf(anchorEl) < 0) sel = [anchorEl]; // grabbed outside the selection → move just it
+    var items = sel.map(function (x) {
+      var t0 = parseTranslate(x.style.transform);
+      return { el: x, baseNoT: stripTranslate(x.style.transform), cx0: t0.x, cy0: t0.y, origTransform: x.style.transform, oOpacity: x.style.opacity, oShadow: x.style.boxShadow, oTransition: x.style.transition };
+    });
+    state.move = {
+      el: anchorEl, items: items, anchor: null, downTarget: downTarget,
+      startX: e.clientX, startY: e.clientY, active: false, dx: 0, dy: 0, note: '',
+      startRect: anchorEl.getBoundingClientRect(), snapLines: collectSnapLines(anchorEl, sel)
+    };
+    for (var i = 0; i < items.length; i++) if (items[i].el === anchorEl) state.move.anchor = items[i];
     window.addEventListener('pointermove', onMoveMove, true);
     window.addEventListener('pointerup', onMoveUp, true);
+  }
+  function liftMove(g) {
+    for (var i = 0; i < g.items.length; i++) {
+      var el = g.items[i].el;
+      el.style.transition = 'box-shadow .15s ease, opacity .15s ease';
+      el.style.opacity = '0.85';
+      el.style.boxShadow = '0 10px 28px -8px rgba(0,0,0,.45), 0 0 0 1px ' + TEAL + '99';
+    }
+  }
+  function endMoveVisuals(g) {
+    for (var i = 0; i < g.items.length; i++) {
+      var it = g.items[i];
+      it.el.style.opacity = it.oOpacity || ''; it.el.style.boxShadow = it.oShadow || ''; it.el.style.transition = it.oTransition || '';
+    }
+    clearGuides();
+    if (elMoveTip) elMoveTip.style.display = 'none';
+  }
+  function applyMoveTransform(g) {
+    for (var i = 0; i < g.items.length; i++) {
+      var it = g.items[i];
+      it.el.style.transform = (it.baseNoT ? it.baseNoT + ' ' : '') + 'translate(' + (it.cx0 + g.dx) + 'px, ' + (it.cy0 + g.dy) + 'px)';
+    }
+  }
+  function showMoveTip(g) {
+    if (!elMoveTip || !g.anchor) return;
+    var r = g.el.getBoundingClientRect();
+    elMoveTip.textContent = (g.anchor.cx0 + g.dx) + ', ' + (g.anchor.cy0 + g.dy) + ' px' + (g.note ? ' · ' + g.note : '');
+    elMoveTip.style.left = clamp(r.left, 2, window.innerWidth - 130) + 'px';
+    elMoveTip.style.top = clamp(r.top - 22, 2, window.innerHeight - 20) + 'px';
+    elMoveTip.style.display = 'block';
   }
   function onMoveMove(e) {
     var g = state.move; if (!g || !state.enabled) return;
     if (e.buttons === 0) { onMoveUp(); return; }
     if (!g.active) {
       if (Math.abs(e.clientX - g.startX) < 4 && Math.abs(e.clientY - g.startY) < 4) return;
-      g.active = true; g.el.style.opacity = '0.5'; showHint('Drag to reposition, release to drop');
+      g.active = true; liftMove(g);
+      showHint('Drag to reposition · release to drop · Esc to cancel');
     }
-    g.el.style.pointerEvents = 'none';
-    var under = document.elementFromPoint(e.clientX, e.clientY);
-    g.el.style.pointerEvents = '';
-    if (!under || isOurs(under) || under === g.el || g.el.contains(under)) { elInsert.style.display = 'none'; g.drop = null; return; }
-    var r = under.getBoundingClientRect(), before = e.clientY < r.top + r.height / 2;
-    g.drop = { ref: under, before: before };
-    elInsert.style.display = 'block'; elInsert.style.height = '3px';
-    elInsert.style.left = r.left + 'px'; elInsert.style.width = r.width + 'px';
-    elInsert.style.top = (before ? r.top - 1 : r.bottom - 2) + 'px';
+    var dx = e.clientX - g.startX, dy = e.clientY - g.startY, note = '';
+    // Snap the moving box's edges/centers to nearby lines + draw the guides.
+    if (snapOn && !e.ctrlKey && !e.metaKey && g.snapLines) {
+      var guides = [], r = g.startRect;
+      var xC = [['left', r.left], ['right', r.right], ['center', (r.left + r.right) / 2]], bx = null;
+      for (var xi = 0; xi < xC.length; xi++) { var lx = nearestLine(xC[xi][1] + dx, g.snapLines.xs, SNAP_THR); if (lx != null) { var dxd = Math.abs(lx - (xC[xi][1] + dx)); if (!bx || dxd < bx.d) bx = { adj: lx - (xC[xi][1] + dx), line: lx, label: xC[xi][0], d: dxd }; } }
+      if (bx) { dx += bx.adj; guides.push({ x: bx.line }); note += bx.label; }
+      var yC = [['top', r.top], ['bottom', r.bottom], ['middle', (r.top + r.bottom) / 2]], by = null;
+      for (var yi = 0; yi < yC.length; yi++) { var ly = nearestLine(yC[yi][1] + dy, g.snapLines.ys, SNAP_THR); if (ly != null) { var dyd = Math.abs(ly - (yC[yi][1] + dy)); if (!by || dyd < by.d) by = { adj: ly - (yC[yi][1] + dy), line: ly, label: yC[yi][0], d: dyd }; } }
+      if (by) { dy += by.adj; guides.push({ y: by.line }); note += (note ? '+' : '') + by.label; }
+      drawGuides(guides);
+    } else clearGuides();
+    g.dx = Math.round(dx); g.dy = Math.round(dy); g.note = note;
+    applyMoveTransform(g);
+    reposition();
+    showMoveTip(g);
+  }
+  function cancelMove() {
+    var g = state.move; if (!g) return;
+    window.removeEventListener('pointermove', onMoveMove, true);
+    window.removeEventListener('pointerup', onMoveUp, true);
+    if (g.active) { for (var i = 0; i < g.items.length; i++) g.items[i].el.style.transform = g.items[i].origTransform; endMoveVisuals(g); reposition(); }
+    state.move = null;
   }
   function onMoveUp() {
     var g = state.move; if (!g) return;
     window.removeEventListener('pointermove', onMoveMove, true);
     window.removeEventListener('pointerup', onMoveUp, true);
-    g.el.style.opacity = g.origOpacity || ''; elInsert.style.display = 'none'; showHint('');
     state.move = null;
-    if (g.active && g.drop && g.drop.ref && g.drop.ref.parentNode) {
-      var ref = g.drop.ref, parent = ref.parentNode, movedEl = g.el, origParent = g.origParent, origNext = g.origNext;
-      if (g.drop.before) parent.insertBefore(movedEl, ref); else parent.insertBefore(movedEl, ref.nextSibling);
-      if (isPlaceholder(movedEl)) { reposition(); return; } // insert entry captures its live position
-      record({
-        kind: 'move', property: 'position', selector: cssPath(movedEl), label: describe(movedEl), el: movedEl,
-        from: 'original position', to: (g.drop.before ? 'before ' : 'after ') + describe(ref),
-        target: { parentSelector: cssPath(parent), refSelector: cssPath(ref), position: g.drop.before ? 'before' : 'after' },
-        revert: function () { if (origNext && origNext.parentNode === origParent) origParent.insertBefore(movedEl, origNext); else if (origParent) origParent.appendChild(movedEl); }
-      });
-      reposition();
-    } else if (!g.active && g.downTarget && g.downTarget !== state.selected && !isOurs(g.downTarget) && g.downTarget.isConnected) {
+    if (g.active) {
+      endMoveVisuals(g);
+      if (g.dx || g.dy) {
+        for (var i = 0; i < g.items.length; i++) {
+          if (isPlaceholder(g.items[i].el)) continue; // insert entry captures its live position
+          (function (it) {
+            var afterT = it.el.style.transform, beforeT = it.origTransform;
+            record({
+              kind: 'move', property: 'offset', selector: cssPath(it.el), label: describe(it.el), el: it.el,
+              from: 'original position', to: (it.cx0 + g.dx) + ', ' + (it.cy0 + g.dy) + 'px' + (g.note ? ' (' + g.note + ' aligned)' : ''), after: afterT,
+              revert: function () { it.el.style.transform = beforeT; },
+              reapply: function () { it.el.style.transform = afterT; }
+            });
+          })(g.items[i]);
+        }
+        reposition();
+      }
+    } else if (g.downTarget && g.downTarget !== state.selected && !isOurs(g.downTarget) && g.downTarget.isConnected) {
       // A click (no drag) on a child of the selection drills in and selects it.
       select(chartRoot(g.downTarget) || g.downTarget);
     }
@@ -958,43 +1713,54 @@
 
   // ---- keyboard nudge ------------------------------------------------------
   function nudge(dx, dy) {
-    var el = state.selected; if (!el) return;
-    var before = state.selInline ? state.selInline.transform : el.style.transform;
+    var sel = (state.selection && state.selection.length) ? state.selection.slice() : (state.selected ? [state.selected] : []);
+    sel.forEach(function (el) { nudgeOne(el, dx, dy); });
+    reposition();
+  }
+  function nudgeOne(el, dx, dy) {
+    if (!el) return;
+    var snap = state.selInlineMap && state.selInlineMap.get(el);
+    var before = snap ? snap.transform : el.style.transform;
     var m = /translate\((-?\d+)px,\s*(-?\d+)px\)/.exec(el.style.transform || '');
     var cx = m ? parseInt(m[1], 10) : 0, cy = m ? parseInt(m[2], 10) : 0;
     cx += dx; cy += dy;
     el.style.transform = (el.style.transform || '').replace(/translate\([^)]*\)/, '').trim() + ' translate(' + cx + 'px, ' + cy + 'px)';
     if (!isPlaceholder(el)) {
+      var afterTransform = el.style.transform;
       record({
-        kind: 'move', property: 'nudge', selector: cssPath(el), label: describe(el), el: el,
-        from: 'original position', to: 'nudged (' + cx + ', ' + cy + ')px',
-        revert: function () { el.style.transform = before; }
+        kind: 'move', property: 'offset', selector: cssPath(el), label: describe(el), el: el,
+        from: 'original position', to: cx + ', ' + cy + 'px',
+        revert: function () { el.style.transform = before; },
+        reapply: function () { el.style.transform = afterTransform; }
       });
     }
-    reposition();
   }
 
   // ---- remove / reset / discard --------------------------------------------
   function removeSelected() {
-    var el = state.selected; if (!el) return;
-    // Removing a placeholder deletes it entirely (undoes the insert).
-    if (isPlaceholder(el)) { var ins = findInsertEntry(el); if (ins) removeEntry(ins); deselect(); return; }
-    var beforeDisplay = el.style.display;
-    el.style.display = 'none';
-    record({ kind: 'remove', property: 'display', selector: cssPath(el), label: describe(el), el: el, from: 'visible', to: 'removed', revert: function () { el.style.display = beforeDisplay; } });
+    var sel = (state.selection && state.selection.length) ? state.selection.slice() : (state.selected ? [state.selected] : []);
+    sel.forEach(function (el) {
+      // Removing a placeholder deletes it entirely (undoes the insert).
+      if (isPlaceholder(el)) { var ins = findInsertEntry(el); if (ins) removeEntry(ins); return; }
+      var beforeDisplay = el.style.display;
+      el.style.display = 'none';
+      record({ kind: 'remove', property: 'display', selector: cssPath(el), label: describe(el), el: el, from: 'visible', to: 'removed', revert: function () { el.style.display = beforeDisplay; }, reapply: function () { el.style.display = 'none'; } });
+    });
     deselect();
   }
   function resetSelected() {
-    var el = state.selected; if (!el) return;
-    for (var i = state.changes.length - 1; i >= 0; i--) if (state.changes[i].el === el) revertEntry(state.changes[i]);
-    state.changes = state.changes.filter(function (c) { return c.el !== el; });
+    var sel = (state.selection && state.selection.length) ? state.selection.slice() : (state.selected ? [state.selected] : []);
+    if (!sel.length) return;
+    for (var i = state.changes.length - 1; i >= 0; i--) if (sel.indexOf(state.changes[i].el) >= 0) revertEntry(state.changes[i]);
+    state.changes = state.changes.filter(function (c) { return sel.indexOf(c.el) < 0; });
     bump(); renderInspector(); reposition(); renderBar();
   }
   function discardAll() {
     if (state.editingText) commitText();
     for (var i = state.changes.length - 1; i >= 0; i--) revertEntry(state.changes[i]);
-    state.changes = [];
+    state.changes = []; state.redo = [];
     deselect(); clearPins(); clearDrawings();
+    if (elChanges) elChanges.style.display = 'none';
     bump(); reposition(); renderBar();
   }
 
@@ -1013,7 +1779,8 @@
     // hand-off), so don't record a separate text change for them.
     if (!isPlaceholder(el) && (el.textContent || '') !== t.from) {
       var beforeHtml = t.html;
-      record({ kind: 'text', property: 'text', selector: cssPath(el), label: describe(el), el: el, from: t.from.trim(), to: (el.textContent || '').trim(), revert: function () { el.innerHTML = beforeHtml; } });
+      var afterHtml = el.innerHTML;
+      record({ kind: 'text', property: 'text', selector: cssPath(el), label: describe(el), el: el, from: t.from.trim(), to: (el.textContent || '').trim(), revert: function () { el.innerHTML = beforeHtml; }, reapply: function () { el.innerHTML = afterHtml; } });
     }
     showHint('');
   }
@@ -1185,7 +1952,7 @@
   // poll drains the request, generates the HTML, and calls applyGenerated).
   function requestAiGenerate(ph, description) {
     var desc = (description || '').trim();
-    if (!ph || !desc) { showHint('Describe the component first'); return; }
+    if (!ph || !desc) { showHint('Describe the component first', 'error'); return; }
     ph.setAttribute('data-rayfin-desc', desc);
     var id = ph.getAttribute('data-rayfin-ph-id');
     var r = ph.getBoundingClientRect();
@@ -1196,7 +1963,7 @@
     ph.classList.add('__rf_gen');
     ph.innerHTML = '<span class="__rf_grid"></span><span class="__rf_gscan"></span>' +
       '<span class="__rf_glab"><span class="__rf_gspark">✦</span><span>Building<span class="__rf_gdots"></span></span></span>';
-    state.aiRequest = { id: id, description: desc, width: Math.max(1, Math.round(r.width)), height: Math.max(1, Math.round(r.height)), model: state.aiModel || undefined };
+    state.aiRequest = { id: id, description: desc, width: Math.max(1, Math.round(r.width)), height: Math.max(1, Math.round(r.height)), model: selectedModel() };
     bump();
     renderInspector();
   }
@@ -1215,7 +1982,7 @@
       // Failure — return to the describe state.
       ph.setAttribute('style', PH_EMPTY + sz);
       ph.textContent = phDesc(ph) || 'New component';
-      showHint('Couldn’t generate — try a different description');
+      showHint('Couldn’t generate — try a different description', 'error');
       if (state.selected === ph) renderInspector();
       bump();
       return;
@@ -1229,6 +1996,178 @@
     if (entry) entry.generatedHtml = clean;
     bump();
     if (state.selected === ph) { renderInspector(); reposition(); }
+  }
+
+  // ---- Edit with AI: restyle any element -----------------------------------
+  // CSS properties the controller will apply from a model restyle patch (mirrors
+  // the Rust whitelist — defense-in-depth in case the contract drifts).
+  var RESTYLE_ALLOWED = {
+    'color': 1, 'background': 1, 'background-color': 1, 'background-image': 1, 'border': 1,
+    'border-color': 1, 'border-width': 1, 'border-style': 1, 'border-radius': 1, 'padding': 1,
+    'padding-top': 1, 'padding-right': 1, 'padding-bottom': 1, 'padding-left': 1, 'margin': 1,
+    'margin-top': 1, 'margin-right': 1, 'margin-bottom': 1, 'margin-left': 1, 'font-size': 1,
+    'font-weight': 1, 'font-style': 1, 'line-height': 1, 'letter-spacing': 1, 'text-align': 1,
+    'text-transform': 1, 'text-decoration': 1, 'opacity': 1, 'box-shadow': 1, 'width': 1,
+    'height': 1, 'min-width': 1, 'min-height': 1, 'max-width': 1, 'max-height': 1, 'display': 1,
+    'gap': 1, 'align-items': 1, 'justify-content': 1, 'flex-direction': 1
+  };
+  // Current styles sent to the model as context (compact).
+  var RESTYLE_SNAPSHOT = ['color', 'background-color', 'font-size', 'font-weight', 'line-height', 'text-align', 'padding', 'margin', 'border', 'border-radius', 'opacity', 'display', 'width', 'height'];
+
+  function restyleContext(el) {
+    var cs = getComputedStyle(el), styles = {};
+    for (var i = 0; i < RESTYLE_SNAPSHOT.length; i++) {
+      var p = RESTYLE_SNAPSHOT[i], v = cs.getPropertyValue(p);
+      if (v) styles[p] = v.trim();
+    }
+    var chart = chartRoot(el);
+    // Notable descendants the model can target via `rules` (headings, buttons,
+    // text, media, or anything with a class) — capped + compact.
+    var children = [];
+    if (!chart) {
+      var kids = el.querySelectorAll('*');
+      for (var ki = 0; ki < kids.length && children.length < 40; ki++) {
+        var k = kids[ki];
+        if (isOurs(k) || !k.tagName) continue;
+        var ktag = k.tagName.toLowerCase();
+        if (ktag === 'script' || ktag === 'style') continue;
+        var hasClass = typeof k.className === 'string' && k.className.trim();
+        var notable = /^(h[1-6]|button|a|p|span|label|input|textarea|img|svg|li|th|td|strong|em|small)$/.test(ktag) || hasClass;
+        if (!notable) continue;
+        children.push({ tag: ktag, classes: hasClass ? k.className.trim() : undefined, text: shortText(k) || undefined });
+      }
+    }
+    return {
+      tag: el.tagName.toLowerCase(),
+      text: shortText(el) || undefined,
+      classes: (typeof el.className === 'string' && el.className.trim()) ? el.className.trim() : undefined,
+      component: componentHint(el) || undefined,
+      styles: styles,
+      isChart: !!chart,
+      chartType: chart ? (chart.getAttribute('data-graphein-type') || undefined) : undefined,
+      spec: chart ? stripData(readSpec(chart)) : undefined,
+      children: children.length ? children : undefined
+    };
+  }
+  var editSeq = 0;
+  function editElById(id) { try { return document.querySelector('[data-rayfin-edit-id="' + id + '"]'); } catch (e) { return null; } }
+
+  // Queue an "Edit with AI" request for the host poll (drainAiEdit →
+  // restyleElement → applyRestyle). Tags the element with a stable id and a busy
+  // marker so the card shows "Applying…" and we can target it when the patch lands.
+  function requestAiEdit(el, description) {
+    var desc = (description || '').trim();
+    if (!el || !desc) { showHint('Describe the change first', 'error'); return; }
+    if (el.getAttribute('data-rayfin-editing') === '1') return;
+    var id = el.getAttribute('data-rayfin-edit-id');
+    if (!id) { id = 'e' + (++editSeq) + '_' + Date.now(); el.setAttribute('data-rayfin-edit-id', id); }
+    el.setAttribute('data-rayfin-editing', '1');
+    state.aiEditQueue.push({ id: id, description: desc, model: selectedModel(), context: restyleContext(el) });
+    bump();
+    if (state.selected === el) renderInspector();
+  }
+  // Enqueue an "Edit with AI" for the current selection. For a multi-selection we
+  // send ONE request (the primary's context) and apply the resulting patch to
+  // EVERY selected element, so "make them the same X" is consistent (independent
+  // per-element requests can't agree on "the same"). All selected elements animate.
+  function requestAiEditSelection(description) {
+    var desc = (description || '').trim();
+    if (!desc) { showHint('Describe the change first', 'error'); return; }
+    var sel = (state.selection && state.selection.length) ? state.selection.slice() : (state.selected ? [state.selected] : []);
+    sel = sel.filter(function (el) { return el && el.isConnected && el.getAttribute('data-rayfin-editing') !== '1'; });
+    if (!sel.length) return;
+    var ids = [];
+    sel.forEach(function (el) {
+      var id = el.getAttribute('data-rayfin-edit-id');
+      if (!id) { id = 'e' + (++editSeq) + '_' + Date.now() + '_' + ids.length; el.setAttribute('data-rayfin-edit-id', id); }
+      el.setAttribute('data-rayfin-editing', '1');
+      ids.push(id);
+    });
+    var primary = (state.selected && sel.indexOf(state.selected) >= 0) ? state.selected : sel[0];
+    state.aiEditQueue.push({ id: ids[0], ids: ids, description: desc, model: selectedModel(), context: restyleContext(primary) });
+    bump();
+    renderInspector();
+  }
+
+  // Apply one whitelisted inline-style change to `el` and record it (revert
+  // restores the element's pre-edit inline value). Independent of the current
+  // selection so it stays correct if the user re-selected during generation.
+  function applyRestyleStyle(el, cssProp, jsProp, value) {
+    var before = el.style[jsProp];
+    el.style[jsProp] = value;
+    record({
+      kind: 'style', property: cssProp, selector: cssPath(el), label: describe(el), el: el,
+      from: undefined, to: value,
+      revert: function () { el.style[jsProp] = before; },
+      reapply: function () { el.style[jsProp] = value; }
+    });
+  }
+  function deepMerge(t, s) {
+    for (var k in s) {
+      if (s[k] && typeof s[k] === 'object' && !Array.isArray(s[k]) && t[k] && typeof t[k] === 'object' && !Array.isArray(t[k])) deepMerge(t[k], s[k]);
+      else t[k] = s[k];
+    }
+    return t;
+  }
+  function applyChartPatch(chart, patch) {
+    var spec = readSpec(chart);
+    if (!spec || !patch || typeof patch !== 'object') return;
+    var before = JSON.parse(JSON.stringify(spec));
+    var beforeAttr = chart.getAttribute('data-graphein-spec');
+    var p = {}; for (var k in patch) if (k !== 'data') p[k] = patch[k];
+    deepMerge(spec, p); writeSpec(chart, spec);
+    var afterAttr = chart.getAttribute('data-graphein-spec');
+    record({
+      kind: 'chart', property: 'spec', selector: cssPath(chart), label: describe(chart), el: chart,
+      before: stripData(before), after: stripData(spec),
+      revert: function () { if (beforeAttr != null) chart.setAttribute('data-graphein-spec', beforeAttr); },
+      reapply: function () { if (afterAttr != null) chart.setAttribute('data-graphein-spec', afterAttr); }
+    });
+  }
+
+  // Apply the model's restyle patch (whitelisted inline CSS + optional Graphein
+  // spec patch) to the tagged element as revertable change-set entries. An empty
+  // patch (failure) just clears the busy state.
+  function applyRestyle(id, patch) {
+    var el = editElById(id);
+    if (!el) return;
+    el.removeAttribute('data-rayfin-editing');
+    var applied = 0, styles = patch && patch.styles;
+    if (styles) {
+      for (var cssProp in styles) {
+        var key = String(cssProp).toLowerCase();
+        if (!RESTYLE_ALLOWED[key]) continue;
+        var val = String(styles[cssProp]); if (!val) continue;
+        var jsProp = key.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); });
+        applyRestyleStyle(el, key, jsProp, val); applied++;
+      }
+    }
+    if (patch && patch.graphein && chartRoot(el)) { applyChartPatch(chartRoot(el), patch.graphein); applied++; }
+    // Descendant rules — apply whitelisted styles to elements matching each
+    // (element-relative) selector inside the selection, capped for safety.
+    if (patch && patch.rules && patch.rules.length) {
+      for (var ri = 0; ri < patch.rules.length; ri++) {
+        var rule = patch.rules[ri];
+        if (!rule || !rule.selector || !rule.styles) continue;
+        var targets;
+        try { targets = el.querySelectorAll(rule.selector); } catch (e) { continue; }
+        for (var ti = 0; ti < targets.length && ti < 60; ti++) {
+          var tEl = targets[ti];
+          if (isOurs(tEl)) continue;
+          for (var rp in rule.styles) {
+            var rk = String(rp).toLowerCase();
+            if (!RESTYLE_ALLOWED[rk]) continue;
+            var rv = String(rule.styles[rp]); if (!rv) continue;
+            applyRestyleStyle(tEl, rk, rk.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); }), rv);
+            applied++;
+          }
+        }
+      }
+    }
+    if (!applied) showHint('Couldn’t apply the change — try rephrasing', 'error');
+    else el.removeAttribute('data-rayfin-edit-desc'); // success → clear the saved prompt
+    if (state.selected === el) renderInspector();
+    reposition(); bump();
   }
 
   // DOM-based sanitizer for model-generated markup before it's injected into the
@@ -1277,20 +2216,42 @@
   }
 
   // ---- handoff -------------------------------------------------------------
-  var markers = [];
-  function clearMarkers() { for (var i = 0; i < markers.length; i++) markers[i].remove(); markers = []; }
-  function drawMarkers() {
-    clearMarkers();
-    for (var i = 0; i < state.changes.length; i++) {
-      var c = state.changes[i], anchor = null;
-      if (c.el && c.el.isConnected) { var r = c.el.getBoundingClientRect(); anchor = { x: r.left, y: r.top }; }
-      else if (c.node) { var rb = c.node.getBoundingClientRect(); anchor = { x: rb.left, y: rb.top }; }
-      if (!anchor) continue;
-      var m = h('div', { class: 'marker', text: String(i + 1) });
-      m.style.left = clamp(anchor.x - 6, 2, window.innerWidth - 24) + 'px';
-      m.style.top = clamp(anchor.y - 6, 2, window.innerHeight - 20) + 'px';
-      root.appendChild(m); markers.push(m);
-    }
+
+  // Neutralize design-only visuals before the "Send to chat" screenshot so the
+  // agent reads the real result, not our tooling chrome. We hide the changes
+  // panel, guides and morph overlays, and make inserted placeholders' dashed
+  // "drop-zone" border + tint transparent (kept in the layout, generated content
+  // left visible). We deliberately draw NO numbered markers over the design —
+  // they read as UI badges to the agent; the change-set below carries each item's
+  // selector/text/component for source mapping instead. User annotations that ARE
+  // meant for the agent (comment pins, sketches) are left in. Restored on drain.
+  function stripCaptureAffordances() {
+    if (elChanges) elChanges.style.display = 'none';
+    clearGuides();
+    if (elMorph) { elMorph.textContent = ''; elMorph.style.display = 'none'; }
+    try {
+      var phs = document.querySelectorAll('[data-rayfin-placeholder="1"]');
+      for (var i = 0; i < phs.length; i++) {
+        var ph = phs[i];
+        if (ph.getAttribute('data-rayfin-ph-restore') == null) ph.setAttribute('data-rayfin-ph-restore', ph.getAttribute('style') || '');
+        ph.style.borderColor = 'transparent';
+        ph.style.background = 'transparent';
+        ph.style.boxShadow = 'none';
+        // Not-yet-generated placeholders only hold our teal "New component" hint
+        // (no real element children) — hide that text too so it isn't captured.
+        if (!ph.querySelector('*')) ph.style.color = 'transparent';
+      }
+    } catch (e) {}
+  }
+  function restoreCaptureAffordances() {
+    try {
+      var phs = document.querySelectorAll('[data-rayfin-ph-restore]');
+      for (var i = 0; i < phs.length; i++) {
+        var ph = phs[i], s = ph.getAttribute('data-rayfin-ph-restore');
+        ph.removeAttribute('data-rayfin-ph-restore');
+        if (s != null) ph.setAttribute('style', s);
+      }
+    } catch (e) {}
   }
 
   function beginHandoff() {
@@ -1301,9 +2262,92 @@
     elHover.style.display = 'none'; elLabel.style.display = 'none';
     elToolbar.style.display = 'none'; elInspector.style.display = 'none';
     if (elLegend) elLegend.style.display = 'none';
-    drawMarkers();
+    stripCaptureAffordances(); // keep the screenshot to the clean design result
     state.handoff = { instruction: composeInstruction(), changeCount: state.changes.length };
     bump();
+  }
+
+  // ---- debug view (transient full-screen Graphein inspection) --------------
+  // Graphein 0.17+ replaces a chart with a multi-panel diagnostic when
+  // `debug:true` is set on its spec. We flip that flag on the selected chart
+  // WITHOUT recording it (so it never enters the change-set / "Send to chat"),
+  // blow the chart up to fill the viewport so every panel is readable, and
+  // revert cleanly on Esc / close / when design mode is disabled.
+  function inDebug(node) { var dv = state.debugView; if (!dv) return false; var t = dv.target || dv.el; return !!(t && (node === t || (t.contains && t.contains(node)))); }
+  function hideChromeForDebug() {
+    if (!root) return;
+    state.hoverEl = null;
+    [elHover, elLabel, elSel, elSels, elBadges, elHandles, elMorph, elToolbar, elInspector, elChanges].forEach(function (n) { if (n) n.style.display = 'none'; });
+    if (elLegend) elLegend.style.display = 'none';
+    clearGuides();
+  }
+  function showDebugBar() {
+    if (!root) return;
+    if (state.debugBar) { state.debugBar.style.display = 'flex'; return; }
+    var bar = h('div', { class: 'dbgbar' });
+    bar.appendChild(h('span', { class: 'dbgbar-t', text: 'Debug view' }));
+    var x = h('button', { class: 'dbgbar-x', text: 'Exit (Esc)' });
+    x.onclick = function (e) { e.stopPropagation(); e.preventDefault(); exitDebugView(); };
+    bar.appendChild(x);
+    root.appendChild(bar);
+    state.debugBar = bar;
+  }
+  function hideDebugBar() { if (state.debugBar) { try { state.debugBar.remove(); } catch (e) {} state.debugBar = null; } }
+
+  // Ancestor properties that establish a containing block for position:fixed
+  // (so the fullscreen chart would be trapped inside them) — cleared while in
+  // debug and restored on exit. will-change → 'auto', everything else → 'none'.
+  var DEBUG_NEUTRALIZE = { transform: 'none', perspective: 'none', filter: 'none', 'backdrop-filter': 'none', '-webkit-backdrop-filter': 'none', 'will-change': 'auto', contain: 'none' };
+  var DEBUG_FS = { position: 'fixed', left: '0', top: '0', right: '0', bottom: '0', width: '100vw', height: '100vh', 'max-width': 'none', 'max-height': 'none', 'min-width': '0', 'min-height': '0', margin: '0', padding: '0', 'box-sizing': 'border-box', 'z-index': '2147483630', background: PANEL_BG, overflow: 'auto', 'border-radius': '0', transform: 'none', perspective: 'none', filter: 'none', 'backdrop-filter': 'none', '-webkit-backdrop-filter': 'none', 'will-change': 'auto', contain: 'none' };
+  function enterDebugView(chart) {
+    if (!chart || state.debugView) return;
+    var spec = readSpec(chart);
+    if (!spec) return;
+    if (state.editingText) commitText();
+    if (state.selected) deselect();
+    // Graphein sizes the chart from resolveSize(container), where container is the
+    // PARENT of the element carrying data-graphein-spec (surface.root). So we blow up
+    // that parent — not the root itself — otherwise the diagnostic overlay stays
+    // pinned to the chart's original size and only the top-left corner fills.
+    var target = (chart.parentElement && chart.parentElement.nodeType === 1) ? chart.parentElement : chart;
+    var dv = { el: chart, target: target, prevSpecAttr: chart.getAttribute('data-graphein-spec'), prevTargetStyle: target.getAttribute('style'), neutralized: [] };
+    // Clear containing-block props on the target's ancestors so its position:fixed is
+    // viewport-relative (a transformed/filtered/contained ancestor would trap it).
+    var n = target.parentElement, guard = 0, p;
+    while (n && n.nodeType === 1 && guard < 300) {
+      var cs = null; try { cs = getComputedStyle(n); } catch (e) {}
+      if (cs && ((cs.transform && cs.transform !== 'none') || (cs.perspective && cs.perspective !== 'none') || (cs.filter && cs.filter !== 'none') || (cs.backdropFilter && cs.backdropFilter !== 'none') || (cs.willChange && cs.willChange.indexOf('transform') >= 0) || (cs.contain && /paint|layout|strict|content/.test(cs.contain)))) {
+        dv.neutralized.push({ el: n, style: n.getAttribute('style') });
+        for (p in DEBUG_NEUTRALIZE) { try { n.style.setProperty(p, DEBUG_NEUTRALIZE[p], 'important'); } catch (e) {} }
+      }
+      n = n.parentElement; guard++;
+    }
+    for (p in DEBUG_FS) { try { target.style.setProperty(p, DEBUG_FS[p], 'important'); } catch (e) {} }
+    // Flip debug on WITHOUT recording; drop any authored width/height so the view
+    // fills the now-fullscreen container rather than the chart's fixed dimensions.
+    var dbgSpec = cloneVal(spec); dbgSpec.debug = true;
+    if (dbgSpec.dimensions && typeof dbgSpec.dimensions === 'object') { try { delete dbgSpec.dimensions.width; delete dbgSpec.dimensions.height; } catch (e) {} }
+    writeSpec(chart, dbgSpec);
+    state.debugView = dv;
+    hideChromeForDebug();
+    showDebugBar();
+  }
+  function exitDebugView() {
+    var dv = state.debugView;
+    if (!dv) return;
+    state.debugView = null;
+    // Revert the spec (drops debug + restores authored dimensions) → the chart re-renders.
+    try { if (dv.prevSpecAttr != null) dv.el.setAttribute('data-graphein-spec', dv.prevSpecAttr); else dv.el.removeAttribute('data-graphein-spec'); } catch (e) {}
+    // Restore the fullscreen target's inline style, then any neutralized ancestors.
+    try { if (dv.prevTargetStyle != null) dv.target.setAttribute('style', dv.prevTargetStyle); else dv.target.removeAttribute('style'); } catch (e) {}
+    for (var i = 0; i < dv.neutralized.length; i++) { var it = dv.neutralized[i]; try { if (it.style != null) it.el.setAttribute('style', it.style); else it.el.removeAttribute('style'); } catch (e) {} }
+    hideDebugBar();
+    if (root && state.enabled) {
+      if (elToolbar) elToolbar.style.display = 'flex';
+      if (elLegend) elLegend.style.display = '';
+      renderBar();
+      if (dv.el && dv.el.isConnected) select(dv.el);
+    }
   }
 
   function buildChangeSet() {
@@ -1332,21 +2376,21 @@
 
   function composeInstruction() {
     var lines = [];
-    lines.push('I made these visual tweaks directly in the live preview (numbers match the highlighted markers in the attached screenshot). Please apply the equivalent changes to the app’s source:');
+    lines.push('I made these visual tweaks directly in the live preview — the attached screenshot shows the intended result. Please apply the equivalent changes to the app’s source (use each item’s `context`/selector in the change-set below to locate the element):');
     lines.push('');
     for (var i = 0; i < state.changes.length; i++) {
       var c = state.changes[i], n = (i + 1) + '. ';
       if (c.kind === 'chart') lines.push(n + c.label + ' — update the Graphein spec (before→after in the JSON below).');
-      else if (c.kind === 'move') lines.push(n + c.label + ' — move it ' + c.to + (c.target ? ' (inside ' + c.target.parentSelector + ')' : '') + '.');
+      else if (c.kind === 'move') lines.push(n + c.label + ' — reposition it to a translate offset of ' + c.to + ' from its natural layout position.');
       else if (c.kind === 'text') lines.push(n + c.label + ' — change text from “' + c.from + '” to “' + c.to + '”.');
       else if (c.kind === 'resize') lines.push(n + c.label + ' — resize from ' + c.from + ' to ' + c.to + ' px.');
       else if (c.kind === 'remove') lines.push(n + c.label + ' — remove this element.');
       else if (c.kind === 'comment') lines.push(n + 'Note on ' + c.label + ': ' + (c.note || '(no text)'));
-      else if (c.kind === 'annotation') lines.push(n + 'Sketch (' + c.property + ') ' + (c.region ? 'on ' + c.region : '') + ' — see the screenshot marker.');
+      else if (c.kind === 'annotation') lines.push(n + 'Sketch (' + c.property + ') ' + (c.region ? 'on ' + c.region : '') + ' — see the sketch in the screenshot.');
       else if (c.kind === 'insert') {
         var pr = c.el && c.el.isConnected ? c.el.getBoundingClientRect() : null;
         var desc = c.el ? (phDesc(c.el) || shortText(c.el)) : '';
-        lines.push(n + 'Add a NEW UI component ' + insertLoc(c.el) + (pr ? ', ~' + Math.round(pr.width) + '×' + Math.round(pr.height) + 'px' : '') + '. Intended: “' + desc + '”.' + (c.generatedHtml ? ' A generated HTML/CSS starting point is in the change-set (`generatedHtml`) — use it as the base.' : ' (see the placeholder/marker in the screenshot).'));
+        lines.push(n + 'Add a NEW UI component ' + insertLoc(c.el) + (pr ? ', ~' + Math.round(pr.width) + '×' + Math.round(pr.height) + 'px' : '') + '. Intended: “' + desc + '”.' + (c.generatedHtml ? ' A generated HTML/CSS starting point is in the change-set (`generatedHtml`) — use it as the base.' : ' (see the new component in the screenshot).'));
       }
       else lines.push(n + c.label + ' — set ' + c.property + ' to ' + c.to + '.');
     }
@@ -1360,6 +2404,7 @@
 
   // ---- global handlers -----------------------------------------------------
   function onPointerMove(e) {
+    if (state.debugView) { state.hoverEl = null; return; }
     if (state.move || state.resizing || state.editingText) return;
     if (state.tool === 'insert') { showInsertLine(e.clientX, e.clientY); return; }
     if (state.tool !== 'select') return;
@@ -1370,6 +2415,7 @@
   }
 
   function onPointerDown(e) {
+    if (state.debugView) return; // clicks pass through to the full-screen debug panels
     if (isOurs(e.target)) return; // our UI (toolbar/inspector/handles/pins/draw) handles itself
     if (state.tool === 'draw') return; // draw is handled by elDraw's own pointerdown
 
@@ -1387,7 +2433,11 @@
 
     // select mode
     e.preventDefault(); e.stopPropagation();
-    if (state.selected && (el === state.selected || state.selected.contains(target) || state.selected === target)) {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) { toggleSelect(el); return; } // add/remove from multi-selection
+    var inSel = !!(state.selection && state.selection.length && state.selection.indexOf(el) >= 0);
+    if (inSel) {
+      beginPendingMove(e, el, target); // grab any selected element → drag the whole selection
+    } else if (state.selected && (el === state.selected || state.selected.contains(target) || state.selected === target)) {
       beginPendingMove(e, state.selected, target); // drag the selection to move; click a child to drill in
     } else {
       select(el);
@@ -1395,6 +2445,7 @@
   }
 
   function onDblClick(e) {
+    if (state.debugView) return;
     if (state.tool !== 'select' || isOurs(e.target)) return;
     var el = document.elementFromPoint(e.clientX, e.clientY);
     if (el && !isOurs(el) && !chartRoot(el) && el.children.length === 0) { e.preventDefault(); e.stopPropagation(); select(el); startText(el); }
@@ -1402,17 +2453,20 @@
 
   function blockMouse(e) {
     if (isOurs(e.target)) return;
+    if (state.debugView) { if (inDebug(e.target)) return; e.preventDefault(); e.stopPropagation(); return; }
     if (state.editingText) { var t = e.target; if (t && (t === state.editingText.el || (state.editingText.el.contains && state.editingText.el.contains(t)))) return; }
     e.preventDefault(); e.stopPropagation();
   }
 
   function onKey(e) {
+    if (state.debugView) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); exitDebugView(); } return; }
     if (state.editingText) { if (e.key === 'Escape') { e.preventDefault(); commitText(); } return; }
     // Don't hijack keys while typing in one of our own inputs (inspector fields,
     // comment note, chart title) — let them behave natively (incl. Ctrl+Z).
     var ae = root && root.activeElement;
     if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) { if (e.key === 'Escape') ae.blur(); return; }
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); e.stopPropagation(); undoLast(); return; }
+    if ((e.ctrlKey || e.metaKey) && ((e.shiftKey && (e.key === 'z' || e.key === 'Z')) || e.key === 'y' || e.key === 'Y')) { e.preventDefault(); e.stopPropagation(); redoLast(); return; }
     if (state.selected && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); e.stopPropagation(); removeSelected(); return; }
     if (state.selected && e.key.indexOf('Arrow') === 0) {
       e.preventDefault(); e.stopPropagation();
@@ -1421,7 +2475,7 @@
       else if (e.key === 'ArrowUp') nudge(0, -d); else nudge(0, d);
       return;
     }
-    if (e.key === 'Escape') { closeCommentEditor(); if (state.selected) deselect(); else if (state.tool !== 'select') setTool('select'); return; }
+    if (e.key === 'Escape') { if (state.move) { e.preventDefault(); e.stopPropagation(); cancelMove(); return; } closeCommentEditor(); if (state.selected) deselect(); else if (state.tool !== 'select') setTool('select'); return; }
     if (e.key === 'v' || e.key === 'V') setTool('select');
     else if (e.key === 'c' || e.key === 'C') setTool('comment');
     else if (e.key === 'i' || e.key === 'I') setTool('insert');
@@ -1433,9 +2487,69 @@
 
   var MOUSE_EVENTS = ['click', 'mousedown', 'mouseup', 'dblclick', 'contextmenu'];
 
+  // ---- theme adoption ------------------------------------------------------
+  // The tools are Fabricator's own UI, so they mirror FABRICATOR's theme (not the
+  // previewed app): the renderer reads its own --accent / --bg-elev / --text /
+  // --border tokens + the UI zoom (100/110/125/150%) and pushes them in via
+  // `setTheme` (host → controller, re-sent on reload like the model list). Until
+  // one arrives we use the default dark-teal palette. Colors are normalized to
+  // 6-digit hex so the alpha-suffix patterns (e.g. accent + '88') keep working.
+  var DEF_THEME = { accent: TEAL, panel: PANEL_BG, txt: TXT };
+  function hx2(n) { var s = Math.round(clamp(n, 0, 255)).toString(16); return s.length === 1 ? '0' + s : s; }
+  function toRgb(c) {
+    if (!c) return null;
+    c = String(c).trim();
+    if (c[0] === '#') {
+      if (c.length === 4) return [parseInt(c[1] + c[1], 16), parseInt(c[2] + c[2], 16), parseInt(c[3] + c[3], 16)];
+      if (c.length >= 7) return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+      return null;
+    }
+    var m = c.match(/rgba?\(([^)]+)\)/i);
+    if (m) { var p = m[1].split(',').map(function (x) { return parseFloat(x); }); if (p.length >= 3 && !isNaN(p[0])) return [p[0], p[1], p[2]]; }
+    return null;
+  }
+  function toHex(c) { var r = toRgb(c); return r ? '#' + hx2(r[0]) + hx2(r[1]) + hx2(r[2]) : ''; }
+  function mixc(a, b, t) { var ra = toRgb(a), rb = toRgb(b); if (!ra || !rb) return toHex(a) || a; return '#' + hx2(ra[0] + (rb[0] - ra[0]) * t) + hx2(ra[1] + (rb[1] - ra[1]) * t) + hx2(ra[2] + (rb[2] - ra[2]) * t); }
+  function rgbaOf(c, a) { var r = toRgb(c); return r ? 'rgba(' + Math.round(r[0]) + ',' + Math.round(r[1]) + ',' + Math.round(r[2]) + ',' + a + ')' : c; }
+  function lumOf(c) { var r = toRgb(c); return r ? (0.2126 * r[0] + 0.7152 * r[1] + 0.0722 * r[2]) / 255 : 0; }
+  function onColor(c) { return lumOf(c) > 0.55 ? '#04211f' : '#ffffff'; }
+  // Chrome font px = base size * Fabricator UI zoom (themeScale).
+  function fpx(n) { return Math.round(n * (themeScale || 1)) + 'px'; }
+  // Apply a Fabricator theme pushed by the host (accent / surfaces / text /
+  // border / UI scale). Missing fields fall back to defaults; on-accent text is
+  // derived from the accent luminance so it stays readable (teal → dark ink).
+  function applyHostTheme(t) {
+    if (!t) return;
+    var accent = toHex(t.accent) || DEF_THEME.accent;
+    var panel = toHex(t.panel) || DEF_THEME.panel;
+    var txt = toHex(t.txt) || DEF_THEME.txt;
+    TEAL = accent;
+    TEAL_HI = toHex(t.accentHi) || mixc(accent, '#ffffff', 0.2);
+    PANEL_BG = panel;
+    PANEL_BG2 = toHex(t.panel2) || mixc(panel, txt, 0.08);
+    BORDER = toHex(t.border) || mixc(panel, txt, 0.16);
+    TXT = txt;
+    TXT_DIM = toHex(t.txtDim) || mixc(txt, panel, 0.4);
+    PANEL_GLASS = rgbaOf(panel, 0.9);
+    ON_ACCENT = onColor(accent);
+    if (typeof t.scale === 'number' && t.scale > 0) themeScale = clamp(t.scale, 0.8, 2);
+    state.hasTheme = true;
+  }
+  // Repaint the live chrome after a theme/scale change: rebuild the shadow
+  // <style> + the light-DOM animation CSS + the toolbar (icon sizes), then reflow.
+  function rebuildStyle() {
+    if (!state.enabled || !elStyle) return;
+    elStyle.textContent = buildStyle();
+    removeGenStyle(); injectGenStyle();
+    if (elToolbar) buildToolbar();
+    if (state.selected) renderInspector();
+    reposition();
+  }
+
   function enable() {
     if (state.enabled) return;
     state.enabled = true;
+    if (state.theme) applyHostTheme(state.theme);
     buildUI();
     injectGenStyle();
     window.addEventListener('pointermove', onPointerMove, true);
@@ -1452,10 +2566,11 @@
   function disable() {
     if (!state.enabled) return;
     state.enabled = false;
+    exitDebugView(); // revert any transient debug view (restores the chart, no record)
     if (state.editingText) commitText();
     if (state.panelDragUp) { try { state.panelDragUp(); } catch (e) {} state.panelDragUp = null; }
     if (state.resizing) { window.removeEventListener('pointermove', onResizeMove, true); window.removeEventListener('pointerup', onResizeUp, true); state.resizing = null; }
-    if (state.move) { window.removeEventListener('pointermove', onMoveMove, true); window.removeEventListener('pointerup', onMoveUp, true); if (state.move.el) state.move.el.style.opacity = state.move.origOpacity || ''; state.move = null; }
+    if (state.move) { window.removeEventListener('pointermove', onMoveMove, true); window.removeEventListener('pointerup', onMoveUp, true); if (state.move.active) { for (var mi = 0; mi < state.move.items.length; mi++) state.move.items[mi].el.style.transform = state.move.items[mi].origTransform; endMoveVisuals(state.move); } state.move = null; }
     if (state.drawing) { window.removeEventListener('pointermove', onDrawMove, true); window.removeEventListener('pointerup', onDrawUp, true); state.drawing = null; }
     window.removeEventListener('pointermove', onPointerMove, true);
     window.removeEventListener('pointerdown', onPointerDown, true);
@@ -1465,7 +2580,7 @@
     window.removeEventListener('scroll', reposition, true);
     window.removeEventListener('resize', reposition, true);
     if (rafId) cancelAnimationFrame(rafId); rafId = 0;
-    clearMarkers();
+    restoreCaptureAffordances(); // undo any un-drained pre-capture neutralization
     // Reset any placeholder left mid-"building" (its animation style is about to
     // be removed) so it doesn't sit as a static half-state in the app.
     try {
@@ -1477,10 +2592,15 @@
         gp.textContent = gp.getAttribute('data-rayfin-desc') || 'New component';
       }
     } catch (e) {}
+    // Clear any "Edit with AI" busy markers left on elements.
+    try {
+      var eds = document.querySelectorAll('[data-rayfin-editing="1"]');
+      for (var ei = 0; ei < eds.length; ei++) eds[ei].removeAttribute('data-rayfin-editing');
+    } catch (e) {}
     removeGenStyle();
     if (host) host.remove();
     host = root = null;
-    state.selected = null; state.hoverEl = null; state.handoff = null; state.aiRequest = null;
+    state.selected = null; state.hoverEl = null; state.handoff = null; state.aiRequest = null; state.aiEditQueue = [];
   }
 
   // ---- color helper --------------------------------------------------------
@@ -1493,50 +2613,320 @@
     return '#' + x(m[1]) + x(m[2]) + x(m[3]);
   }
 
+  // ---- local (in-frame) controller API -------------------------------------
+  // These operate on THIS frame's live controller. In the direct view and inside
+  // the app iframe they are the real implementation; the relay (top frame of the
+  // embedded view) serves cached copies and forwards mutations to the app iframe.
+  function localPeek() {
+    return {
+      enabled: state.enabled,
+      version: state.version,
+      changeCount: state.changes.length,
+      handoffReady: !!state.handoff,
+      aiPending: !!state.aiRequest,
+      aiEditPending: state.aiEditQueue.length > 0,
+      hasModels: !!(state.models && state.models.length),
+      aiModel: state.aiModel || null,
+      hasTheme: !!state.hasTheme
+    };
+  }
+  function localDrain() {
+    var hf = state.handoff; if (!hf) return null;
+    state.handoff = null;
+    var out = { instruction: hf.instruction, changeCount: hf.changeCount };
+    // Clean up: clear the change-set (entries hold the undo closures) and any
+    // user markup (pins/sketches); restore chrome (host typically disables next).
+    state.changes = []; state.redo = []; clearPins(); clearDrawings();
+    restoreCaptureAffordances(); // undo the pre-capture placeholder/overlay neutralization
+    if (elChanges) elChanges.style.display = 'none';
+    if (elToolbar) { elToolbar.style.display = 'flex'; renderBar(); }
+    bump();
+    return out;
+  }
+  function localDrainAi() {
+    var r = state.aiRequest; if (!r) return null;
+    state.aiRequest = null; bump();
+    return { id: r.id, description: r.description, width: r.width, height: r.height, model: r.model };
+  }
+  function localDrainAiEdit() {
+    var r = state.aiEditQueue.shift(); if (!r) return null;
+    bump();
+    return { id: r.id, ids: r.ids || [r.id], description: r.description, model: r.model, context: r.context };
+  }
+  function localSetModels(list, preferred) {
+    try {
+      state.models = Array.isArray(list) ? list : null;
+      var ids = (state.models || []).map(function (m) { return m.id; });
+      var valid = function (v) { return v === 'auto' || ids.indexOf(v) >= 0; };
+      // 'auto' = the engine picks, and is the default. Honour a persisted
+      // `preferred` when valid; else keep a still-valid pick; else fall back to Auto.
+      if (preferred !== undefined && preferred !== null) {
+        state.aiModel = valid(preferred) ? preferred : 'auto';
+      } else if (!valid(state.aiModel)) {
+        state.aiModel = 'auto';
+      }
+      if (state.selected) renderInspector();
+    } catch (e) {}
+  }
+  // The model id to send to the engine for a generation ('auto' → none/default).
+  function selectedModel() { return (state.aiModel && state.aiModel !== 'auto') ? state.aiModel : undefined; }
+  // Apply a Fabricator theme (accent/surfaces/text/border/scale) and repaint.
+  function localSetTheme(theme) {
+    if (!theme) return;
+    state.theme = theme;
+    applyHostTheme(theme);
+    rebuildStyle();
+  }
+
+  // ---- frame roles + cross-frame relay -------------------------------------
+  // The host only evals in the TOP frame. When the app is embedded in a
+  // cross-origin iframe (Fabric portal), the top frame runs as a `relay` that
+  // bridges the host API to the app frame over postMessage; the app frame runs
+  // the real controller as role `app`. In the direct view the top frame IS the
+  // app (role `direct`) and everything is local.
+  var MSG = 'rayfin-design';
+  var frameRole = 'idle'; // 'idle' | 'direct' | 'relay' | 'app'
+  var isTop = true;
+  try { isTop = (window.top === window.self); } catch (e) { isTop = true; }
+
+  // Relay side (top frame, embedded view): the app frame's window + expected
+  // origin, whether design is active, buffered pre-enable hellos, the mirrored
+  // status cache, and the last models pushed by the host.
+  var relayActive = false, relayAppWin = null, relayAppOrigin = null;
+  var pendingHellos = [];
+  var cache = { status: null, handoff: null, aiRequest: null, aiEdit: null };
+  var relayModels = null, relayPreferred = null, relayTheme = null;
+  var pingTimer = 0, pingCount = 0;
+
+  // App side (the embedded iframe): the top frame's origin, the upward-sync
+  // timer, and whether the relay has acknowledged us (stops the hello retries).
+  var topOrigin = '*', syncTimer = 0, helloAcked = false;
+
+  function postToApp(msg) {
+    try { if (relayAppWin && relayAppOrigin) relayAppWin.postMessage(msg, relayAppOrigin); } catch (e) {}
+  }
+  function sendEnableToApp() {
+    postToApp({ ns: MSG, cmd: 'enable', models: relayModels, preferred: relayPreferred, theme: relayTheme });
+  }
+  function adoptPendingHellos() {
+    for (var i = 0; i < pendingHellos.length; i++) {
+      if (pendingHellos[i].origin === relayAppOrigin) relayAppWin = pendingHellos[i].source;
+    }
+    pendingHellos = [];
+  }
+  // The relay can't reliably enumerate deeply-nested cross-origin frames, so it
+  // also pings its direct children (origin-gated) to prompt a hello — covers the
+  // case where design mode is toggled long after the page settled.
+  function stopPing() { if (pingTimer) { clearTimeout(pingTimer); pingTimer = 0; } }
+  function pingChildrenForApp() {
+    stopPing(); pingCount = 0;
+    (function tick() {
+      if (!relayActive || relayAppWin) { stopPing(); return; }
+      try {
+        var frames = window.frames;
+        for (var i = 0; i < frames.length; i++) {
+          try { frames[i].postMessage({ ns: MSG, cmd: 'ping' }, relayAppOrigin || '*'); } catch (e) {}
+        }
+      } catch (e) {}
+      if (++pingCount >= 10) { stopPing(); return; }
+      pingTimer = setTimeout(tick, 500);
+    })();
+  }
+  function relayPeek() {
+    if (cache.status) return cache.status;
+    return {
+      enabled: relayActive, version: 0, changeCount: 0, handoffReady: false,
+      aiPending: false, hasModels: !!(relayModels && relayModels.length),
+      aiModel: relayPreferred || null, hasTheme: !!relayTheme
+    };
+  }
+  function relayDrain() {
+    var hf = cache.handoff; if (!hf) return null;
+    cache.handoff = null;
+    postToApp({ ns: MSG, cmd: 'drainCommit' });
+    return { instruction: hf.instruction, changeCount: hf.changeCount };
+  }
+  function relayDrainAi() {
+    var r = cache.aiRequest; if (!r) return null;
+    cache.aiRequest = null;
+    postToApp({ ns: MSG, cmd: 'drainAiCommit' });
+    return { id: r.id, description: r.description, width: r.width, height: r.height, model: r.model };
+  }
+  function relayDrainAiEdit() {
+    var r = cache.aiEdit; if (!r) return null;
+    cache.aiEdit = null;
+    postToApp({ ns: MSG, cmd: 'drainAiEditCommit' });
+    return { id: r.id, description: r.description, model: r.model, context: r.context };
+  }
+
+  // Host entry points (called from the TOP frame by `preview_design_set`).
+  function hostEnable(mode, appOrigin) {
+    if (mode === 'relay') {
+      frameRole = 'relay';
+      relayActive = true;
+      relayAppOrigin = appOrigin || null;
+      adoptPendingHellos();
+      if (relayAppWin) sendEnableToApp();
+      pingChildrenForApp();
+    } else {
+      frameRole = 'direct';
+      enable();
+    }
+  }
+  function hostDisable() {
+    if (frameRole === 'relay') {
+      relayActive = false;
+      postToApp({ ns: MSG, cmd: 'disable' });
+      cache = { status: null, handoff: null, aiRequest: null, aiEdit: null };
+      stopPing();
+    } else {
+      disable();
+    }
+  }
+
+  // App side: mirror status up to the relay, and react to relay commands.
+  function postStatus() {
+    if (isTop) return;
+    try {
+      window.top.postMessage({
+        ns: MSG, evt: 'status', status: localPeek(),
+        handoff: state.handoff || null, aiRequest: state.aiRequest || null, aiEdit: state.aiEditQueue[0] || null
+      }, topOrigin || '*');
+    } catch (e) {}
+  }
+  function startAppSync() { stopAppSync(); syncTimer = setInterval(postStatus, 250); }
+  function stopAppSync() { if (syncTimer) { clearInterval(syncTimer); syncTimer = 0; } }
+  function sayHello() {
+    if (isTop) return;
+    try { window.top.postMessage({ ns: MSG, evt: 'hello' }, '*'); } catch (e) {}
+  }
+  function scheduleHellos() {
+    if (isTop) return;
+    [0, 250, 750, 1500, 3000, 6000].forEach(function (ms) {
+      setTimeout(function () { if (!helloAcked) sayHello(); }, ms);
+    });
+    try {
+      document.addEventListener('DOMContentLoaded', function () { if (!helloAcked) sayHello(); });
+      window.addEventListener('load', function () { if (!helloAcked) sayHello(); });
+    } catch (e) {}
+  }
+  function onRelayCommand(d, e) {
+    topOrigin = e.origin || '*';
+    helloAcked = true;
+    switch (d.cmd) {
+      case 'ping': sayHello(); break;
+      case 'enable':
+        frameRole = 'app';
+        if (d.models) localSetModels(d.models, d.preferred);
+        if (d.theme) state.theme = d.theme;
+        enable();
+        startAppSync();
+        postStatus();
+        break;
+      case 'disable': disable(); stopAppSync(); postStatus(); break;
+      case 'setModels': localSetModels(d.list, d.preferred); postStatus(); break;
+      case 'setTheme': localSetTheme(d.theme); postStatus(); break;
+      case 'applyGenerated': applyGenerated(d.id, d.html); break;
+      case 'drainCommit': localDrain(); postStatus(); break;
+      case 'drainAiCommit': localDrainAi(); postStatus(); break;
+      case 'drainAiEditCommit': localDrainAiEdit(); postStatus(); break;
+      case 'applyRestyle': applyRestyle(d.id, d.patch); break;
+    }
+  }
+  function onMessage(e) {
+    var d = e && e.data;
+    if (!d || d.ns !== MSG) return;
+    if (isTop) {
+      // Relay side: app frames announce themselves and mirror their status.
+      if (d.evt === 'hello') {
+        if (frameRole === 'direct') return; // top frame is the app; ignore child hellos
+        if (relayAppOrigin) {
+          if (e.origin === relayAppOrigin) { relayAppWin = e.source; if (relayActive) sendEnableToApp(); }
+        } else {
+          pendingHellos.push({ source: e.source, origin: e.origin });
+          if (pendingHellos.length > 12) pendingHellos.shift();
+        }
+      } else if (d.evt === 'status' && frameRole === 'relay') {
+        cache.status = d.status || null;
+        cache.handoff = d.handoff || null;
+        cache.aiRequest = d.aiRequest || null;
+        cache.aiEdit = d.aiEdit || null;
+      }
+    } else if (d.cmd) {
+      // App side: only accept commands from the top (relay) frame.
+      var fromTop = false;
+      try { fromTop = (e.source === window.top); } catch (err) { fromTop = false; }
+      if (fromTop) onRelayCommand(d, e);
+    }
+  }
+
   // ---- public API ----------------------------------------------------------
+  // Host calls always land in the TOP frame; each method dispatches by role so a
+  // relay bridges to the app iframe while direct/app frames act locally.
   window[NS] = {
     __v: VERSION,
-    enable: function () { try { enable(); } catch (e) {} },
-    disable: function () { try { disable(); } catch (e) {} },
-    peek: function () { return { enabled: state.enabled, version: state.version, changeCount: state.changes.length, handoffReady: !!state.handoff, aiPending: !!state.aiRequest, hasModels: !!(state.models && state.models.length), aiModel: state.aiModel || null }; },
-    drain: function () {
-      var hf = state.handoff; if (!hf) return null;
-      state.handoff = null;
-      var out = { instruction: hf.instruction, changeCount: hf.changeCount };
-      // Clean up: clear change-set (entries hold the undo closures), markup, and
-      // markers; restore chrome (host typically disables next).
-      state.changes = []; clearMarkers(); clearPins(); clearDrawings();
-      if (elToolbar) { elToolbar.style.display = 'flex'; renderBar(); }
-      bump();
-      return out;
-    },
-    // Drain a pending "Generate with AI" request (host then generates + applies).
-    drainAi: function () {
-      var r = state.aiRequest; if (!r) return null;
-      state.aiRequest = null; bump();
-      return { id: r.id, description: r.description, width: r.width, height: r.height, model: r.model };
+    // `mode`: 'direct' (top frame is the app) or 'relay' (top = Fabric shell,
+    // drive the app iframe at `appOrigin`). Legacy no-arg call → 'direct'.
+    enable: function (mode, appOrigin) { try { hostEnable(mode, appOrigin); } catch (e) {} },
+    disable: function () { try { hostDisable(); } catch (e) {} },
+    peek: function () { try { return frameRole === 'relay' ? relayPeek() : localPeek(); } catch (e) { return null; } },
+    drain: function () { try { return frameRole === 'relay' ? relayDrain() : localDrain(); } catch (e) { return null; } },
+    drainAi: function () { try { return frameRole === 'relay' ? relayDrainAi() : localDrainAi(); } catch (e) { return null; } },
+    drainAiEdit: function () { try { return frameRole === 'relay' ? relayDrainAiEdit() : localDrainAiEdit(); } catch (e) { return null; } },
+    // Apply a restyle patch to the element tagged `id` (whitelisted inline CSS +
+    // optional Graphein spec patch), recorded as revertable change-set entries.
+    applyRestyle: function (id, patch) {
+      try {
+        if (frameRole === 'relay') postToApp({ ns: MSG, cmd: 'applyRestyle', id: id, patch: patch });
+        else applyRestyle(id, patch);
+      } catch (e) {}
     },
     // Inject AI-generated HTML into placeholder `id` (empty html = generation
     // failed → restore the describe state).
-    applyGenerated: function (id, html) { try { applyGenerated(id, html); } catch (e) {} },
+    applyGenerated: function (id, html) {
+      try {
+        if (frameRole === 'relay') postToApp({ ns: MSG, cmd: 'applyGenerated', id: id, html: html });
+        else applyGenerated(id, html);
+      } catch (e) {}
+    },
     // Supply the model list for the placeholder AI picker (host resolves it);
     // `[{id,name,fast}]`. Defaults the selection to the first fast model.
     setModels: function (list, preferred) {
       try {
-        state.models = Array.isArray(list) ? list : null;
-        var ids = (state.models || []).map(function (m) { return m.id; });
-        // Preselect: keep the current pick if still offered; otherwise the
-        // caller's preferred (persisted) model; otherwise the first fast / first.
-        if (!state.aiModel || ids.indexOf(state.aiModel) < 0) {
-          if (preferred && ids.indexOf(preferred) >= 0) {
-            state.aiModel = preferred;
-          } else if (state.models && state.models.length) {
-            var fast = state.models.filter(function (m) { return m.fast; })[0];
-            state.aiModel = (fast || state.models[0]).id;
-          }
+        if (frameRole === 'relay') {
+          relayModels = Array.isArray(list) ? list : null;
+          relayPreferred = preferred || null;
+          postToApp({ ns: MSG, cmd: 'setModels', list: relayModels, preferred: relayPreferred });
+        } else {
+          localSetModels(list, preferred);
         }
-        if (state.selected && isPlaceholder(state.selected)) renderInspector();
       } catch (e) {}
+    },
+    // Push Fabricator's theme (accent/surfaces/text/border + UI scale) so the
+    // tools match the host app. Re-sent by the renderer after a preview reload.
+    setTheme: function (theme) {
+      try {
+        if (frameRole === 'relay') {
+          relayTheme = theme || null;
+          postToApp({ ns: MSG, cmd: 'setTheme', theme: relayTheme });
+        } else {
+          localSetTheme(theme);
+        }
+      } catch (e) {}
+    },
+    // Pure chart-type conversion helpers (no DOM / no mutation), exposed for unit tests.
+    __convert: { chartTypes: CHART_TYPES, groups: TYPE_GROUPS, shapeOf: shapeOf, canConvert: canConvert, convertSpec: convertSpec },
+    // Transient debug-view controls (non-recorded), exposed for unit tests.
+    __debug: {
+      enter: function (el) { try { enterDebugView(el); } catch (e) {} },
+      exit: function () { try { exitDebugView(); } catch (e) {} },
+      active: function () { return !!state.debugView; },
+      changeCount: function () { return state.changes.length; }
     }
   };
+
+  // Every frame listens; non-top frames also announce themselves so the relay
+  // (the top frame, once enabled) can find and drive the app iframe.
+  try { window.addEventListener('message', onMessage, false); } catch (e) {}
+  scheduleHellos();
 })();

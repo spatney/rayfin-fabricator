@@ -14,7 +14,7 @@ use regex::Regex;
 use serde::Deserialize;
 
 use crate::services::{exec, store};
-use crate::types::{SkillActionResult, SkillInfo, SkillSource};
+use crate::types::{CustomSkillInfo, SkillActionResult, SkillInfo, SkillSource};
 
 /// A curated add-on skill the user can toggle on/off.
 struct SkillDef {
@@ -218,6 +218,12 @@ fn catalog_by_id(id: &str) -> Option<&'static SkillDef> {
   CATALOG.iter().find(|s| s.id == id)
 }
 
+/// True when `id` is reserved by a built-in catalog add-on or a known
+/// CLI-managed skill, and therefore can't be used for a custom library skill.
+pub(crate) fn is_reserved_id(id: &str) -> bool {
+  CATALOG.iter().any(|s| s.id == id) || matches!(id, "rayfin" | "rayfin-functions")
+}
+
 /// Extract the YAML block between the leading `---` fences.
 fn frontmatter(raw: &str) -> Option<&str> {
   static FM_RE: Lazy<Regex> =
@@ -271,7 +277,7 @@ fn read_installed(dir: &str) -> BTreeMap<String, OnDisk> {
 }
 
 /// Title-case a bare skill id for an unknown custom skill (`my_skill` → `My Skill`).
-fn title_case(id: &str) -> String {
+pub(crate) fn title_case(id: &str) -> String {
   let spaced: String = id
     .chars()
     .map(|c| if c == '-' || c == '_' { ' ' } else { c })
@@ -310,6 +316,12 @@ fn presentation_for(id: &str) -> (String, String, String) {
 
 /// Compose the project's skill list: locked managed skills, catalog add-ons, then extras.
 fn build_list(dir: &str) -> Vec<SkillInfo> {
+  build_list_with(dir, crate::commands::custom_skills::list_library())
+}
+
+/// Core of [`build_list`], with the global custom-skill `library` injected so it
+/// can be exercised deterministically in tests.
+fn build_list_with(dir: &str, library: Vec<CustomSkillInfo>) -> Vec<SkillInfo> {
   let installed = read_installed(dir);
   let mut list: Vec<SkillInfo> = Vec::new();
   let mut used: HashSet<String> = HashSet::new();
@@ -338,6 +350,7 @@ fn build_list(dir: &str) -> Vec<SkillInfo> {
       active: true,
       category: None,
       custom: None,
+      library: None,
     });
     used.insert(id.clone());
   }
@@ -357,16 +370,44 @@ fn build_list(dir: &str) -> Vec<SkillInfo> {
       base: false,
       active: on_disk.map(|d| !d.managed).unwrap_or(false),
       custom: None,
+      library: None,
     });
     used.insert(def.id.to_string());
   }
 
-  // 3) Any other installed unmanaged skills (e.g. agent-authored).
+  // 3) Global custom-skill library — reusable skills the user can toggle into
+  //    this project. Active when a copy is installed under `.agents/skills/`.
+  for lib in library {
+    if used.contains(&lib.id) {
+      continue;
+    }
+    let on_disk = installed.get(&lib.id);
+    if on_disk.map(|d| d.managed).unwrap_or(false) {
+      continue;
+    }
+    list.push(SkillInfo {
+      id: lib.id.clone(),
+      title: lib.title,
+      description: lib.description,
+      icon: lib.icon,
+      base: false,
+      active: on_disk.is_some(),
+      category: None,
+      custom: Some(true),
+      library: Some(true),
+    });
+    used.insert(lib.id);
+  }
+
+  // 4) Any other installed unmanaged skills not in the catalog or library
+  //    (e.g. skills added to just this app, or agent-authored directly).
   for (id, d) in &installed {
     if used.contains(id) || d.managed {
       continue;
     }
-    let (title, description, icon) = presentation_for(id);
+    let (title, description, icon) =
+      crate::commands::custom_skills::project_skill_presentation(dir, id)
+        .unwrap_or_else(|| presentation_for(id));
     list.push(SkillInfo {
       id: id.clone(),
       title,
@@ -376,6 +417,7 @@ fn build_list(dir: &str) -> Vec<SkillInfo> {
       active: true,
       category: None,
       custom: Some(true),
+      library: None,
     });
   }
 
@@ -464,6 +506,21 @@ async fn ensure_git_identity(dir: &str) {
   }
 }
 
+/// Stage and commit just one skill's `.agents/skills/<id>` folder (best-effort) so
+/// the change shows up in History. Shared by the catalog toggle and the
+/// custom-skill library (see [`crate::commands::custom_skills`]).
+pub(crate) async fn commit_skill_change(dir: &str, skill_id: &str, message: &str) {
+  let rel = format!(".agents/skills/{skill_id}");
+  ensure_git_identity(dir).await;
+  let _ = exec::run("git", &["add", "-A", "--", &rel], git_opts(dir, 30_000)).await;
+  let _ = exec::run(
+    "git",
+    &["commit", "-m", message, "--", &rel],
+    git_opts(dir, 30_000),
+  )
+  .await;
+}
+
 // ── Commands ─────────────────────────────────────────────────────────────────
 
 /// The project's skill list (locked managed skills + add-on catalog + extras).
@@ -504,11 +561,19 @@ pub fn skills_source(id: String, skill_id: String) -> SkillSource {
         content: Some(render_skill_file(def)),
         error: None,
       },
-      None => SkillSource {
-        ok: false,
-        installed: false,
-        content: None,
-        error: Some("This skill has no preview.".to_string()),
+      None => match crate::commands::custom_skills::read_library_source(&skill_id) {
+        Some(content) => SkillSource {
+          ok: true,
+          installed: false,
+          content: Some(content),
+          error: None,
+        },
+        None => SkillSource {
+          ok: false,
+          installed: false,
+          content: None,
+          error: Some("This skill has no preview.".to_string()),
+        },
       },
     },
   }
@@ -534,7 +599,8 @@ pub async fn skills_set(id: String, skill_id: String, active: bool) -> SkillActi
   let def = catalog_by_id(&skill_id);
 
   if active {
-    if def.is_none() {
+    let is_library = crate::commands::custom_skills::library_skill_exists(&skill_id);
+    if def.is_none() && !is_library {
       return SkillActionResult {
         ok: false,
         skills: build_list(&dir),
@@ -565,14 +631,19 @@ pub async fn skills_set(id: String, skill_id: String, active: bool) -> SkillActi
     }
   }
 
-  let mut title = skill_id.clone();
+  let title;
   let io_result: std::io::Result<()> = if active {
     match def {
       Some(def) => {
         title = def.title.to_string();
         write_skill_file(&dir, def)
       }
-      None => Ok(()),
+      // A library skill: copy its folder (SKILL.md + references/) into the project.
+      None => {
+        title = crate::commands::custom_skills::library_title(&skill_id)
+          .unwrap_or_else(|| presentation_for(&skill_id).0);
+        crate::commands::custom_skills::install_into_project(&skill_id, &dir)
+      }
     }
   } else {
     title = presentation_for(&skill_id).0;
@@ -593,16 +664,8 @@ pub async fn skills_set(id: String, skill_id: String, active: bool) -> SkillActi
   }
 
   // Commit just the skill folder (best-effort) so the change shows in History.
-  let rel = format!(".agents/skills/{skill_id}");
-  ensure_git_identity(&dir).await;
-  let _ = exec::run("git", &["add", "-A", "--", &rel], git_opts(&dir, 30_000)).await;
   let message = format!("{} skill: {}", if active { "Add" } else { "Remove" }, title);
-  let _ = exec::run(
-    "git",
-    &["commit", "-m", &message, "--", &rel],
-    git_opts(&dir, 30_000),
-  )
-  .await;
+  commit_skill_change(&dir, &skill_id, &message).await;
 
   SkillActionResult {
     ok: true,
@@ -670,6 +733,61 @@ mod tests {
   fn title_case_humanizes_ids() {
     assert_eq!(title_case("my_custom-skill"), "My Custom Skill");
     assert_eq!(title_case("rayfin"), "Rayfin");
+  }
+
+  #[test]
+  fn is_reserved_id_covers_catalog_and_managed() {
+    assert!(is_reserved_id("polished-ui"));
+    assert!(is_reserved_id("rayfin"));
+    assert!(is_reserved_id("rayfin-functions"));
+    assert!(!is_reserved_id("my-custom-skill"));
+  }
+
+  #[test]
+  fn build_list_includes_library_skills_active_when_installed() {
+    let dir = std::env::temp_dir().join(format!("rayfin-skills-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let dir_str = dir.to_string_lossy().to_string();
+
+    let library = vec![
+      crate::types::CustomSkillInfo {
+        id: "team-brand".to_string(),
+        title: "Team brand".to_string(),
+        description: "Our house style.".to_string(),
+        icon: "🎨".to_string(),
+        has_references: false,
+      },
+      crate::types::CustomSkillInfo {
+        id: "installed-one".to_string(),
+        title: "Installed one".to_string(),
+        description: "Already on disk.".to_string(),
+        icon: "📦".to_string(),
+        has_references: false,
+      },
+    ];
+
+    // Install only the second library skill into the project.
+    let installed_dir = skill_dir(&dir_str, "installed-one");
+    std::fs::create_dir_all(&installed_dir).unwrap();
+    std::fs::write(
+      installed_dir.join("SKILL.md"),
+      "---\nname: installed-one\ndescription: d\n---\n# x",
+    )
+    .unwrap();
+
+    let list = build_list_with(&dir_str, library);
+    let brand = list.iter().find(|s| s.id == "team-brand").unwrap();
+    assert_eq!(brand.custom, Some(true));
+    assert_eq!(brand.library, Some(true));
+    assert!(!brand.active, "uninstalled library skill is inactive");
+    assert_eq!(brand.title, "Team brand");
+
+    let installed = list.iter().find(|s| s.id == "installed-one").unwrap();
+    assert!(installed.active, "installed library skill is active");
+    assert_eq!(installed.library, Some(true));
+
+    let _ = std::fs::remove_dir_all(&dir);
   }
 
   #[test]
