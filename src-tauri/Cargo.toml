@@ -1,6 +1,6 @@
 [package]
 name = "rayfin-fabricator"
-version = "1.3.3"
+version = "1.3.4-experimental.mac-sso.1"
 description = "Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
 authors = ["Fabricator"]
 license = "MIT"

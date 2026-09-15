@@ -39,12 +39,26 @@ The script writes `resources/telemetry.json` and `.deploy.state.json`. If `gh` i
 
 ## Cut a release
 
-Push a version tag to trigger the GitHub Actions release workflow that builds the Windows installer (Tauri/NSIS) and publishes it to a GitHub Release:
+Push a version tag to trigger the GitHub Actions release workflow that builds the Windows installer (Tauri/NSIS) and macOS Apple Silicon bundles (`.dmg` and `.app.tar.gz`) and publishes them to a GitHub Release:
 
 ```powershell
 git tag v0.1.0
 git push origin v0.1.0
 ```
+
+### Experimental macOS SSO releases
+
+On `fix/mac-preview-sso-user-agent`, tags matching `v<version>-experimental.mac-sso.<number>` build **macOS Apple Silicon only** for [issue #4](https://github.com/spatney/rayfin-fabricator/issues/4). The workflow marks all prerelease version tags (those containing `-`) as GitHub pre-releases, never marks them latest, and skips publishing `latest.json`. Existing stable installations therefore cannot auto-update into an experiment.
+
+Keep the version in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` aligned before tagging. For example, after committing version `1.3.4-experimental.mac-sso.1` on the issue branch:
+
+```powershell
+git push origin fix/mac-preview-sso-user-agent
+git tag v1.3.4-experimental.mac-sso.1
+git push origin v1.3.4-experimental.mac-sso.1
+```
+
+Use a new prerelease number for each subsequent build. Add release notes describing the candidate fix, installation instructions, and the passwordless sign-in checks requested in #4. Testers install the DMG manually; it replaces the normal app and uses the same projects/settings, rather than creating a separate app profile. To return to stable, reinstall the stable DMG. The app's updater continues to follow the stable channel and can offer a later stable version once it is newer than the installed experiment.
 
 ## Warm npm cache (fast first-run installs)
 
@@ -62,7 +76,7 @@ The app ships with Tauri's updater plugin. On startup (and via **Settings → Ch
 
 ### How the release workflow supports it
 
-`.github/workflows/release.yml` signs the installer with a minisign key and publishes three assets per release: `*-setup.exe`, `*-setup.exe.sig`, and a generated `latest.json` (version, notes, `pub_date`, and the `windows-x86_64` signature + download URL). The updater endpoint is `releases/latest/download/latest.json`, which always resolves to the most recent non-prerelease release — so keep releases non-prerelease.
+`.github/workflows/release.yml` signs the Windows installer and macOS app archive with a minisign key. Stable releases include `*-setup.exe`, `*-setup.exe.sig`, `*.dmg`, `*.app.tar.gz`, `*.app.tar.gz.sig`, and a generated `latest.json` (version, notes, `pub_date`, and the `windows-x86_64` / `darwin-aarch64` signatures and download URLs). The updater endpoint is `releases/latest/download/latest.json`, which resolves to the latest non-prerelease release. Experimental pre-releases omit the manifest and do not change that endpoint.
 
 ### Updater signing key (custody)
 

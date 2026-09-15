@@ -103,6 +103,11 @@ appends, since both still flow through the same default closure.
 
 ## Patch 3: macOS auth-popup user agent (WKWebView)
 
+**Status:** experimental on `fix/mac-preview-sso-user-agent`. The candidate fix
+still needs end-to-end confirmation with a passwordless account on macOS; see
+[#4](https://github.com/spatney/rayfin-fabricator/issues/4) and the
+[experimental release instructions](./DEPLOY.md#experimental-macos-sso-releases).
+
 **File:** `src-tauri/vendor/wry/src/wkwebview/class/wry_web_view_ui_delegate.rs`
 **Where:** inside `create_web_view_for_navigation_action` (the `WKUIDelegate`
 `createWebViewWithConfiguration:` handler), in the `NewWindowResponse::Allow` arm,
@@ -271,7 +276,7 @@ When you upgrade Tauri (or otherwise change the pinned `wry` version), redo this
   popup web view (or exposes a hook on the new-window response to set it), drop the
   patch and rely on that instead.
 
-If **both** patches become unnecessary, **delete the vendored tree and remove the
+If **all** patches become unnecessary, **delete the vendored tree and remove the
 `[patch.crates-io]` entry** from `src-tauri/Cargo.toml`.
 
 ## Notes

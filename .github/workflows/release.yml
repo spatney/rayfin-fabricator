@@ -16,20 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            bundles: nsis
-            artifacts: |
-              src-tauri/target/release/bundle/nsis/*-setup.exe
-              src-tauri/target/release/bundle/nsis/*-setup.exe.sig
-          # macOS ships an Apple-silicon (arm64) build. The updater artifact is
-          # the *.app.tar.gz; the *.dmg is for manual download.
-          - os: macos-latest
-            bundles: app,dmg
-            artifacts: |
-              src-tauri/target/release/bundle/dmg/*.dmg
-              src-tauri/target/release/bundle/macos/*.app.tar.gz
-              src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
+        # Issue #4 experiments only need the Apple-silicon macOS installer.
+        os: ${{ contains(github.ref_name, '-experimental.mac-sso.') && fromJSON('["macos-latest"]') || fromJSON('["windows-latest", "macos-latest"]') }}
 
     steps:
       - name: Check out repository
@@ -148,10 +136,10 @@ jobs:
         run: |
           if [ "${{ steps.signing.outputs.enabled }}" = "true" ]; then
             echo "Building signed installer…"
-            npm run tauri:build -- --bundles ${{ matrix.bundles }} --config src-tauri/tauri.signing.conf.json
+            npm run tauri:build -- --bundles nsis --config src-tauri/tauri.signing.conf.json
           else
             echo "Building unsigned installer…"
-            npm run tauri:build -- --bundles ${{ matrix.bundles }}
+            npm run tauri:build -- --bundles nsis
           fi
 
       - name: Build Tauri bundle (macOS)
@@ -189,14 +177,19 @@ jobs:
             # Control-click → Open (or `xattr -dr com.apple.quarantine`) clears.
             export APPLE_SIGNING_IDENTITY="-"
           fi
-          npm run tauri:build -- --bundles ${{ matrix.bundles }}
+          npm run tauri:build -- --bundles app,dmg
 
       - name: Upload installer artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.os }}
-          path: ${{ matrix.artifacts }}
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app.tar.gz
+            src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
           if-no-files-found: error
 
   release:
@@ -221,6 +214,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}
+          name: ${{ contains(github.ref_name, '-experimental.mac-sso.') && format('Experimental macOS SSO - {0}', github.ref_name) || github.ref_name }}
           fail_on_unmatched_files: false
           files: |
             dist/**/*-setup.exe
@@ -232,6 +228,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate and upload updater manifest (latest.json)
+        if: ${{ !contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
