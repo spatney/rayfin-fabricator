@@ -29,7 +29,7 @@ const REPO_LIST_FIELDS: &str =
   "nameWithOwner,name,description,visibility,updatedAt,url,isPrivate,isFork,primaryLanguage";
 
 const AUTH_PROBE_ARGS: &[&str] =
-  &["api", "--hostname", "github.com", "user", "--jq", "{login: .login, id: .id}"];
+  &["api", "--hostname", "github.com", "user", "--jq", ".login // empty"];
 
 fn gh_options(timeout_ms: u64) -> RunOptions {
   RunOptions {
@@ -66,21 +66,13 @@ fn say(on: &OnData, msg: &str) {
 static AUTH_USER_RE: Lazy<Regex> =
   Lazy::new(|| Regex::new(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$").unwrap());
 
-#[derive(Deserialize)]
-struct ApiIdentity {
-  id: u64,
-  login: String,
-}
-
 fn status_from_result(res: &exec::RunResult) -> GithubStatus {
-  let identity = serde_json::from_str::<ApiIdentity>(&res.stdout)
-    .ok()
-    .filter(|identity| identity.id > 0 && AUTH_USER_RE.is_match(&identity.login));
-  let signed_in = res.ok && !res.not_found && identity.is_some();
+  let login = res.stdout.trim();
+  let signed_in = res.ok && !res.not_found && AUTH_USER_RE.is_match(login);
   GithubStatus {
     gh_installed: !res.not_found,
     signed_in,
-    user: if signed_in { identity.map(|identity| identity.login) } else { None },
+    user: signed_in.then(|| login.to_string()),
   }
 }
 
@@ -402,17 +394,17 @@ mod tests {
     let mut res = exec::RunResult {
       ok: true,
       exit_code: Some(0),
-      stdout: r#"{"login":"octocat","id":1}"#.into(),
+      stdout: "octocat\n".into(),
       stderr: String::new(),
       not_found: false,
     };
     assert!(status_from_result(&res).signed_in);
     assert_eq!(status_from_result(&res).user.as_deref(), Some("octocat"));
-    for text in ["", "null", "Logged in to github.example account octocat", "{}", r#"{"login":null,"id":1}"#, r#"{"login":"octocat","id":0}"#] {
+    for text in ["", "Logged in to github.example account octocat", "octo cat", "-octocat"] {
       res.stdout = text.into();
       assert!(!status_from_result(&res).signed_in);
     }
-    res.stdout = r#"{"login":"octocat","id":1}"#.into();
+    res.stdout = "octocat".into();
     res.ok = false;
     assert!(!status_from_result(&res).signed_in);
     assert!(status_from_result(&res).user.is_none());
