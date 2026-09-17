@@ -262,7 +262,7 @@ pub async fn github_list_repos() -> GithubReposResult {
 
 /// Accept only github.com repositories, never credentials or arbitrary hosts.
 static GH_URL_RE: Lazy<Regex> = Lazy::new(|| {
-  Regex::new(r"(?i)^(?:https://github\.com(?::443)?/|git@github\.com:|ssh://git@github\.com/)?([a-z0-9][a-z0-9-]{0,38})/([a-z0-9_.-]{1,100}?)(?:\.git)?/?(?:[#?].*)?$").unwrap()
+  Regex::new(r"(?i)^(?:https://github\.com(?::443)?/|git@github\.com:|ssh://git@github\.com/)?([a-z0-9][a-z0-9_-]{0,254})/([a-z0-9_.-]{1,100}?)(?:\.git)?/?(?:[#?].*)?$").unwrap()
 });
 
 /// Reject anything that isn't a safe single path segment (no separators / dot dirs).
@@ -490,6 +490,10 @@ mod tests {
     assert_eq!(
       clone_target_name("https://github.com/octocat/Hello-World/"),
       Some("Hello-World".into())
+    );
+    assert_eq!(
+      clone_target_name("https://github.com/chamil_microsoft/Azure-Data-FY27-Priorities"),
+      Some("Azure-Data-FY27-Priorities".into())
     );
     // Not cloneable / unsafe inputs.
     assert_eq!(clone_target_name("just-a-name"), None);
