@@ -29,7 +29,7 @@ const REPO_LIST_FIELDS: &str =
   "nameWithOwner,name,description,visibility,updatedAt,url,isPrivate,isFork,primaryLanguage";
 
 const AUTH_PROBE_ARGS: &[&str] =
-  &["api", "--hostname", "github.com", "user", "--jq", "{login: .login, id: .id}"];
+  &["api", "--hostname", "github.com", "user", "--jq", ".login // empty"];
 
 fn gh_options(timeout_ms: u64) -> RunOptions {
   RunOptions {
@@ -39,6 +39,11 @@ fn gh_options(timeout_ms: u64) -> RunOptions {
       ("GIT_TERMINAL_PROMPT".into(), "0".into()),
       ("GCM_INTERACTIVE".into(), "Never".into()),
     ],
+    // Desktop launches can inherit automation tokens from their parent process.
+    // gh gives these variables precedence over the credential store, so a stale
+    // token would make browser login succeed in Terminal while every app probe
+    // kept testing the old token forever.
+    env_remove: vec!["GH_TOKEN".into(), "GITHUB_TOKEN".into()],
     timeout_ms: Some(timeout_ms),
     ..Default::default()
   }
@@ -59,23 +64,15 @@ fn say(on: &OnData, msg: &str) {
 /* --------------------------------- status --------------------------------- */
 
 static AUTH_USER_RE: Lazy<Regex> =
-  Lazy::new(|| Regex::new(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$").unwrap());
-
-#[derive(Deserialize)]
-struct ApiIdentity {
-  id: u64,
-  login: String,
-}
+  Lazy::new(|| Regex::new(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$").unwrap());
 
 fn status_from_result(res: &exec::RunResult) -> GithubStatus {
-  let identity = serde_json::from_str::<ApiIdentity>(&res.stdout)
-    .ok()
-    .filter(|identity| identity.id > 0 && AUTH_USER_RE.is_match(&identity.login));
-  let signed_in = res.ok && !res.not_found && identity.is_some();
+  let login = res.stdout.trim();
+  let signed_in = res.ok && !res.not_found && AUTH_USER_RE.is_match(login);
   GithubStatus {
     gh_installed: !res.not_found,
     signed_in,
-    user: if signed_in { identity.map(|identity| identity.login) } else { None },
+    user: signed_in.then(|| login.to_string()),
   }
 }
 
@@ -91,7 +88,13 @@ pub async fn github_status() -> GithubStatus {
 
 /// The `gh auth login` invocation used in the launched terminal — the web/device
 /// flow, with the git protocol pinned so gh doesn't prompt for it.
-const LOGIN_CMD: &str = "gh auth login --web --git-protocol https --hostname github.com";
+#[cfg(target_os = "windows")]
+const LOGIN_CMD: &str =
+  "set \"GH_TOKEN=\" && set \"GITHUB_TOKEN=\" && gh auth login --web --git-protocol https --hostname github.com";
+
+#[cfg(not(target_os = "windows"))]
+const LOGIN_CMD: &str =
+  "env -u GH_TOKEN -u GITHUB_TOKEN gh auth login --web --git-protocol https --hostname github.com";
 
 /// Launch the user's terminal running `gh auth login --web` (browser + one-time
 /// code). Returns `ok:false` when `gh` isn't installed or the terminal couldn't
@@ -104,17 +107,6 @@ pub fn github_login() -> ProcResult {
       exit_code: None,
       error: Some("The GitHub CLI (gh) is not installed or not on PATH.".into()),
     };
-  }
-  for name in ["GH_TOKEN", "GITHUB_TOKEN"] {
-    if std::env::var_os(name).is_some_and(|value| !value.is_empty()) {
-      return ProcResult {
-        ok: false,
-        exit_code: None,
-        error: Some(format!(
-          "{name} overrides the GitHub CLI's saved credentials. Update or unset that environment variable before signing in; browser sign-in cannot replace it."
-        )),
-      };
-    }
   }
   let ok = launch_login_terminal();
   ProcResult {
@@ -270,7 +262,7 @@ pub async fn github_list_repos() -> GithubReposResult {
 
 /// Accept only github.com repositories, never credentials or arbitrary hosts.
 static GH_URL_RE: Lazy<Regex> = Lazy::new(|| {
-  Regex::new(r"(?i)^(?:https://github\.com(?::443)?/|git@github\.com:|ssh://git@github\.com/)?([a-z0-9][a-z0-9-]{0,38})/([a-z0-9_.-]{1,100}?)(?:\.git)?/?(?:[#?].*)?$").unwrap()
+  Regex::new(r"(?i)^(?:https://github\.com(?::443)?/|git@github\.com:|ssh://git@github\.com/)?([a-z0-9][a-z0-9_-]{0,254})/([a-z0-9_.-]{1,100}?)(?:\.git)?/?(?:[#?].*)?$").unwrap()
 });
 
 /// Reject anything that isn't a safe single path segment (no separators / dot dirs).
@@ -402,17 +394,20 @@ mod tests {
     let mut res = exec::RunResult {
       ok: true,
       exit_code: Some(0),
-      stdout: r#"{"login":"octocat","id":1}"#.into(),
+      stdout: "octocat\n".into(),
       stderr: String::new(),
       not_found: false,
     };
     assert!(status_from_result(&res).signed_in);
     assert_eq!(status_from_result(&res).user.as_deref(), Some("octocat"));
-    for text in ["", "null", "Logged in to github.example account octocat", "{}", r#"{"login":null,"id":1}"#, r#"{"login":"octocat","id":0}"#] {
+    res.stdout = "octocat_managed\n".into();
+    assert!(status_from_result(&res).signed_in);
+    assert_eq!(status_from_result(&res).user.as_deref(), Some("octocat_managed"));
+    for text in ["", "Logged in to github.example account octocat", "octo cat", "-octocat"] {
       res.stdout = text.into();
       assert!(!status_from_result(&res).signed_in);
     }
-    res.stdout = r#"{"login":"octocat","id":1}"#.into();
+    res.stdout = "octocat".into();
     res.ok = false;
     assert!(!status_from_result(&res).signed_in);
     assert!(status_from_result(&res).user.is_none());
@@ -427,6 +422,8 @@ mod tests {
     assert!(options.env.contains(&("GH_HOST".into(), "github.com".into())));
     assert!(options.env.contains(&("GH_PROMPT_DISABLED".into(), "1".into())));
     assert!(options.env.contains(&("GIT_TERMINAL_PROMPT".into(), "0".into())));
+    assert!(options.env_remove.contains(&"GH_TOKEN".into()));
+    assert!(options.env_remove.contains(&"GITHUB_TOKEN".into()));
   }
 
   #[test]
@@ -493,6 +490,10 @@ mod tests {
     assert_eq!(
       clone_target_name("https://github.com/octocat/Hello-World/"),
       Some("Hello-World".into())
+    );
+    assert_eq!(
+      clone_target_name("https://github.com/chamil_microsoft/Azure-Data-FY27-Priorities"),
+      Some("Azure-Data-FY27-Priorities".into())
     );
     // Not cloneable / unsafe inputs.
     assert_eq!(clone_target_name("just-a-name"), None);
