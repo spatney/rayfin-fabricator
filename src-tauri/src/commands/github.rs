@@ -64,7 +64,7 @@ fn say(on: &OnData, msg: &str) {
 /* --------------------------------- status --------------------------------- */
 
 static AUTH_USER_RE: Lazy<Regex> =
-  Lazy::new(|| Regex::new(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}$").unwrap());
+  Lazy::new(|| Regex::new(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$").unwrap());
 
 fn status_from_result(res: &exec::RunResult) -> GithubStatus {
   let login = res.stdout.trim();
@@ -400,6 +400,9 @@ mod tests {
     };
     assert!(status_from_result(&res).signed_in);
     assert_eq!(status_from_result(&res).user.as_deref(), Some("octocat"));
+    res.stdout = "octocat_managed\n".into();
+    assert!(status_from_result(&res).signed_in);
+    assert_eq!(status_from_result(&res).user.as_deref(), Some("octocat_managed"));
     for text in ["", "Logged in to github.example account octocat", "octo cat", "-octocat"] {
       res.stdout = text.into();
       assert!(!status_from_result(&res).signed_in);
