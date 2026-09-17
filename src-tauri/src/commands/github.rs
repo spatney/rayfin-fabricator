@@ -39,6 +39,11 @@ fn gh_options(timeout_ms: u64) -> RunOptions {
       ("GIT_TERMINAL_PROMPT".into(), "0".into()),
       ("GCM_INTERACTIVE".into(), "Never".into()),
     ],
+    // Desktop launches can inherit automation tokens from their parent process.
+    // gh gives these variables precedence over the credential store, so a stale
+    // token would make browser login succeed in Terminal while every app probe
+    // kept testing the old token forever.
+    env_remove: vec!["GH_TOKEN".into(), "GITHUB_TOKEN".into()],
     timeout_ms: Some(timeout_ms),
     ..Default::default()
   }
@@ -91,7 +96,13 @@ pub async fn github_status() -> GithubStatus {
 
 /// The `gh auth login` invocation used in the launched terminal — the web/device
 /// flow, with the git protocol pinned so gh doesn't prompt for it.
-const LOGIN_CMD: &str = "gh auth login --web --git-protocol https --hostname github.com";
+#[cfg(target_os = "windows")]
+const LOGIN_CMD: &str =
+  "set \"GH_TOKEN=\" && set \"GITHUB_TOKEN=\" && gh auth login --web --git-protocol https --hostname github.com";
+
+#[cfg(not(target_os = "windows"))]
+const LOGIN_CMD: &str =
+  "env -u GH_TOKEN -u GITHUB_TOKEN gh auth login --web --git-protocol https --hostname github.com";
 
 /// Launch the user's terminal running `gh auth login --web` (browser + one-time
 /// code). Returns `ok:false` when `gh` isn't installed or the terminal couldn't
@@ -104,17 +115,6 @@ pub fn github_login() -> ProcResult {
       exit_code: None,
       error: Some("The GitHub CLI (gh) is not installed or not on PATH.".into()),
     };
-  }
-  for name in ["GH_TOKEN", "GITHUB_TOKEN"] {
-    if std::env::var_os(name).is_some_and(|value| !value.is_empty()) {
-      return ProcResult {
-        ok: false,
-        exit_code: None,
-        error: Some(format!(
-          "{name} overrides the GitHub CLI's saved credentials. Update or unset that environment variable before signing in; browser sign-in cannot replace it."
-        )),
-      };
-    }
   }
   let ok = launch_login_terminal();
   ProcResult {
@@ -427,6 +427,8 @@ mod tests {
     assert!(options.env.contains(&("GH_HOST".into(), "github.com".into())));
     assert!(options.env.contains(&("GH_PROMPT_DISABLED".into(), "1".into())));
     assert!(options.env.contains(&("GIT_TERMINAL_PROMPT".into(), "0".into())));
+    assert!(options.env_remove.contains(&"GH_TOKEN".into()));
+    assert!(options.env_remove.contains(&"GITHUB_TOKEN".into()));
   }
 
   #[test]

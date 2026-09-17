@@ -93,6 +93,9 @@ impl CancelToken {
 pub struct RunOptions {
   pub cwd: Option<PathBuf>,
   pub env: Vec<(String, String)>,
+  /// Environment variables to remove from the child process. This is useful
+  /// when a CLI gives ambient variables precedence over its persisted login.
+  pub env_remove: Vec<String>,
   pub on_data: Option<OnData>,
   pub timeout_ms: Option<u64>,
   pub cancel: Option<CancelToken>,
@@ -496,6 +499,9 @@ async fn spawn_and_run(resolved: Resolved, args: &[&str], opts: RunOptions) -> R
     cmd.current_dir(cwd);
   }
   cmd.env("NO_COLOR", "1").env("FORCE_COLOR", "0");
+  for name in &opts.env_remove {
+    cmd.env_remove(name);
+  }
   for (k, v) in &opts.env {
     cmd.env(k, v);
   }
