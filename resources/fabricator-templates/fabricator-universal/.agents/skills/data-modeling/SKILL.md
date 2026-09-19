@@ -5,66 +5,72 @@ description: >
   CRUD, lists, "save/remember X", or per-user data with row-level security. This
   app's data layer is Rayfin's: you declare entities as TypeScript classes with
   decorators in rayfin/data/, register them in the schema, and read/write them
-  through the typed rayfin-client. Covers: defining an @entity, field decorators,
-  registering it, per-entity access with @role, owner-only row-level security,
-  and the client query/mutation API. Triggers: data, database, model, entity,
+  through the typed rayfin-client. Covers this template's schema registration,
+  client access, and authentication wiring, with official Rayfin references for
+  entities, decorators, permissions, queries, and mutations.
+  Triggers: data, database, model, entity,
   schema, table, record, CRUD, create, read, update, delete, list, store, save,
   persist, per-user, row-level security, RLS, access control, ownership.
 ---
 
 # Data modeling — entities, schema, and row-level security
 
-This app persists data with **Rayfin data**. You define entities as decorated
-TypeScript classes under `rayfin/data/`, register them in
-`rayfin/data/schema.ts`, and read/write them with the typed client from
-`src/services/rayfinClient.ts` (`getRayfinClient()`).
+The base template enables `data` with `dialect: mssql` in `rayfin/rayfin.yml`.
+Add entity classes under `rayfin/data/`, register them in
+`rayfin/data/schema.ts`, and use the existing typed client in
+`src/services/rayfinClient.ts`.
 
-The `data` service is already enabled in `rayfin/rayfin.yml`
-(`data: { enabled: true, dialect: mssql }`), so you don't need to turn anything
-on — just add entities.
+**Authenticated access is this template's default.** Pair this pack with the
+[authentication skill](../authentication/SKILL.md) for ordinary app records,
+per-user data, and row-level security. For explicit anonymous-access requests,
+follow the access guidance in `AGENTS.md` and the permissions documentation
+before changing that default.
 
-> **Data means auth — wire it in.** Rayfin data is always accessed as an
-> **authenticated user** (there's no anonymous/public data access on Fabric — see
-> Notes). So adding data isn't complete until authentication is wired in: follow
-> the **`authentication`** skill (`AuthProvider` + `bootstrapAuth()` in
-> `src/main.tsx`, the route guard in `src/App.tsx`). Per-user rows and row-level
-> security key off the signed-in identity. Only a purely **static page over
-> public data** (no Rayfin data) can skip auth.
+## Rayfin references
 
-## Step 1 — install the data package
+Follow the [documentation and version guidance](../../../AGENTS.md#rayfin-documentation)
+before implementing the data model. Use the maintained guides rather than
+copying generic SDK examples into this skill:
 
-```bash
-npm install @microsoft/rayfin-data
-```
+- [Modeling entities](https://rayfin.ai/docs/data/modeling) for decorators,
+  field types, relationships, and schema requirements.
+- [Querying](https://rayfin.ai/docs/data/querying) for typed reads and pagination.
+- [Creating, updating, deleting](https://rayfin.ai/docs/data/mutations) for writes.
+- [Permissions and row-level security](https://rayfin.ai/docs/data/permissions)
+  for explicit access rules, owner-scoped records, and tenant prerequisites.
 
-(`@microsoft/rayfin-core` — which provides the decorators — and
-`@microsoft/rayfin-client` are already in the base app.)
+For version-matched details, run
+`npx rayfin docs search '<topic>' --module guide` from the project root and read
+the relevant result. Check the linked agent rules and known limitations before
+choosing field constraints or permissions.
 
-## Step 2 — define an entity
+## Integrate the model with this template
 
-Create one file per entity under `rayfin/data/`, e.g. `rayfin/data/Note.ts`:
+1. **Check dependencies and service configuration.** The base already includes
+   `@microsoft/rayfin-core` and `@microsoft/rayfin-client`. If
+   `@microsoft/rayfin-data` is missing, install a version compatible with the
+   project's SDK rather than mixing release lines. Confirm `services.data`
+   remains enabled with `dialect: mssql` if another pack changed the config.
+2. **Define the entities.** Create one class per file under `rayfin/data/`,
+   following the modeling guide for the installed version. Declare permissions
+   explicitly and follow the documented MSSQL field constraints; do not rely on
+   implicit access defaults.
+3. **Register every entity.** Update both the `schema` array and
+   `UniversalAppSchema` type exported by `rayfin/data/schema.ts`. Keep those
+   export names: the existing client imports `UniversalAppSchema` for its type.
+4. **Wire authentication for the default data path.** Follow the authentication
+   skill to initialize `bootstrapAuth()` and add `AuthProvider` and route guards.
+   The existing `getRayfinClient()` throws until bootstrap initializes it.
+5. **Reuse the typed client.** Read and write through `getRayfinClient()` using
+   the query and mutation guides. For per-user records, derive ownership from
+   the signed-in identity and enforce access with server-side entity policies,
+   not just UI filters.
+6. **Let Fabricator deploy the change.** Its auto-deploy applies the schema and
+   ships the frontend; do not run `rayfin up` from the agent.
 
-```ts
-import { entity, role, text, boolean, date, uuid } from '@microsoft/rayfin-core';
+### Schema registration
 
-@entity()
-export class Note {
-  @uuid() id!: string;
-  @text({ min: 1, max: 200 }) title!: string;
-  @text() body!: string;
-  @boolean() pinned!: boolean;
-  @date() createdAt!: Date;
-}
-```
-
-Common field decorators: `@uuid()`, `@text({ min, max })`, `@boolean()`,
-`@date()`, plus number/relation decorators. If you're unsure of a decorator or
-option, check the docs: `rayfin docs search '<topic>' --module guide`.
-
-## Step 3 — register it in the schema
-
-`rayfin/data/schema.ts` starts empty. Add each entity to the exported `schema`
-array and the schema type so the client is typed:
+For an entity already defined in `rayfin/data/Note.ts`, registration looks like:
 
 ```ts
 import { Note } from './Note.js';
@@ -76,71 +82,7 @@ export type UniversalAppSchema = {
 export const schema = [Note];
 ```
 
-> Import entities with the `.js` extension (`'./Note.js'`) — Rayfin compiles the
-> data model as ESM. The client's generic type comes from
-> `UniversalAppSchema` (already referenced by `src/services/rayfinClient.ts`).
-
-## Step 4 — read and write with the client
-
-```ts
-import { getRayfinClient } from '@/services/rayfinClient';
-
-const client = getRayfinClient();
-
-// query
-const notes = await client.data.Note
-  .select(['id', 'title', 'body', 'pinned', 'createdAt'])
-  .orderBy({ createdAt: 'desc' })
-  .execute();
-
-// create / update / delete
-const note = await client.data.Note.create({ title, body, pinned: false, createdAt: new Date() });
-await client.data.Note.update({ id }, { pinned: true });
-await client.data.Note.delete({ id });
-const one = await client.data.Note.findById(id);
-```
-
-## Row-level security (owner-only data)
-
-When the user wants "each person sees only their own …", first turn on
-**authentication** (see the `authentication` skill), then add an owner column and
-a `@role` policy so the platform enforces access **server-side**:
-
-```ts
-import { entity, role, text, boolean, date, uuid } from '@microsoft/rayfin-core';
-
-@entity()
-@role('authenticated', '*', {
-  policy: (claims, item) => claims.sub.eq(item.user_id),
-})
-export class Note {
-  @uuid() id!: string;
-  @text({ min: 1, max: 200 }) title!: string;
-  @text() body!: string;
-  @boolean() pinned!: boolean;
-  @date() createdAt!: Date;
-  @text() user_id!: string;
-}
-```
-
-- `@role('authenticated', '*', { policy })` grants all operations (`'*'`) to
-  authenticated users, but the `policy` restricts each row to its owner —
-  `claims.sub` (the signed-in user id) must equal the row's `user_id`.
-- Stamp `user_id` from the session on create:
-
-  ```ts
-  const session = client.auth.getSession();
-  if (!session.isAuthenticated || !session.user) throw new Error('Not signed in.');
-  await client.data.Note.create({ /* … */, user_id: session.user.id });
-  ```
-
-Row-level security is enforced by Rayfin on the server — the client can't read or
-write another user's rows regardless of what the UI does.
-
-## Notes
-
-- **Stable features only.** Use `@authenticated` / `@role('authenticated', …)`;
-  don't reach for experimental anonymous/public access (it doesn't deploy on
-  Fabric). If asked for public data, say so and use authenticated access.
-- Fabricator auto-deploys after your turn — don't run `rayfin up`. A data-model
-  change ships and migrates on that deploy.
+Import entity modules with the `.js` extension because the data model compiles
+as ESM. Keep SDK-specific entity definitions and access policies aligned with
+the official, version-compatible documentation rather than expanding this
+registration example into another API tutorial.

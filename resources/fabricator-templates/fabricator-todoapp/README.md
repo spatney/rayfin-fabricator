@@ -5,22 +5,37 @@ tuned for the **Fabricator** deploy-to-test workflow. Each user gets their
 own todos via row-level security on a Rayfin data model — sign in with Microsoft,
 add tasks, and they're persisted to Fabric.
 
-> This is a Fabricator template: there is **no local backend, dev server, or
-> test harness**. You build your app and deploy it to a Fabric test workspace —
-> the Fabricator agent does this for you and validates the running app in its
-> built-in browser.
+> This is a Fabricator template: Fabricator deploys the agent's changes to a
+> Fabric test workspace and shows the running app in its built-in browser.
+> Its normal agent workflow uses that deployed backend rather than starting
+> local servers or a test harness.
 
 ## Getting started
 
-In Fabricator, just describe what you want to build. To deploy from the CLI:
+In Fabricator, describe what you want to build; Fabricator handles deployment
+after the agent's changes. For manual CLI deployment outside that workflow:
 
 ```bash
 npm run rayfin:up
 ```
 
+## Documentation
+
+Visit [Rayfin](https://rayfin.ai/) or
+[browse the documentation](https://rayfin.ai/docs) for platform guides,
+authentication, data modeling, SDK APIs, and limitations.
+
+Coding agents start with [AGENTS.md](AGENTS.md) and use the
+[rayfin-web-docs skill](.agents/skills/rayfin-web-docs/SKILL.md) before
+Rayfin-specific changes. The skill reads relevant website pages and checks their
+SDK/CLI versions against the project instead of copying incompatible examples.
+
 ## Project structure
 
 ```text
+├── AGENTS.md               # Template-specific agent workflow
+├── .agents/skills/
+│   └── rayfin-web-docs/    # Official docs lookup for Rayfin changes
 ├── rayfin/
 │   ├── rayfin.yml          # Fabric service configuration
 │   └── data/
@@ -48,21 +63,13 @@ npm run rayfin:up
 ## The data model
 
 `rayfin/data/Todo.ts` defines a `Todo` entity scoped to the signed-in user, so
-each person only ever sees their own tasks:
+each person only ever sees their own tasks.
 
-```typescript
-import { entity, role, uuid, text, boolean, date } from '@microsoft/rayfin-core';
-
-@entity()
-@role('authenticated', '*', { policy: (claims, item) => claims.sub.eq(item.user_id) })
-export class Todo {
-  @uuid() id!: string;
-  @text({ min: 1, max: 100 }) title!: string;
-  @boolean() isCompleted!: boolean;
-  @date() createdAt!: Date;
-  @text() user_id!: string;
-}
-```
+Read the entity in the project alongside the official
+[modeling guide](https://rayfin.ai/docs/data/modeling) and
+[permissions guide](https://rayfin.ai/docs/data/permissions) when extending it.
+Keep the entity registered in `rayfin/data/schema.ts` and preserve its
+server-side owner policy.
 
 `src/services/todos.ts` wraps the typed Rayfin client with `getTodos`,
 `createTodo`, `updateTodo`, and `deleteTodo`.

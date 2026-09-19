@@ -6,10 +6,10 @@ plus a **capability router** the agent reads first — it picks the right Rayfin
 services, installs the right npm modules, and activates the right skills for the
 app you describe.
 
-> This is a Fabricator template: you build your app and deploy it to a Fabric
-> test workspace — the Fabricator agent does this for you and validates the
-> running app in its built-in browser. For a quick look without deploying, run
-> `npm run preview` to serve the home page locally (no backend, no sign-in).
+> This is a Fabricator template: describe your app, and Fabricator deploys the
+> agent's changes to a Fabric test workspace and shows the running app in its
+> built-in browser. For a quick look at the public starter without deploying,
+> run `npm run preview` to serve the home page locally (no backend, no sign-in).
 
 ## How it works
 
@@ -20,7 +20,7 @@ to one or more **capability packs**, and only then pulls each one in:
 | You ask for… | The router activates | Which brings in |
 |---|---|---|
 | Sign-in / accounts / per-user data | `authentication` | Wire the Fabric auth that already ships in `src/services/` |
-| Data, records, CRUD, a database | `data-modeling` **+ `authentication`** | Entities + row-level security in `rayfin/data/`; auth wired in, since Rayfin data is always authenticated |
+| Data, records, CRUD, a database | `data-modeling` **+ `authentication`** by default | Entities + row-level security in `rayfin/data/`; auth wired for the template's default authenticated data workflow |
 | Charts, dashboards, KPIs | `graphein-visuals` | Author Graphein specs, drop into `<Chart>` |
 | Power BI / semantic-model analytics | `analytics` | One command — `npm run pack:add -- analytics` scaffolds the dashboard kit, DAX + headless preview, and a runnable demo |
 
@@ -28,11 +28,27 @@ Nothing heavy is loaded until it's needed — the base app stays small and fast.
 
 ## Getting started
 
-In Fabricator, just describe what you want to build. To deploy from the CLI:
+In Fabricator, describe what you want to build; Fabricator handles deployment
+after the agent's changes. For manual CLI deployment outside that workflow:
 
 ```bash
 npm run rayfin:up
 ```
+
+## Documentation
+
+Visit [Rayfin](https://rayfin.ai/) or
+[browse the documentation](https://rayfin.ai/docs) for platform guides, SDK
+APIs, authentication, data modeling, configuration, and known limitations.
+This template's README and skills focus on its own integration points rather
+than duplicating those guides.
+
+Coding agents should start with [AGENTS.md](AGENTS.md), including its
+[documentation guidance](AGENTS.md#rayfin-documentation) for machine-readable
+references, version-matched APIs, and Fabricator's workflow rules.
+The [rayfin-web-docs skill](.agents/skills/rayfin-web-docs/SKILL.md) performs
+targeted website lookups before Rayfin-specific changes, without fetching
+unrelated documentation for purely visual edits.
 
 ## Project structure
 
@@ -40,6 +56,7 @@ npm run rayfin:up
 ├── AGENTS.md                       # Capability router — the agent reads this first
 ├── .agents/skills/                 # Capability packs (skills + on-demand assets)
 │   ├── capability-router/          # Start-here orchestrator
+│   ├── rayfin-web-docs/            # Official docs lookup for Rayfin changes
 │   ├── authentication/             # Turn on Fabric sign-in
 │   ├── data-modeling/              # Entities + row-level security
 │   ├── graphein-visuals/           # Charts as declarative specs
@@ -62,9 +79,10 @@ npm run rayfin:up
 ```
 
 Authentication ships wired **off** so the static base previews with no backend.
-It's wired in automatically as soon as your app **uses data** (Rayfin data is
-always authenticated) or needs sign-in — a static page over public data stays
-no-auth. See `.agents/skills/authentication/SKILL.md`.
+The agent wires it in for the template's **default authenticated data workflow**
+or features that need sign-in. A static page over public data can stay no-auth.
+See the [authentication skill](.agents/skills/authentication/SKILL.md) for the
+template's wiring and backend requirements.
 
 ## Scripts
 

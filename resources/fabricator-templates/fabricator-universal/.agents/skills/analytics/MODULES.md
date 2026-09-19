@@ -24,8 +24,8 @@ change the base toolchain versions.
 - `@microsoft/fabric-app-data`: `1.1.0`
 - `@microsoft/fabric-app-data-embed-client`: `1.0.0`
 - `@microsoft/fabric-app-data-proxy`: `1.0.0`
-- `@microsoft/rayfin-data`: `^1.33.2`
-- `@microsoft/rayfin-lib`: `^1.33.2`
+- `@microsoft/rayfin-data`: `^1.35.1`
+- `@microsoft/rayfin-lib`: `^1.35.1`
 - `clsx`: `^2.1.1`
 - `framer-motion`: `^12.40.0`
 - `tailwind-merge`: `^3.6.0`
@@ -35,7 +35,7 @@ change the base toolchain versions.
 - `@graphein/node`: `>=0.16.0` — headless render for `npm run preview`
 - `@microsoft/fabric-app-data-cli`: `1.1.0` — `fabric-app-data generate` in `build:fabric`
 - `@microsoft/fabric-app-data-cli-proxy`: `1.0.0`
-- `@microsoft/rayfin-mcp`: `^1.33.2`
+- `@microsoft/rayfin-mcp`: `^1.35.1`
 
 ## Not included
 

@@ -1,14 +1,12 @@
 ---
 name: authentication
 description: >
-  Wire this in whenever the app uses or connects to data — records, a database,
-  entities, per-user data, row-level security — or when the user wants sign-in,
-  accounts, login, or protected pages. Rayfin data is always accessed as an
-  authenticated user, so **data implies auth**; only a static page over public
-  data skips it. The starter ships as a no-auth "hello world" that previews with
-  no backend, and the full Fabric auth scaffolding is already in the project —
-  this skill wires it in: AuthProvider + bootstrapAuth in main.tsx, the route
-  guard in App.tsx, the sign-in page, sign-out, and the env/deploy requirement.
+  Wire the existing Fabric auth into the template's default authenticated data
+  workflow, or when the user wants sign-in, accounts, login, protected pages,
+  per-user data, or row-level security. The starter is a no-auth "hello world"
+  with auth scaffolding already present. This skill covers its AuthProvider,
+  bootstrapAuth, routes, sign-in page, and deployment configuration; official
+  Rayfin docs cover the underlying platform and SDK.
   Triggers: auth, authentication, sign in, sign-in, login, log in, sign out,
   logout, account, user, identity, protect route, require login, gated page,
   data, database, records, per-user, row-level security, who is the current user,
@@ -17,21 +15,23 @@ description: >
 
 # Enabling authentication
 
-This starter renders a **no-auth hello-world page** so it previews locally
-(`npm run preview`) with no backend. The Fabric auth scaffolding is present but
-not wired into the running app.
+This starter renders a **no-auth hello-world page** that can preview without a
+backend. Enable the existing auth scaffolding for the default `data-modeling`
+workflow or features that need sign-in, protected routes, or per-user data. A
+static page over public data needs no auth.
 
-**Wire it in as soon as the app uses data.** Rayfin data is always accessed as an
-authenticated user — there is **no anonymous/public data access on Fabric** — so
-the moment you add data (records, a database, per-user rows, row-level security),
-or the user asks for sign-in / accounts / protected pages, wire auth in with the
-steps below. A **static page over public data** (no Rayfin data) stays no-auth.
+## Rayfin references
 
-> Authentication needs a deployed Rayfin backend. `rayfin env` injects the
-> `VITE_RAYFIN_*` and `VITE_FABRIC_*` vars at build time from the active
-> deployment, and `bootstrapAuth()` throws without them — so once auth is wired
-> in, the app must be deployed (`npm run rayfin:up`) to run. `npm run preview`
-> (no backend) only works while the app stays no-auth.
+Follow the [documentation and version guidance](../../../AGENTS.md#rayfin-documentation)
+before choosing SDK APIs. Use the official guides for platform behavior:
+
+- [Fabric SSO](https://rayfin.ai/docs/auth/fabric-sso) covers popup and embedded
+  flows, deployed-backend requirements, and allowed origins.
+- [React integration](https://rayfin.ai/docs/auth/react) covers sessions and route
+  guarding.
+
+Adapt those patterns to the existing services below rather than replacing them
+with a second client or auth context.
 
 ## What's already in the project
 
@@ -44,106 +44,37 @@ steps below. A **static page over public data** (no Rayfin data) stays no-auth.
 | `src/hooks/AuthContext.tsx` | `AuthProvider` + `useAuth()` |
 | `src/components/AuthPage.tsx` | Sign-in UI |
 
-## Step 1 — wire the provider in `src/main.tsx`
+## Wire authentication into this template
 
-```tsx
-import { createRoot } from 'react-dom/client';
+1. **Initialize once in `src/main.tsx`.** Import `bootstrapAuth` from
+   `@/services/bootstrap` and `AuthProvider` from `@/hooks/AuthContext`. Call
+   `bootstrapAuth()` once before rendering, then wrap `<App />` with
+   `<AuthProvider authService={authService}>`. The entry file already includes
+   this wiring as a commented example.
+2. **Gate the intended routes in `src/App.tsx`.** Add an `/auth` route using
+   `AuthPage`. Use `useAuth()`'s `loading` and `isAuthenticated` values to wait for
+   initialization, redirect signed-out users from protected routes to `/auth`,
+   and redirect signed-in users away from the sign-in page. Leave genuinely
+   public routes ungated.
+3. **Reuse the existing context and client.** Components under `AuthProvider`
+   use `useAuth()` for `user`, `signIn`, `signOut`, and loading/error state.
+   `AuthPage` already starts sign-in from a button click. Data access uses
+   `getRayfinClient()` after bootstrap; do not initialize a second client.
+4. **Let Fabricator deploy.** Return the changes for its normal auto-deploy
+   workflow. Do not run `rayfin up` or `npm run rayfin:up` from the agent.
 
-import App from '@/App';
-import { AuthProvider } from '@/hooks/AuthContext';
-import { bootstrapAuth } from '@/services/bootstrap';
+## Backend configuration and preview
 
-import './main.css';
+`bootstrapAuth()` requires `VITE_RAYFIN_API_URL`,
+`VITE_RAYFIN_PUBLISHABLE_KEY`, `VITE_FABRIC_WORKSPACE_ID`,
+`VITE_FABRIC_ITEM_ID`, and `VITE_FABRIC_PORTAL_URL`. `rayfin env` supplies these
+from the active deployment for the build. Keep its explicit errors for missing
+configuration; placeholder values do not create a working authenticated backend.
 
-const authService = bootstrapAuth();
-
-createRoot(document.getElementById('root')!).render(
-  <AuthProvider authService={authService}>
-    <App />
-  </AuthProvider>
-);
-```
-
-## Step 2 — gate routes in `src/App.tsx`
-
-Add an `AuthGuard` that reads `useAuth()` and redirects unauthenticated users to
-the sign-in page, then wrap protected routes with it:
-
-```tsx
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-
-import { AuthPage } from '@/components/AuthPage';
-import { useAuth } from '@/hooks/AuthContext';
-import { HomePage } from '@/pages/HomePage';
-
-function AuthGuard({
-  children,
-  requireAuth,
-}: {
-  children: React.ReactNode;
-  requireAuth: boolean;
-}) {
-  const { isAuthenticated, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-500">Loading...</div>
-      </div>
-    );
-  }
-
-  if (requireAuth && !isAuthenticated) return <Navigate to="/auth" replace />;
-  if (!requireAuth && isAuthenticated) return <Navigate to="/" replace />;
-
-  return <>{children}</>;
-}
-
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route
-          path="/auth"
-          element={
-            <AuthGuard requireAuth={false}>
-              <AuthPage />
-            </AuthGuard>
-          }
-        />
-        <Route
-          path="/"
-          element={
-            <AuthGuard requireAuth={true}>
-              <HomePage />
-            </AuthGuard>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
-}
-
-export default App;
-```
-
-## Step 3 — use the session in components
-
-Anywhere under `AuthProvider`, call `useAuth()`:
-
-```tsx
-const { user, signOut } = useAuth();
-// user?.name, user?.email
-// <button onClick={() => void signOut()}>Sign out</button>
-```
-
-## Step 4 — deploy
-
-```bash
-npm run rayfin:up
-```
-
-The Fabricator agent then validates the running app in its built-in browser.
-`npm run preview` no longer renders once routes require auth (there's no local
-session), so preview only the parts you keep public, or preview before gating.
+The no-backend preview is for the public starter. Authenticated views need a
+deployed **backend**, real environment configuration, and a session. This does
+not require every frontend to be hosted in Fabric: the SSO popup flow also
+supports a local frontend whose origin is registered in `allowedRedirectUris`.
+Only the embedded flow requires the Fabric portal iframe. That platform
+capability does not change Fabricator's workflow or authorize starting a dev
+server during an agent turn.

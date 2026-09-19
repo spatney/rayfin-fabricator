@@ -24,31 +24,30 @@ asked for.
 1. **Classify the request** into one or more capabilities using the matrix below.
    Most requests need 1–2 packs. When in doubt, start with the smallest set and
    grow later — you can always route again on the next turn.
-2. **For each chosen pack, in order:**
-   0. **If the pack ships a `pack.json`, scaffold it in one command** — `npm run
-      pack:add -- <pack>` enables the service, installs the pinned modules,
-      copies the kit, and wires scripts in one idempotent pass (see
-      [`pack-manifest.md`](pack-manifest.md)). Today **`analytics`** ships one, so
-      that whole path is a single command — then jump straight to reading the
-      pack skill. Otherwise, do the manual steps below.
-   1. **Enable the service** — edit `rayfin/rayfin.yml` (see the pack's row).
-      Auth + data + static hosting are already on.
-   2. **Install the modules** — `npm install <…>` for that pack. This is fast
-      (Fabricator ships a warm offline cache), so just install what the pack
-      needs. Skip modules that are already in `package.json`.
-   3. **Scaffold the code** — create the entities / wiring / files the pack calls
-      for (the pack's row says what; the pack's SKILL.md has the patterns).
-   4. **Read the pack skill** — open `.agents/skills/<pack>/SKILL.md` and follow
-      it for the real implementation details. Don't duplicate its guidance here.
-3. **Keep it building** and let Fabricator auto-deploy. Don't run `rayfin up`, a
+2. **Read before activating each pack.** Open
+   `.agents/skills/<pack>/SKILL.md` for the template-specific integration. When
+   the pack needs Rayfin APIs or service configuration, follow
+   [rayfin-web-docs](../rayfin-web-docs/SKILL.md) to read relevant pages from
+   `https://rayfin.ai/` and reconcile their versions before making changes.
+   The [central documentation guidance](../../../AGENTS.md#rayfin-documentation)
+   explains source precedence and Fabricator's workflow boundaries.
+3. **Activate only the selected capabilities.** If a pack ships a `pack.json`,
+   use `npm run pack:add -- <pack>` to enable its services, install pinned
+   modules, copy the kit, and wire scripts in one idempotent pass (see
+   [`pack-manifest.md`](pack-manifest.md)). **`analytics`** ships a manifest.
+   Otherwise, follow the pack's instructions to enable services in
+   `rayfin/rayfin.yml`, install missing modules compatible with the project's
+   SDK, and scaffold the required entities or wiring. Auth + data + static
+   hosting are already enabled; skip packages already present.
+4. **Keep it building** and let Fabricator auto-deploy. Don't run `rayfin up`, a
    dev server, or a local test runner (see `AGENTS.md`).
 
 ## Capability matrix
 
-| Pack | Route here when the user wants… | Enable in `rayfin.yml` | Install | Scaffold | Then read |
+| Pack | Route here when the user wants… | Enable in `rayfin.yml` | Install | Scaffold | Read before activation |
 |---|---|---|---|---|---|
 | **authentication** | sign-in, accounts, login, logout, protected pages, "who is the current user", per-user data | `auth` (already on) | — (scaffolding already present) | Wire `AuthProvider` + `bootstrapAuth()` in `src/main.tsx`; add the route guard in `src/App.tsx` | `authentication` |
-| **data-modeling** | records, CRUD, a database, entities, lists, "save/store X", per-user rows, row-level security | `data` (already on, `dialect: mssql`) + `auth` | `@microsoft/rayfin-data` | Add entity classes under `rayfin/data/*.ts`; register them in `rayfin/data/schema.ts`; read/write via the `rayfin-client`; **wire auth** (Rayfin data is always authenticated) | `data-modeling` **+ `authentication`** |
+| **data-modeling** | records, CRUD, a database, entities, lists, "save/store X", per-user rows, row-level security | `data` (already on, `dialect: mssql`) + `auth` for the default workflow | `@microsoft/rayfin-data` | Add entity classes under `rayfin/data/*.ts`; register them in `rayfin/data/schema.ts`; read/write via the `rayfin-client`; **wire auth** for the default authenticated data path | `data-modeling` **+ `authentication`** |
 | **graphein-visuals** | a chart, graph, plot, KPI, table, or small dashboard over app data | — | `graphein` (already present) | Author a `ChartSpec`, drop into `<Chart spec={…} />` (`src/components/Chart.tsx`) | `graphein-visuals` |
 | **analytics** | a **Power BI / semantic-model** dashboard, DAX measures, BI reporting over an existing dataset | one command: **`npm run pack:add -- analytics`** (sets `auth` on / **`data` off**, installs modules, copies `kit/**`, seeds a runnable demo) | — (the command installs them) | — (the command copies the kit + seeds `App.tsx`/`main.tsx`); then wire the semantic model | `analytics` (then `build-workflow`, `visuals`, `dax`, `fabric-data`, `app-design`, `headless-preview`) |
 
@@ -65,11 +64,11 @@ asked for.
   (e.g. `data-modeling` for the data + `graphein-visuals` for the chart).
 - **Row-level security** lives inside `data-modeling` — route there when the user
   says "each user only sees their own …".
-- **Data implies auth.** Rayfin data is always accessed as an authenticated user
-  (no anonymous access on Fabric), so any request that stores or reads app data —
-  `data-modeling` especially — must **also wire `authentication`**; route to both.
-  A **static page over public data** needs neither. (Analytics is separate: its
-  Power BI model is read through the Fabric embed proxy, which Fabric
-  authenticates — no app `AuthProvider` needed.)
+- **Authenticated data is the default.** Route ordinary app-data requests to
+  both `data-modeling` and `authentication`. For explicit anonymous-access
+  requests, follow the access guidance in `AGENTS.md` before choosing a different
+  path. A **static page over public data** needs neither pack. (Analytics is
+  separate: its Power BI model is read through the Fabric-authenticated embed
+  proxy, with no app `AuthProvider` needed.)
 - **Grow incrementally.** Ship the core of what was asked, let it deploy, then add
   the next capability. You don't have to wire every pack up front.
