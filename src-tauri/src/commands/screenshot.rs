@@ -35,11 +35,40 @@ pub async fn screenshot_cleanup(paths: Vec<String>) {
 /// Delete the given temp screenshot files, restricted to Studio's shots dir.
 /// Shared by the `screenshot_cleanup` command and the chat turn engine.
 pub fn cleanup(paths: &[String]) {
-  let shots = crate::services::paths::shots_dir();
+  let Ok(shots) = std::fs::canonicalize(crate::services::paths::shots_dir()) else { return; };
   for p in paths {
-    let path = PathBuf::from(p);
-    if path.starts_with(&shots) {
-      let _ = std::fs::remove_file(&path);
+    if let Some(owned) = owned_capture(&shots, &PathBuf::from(p)) {
+      let _ = std::fs::remove_file(owned);
     }
+  }
+}
+
+fn owned_capture(shots: &std::path::Path, path: &std::path::Path) -> Option<PathBuf> {
+  let canonical = std::fs::canonicalize(path).ok()?;
+  // Lexical starts_with allowed shots/../... to delete persistent assets.
+  // Captures are immediate files, never descendants or aliases outside shots.
+  if canonical.parent() != Some(shots) { return None; }
+  let metadata = std::fs::symlink_metadata(path).ok()?;
+  (metadata.is_file() && !metadata.file_type().is_symlink()).then_some(canonical)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn design_screenshot_cleanup_cannot_escape_into_persistent_assets() {
+    let dir = crate::services::design_store::test_dir();
+    let shots = dir.join("shots");
+    let assets = dir.join("assets");
+    std::fs::create_dir(&shots).unwrap();
+    std::fs::create_dir(&assets).unwrap();
+    std::fs::write(shots.join("shot-1.png"), b"capture").unwrap();
+    std::fs::write(assets.join("original.bin"), b"persistent").unwrap();
+    let canonical = std::fs::canonicalize(&shots).unwrap();
+    assert!(owned_capture(&canonical, &shots.join("shot-1.png")).is_some());
+    assert!(owned_capture(&canonical, &shots.join("..").join("assets").join("original.bin")).is_none());
+    assert_eq!(std::fs::read(assets.join("original.bin")).unwrap(), b"persistent");
+    std::fs::remove_dir_all(dir).unwrap();
   }
 }

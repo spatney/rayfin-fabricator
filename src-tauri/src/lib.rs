@@ -141,6 +141,7 @@ pub fn run() {
     .plugin(tauri_plugin_updater::Builder::new().build())
     .manage(AppState::default())
     .manage(PreviewState::default())
+    .manage(services::preview_studio::StudioState::default())
     .manage(UpdaterState::default())
     .manage(DevServers::default())
     .setup(|app| {
@@ -326,6 +327,20 @@ pub fn run() {
       services::preview::preview_design_apply_restyle,
       services::preview::preview_design_set_models,
       services::preview::preview_design_set_theme,
+      services::preview_studio::preview_studio_connect,
+      services::preview_studio::preview_studio_poll,
+      services::preview_studio::preview_studio_command,
+      services::preview_studio::preview_studio_disconnect,
+      commands::design_studio::design_draft_load,
+      commands::design_studio::design_draft_save,
+      commands::design_studio::design_draft_clear,
+      commands::design_studio::design_source_revision,
+      commands::design_studio::design_assets,
+      commands::design_studio::design_import_asset,
+      commands::design_studio::design_asset_preview,
+      commands::design_studio::design_apply,
+      commands::design_studio::design_apply_receipt,
+      commands::design_studio::design_apply_finish,
       commands::design::design_generate_html,
       commands::design::design_restyle_element,
     ])

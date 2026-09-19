@@ -203,6 +203,7 @@ struct Inner {
   /// Re-shows compare against this — not the webview's drifted live URL — so a
   /// pure re-show (e.g. after an overlay closes) never triggers a reload.
   commanded: Option<String>,
+  nav_state: Option<PreviewNavState>,
   /// Committed main-frame URLs, oldest first (the back/forward stack).
   stack: Vec<String>,
   /// Index into `stack` of the currently displayed entry.
@@ -229,6 +230,7 @@ struct Inner {
   /// top frame is then re-enabled as a `relay` for that origin on every finished
   /// page load; `None` means the direct view (top frame is the app itself).
   design_relay: Option<String>,
+  studio_active: bool,
 }
 
 impl Inner {
@@ -251,6 +253,7 @@ impl Inner {
     // controller isn't re-injected into it (see `on_page_load`).
     self.design_active = false;
     self.design_relay = None;
+    self.studio_active = false;
   }
 }
 
@@ -357,6 +360,9 @@ fn on_page_load(app: &AppHandle, event: PageLoadEvent, u: &Url) {
       let _ = wv.eval(design_enable_js(design_relay.as_deref()));
     }
   }
+  if !loading && state.inner.lock().unwrap().studio_active {
+    crate::services::preview_studio::on_load(app.clone());
+  }
   emit_nav(app, &u.to_string(), loading, can_back, can_fwd);
 }
 
@@ -380,15 +386,14 @@ fn on_new_window(
 }
 
 fn emit_nav(app: &AppHandle, url: &str, loading: bool, can_back: bool, can_fwd: bool) {
-  let _ = app.emit(
-    PREVIEW_NAV,
-    PreviewNavState {
-      url: url.to_string(),
-      loading,
-      can_go_back: can_back,
-      can_go_forward: can_fwd,
-    },
-  );
+  let nav = PreviewNavState {
+    url: url.to_string(),
+    loading,
+    can_go_back: can_back,
+    can_go_forward: can_fwd,
+  };
+  app.state::<PreviewState>().inner.lock().unwrap().nav_state = Some(nav.clone());
+  let _ = app.emit(PREVIEW_NAV, nav);
 }
 
 /// Show the preview at `url`, positioned over `bounds`. Creates the child webview
@@ -447,6 +452,13 @@ pub async fn preview_show_url(
     }
     wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
     state.inner.lock().unwrap().visible = true;
+    if !needs_nav {
+      // A remounted pane has not seen this retained document's navigation events.
+      let nav = state.inner.lock().unwrap().nav_state.clone();
+      if let Some(nav) = nav {
+        app.emit(PREVIEW_NAV, nav).map_err(|e| AppError::Msg(e.to_string()))?;
+      }
+    }
   }
   Ok(())
 }
@@ -756,6 +768,44 @@ async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) 
   }
 }
 
+pub(crate) fn studio_active(app: &AppHandle, enabled: bool) {
+  let state = app.state::<PreviewState>();
+  let mut inner = state.inner.lock().unwrap();
+  inner.studio_active = enabled;
+  if enabled {
+    inner.design_active = false;
+    inner.design_relay = None;
+  }
+}
+
+pub(crate) fn studio_url(app: &AppHandle) -> Result<Url, String> {
+  app.get_webview(PREVIEW_LABEL).ok_or("The app preview is not open.")?
+    .url().map_err(|e| format!("Could not identify the app preview: {e}"))
+}
+
+/// Studio never treats a malformed, timed-out, or missing controller response
+/// as an empty successful snapshot. Legacy polling retains its old semantics.
+pub(crate) async fn studio_eval(app: &AppHandle, js: &str) -> Result<serde_json::Value, String> {
+  let wv = app.get_webview(PREVIEW_LABEL).ok_or("The app preview is not open.")?;
+  let (tx, rx) = oneshot::channel();
+  let tx = Mutex::new(Some(tx));
+  wv.eval_with_callback(js.to_string(), move |res| {
+    if let Some(tx) = tx.lock().unwrap().take() { let _ = tx.send(res); }
+  }).map_err(|e| format!("Design controller evaluation failed: {e}"))?;
+  let raw: String = tokio::time::timeout(Duration::from_secs(4), rx).await
+    .map_err(|_| "Design controller response timed out. Reload the app preview and retry.")?
+    .map_err(|_| "Design controller response was interrupted.")?;
+  if raw.len() > crate::services::design_contract::MAX_WIRE_BYTES {
+    return Err("Design controller response exceeded its byte budget.".into());
+  }
+  let value: serde_json::Value = serde_json::from_str(raw.trim())
+    .map_err(|e| format!("Design controller returned invalid JSON: {e}"))?;
+  if let Some(error) = value.get("__studioError").and_then(|v| v.as_str()) {
+    return Err(format!("Design controller: {error}"));
+  }
+  Ok(value)
+}
+
 /// Turn the in-preview "design mode" on/off. Enables (or disables) the design
 /// controller — which is already injected at document-start into every frame — and
 /// records the session so it is re-armed on subsequent page loads. `embedded` +
@@ -771,6 +821,9 @@ pub fn preview_design_set(
   embedded: Option<bool>,
   app_url: Option<String>,
 ) -> AppResult<()> {
+  if state.inner.lock().unwrap().studio_active {
+    return Ok(());
+  }
   // Relay mode only when enabling an embedded (Fabric) view for which we can
   // resolve the app's origin; anything else is the direct (top-frame) view.
   let relay_origin = if enabled && embedded.unwrap_or(false) {

@@ -7,6 +7,8 @@
  * `RayfinStudioApi` interface and the `IpcChannels` map together.
  */
 
+import type { DesignStudioApi } from './design'
+
 export interface AppVersions {
   app: string
   tauri: string
@@ -757,9 +759,11 @@ export interface ExperimentFlags {
    * Live local preview: while an agent turn runs, start the project's Vite dev
    * server and point the preview at `localhost` so edits show live (HMR). The
    * server is stopped at turn end and the normal after-turn deploy takes over.
-   * Off by default; only affects projects that declare a `dev` script.
+   * Off by default; requires the project's locally installed Vite.
    */
   localDevPreview?: boolean
+  /** Canvas-first visual editing with locally saved drafts and explicit Apply. */
+  designStudio?: boolean
 }
 
 export interface CreateProjectInput {
@@ -1300,6 +1304,8 @@ export interface SuggestionSet {
  */
 export interface ChatMessage {
   id: string
+  /** Source-writing Design turns recover through their Apply receipt, not prompt replay. */
+  designApplyId?: string
   role: 'user' | 'assistant'
   text: string
   tools: ChatToolCall[]
@@ -1981,7 +1987,7 @@ export interface RayfinStudioApi {
      * `workspace` optionally targets a Fabric workspace by display name (first
      * deploy); subsequent deploys reuse the recorded active deployment.
      */
-    run: (projectId: string, workspace?: string) => Promise<DeployResult>
+    run: (projectId: string, workspace?: string, applyId?: string) => Promise<DeployResult>
     /** Read the persisted deployment status (`rayfin up status --json`). */
     status: (projectId: string) => Promise<DeployStatus>
     /** True when the project has uncommitted changes not yet deployed. */
@@ -2020,12 +2026,14 @@ export interface RayfinStudioApi {
      * serving with its `localhost` URL, or with `unsupported` / `error`. The
      * process keeps running until {@link stop}.
      */
-    start: (projectId: string) => Promise<DevServerResult>
-    /** Stop the project's Vite dev server (no-op when none is running). */
-    stop: (projectId: string) => Promise<void>
-    /** True when the project supports a local preview (declares a `dev` script). */
+    start: (projectId: string, owner?: 'chat' | 'design') => Promise<DevServerResult>
+    /** Release this consumer; stop only when no owner still needs the server. */
+    stop: (projectId: string, owner?: 'chat' | 'design') => Promise<void>
+    /** True when the project has a locally installed Vite. */
     supported: (projectId: string) => Promise<boolean>
   }
+
+  designStudio: DesignStudioApi
 
   /** App-wide settings (theme, telemetry opt-in). */
   settings: {

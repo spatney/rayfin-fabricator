@@ -216,6 +216,40 @@ describe('ChatPanel authentication recovery', () => {
   })
 })
 
+describe('ChatPanel Design Apply isolation', () => {
+  it('keeps a composer draft and outbound request untouched while Design owns source editing', async () => {
+    const api = installApi()
+    const consumed = vi.fn()
+    const changed = vi.fn()
+    render(<ChatPanel
+      project={makeProject('p1')} messages={[]} onChange={() => {}}
+      draft="Keep this idea for later" onDraftChange={changed} externalBusy
+      outbound={{ id: 'queued', display: 'An update', prompt: 'Do not replace my draft' }}
+      onOutboundConsumed={consumed}
+    />)
+    const composer = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    fireEvent.keyDown(composer, { key: 'Enter' })
+    expect(composer.value).toBe('Keep this idea for later')
+    expect(api.chat.send).not.toHaveBeenCalled()
+    expect(api.chat.steer).not.toHaveBeenCalled()
+    expect(consumed).not.toHaveBeenCalled()
+    expect(changed).not.toHaveBeenCalled()
+  })
+
+  it('does not offer generic prompt replay for an interrupted or failed source Apply', async () => {
+    installApi()
+    const base: UIChatMessage = { id: 'u1', role: 'user', text: 'Apply visual changes', tools: [], pending: false }
+    render(<ChatPanel project={makeProject('p1')} onChange={() => {}} messages={[
+      base,
+      { ...base, id: 'a1', role: 'assistant', designApplyId: 'apply1', interrupted: true },
+      { ...base, id: 'a2', role: 'assistant', designApplyId: 'apply2', error: 'Source needs review' }
+    ]} />)
+    expect(screen.queryByRole('button', { name: /Resume$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Retry$/i })).toBeNull()
+    expect(screen.getAllByText(/Open Design Studio to review or recover/)).toHaveLength(2)
+  })
+})
+
 describe('ChatPanel composer draft', () => {
   it('preserves a typed-but-unsent prompt when navigating to Code and back (issue #9)', async () => {
     render(<Harness />)

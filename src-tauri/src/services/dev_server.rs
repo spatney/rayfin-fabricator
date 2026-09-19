@@ -8,10 +8,10 @@
 //! is wired from the last recorded deployment. The spawned server is long-lived:
 //! [`dev_start`] returns once Vite prints its `Local:` URL but leaves the process
 //! running under a per-project handle until [`dev_stop`] (or app exit) tree-kills
-//! it. Only projects that declare a `dev` script are supported (universal /
-//! todoapp); others are reported `unsupported`.
+//! it. Chat and Design are independent owners; only the last release stops it.
+//! Locally installed Vite is sufficient; no `dev` script is required.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
@@ -48,8 +48,6 @@ const SCAN_TAIL: usize = 4096;
 /// case a color reset is appended.
 static LOCAL_URL_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)Local:\s*(https?://[^\s\x1b]+)").unwrap());
-static HTML_TITLE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?is)<title[^>]*>\s*(.*?)\s*</title>").unwrap());
 
 /// Extract Vite's `Local:` URL from a chunk of dev-server output (trailing slash
 /// trimmed). Returns `None` when the text doesn't contain the ready banner.
@@ -58,45 +56,16 @@ pub fn parse_local_url(text: &str) -> Option<String> {
     Some(raw.trim_end_matches('/').to_string())
 }
 
-fn html_title(text: &str) -> Option<String> {
-    HTML_TITLE_RE
-        .captures(text)?
-        .get(1)
-        .map(|m| m.as_str().split_whitespace().collect::<Vec<_>>().join(" "))
-        .filter(|title| !title.is_empty())
-}
-
-/// A Vite server on the shared Rayfin port is reusable only when its served
-/// document matches this project's index title. This prevents attaching the
-/// preview to another Rayfin app that happens to be running on port 5173.
-fn existing_vite_matches(project_index: &str, served_html: &str) -> bool {
-    if !served_html.contains("/@vite/client") {
-        return false;
-    }
-    matches!(
-        (html_title(project_index), html_title(served_html)),
-        (Some(expected), Some(actual)) if expected == actual
-    )
-}
-
-/// Probe an already-running Vite server on the canonical Rayfin port.
-/// `Some(true)` means it serves this project, `Some(false)` means another Vite
-/// app owns the port, and `None` means no Vite page answered.
-async fn probe_existing_vite(project_dir: &Path) -> Option<bool> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-        .ok()?;
-    let response = client.get(LOCAL_URL).send().await.ok()?;
-    if !response.status().is_success() {
-        return None;
-    }
-    let served_html = response.text().await.ok()?;
-    if !served_html.contains("/@vite/client") {
-        return None;
-    }
-    let project_index = std::fs::read_to_string(project_dir.join("index.html")).ok()?;
-    Some(existing_vite_matches(&project_index, &served_html))
+/// A page title is not provenance. Never adopt an untracked process, even if
+/// it looks like the same template; let its owner stop it explicitly.
+async fn unowned_port_in_use() -> bool {
+    tokio::task::spawn_blocking(|| {
+        ["127.0.0.1:5173", "[::1]:5173"].iter().any(|address| {
+            std::net::TcpStream::connect_timeout(
+                &address.parse().expect("fixed loopback address"), Duration::from_millis(500),
+            ).is_ok()
+        })
+    }).await.unwrap_or(true)
 }
 
 /// True when a project has Vite installed locally — the one requirement for the
@@ -162,13 +131,38 @@ struct DevHandle {
     cancel: CancelToken,
     /// The resolved `localhost` URL once Vite is ready.
     url: Option<String>,
+    owners: HashSet<DevOwner>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DevOwner { Chat, Design }
 
 /// Per-project registry of live Vite dev servers (Tauri managed state). Cloneable
 /// so the spawn monitor task can update / remove its own entry.
 #[derive(Default, Clone)]
 pub struct DevServers {
     inner: Arc<Mutex<HashMap<String, DevHandle>>>,
+    lifecycle: Arc<tokio::sync::Mutex<()>>,
+}
+
+impl DevServers {
+    pub fn owns_project(&self, project_id: &str) -> bool {
+        self.inner.lock().unwrap().get(project_id)
+            .is_some_and(|h| !h.cancel.is_cancelled() && h.url.as_deref() == Some(LOCAL_URL) && !h.owners.is_empty())
+    }
+
+    fn release_owner(&self, project_id: &str, owner: DevOwner) -> bool {
+        let mut handles = self.inner.lock().unwrap();
+        if let Some(h) = handles.get_mut(project_id) {
+            if !h.owners.remove(&owner) { return false; }
+            if h.owners.is_empty() {
+                h.cancel.cancel();
+                return true;
+            }
+        }
+        false
+    }
 }
 
 type ReadySender = oneshot::Sender<Result<String, String>>;
@@ -184,6 +178,7 @@ async fn pump<R>(
     ready: SharedReady,
     servers: DevServers,
     project_id: String,
+    token: CancelToken,
 ) where
     R: AsyncReadExt + Unpin,
 {
@@ -197,22 +192,25 @@ async fn pump<R>(
                 renderer(stream, &chunk);
                 acc.push_str(&chunk);
                 if let Some(url) = parse_local_url(&acc) {
-                    // Record the URL and satisfy the readiness wait, exactly once.
-                    let mut fired = false;
-                    if let Some(tx) = ready.lock().unwrap().take() {
-                        let _ = tx.send(Ok(url.clone()));
-                        fired = true;
-                    }
-                    if fired {
-                        if let Some(h) = servers.inner.lock().unwrap().get_mut(&project_id) {
-                            h.url = Some(url);
+                    if url != LOCAL_URL {
+                        if let Some(tx) = ready.lock().unwrap().take() {
+                            let _ = tx.send(Err("Vite did not bind to the required localhost:5173 address.".into()));
                         }
+                        continue;
+                    }
+                    // Record the URL and satisfy the readiness wait, exactly once.
+                    if let Some(tx) = ready.lock().unwrap().take() {
+                        if let Some(h) = servers.inner.lock().unwrap().get_mut(&project_id).filter(|h| h.cancel.same(&token)) {
+                            h.url = Some(url.clone());
+                        }
+                        let _ = tx.send(Ok(url));
                     }
                     acc.clear();
                 } else if acc.len() > SCAN_TAIL {
                     // Keep only the tail so the banner is still detectable across a
                     // read boundary without the buffer growing unbounded.
-                    let cut = acc.len() - SCAN_TAIL;
+                    let mut cut = acc.len() - SCAN_TAIL;
+                    while !acc.is_char_boundary(cut) { cut += 1; }
                     acc.drain(..cut);
                 }
             }
@@ -228,21 +226,28 @@ pub async fn dev_start(
     app: AppHandle,
     state: State<'_, DevServers>,
     project_id: String,
+    owner: Option<DevOwner>,
 ) -> AppResult<DevServerResult> {
+    let servers = state.inner().clone();
+    tokio::spawn(async move { start_owned(app, servers, project_id, owner.unwrap_or(DevOwner::Chat)).await })
+        .await.map_err(|e| crate::error::AppError::Msg(format!("Local preview task failed: {e}")))?
+}
+
+async fn start_owned(app: AppHandle, state: DevServers, project_id: String, owner: DevOwner) -> AppResult<DevServerResult> {
+    let _lifecycle = state.lifecycle.lock().await;
     // Idempotent: if a server is already up for this project, return its URL.
-    if let Some(url) = state
-        .inner
-        .lock()
-        .unwrap()
-        .get(&project_id)
-        .and_then(|h| h.url.clone())
     {
-        return Ok(DevServerResult {
-            ok: true,
-            outcome: "running".into(),
-            url: Some(url),
-            error: None,
-        });
+        let mut handles = state.inner.lock().unwrap();
+        if let Some(h) = handles.get_mut(&project_id) {
+            if let Some(url) = h.url.clone().filter(|_| !h.cancel.is_cancelled()) {
+                h.owners.insert(owner);
+                return Ok(DevServerResult { ok: true, outcome: "running".into(), url: Some(url), error: None });
+            }
+            return Ok(failed("The owned local preview is still starting or stopping. Retry after it finishes."));
+        }
+        if !handles.is_empty() {
+            return Ok(failed("Another Fabricator project owns localhost:5173. Leave its Design preview or wait for its chat preview to stop, then retry."));
+        }
     }
 
     let Some(project) = store::find_project(&project_id) else {
@@ -259,32 +264,10 @@ pub async fn dev_start(
     };
 
     let renderer = emit::proc_streamer(&app, DEV_CHANNEL);
-    match probe_existing_vite(&project_dir).await {
-        Some(true) => {
-            renderer(
-                Stream::System,
-                &format!("Reusing this project's existing local preview at {LOCAL_URL}\n"),
-            );
-            return Ok(DevServerResult {
-                ok: true,
-                outcome: "running".into(),
-                url: Some(LOCAL_URL.into()),
-                error: None,
-            });
-        }
-        Some(false) => {
-            let reason = format!(
-                "Port {LOCAL_PORT} is already serving a different Vite app. Stop it before starting this local preview."
-            );
-            renderer(Stream::System, &format!("{reason}\n"));
-            return Ok(DevServerResult {
-                ok: false,
-                outcome: "error".into(),
-                url: None,
-                error: Some(reason),
-            });
-        }
-        None => {}
+    if unowned_port_in_use().await {
+        let reason = "Port 5173 is already in use by an unowned process. Fabricator cannot establish which project it serves and will not attach or kill it. Stop that server yourself, then retry.";
+        renderer(Stream::System, &format!("{reason}\n"));
+        return Ok(failed(reason));
     }
     renderer(
         Stream::System,
@@ -297,8 +280,9 @@ pub async fn dev_start(
     // (Blocking on it here stalled the swap for tens of seconds when signed out.)
     {
         let dir = project_dir.clone();
+        let env_renderer = renderer.clone();
         tokio::spawn(async move {
-            let _ = exec::run_project_rayfin(
+            let result = exec::run_project_rayfin(
                 &dir,
                 &["env", "--framework", "vite"],
                 RunOptions {
@@ -308,6 +292,12 @@ pub async fn dev_start(
                 },
             )
             .await;
+            if !result.ok {
+                let detail: String = result.stderr.trim().chars().take(600).collect();
+                env_renderer(Stream::System, &format!(
+                    "\nLocal Vite is independent of deployment, but backend environment refresh failed. The app may need sign-in or a first deployment. {detail}\n"
+                ));
+            }
         });
     }
 
@@ -315,7 +305,7 @@ pub async fn dev_start(
     cmd.arg(&vite_script)
         // Pin to 5173 (the app's auth-redirect / CORS port) and fail rather than
         // silently fall back to 5174 — a fallback port would load but break sign-in.
-        .args(["--port", LOCAL_PORT, "--strictPort"])
+        .args(["--host", "localhost", "--port", LOCAL_PORT, "--strictPort"])
         .current_dir(&project_dir)
         .env("NO_COLOR", "1")
         .env("FORCE_COLOR", "0")
@@ -349,6 +339,7 @@ pub async fn dev_start(
             pid,
             cancel: cancel.clone(),
             url: None,
+            owners: HashSet::from([owner]),
         },
     );
 
@@ -359,9 +350,7 @@ pub async fn dev_start(
 
     // Monitor task owns the child so it isn't dropped when this command returns;
     // it pumps output, watches for cancellation, and cleans up on exit.
-    let servers = DevServers {
-        inner: state.inner.clone(),
-    };
+    let servers = state.clone();
     {
         let (renderer, ready, servers, project_id) =
             (renderer.clone(), ready.clone(), servers.clone(), project_id.clone());
@@ -374,6 +363,7 @@ pub async fn dev_start(
                     ready.clone(),
                     servers.clone(),
                     project_id.clone(),
+                    cancel.clone(),
                 ));
             }
             if let Some(s) = stderr {
@@ -384,6 +374,7 @@ pub async fn dev_start(
                     ready.clone(),
                     servers.clone(),
                     project_id.clone(),
+                    cancel.clone(),
                 ));
             }
             tokio::select! {
@@ -395,14 +386,26 @@ pub async fn dev_start(
             }
             // If it never reached "ready", unblock the waiter with a failure.
             if let Some(tx) = ready.lock().unwrap().take() {
-                let _ = tx.send(Err("Vite exited before it was ready.".into()));
+                let _ = tx.send(Err("Vite exited before it was ready. Check the preview log; if localhost:5173 is occupied, stop its owner yourself and retry.".into()));
             }
-            servers.inner.lock().unwrap().remove(&project_id);
+            let mut handles = servers.inner.lock().unwrap();
+            if handles.get(&project_id).is_some_and(|h| h.cancel.same(&cancel)) {
+                handles.remove(&project_id);
+            }
         });
     }
 
     match tokio::time::timeout(Duration::from_millis(READY_TIMEOUT_MS), ready_rx).await {
         Ok(Ok(Ok(url))) => {
+            let responsive = match reqwest::Client::builder().no_proxy().timeout(Duration::from_secs(5))
+                .redirect(reqwest::redirect::Policy::none()).build() {
+                Ok(client) => client.get(&url).send().await.is_ok(),
+                Err(_) => false,
+            };
+            if !responsive || !state.owns_project(&project_id) {
+                stop_project(&state, &project_id);
+                return Ok(failed("Vite printed a URL but the owned server is not responding. Check the local preview log and retry."));
+            }
             renderer(Stream::System, &format!("\n✅ Local preview at {url}\n"));
             Ok(DevServerResult {
                 ok: true,
@@ -437,12 +440,23 @@ pub async fn dev_start(
 /// Stop the project's Vite dev server (tree-kill) if one is running. No-op when
 /// none is tracked, so this is safe to call unconditionally at turn end.
 #[tauri::command]
-pub async fn dev_stop(state: State<'_, DevServers>, project_id: String) -> AppResult<()> {
-    stop_project(&state, &project_id);
+pub async fn dev_stop(state: State<'_, DevServers>, project_id: String, owner: Option<DevOwner>) -> AppResult<()> {
+    let _lifecycle = state.lifecycle.lock().await;
+    let last = state.release_owner(&project_id, owner.unwrap_or(DevOwner::Chat));
+    if last {
+        stop_project(&state, &project_id);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        while state.inner.lock().unwrap().contains_key(&project_id) {
+            if tokio::time::Instant::now() >= deadline {
+                return Err(crate::error::AppError::Msg("The owned Vite process is still stopping. Retry shortly; no unowned process was killed.".into()));
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
     Ok(())
 }
 
-/// Whether the project supports the live local preview (has a `dev` script).
+/// Whether the project supports the live local preview (has installed Vite).
 #[tauri::command]
 pub fn dev_supported_cmd(project_id: String) -> bool {
     store::find_project(&project_id)
@@ -453,12 +467,8 @@ pub fn dev_supported_cmd(project_id: String) -> bool {
 /// Remove a project's handle and kill its process (directly, plus cancel so the
 /// monitor reaps it). Shared by [`dev_stop`] and the timeout/early-exit paths.
 fn stop_project(state: &DevServers, project_id: &str) {
-    let handle = state.inner.lock().unwrap().remove(project_id);
-    if let Some(h) = handle {
+    if let Some(h) = state.inner.lock().unwrap().get(project_id) {
         h.cancel.cancel();
-        if let Some(pid) = h.pid {
-            kill_tree(pid);
-        }
     }
 }
 
@@ -483,6 +493,10 @@ fn unsupported(msg: &str) -> DevServerResult {
         url: None,
         error: Some(msg.to_string()),
     }
+}
+
+fn failed(msg: &str) -> DevServerResult {
+    DevServerResult { ok: false, outcome: "error".into(), url: None, error: Some(msg.to_string()) }
 }
 
 #[cfg(test)]
@@ -513,21 +527,26 @@ mod tests {
     }
 
     #[test]
-    fn existing_vite_requires_the_same_project_title() {
-        let index = "<html><head><title>Super Rayfin</title></head></html>";
-        let matching =
-            r#"<html><head><script type="module" src="/@vite/client"></script><title> Super   Rayfin </title></head></html>"#;
-        let other =
-            r#"<html><head><script type="module" src="/@vite/client"></script><title>Other App</title></head></html>"#;
-        assert!(existing_vite_matches(index, matching));
-        assert!(!existing_vite_matches(index, other));
-        assert!(!existing_vite_matches(index, "<title>Super Rayfin</title>"));
-        assert!(!existing_vite_matches("<html></html>", "<script src=\"/@vite/client\"></script>"));
+    fn design_local_preview_has_independent_chat_and_design_owners() {
+        let servers = DevServers::default();
+        let cancel = CancelToken::new();
+        servers.inner.lock().unwrap().insert("p".into(), DevHandle {
+            pid: None, cancel: cancel.clone(), url: Some(LOCAL_URL.into()),
+            owners: HashSet::from([DevOwner::Chat, DevOwner::Design]),
+        });
+        assert!(!servers.release_owner("p", DevOwner::Chat));
+        assert!(servers.owns_project("p"));
+        assert!(!cancel.is_cancelled());
+        assert!(!servers.release_owner("p", DevOwner::Chat));
+        assert!(servers.release_owner("p", DevOwner::Design));
+        assert!(cancel.is_cancelled());
+        assert!(!servers.owns_project("p"));
+        assert!(!servers.owns_project("untracked"));
     }
 
     #[test]
     fn dev_supported_detects_installed_vite() {
-        let dir = std::env::temp_dir().join(format!("rayfin-dev-{}", uuid::Uuid::new_v4()));
+        let dir = crate::services::design_store::test_dir();
         std::fs::create_dir_all(&dir).unwrap();
 
         // No Vite installed → unsupported.

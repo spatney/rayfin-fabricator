@@ -457,7 +457,7 @@ pub struct DeployInfo {
   pub commit: Option<String>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DeployResult {
   pub ok: bool,
@@ -474,7 +474,7 @@ pub struct DeployResult {
 
 /// Result of starting a project's Vite dev server for the live local preview
 /// (experimental). `outcome` is one of `running` (started or already running),
-/// `unsupported` (no `dev` script / no local Vite), or `error`.
+/// `unsupported` (no local Vite / Node), or `error`.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DevServerResult {
@@ -590,9 +590,12 @@ pub struct ExperimentFlags {
   /// Live local preview: while an agent turn runs, start the project's Vite dev
   /// server and point the preview at `localhost` so edits show live (HMR); the
   /// server is stopped at turn end and the normal after-turn deploy takes over.
-  /// Opt-in (off by default) and only for projects that declare a `dev` script.
+  /// Opt-in (off by default) and only for projects with installed Vite.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub local_dev_preview: Option<bool>,
+  /// Canvas-first Design Studio, separate from the chat-only local preview.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub design_studio: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -1126,6 +1129,10 @@ pub struct ChatMessage {
   /// "resume" (re-run the prompt) on the next launch; cleared on completion.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub interrupted: Option<bool>,
+  /// Design turns recover through their Apply receipt, never ordinary prompt
+  /// Retry/Resume. Both transcript rows retain the same Apply/turn identifier.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub design_apply_id: Option<String>,
   /// A Plan-mode plan card attached to this assistant message, so a reloaded
   /// transcript can re-render its proposed/resolved state.
   #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1512,6 +1519,7 @@ mod tests {
       attachment_thumbs: None,
       kind: None,
       interrupted: None,
+      design_apply_id: None,
       plan: Some(ChatPlanArtifact {
         id: "req-1".into(),
         phase: "proposed".into(),
@@ -1565,6 +1573,7 @@ mod tests {
       attachment_thumbs: None,
       kind: None,
       interrupted: None,
+      design_apply_id: None,
       plan: None,
       questions: Some(vec![ChatPlanQuestion {
         id: "q1".into(),

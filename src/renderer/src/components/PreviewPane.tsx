@@ -11,6 +11,7 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { loadCopilotModels, pickFastModel, isFastModel } from '../copilotModels'
+import type { DesignSource } from '@shared/design'
 import { usePreviewSuppressed } from '../overlay'
 import { measurePreviewBounds, watchPreviewPixelRatio } from '../previewBounds'
 import {
@@ -28,6 +29,18 @@ export interface DeployUiState {
   running: boolean
   log: string[]
   result?: DeployResult
+}
+
+export interface DesignPreviewTarget {
+  url: string
+  appUrl: string
+  embedded: boolean
+}
+
+export interface StudioPreviewOptions {
+  source: DesignSource
+  viewportWidth?: number
+  onReady: (target: DesignPreviewTarget | null) => void
 }
 
 /**
@@ -51,7 +64,7 @@ const DESIGN_MODEL_KEY = 'rayfin.design.aiModel'
  * app's look and scale (the tools are Fabricator UI, not the previewed app's).
  * Falls back to the dark-teal defaults if a token is missing.
  */
-function readFabricatorTheme(): PreviewDesignTheme {
+export function readFabricatorTheme(): PreviewDesignTheme {
   const cs = getComputedStyle(document.documentElement)
   const v = (n: string): string => cs.getPropertyValue(n).trim()
   const scale = Number(v('--ui-scale') || document.documentElement.style.zoom) || 1
@@ -123,6 +136,9 @@ interface Props {
    *  running), the preview surface shows this instead of the deployed app, with a
    *  "Local" badge. See {@link RayfinStudioApi.dev}. */
   localPreviewUrl?: string | null
+  designStudioEnabled?: boolean
+  onOpenDesignStudio?: () => void
+  studio?: StudioPreviewOptions
 }
 
 function statusLabel(running: boolean, status: string | undefined): string {
@@ -152,6 +168,15 @@ function prettyUrl(url: string): string {
     return new URL(url).host || url
   } catch {
     return url
+  }
+}
+
+function matchingPreviewOrigin(actual: string, expected: string | undefined): boolean {
+  if (!actual || !expected) return false
+  try {
+    return new URL(actual).origin === new URL(expected).origin
+  } catch {
+    return false
   }
 }
 
@@ -189,7 +214,10 @@ export default function PreviewPane({
   onPreviewModeChanged,
   onDesignHandoff,
   onLoadingChange,
-  localPreviewUrl
+  localPreviewUrl,
+  designStudioEnabled = false,
+  onOpenDesignStudio,
+  studio
 }: Props): JSX.Element {
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
@@ -212,6 +240,9 @@ export default function PreviewPane({
   const [loading, setLoading] = useState(false)
   const [canBack, setCanBack] = useState(false)
   const [canForward, setCanForward] = useState(false)
+  const [nativeShown, setNativeShown] = useState(false)
+  const [surfaceError, setSurfaceError] = useState<string | null>(null)
+  const [studioUiScale, setStudioUiScale] = useState(() => readFabricatorTheme().scale ?? 1)
   // While an HTML overlay suppresses the native preview, `frozen` holds a PNG of
   // the last visible frame so the placeholder shows that still image, not black.
   const [frozen, setFrozen] = useState<string | null>(null)
@@ -321,12 +352,16 @@ export default function PreviewPane({
   // Which URL the embedded webview actually loads. Falls back to the direct URL
   // whenever the Fabric link is unavailable or the toggle is off.
   const [previewMode, setPreviewMode] = useState<PreviewMode>(() => readPreviewMode(project))
-  const deployedPreviewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
+  const effectiveMode = studio ? (studio.source === 'fabric' ? 'fabric' : 'direct') : previewMode
+  const deployedPreviewUrl = effectiveMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
   // Live local preview (experiment): while a Vite dev server is running for this
   // project, the surface shows its localhost URL instead of the deployed app. A
   // running deploy still wins (DeployStage), so this only applies mid-turn.
-  const isLocal = Boolean(localPreviewUrl) && !running
-  const previewUrl = isLocal ? (localPreviewUrl as string) : deployedPreviewUrl
+  const isLocal = Boolean(localPreviewUrl) && !running && (!studio || studio.source === 'local')
+  const previewUrl = studio?.source === 'local'
+    ? localPreviewUrl ?? undefined
+    : studio?.source === 'fabric' && !fabricUrl ? undefined
+    : isLocal ? localPreviewUrl ?? undefined : deployedPreviewUrl
   const showWebview = !running && Boolean(previewUrl)
 
   // Re-init from the persisted project on project switch (don't carry a prior
@@ -406,6 +441,7 @@ export default function PreviewPane({
       showWebview && !suppressed && !transitioningRef.current && Boolean(previewUrl)
     const host = hostRef.current
     if (!visible || !host || !previewUrl) {
+      setNativeShown(false)
       // An HTML overlay covering a live preview suppresses the native webview,
       // which paints above ALL HTML and would otherwise cover the overlay. Two
       // cases, handled differently (only while the preview is otherwise STABLE —
@@ -495,6 +531,20 @@ export default function PreviewPane({
 
     let raf = 0
     let clearFrozenTimer = 0
+    let cancelled = false
+    const show = (bounds: PreviewBounds): void => {
+      void window.api.preview.showUrl(previewUrl, bounds).then(() => {
+        if (!cancelled) {
+          setSurfaceError(null)
+          setNativeShown(true)
+        }
+      }).catch((reason: unknown) => {
+        if (!cancelled) {
+          setNativeShown(false)
+          setSurfaceError(reason instanceof Error ? reason.message : String(reason))
+        }
+      })
+    }
     // `shownKey` is the bounds key the webview is currently shown at; '' means
     // the webview is hidden. The webview is a separate OS surface, so after it
     // has been hidden (e.g. the pane collapsed to 0×0 when chat is focused) it
@@ -520,6 +570,7 @@ export default function PreviewPane({
       if (!b) {
         if (shownKey !== '') {
           shownKey = ''
+          setNativeShown(false)
           void window.api.preview.hide()
           return true
         }
@@ -530,7 +581,7 @@ export default function PreviewPane({
       if (shownKey === '') {
         // Was hidden → show + position (showUrl re-shows the surface).
         shownKey = key
-        void window.api.preview.showUrl(previewUrl, b)
+        show(b)
         return true
       }
       if (key !== shownKey) {
@@ -594,7 +645,7 @@ export default function PreviewPane({
     if (initial) {
       shownKey = keyOf(initial)
       lastBoundsRef.current = initial
-      void window.api.preview.showUrl(previewUrl, initial)
+      show(initial)
     }
     startTracking()
 
@@ -606,6 +657,7 @@ export default function PreviewPane({
     clearFrozenTimer = window.setTimeout(() => setFrozen(null), FROZEN_CLEAR_MS)
 
     return () => {
+      cancelled = true
       window.removeEventListener('resize', onResize)
       window.removeEventListener('scroll', onResize)
       viewport?.removeEventListener('resize', onResize)
@@ -617,6 +669,26 @@ export default function PreviewPane({
       if (clearFrozenTimer !== 0) window.clearTimeout(clearFrozenTimer)
     }
   }, [deployedUrl, previewUrl, showWebview, suppressed, transitioning, measureHost])
+
+  const studioOnReady = studio?.onReady
+  const isStudio = Boolean(studio)
+  useEffect(() => {
+    if (!isStudio) return
+    const update = (): void => setStudioUiScale(readFabricatorTheme().scale ?? 1)
+    update()
+    const observer = new MutationObserver(update)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'data-theme'] })
+    return () => observer.disconnect()
+  }, [isStudio])
+  useEffect(() => {
+    const appUrl = isLocal ? localPreviewUrl : deployedUrl
+    studioOnReady?.(
+      nativeShown && showWebview && !transitioning && !loading && matchingPreviewOrigin(displayUrl, previewUrl) && previewUrl && appUrl
+        ? { url: previewUrl, appUrl, embedded: effectiveMode === 'fabric' }
+        : null
+    )
+  }, [studioOnReady, nativeShown, showWebview, transitioning, loading, displayUrl, previewUrl, isLocal, localPreviewUrl, deployedUrl, effectiveMode])
+  useEffect(() => () => studioOnReady?.(null), [studioOnReady])
 
   // The positioning effect hides the webview whenever a dependency change makes it
   // not-visible (and its rAF loop hides it when the host collapses to 0×0). On the
@@ -947,7 +1019,10 @@ export default function PreviewPane({
       void window.api.preview.design.setEnabled(false)
     }
   }, [designActive, showWebview])
-  useEffect(() => () => void window.api.preview.design.setEnabled(false), [])
+  const studioMode = Boolean(studio)
+  useEffect(() => () => {
+    if (!studioMode) void window.api.preview.design.setEnabled(false)
+  }, [studioMode])
 
   // End the design session whenever the preview navigates to a different URL — a
   // project switch, the Fabric-view toggle, or a redeploy to a new URL. Rust's
@@ -960,10 +1035,11 @@ export default function PreviewPane({
   useEffect(() => {
     if (prevPreviewUrlRef.current === previewUrl) return
     prevPreviewUrlRef.current = previewUrl
+    if (studioMode) return
     setDesignActive(false)
     setDesignCount(0)
     void window.api.preview.design.setEnabled(false)
-  }, [previewUrl])
+  }, [previewUrl, studioMode])
 
   const dotClass =
     status === 'success'
@@ -975,8 +1051,8 @@ export default function PreviewPane({
           : 'idle'
 
   return (
-    <div className="preview">
-      <div className="preview-toolbar">
+    <div className={`preview${studio ? ' preview--studio' : ''}`}>
+      {!studio && <div className="preview-toolbar">
         <div className="preview-toolbar-left">
           <div className="seg seg--toolbar preview-nav">
             <button
@@ -1055,17 +1131,21 @@ export default function PreviewPane({
             </button>
             <button
               className={`seg-btn ${designActive ? 'seg-btn--on' : ''}`}
-              onClick={toggleDesign}
-              disabled={!showWebview || transitioning || designBusy || isLocal}
+              onClick={designStudioEnabled ? onOpenDesignStudio : toggleDesign}
+              disabled={designStudioEnabled ? running || transitioning : !showWebview || transitioning || designBusy || isLocal}
               title={
-                previewMode === 'fabric'
+                designStudioEnabled
+                  ? 'Open Design Studio - edit visually, save a draft, then apply it to your app'
+                  : previewMode === 'fabric'
                   ? 'Design mode — click elements in the embedded app to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
                   : 'Design mode — click elements in the preview to tweak them (move, resize, color, text, chart specs), then send the changes to chat'
               }
             >
               <DesignIcon />
               <span className="seg-btn-label">
-                {designBusy
+                {designStudioEnabled
+                  ? 'Design'
+                  : designBusy
                   ? 'Sending…'
                   : designActive
                     ? `Design${designCount ? ` · ${designCount}` : ''}`
@@ -1084,7 +1164,9 @@ export default function PreviewPane({
             </button>
           </div>
         </div>
-      </div>
+      </div>}
+
+      {surfaceError && <div className="preview-error-banner" role="alert">{surfaceError}</div>}
 
       {status === 'error' && error && !running && !needsWorkspace && (
         <div className="preview-error-banner" title={error}>
@@ -1103,7 +1185,11 @@ export default function PreviewPane({
                   here so the overlay floats over a still preview instead of black.
                   The project-load overlay is rendered at the Workbench level (so it
                   centers over the whole build view), not here. */}
-              <div className="preview-webview-host" ref={hostRef}>
+              <div
+                className="preview-webview-host"
+                ref={hostRef}
+                style={studio ? { width: studio.viewportWidth ? studio.viewportWidth / studioUiScale : '100%', maxWidth: '100%', flex: '0 1 auto' } : undefined}
+              >
                 {frozen && <img className="preview-frozen" src={frozen} alt="" draggable={false} />}
               </div>
             </div>

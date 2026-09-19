@@ -1,9 +1,9 @@
 /*
- * Rayfin preview "design mode" controller (v4).
+ * Rayfin preview "design mode" controller (v5 + opt-in Studio protocol 1).
  *
  * Injected at document-start into EVERY frame of the preview webview (see
  * `preview.rs` `DESIGN_AGENT_JS` / `initialization_script_for_all_frames`). Stays
- * dormant until `preview_design_set` calls `enable(...)`. A Figma-like,
+ * dormant until `enable(...)` or the opt-in `studio.connect(...)`. A Figma-like,
  * click-to-edit layer over the LIVE app:
  *   - Select tool: pick any element and edit it in a docked inspector (size,
  *     spacing, typography, appearance, text) with always-on move/resize handles
@@ -30,6 +30,10 @@
  *     SPA body swaps). Everything is torn down on `disable()`, namespaced under
  *     `window.__rayfinDesign`, and never persisted.
  *   - Host comms are pull-based: the host polls `peek()` and reads `drain()`.
+ *   - `studio` is a separate, opt-in protocol. Its JSON journal is authoritative;
+ *     DOM references and inverse functions are only a disposable projection.
+ *     The workspace owns framing and Apply. This page owns hit testing, inline
+ *     text and a small, three-action contextual popover; legacy panels stay off.
  */
 (function () {
   var NS = '__rayfinDesign';
@@ -37,6 +41,7 @@
   if (window[NS] && window[NS].__v === VERSION) return;
 
   var HOST_ID = '__rayfin_design_host';
+  var studio = null, studioRelay = null;
 
   // ---- theme (flat, teal — matches the host app) ---------------------------
   var TEAL = '#14b8a6';
@@ -494,7 +499,7 @@
     '.morph::before{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 38%,' + TEAL_HI + '22 47%,' + TEAL_HI + '66 50%,' + TEAL_HI + '22 53%,transparent 62%);transform:translateX(-130%) skewX(-12deg);animation:rfMorphSweep 1.4s ease-in-out infinite}',
     '.morph::after{content:"";position:absolute;left:6%;right:6%;height:2px;top:-12%;border-radius:2px;background:linear-gradient(90deg,transparent,' + TEAL_HI + ',transparent);box-shadow:0 0 14px 2px ' + TEAL_HI + 'cc;animation:rfMorphScan 1.7s cubic-bezier(.4,0,.2,1) infinite}',
     '@media (prefers-reduced-motion: reduce){.morph,.morph::before,.morph::after{animation:none}.morph{box-shadow:0 0 0 2px ' + TEAL + '}.morph::after{display:none}}'
-    ].join('\n');
+    ].join('\n') + (studio ? studioPopupCss() : '');
   }
 
   // Light-DOM animation CSS for the placeholder "building" state (the placeholder
@@ -585,7 +590,8 @@
     makeDraggable(elInspector, false);
     makeDraggable(elChanges, true);
     buildToolbar();
-    if (!localStorageFlag()) showLegend();
+    if (!studio && !localStorageFlag()) showLegend();
+    if (studio) studioPopupMount();
   }
 
   // Let a panel be dragged by any non-interactive part of it (so it can be moved
@@ -621,6 +627,7 @@
 
   // ---- toolbar (single control surface: tools + draw opts + actions) -------
   function buildToolbar() {
+    if (studio) { elToolbar.style.display = 'none'; return; }
     elToolbar.textContent = '';
     var tools = h('div', { class: 'seg' });
     [['select', 'cursor', 'Select', 'V'], ['comment', 'comment', 'Comment', 'C'], ['insert', 'frame', 'Insert', 'I'], ['draw', 'pen', 'Draw', 'D']].forEach(function (t) {
@@ -824,13 +831,15 @@
   }
 
   function reposition() {
+    if (!host || !root) return;
+    if (studio && (studio.compare || studio.capture || state.tool === 'interact')) return;
     if (state.debugView) return; // overlays are hidden while the debug view is full-screen
     // hover (Select only, no active selection drag)
     if (state.tool === 'select' && state.hoverEl && state.hoverEl !== state.selected && !state.move && !state.resizing) {
       place(elHover, state.hoverEl);
       var hr = state.hoverEl.getBoundingClientRect();
       elLabel.style.display = 'block';
-      elLabel.textContent = state.hoverEl.tagName.toLowerCase() + ' · ' + Math.round(hr.width) + '×' + Math.round(hr.height);
+      elLabel.textContent = studio ? studioLabel(state.hoverEl) : state.hoverEl.tagName.toLowerCase() + ' · ' + Math.round(hr.width) + '×' + Math.round(hr.height);
       elLabel.style.left = hr.left + 'px';
       elLabel.style.top = Math.max(2, hr.top - 20) + 'px';
     } else { elHover.style.display = 'none'; elLabel.style.display = 'none'; }
@@ -848,7 +857,7 @@
         sb.style.width = sr.width + 'px'; sb.style.height = sr.height + 'px';
       }
       elSels.style.display = 'block';
-      if (sel.length === 1) { positionHandles(); positionBadges(); }
+      if (sel.length === 1 && !studio) { positionHandles(); positionBadges(); }
       else { elHandles.style.display = 'none'; elBadges.style.display = 'none'; }
     } else {
       elSel.style.display = 'none'; elSels.style.display = 'none';
@@ -856,7 +865,8 @@
     }
     // comment pins track their anchor elements
     positionPins();
-    positionMorphs();
+    if (!studio) positionMorphs();
+    if (studio) studioPopupSync();
   }
   // Position an animated "transforming" overlay over each element currently being
   // restyled by AI (driven by the data-rayfin-editing marker), so several can
@@ -926,6 +936,7 @@
   function closeInspector() { elInspector.style.display = 'none'; elInspector.textContent = ''; }
 
   function renderInspector() {
+    if (studio) { closeInspector(); return; }
     var el = state.selected;
     if (!el || state.tool !== 'select') { closeInspector(); return; }
     elInspector.textContent = '';
@@ -1512,7 +1523,7 @@
     HANDLE_DIRS.forEach(function (d) {
       var hd = h('div', { class: 'hnd' });
       hd.style.cursor = d[3];
-      hd.onpointerdown = function (e) { startResize(e, d); };
+      hd.addEventListener('pointerdown', function (e) { startResize(e, d); });
       elHandles.appendChild(hd);
     });
     positionHandles();
@@ -1558,6 +1569,7 @@
     }
   }
   function startResize(e, dir) {
+    if (studio) { studioResizeDown(e, dir); return; }
     e.preventDefault(); e.stopPropagation();
     var el = state.selected; if (!el) return;
     var r = el.getBoundingClientRect();
@@ -1766,12 +1778,14 @@
 
   // ---- text edit (double-click quick path) ---------------------------------
   function startText(el) {
+    if (studio) { studioStartText(el); return; }
     if (!el) return;
     state.editingText = { el: el, from: el.textContent || '', html: el.innerHTML };
     el.setAttribute('contenteditable', 'true'); el.classList.add('editing-text'); el.focus();
     showHint('Editing text — click away or Esc to finish');
   }
   function commitText() {
+    if (studio) { studioFinishText(false); return; }
     var t = state.editingText; if (!t) return;
     state.editingText = null;
     var el = t.el; el.removeAttribute('contenteditable'); el.classList.remove('editing-text');
@@ -1796,7 +1810,7 @@
       var r = entry.el.getBoundingClientRect();
       pin.style.display = 'flex';
       pin.style.left = (r.left + 8) + 'px'; pin.style.top = (r.top + 8) + 'px';
-      pin.textContent = String(state.changes.indexOf(entry) + 1);
+      pin.textContent = entry.studio && studio ? String(Math.max(1, studio.history.findIndex(function (tx) { return tx.id === entry.transactionId; }) + 1)) : String(state.changes.indexOf(entry) + 1);
     }
   }
   function addComment(el, clientX, clientY) {
@@ -1840,6 +1854,7 @@
   // ---- draw ----------------------------------------------------------------
   function clearDrawings() { if (elDraw) while (elDraw.firstChild) elDraw.removeChild(elDraw.firstChild); }
   function onDrawDown(e) {
+    if (studio) { studioDrawDown(e); return; }
     if (state.tool !== 'draw') return;
     e.preventDefault(); e.stopPropagation();
     var color = state.drawColor, shape = state.drawShape, x0 = e.clientX, y0 = e.clientY, node;
@@ -2343,8 +2358,8 @@
     for (var i = 0; i < dv.neutralized.length; i++) { var it = dv.neutralized[i]; try { if (it.style != null) it.el.setAttribute('style', it.style); else it.el.removeAttribute('style'); } catch (e) {} }
     hideDebugBar();
     if (root && state.enabled) {
-      if (elToolbar) elToolbar.style.display = 'flex';
-      if (elLegend) elLegend.style.display = '';
+      if (elToolbar && !studio) elToolbar.style.display = 'flex';
+      if (elLegend && !studio) elLegend.style.display = '';
       renderBar();
       if (dv.el && dv.el.isConnected) select(dv.el);
     }
@@ -2404,6 +2419,7 @@
 
   // ---- global handlers -----------------------------------------------------
   function onPointerMove(e) {
+    if (studio) { studioPointerHover(e); return; }
     if (state.debugView) { state.hoverEl = null; return; }
     if (state.move || state.resizing || state.editingText) return;
     if (state.tool === 'insert') { showInsertLine(e.clientX, e.clientY); return; }
@@ -2415,6 +2431,7 @@
   }
 
   function onPointerDown(e) {
+    if (studio) { studioPointerDown(e); return; }
     if (state.debugView) return; // clicks pass through to the full-screen debug panels
     if (isOurs(e.target)) return; // our UI (toolbar/inspector/handles/pins/draw) handles itself
     if (state.tool === 'draw') return; // draw is handled by elDraw's own pointerdown
@@ -2445,6 +2462,7 @@
   }
 
   function onDblClick(e) {
+    if (studio) { studioDoubleClick(e); return; }
     if (state.debugView) return;
     if (state.tool !== 'select' || isOurs(e.target)) return;
     var el = document.elementFromPoint(e.clientX, e.clientY);
@@ -2452,6 +2470,7 @@
   }
 
   function blockMouse(e) {
+    if (studio) { studioBlockMouse(e); return; }
     if (isOurs(e.target)) return;
     if (state.debugView) { if (inDebug(e.target)) return; e.preventDefault(); e.stopPropagation(); return; }
     if (state.editingText) { var t = e.target; if (t && (t === state.editingText.el || (state.editingText.el.contains && state.editingText.el.contains(t)))) return; }
@@ -2459,6 +2478,7 @@
   }
 
   function onKey(e) {
+    if (studio) { studioKey(e); return; }
     if (state.debugView) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); exitDebugView(); } return; }
     if (state.editingText) { if (e.key === 'Escape') { e.preventDefault(); commitText(); } return; }
     // Don't hijack keys while typing in one of our own inputs (inspector fields,
@@ -2537,8 +2557,19 @@
   }
   // Repaint the live chrome after a theme/scale change: rebuild the shadow
   // <style> + the light-DOM animation CSS + the toolbar (icon sizes), then reflow.
+  // Studio shares the color/scale helpers but never rebuilds legacy panels.
   function rebuildStyle() {
     if (!state.enabled || !elStyle) return;
+    if (studio) {
+      studioRefresh();
+      studioSilence(function () {
+        elStyle.textContent = buildStyle();
+        if (studio.text) studio.text.wrapper.style.outlineColor = TEAL;
+        studioChrome();
+        reposition();
+      });
+      return;
+    }
     elStyle.textContent = buildStyle();
     removeGenStyle(); injectGenStyle();
     if (elToolbar) buildToolbar();
@@ -2559,8 +2590,10 @@
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('scroll', reposition, true);
     window.addEventListener('resize', reposition, true);
-    rafId = requestAnimationFrame(loop);
-    showHint('Design mode — Select · Insert · Comment · Draw'); setTimeout(hideHint, 2800);
+    if (!studio) {
+      rafId = requestAnimationFrame(loop);
+      showHint('Design mode — Select · Insert · Comment · Draw'); setTimeout(hideHint, 2800);
+    }
   }
 
   function disable() {
@@ -2761,6 +2794,7 @@
 
   // Host entry points (called from the TOP frame by `preview_design_set`).
   function hostEnable(mode, appOrigin) {
+    if (studio || studioRelay) return;
     if (mode === 'relay') {
       frameRole = 'relay';
       relayActive = true;
@@ -2774,6 +2808,7 @@
     }
   }
   function hostDisable() {
+    if (studio || studioRelay) { studioDisconnect((studio || studioRelay).sessionId); return; }
     if (frameRole === 'relay') {
       relayActive = false;
       postToApp({ ns: MSG, cmd: 'disable' });
@@ -2834,6 +2869,7 @@
     }
   }
   function onMessage(e) {
+    if (studio || studioRelay) return;
     var d = e && e.data;
     if (!d || d.ns !== MSG) return;
     if (isTop) {
@@ -2860,11 +2896,2908 @@
     }
   }
 
+  // ---- Studio: bounded JSON journal and conservative DOM identities --------
+  var STUDIO_MSG = 'rayfin-design-studio';
+  var STUDIO_LIMIT = { history: 300, edits: 256, nodes: 1200, children: 160, selection: 40, html: 48000, journal: 1800000 };
+  var studioSeq = 0, studioEpoch = 0, studioProjectedDocument = false;
+  var studioSeed = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  var studioIdentityRoute = studioRoute();
+  var studioHellos = [], studioTopOrigin = null, studioHelloTimers = [];
+  var STUDIO_STYLES = (
+    'color accent-color background background-color background-image width height min-width max-width min-height max-height ' +
+    'inline-size block-size min-inline-size max-inline-size min-block-size max-block-size aspect-ratio box-sizing ' +
+    'padding padding-top padding-right padding-bottom padding-left padding-inline padding-inline-start padding-inline-end padding-block padding-block-start padding-block-end ' +
+    'margin margin-top margin-right margin-bottom margin-left margin-inline margin-inline-start margin-inline-end margin-block margin-block-start margin-block-end ' +
+    'font-family font-size font-weight font-style font-variant line-height letter-spacing word-spacing text-align text-transform text-decoration text-decoration-color text-wrap white-space ' +
+    'border border-width border-style border-color border-radius border-top border-right border-bottom border-left border-top-left-radius border-top-right-radius border-bottom-left-radius border-bottom-right-radius ' +
+    'border-top-width border-right-width border-bottom-width border-left-width border-top-style border-right-style border-bottom-style border-left-style border-top-color border-right-color border-bottom-color border-left-color ' +
+    'opacity box-shadow display gap row-gap column-gap flex flex-grow flex-shrink flex-basis flex-direction flex-wrap align-items align-self align-content justify-content justify-items justify-self ' +
+    'grid-template-columns grid-template-rows grid-auto-flow grid-auto-columns grid-auto-rows grid-column grid-row order ' +
+    'object-fit object-position list-style-type overflow overflow-x overflow-y transform transform-origin position top right bottom left z-index'
+  ).split(' ');
+  function studioId(prefix) { return prefix + '-' + studioSeed + '-' + (++studioSeq).toString(36); }
+  function studioRoute() { return window.location.pathname + window.location.search + window.location.hash; }
+  function studioDocumentIdentity() {
+    var route = studioRoute();
+    if (route !== studioIdentityRoute) { studioIdentityRoute = route; studioEpoch++; }
+    return studioSeed + ':' + studioEpoch;
+  }
+  function studioError(message) { throw new Error(message); }
+  function studioPlain(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
+  function studioJson(value, max) {
+    var seen = new Set(), count = 0;
+    function copy(v, depth, path) {
+      if (++count > 40000 || depth > 24) studioError('Design data is too complex.');
+      if (v === null || typeof v === 'boolean' || typeof v === 'string') return v;
+      if (typeof v === 'number' && isFinite(v)) return v;
+      if (!v || typeof v !== 'object' || v.nodeType || seen.has(v)) studioError('Design data must be serializable JSON at ' + path + '.');
+      seen.add(v);
+      var out = Array.isArray(v) ? [] : {};
+      Object.keys(v).forEach(function (k) {
+        if (k === '__proto__' || k === 'prototype' || k === 'constructor') studioError('Unsafe design data key.');
+        out[k] = copy(v[k], depth + 1, path + '.' + k);
+      });
+      seen.delete(v);
+      return out;
+    }
+    var result = copy(value, 0, 'root');
+    if (JSON.stringify(result).length > (max || STUDIO_LIMIT.journal)) studioError('Design data exceeds the journal limit.');
+    return result;
+  }
+  // Native JSON serializers may reorder object keys. Only arrays are ordered.
+  function studioStableJson(value) {
+    if (Array.isArray(value)) return '[' + value.map(studioStableJson).join(',') + ']';
+    if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map(function (key) { return JSON.stringify(key) + ':' + studioStableJson(value[key]); }).join(',') + '}';
+    return JSON.stringify(value);
+  }
+  function studioEqual(a, b) { return studioStableJson(a) === studioStableJson(b); }
+  function studioHash(text) {
+    var hash = 2166136261;
+    for (var i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619);
+    return (hash >>> 0).toString(36) + ':' + text.length;
+  }
+  function studioNorm(text) { return String(text || '').replace(/\s+/g, ' ').trim(); }
+  function studioFormControl(el) { return !!(el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)); }
+  function studioFormData(el) { return !!(el && el.closest && el.closest('input,textarea,select,datalist,option,optgroup')); }
+  function studioOwnNodes(el) {
+    if (!el || studioFormData(el) || el.childNodes.length > STUDIO_LIMIT.children) return [];
+    return Array.prototype.filter.call(el.childNodes, function (n) { return n.nodeType === 3; });
+  }
+  function studioOwn(el) { return studioOwnNodes(el).map(function (n) { return n.nodeValue; }).join(''); }
+  function studioTextInfo(el) {
+    if (studioFormData(el)) return { text: '', hash: studioHash(''), complete: true };
+    var walker = document.createTreeWalker(el, 5, { acceptNode: function (node) {
+      return node.nodeType === 3 ? 1 : /^(INPUT|TEXTAREA|SELECT|DATALIST|OPTION|OPTGROUP)$/.test(node.tagName) ? 2 : 3;
+    } }), text = '', n, count = 0, complete = true;
+    while ((n = walker.nextNode())) {
+      if (++count > 80) { complete = false; break; }
+      if (text.length + n.nodeValue.length > 8192) { complete = false; break; }
+      text += n.nodeValue;
+    }
+    text = studioNorm(text);
+    return { text: text, hash: studioHash(text), complete: complete };
+  }
+  function studioAllowedElement(el) {
+    return !!(el && el.nodeType === 1 && el.ownerDocument === document && !isOurs(el) &&
+      !/^(SCRIPT|STYLE|LINK|META|HEAD|NOSCRIPT|IFRAME|OBJECT|EMBED|TEMPLATE)$/.test(el.tagName) &&
+      (!studioFormData(el) || studioFormControl(el)) &&
+      !el.closest('[data-rayfin-studio-chrome]'));
+  }
+  function studioIdentityKey(el) {
+    var key = {};
+    ['id', 'data-testid', 'data-test-id', 'data-key', 'role', 'aria-label', 'name'].forEach(function (name) {
+      var value = el.getAttribute(name);
+      if (value && value.length <= 256 && value.indexOf('__rayfin') !== 0) key[name] = value;
+    });
+    if (studioFormControl(el)) {
+      ['type', 'placeholder'].forEach(function (name) {
+        var value = el.getAttribute(name);
+        if (value && value.length <= 256) key[name] = value;
+      });
+    }
+    return key;
+  }
+  function studioQuery(selector, base) {
+    if (typeof selector !== 'string' || !selector || selector.length > 1024 || /:has\(|[{}]/i.test(selector)) return [];
+    try {
+      var found = (base || document).querySelectorAll(selector);
+      return found.length > STUDIO_LIMIT.children ? [] : Array.prototype.filter.call(found, studioAllowedElement);
+    } catch (e) { return []; }
+  }
+  function studioSelector(el) {
+    if (el === document.documentElement) return 'html';
+    if (el === document.body) return 'body';
+    var hint = cssPath(el);
+    if (studioQuery(hint).length === 1) return hint;
+    var parts = [], n = el;
+    for (var i = 0; n && i < 20; i++, n = n.parentElement) {
+      var segment = n.tagName.toLowerCase();
+      if (n.id && studioQuery('#' + cssEscape(n.id)).length === 1) { parts.unshift('#' + cssEscape(n.id)); break; }
+      var siblings = n.parentElement && Array.prototype.filter.call(n.parentElement.children, function (x) { return x.tagName === n.tagName; });
+      if (siblings && siblings.length > 1) segment += ':nth-of-type(' + (siblings.indexOf(n) + 1) + ')';
+      parts.unshift(segment);
+    }
+    return parts.join(' > ');
+  }
+  function studioLabel(el) {
+    var chart = chartRoot(el), tag = el.tagName.toLowerCase(), label;
+    if (studioFormControl(el)) {
+      label = tag === 'select' ? 'Dropdown' : tag === 'textarea' ? 'Text area' : studioPopupButton(el) ? 'Button' : 'Input';
+      var fieldName = el.getAttribute('aria-label') || el.getAttribute('placeholder') || '';
+      if (!fieldName && el.labels && el.labels.length) fieldName = studioTextInfo(el.labels[0]).text;
+      if (!fieldName) fieldName = el.getAttribute('name') || '';
+      return (label + (fieldName ? ' · ' + studioNorm(fieldName).slice(0, 60) : '')).slice(0, 120);
+    }
+    if (chart === el) label = 'Chart';
+    else if (/^h[1-6]$/.test(tag)) label = 'Heading';
+    else label = ({ button: 'Button', a: 'Link', img: 'Image', p: 'Text', section: 'Section', article: 'Card', main: 'Page', nav: 'Navigation', input: 'Input', ul: 'List', ol: 'List' })[tag] ||
+      (studioPopupLayoutKind(el) === 'grid' ? 'Grid' : studioPopupLayoutKind(el) === 'stack' ? 'Stack' : '') ||
+      el.getAttribute('aria-label') || (studioPopupKind(el) === 'card' ? 'Card' : el.children.length ? 'Container' : 'Text');
+    var text = studioNorm(studioOwn(el));
+    return (label + (text ? ' · ' + text.slice(0, 60) : '')).slice(0, 120);
+  }
+  function studioContext(el) {
+    var info = studioIdentityText(el), parent = el.parentElement, chart = chartRoot(el) === el, form = studioFormControl(el);
+    var siblings = parent && parent.children.length <= STUDIO_LIMIT.children ? Array.prototype.filter.call(parent.children, studioAllowedElement) : [];
+    var index = siblings.indexOf(el);
+    function neighbor(node) {
+      if (!node) return null;
+      var text = studioIdentityText(node);
+      return { tag: node.tagName.toLowerCase(), key: studioIdentityKey(node), hash: text.hash };
+    }
+    return {
+      tag: el.tagName.toLowerCase(), key: studioIdentityKey(el), own: chart ? '' : studioNorm(studioOwn(el)).slice(0, 4096),
+      text: info.text, hash: info.hash, complete: info.complete, selector: studioSelector(el),
+      children: chart || form ? [] : Array.prototype.slice.call(el.children, 0, 64).filter(studioAllowedElement).map(function (n) { return { tag: n.tagName.toLowerCase(), key: studioIdentityKey(n) }; }),
+      parent: parent && studioAllowedElement(parent) ? { selector: studioSelector(parent), tag: parent.tagName.toLowerCase(), key: studioIdentityKey(parent) } : null,
+      position: index < 0 ? null : { index: index, count: siblings.length, previous: neighbor(siblings[index - 1]), next: neighbor(siblings[index + 1]) }
+    };
+  }
+  function studioIdentityText(el) {
+    if (chartRoot(el) !== el) return studioTextInfo(el);
+    var spec = readSpec(el);
+    try { return { text: '', hash: 'chart:' + studioHash(studioStableJson(studioChartVisual(spec))), complete: true }; }
+    catch (e) { return { text: '', hash: 'chart:' + (spec && spec.type || 'unavailable'), complete: false }; }
+  }
+  function studioTarget(el) {
+    var id = studio && studio.nodeIds.get(el);
+    if (!id) {
+      id = studioId('target');
+      if (studio) { studio.nodeIds.set(el, id); studio.bindings.set(id, el); }
+    }
+    if (studio && !studio.identities.has(id)) studio.identities.set(id, studioContext(el));
+    var out = { id: id, selector: studioSelector(el), tag: el.tagName.toLowerCase(), label: studioLabel(el) };
+    var text = studioTextInfo(el).text;
+    if (text) out.text = text.slice(0, 512);
+    if (el.parentElement && studioAllowedElement(el.parentElement)) out.parentSelector = studioSelector(el.parentElement);
+    if (el.getAttribute('role')) out.role = el.getAttribute('role').slice(0, 256);
+    if (el.getAttribute('aria-label')) out.ariaLabel = el.getAttribute('aria-label').slice(0, 256);
+    var component = componentHint(el);
+    if (component) out.component = component.slice(0, 120);
+    return out;
+  }
+  function studioBind(target, el) {
+    if (!studio) return;
+    studio.bindings.set(target.id, el);
+    studio.nodeIds.set(el, target.id);
+    studio.identities.set(target.id, studioContext(el));
+  }
+  function studioValidTarget(target) {
+    return studioPlain(target) && typeof target.id === 'string' && target.id.length > 0 && target.id.length <= 200 &&
+      typeof target.selector === 'string' && target.selector.length > 0 && target.selector.length <= 1024 &&
+      typeof target.tag === 'string' && /^[a-z][a-z0-9-]*$/.test(target.tag) && typeof target.label === 'string' && target.label.length <= 240 &&
+      ['text', 'parentSelector', 'role', 'ariaLabel', 'component'].every(function (key) { return target[key] == null || (typeof target[key] === 'string' && target[key].length <= 1024); });
+  }
+  function studioKeysMatch(el, key) {
+    return Object.keys(key || {}).every(function (k) { return el.getAttribute(k) === key[k]; });
+  }
+  function studioContextMatches(el, ctx, ignoreParent) {
+    if (!ctx || el.tagName.toLowerCase() !== ctx.tag || !studioKeysMatch(el, ctx.key)) return false;
+    var chart = chartRoot(el) === el, info = studioIdentityText(el);
+    if (ctx.hash !== info.hash || ctx.text !== info.text || ctx.complete !== info.complete) return false;
+    if (!ctx.complete && !(ctx.key.id || ctx.key['data-testid'])) return false;
+    if (ctx.own !== (chart ? '' : studioNorm(studioOwn(el)).slice(0, 4096))) return false;
+    var children = chart || studioFormControl(el) ? [] : Array.prototype.slice.call(el.children, 0, 64).filter(studioAllowedElement);
+    if (ctx.children && (ctx.children.length !== children.length || ctx.children.some(function (child, i) {
+      return children[i].tagName.toLowerCase() !== child.tag || !studioKeysMatch(children[i], child.key);
+    }))) return false;
+    if (!ignoreParent && ctx.parent) {
+      var p = el.parentElement;
+      if (!p || p.tagName.toLowerCase() !== ctx.parent.tag || !studioKeysMatch(p, ctx.parent.key)) return false;
+      var parents = studioQuery(ctx.parent.selector);
+      if (parents.length !== 1 || parents[0] !== p) return false;
+    }
+    if (!ignoreParent && ctx.position && !(ctx.key.id || ctx.key['data-testid'])) {
+      var siblings = el.parentElement && Array.prototype.filter.call(el.parentElement.children, studioAllowedElement);
+      if (!siblings || siblings.length !== ctx.position.count || siblings[ctx.position.index] !== el) return false;
+      var adjacent = [siblings[ctx.position.index - 1], siblings[ctx.position.index + 1]];
+      var expected = [ctx.position.previous, ctx.position.next];
+      if (expected.some(function (neighbor, i) {
+        if (!neighbor) return !!adjacent[i];
+        return !adjacent[i] || adjacent[i].tagName.toLowerCase() !== neighbor.tag ||
+          !studioKeysMatch(adjacent[i], neighbor.key) || studioIdentityText(adjacent[i]).hash !== neighbor.hash;
+      })) return false;
+    }
+    return true;
+  }
+  function studioUnambiguous(el, ctx) {
+    if (ctx.key.id && studioQuery('#' + cssEscape(ctx.key.id)).length === 1) return true;
+    if (ctx.key['data-testid'] && studioQuery('[data-testid="' + cssAttr(ctx.key['data-testid']) + '"]').length === 1) return true;
+    var parent = el.parentElement;
+    if (!parent || parent.children.length > STUDIO_LIMIT.children) return false;
+    var same = Array.prototype.filter.call(parent.children, function (n) { return studioAllowedElement(n) && studioContextMatches(n, ctx, true); });
+    return same.length === 1;
+  }
+  function studioResolve(target, contexts, options) {
+    options = options || {};
+    if (!studioValidTarget(target)) studioError('Invalid design target.');
+    contexts = (contexts || []).filter(Boolean);
+    var bound = !options.fresh && studio && studio.bindings.get(target.id);
+    if (bound && studioAllowedElement(bound) && bound.tagName.toLowerCase() === target.tag &&
+      (bound.isConnected || options.detached) &&
+      (!contexts.length || contexts.some(function (ctx) { return studioContextMatches(bound, ctx, options.detached); }))) return bound;
+    if (!contexts.length && studio && studio.identities.has(target.id)) contexts = [studio.identities.get(target.id)];
+    var candidates = studioQuery(target.selector);
+    contexts.forEach(function (ctx) {
+      if (ctx.selector && ctx.selector !== target.selector) candidates = candidates.concat(studioQuery(ctx.selector));
+      if (ctx.parent) {
+        var parents = studioQuery(ctx.parent.selector);
+        if (parents.length === 1 && parents[0].children.length <= STUDIO_LIMIT.children) candidates = candidates.concat(Array.prototype.slice.call(parents[0].children));
+      }
+    });
+    candidates = candidates.filter(function (el, i, list) {
+      if (list.indexOf(el) !== i || !studioAllowedElement(el) || el.tagName.toLowerCase() !== target.tag) return false;
+      if (contexts.length) return contexts.some(function (ctx) { return studioContextMatches(el, ctx, false) && studioUnambiguous(el, ctx); });
+      return (!target.text || studioTextInfo(el).text.slice(0, 512) === target.text) &&
+        (!target.role || el.getAttribute('role') === target.role) && (!target.ariaLabel || el.getAttribute('aria-label') === target.ariaLabel);
+    });
+    if (candidates.length !== 1) studioError('Target is missing or ambiguous: ' + target.label + '. Reselect it to retarget this change.');
+    if (!options.fresh) studioBind(target, candidates[0]);
+    return candidates[0];
+  }
+  function studioContexts(edit) {
+    return [edit.before && edit.before.context, edit.after && edit.after.context, edit.before && edit.before.source].filter(Boolean);
+  }
+  function studioScope(scope) {
+    if (!scope || scope === 'all' || scope === 'all-sizes') return '';
+    if (typeof scope !== 'string' || scope.length > 240) studioError('Invalid breakpoint scope.');
+    var value = scope.replace(/^@media\s*/i, '').trim();
+    if (!/^[a-z0-9()\s.,:%<>=+-]+$/i.test(value) || !/\b(?:width|height)\b/.test(value) ||
+      (value.match(/\(/g) || []).length !== (value.match(/\)/g) || []).length ||
+      (typeof window.matchMedia === 'function' && window.matchMedia(value).media === 'not all')) {
+      studioError('Use an explicit width/height media condition for breakpoint-scoped edits.');
+    }
+    return value;
+  }
+  function studioScopeMatches(scope) {
+    if (!scope) return true;
+    if (typeof window.matchMedia === 'function') return window.matchMedia(scope).matches;
+    var parts = scope.match(/\([^)]*\)/g);
+    if (!parts) return false;
+    return parts.every(function (part) {
+      var m = /\((min-|max-)?(width|height)\s*:\s*(\d+(?:\.\d+)?)(px|em|rem)\)/i.exec(part);
+      if (!m) {
+        var range = /\((width|height)\s*(<=|>=|<|>|=)\s*(\d+(?:\.\d+)?)(px|em|rem)\)/i.exec(part);
+        if (!range) return false;
+        var actual = range[1] === 'width' ? window.innerWidth : window.innerHeight, threshold = +range[3] * (range[4] === 'px' ? 1 : 16);
+        return range[2] === '<=' ? actual <= threshold : range[2] === '>=' ? actual >= threshold : range[2] === '<' ? actual < threshold : range[2] === '>' ? actual > threshold : actual === threshold;
+      }
+      var current = m[2] === 'width' ? window.innerWidth : window.innerHeight;
+      var value = +m[3] * (m[4] === 'px' ? 1 : 16);
+      return m[1] === 'min-' ? current >= value : m[1] === 'max-' ? current <= value : current === value;
+    });
+  }
+  function studioCssValue(property, value, priority, token) {
+    if (typeof value !== 'string' || value.length > 4096 || /url\s*\(|expression\s*\(|@import|[{}<>\\]|\/\*/i.test(value)) studioError('Unsafe or oversized CSS value.');
+    if (token ? !/^--[a-zA-Z0-9_-]{1,100}$/.test(property) : STUDIO_STYLES.indexOf(property) < 0) studioError('Unsupported style property: ' + property);
+    var important = /\s*!important\s*$/i.test(value), clean = value.replace(/\s*!important\s*$/i, '').trim();
+    var style = document.createElement('div').style;
+    style.setProperty(property, clean);
+    if (clean && !style.getPropertyValue(property)) studioError('Invalid value for ' + property + '.');
+    return { value: clean ? style.getPropertyValue(property) : '', priority: clean ? (important ? 'important' : (priority || '')) : '' };
+  }
+  function studioStyleValue(el, property) {
+    return { value: el.style.getPropertyValue(property), priority: el.style.getPropertyPriority(property), computed: getComputedStyle(el).getPropertyValue(property).trim(),
+      viewport: { width: window.innerWidth, height: window.innerHeight } };
+  }
+  function studioStoredStyle(value) {
+    var copy = Object.assign({}, value);
+    ['value', 'computed'].forEach(function (key) {
+      if (copy[key] && (/(?:data:image\/|blob:)/i.test(copy[key]) || copy[key].length > 4096)) {
+        copy[key + 'Hash'] = studioHash(copy[key]); copy[key] = null;
+      }
+    });
+    return copy;
+  }
+  function studioBase(el) {
+    var target = studioTarget(el), ctx = studioContext(el);
+    var source = studio.sources.get(target.id);
+    if (!source) { source = ctx; studio.sources.set(target.id, source); }
+    return { target: target, context: ctx, source: source };
+  }
+  function studioStyleEdit(el, property, value, scope, theme) {
+    var base = studioBase(el), before = studioStoredStyle(studioStyleValue(el, property)), next = studioCssValue(property, value, before.priority, theme);
+    before.context = base.context; before.source = base.source;
+    return { kind: theme ? 'theme' : 'style', target: base.target, property: property, before: before,
+      after: { value: next.value, priority: next.priority, context: base.context }, scope: scope || '' };
+  }
+  function studioSelectionElements() {
+    var selection = (state.selection || []).filter(function (el) { return el.isConnected && studioAllowedElement(el); });
+    if (!selection.length) studioError('Select an element in the app first.');
+    if (selection.length > STUDIO_LIMIT.selection) studioError('Select fewer elements.');
+    return selection;
+  }
+  function studioCanText(el) {
+    return studioAllowedElement(el) && !chartRoot(el) && !/^(INPUT|TEXTAREA|SELECT|OPTION|SVG|CANVAS|VIDEO|AUDIO|HTML|BODY)$/.test(el.tagName) &&
+      !el.isContentEditable && studioNorm(studioOwn(el)).length > 0 && studioOwn(el).length <= 4096;
+  }
+  function studioCanContain(el) {
+    return studioAllowedElement(el) && el.namespaceURI === 'http://www.w3.org/1999/xhtml' &&
+      !/^(HTML|P|H[1-6]|BUTTON|A|IMG|INPUT|TEXTAREA|SELECT|OPTION|TABLE|THEAD|TBODY|TFOOT|TR|UL|OL|DL|SVG|CANVAS|VIDEO|AUDIO|PICTURE|SOURCE|BR|HR)$/.test(el.tagName) &&
+      !chartRoot(el) && !el.isContentEditable && el.tagName.indexOf('-') < 0;
+  }
+
+  // Effects deliberately capture the *current* DOM baseline. Inverse effects
+  // only run while their projected value is still present; an app rerender is
+  // never overwritten merely because an old closure retained the same node.
+  function studioSilence(fn) {
+    studio.mutating++;
+    try { return fn(); }
+    finally {
+      if (studio.observer) studio.observer.takeRecords();
+      studio.mutating--;
+    }
+  }
+  function studioStyleSame(el, property, value) {
+    var actual = el.style.getPropertyValue(property);
+    return (value.valueHash ? studioHash(actual) === value.valueHash : actual === value.value) && el.style.getPropertyPriority(property) === (value.priority || '');
+  }
+  function studioSetStyle(el, property, value) {
+    if (value.value) el.style.setProperty(property, value.value, value.priority || '');
+    else el.style.removeProperty(property);
+  }
+  function studioComputedSame(el, property, value) {
+    var current = getComputedStyle(el).getPropertyValue(property).trim();
+    return (value.computedHash && studioHash(current) === value.computedHash) ||
+      (value.computed != null && current === value.computed) || (value.value != null && value.value !== '' && current === value.value);
+  }
+  function studioNoEffect(el) { return { el: el, changed: false, undo: function () { return true; } }; }
+  function studioSequence(parent) {
+    if (parent.children.length > STUDIO_LIMIT.children) studioError('This container is too large to edit safely.');
+    return Array.prototype.filter.call(parent.children, studioAllowedElement).map(function (el) {
+      var info = studioTextInfo(el);
+      return { tag: el.tagName.toLowerCase(), key: studioIdentityKey(el), hash: info.hash, text: info.text.slice(0, 128), complete: info.complete };
+    });
+  }
+  function studioSequenceMatches(parent, sequence) {
+    var children = Array.prototype.filter.call(parent.children, studioAllowedElement);
+    return Array.isArray(sequence) && children.length === sequence.length && children.every(function (el, i) {
+      var info = studioTextInfo(el), expected = sequence[i];
+      return expected.tag === el.tagName.toLowerCase() && studioKeysMatch(el, expected.key) && info.hash === expected.hash && info.complete === expected.complete;
+    });
+  }
+  function studioLocation(el) {
+    var parent = el.parentElement;
+    if (!parent || !studioAllowedElement(parent)) studioError('This element has no editable parent.');
+    return {
+      parent: studioTarget(parent), parentContext: studioContext(parent),
+      index: Array.prototype.indexOf.call(parent.children, el),
+      next: el.nextElementSibling && studioAllowedElement(el.nextElementSibling) ? studioTarget(el.nextElementSibling) : null,
+      previous: el.previousElementSibling && studioAllowedElement(el.previousElementSibling) ? studioTarget(el.previousElementSibling) : null,
+      sequence: studioSequence(parent)
+    };
+  }
+  function studioReadText(el) {
+    return { value: studioNorm(studioOwn(el)), segments: studioOwnNodes(el).map(function (n) {
+      return { index: Array.prototype.indexOf.call(el.childNodes, n), text: n.nodeValue };
+    }) };
+  }
+  function studioTextEdit(el, value) {
+    if (!studioCanText(el)) studioError('Only an element’s own text is editable. Select its text-bearing child instead.');
+    if (typeof value !== 'string' || value.length > 4096) studioError('Text must be at most 4096 characters.');
+    var base = studioBase(el), before = studioReadText(el);
+    before.context = base.context; before.source = base.source;
+    return { kind: 'text', target: base.target, property: 'ownText', before: before, after: { value: value, context: base.context } };
+  }
+  function studioWriteOwn(el, value) {
+    var nodes = studioOwnNodes(el), meaningful = nodes.filter(function (n) { return studioNorm(n.nodeValue); });
+    var first = meaningful[0] || nodes[0];
+    if (!first) studioError('The text node was replaced. Reselect the element.');
+    var lead = (first.nodeValue.match(/^\s*/) || [''])[0], trail = (first.nodeValue.match(/\s*$/) || [''])[0];
+    first.nodeValue = lead + value + trail;
+    meaningful.slice(1).forEach(function (n) { n.nodeValue = ''; });
+  }
+  function studioImageValue(el) {
+    var value = {};
+    ['src', 'srcset', 'sizes', 'alt'].forEach(function (name) {
+      var attr = el.getAttribute(name);
+      value[name] = attr && (attr.length > 4096 || /(?:data:|blob:)/i.test(attr)) ? null : attr;
+      if (attr && value[name] === null) value[name + 'Hash'] = studioHash(attr);
+    });
+    if (el.getAttribute('data-rayfin-studio-asset')) value.assetId = el.getAttribute('data-rayfin-studio-asset');
+    return value;
+  }
+  // Native asset collection uses the top-level ID; value also supports existing
+  // protocol-1 journals. Reject disagreement instead of importing one asset and
+  // projecting another.
+  function studioImageAsset(after) {
+    var nested = studioPlain(after.value) ? after.value : {};
+    var assetId = after.assetId != null ? after.assetId : nested.assetId;
+    var alt = Object.prototype.hasOwnProperty.call(after, 'alt') ? after.alt : nested.alt;
+    if (typeof assetId !== 'string' || !/^[a-zA-Z0-9_.-]{1,160}$/.test(assetId) ||
+      (alt != null && (typeof alt !== 'string' || alt.length > 4096))) studioError('Invalid image asset journal value.');
+    if ((after.assetId != null && nested.assetId != null && after.assetId !== nested.assetId) ||
+      (Object.prototype.hasOwnProperty.call(after, 'alt') && Object.prototype.hasOwnProperty.call(nested, 'alt') && after.alt !== nested.alt)) studioError('Conflicting image asset journal values.');
+    return { assetId: assetId, alt: alt == null ? null : alt };
+  }
+  function studioValidateAsset(assetId, dataUrl) {
+    if (typeof assetId !== 'string' || !/^[a-zA-Z0-9_.-]{1,160}$/.test(assetId)) studioError('Invalid image asset ID.');
+    if (typeof dataUrl !== 'string' || dataUrl.length > 14000000 ||
+      !/^data:image\/(?:png|jpeg|jpg|gif|webp|avif|bmp|svg\+xml);base64,[a-zA-Z0-9+/\s]+=*$/i.test(dataUrl)) studioError('Use a validated image asset, not a remote URL.');
+    if (/^data:image\/svg\+xml/i.test(dataUrl)) {
+      var decoded;
+      try { decoded = atob(dataUrl.slice(dataUrl.indexOf(',') + 1)); } catch (e) { studioError('Invalid SVG asset.'); }
+      if (decoded.length > 1000000 || /<\s*(?:script|foreignObject|iframe|image|use|style)|\bon[a-z]+\s*=|(?:href|src)\s*=|url\s*\(|<!ENTITY|<!DOCTYPE/i.test(decoded)) {
+        studioError('SVG assets must be inert and contain no scripts or external references.');
+      }
+    }
+    return dataUrl;
+  }
+  function studioChartVisual(spec, snapshot) {
+    var omitted = [];
+    function walk(value, depth) {
+      if (depth > 14) studioError('Chart specification is too deeply nested.');
+      if (typeof value === 'string' && /data:image\//i.test(value)) studioError('Image bytes do not belong in chart history. Use source assets.');
+      if (!value || typeof value !== 'object') return value;
+      if (Array.isArray(value)) {
+        if (value.length > 256) studioError('Chart configuration is too large (data belongs outside the journal).');
+        return value.map(function (v) { return walk(v, depth + 1); });
+      }
+      var out = {};
+      Object.keys(value).forEach(function (key) {
+        if (key === 'data' || key === 'debug') return;
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') studioError('Unsafe chart specification key.');
+        if (key === 'geo') { omitted.push('geo'); return; } // geometry, like rows, stays in the live chart
+        out[key] = walk(value[key], depth + 1);
+      });
+      return out;
+    }
+    var clean = studioJson(walk(spec, 0), 40000);
+    if (snapshot && omitted.length) clean.__studioOmitted = ['geo'];
+    return clean;
+  }
+  function studioChartPatch(el, patch) {
+    var chart = chartRoot(el), spec = chart && readSpec(chart);
+    if (!spec || !studioPlain(patch)) studioError('Select a supported Graphein chart.');
+    var safe = studioJson(patch, 30000);
+    function validate(object) {
+      Object.keys(object).forEach(function (key) {
+        if (key === 'data' || key === 'debug' || key === 'geo') studioError('Chart data, geometry and debug mode are not persistent chart edits.');
+        if (typeof object[key] === 'string' && /data:image\//i.test(object[key])) studioError('Import images as assets rather than including image bytes in chart edits.');
+        if (object[key] && typeof object[key] === 'object') validate(object[key]);
+      });
+    }
+    validate(safe);
+    var before = studioChartVisual(spec), after = studioJson(before);
+    if (safe.type && safe.type !== spec.type) {
+      if (CHART_TYPES.indexOf(safe.type) < 0) studioError('Unknown chart type.');
+      var compatible = canConvert(shapeOf(spec), safe.type);
+      if (!compatible.ok) studioError('Chart conversion ' + compatible.reason + '.');
+      after = studioChartVisual(convertSpec(spec.geo ? Object.assign({ geo: spec.geo }, before) : before, safe.type));
+    }
+    deepMerge(after, safe);
+    var base = studioBase(chart);
+    return { kind: 'chart', target: base.target, property: 'spec',
+      before: { value: before, context: base.context, source: base.source },
+      after: { value: after, context: base.context } };
+  }
+  function studioWriteChart(el, visual) {
+    var current = readSpec(el);
+    if (!current) studioError('The chart specification disappeared.');
+    var next = studioJson(visual, 40000);
+    ['data', 'geo', 'debug'].forEach(function (key) { if (Object.prototype.hasOwnProperty.call(current, key)) next[key] = current[key]; });
+    el.setAttribute('data-graphein-spec', JSON.stringify(next));
+  }
+
+  // Parse prototypes in an inert template, before anything reaches the live
+  // document. DOM cloning is intentionally not presented as cloning a component.
+  function studioSafeHtml(html, duplicate) {
+    if (typeof html !== 'string' || !html.trim() || html.length > STUDIO_LIMIT.html) studioError('Provide a nonempty HTML block under 48 KB.');
+    var template = document.createElement('template');
+    template.innerHTML = html;
+    var nodes = template.content.querySelectorAll('*');
+    if (nodes.length > 400) studioError('The block contains too many elements.');
+    var tags = ('section article div span p h1 h2 h3 h4 h5 h6 button a img figure figcaption header footer main aside nav ul ol li dl dt dd strong em b i small br hr label svg g path rect circle ellipse line polyline polygon title desc defs linearGradient radialGradient stop clipPath').toLowerCase().split(' ');
+    var attrs = ('class title role aria-label aria-hidden alt width height viewbox d fill stroke stroke-width stroke-linecap stroke-linejoin fill-rule clip-rule x y x1 x2 y1 y2 cx cy r rx ry points opacity offset stop-color stop-opacity preserveaspectratio').split(' ');
+    Array.prototype.forEach.call(nodes, function (node) {
+      var tag = node.tagName.toLowerCase();
+      if (tags.indexOf(tag) < 0) { node.remove(); return; }
+      Array.prototype.slice.call(node.attributes).forEach(function (attr) {
+        var name = attr.name.toLowerCase(), value = attr.value;
+        if (name === 'style') {
+          var clean = document.createElement('div').style, original = node.style;
+          for (var i = 0; i < original.length; i++) {
+            var property = original[i];
+            if (STUDIO_STYLES.indexOf(property) < 0 || /url\s*\(|expression\s*\(|[<>\\]|\/\*/i.test(original.getPropertyValue(property))) continue;
+            clean.setProperty(property, original.getPropertyValue(property), original.getPropertyPriority(property));
+          }
+          node.setAttribute('style', clean.cssText);
+        } else if (name === 'src' && tag === 'img') {
+          if (/^data:/i.test(value)) studioError('Import inline images as assets before adding or duplicating this block.');
+          if (!duplicate || /^(?:javascript:|vbscript:|blob:)/i.test(value) || value.length > 2048) node.removeAttribute(attr.name);
+        } else if (name === 'data-rayfin-asset' && studio.assets[value]) {
+          // Only references to an already-imported asset may hydrate a prototype.
+        } else if (attrs.indexOf(name) < 0 || /url\s*\(|javascript:|expression\s*\(/i.test(value)) node.removeAttribute(attr.name);
+      });
+      if (tag === 'button') node.setAttribute('type', 'button');
+    });
+    var children = Array.prototype.slice.call(template.content.children);
+    if (!children.length) studioError('The generated block contains no safe visual elements.');
+    if (children.length > 1) {
+      var wrapper = document.createElement('div');
+      wrapper.appendChild(template.content);
+      template.content.appendChild(wrapper);
+    }
+    return template.innerHTML;
+  }
+  function studioPrototype(html, id) {
+    var template = document.createElement('template');
+    template.innerHTML = studioSafeHtml(html, true);
+    var node = template.content.firstElementChild;
+    node.setAttribute('data-rayfin-studio-node', id);
+    node.setAttribute('data-rayfin-studio-prototype', 'true');
+    var images = [node].concat(Array.prototype.slice.call(node.querySelectorAll('[data-rayfin-asset]')));
+    images.forEach(function (image) {
+      var asset = image.getAttribute('data-rayfin-asset');
+      if (asset) {
+        if (!studio.assets[asset]) studioError('An image asset preview is unavailable: ' + asset);
+        image.setAttribute('src', studio.assets[asset]);
+      }
+    });
+    node.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); }, true);
+    return node;
+  }
+  var STUDIO_BLOCKS = {
+    section: '<section style="padding:1.5rem"><h2>New section</h2><p>Add your content here.</p></section>',
+    row: '<div style="display:flex;gap:1rem;align-items:center;padding:1rem"><p>First item</p><p>Second item</p></div>',
+    columns: '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;padding:1rem"><div><h3>First column</h3><p>Column content.</p></div><div><h3>Second column</h3><p>Column content.</p></div></div>',
+    card: '<article style="padding:1.5rem;border:1px solid currentColor;border-radius:0.75rem"><h3>New card</h3><p>Card content.</p></article>',
+    heading: '<h2>New heading</h2>',
+    text: '<p>Add your text here.</p>',
+    button: '<button type="button" style="padding:0.65em 1.25em;border:1px solid currentColor;border-radius:0.5em">New button</button>',
+    image: '<img alt="New image — choose an asset" style="width:100%;height:12rem;object-fit:cover">'
+  };
+  function studioInsertEdit(anchor, html, placement, block) {
+    if (['inside', 'before', 'after'].indexOf(placement) < 0) studioError('Invalid insert placement.');
+    var parent = placement === 'inside' ? anchor : anchor.parentElement;
+    if (!parent || !studioCanContain(parent)) studioError('This element cannot contain that block. Choose a section or container.');
+    var base = studioBase(anchor), parentBase = studioBase(parent);
+    var location = { parent: parentBase.target, parentContext: parentBase.context, sequence: studioSequence(parent) };
+    return { kind: 'insert', target: base.target, property: block || 'prototype',
+      before: { context: base.context, source: base.source, location: location, present: false },
+      after: { context: base.context, html: html, placement: placement, insertId: studioId('block'), present: true } };
+  }
+  function studioRemoveEdit(el) {
+    if (el === document.body || el === document.documentElement || !studioAllowedElement(el)) studioError('The app root cannot be removed.');
+    var base = studioBase(el);
+    return { kind: 'remove', target: base.target, property: 'element',
+      before: { context: base.context, source: base.source, location: studioLocation(el), removed: false },
+      after: { context: base.context, removed: true } };
+  }
+  function studioLayout(parent) {
+    if (!parent || !studioAllowedElement(parent) || !/^(DIV|SECTION|ARTICLE|MAIN|ASIDE|NAV|HEADER|FOOTER|UL|OL|LI)$/.test(parent.tagName) || parent.children.length > 60) return null;
+    var style = getComputedStyle(parent), display = style.display || 'block';
+    if (['block', 'flex', 'inline-flex', 'grid', 'inline-grid'].indexOf(display) < 0) return null;
+    var children = Array.prototype.filter.call(parent.children, studioAllowedElement);
+    if (children.some(function (el) {
+      var s = getComputedStyle(el);
+      return /^(absolute|fixed)$/.test(s.position) || (s.order && s.order !== '0') ||
+        (/grid/.test(display) && [s.gridColumnStart, s.gridColumnEnd, s.gridRowStart, s.gridRowEnd].some(function (v) { return v && v !== 'auto'; }));
+    })) return null;
+    return { parent: parent, children: children, horizontal: /flex/.test(display) && /^row/.test(style.flexDirection || 'row'), reverse: /reverse/.test(style.flexDirection), rtl: style.direction === 'rtl', grid: /grid/.test(display) };
+  }
+  function studioOrderValue(parent, children) {
+    return { order: children.map(function (el) { return { target: studioTarget(el), context: studioContext(el) }; }), sequence: studioSequence(parent) };
+  }
+  function studioReorderEdit(parent, after) {
+    var base = studioBase(parent), before = studioOrderValue(parent, studioLayout(parent).children);
+    before.context = base.context; before.source = base.source;
+    return { kind: 'reorder', target: base.target, property: 'children', before: before,
+      after: { order: after.map(function (el) { return { target: studioTarget(el), context: studioContext(el) }; }), context: base.context } };
+  }
+  function studioMoveEdit(selection, direction) {
+    var parent = selection[0].parentElement, layout = studioLayout(parent);
+    if (!layout || selection.some(function (el) { return el.parentElement !== parent; })) studioError('Reorder requires a supported, shared flow, flex, or auto-grid container.');
+    var list = layout.children.slice(), indexes = selection.map(function (el) { return list.indexOf(el); }).sort(function (a, b) { return a - b; });
+    if (indexes.some(function (index, i) { return index < 0 || (i && index !== indexes[i - 1] + 1); })) studioError('Select adjacent siblings to reorder them as a group.');
+    var first = indexes[0], last = indexes[indexes.length - 1];
+    if ((direction === 'previous' && first === 0) || (direction === 'next' && last === list.length - 1)) return null;
+    var group = list.splice(first, indexes.length);
+    var index = direction === 'previous' ? first - 1 : first + 1;
+    Array.prototype.splice.apply(list, [index, 0].concat(group));
+    return studioReorderEdit(parent, list);
+  }
+
+  function studioApplyEdit(edit, recording, transactionId) {
+    var el = studioResolve(edit.target, recording ? [] : studioContexts(edit));
+    var before = edit.before, after = edit.after, effect, property = edit.property;
+    if (!studioPlain(before) || !studioPlain(after)) studioError('Invalid journal values.');
+    if (edit.kind === 'style' || edit.kind === 'theme') {
+      var scope = studioScope(edit.scope), token = edit.kind === 'theme';
+      studioCssValue(property, after.value, after.priority, token);
+      if (!studioScopeMatches(scope)) return studioNoEffect(el);
+      if (studioStyleSame(el, property, after) || (!recording && studioComputedSame(el, property, after))) return studioNoEffect(el);
+      var sameViewport = !before.viewport || (before.viewport.width === window.innerWidth && before.viewport.height === window.innerHeight);
+      if (!recording && (!studioStyleSame(el, property, before) || (sameViewport && before.value === '' && (before.computed || before.computedHash) && !studioComputedSame(el, property, before)))) {
+        studioError('The source value of ' + property + ' changed. Reselect or revert this transaction.');
+      }
+      var original = studioStyleValue(el, property);
+      studioSetStyle(el, property, after);
+      var expected = studioStyleValue(el, property);
+      if (after.value && !after.priority && expected.computed === original.computed && after.value !== original.value) {
+        // A stylesheet !important can outrank ordinary inline declarations.
+        el.style.setProperty(property, after.value, 'important');
+        expected = studioStyleValue(el, property);
+      }
+      if (recording) Object.assign(after, studioStoredStyle(expected));
+      effect = { el: el, changed: true, undo: function () {
+        if (!studioStyleSame(el, property, expected)) return false;
+        studioSetStyle(el, property, original); return true;
+      } };
+    } else if (edit.kind === 'text') {
+      if (typeof after.value !== 'string' || after.value.length > 4096) studioError('Invalid text journal value.');
+      var currentText = studioNorm(studioOwn(el));
+      if (currentText === studioNorm(after.value)) return studioNoEffect(el);
+      if (!recording && currentText !== studioNorm(before.value)) studioError('The source text changed. Reselect this text.');
+      var textNodes = studioOwnNodes(el), textValues = textNodes.map(function (n) { return n.nodeValue; });
+      studioWriteOwn(el, after.value);
+      var expectedText = textNodes.map(function (n) { return n.nodeValue; });
+      if (recording) after.segments = studioReadText(el).segments;
+      effect = { el: el, changed: true, undo: function () {
+        if (textNodes.some(function (n, i) { return n.parentNode !== el || n.nodeValue !== expectedText[i]; })) return false;
+        textNodes.forEach(function (n, i) { n.nodeValue = textValues[i]; }); return true;
+      } };
+    } else if (edit.kind === 'remove') {
+      if (el === document.body || el === document.documentElement) studioError('The app root cannot be removed.');
+      var removeParent = el.parentNode, removeNext = el.nextSibling;
+      if (!removeParent) studioError('The element is no longer in the app.');
+      if (!after.removed) studioError('Invalid removal journal value.');
+      removeParent.removeChild(el);
+      if (recording) after.sequence = studioSequence(removeParent);
+      effect = { el: el, parent: removeParent, changed: true, undo: function () {
+        if (el.parentNode || !removeParent.isConnected || (removeNext && removeNext.parentNode !== removeParent)) return false;
+        removeParent.insertBefore(el, removeNext); return true;
+      } };
+    } else if (edit.kind === 'reorder') {
+      var layout = studioLayout(el);
+      if (!layout || !Array.isArray(after.order) || layout.children.length !== after.order.length) studioError('The layout container changed or no longer supports reordering.');
+      var ordered = after.order.map(function (item) {
+        var node = studioResolve(item.target, recording ? [] : [item.context]);
+        if (node.parentElement !== el) studioError('A reordered element moved to another container.');
+        return node;
+      });
+      if (new Set(ordered).size !== ordered.length) studioError('The reorder contains duplicate targets.');
+      if (ordered.every(function (node, i) { return node === layout.children[i]; })) return studioNoEffect(el);
+      if (!recording && !studioSequenceMatches(el, before.sequence)) studioError('The container’s source order changed.');
+      var oldOrder = Array.prototype.slice.call(el.childNodes);
+      ordered.forEach(function (node) { el.appendChild(node); });
+      if (recording) after.sequence = studioSequence(el);
+      effect = { el: el, changed: true, undo: function () {
+        var current = Array.prototype.filter.call(el.children, studioAllowedElement);
+        if (!el.isConnected || !ordered.every(function (node, i) { return current[i] === node; }) || current.length !== ordered.length) return false;
+        oldOrder.forEach(function (node) { el.appendChild(node); }); return true;
+      } };
+    } else if (edit.kind === 'insert') {
+      var insertParent = after.placement === 'inside' ? el : el.parentElement;
+      if (!insertParent || !studioCanContain(insertParent)) studioError('The insertion container is no longer valid.');
+      if (!recording && after.sequence && studioSequenceMatches(insertParent, after.sequence)) {
+        var existing = insertParent.children[after.index];
+        if (existing && studioContextMatches(existing, after.prototypeContext, true) && studioUnambiguous(existing, after.prototypeContext)) {
+          studioBind(after.prototypeTarget, existing); return studioNoEffect(existing);
+        }
+      }
+      if (!recording && !studioSequenceMatches(insertParent, before.location.sequence)) studioError('The insertion position changed or is ambiguous.');
+      var prototype = studioPrototype(after.html, after.insertId);
+      var insertNext = after.placement === 'before' ? el : after.placement === 'after' ? el.nextSibling : null;
+      insertParent.insertBefore(prototype, insertNext);
+      if (recording) {
+        after.prototypeTarget = studioTarget(prototype);
+        after.prototypeContext = studioContext(prototype);
+        after.index = Array.prototype.indexOf.call(insertParent.children, prototype);
+        after.sequence = studioSequence(insertParent);
+      } else studioBind(after.prototypeTarget, prototype);
+      effect = { el: prototype, changed: true, undo: function () {
+        if (prototype.parentNode !== insertParent) return !prototype.isConnected;
+        prototype.remove(); return true;
+      } };
+    } else if (edit.kind === 'image') {
+      if (el.tagName !== 'IMG') studioError('Select an image element.');
+      if (property === 'alt') {
+        if (typeof after.value !== 'string' || after.value.length > 4096) studioError('Invalid alt text.');
+        var oldAlt = el.getAttribute('alt');
+        if (oldAlt === after.value) return studioNoEffect(el);
+        if (!recording && oldAlt !== before.value) studioError('The image alt text changed in source.');
+        el.setAttribute('alt', after.value);
+        effect = { el: el, changed: true, undo: function () {
+          if (el.getAttribute('alt') !== after.value) return false;
+          if (oldAlt == null) el.removeAttribute('alt'); else el.setAttribute('alt', oldAlt);
+          return true;
+        } };
+      } else {
+        var asset = studioImageAsset(after), preview = studio.assets[asset.assetId];
+        if (!preview) studioError('Image asset preview unavailable: ' + asset.assetId + '. Import or restore the asset.');
+        var oldImage = ['src', 'srcset', 'sizes', 'alt', 'data-rayfin-studio-asset'].map(function (name) { return { name: name, value: el.getAttribute(name) }; });
+        if (!recording && !studioEqual(studioImageValue(el), before.value)) studioError('The source image or responsive image attributes changed.');
+        var sources = el.parentElement && el.parentElement.tagName === 'PICTURE' ? Array.prototype.slice.call(el.parentElement.querySelectorAll('source'), 0, 20) : [];
+        var oldSources = sources.map(function (source) { return { el: source, value: source.getAttribute('srcset') }; });
+        el.setAttribute('src', preview); el.removeAttribute('srcset'); el.removeAttribute('sizes');
+        el.setAttribute('data-rayfin-studio-asset', asset.assetId);
+        if (asset.alt != null) el.setAttribute('alt', asset.alt); else el.removeAttribute('alt');
+        sources.forEach(function (source) { source.removeAttribute('srcset'); });
+        effect = { el: el, changed: true, undo: function () {
+          if (el.getAttribute('src') !== preview) return false;
+          oldImage.forEach(function (attr) {
+            if (attr.value == null) el.removeAttribute(attr.name); else el.setAttribute(attr.name, attr.value);
+          });
+          oldSources.forEach(function (source) { if (!source.el.hasAttribute('srcset') && source.value != null) source.el.setAttribute('srcset', source.value); });
+          return true;
+        } };
+      }
+    } else if (edit.kind === 'chart') {
+      var oldVisual = studioChartVisual(readSpec(el));
+      if (studioEqual(oldVisual, after.value)) return studioNoEffect(el);
+      if (!recording && !studioEqual(oldVisual, before.value)) studioError('The chart configuration changed in source.');
+      studioWriteChart(el, after.value);
+      effect = { el: el, changed: true, undo: function () {
+        if (!studioEqual(studioChartVisual(readSpec(el)), after.value)) return false;
+        studioWriteChart(el, oldVisual); return true;
+      } };
+    } else if (edit.kind === 'comment') {
+      if (typeof after.value !== 'string' || !after.value.trim() || after.value.length > 3000) studioError('A comment must contain between 1 and 3000 characters.');
+      var pin = h('button', { class: 'pin', title: after.value, 'aria-label': after.value });
+      pin.__entry = { el: el, studio: true, transactionId: transactionId };
+      pin.onclick = function (e) { e.preventDefault(); e.stopPropagation(); studioChoose(el, false); studio.notice = after.value; studioPublish(); };
+      elPins.appendChild(pin);
+      effect = { el: el, changed: false, undo: function () { pin.remove(); return true; } };
+    } else if (edit.kind === 'annotation') {
+      var annotation = studioDrawNode(after);
+      elDraw.appendChild(annotation);
+      effect = { el: el, changed: false, annotation: annotation, undo: function () { annotation.remove(); return true; } };
+    } else studioError('Unsupported journal edit kind: ' + edit.kind);
+    if (recording && edit.kind !== 'remove') after.context = studioContext(el);
+    if (effect.changed) studioProjectedDocument = true;
+    return effect;
+  }
+  function studioUndoEffects(effects) {
+    var clean = true;
+    for (var i = effects.length - 1; i >= 0; i--) {
+      try { if (effects[i].undo() === false) clean = false; }
+      catch (e) { clean = false; }
+    }
+    return clean;
+  }
+  function studioUnproject() {
+    if (!studio) return;
+    studioSilence(function () {
+      for (var i = studio.applied.length - 1; i >= 0; i--) studioUndoEffects(studio.applied[i].effects);
+      studio.applied = [];
+    });
+  }
+  function studioApplyTransaction(tx, recording) {
+    var effects = [];
+    try {
+      tx.edits.forEach(function (edit) {
+        if (recording) {
+          var el = studioResolve(edit.target, []);
+          edit.before.context = studioContext(el);
+          if (edit.kind === 'insert') edit.before.location.sequence = studioSequence(edit.after.placement === 'inside' ? el : el.parentElement);
+          if (edit.kind === 'remove') edit.before.location = studioLocation(el);
+        }
+        effects.push(studioApplyEdit(edit, recording, tx.id));
+      });
+      if (recording) tx.edits.forEach(function (edit, i) {
+        var target = studio.bindings.get(edit.target.id);
+        if (target && target.isConnected) edit.after.context = studioContext(target);
+        if (edit.kind === 'reorder' && target && target.isConnected) {
+          edit.after.order.forEach(function (item) {
+            var node = studio.bindings.get(item.target.id);
+            if (node && node.isConnected) item.context = studioContext(node);
+          });
+        }
+        if (edit.kind === 'insert') {
+          var inserted = effects[i].el;
+          if (inserted && inserted.isConnected) { edit.after.prototypeContext = studioContext(inserted); edit.after.sequence = studioSequence(inserted.parentElement); }
+        }
+        if (edit.kind === 'remove' && effects[i].parent) edit.after.sequence = studioSequence(effects[i].parent);
+      });
+      return effects;
+    } catch (e) { studioUndoEffects(effects); throw e; }
+  }
+  function studioValidateHistory(history, cursor) {
+    if (!Array.isArray(history) || history.length > STUDIO_LIMIT.history ||
+      !Number.isInteger(cursor) || cursor < 0 || cursor > history.length) studioError('Invalid design history or cursor.');
+    var copy = studioJson(history), ids = new Set();
+    function persisted(value) {
+      if (typeof value === 'string' && /^\s*(?:data:|blob:)/i.test(value)) studioError('Transient data/blob URLs cannot be persisted in a draft. Import images as assets.');
+      if (value && typeof value === 'object') Object.keys(value).forEach(function (key) { persisted(value[key]); });
+    }
+    persisted(copy);
+    copy.forEach(function (tx) {
+      if (!tx || typeof tx.id !== 'string' || !tx.id || ids.has(tx.id) || typeof tx.label !== 'string' ||
+        typeof tx.route !== 'string' || !tx.route.startsWith('/') || !Array.isArray(tx.edits) || !tx.edits.length || tx.edits.length > STUDIO_LIMIT.edits) studioError('Invalid design transaction.');
+      ids.add(tx.id);
+      tx.edits.forEach(function (edit) {
+        if (!studioValidTarget(edit.target) || !studioPlain(edit.before) || !studioPlain(edit.after) ||
+          ['style', 'text', 'remove', 'reorder', 'insert', 'image', 'theme', 'chart', 'comment', 'annotation'].indexOf(edit.kind) < 0) studioError('Invalid design edit.');
+        if (edit.kind === 'image' && edit.property !== 'alt') studioImageAsset(edit.after);
+        if (edit.scope) studioScope(edit.scope);
+      });
+    });
+    return copy;
+  }
+  function studioRecapture(edit) {
+    var bound = studio.bindings.get(edit.target.id), el;
+    if (bound && bound.isConnected && studioAllowedElement(bound)) el = bound;
+    else el = studioResolve(edit.target, studioContexts(edit));
+    var current = studioBase(el), before;
+    if (edit.kind === 'style' || edit.kind === 'theme') before = studioStoredStyle(studioStyleValue(el, edit.property));
+    else if (edit.kind === 'text') before = studioReadText(el);
+    else if (edit.kind === 'chart') before = { value: studioChartVisual(readSpec(el)) };
+    else if (edit.kind === 'image') before = { value: edit.property === 'alt' ? el.getAttribute('alt') : studioImageValue(el) };
+    else if (edit.kind === 'remove') before = { removed: false, location: studioLocation(el) };
+    else if (edit.kind === 'insert') {
+      var parent = edit.after.placement === 'inside' ? el : el.parentElement;
+      before = { present: false, location: { parent: studioTarget(parent), parentContext: studioContext(parent), sequence: studioSequence(parent) } };
+    } else if (edit.kind === 'reorder') {
+      var layout = studioLayout(el);
+      if (!layout) studioError('The layout is no longer reorderable.');
+      before = studioOrderValue(el, layout.children);
+    } else before = { value: null };
+    before.context = current.context; before.source = current.source;
+    edit.before = before; edit.target = current.target;
+  }
+  function studioReplay(rebase) {
+    if (studio.compare) {
+      var activeIds = studio.history.slice(0, studio.cursor).map(function (tx) { return tx.id; });
+      studio.conflicts = studio.conflicts.filter(function (conflict) { return activeIds.indexOf(conflict.transactionId) >= 0; });
+      return;
+    }
+    studio.conflicts = [];
+    studioSilence(function () {
+      studio.history.slice(0, studio.cursor).forEach(function (tx) {
+        if (tx.route !== studio.route) { studio.conflicts.push({ transactionId: tx.id, message: 'This change belongs to ' + tx.route + ', not the current route.' }); return; }
+        try {
+          if (rebase) tx.edits.forEach(studioRecapture);
+          var effects = studioApplyTransaction(tx, !!rebase);
+          studio.applied.push({ transactionId: tx.id, effects: effects });
+        } catch (e) { studio.conflicts.push({ transactionId: tx.id, message: e.message || String(e) }); }
+      });
+    });
+    studio.dirty = false; studio.discoveryDirty = true;
+  }
+  function studioChanged() {
+    studio.revision++;
+    studio.verification = null;
+    studio.discoveryDirty = true;
+    studio.lastError = null;
+    studio.dirty = false;
+    studioChrome(); reposition(); studioPublish();
+  }
+  function studioDedup(edits) {
+    var result = [], keys = new Map();
+    edits.forEach(function (edit) {
+      var key = ['style', 'theme', 'text', 'chart', 'image'].indexOf(edit.kind) >= 0 ? edit.target.id + '|' + edit.kind + '|' + edit.property + '|' + (edit.scope || '') : null;
+      if (key && keys.has(key)) { result[keys.get(key)].after = edit.after; return; }
+      if (key) keys.set(key, result.length);
+      result.push(edit);
+    });
+    return result.filter(function (edit) {
+      if (edit.kind === 'style' || edit.kind === 'theme') return edit.scope || edit.before.value !== edit.after.value || edit.before.priority !== edit.after.priority;
+      if (edit.kind === 'text' || edit.kind === 'chart' || (edit.kind === 'image' && edit.property === 'alt')) return !studioEqual(edit.before.value, edit.after.value);
+      return true;
+    });
+  }
+  function studioCommit(label, edits) {
+    edits = studioDedup(edits);
+    if (!edits.length) return;
+    if (edits.length > STUDIO_LIMIT.edits || studio.cursor >= STUDIO_LIMIT.history) studioError('The draft is full. Apply or discard changes before adding more.');
+    var tx = { id: studioId('transaction'), label: label, route: studio.route, edits: edits };
+    var effects = studioSilence(function () { return studioApplyTransaction(tx, true); });
+    try {
+      var next = studioValidateHistory(studio.history.slice(0, studio.cursor).concat([tx]), studio.cursor + 1);
+      studio.history = next; studio.cursor = next.length;
+      studio.applied.push({ transactionId: tx.id, effects: effects });
+    } catch (e) { studioSilence(function () { studioUndoEffects(effects); }); throw e; }
+    studioChanged();
+  }
+  function studioEndGesture(id) {
+    if (!id || !studio) return;
+    studio.closedGestures.add(id);
+    if (studio.closedGestures.size > 256) studio.closedGestures.delete(studio.closedGestures.values().next().value);
+  }
+  function studioCancelGesture(continuing) {
+    if (!studio || !studio.gesture) return true;
+    var id = studio.gesture.id;
+    var clean = studioSilence(function () { return studioUndoEffects(studio.gesture.effects); });
+    studio.gesture = null;
+    if (!continuing) studioEndGesture(id);
+    reposition();
+    return clean;
+  }
+  function studioStyleCommand(command) {
+    var phase = command.phase || 'commit', id = command.gestureId;
+    if (['preview', 'commit', 'cancel'].indexOf(phase) < 0 || (phase !== 'commit' && (typeof id !== 'string' || !id || id.length > 160))) studioError('Continuous controls require a gesture ID and valid phase.');
+    if (id != null && (typeof id !== 'string' || !id || id.length > 160)) studioError('Invalid style gesture ID.');
+    if (!studioPlain(command.values) || Object.keys(command.values).length > 80) studioError('Invalid style values.');
+    if (id && studio.closedGestures.has(id)) {
+      if (phase === 'cancel') return;
+      studioError('This gesture has ended. Start a new gesture.');
+    }
+    if (phase === 'cancel') {
+      if (studio.gesture && studio.gesture.id !== id) studioError('This gesture has already ended.');
+      if (!studioCancelGesture()) studioError('The app changed during this gesture. Its newer values were preserved.');
+      studioEndGesture(id);
+      return;
+    }
+    var scope = studioScope(command.scope), selection = studioSelectionElements();
+    if (studio.gesture && studio.gesture.id !== id) studioFinishGesture();
+    if (studio.gesture && (studio.gesture.scope !== scope || !studioEqual(studio.gesture.targets, selection.map(function (el) { return studioTarget(el).id; })))) studioError('Selection or scope changed during the gesture.');
+    var previous = studio.gesture, merged = {};
+    if (previous) Object.keys(previous.values).forEach(function (key) { merged[key] = previous.values[key]; });
+    Object.keys(command.values).forEach(function (key) { merged[cssName(key)] = command.values[key]; });
+    // Validate all members before undoing the previous optimistic frame.
+    selection.forEach(function (el) { Object.keys(merged).forEach(function (key) { studioCssValue(key, merged[key], el.style.getPropertyPriority(key), false); }); });
+    if (!studioCancelGesture(true)) { studioEndGesture(id); studioError('The app changed during this gesture; the gesture was cancelled.'); }
+    var edits = [];
+    selection.forEach(function (el) { Object.keys(merged).forEach(function (key) { edits.push(studioStyleEdit(el, key, merged[key], scope, false)); }); });
+    if (phase === 'commit') {
+      try { studioCommit('Change ' + Object.keys(merged).map(humanProp).join(', '), edits); }
+      finally { studioEndGesture(id); }
+      return;
+    }
+    var tx = { id: studioId('gesture'), label: 'Change style', route: studio.route, edits: edits };
+    var effects = studioSilence(function () { return studioApplyTransaction(tx, true); });
+    studio.gesture = { id: id, effects: effects, values: merged, scope: scope, targets: selection.map(function (el) { return studioTarget(el).id; }) };
+    reposition();
+  }
+  function studioFinishGesture() {
+    if (!studio.gesture) return;
+    var gesture = studio.gesture;
+    studioStyleCommand({ type: 'style', values: gesture.values, scope: gesture.scope, gestureId: gesture.id, phase: 'commit' });
+  }
+
+  // ---- Studio: event-driven discovery, snapshots and projection lifecycle --
+  function studioDiscover() {
+    if (!studio.discoveryDirty && studio.discovery) return studio.discovery;
+    var nodes = [], layers = [], stack = document.body ? [document.body] : [], examined = 0;
+    while (stack.length && examined++ < STUDIO_LIMIT.nodes) {
+      var el = stack.pop();
+      if (!studioAllowedElement(el)) continue;
+      nodes.push(el);
+      if (layers.length < 200) layers.push(studioTarget(el));
+      if (studioFormControl(el) || chartRoot(el) === el || /^(SVG|CANVAS|VIDEO|AUDIO)$/i.test(el.tagName)) continue;
+      for (var i = Math.min(el.children.length, STUDIO_LIMIT.children) - 1; i >= 0; i--) stack.push(el.children[i]);
+    }
+    var tokens = [], names = new Set(), breakpoints = new Set(), rulesRead = 0, inaccessible = false;
+    function addTokens(style, targets) {
+      for (var i = 0; style && i < style.length && i < 160 && tokens.length < 120; i++) {
+        var name = style[i];
+        if (!/^--[a-zA-Z0-9_-]{1,100}$/.test(name)) continue;
+        targets.slice(0, 8).forEach(function (target) {
+          var descriptor = studioTarget(target), key = descriptor.id + ':' + name;
+          if (names.has(key) || tokens.length >= 120) return;
+          var value = getComputedStyle(target).getPropertyValue(name).trim() || style.getPropertyValue(name).trim();
+          if (!value || value.length > 512 || /url\s*\(/i.test(value)) return;
+          names.add(key);
+          var kind = /^(#|rgba?\(|hsla?\(|oklch\(|oklab\(|color\()/.test(value) || /color|background|foreground|accent/.test(name) ? 'color' :
+            /^-?\d*\.?\d+(px|rem|em|%|vh|vw)$/.test(value) ? 'length' : /font|family/.test(name) ? 'font' : 'other';
+          tokens.push({ name: name, value: value, kind: kind, target: descriptor });
+        });
+      }
+    }
+    function visitRules(rules, depth) {
+      if (!rules || depth > 5) return;
+      for (var ri = 0; ri < rules.length && rulesRead++ < 1200; ri++) {
+        var rule = rules[ri];
+        if (rule.media && rule.media.mediaText) {
+          var media = rule.media.mediaText;
+          if (/width|height/.test(media) && media.length <= 240 && breakpoints.size < 24) breakpoints.add(media);
+        }
+        if (rule.selectorText && rule.style && rule.style.cssText.indexOf('--') >= 0) addTokens(rule.style, studioQuery(rule.selectorText));
+        if (rule.cssRules) visitRules(rule.cssRules, depth + 1);
+      }
+    }
+    nodes.concat(document.documentElement ? [document.documentElement] : []).forEach(function (node) { addTokens(node.style, [node]); });
+    for (var si = 0; si < document.styleSheets.length && si < 60; si++) {
+      try { visitRules(document.styleSheets[si].cssRules, 0); }
+      catch (e) { inaccessible = true; } // Browsers prohibit reading cross-origin CSSOM.
+    }
+    if (studio.bindings.size > 2400) studio.bindings.forEach(function (node, id) {
+      if (!node.isConnected) { studio.bindings.delete(id); studio.identities.delete(id); }
+    });
+    studio.discovery = { layers: layers, tokens: tokens, breakpoints: Array.from(breakpoints) };
+    studio.discoveryDirty = false;
+    studio.discoveryNotice = inaccessible ? 'Some cross-origin stylesheets cannot be inspected; token and breakpoint discovery is partial.' : (stack.length ? 'The layer outline is limited to the first 1200 elements.' : null);
+    return studio.discovery;
+  }
+  function studioSelection(el) {
+    var target = studioTarget(el), cs = getComputedStyle(el), styles = {}, inline = {}, rect = el.getBoundingClientRect();
+    STUDIO_STYLES.forEach(function (property) {
+      var computed = cs.getPropertyValue(property).trim();
+      if (computed && computed.length <= 1024 && !/(?:data:image\/|blob:)/i.test(computed)) styles[property] = computed;
+      var value = el.style.getPropertyValue(property);
+      if (value && value.length <= 1024 && !/(?:data:|blob:)/i.test(value)) inline[property] = value + (el.style.getPropertyPriority(property) ? ' !important' : '');
+    });
+    var out = Object.assign({}, target, {
+      styles: styles, inlineStyles: inline, textEditable: studioCanText(el), ownText: studioNorm(studioOwn(el)).slice(0, 4096),
+      width: Math.round(rect.width * 100) / 100, height: Math.round(rect.height * 100) / 100,
+      children: studioFormControl(el) ? [] : Array.prototype.slice.call(el.children, 0, 40).filter(studioAllowedElement).map(studioTarget),
+      canContain: studioCanContain(el), canReorder: !!studioLayout(el.parentElement)
+    });
+    if (el.parentElement && studioAllowedElement(el.parentElement)) out.parent = studioTarget(el.parentElement);
+    if (el.tagName === 'IMG') {
+      var source = el.getAttribute('src') || '';
+      out.image = { src: source.length < 2048 && !/^(?:data:|blob:)/i.test(source) ? source : '', alt: (el.getAttribute('alt') || '').slice(0, 4096) };
+    }
+    var chart = chartRoot(el);
+    if (chart) {
+      var raw = chart.getAttribute('data-graphein-spec'), cached = studio.chartCache.get(chart);
+      if (!cached || cached.raw !== raw) {
+        var spec = readSpec(chart);
+        if (spec) {
+          var shape = shapeOf(spec), visual;
+          try { visual = studioChartVisual(spec, true); }
+          catch (e) { visual = { type: spec.type || '', __studioOmitted: ['oversized configuration'] }; studio.notice = e.message; }
+          cached = { raw: raw, chart: { spec: visual, types: CHART_TYPES.map(function (type) {
+            var result = canConvert(shape, type);
+            return { value: type, label: typeLabel(type) + (!result.ok && result.reason ? ' · ' + result.reason : ''), enabled: result.ok };
+          }) } };
+          studio.chartCache.set(chart, cached);
+        }
+      }
+      if (cached) out.chart = cached.chart;
+    }
+    return out;
+  }
+  function studioEmpty(sessionId, documentId, error, commandId, route) {
+    var out = {
+      protocol: 1, sessionId: sessionId || '', documentId: documentId || '', revision: 0, enabled: false,
+      route: route || '', tool: 'select', compare: false, selection: [], layers: [], tokens: [], breakpoints: [],
+      viewport: { width: 0, height: 0 }, history: [], cursor: 0, conflicts: [], acknowledged: commandId ? [commandId] : []
+    };
+    if (error) out.error = error;
+    return out;
+  }
+  function studioSnapshot(error, commandId) {
+    if (!studio) return studioEmpty('', '', error, commandId, '');
+    var discovery, selections = [];
+    try {
+      discovery = studioDiscover();
+      selections = (state.selection || []).filter(function (el) { return el.isConnected && studioAllowedElement(el); }).slice(0, STUDIO_LIMIT.selection).map(studioSelection);
+    } catch (e) {
+      discovery = studio.discovery || { layers: [], tokens: [], breakpoints: [] };
+      error = error || ('Unable to inspect the app: ' + (e.message || e));
+    }
+    var acknowledged = studio.acknowledged.slice();
+    if (commandId && acknowledged.indexOf(commandId) < 0) acknowledged.push(commandId);
+    var out = {
+      protocol: 1, sessionId: studio.sessionId, documentId: studio.documentId, revision: studio.revision,
+      enabled: state.enabled, route: studio.route, tool: state.tool, compare: studio.compare,
+      selection: selections, layers: discovery.layers, tokens: discovery.tokens, breakpoints: discovery.breakpoints,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      history: studio.history, cursor: studio.cursor, conflicts: studio.conflicts, acknowledged: acknowledged
+    };
+    var reportedError = error === undefined ? studio.lastError : error;
+    if (reportedError) out.error = reportedError;
+    if (studio.notice || studio.discoveryNotice) out.notice = studio.notice || studio.discoveryNotice;
+    if (studio.verification) out.verification = studio.verification;
+    try { return studioJson(out, STUDIO_LIMIT.journal + 600000); }
+    catch (e) {
+      var compact = studioEmpty(studio.sessionId, studio.documentId, 'Snapshot metadata exceeded its limit: ' + (e.message || e), null, studio.route);
+      Object.assign(compact, {
+        revision: studio.revision, enabled: state.enabled, tool: state.tool, compare: studio.compare,
+        viewport: out.viewport, history: studioJson(studio.history), cursor: studio.cursor,
+        conflicts: studioJson(studio.conflicts), acknowledged: acknowledged
+      });
+      return compact;
+    }
+  }
+  function studioChrome() {
+    if (!studio || !host) return;
+    var hidden = studio.compare || studio.capture || state.tool === 'interact';
+    host.style.display = hidden ? 'none' : '';
+    [elToolbar, elInspector, elLegend, elChanges, elMorph].forEach(function (node) { if (node) node.style.display = 'none'; });
+    if (elDraw) elDraw.style.pointerEvents = !hidden && state.tool === 'draw' ? 'auto' : 'none';
+    if (hidden) { clearGuides(); state.hoverEl = null; }
+    studioPopupSync();
+  }
+  function studioRelevantMutation(record) {
+    var target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+    return !!target && !isOurs(target) && !(target.closest && target.closest('[data-rayfin-studio-chrome]'));
+  }
+  function studioObserve() {
+    studio.observer = new MutationObserver(function (records) {
+      if (!studio || studio.mutating || !records.some(studioRelevantMutation)) return;
+      studio.dirty = true; studio.discoveryDirty = true;
+      if (!studio.refreshTimer) studio.refreshTimer = setTimeout(function () {
+        if (!studio) return;
+        studio.refreshTimer = 0;
+        try { studioRefresh(); studioPublish(); }
+        catch (e) { studio.lastError = 'Unable to reconcile the app: ' + (e.message || e); studioPublish(); }
+      }, 80);
+    });
+    studio.observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+    window.addEventListener('popstate', studioRouteEvent);
+    window.addEventListener('hashchange', studioRouteEvent);
+    window.addEventListener('resize', studioRouteEvent);
+    window.addEventListener('pointercancel', studioPointerCancel, true);
+    window.addEventListener('keyup', studioKeyUp, true);
+    window.addEventListener('click', studioClick, true);
+  }
+  function studioRouteEvent() {
+    if (!studio) return;
+    studio.dirty = true;
+    studioRefresh(); studioPublish();
+  }
+  function studioRefresh() {
+    if (!studio || studio.mutating) return;
+    if (studio.observer && studio.observer.takeRecords().some(studioRelevantMutation)) { studio.dirty = true; studio.discoveryDirty = true; }
+    var route = studioRoute(), routeChanged = route !== studio.route;
+    var viewportChanged = studio.viewportWidth !== window.innerWidth || studio.viewportHeight !== window.innerHeight;
+    if (studio.gesture && studio.gesture.targets.some(function (id) { var node = studio.bindings.get(id); return !node || !node.isConnected; })) {
+      studioCancelGesture(); studio.lastError = 'The selection was replaced during a gesture; the gesture was cancelled.';
+    }
+    if (studio.pointer && studio.pointer.el && !studio.pointer.el.isConnected) studioFinishPointer(true);
+    if (studio.keyGesture && studio.keyGesture.bases.some(function (base) { return !base.el.isConnected; })) studioFinishKey(true);
+    if (studio.text && !studio.text.el.isConnected) studioFinishText(true);
+    if (routeChanged) {
+      studioFinishText(true); studioFinishPointer(true); studioCancelGesture();
+      exitDebugView(); restoreCaptureAffordances(); studio.capture = false;
+      studioUnproject();
+      studio.route = route; studio.documentId = studioDocumentIdentity(); studio.epoch = studioEpoch;
+      studio.compare = false; studio.verification = null; studio.acknowledged = []; studio.results.clear();
+      state.selected = null; state.selection = []; state.hoverEl = null;
+      studio.dirty = true;
+    }
+    if ((studio.dirty || viewportChanged) && !studio.gesture && !studio.pointer && !studio.keyGesture && !studio.text && !state.debugView && !studio.capture) {
+      var selectedTargets = (state.selection || []).map(studioTarget);
+      if (!routeChanged) studioUnproject();
+      if (!host || !host.isConnected) buildUI();
+      studioReplay(false);
+      state.selection = selectedTargets.map(function (target) {
+        var bound = studio.bindings.get(target.id);
+        if (bound && bound.isConnected) return bound;
+        try { return studioResolve(target, []); } catch (e) { return null; }
+      }).filter(Boolean);
+      state.selected = state.selection[state.selection.length - 1] || null;
+      if (state.selected) showHandles(); else hideHandles();
+      studio.viewportWidth = window.innerWidth; studio.viewportHeight = window.innerHeight;
+      studioChrome(); reposition();
+    }
+  }
+  function studioChoose(el, toggle) {
+    if (!studioAllowedElement(el)) studioError('This surface is not editable.');
+    studioPopupFinish(false);
+    studioFinishKey(false);
+    studioFinishPointer(true); studioFinishGesture(); studioFinishText(false);
+    if (toggle && (state.selection || []).length >= STUDIO_LIMIT.selection && state.selection.indexOf(el) < 0) studioError('Select at most 40 elements.');
+    if (toggle) toggleSelect(el); else select(el);
+    studioTarget(el); studio.notice = /^(CANVAS|IFRAME|VIDEO)$/i.test(el.tagName) && !chartRoot(el) ? 'This surface has no editable DOM content; only its container appearance can be changed.' : null;
+    studioChrome(); studioPublish();
+  }
+  function studioSetTool(tool) {
+    if (['select', 'interact', 'comment', 'draw'].indexOf(tool) < 0) studioError('Unknown design tool.');
+    studioPopupFinish(false);
+    studioFinishText(false); studioFinishPointer(true); studioFinishGesture(); studioFinishKey(false); closeCommentEditor();
+    if (state.debugView) exitDebugView();
+    state.tool = tool; state.hoverEl = null;
+    studioChrome(); reposition();
+  }
+  function studioHistoryChange(next, cursor, rebase) {
+    var previous = studioJson(studio.history), previousCursor = studio.cursor;
+    studioFinishText(true); studioFinishPointer(true); studioCancelGesture(); exitDebugView();
+    studioUnproject();
+    try {
+      studio.history = next; studio.cursor = cursor;
+      studioReplay(rebase);
+      studio.history = studioValidateHistory(studio.history, studio.cursor);
+    } catch (e) {
+      studioUnproject(); studio.history = previous; studio.cursor = previousCursor;
+      studioReplay(false); throw e;
+    }
+    state.selection = (state.selection || []).filter(function (el) { return el.isConnected; });
+    state.selected = state.selection[state.selection.length - 1] || null;
+    studioChanged();
+  }
+  function studioClearHistory() {
+    studioFinishText(true); studioFinishPointer(true); studioCancelGesture(); studioFinishKey(true);
+    exitDebugView(); closeCommentEditor();
+    var changed = studio.history.length > 0;
+    // Clear accepts the current DOM as the new baseline. Unlike Discard, it
+    // drops inverse effects without running them; it is not proof of source.
+    studio.history = []; studio.cursor = 0; studio.applied = []; studio.conflicts = [];
+    studio.sources.clear(); studio.identities.clear();
+    studio.compare = false; studio.verification = null;
+    studio.discoveryDirty = true; studio.dirty = false;
+    clearPins(); clearDrawings();
+    studio.notice = 'History cleared; the current app DOM was preserved. Reload to verify source.';
+    if (changed) studioChanged();
+  }
+  function studioReject(envelope, message) {
+    var out;
+    var session = studio || studioRelay;
+    var documentId = studio ? studio.documentId : studioRelay && studioRelay.snapshot ? studioRelay.snapshot.documentId : '';
+    if (!session || !envelope || envelope.sessionId !== session.sessionId || envelope.documentId !== documentId) {
+      return studioEmpty(envelope && envelope.sessionId, envelope && envelope.documentId, message, envelope && envelope.commandId, '/');
+    }
+    if (studio) out = studioSnapshot(message, envelope && envelope.commandId);
+    else if (studioRelay && studioRelay.snapshot) {
+      out = studioJson(studioRelay.snapshot);
+      out.error = message;
+      if (envelope && envelope.commandId && out.acknowledged.indexOf(envelope.commandId) < 0) out.acknowledged.push(envelope.commandId);
+    } else out = studioEmpty(envelope && envelope.sessionId, envelope && envelope.documentId, message, envelope && envelope.commandId, studioRelay && studioRelay.options.route);
+    return out;
+  }
+  function studioAck(envelope, error) {
+    studio.acknowledged.push(envelope.commandId);
+    if (studio.acknowledged.length > 128) studio.acknowledged.shift();
+    studio.results.set(envelope.commandId, { error: error || null });
+    if (studio.results.size > 256) studio.results.delete(studio.results.keys().next().value);
+    studio.lastError = error || null;
+    studioPublish();
+    return studioSnapshot();
+  }
+  function studioRunCommand(c) {
+    if (studio.popup && studio.popup.edit && c.type !== 'style') {
+      studioPopupFinish(c.type === 'capture' && studio.popup.edit.kind === 'slider');
+    }
+    if ((c.type === 'undo' || c.type === 'redo') && studio.text) studioFinishText(false);
+    if (c.type === 'style') { studioStyleCommand(c); return; }
+    if (['undo', 'redo', 'discard', 'clear', 'reset', 'compare', 'capture'].indexOf(c.type) < 0) studioFinishGesture();
+    var selection, edits, next, index;
+    switch (c.type) {
+      case 'select':
+        studioChoose(studioResolve(c.target, []), !!c.toggle); break;
+      case 'tool':
+        studioSetTool(c.tool); break;
+      case 'text':
+        studioCommit('Edit text', studioSelectionElements().map(function (el) { return studioTextEdit(el, c.value); })); break;
+      case 'undo': case 'redo':
+        studioCancelGesture(); studioFinishPointer(true);
+        index = studio.cursor + (c.type === 'undo' ? -1 : 1);
+        if (index >= 0 && index <= studio.history.length && index !== studio.cursor) studioHistoryChange(studio.history, index, false);
+        break;
+      case 'discard':
+        studioCancelGesture(); studioFinishPointer(true); studioFinishText(true);
+        if (studio.history.length) studioHistoryChange([], 0, false);
+        state.selection = []; state.selected = null; closeCommentEditor(); break;
+      case 'clear':
+        studioClearHistory(); break;
+      case 'reset':
+        selection = studioSelectionElements().map(function (el) { return studioTarget(el).id; });
+        next = studioJson(studio.history).map(function (tx) {
+          tx.edits = tx.edits.filter(function (edit) { return selection.indexOf(edit.target.id) < 0; }); return tx;
+        });
+        index = next.slice(0, studio.cursor).filter(function (tx) { return tx.edits.length; }).length;
+        next = next.filter(function (tx) { return tx.edits.length; });
+        if (!studioEqual(next, studio.history)) studioHistoryChange(next, index, true);
+        break;
+      case 'revert':
+        index = studio.history.findIndex(function (tx) { return tx.id === c.transactionId; });
+        if (index < 0) studioError('That transaction no longer exists.');
+        next = studioJson(studio.history); next.splice(index, 1);
+        studioHistoryChange(next, studio.cursor - (index < studio.cursor ? 1 : 0), true);
+        break;
+      case 'retarget':
+        index = studio.history.findIndex(function (tx) { return tx.id === c.transactionId; });
+        if (index < 0) studioError('That transaction no longer exists.');
+        selection = [studioResolve(c.target, [])];
+        var targetIds = new Set(studio.history[index].edits.map(function (edit) { return edit.target.id; }));
+        if (targetIds.size !== 1) studioError('A multi-target transaction cannot be retargeted to one element. Revert it and reapply to a new selection.');
+        studio.history[index].edits.forEach(function (edit) {
+          if (edit.kind === 'text' && !studioCanText(selection[0])) studioError('Retarget text to an element with editable own text.');
+          if (edit.kind === 'chart' && !selection[0].hasAttribute('data-graphein-spec')) studioError('Retarget a chart edit to a Graphein chart root.');
+          if (edit.kind === 'image' && selection[0].tagName !== 'IMG') studioError('Retarget an image edit to an image.');
+          if (edit.kind === 'reorder') studioError('Reordering cannot be retargeted to a different container. Reapply it to the intended siblings.');
+          if (edit.kind === 'insert' && !studioCanContain(edit.after.placement === 'inside' ? selection[0] : selection[0].parentElement)) studioError('Choose a valid insertion container.');
+        });
+        next = studioJson(studio.history);
+        next[index].route = studio.route;
+        next[index].edits.forEach(function (edit) {
+          edit.target = studioTarget(selection[0]);
+          edit.before.context = studioContext(selection[0]); edit.before.source = edit.before.context;
+        });
+        studioHistoryChange(next, studio.cursor, true);
+        break;
+      case 'compare':
+        if (typeof c.enabled !== 'boolean') studioError('Invalid comparison state.');
+        studioFinishPointer(true); studioCancelGesture(); studioFinishText(true); exitDebugView();
+        if (studio.compare !== c.enabled) {
+          studioUnproject(); studio.compare = c.enabled;
+          if (!c.enabled) studioReplay(false);
+        }
+        break;
+      case 'capture':
+        if (typeof c.enabled !== 'boolean') studioError('Invalid capture state.');
+        if (c.enabled) { studioFinishText(false); studioFinishPointer(false); studioFinishGesture(); exitDebugView(); stripCaptureAffordances(); hideHint(); }
+        else restoreCaptureAffordances();
+        studio.capture = c.enabled; break;
+      case 'freeMove':
+        if (typeof c.enabled !== 'boolean') studioError('Invalid movement mode.');
+        studioFinishPointer(true); studio.freeMove = c.enabled;
+        studio.notice = c.enabled ? 'Free move uses visual transform offsets, not responsive layout reflow.' : 'Dragging reorders within supported layout containers.';
+        break;
+      case 'move':
+        if (c.direction !== 'previous' && c.direction !== 'next') studioError('Invalid movement direction.');
+        selection = studioSelectionElements();
+        if (c.free || studio.freeMove) {
+          edits = selection.map(function (el) {
+            var original = el.style.transform, offset = parseTranslate(original), base = stripTranslate(original);
+            return studioStyleEdit(el, 'transform', (base ? base + ' ' : '') + 'translate(' + (offset.x + (c.direction === 'previous' ? -1 : 1)) + 'px, ' + offset.y + 'px)', '', false);
+          });
+          studioCommit('Move with transform', edits);
+        } else {
+          var reorder = studioMoveEdit(selection, c.direction);
+          if (reorder) studioCommit('Reorder ' + c.direction, [reorder]); else studio.notice = 'Already at the edge of this container.';
+        }
+        break;
+      case 'remove':
+        selection = studioSelectionElements();
+        selection = selection.filter(function (el) { return !selection.some(function (parent) { return parent !== el && parent.contains(el); }); });
+        studioCommit('Remove selection', selection.map(studioRemoveEdit));
+        state.selection = []; state.selected = null; break;
+      case 'duplicate':
+        selection = studioSelectionElements();
+        edits = selection.map(function (el) { return studioInsertEdit(el, studioSafeHtml(el.outerHTML, true), 'after', 'duplicate'); });
+        studioCommit('Duplicate as visual prototype', edits);
+        studio.notice = 'Duplicates are static visual prototypes. IDs, handlers and bindings are not cloned; Apply must wire real components.';
+        break;
+      case 'insert':
+        if (!Object.prototype.hasOwnProperty.call(STUDIO_BLOCKS, c.block)) studioError('Unknown block preset.');
+        edits = studioSelectionElements().map(function (el) { return studioInsertEdit(el, STUDIO_BLOCKS[c.block], c.placement, c.block); });
+        studioCommit('Insert ' + c.block, edits);
+        studio.notice = 'Inserted blocks are visual prototypes until Apply updates source and behavior.';
+        break;
+      case 'image':
+        selection = studioSelectionElements();
+        studioValidateAsset(c.assetId, c.dataUrl);
+        if (selection.some(function (el) { return el.tagName !== 'IMG'; }) || (c.alt != null && (typeof c.alt !== 'string' || c.alt.length > 4096))) studioError('Select only images and provide valid alt text.');
+        studio.assets[c.assetId] = c.dataUrl;
+        edits = selection.map(function (el) {
+          var base = studioBase(el), alt = c.alt != null ? c.alt : el.getAttribute('alt');
+          return { kind: 'image', target: base.target, property: 'asset',
+            before: { value: studioImageValue(el), context: base.context, source: base.source },
+            after: { assetId: c.assetId, alt: alt, value: { assetId: c.assetId, alt: alt }, context: base.context } };
+        });
+        studioCommit('Replace image', edits); break;
+      case 'attribute':
+        if (c.name !== 'alt' || typeof c.value !== 'string' || c.value.length > 4096) studioError('Only image alt text can be edited as an attribute.');
+        edits = studioSelectionElements().map(function (el) {
+          if (el.tagName !== 'IMG') studioError('Select only image elements to edit alt text.');
+          var base = studioBase(el);
+          return { kind: 'image', target: base.target, property: 'alt', before: { value: el.getAttribute('alt'), context: base.context, source: base.source }, after: { value: c.value, context: base.context } };
+        });
+        studioCommit('Edit image alt text', edits); break;
+      case 'theme':
+        if (!Array.isArray(c.values) || !c.values.length || c.values.length > 120) studioError('Choose discovered app theme tokens.');
+        var discovered = studioDiscover().tokens;
+        edits = c.values.map(function (item) {
+          var token = item.token, found = token && discovered.find(function (known) { return known.name === token.name && known.target.id === token.target.id; });
+          if (!found) studioError('That token was not discovered in this app scope.');
+          return studioStyleEdit(studioResolve(found.target, []), found.name, item.value, '', true);
+        });
+        studioCommit('Change app theme', edits); break;
+      case 'chart':
+        studioCommit('Edit chart', studioSelectionElements().map(function (el) { return studioChartPatch(el, c.patch); })); break;
+      case 'debug':
+        if (typeof c.enabled !== 'boolean') studioError('Invalid chart debug state.');
+        if (!c.enabled) exitDebugView();
+        else {
+          selection = studioSelectionElements();
+          if (selection.length !== 1 || !chartRoot(selection[0])) studioError('Select one Graphein chart to inspect.');
+          enterDebugView(chartRoot(selection[0]));
+        }
+        break;
+      case 'comment':
+        if (typeof c.value !== 'string' || !c.value.trim() || c.value.length > 3000) studioError('Enter a comment of at most 3000 characters.');
+        edits = studioSelectionElements().map(function (el) {
+          var base = studioBase(el);
+          return { kind: 'comment', target: base.target, property: 'note', before: { value: null, context: base.context, source: base.source }, after: { value: c.value.trim(), context: base.context } };
+        });
+        studioCommit('Add comment', edits); break;
+      case 'drawOptions':
+        if (['pen', 'arrow', 'rect', 'ellipse'].indexOf(c.shape) < 0 || typeof c.color !== 'string' || !/^#[a-fA-F0-9]{6}$/.test(c.color)) studioError('Choose a drawing shape and hex color.');
+        state.drawShape = c.shape; state.drawColor = c.color; break;
+      case 'restyle':
+        studioRestyle(c.patch); break;
+      case 'generated':
+        var clean = studioSafeHtml(c.html, false);
+        edits = studioSelectionElements().map(function (el) { return studioInsertEdit(el, clean, 'inside', 'generated'); });
+        studioCommit('Add generated visual prototype', edits);
+        studio.notice = 'Generated markup was sanitized. It is a static prototype, not a live component.';
+        break;
+      case 'verify':
+        studio.verification = studioVerify(c.history, c.cursor); break;
+      default: studioError('Unknown Studio command: ' + c.type);
+    }
+    studioChrome(); reposition();
+  }
+  function studioRestyle(patch) {
+    if (!studioPlain(patch) || !studioPlain(patch.styles)) studioError('The assistant returned no usable restyle patch.');
+    var edits = [];
+    studioSelectionElements().forEach(function (el) {
+      Object.keys(patch.styles).forEach(function (property) {
+        var key = property.toLowerCase();
+        if (RESTYLE_ALLOWED[key]) edits.push(studioStyleEdit(el, key, patch.styles[property], '', false));
+      });
+      if (patch.graphein) edits.push(studioChartPatch(el, patch.graphein));
+      if (patch.rules) {
+        if (!Array.isArray(patch.rules) || patch.rules.length > 40) studioError('Too many descendant restyle rules.');
+        patch.rules.forEach(function (rule) {
+          if (!rule || !studioPlain(rule.styles)) studioError('Invalid descendant restyle rule.');
+          var matches = studioQuery(rule.selector, el);
+          if (!matches.length) studioError('A descendant restyle target is missing or ambiguous: ' + rule.selector);
+          matches.slice(0, 60).forEach(function (child) {
+            Object.keys(rule.styles).forEach(function (property) {
+              var key = property.toLowerCase();
+              if (RESTYLE_ALLOWED[key]) edits.push(studioStyleEdit(child, key, rule.styles[property], '', false));
+            });
+          });
+        });
+      }
+    });
+    if (!edits.length) studioError('The assistant returned no supported visual changes.');
+    studioCommit('Restyle selection', edits);
+  }
+
+  // ---- Studio: point-and-change controls ----------------------------------
+  function studioPopupCss() {
+    var light = lumOf(PANEL_BG) > 0.55;
+    var edge = mixc(PANEL_BG, TXT, light ? 0.13 : 0.18);
+    var accentWash = mixc(PANEL_BG, TEAL, light ? 0.09 : 0.16);
+    var accentInk = mixc(TXT, TEAL, light ? 0.48 : 0.62);
+    var shadow = light ? '0 16px 44px #17263f18,0 3px 10px #17263f0d,inset 0 1px #ffffffcc' :
+      '0 18px 48px #0006,0 4px 12px #0003,inset 0 1px #ffffff0a';
+    return [
+      '.studio-context{position:fixed;z-index:2147483646;pointer-events:auto;box-sizing:border-box;max-width:calc(100vw - 16px);padding:' + fpx(6) + ';border:1px solid ' + edge + ';border-radius:' + fpx(16) + ';background:' + rgbaOf(PANEL_BG, 0.97) + ';' + GLASS_FX + ';color:' + TXT + ';box-shadow:' + shadow + ';font-size:var(--fs-small);animation:studio-context-enter .16s cubic-bezier(.2,.8,.2,1)}',
+      '.studio-context[hidden],.studio-options:empty{display:none!important}',
+      '.studio-context[data-placement=above]{transform-origin:50% 100%}.studio-context[data-placement=below]{transform-origin:50% 0}',
+      '.studio-context-row{display:flex;flex-wrap:wrap;align-items:center;gap:' + fpx(3) + '}',
+      '.studio-context-label{color:' + TXT_DIM + ';font-size:var(--fs-micro);font-weight:500;padding:0 ' + fpx(9) + ';margin-right:' + fpx(2) + ';border-right:1px solid ' + edge + ';white-space:nowrap}',
+      '.studio-context button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:' + fpx(6) + ';color:' + TXT_DIM + ';font-size:var(--fs-small);font-weight:500;line-height:1.25;padding:' + fpx(9) + ' ' + fpx(10) + ';border-radius:' + fpx(10) + ';white-space:nowrap;transition:background-color .13s,color .13s,box-shadow .13s,transform .13s}',
+      '.studio-context button:hover{background:' + PANEL_BG2 + ';color:' + TXT + '}',
+      '.studio-context button[data-studio-action][aria-expanded=true]{background:' + accentWash + ';color:' + accentInk + ';box-shadow:inset 0 0 0 1px ' + rgbaOf(TEAL, light ? 0.13 : 0.23) + '}',
+      '.studio-context button:active{transform:scale(.97)}',
+      '.studio-action-icon{display:flex;align-items:center;opacity:.85}.studio-action-icon svg{width:' + fpx(14) + ';height:' + fpx(14) + '}',
+      '.studio-context button:focus-visible,.studio-context input:focus-visible{outline:2px solid ' + TEAL + ';outline-offset:2px}',
+      '.studio-options{box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:' + edge + ' transparent;margin-top:' + fpx(6) + ';padding:' + fpx(14) + ' ' + fpx(12) + ' ' + fpx(11) + ';border-radius:' + fpx(11) + ';background:' + mixc(PANEL_BG, TXT, light ? 0.025 : 0.035) + ';box-shadow:inset 0 1px ' + rgbaOf(TXT, 0.035) + ';animation:studio-options-enter .14s ease-out}',
+      '.studio-swatches{display:flex;flex-wrap:wrap;gap:' + fpx(7) + ';max-width:' + fpx(294) + ';padding:' + fpx(2) + '}',
+      '.studio-context .studio-swatch{position:relative;width:' + fpx(34) + ';height:' + fpx(34) + ';padding:0;border-radius:50%;border:2px solid transparent;background:transparent;box-shadow:none}',
+      '.studio-swatch::before{content:"";position:absolute;inset:' + fpx(3) + ';border-radius:50%;background:linear-gradient(var(--swatch),var(--swatch)),repeating-conic-gradient(#c6cbd2 0 25%,#f5f5f5 0 50%) 0/8px 8px;box-shadow:inset 0 0 0 1px #00000012,0 1px 3px #00000010}',
+      '.studio-context .studio-swatch:hover{background:transparent;transform:translateY(-2px)}',
+      '.studio-context .studio-swatch[aria-pressed=true]{border-color:' + TEAL + ';box-shadow:0 0 0 2px ' + rgbaOf(TEAL, 0.10) + '}',
+      '.studio-swatch-check{position:relative;width:' + fpx(13) + ';height:' + fpx(13) + ';color:var(--swatch-ink);opacity:0;transform:scale(.7);transition:opacity .12s,transform .12s}',
+      '.studio-swatch[aria-pressed=true] .studio-swatch-check{opacity:1;transform:scale(1)}',
+      '.studio-context-feedback{margin-top:' + fpx(10) + ';font-size:var(--fs-micro);line-height:1.4;color:' + TXT_DIM + ';min-height:1.4em}',
+      '.studio-range{width:' + fpx(245) + ';max-width:min(100%,calc(100vw - ' + fpx(52) + '));display:grid;gap:' + fpx(8) + '}',
+      '.studio-range-heading{display:flex;align-items:center;justify-content:space-between;gap:' + fpx(16) + ';font-size:var(--fs-small);font-weight:500}',
+      '.studio-range-labels{display:flex;justify-content:space-between;gap:' + fpx(12) + ';font-size:var(--fs-micro);color:' + TXT_DIM + '}',
+      '.studio-range output{color:' + accentInk + ';background:' + accentWash + ';border-radius:' + fpx(6) + ';padding:' + fpx(4) + ' ' + fpx(7) + ';font-size:var(--fs-micro);font-variant-numeric:tabular-nums;min-width:' + fpx(42) + ';text-align:center}',
+      '.studio-range input{display:block;appearance:none;-webkit-appearance:none;width:100%;height:' + fpx(27) + ';padding:0;border:0;margin:0;background:transparent;cursor:ew-resize;accent-color:' + TEAL + '}',
+      '.studio-range input::-webkit-slider-runnable-track{height:' + fpx(5) + ';border-radius:9px;background:linear-gradient(to right,' + TEAL + ' 0%,' + TEAL + ' var(--studio-progress),' + edge + ' var(--studio-progress),' + edge + ' 100%)}',
+      '.studio-range input::-moz-range-track{height:' + fpx(5) + ';border-radius:9px;background:' + edge + '}.studio-range input::-moz-range-progress{height:' + fpx(5) + ';border-radius:9px;background:' + TEAL + '}',
+      '.studio-range input::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:' + fpx(17) + ';height:' + fpx(17) + ';margin-top:' + fpx(-6) + ';border:1px solid #0000001a;border-radius:50%;background:#fff;box-shadow:0 1px 5px #0003;transition:transform .12s,box-shadow .12s}',
+      '.studio-range input::-moz-range-thumb{width:' + fpx(17) + ';height:' + fpx(17) + ';border:1px solid #0000001a;border-radius:50%;background:#fff;box-shadow:0 1px 5px #0003}',
+      '.studio-range input:hover::-webkit-slider-thumb,.studio-range input:focus-visible::-webkit-slider-thumb{transform:scale(1.12);box-shadow:0 1px 5px #0003,0 0 0 4px ' + rgbaOf(TEAL, 0.13) + '}',
+      '.studio-looks{display:flex;flex-wrap:wrap;gap:' + fpx(7) + '}',
+      '.studio-context .studio-look{display:flex;flex-direction:column;gap:' + fpx(9) + ';padding:' + fpx(8) + ';width:' + fpx(78) + ';font-size:var(--fs-micro);border:1px solid transparent}',
+      '.studio-context .studio-look:hover{transform:translateY(-2px);background:' + PANEL_BG2 + '}',
+      '.studio-context .studio-look[aria-pressed=true]{border-color:' + rgbaOf(TEAL, 0.4) + ';background:' + accentWash + ';color:' + accentInk + '}',
+      '.studio-look-sample{position:relative;display:flex;flex-direction:column;justify-content:center;gap:' + fpx(4) + ';width:100%;height:' + fpx(45) + ';padding:' + fpx(9) + ';box-sizing:border-box;overflow:hidden}',
+      '.studio-look-line{height:' + fpx(3) + ';width:82%;border-radius:4px;background:var(--look-ink)}.studio-look-line:last-child{width:58%;opacity:.4}',
+      '.studio-layout-group{display:grid;gap:' + fpx(7) + ';width:' + fpx(250) + ';max-width:min(100%,calc(100vw - ' + fpx(52) + '));margin-bottom:' + fpx(12) + '}',
+      '.studio-layout-label{font-size:var(--fs-micro);font-weight:500;color:' + TXT_DIM + '}',
+      '.studio-layout-choices{display:flex;gap:' + fpx(3) + ';padding:' + fpx(3) + ';border-radius:' + fpx(9) + ';background:' + PANEL_BG2 + '}',
+      '.studio-layout-choices button{flex:1;min-width:min-content;padding:' + fpx(7) + ' ' + fpx(6) + ';font-size:var(--fs-micro)}',
+      '.studio-layout-choices button[aria-pressed=true]{background:' + accentWash + ';color:' + accentInk + ';box-shadow:inset 0 0 0 1px ' + rgbaOf(TEAL, 0.18) + '}',
+      '.studio-context-note{max-width:' + fpx(240) + ';font-size:var(--fs-small);color:' + TXT_DIM + ';line-height:1.5}',
+      '@keyframes studio-context-enter{from{opacity:0;transform:translateY(3px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}',
+      '@keyframes studio-options-enter{from{opacity:0}to{opacity:1}}',
+      '@media(max-width:480px){.studio-action-icon{display:none}.studio-context button[data-studio-action]{padding-inline:' + fpx(8) + '}.studio-layout-align{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}',
+      '@media (prefers-reduced-motion:reduce){.studio-context,.studio-context *,.studio-context *::before,.studio-context *::after,.studio-context input::-webkit-slider-thumb{animation:none!important;transition:none!important}.studio-context button:hover,.studio-range input:hover::-webkit-slider-thumb,.studio-range input:focus-visible::-webkit-slider-thumb{transform:none!important}}'
+    ].join('\n');
+  }
+  function studioPopupIcon(name) {
+    var path = {
+      Color: '<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none"/>',
+      Size: '<path d="M2 4V2.5h12V4M8 2.5v11M5.5 13.5h5"/>',
+      Weight: '<path d="M4 2.5h4a3 3 0 0 1 0 6H4m0-6v11h5a2.5 2.5 0 0 0 0-5H4"/>',
+      Space: '<path d="M2 3v10M14 3v10M4.5 8h7M6 6.5 4.5 8 6 9.5M10 6.5 11.5 8 10 9.5"/>',
+      Shape: '<path d="M3 13V7a4 4 0 0 1 4-4h6"/><path d="M3 13h10V3" opacity=".35"/>',
+      Look: '<rect x="2.5" y="2.5" width="11" height="11" rx="3"/><path d="M5.5 6h5M5.5 9h3"/>',
+      Layout: '<rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/>'
+    }[name] || '';
+    return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' + path + '</svg>';
+  }
+  function studioPopupButton(el) { return !!(el && el.matches && el.matches('button,[role="button"],a[href],input[type="button"],input[type="submit"],input[type="reset"],input[type="image"]')); }
+  function studioPopupFieldType(el) {
+    if (!studioFormControl(el) || el.tagName !== 'INPUT') return 'text';
+    return /^(checkbox|radio)$/.test(el.type) ? 'choice' : el.type === 'range' ? 'range' : el.type === 'color' ? 'color' : 'text';
+  }
+  function studioPopupLayoutKind(el) {
+    if (!el || studioFormControl(el) || !el.children.length) return '';
+    if (/^(UL|OL)$/.test(el.tagName) || el.getAttribute('role') === 'list') return 'list';
+    var display = getComputedStyle(el).display;
+    return /^(inline-)?flex$/.test(display) ? 'stack' : /^(inline-)?grid$/.test(display) ? 'grid' : '';
+  }
+  function studioPopupKind(el) {
+    if (!studioAllowedElement(el) || chartRoot(el) || /^(OPTION|SVG|CANVAS|VIDEO|AUDIO|HTML|BODY)$/i.test(el.tagName)) return '';
+    if (studioFormControl(el)) return el.tagName === 'INPUT' && el.type === 'hidden' ? '' : studioPopupButton(el) ? 'button' : 'field';
+    if (el.closest('input,textarea,select,[contenteditable]:not([data-rayfin-studio-text])')) return '';
+    if (studioPopupButton(el)) return 'button';
+    if (studio && studio.text && studio.text.el === el) return 'text';
+    var text = studioCanText(el) && !Array.prototype.some.call(el.children, function (child) { return /^(DIV|SECTION|ARTICLE|P|H[1-6]|UL|OL|TABLE)$/.test(child.tagName); });
+    if (text && !/^(ARTICLE|SECTION|ASIDE|MAIN|NAV|HEADER|FOOTER|LI|UL|OL)$/.test(el.tagName) && el.getAttribute('role') !== 'list') return 'text';
+    var layout = studioPopupLayoutKind(el);
+    if (layout) return layout;
+    if (/^(ARTICLE|SECTION|ASIDE|MAIN|NAV|HEADER|FOOTER|LI)$/.test(el.tagName)) return 'card';
+    if (text) return 'text';
+    if (studioCanContain(el) && el.children.length) {
+      var cs = getComputedStyle(el);
+      if (/flex|grid/.test(cs.display) || parseFloat(cs.paddingTop) || parseFloat(cs.paddingLeft) ||
+        parseFloat(cs.borderTopWidth) || (cs.backgroundColor && !/^(transparent|rgba\(0,\s*0,\s*0,\s*0\))$/.test(cs.backgroundColor)) ||
+        /(?:^|[-_\s])(card|panel|tile)(?:$|[-_\s])/i.test((el.id || '') + ' ' + (typeof el.className === 'string' ? el.className : ''))) return 'card';
+    }
+    return '';
+  }
+  function studioMeaningful(el) {
+    if (!el || !el.closest || isOurs(el)) return null;
+    if (studio && studio.text && studio.text.wrapper.contains(el)) return studio.text.el;
+    var control = el.closest('input,textarea,select,[contenteditable]:not([data-rayfin-studio-text])');
+    if (control) return studioAllowedElement(control) ? control : null;
+    var chart = chartRoot(el);
+    if (chart) return chart;
+    var button = el.closest('button,[role="button"],a[href]');
+    if (button && studioAllowedElement(button)) return button;
+    var decoration = el.closest('[aria-hidden="true"],svg');
+    if (decoration) el = decoration.parentElement;
+    for (var i = 0; el && i < 10 && el !== document.body && el !== document.documentElement; i++, el = el.parentElement) {
+      if (studioPopupKind(el)) return el;
+    }
+    return null;
+  }
+  function studioPopupMount() {
+    if (!studio || !root) return;
+    var node = h('div', { class: 'studio-context', role: 'toolbar', 'aria-label': 'Edit selection', hidden: '' });
+    var row = h('div', { class: 'studio-context-row' }), options = h('div', { class: 'studio-options' });
+    node.appendChild(row); node.appendChild(options); root.appendChild(node);
+    studio.popup = { node: node, row: row, options: options, target: null, kind: '', option: '', edit: null, range: null, choices: [], feedback: null };
+    node.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+  }
+  function studioPopupSync() {
+    var p = studio && studio.popup;
+    if (!p) return;
+    var target = state.selection.length === 1 ? state.selected : null;
+    var visible = studioInteractive() && state.tool === 'select' && !state.debugView && target && target.isConnected;
+    var kind = visible ? studioPopupKind(target) : '';
+    if (!kind) { p.node.hidden = true; if (p.range) p.range.closed = true; return; }
+    if (target !== p.target || kind !== p.kind) {
+      studioPopupFinish(false);
+      p.target = target; p.kind = kind; p.option = ''; p.range = null; p.choices = []; p.feedback = null; p.options.textContent = ''; p.row.textContent = '';
+      var labels = { text: 'Text', button: 'Button', card: 'Card', field: p.target.tagName === 'SELECT' ? 'Dropdown' : p.target.tagName === 'TEXTAREA' ? 'Text area' : 'Input', stack: 'Stack', list: 'List', grid: 'Grid' };
+      p.row.appendChild(h('span', { class: 'studio-context-label', text: labels[kind] }));
+      var actions = kind === 'text' ? ['Color', 'Size', 'Weight'] : kind === 'button' ? ['Color', 'Shape', 'Look'] :
+        kind === 'field' ? (studioPopupFieldType(target) === 'choice' || studioPopupFieldType(target) === 'range' ? ['Color', 'Size'] : studioPopupFieldType(target) === 'color' ? ['Size', 'Shape'] : ['Color', 'Size', 'Shape']) :
+          /^(stack|list|grid)$/.test(kind) ? ['Color', 'Space', 'Layout'] : ['Color', 'Space', 'Look'];
+      actions.forEach(function (name) {
+        var button = h('button', { type: 'button', 'data-studio-action': name, 'aria-expanded': 'false' }, [
+          h('span', { class: 'studio-action-icon', 'aria-hidden': 'true', html: studioPopupIcon(name) }),
+          h('span', { text: name })
+        ]);
+        button.addEventListener('click', function (e) {
+          e.preventDefault(); e.stopPropagation();
+          try { studioPopupOpen(name); } catch (error) { studioGestureError(error); }
+        });
+        p.row.appendChild(button);
+      });
+    }
+    p.node.hidden = false;
+    if (p.range && !p.edit) {
+      var value = studioPopupRangeValue(p.target, p.option);
+      p.range.input.value = String(clamp(value, +p.range.input.min, +p.range.input.max));
+      studioPopupPaintRange(p.range, p.option);
+    }
+    if (!p.edit) studioPopupRefreshChoices(p);
+    studioPopupPosition();
+  }
+  function studioPopupPosition() {
+    var p = studio && studio.popup;
+    if (!p || p.node.hidden || !p.target || !p.target.isConnected || p.edit) return;
+    var viewportWidth = Math.min(window.innerWidth, document.documentElement.clientWidth || window.innerWidth);
+    var viewportHeight = Math.min(window.innerHeight, document.documentElement.clientHeight || window.innerHeight);
+    var margin = 8, gap = 12 * themeScale;
+    p.node.style.maxWidth = Math.max(1, viewportWidth - margin * 2) + 'px';
+    var r = p.target.getBoundingClientRect(), box = p.node.getBoundingClientRect();
+    var width = Math.min(p.node.offsetWidth || box.width || (p.option ? 276 : 250) * themeScale, Math.max(1, viewportWidth - margin * 2));
+    var optionsHeight = p.options.offsetHeight || p.options.getBoundingClientRect().height;
+    // Layout dimensions ignore entrance motion and preserve the user's scroll position.
+    var baseHeight = p.node.offsetHeight || box.height;
+    var height = (baseHeight || (p.option ? 124 : 44) * themeScale) + Math.max(0, p.options.scrollHeight - p.options.clientHeight);
+    var fullHeight = Math.max(0, viewportHeight - margin * 2), chromeHeight = baseHeight - optionsHeight;
+    var above = clamp(r.top - gap - margin, 0, fullHeight), below = clamp(viewportHeight - margin - r.bottom - gap, 0, fullHeight);
+    var beside = r.right + gap + width <= viewportWidth - margin || r.left - gap - width >= margin;
+    var available = Math.max(above, below, beside ? fullHeight : 0);
+    var minimumOptions = Math.min(p.options.scrollHeight, 92 * themeScale);
+    if (p.option === 'Layout' && p.options.firstElementChild) {
+      var first = p.options.firstElementChild, optionsStyle = getComputedStyle(p.options);
+      minimumOptions = (first.offsetHeight || first.getBoundingClientRect().height) +
+        (parseFloat(optionsStyle.paddingTop) || 0) + (parseFloat(optionsStyle.paddingBottom) || 0);
+    }
+    if (p.option && optionsHeight && height > available && available >= chromeHeight + minimumOptions) {
+      // Parent and options dimensions can round in opposite directions.
+      p.options.style.maxHeight = Math.floor(available - chromeHeight - 1) + 'px';
+      height = p.node.offsetHeight || p.node.getBoundingClientRect().height;
+    } else if (p.options.style.maxHeight) {
+      p.options.style.maxHeight = '';
+      height = p.node.offsetHeight || p.node.getBoundingClientRect().height;
+    }
+    var left = clamp(r.left + r.width / 2 - width / 2, margin, Math.max(margin, viewportWidth - width - margin));
+    var top, placement;
+    if (height <= above) { top = Math.min(r.top - gap - height, viewportHeight - margin - height); placement = 'above'; }
+    else if (height <= below) { top = Math.max(margin, r.bottom + gap); placement = 'below'; }
+    else if (height <= fullHeight && r.right + gap + width <= viewportWidth - margin) { left = r.right + gap; top = clamp(r.top, margin, viewportHeight - height - margin); placement = 'right'; }
+    else if (height <= fullHeight && r.left - gap - width >= margin) { left = r.left - gap - width; top = clamp(r.top, margin, viewportHeight - height - margin); placement = 'left'; }
+    else {
+      p.node.hidden = true;
+      studio.notice = 'Select a smaller visible element to show controls beside it.';
+      return;
+    }
+    if (studio.notice === 'Select a smaller visible element to show controls beside it.') studio.notice = null;
+    p.node.style.left = Math.round(left) + 'px'; p.node.style.top = Math.round(top) + 'px';
+    p.node.setAttribute('data-placement', placement);
+  }
+  function studioPopupFinish(commit) {
+    var p = studio && studio.popup, edit = p && p.edit;
+    if (!edit) return;
+    p.edit = null;
+    if (p.range) p.range.closed = true;
+    if (!studio.gesture || studio.gesture.id !== edit.id) { studioEndGesture(edit.id); return; }
+    try {
+      studioStyleCommand({ values: commit ? edit.values : {}, gestureId: edit.id, phase: commit ? 'commit' : 'cancel' });
+      if (p.feedback && edit.kind === 'hover') {
+        p.feedback.textContent = commit ? (edit.owner.getAttribute('data-studio-look') || edit.owner.title || 'Color') + ' selected' : 'Hover to preview · click to keep';
+      }
+    }
+    catch (error) {
+      if (commit) throw error;
+      studio.lastError = error.message || String(error); studioPublish();
+    }
+  }
+  function studioPopupDismiss(cancelText) {
+    if (!studio) return;
+    studioPopupFinish(false);
+    studioFinishText(!!cancelText);
+    if (studio.popup) { studio.popup.node.hidden = true; studio.popup.option = ''; studio.popup.options.textContent = ''; studio.popup.range = null; studio.popup.choices = []; studio.popup.feedback = null; }
+    state.hoverEl = null;
+    deselect(); studioPublish();
+  }
+  function studioPopupPreview(values, kind, owner) {
+    var p = studio.popup;
+    if (!studioInteractive() || state.tool !== 'select' || state.selected !== p.target || !p.target.isConnected) return;
+    if (p.edit && (p.edit.kind !== kind || p.edit.owner !== owner)) studioPopupFinish(false);
+    if (typeof values === 'function') values = values();
+    if (!p.edit) p.edit = { id: studioId('context-gesture'), kind: kind, owner: owner, values: values };
+    p.edit.values = values;
+    studioStyleCommand({ values: values, gestureId: p.edit.id, phase: 'preview' });
+    if (p.feedback && kind === 'hover') p.feedback.textContent = 'Previewing ' + (owner.getAttribute('data-studio-look') || owner.title || 'color').toLowerCase();
+  }
+  function studioPopupChoice(button, values, computed) {
+    var popup = studio.popup, target = popup.target, option = popup.option;
+    popup.choices.push({ button: button, values: values, computed: !!computed });
+    button.setAttribute('aria-pressed', 'false');
+    function current() { return studio && studio.popup === popup && button.isConnected && !popup.node.hidden && popup.target === target && state.selected === target && popup.option === option; }
+    button.addEventListener('pointerenter', function () {
+      if (!current()) return;
+      try { studioPopupPreview(values, 'hover', button); } catch (error) { studioPopupFinish(false); studioGestureError(error); }
+    });
+    button.addEventListener('focus', function () {
+      if (!current()) return;
+      try { studioPopupPreview(values, 'hover', button); } catch (error) { studioGestureError(error); }
+    });
+    function leave() {
+      if (studio && studio.popup && studio.popup.edit && studio.popup.edit.owner === button) {
+        try { studioPopupFinish(false); studioPopupPosition(); } catch (error) { studioGestureError(error); }
+      }
+    }
+    button.addEventListener('pointerleave', leave);
+    button.addEventListener('blur', leave);
+    button.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      if (!studioInteractive() || !current()) return;
+      try {
+        var p = studio.popup;
+        if (!p.target || state.selected !== p.target || !p.target.isConnected) return;
+        if (p.edit && p.edit.owner === button) studioPopupFinish(true);
+        else {
+          studioPopupFinish(false);
+          studioStyleCommand({ values: typeof values === 'function' ? values() : values, gestureId: studioId('context-choice'), phase: 'commit' });
+          if (p.feedback) p.feedback.textContent = (button.getAttribute('data-studio-look') || button.title || 'Color') + ' selected';
+        }
+        studioPopupPosition();
+      } catch (error) { studioGestureError(error); }
+    });
+  }
+  function studioPopupRefreshChoices(p) {
+    if (!p.target || !p.target.isConnected || !p.choices.length) return;
+    var cs = getComputedStyle(p.target), probe = document.createElement('span').style;
+    p.choices.forEach(function (choice) {
+      var values = typeof choice.values === 'function' ? choice.values() : choice.values;
+      var selected = Object.keys(values).every(function (property) {
+        var wanted = values[property];
+        if (property === 'color' || property === 'background-color' || property === 'accent-color') {
+          var a = studioPopupRgb(studioPopupResolveColor(p.target, cs.getPropertyValue(property)));
+          var b = studioPopupRgb(wanted);
+          return a && b && a.every(function (value, i) { return Math.abs(value - b[i]) < (i === 3 ? 0.01 : 1); });
+        }
+        probe.setProperty(property, wanted);
+        if (property === 'grid-template-columns' && choice.button.hasAttribute('data-studio-columns')) {
+          return studioPopupColumns(p.target) === +choice.button.getAttribute('data-studio-columns');
+        }
+        return (choice.computed ? cs.getPropertyValue(property) : p.target.style.getPropertyValue(property)) === probe.getPropertyValue(property);
+      });
+      choice.button.setAttribute('aria-pressed', String(!!selected));
+    });
+  }
+  function studioPopupFeedback(p) {
+    p.feedback = h('div', { class: 'studio-context-feedback', text: 'Hover to preview · click to keep' });
+    p.options.appendChild(p.feedback);
+  }
+  function studioPopupResolveColor(el, color) {
+    for (var i = 0; i < 5 && /var\(/.test(color || ''); i++) {
+      var match = /^var\(\s*(--[\w-]+)\s*(?:,\s*(.+))?\)$/.exec(color.trim());
+      if (!match) return '';
+      var value = '', node = el;
+      for (var depth = 0; node && depth < 16 && !value; depth++, node = node.parentElement) value = getComputedStyle(node).getPropertyValue(match[1]).trim();
+      color = value || match[2] || '';
+    }
+    if (/^(canvastext|buttontext|fieldtext)$/i.test(color || '')) return studioPopupDarkCanvas() ? '#eeeeee' : '#20232a';
+    return color || '';
+  }
+  function studioPopupDarkCanvas() {
+    var scheme = getComputedStyle(document.documentElement).colorScheme || '';
+    return /dark/.test(scheme) && (!/light/.test(scheme) || (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches));
+  }
+  function studioPopupRgb(color) {
+    if (!color || /var\(/.test(color)) return null;
+    if (color === 'transparent') return [0, 0, 0, 0];
+    var perceptual = /^(oklch|oklab)\(([^)]+)\)$/i.exec(color);
+    if (perceptual) {
+      var segments = perceptual[2].split('/'), channels = segments[0].trim().split(/\s+/);
+      if (channels.length !== 3) return null;
+      var light = parseFloat(channels[0]) / (/%$/.test(channels[0]) ? 100 : 1);
+      var a = parseFloat(channels[1]) * (/%$/.test(channels[1]) ? 0.004 : 1), b = parseFloat(channels[2]);
+      if (perceptual[1].toLowerCase() === 'oklch') { var angle = b * Math.PI / 180; b = a * Math.sin(angle); a *= Math.cos(angle); }
+      else if (/%$/.test(channels[2])) b *= 0.004;
+      var l = Math.pow(light + 0.3963377774 * a + 0.2158037573 * b, 3);
+      var m0 = Math.pow(light - 0.1055613458 * a - 0.0638541728 * b, 3);
+      var s = Math.pow(light - 0.0894841775 * a - 1.291485548 * b, 3);
+      var output = [4.0767416621 * l - 3.3077115913 * m0 + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m0 - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m0 + 1.707614701 * s].map(function (n) {
+        return clamp((n <= 0.0031308 ? 12.92 * n : 1.055 * Math.pow(n, 1 / 2.4) - 0.055) * 255, 0, 255);
+      });
+      if (output.some(function (n) { return !isFinite(n); })) return null;
+      return output.concat([segments[1] ? clamp(parseFloat(segments[1]) / (/%\s*$/.test(segments[1]) ? 100 : 1), 0, 1) : 1]);
+    }
+    var rgb = toRgb(color);
+    var alpha = 1, m = /^rgba?\(([^)]+)\)/i.exec(color);
+    if (m) {
+      var parts = m[1].replace(/[,/]/g, ' ').trim().split(/\s+/);
+      if (parts.length < 3) return null;
+      rgb = parts.slice(0, 3).map(function (part) { return clamp(parseFloat(part) * (/%$/.test(part) ? 2.55 : 1), 0, 255); });
+      if (parts[3]) alpha = clamp(parseFloat(parts[3]) / (/%$/.test(parts[3]) ? 100 : 1), 0, 1);
+    } else if (!rgb) return null;
+    else if (/^#[0-9a-f]{8}$/i.test(color)) alpha = parseInt(color.slice(7, 9), 16) / 255;
+    else if (/^#[0-9a-f]{4}$/i.test(color)) alpha = parseInt(color[4] + color[4], 16) / 255;
+    return rgb.concat([alpha]);
+  }
+  function studioPopupRgbCss(rgb) { return 'rgb(' + rgb.slice(0, 3).map(function (n) { return Math.round(n); }).join(', ') + ')'; }
+  function studioPopupBlend(fg, bg) {
+    var alpha = fg[3] == null ? 1 : fg[3];
+    return [0, 1, 2].map(function (i) { return fg[i] * alpha + bg[i] * (1 - alpha); }).concat([1]);
+  }
+  function studioPopupBackground(el) {
+    var chain = [], node = el;
+    for (var i = 0; node && i < 16; i++, node = node.parentElement) chain.unshift(node);
+    var dark = studioPopupDarkCanvas();
+    var color = dark ? [18, 18, 18, 1] : [255, 255, 255, 1];
+    chain.forEach(function (item) {
+      var current = studioPopupRgb(studioPopupResolveColor(item, getComputedStyle(item).backgroundColor));
+      if (current) color = studioPopupBlend(current, color);
+    });
+    return color;
+  }
+  function studioPopupContrast(fg, bg) {
+    fg = studioPopupBlend(fg, bg);
+    function luminance(rgb) {
+      var channels = rgb.slice(0, 3).map(function (n) { n /= 255; return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4); });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    }
+    var a = luminance(fg), b = luminance(bg);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  }
+  function studioPopupInks(el) {
+    var inks = [], stack = [el], count = 0;
+    while (stack.length && count++ < 60) {
+      var node = stack.pop(), cs = getComputedStyle(node), background = studioPopupRgb(studioPopupResolveColor(node, cs.backgroundColor));
+      if (node !== el && ((background && background[3] > 0.95) || (cs.backgroundImage && cs.backgroundImage !== 'none') || chartRoot(node))) continue;
+      if (studioNorm(studioOwn(node)) || studioFormControl(node)) {
+        var color = studioPopupRgb(studioPopupResolveColor(node, cs.color));
+        if (color && !inks.some(function (known) { return studioEqual(known, color); })) inks.push(color);
+      }
+      for (var i = Math.min(node.children.length, 30) - 1; i >= 0; i--) stack.push(node.children[i]);
+    }
+    return inks;
+  }
+  function studioPopupColors(p) {
+    var fieldType = studioPopupFieldType(p.target);
+    var property = p.kind === 'text' ? 'color' : p.kind === 'field' && /^(choice|range)$/.test(fieldType) ? 'accent-color' : 'background-color', cs = getComputedStyle(p.target);
+    var original = studioPopupResolveColor(p.target, cs.getPropertyValue(property)), background = studioPopupBackground(p.target);
+    var candidates = [{ name: 'Current', color: original }], seen = new Set(), colors = h('div', { class: 'studio-swatches' });
+    if (property === 'background-color' && cs.backgroundImage && cs.backgroundImage !== 'none') {
+      p.options.appendChild(h('div', { class: 'studio-context-note', text: 'This background contains imagery. Its colors are kept intact.' })); return;
+    }
+    studioDiscover().tokens.filter(function (token) { return token.kind === 'color'; }).slice(0, 12).forEach(function (token) {
+      try { candidates.push({ name: 'App ' + token.name.replace(/^--/, '').replace(/-/g, ' '), color: studioPopupResolveColor(studioResolve(token.target, []), token.value) }); } catch (e) { /* stale optional color suggestions are omitted */ }
+    });
+    [
+      ['Ink', '#20232a'], ['Lavender', '#7066a6'], ['Clay', '#956453'], ['Sage', '#426d60'], ['Blue', '#426aa0'], ['Plum', '#79556f'],
+      ['Paper', '#f6f4f0'], ['Soft lavender', '#eeedf8'], ['Soft sage', '#edf2ee'], ['Soft blue', '#eaf0f8'], ['Soft rose', '#f6eee8'], ['Sand', '#f6f2e6']
+    ].forEach(function (entry) { candidates.push({ name: entry[0], color: entry[1] }); });
+    var inks = property === 'color' ? [] : studioPopupInks(p.target), originalInk = studioPopupRgb(studioPopupResolveColor(p.target, cs.color));
+    candidates.forEach(function (candidate, index) {
+      var rgb = studioPopupRgb(candidate.color);
+      if (!rgb || colors.children.length >= 7 || seen.has(studioStableJson(rgb))) return;
+      var safe = property === 'accent-color' ? true : property === 'color' ? studioPopupContrast(rgb, background) >= Math.min(4.5, originalInk ? studioPopupContrast(originalInk, background) : 4.5) - 0.02 :
+        inks.every(function (ink) { return studioPopupContrast(ink, studioPopupBlend(rgb, background)) >= Math.min(4.5, studioPopupContrast(ink, background)) - 0.02; });
+      if (index && !safe) return;
+      seen.add(studioStableJson(rgb));
+      var button = h('button', { type: 'button', class: 'studio-swatch', 'aria-label': candidate.name + ' color', title: candidate.name, 'data-studio-color': candidate.color });
+      button.style.setProperty('--swatch', candidate.color);
+      var uiBackground = studioPopupRgb(PANEL_BG2) || [255, 255, 255, 1];
+      var displayed = studioPopupBlend(rgb, uiBackground);
+      var mark = studioPopupContrast([255, 255, 255, 1], displayed) > studioPopupContrast([25, 30, 40, 1], displayed) ? '#ffffff' : '#191e28';
+      button.style.setProperty('--swatch-ink', mark);
+      var check = svg('svg', { class: 'studio-swatch-check', viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' });
+      check.appendChild(svg('path', { d: 'M3.5 8.5 6.5 11 12.5 5', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+      button.appendChild(check);
+      var values = {}; values[property] = candidate.color;
+      studioPopupChoice(button, values); colors.appendChild(button);
+    });
+    p.options.appendChild(colors.children.length ? colors : h('div', { class: 'studio-context-note', text: 'This app color cannot be resolved safely in this frame.' }));
+    if (colors.children.length) studioPopupFeedback(p);
+  }
+  function studioPopupLooks(p) {
+    var cs = getComputedStyle(p.target), background = studioPopupBackground(p.target);
+    var ink = studioPopupRgb(studioPopupResolveColor(p.target, cs.color)) || [100, 100, 100, 1];
+    var line = studioPopupRgbCss(studioPopupBlend([ink[0], ink[1], ink[2], 0.22], background));
+    var looks = h('div', { class: 'studio-looks' });
+    ['Clean', 'Soft', 'Bold'].forEach(function (name, index) {
+      var radius = [8, 18, 6][index], width = index === 2 ? '2px' : '1px';
+      var values = { 'box-shadow': index === 1 ? '0 6px 20px rgba(' + ink.slice(0, 3).map(Math.round).join(',') + ',0.12)' : 'none' };
+      ['top', 'right', 'bottom', 'left'].forEach(function (side) {
+        values['border-' + side + '-style'] = 'solid'; values['border-' + side + '-width'] = width; values['border-' + side + '-color'] = line;
+      });
+      ['top-left', 'top-right', 'bottom-left', 'bottom-right'].forEach(function (corner) { values['border-' + corner + '-radius'] = radius + 'px'; });
+      var button = h('button', { type: 'button', class: 'studio-look', 'aria-label': name + ' look', 'data-studio-look': name });
+      var sample = h('span', { class: 'studio-look-sample', 'aria-hidden': 'true' });
+      sample.style.backgroundColor = studioPopupRgbCss(background); sample.style.border = width + ' solid ' + line;
+      sample.style.borderRadius = radius + 'px'; sample.style.boxShadow = values['box-shadow'];
+      sample.style.setProperty('--look-ink', studioPopupRgbCss(ink));
+      sample.appendChild(h('span', { class: 'studio-look-line' }));
+      sample.appendChild(h('span', { class: 'studio-look-line' }));
+      button.appendChild(sample); button.appendChild(document.createTextNode(name));
+      studioPopupChoice(button, values); looks.appendChild(button);
+    });
+    p.options.appendChild(looks);
+    studioPopupFeedback(p);
+  }
+  function studioPopupLength(value, el, font) {
+    var number = parseFloat(value);
+    if (!isFinite(number)) return 0;
+    if (/rem$/.test(value)) return number * (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+    if (/em$/.test(value)) return number * (parseFloat(getComputedStyle(font ? (el.parentElement || document.documentElement) : el).fontSize) || 16);
+    if (/%$/.test(value)) return number * Math.min(el.getBoundingClientRect().width || 64, el.getBoundingClientRect().height || 64) / 100;
+    return number;
+  }
+  function studioPopupRangeValue(el, name) {
+    var cs = getComputedStyle(el);
+    if (name === 'Weight') return parseFloat(cs.fontWeight) || (cs.fontWeight === 'bold' ? 700 : 400);
+    if (name === 'Size' && studioFormControl(el) && studioPopupFieldType(el) !== 'text') {
+      return el.getBoundingClientRect().width || studioPopupLength(cs.width, el, false) || 16;
+    }
+    if (name === 'Size') return studioPopupLength(cs.fontSize, el, true) || 16;
+    if (name === 'Shape') return studioPopupLength(cs.borderTopLeftRadius || cs.borderRadius, el, false);
+    if (name === 'Space' && studioPopupLayoutKind(el)) {
+      return (studioPopupLength(cs.rowGap || cs.gap, el, false) + studioPopupLength(cs.columnGap || cs.gap, el, false)) / 2;
+    }
+    return ['Top', 'Right', 'Bottom', 'Left'].reduce(function (sum, side) { return sum + studioPopupLength(cs['padding' + side], el, false); }, 0) / 4;
+  }
+  function studioPopupRangeLabel(name, value) { return name === 'Weight' ? String(value) : Math.round(value) + ' px'; }
+  function studioPopupPaintRange(control, name) {
+    var input = control.input, value = +input.value, min = +input.min, max = +input.max;
+    var label = studioPopupRangeLabel(name, value);
+    control.output.textContent = label;
+    input.style.setProperty('--studio-progress', clamp((value - min) / Math.max(1, max - min) * 100, 0, 100).toFixed(2) + '%');
+    input.setAttribute('aria-valuetext', label);
+  }
+  function studioPopupRange(p, name) {
+    var fieldType = p.kind === 'field' ? studioPopupFieldType(p.target) : 'text';
+    var physical = name === 'Size' && fieldType !== 'text';
+    var weight = name === 'Weight', min = weight ? 300 : physical ? fieldType === 'range' ? 80 : 8 : name === 'Size' ? 10 : 0;
+    var current = studioPopupRangeValue(p.target, name), max = weight ? 800 : name === 'Size' ? Math.max(72, Math.min(128, Math.ceil(current))) : 64;
+    if (physical) max = fieldType === 'choice' ? 64 : fieldType === 'range' ? Math.max(400, Math.min(1200, current)) : 200;
+    var input = h('input', { type: 'range', min: String(min), max: String(max), step: weight ? '100' : '1', 'aria-label': name });
+    input.value = String(clamp(current, min, max));
+    var captions = { Size: ['Smaller', 'Larger'], Weight: ['Lighter', 'Bolder'], Space: ['Tighter', 'Roomier'], Shape: ['Square', 'Round'] }[name];
+    var output = h('output', { text: studioPopupRangeLabel(name, +input.value) });
+    var titles = { Size: 'Text size', Weight: 'Text weight', Space: 'Spacing', Shape: 'Corner radius' };
+    if (physical) { titles.Size = fieldType === 'choice' ? 'Control size' : 'Width'; captions = ['Smaller', 'Larger']; }
+    if (name === 'Space' && studioPopupLayoutKind(p.target)) titles.Space = 'Space between items';
+    var heading = h('div', { class: 'studio-range-heading' }, [h('span', { text: titles[name] }), output]);
+    var labels = h('div', { class: 'studio-range-labels' }, [h('span', { text: captions[0] }), h('span', { text: captions[1] })]);
+    p.options.appendChild(h('div', { class: 'studio-range' }, [heading, input, labels]));
+    var control = { input: input, output: output, closed: false };
+    p.range = control;
+    studioPopupPaintRange(control, name);
+    function preview() {
+      if (!studio || studio.popup !== p || p.range !== control || !studioInteractive()) return;
+      if (control.closed) {
+        input.value = String(clamp(studioPopupRangeValue(p.target, name), min, max));
+        studioPopupPaintRange(control, name);
+        return;
+      }
+      var values = {}, value = +input.value;
+      if (physical) {
+        values.width = value + 'px';
+        if (fieldType === 'choice') values.height = value + 'px';
+      }
+      else if (name === 'Size') values['font-size'] = value + 'px';
+      else if (name === 'Weight') values['font-weight'] = String(value);
+      else if (name === 'Space') {
+        if (studioPopupLayoutKind(p.target)) {
+          values.gap = value + 'px';
+          if (p.kind === 'list' && !/flex|grid/.test(getComputedStyle(p.target).display)) {
+            values.display = 'flex'; values['flex-direction'] = 'column';
+          }
+        } else ['top', 'right', 'bottom', 'left'].forEach(function (side) { values['padding-' + side] = value + 'px'; });
+      }
+      else ['top-left', 'top-right', 'bottom-left', 'bottom-right'].forEach(function (corner) { values['border-' + corner + '-radius'] = value + 'px'; });
+      studioPopupPaintRange(control, name);
+      studioPopupPreview(values, 'slider', input);
+    }
+    function finish(commit) {
+      if (control.closed) return;
+      control.closed = true;
+      if (studio && studio.popup === p && p.edit && p.edit.owner === input) studioPopupFinish(commit);
+      studioPopupSync();
+    }
+    function guarded(fn) { return function (e) { try { fn(e); } catch (error) { studioPopupFinish(false); studioGestureError(error); } }; }
+    input.addEventListener('pointerdown', guarded(function (e) {
+      control.closed = false;
+      if (e.pointerId != null && input.setPointerCapture) { try { input.setPointerCapture(e.pointerId); } catch (error) { /* keyboard/synthetic pointers need no capture */ } }
+    }));
+    input.addEventListener('input', guarded(preview));
+    input.addEventListener('change', guarded(function () { if (!control.closed && !p.edit) preview(); finish(true); }));
+    input.addEventListener('pointerup', guarded(function () { finish(true); }));
+    input.addEventListener('pointercancel', guarded(function () { finish(false); }));
+    input.addEventListener('blur', guarded(function () { finish(true); }));
+    input.addEventListener('keydown', guarded(function (e) {
+      if (!/^(ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End|PageUp|PageDown)$/.test(e.key)) return;
+      e.preventDefault(); e.stopPropagation(); control.closed = false;
+      var step = +input.step * (e.shiftKey || /^Page/.test(e.key) ? 5 : 1), direction = /Left|Down/.test(e.key) ? -1 : 1;
+      input.value = String(e.key === 'Home' ? min : e.key === 'End' ? max : clamp(+input.value + direction * step, min, max));
+      preview();
+    }));
+    input.addEventListener('keyup', guarded(function (e) {
+      if (/^(Arrow|Home|End|Page)/.test(e.key)) { e.preventDefault(); e.stopPropagation(); finish(true); }
+    }));
+  }
+  function studioPopupColumns(el) {
+    var columns = getComputedStyle(el).gridTemplateColumns || '';
+    var repeat = /^repeat\(\s*(\d+)\s*,\s*(?:[\d.]+(?:px|fr|%)|minmax\(\s*0(?:px)?\s*,\s*1fr\s*\))\s*\)$/.exec(columns);
+    if (repeat) return +repeat[1];
+    columns = columns.replace(/\[[^\]]*\]/g, '').trim();
+    return /^(?:[\d.]+px\s*)+$/.test(columns) ? columns.split(/\s+/).length : 0;
+  }
+  function studioPopupLayout(p) {
+    function group(label, choices) {
+      var row = h('div', { class: 'studio-layout-group' }, [h('span', { class: 'studio-layout-label', text: label })]);
+      var buttons = h('div', { class: 'studio-layout-choices' + (label === 'Align items' ? ' studio-layout-align' : ''), role: 'group', 'aria-label': label });
+      choices.forEach(function (choice) {
+        var button = h('button', { type: 'button', text: choice.label, title: choice.label, 'aria-label': label + ': ' + choice.label, 'data-studio-layout': choice.id });
+        if (choice.columns) button.setAttribute('data-studio-columns', String(choice.columns));
+        studioPopupChoice(button, choice.values, true);
+        buttons.appendChild(button);
+      });
+      row.appendChild(buttons); p.options.appendChild(row);
+    }
+    var cs = getComputedStyle(p.target), grid = /^(inline-)?grid$/.test(cs.display);
+    if (grid) {
+      group('Columns', [1, 2, 3, 4].map(function (count) {
+        return { id: 'columns-' + count, columns: count, label: String(count), values: { 'grid-template-columns': 'repeat(' + count + ', minmax(0, 1fr))' } };
+      }));
+    } else {
+      group('Flow', [
+        { id: 'horizontal', label: 'Horizontal', direction: 'row' },
+        { id: 'vertical', label: 'Vertical', direction: 'column' }
+      ].map(function (choice) {
+        choice.values = function () { return { display: getComputedStyle(p.target).display === 'inline-flex' ? 'inline-flex' : 'flex', 'flex-direction': choice.direction }; };
+        return choice;
+      }));
+    }
+    group('Align items', [
+      { id: 'align-start', label: 'Start', values: { 'align-items': grid ? 'start' : 'flex-start' } },
+      { id: 'align-center', label: 'Center', values: { 'align-items': 'center' } },
+      { id: 'align-end', label: 'End', values: { 'align-items': grid ? 'end' : 'flex-end' } },
+      { id: 'align-stretch', label: 'Stretch', values: { 'align-items': 'stretch' } }
+    ].map(function (choice) {
+      var values = choice.values;
+      choice.values = function () {
+        return p.kind === 'list' && !/flex|grid/.test(getComputedStyle(p.target).display) ?
+          Object.assign({ display: 'flex', 'flex-direction': 'column' }, values) : values;
+      };
+      return choice;
+    }));
+    if (p.kind === 'list' && Array.prototype.some.call(p.target.children, function (child) { return getComputedStyle(child).display === 'list-item'; })) {
+      group('Markers', [
+        { id: 'bullets', label: 'Bullets', values: { 'list-style-type': 'disc' } },
+        { id: 'numbers', label: 'Numbers', values: { 'list-style-type': 'decimal' } },
+        { id: 'no-markers', label: 'None', values: { 'list-style-type': 'none' } }
+      ]);
+    } else if (!grid) {
+      group('Wrapping', [
+        { id: 'nowrap', label: 'Single line', values: { 'flex-wrap': 'nowrap' } },
+        { id: 'wrap', label: 'Wrap', values: { 'flex-wrap': 'wrap' } }
+      ]);
+    }
+    studioPopupFeedback(p);
+  }
+  function studioPopupOpen(name) {
+    var p = studio && studio.popup;
+    if (!p || !studioInteractive() || state.tool !== 'select' || !p.target || !p.target.isConnected) return;
+    studioPopupFinish(false); studioFinishText(false);
+    p.option = p.option === name ? '' : name; p.range = null; p.choices = []; p.feedback = null; p.options.textContent = '';
+    Array.prototype.forEach.call(p.row.querySelectorAll('[data-studio-action]'), function (button) { button.setAttribute('aria-expanded', String(button.getAttribute('data-studio-action') === p.option)); });
+    if (p.option === 'Color') studioPopupColors(p);
+    else if (p.option === 'Look') studioPopupLooks(p);
+    else if (p.option === 'Layout') studioPopupLayout(p);
+    else if (p.option) studioPopupRange(p, name);
+    studioPopupSync();
+  }
+
+  // ---- Studio: native gestures (never wait for a host poll) -----------------
+  function studioGestureError(error) {
+    if (!studio) return;
+    studio.lastError = error.message || String(error);
+    if (root && !studio.capture) showHint(studio.lastError, 'error');
+    studioPublish();
+  }
+  function studioInteractive() { return studio && !studio.compare && !studio.capture && state.tool !== 'interact'; }
+  function studioHit(event) {
+    var el = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(event.clientX, event.clientY) : event.target;
+    return el && studioAllowedElement(el) ? studioMeaningful(el) : null;
+  }
+  function studioPointerHover(e) {
+    if (!studioInteractive() || studio.pointer || studio.text || state.debugView || state.tool !== 'select') return;
+    state.hoverEl = isOurs(e.target) ? null : studioHit(e);
+    reposition();
+  }
+  function studioPointerDown(e) {
+    if (!studioInteractive() || isOurs(e.target) || state.debugView || state.tool === 'draw' || e.button > 0) return;
+    try {
+      studioRefresh();
+      if (studio.text && studio.text.wrapper.contains(e.target)) { e.stopPropagation(); return; }
+      studioFinishText(false);
+      var target = studioHit(e);
+      if (!target) { studioPopupDismiss(false); return; }
+      studio.lastPointerPick = { target: target, time: Date.now() };
+      e.preventDefault(); e.stopPropagation();
+      if (state.tool === 'comment') { studioChoose(target, false); studioCommentEditor(target, e.clientX, e.clientY); return; }
+      if (e.shiftKey || e.ctrlKey || e.metaKey) { studioChoose(target, true); return; }
+      if (studioPopupKind(target) === 'text' && !studio.freeMove) {
+        studioChoose(target, false); studioStartText(target, e); return;
+      }
+      if (studioFormControl(target)) { studioChoose(target, false); return; }
+      var selected = (state.selection || []).indexOf(target) >= 0;
+      var anchor = selected ? target : state.selected && state.selected.contains(target) ? state.selected : null;
+      if (!anchor) { studioChoose(target, false); return; }
+      studioFinishGesture();
+      var items = studioSelectionElements();
+      var g = { kind: studio.freeMove ? 'free' : 'reorder', id: studioId('pointer'), el: anchor, downTarget: target, items: items,
+        startX: e.clientX, startY: e.clientY, active: false, effects: [], edits: [],
+        layout: studioLayout(anchor.parentElement), rect: anchor.getBoundingClientRect(),
+        bases: items.map(function (el) { return { el: el, transform: el.style.transform, offset: parseTranslate(el.style.transform) }; }) };
+      if (anchor.parentElement && anchor.parentElement.children.length <= STUDIO_LIMIT.children) g.snapLines = collectSnapLines(anchor, items);
+      studioPointerStart(g, e);
+    } catch (error) { studioGestureError(error); }
+  }
+  function studioClick(e) {
+    if (!studioInteractive() || state.tool !== 'select' || isOurs(e.target) || state.debugView) return;
+    var target = studioHit(e), last = studio.lastPointerPick;
+    studio.lastPointerPick = null;
+    if (last && last.target === target && Date.now() - last.time < 600) return;
+    if (studio.text && target === studio.text.el) return;
+    try {
+      if (!target) { studioPopupDismiss(false); return; }
+      if (e.shiftKey || e.ctrlKey || e.metaKey) { studioChoose(target, true); return; }
+      studioChoose(target, false);
+      if (studioPopupKind(target) === 'text' && !studio.freeMove) studioStartText(target, e);
+    } catch (error) { studioGestureError(error); }
+  }
+  function studioPointerStart(gesture, event) {
+    studio.pointer = gesture;
+    gesture.captureTarget = event.target;
+    gesture.pointerId = event.pointerId;
+    if (event.pointerId != null && event.target.setPointerCapture) {
+      try { event.target.setPointerCapture(event.pointerId); } catch (e) { /* detached hit targets cannot capture */ }
+    }
+    window.addEventListener('pointermove', studioPointerMove, true);
+    window.addEventListener('pointerup', studioPointerUp, true);
+    window.addEventListener('blur', studioPointerCancel, true);
+  }
+  function studioPointerPreview(g, build) {
+    if ((g.el && !g.el.isConnected) || (g.items && g.items.some(function (el) { return !el.isConnected; })) ||
+      (g.bases && g.bases.some(function (base) { return !base.el.isConnected; }))) studioError('The app replaced the gesture target; the gesture was cancelled.');
+    studioSilence(function () {
+      var clean = studioUndoEffects(g.effects); g.effects = []; g.edits = [];
+      if (!clean) studioError('The app changed during the gesture; its newer values were preserved.');
+      var edits = studioDedup(build());
+      if (!edits.length) return;
+      g.effects = studioApplyTransaction({ id: g.id, label: 'Gesture preview', route: studio.route, edits: edits }, true);
+      g.edits = edits;
+    });
+    reposition();
+  }
+  function studioResizeDown(e, dir) {
+    if (!studioInteractive() || state.tool !== 'select' || !state.selected || (state.selection || []).length !== 1) return;
+    e.preventDefault(); e.stopPropagation();
+    try {
+      studioFinishGesture(); studioFinishPointer(true);
+      var el = state.selected, rect = el.getBoundingClientRect();
+      studioPointerStart({ kind: 'resize', id: studioId('resize'), el: el, dir: dir[0], rect: rect, startX: e.clientX, startY: e.clientY,
+        effects: [], edits: [], active: false, snapLines: el.parentElement && el.parentElement.children.length <= STUDIO_LIMIT.children ? collectSnapLines(el) : null }, e);
+    } catch (error) { studioGestureError(error); }
+  }
+  function studioPointerMove(e) {
+    var g = studio && studio.pointer;
+    if (!g || !studioInteractive()) return;
+    if (e.buttons === 0) { studioFinishPointer(false); return; }
+    e.preventDefault(); e.stopPropagation();
+    try {
+      var dx = e.clientX - g.startX, dy = e.clientY - g.startY;
+      if (!g.active && Math.abs(dx) + Math.abs(dy) < 4) return;
+      g.active = true;
+      if (g.kind === 'draw') {
+        var point = [e.clientX, e.clientY];
+        if (g.after.shape === 'pen') {
+          var last = g.after.points[g.after.points.length - 1];
+          if (Math.abs(point[0] - last[0]) + Math.abs(point[1] - last[1]) >= 2) {
+            if (g.after.points.length >= 512) g.after.points = g.after.points.filter(function (_, i) { return i % 2 === 0; });
+            g.after.points.push(point);
+          }
+        } else g.after.points = [g.after.points[0], point];
+        var node = studioDrawNode(g.after);
+        g.node.replaceWith(node); g.node = node;
+        return;
+      }
+      if (g.kind === 'free') {
+        if (snapOn && !e.ctrlKey && !e.metaKey && g.snapLines) {
+          var sx = nearestLine(g.rect.left + dx, g.snapLines.xs, SNAP_THR), sy = nearestLine(g.rect.top + dy, g.snapLines.ys, SNAP_THR), guides = [];
+          if (sx != null) { dx = sx - g.rect.left; guides.push({ x: sx }); }
+          if (sy != null) { dy = sy - g.rect.top; guides.push({ y: sy }); }
+          drawGuides(guides);
+        } else clearGuides();
+        studioPointerPreview(g, function () {
+          return g.bases.map(function (base) {
+            var transform = stripTranslate(base.transform);
+            return studioStyleEdit(base.el, 'transform', (transform ? transform + ' ' : '') + 'translate(' + (base.offset.x + Math.round(dx)) + 'px, ' + (base.offset.y + Math.round(dy)) + 'px)', '', false);
+          });
+        });
+      } else if (g.kind === 'resize') {
+        studioPointerPreview(g, function () {
+          var edits = [], guides = [], width = Math.max(8, Math.round(g.rect.width + dx)), height = Math.max(8, Math.round(g.rect.height + dy));
+          if (snapOn && !e.ctrlKey && !e.metaKey && g.snapLines) {
+            var x = nearestLine(g.rect.left + width, g.snapLines.xs, SNAP_THR), y = nearestLine(g.rect.top + height, g.snapLines.ys, SNAP_THR);
+            if (x != null && g.dir.indexOf('e') >= 0) { width = Math.max(8, x - g.rect.left); guides.push({ x: x }); }
+            if (y != null && g.dir.indexOf('s') >= 0) { height = Math.max(8, y - g.rect.top); guides.push({ y: y }); }
+          }
+          drawGuides(guides);
+          if (g.dir.indexOf('e') >= 0) edits.push(studioStyleEdit(g.el, 'width', width + 'px', '', false));
+          if (g.dir.indexOf('s') >= 0) edits.push(studioStyleEdit(g.el, 'height', height + 'px', '', false));
+          return edits;
+        });
+      } else {
+        if (!g.layout || g.items.some(function (el) { return el.parentElement !== g.layout.parent; })) studioError('Drag reordering needs siblings in a supported layout. Enable Free move for transform offsets.');
+        var target = studioHit(e);
+        while (target && target.parentElement !== g.layout.parent && target !== g.layout.parent) target = target.parentElement;
+        if (!target || target === g.layout.parent || target.parentElement !== g.layout.parent) {
+          studioPointerPreview(g, function () { return []; }); g.invalid = true; clearGuides(); return;
+        }
+        if (g.items.indexOf(target) >= 0) return;
+        g.invalid = false;
+        var rect = target.getBoundingClientRect(), horizontal = g.layout.horizontal || g.layout.grid;
+        var after = horizontal ? e.clientX >= rect.left + rect.width / 2 : e.clientY >= rect.top + rect.height / 2;
+        if (g.layout.reverse !== (horizontal && g.layout.rtl)) after = !after;
+        studioPointerPreview(g, function () {
+          var list = g.layout.children.filter(function (el) { return g.items.indexOf(el) < 0; });
+          var group = g.layout.children.filter(function (el) { return g.items.indexOf(el) >= 0; });
+          var index = list.indexOf(target);
+          if (index < 0) studioError('The drop target changed.');
+          Array.prototype.splice.apply(list, [index + (after ? 1 : 0), 0].concat(group));
+          return list.every(function (el, i) { return el === g.layout.children[i]; }) ? [] : [studioReorderEdit(g.layout.parent, list)];
+        });
+        drawGuides(horizontal ? [{ x: after ? rect.right : rect.left }] : [{ y: after ? rect.bottom : rect.top }]);
+      }
+    } catch (error) { studioFinishPointer(true); studioGestureError(error); }
+  }
+  function studioPointerUp() { try { studioFinishPointer(false); } catch (error) { studioGestureError(error); } }
+  function studioPointerCancel() {
+    if (!studio) return;
+    if (studio.popup && studio.popup.range) studio.popup.range.closed = true;
+    studioPopupFinish(false);
+    studio.lastPointerPick = null;
+    studioFinishPointer(true); studioCancelGesture(); studioFinishKey(true); studioFinishText(true);
+    studioChrome(); reposition(); studioPublish();
+  }
+  function studioFinishPointer(cancel) {
+    if (!studio || !studio.pointer) return;
+    var g = studio.pointer; studio.pointer = null;
+    window.removeEventListener('pointermove', studioPointerMove, true);
+    window.removeEventListener('pointerup', studioPointerUp, true);
+    window.removeEventListener('blur', studioPointerCancel, true);
+    if (g.pointerId != null && g.captureTarget && g.captureTarget.releasePointerCapture) {
+      try { g.captureTarget.releasePointerCapture(g.pointerId); } catch (e) { /* capture may already have been lost */ }
+    }
+    clearGuides();
+    var clean = studioSilence(function () { var ok = studioUndoEffects(g.effects || []); if (g.node) g.node.remove(); return ok; });
+    if (!clean || (g.el && !g.el.isConnected)) { cancel = true; studio.lastError = 'The app changed during the gesture; it was cancelled without overwriting source.'; }
+    if (!cancel && g.active && !g.invalid) {
+      if (g.kind === 'draw' && g.after.points.length > 1) {
+        var base = studioBase(document.body);
+        studioCommit('Draw ' + g.after.shape, [{ kind: 'annotation', property: g.after.shape, target: base.target,
+          before: { value: null, context: base.context, source: base.source }, after: g.after }]);
+      } else if (g.edits.length) studioCommit(g.kind === 'reorder' ? 'Drag to reorder' : g.kind === 'resize' ? 'Resize element' : 'Free move selection', g.edits);
+    } else if (!cancel && !g.active && g.downTarget && g.downTarget !== g.el) studioChoose(g.downTarget, false);
+    if (!cancel && g.invalid) { studio.lastError = 'Drop within the original supported container; the drag was cancelled.'; studioPublish(); }
+    reposition();
+  }
+  function studioDrawNode(after) {
+    if (['pen', 'arrow', 'rect', 'ellipse'].indexOf(after.shape) < 0 || !/^#[a-fA-F0-9]{6}$/.test(after.color) ||
+      !Array.isArray(after.points) || !after.points.length || after.points.length > 512 ||
+      after.points.some(function (point) { return !Array.isArray(point) || point.length !== 2 || point.some(function (v) { return typeof v !== 'number' || !isFinite(v) || Math.abs(v) > 100000; }); }) ||
+      !after.viewport || !(after.viewport.width > 0) || !(after.viewport.height > 0)) studioError('Invalid drawing annotation.');
+    var points = after.points, first = points[0], last = points[points.length - 1];
+    var group = svg('g', { 'data-studio-drawing': 'true', transform: 'scale(' + (window.innerWidth / after.viewport.width) + ',' + (window.innerHeight / after.viewport.height) + ')' });
+    var attrs = { fill: 'none', stroke: after.color, 'stroke-width': '3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, node;
+    if (after.shape === 'pen') { attrs.d = points.map(function (point, i) { return (i ? 'L' : 'M') + point.join(','); }).join(' '); node = svg('path', attrs); }
+    else if (after.shape === 'rect') {
+      Object.assign(attrs, { x: Math.min(first[0], last[0]), y: Math.min(first[1], last[1]), width: Math.abs(last[0] - first[0]), height: Math.abs(last[1] - first[1]) }); node = svg('rect', attrs);
+    } else if (after.shape === 'ellipse') {
+      Object.assign(attrs, { cx: (first[0] + last[0]) / 2, cy: (first[1] + last[1]) / 2, rx: Math.abs(last[0] - first[0]) / 2, ry: Math.abs(last[1] - first[1]) / 2 }); node = svg('ellipse', attrs);
+    } else {
+      var markerId = studioId('arrow'), defs = svg('defs'), marker = svg('marker', { id: markerId, viewBox: '0 0 10 10', refX: '8', refY: '5', markerWidth: '6', markerHeight: '6', orient: 'auto' });
+      marker.appendChild(svg('path', { d: 'M0,0 L10,5 L0,10 z', fill: after.color })); defs.appendChild(marker); group.appendChild(defs);
+      Object.assign(attrs, { x1: first[0], y1: first[1], x2: last[0], y2: last[1], 'marker-end': 'url(#' + markerId + ')' }); node = svg('line', attrs);
+    }
+    group.appendChild(node);
+    return group;
+  }
+  function studioDrawDown(e) {
+    if (!studioInteractive() || state.tool !== 'draw') return;
+    e.preventDefault(); e.stopPropagation();
+    try {
+      studioFinishGesture();
+      var after = { shape: state.drawShape, color: state.drawColor, points: [[e.clientX, e.clientY]], viewport: { width: window.innerWidth, height: window.innerHeight } };
+      var node = studioDrawNode(after); elDraw.appendChild(node);
+      studioPointerStart({ kind: 'draw', id: studioId('draw'), startX: e.clientX, startY: e.clientY, after: after, node: node, active: false, effects: [], edits: [] }, e);
+    } catch (error) { studioGestureError(error); }
+  }
+  function studioDoubleClick(e) {
+    if (!studioInteractive() || state.tool !== 'select' || isOurs(e.target) || state.debugView) return;
+    var el = studioHit(e);
+    if (studio.text && el === studio.text.el) return;
+    if (!el || !studioCanText(el)) return;
+    e.preventDefault(); e.stopPropagation();
+    try { studioFinishPointer(true); studioChoose(el, false); studioStartText(el, e); }
+    catch (error) { studioGestureError(error); }
+  }
+  function studioTextCaret(el, event) {
+    if (!event) return null;
+    var node, offset, caret;
+    try {
+      if (document.caretPositionFromPoint) { caret = document.caretPositionFromPoint(event.clientX, event.clientY); node = caret && caret.offsetNode; offset = caret && caret.offset; }
+      else if (document.caretRangeFromPoint) { caret = document.caretRangeFromPoint(event.clientX, event.clientY); node = caret && caret.startContainer; offset = caret && caret.startOffset; }
+    } catch (e) { return null; }
+    var nodes = studioOwnNodes(el), index = nodes.indexOf(node);
+    if (index < 0 || typeof offset !== 'number') return null;
+    var raw = nodes.slice(0, index).map(function (text) { return text.nodeValue; }).join('') + node.nodeValue.slice(0, offset);
+    return raw.replace(/\s+/g, ' ').replace(/^\s+/, '').length;
+  }
+  function studioStartText(el, event) {
+    if (!studioCanText(el)) studioError('Select editable own text, not a container’s nested markup.');
+    var caretOffset = studioTextCaret(el, event);
+    studioFinishGesture(); studioFinishText(false);
+    var nodes = studioOwnNodes(el), values = nodes.map(function (n) { return n.nodeValue; });
+    var first = nodes.find(function (n) { return studioNorm(n.nodeValue); }), wrapper = h('span', { contenteditable: 'plaintext-only', 'data-rayfin-studio-text': 'true', style: 'outline:1px dashed ' + TEAL + ';outline-offset:2px' });
+    var edit = { el: el, nodes: nodes, values: values, first: first, wrapper: wrapper, onBlur: null };
+    studio.text = edit;
+    state.editingText = { el: el };
+    studioSilence(function () {
+      el.insertBefore(wrapper, first);
+      wrapper.appendChild(first); first.nodeValue = studioNorm(values.join(''));
+      nodes.forEach(function (n) { if (n !== first && studioNorm(n.nodeValue)) n.nodeValue = ''; });
+    });
+    studioProjectedDocument = true;
+    wrapper.addEventListener('paste', function (e) {
+      e.preventDefault();
+      var text = e.clipboardData && e.clipboardData.getData('text/plain');
+      if (text == null) return;
+      var selection = window.getSelection(), range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+      text = text.slice(0, Math.max(0, 4096 - (wrapper.textContent || '').length));
+      if (range && wrapper.contains(range.commonAncestorContainer)) {
+        range.deleteContents(); var pasted = document.createTextNode(text); range.insertNode(pasted);
+        range.setStartAfter(pasted); range.collapse(true); selection.removeAllRanges(); selection.addRange(range);
+      }
+    });
+    edit.onBlur = function () {
+      if (!studio || studio.text !== edit) return;
+      try { studioFinishText(false); studioPopupSync(); studioPublish(); }
+      catch (error) { studioGestureError(error); }
+    };
+    wrapper.addEventListener('blur', edit.onBlur);
+    window.addEventListener('blur', edit.onBlur);
+    wrapper.focus({ preventScroll: true });
+    var selection = window.getSelection();
+    if (selection) {
+      var range = document.createRange();
+      if (event) { range.setStart(first, clamp(caretOffset == null ? first.nodeValue.length : caretOffset, 0, first.nodeValue.length)); range.collapse(true); }
+      else range.selectNodeContents(wrapper);
+      selection.removeAllRanges(); selection.addRange(range);
+    }
+    studioPopupSync();
+  }
+  function studioFinishText(cancel) {
+    if (!studio || !studio.text) return;
+    var edit = studio.text, value = edit.wrapper.textContent || '', connected = edit.el.isConnected && edit.wrapper.parentNode === edit.el;
+    studio.text = null; state.editingText = null;
+    edit.wrapper.removeEventListener('blur', edit.onBlur);
+    window.removeEventListener('blur', edit.onBlur);
+    studioSilence(function () {
+      if (edit.wrapper.parentNode) edit.wrapper.parentNode.insertBefore(edit.first, edit.wrapper);
+      edit.wrapper.remove();
+      edit.nodes.forEach(function (n, i) { n.nodeValue = edit.values[i]; });
+    });
+    if (!cancel && connected) studioCommit('Edit text', [studioTextEdit(edit.el, value)]);
+    else if (!cancel && !connected) studio.lastError = 'The text changed in the app during editing; the gesture was cancelled.';
+  }
+  function studioBlockMouse(e) {
+    if (!studioInteractive() || isOurs(e.target)) return;
+    if (state.debugView && inDebug(e.target)) return;
+    if (studio.text && studio.text.wrapper.contains(e.target)) { e.stopPropagation(); return; }
+    e.preventDefault(); e.stopPropagation();
+  }
+  function studioCommentEditor(el, x, y) {
+    closeCommentEditor();
+    elCommentEditor = h('div', { class: 'cmt' });
+    var field = h('textarea', { placeholder: 'What should change here?', 'aria-label': 'Element comment' }), actions = h('div', { class: 'r' });
+    var cancel = h('button', { text: 'Cancel' }), save = h('button', { class: 'ok', text: 'Save' });
+    cancel.onclick = function () { closeCommentEditor(); };
+    save.onclick = function () {
+      try {
+        if (!el.isConnected) studioError('The comment target disappeared.');
+        studioChoose(el, false); studioRunCommand({ type: 'comment', value: field.value }); closeCommentEditor();
+      } catch (error) { studioGestureError(error); }
+    };
+    actions.appendChild(cancel); actions.appendChild(save);
+    elCommentEditor.appendChild(field); elCommentEditor.appendChild(actions);
+    elCommentEditor.style.left = clamp(x + 12, 8, window.innerWidth - 232) + 'px';
+    elCommentEditor.style.top = clamp(y + 12, 8, window.innerHeight - 150) + 'px';
+    root.appendChild(elCommentEditor); field.focus();
+  }
+  function studioKey(e) {
+    if (!studioInteractive()) return;
+    try {
+      if (e.key === 'Escape') {
+        if (state.debugView) exitDebugView();
+        else {
+          studioPopupFinish(false);
+          if (studio.pointer || studio.gesture || studio.keyGesture) studioPointerCancel();
+          studioPopupDismiss(true); closeCommentEditor();
+          if (state.tool !== 'select') studioSetTool('select');
+        }
+        e.preventDefault(); e.stopPropagation(); studioPublish(); return;
+      }
+      if (state.debugView) return;
+      if (studio.text) {
+        if ((e.ctrlKey || e.metaKey) && /^(z|y)$/i.test(e.key)) {
+          e.preventDefault(); e.stopPropagation();
+          studioRunCommand({ type: e.shiftKey || /^y$/i.test(e.key) ? 'redo' : 'undo' });
+          studioPublish(); return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); studioFinishText(false); }
+        return;
+      }
+      var active = root && root.activeElement;
+      if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) && active.type !== 'range') return;
+      if ((e.ctrlKey || e.metaKey) && /^(z|y)$/i.test(e.key)) {
+        e.preventDefault(); e.stopPropagation();
+        if (studio.popup && studio.popup.edit) { studioPopupFinish(false); studioPopupSync(); return; }
+        studioFinishKey(false);
+        studioRunCommand({ type: e.shiftKey || /^y$/i.test(e.key) ? 'redo' : 'undo' }); studioPublish(); return;
+      }
+      if (active && active.type === 'range') return;
+      var appInput = document.activeElement;
+      if (appInput && !isOurs(appInput) && (appInput.matches('input,textarea,select,[contenteditable]'))) {
+        if (e.key !== 'Tab') { e.preventDefault(); e.stopPropagation(); }
+        return;
+      }
+      if (state.selected && /^(Delete|Backspace)$/.test(e.key)) {
+        e.preventDefault(); e.stopPropagation(); studioRunCommand({ type: 'remove' }); return;
+      }
+      if (state.selected && /^Arrow(Left|Right|Up|Down)$/.test(e.key)) {
+        if (!studio.freeMove) return;
+        e.preventDefault(); e.stopPropagation();
+        if (!studio.freeMove) {
+          if (!e.repeat) studioRunCommand({ type: 'move', direction: /Left|Up/.test(e.key) ? 'previous' : 'next' });
+        } else {
+          if (!studio.keyGesture) studio.keyGesture = { id: studioId('key'), effects: [], edits: [], dx: 0, dy: 0, bases: studioSelectionElements().map(function (el) { return { el: el, transform: el.style.transform, offset: parseTranslate(el.style.transform) }; }) };
+          var g = studio.keyGesture, amount = e.shiftKey ? 10 : 1;
+          g.dx += e.key === 'ArrowLeft' ? -amount : e.key === 'ArrowRight' ? amount : 0;
+          g.dy += e.key === 'ArrowUp' ? -amount : e.key === 'ArrowDown' ? amount : 0;
+          studioPointerPreview(g, function () { return g.bases.map(function (base) {
+            var transform = stripTranslate(base.transform);
+            return studioStyleEdit(base.el, 'transform', (transform ? transform + ' ' : '') + 'translate(' + (base.offset.x + g.dx) + 'px, ' + (base.offset.y + g.dy) + 'px)', '', false);
+          }); });
+        }
+        return;
+      }
+    } catch (error) { studioFinishKey(true); studioGestureError(error); }
+  }
+  function studioFinishKey(cancel) {
+    if (!studio || !studio.keyGesture) return;
+    var gesture = studio.keyGesture; studio.keyGesture = null;
+    var clean = studioSilence(function () { return studioUndoEffects(gesture.effects); });
+    if (!clean || gesture.bases.some(function (base) { return !base.el.isConnected; })) cancel = true;
+    if (!cancel && gesture.edits.length) studioCommit('Nudge selection', gesture.edits);
+  }
+  function studioKeyUp(e) {
+    if (studio && /^Arrow/.test(e.key)) { try { studioFinishKey(false); } catch (error) { studioGestureError(error); } }
+  }
+
+  // Verification only reads a clean, freshly loaded document. In particular it
+  // does NOT temporarily undo the draft and mistake that projection for source.
+  function studioVerifyEdit(edit, contexts) {
+    if (edit.kind === 'comment' || edit.kind === 'annotation') studioError('Intent and annotations require human review; they are not verifiable source changes.');
+    if (edit.scope && !studioScopeMatches(studioScope(edit.scope))) studioError('Verify this change at a viewport matching ' + edit.scope + '.');
+    var after = edit.after, el;
+    if (edit.kind === 'remove') {
+      var location = edit.before.location, parents = location && studioQuery(location.parent.selector);
+      if (!parents || parents.length !== 1 || !studioKeysMatch(parents[0], location.parentContext.key)) studioError('The original removal container is missing or ambiguous.');
+      var stable = edit.before.context && edit.before.context.key;
+      if (!stable || !(stable.id || stable['data-testid'])) studioError('Removal of an anonymous element cannot be proven from selector absence.');
+      if (studioQuery(edit.target.selector).length) studioError('The removed element is still present.');
+      if (!studioSequenceMatches(parents[0], after.sequence)) studioError('The removal’s exact after-context does not match source.');
+      return;
+    }
+    el = studioResolve(edit.target, contexts.concat(studioContexts(edit)), { fresh: true });
+    if (edit.kind === 'style' || edit.kind === 'theme') {
+      if (!studioStyleSame(el, edit.property, after) && !studioComputedSame(el, edit.property, after)) studioError('Source does not have the expected ' + edit.property + ' value.');
+    } else if (edit.kind === 'text') {
+      if (studioNorm(studioOwn(el)) !== studioNorm(after.value)) studioError('Source does not contain the expected own text.');
+    } else if (edit.kind === 'chart') {
+      if (!studioEqual(studioChartVisual(readSpec(el)), after.value)) studioError('Source chart configuration does not match the draft.');
+    } else if (edit.kind === 'image') {
+      if (edit.property === 'alt') {
+        if (el.getAttribute('alt') !== after.value) studioError('Source image alt text does not match.');
+      } else {
+        var asset = studioImageAsset(after), data = studio.assets[asset.assetId];
+        if (!data || el.getAttribute('src') !== data || el.getAttribute('alt') !== asset.alt || el.hasAttribute('srcset')) {
+          studioError('The deployed image bytes cannot be verified from its URL alone. Review the staged asset and image visually.');
+        }
+      }
+    } else if (edit.kind === 'reorder') {
+      var children = Array.prototype.filter.call(el.children, studioAllowedElement);
+      if (children.length !== after.order.length) studioError('Source layout has a different number of children.');
+      after.order.forEach(function (item, i) {
+        if (studioResolve(item.target, [item.context], { fresh: true }) !== children[i]) studioError('Source sibling order does not match.');
+      });
+    } else if (edit.kind === 'insert') {
+      var parent = after.placement === 'inside' ? el : el.parentElement;
+      if (!parent || !studioSequenceMatches(parent, after.sequence)) studioError('The inserted block’s exact source context does not match.');
+      var inserted = parent.children[after.index];
+      if (!inserted || !studioContextMatches(inserted, after.prototypeContext, true) || !studioUnambiguous(inserted, after.prototypeContext)) studioError('The inserted source block is missing or ambiguous.');
+      var template = document.createElement('template');
+      template.innerHTML = after.html;
+      function check(actual, expected, depth) {
+        if (!actual || !expected || depth > 20 || actual.tagName !== expected.tagName) studioError('The inserted source structure differs.');
+        if (studioNorm(studioOwn(actual)) !== studioNorm(studioOwn(expected))) studioError('The inserted source content differs.');
+        ['alt', 'role', 'aria-label', 'title', 'src'].forEach(function (name) {
+          if (expected.hasAttribute(name) && actual.getAttribute(name) !== expected.getAttribute(name)) studioError('The inserted block’s ' + name + ' does not match source.');
+        });
+        for (var i = 0; i < expected.style.length; i++) {
+          var prop = expected.style[i], value = expected.style.getPropertyValue(prop);
+          if (actual.style.getPropertyValue(prop) !== value && getComputedStyle(actual).getPropertyValue(prop).trim() !== value) studioError('The inserted block’s ' + prop + ' requires review.');
+        }
+        if (actual.children.length !== expected.children.length) studioError('The inserted source hierarchy differs.');
+        Array.prototype.forEach.call(expected.children, function (child, i) { check(actual.children[i], child, depth + 1); });
+      }
+      check(inserted, template.content.firstElementChild, 0);
+    } else studioError('This edit cannot be verified automatically.');
+  }
+  function studioVerify(history, cursor) {
+    var checked = studioValidateHistory(history, cursor).slice(0, cursor), final = new Map(), contexts = new Map();
+    function facet(edit) {
+      return edit.target.id + '|' + (edit.kind === 'theme' ? 'style' : edit.kind) + '|' + (edit.property || '') + '|' + (edit.scope || '');
+    }
+    checked.forEach(function (tx) {
+      tx.edits.forEach(function (edit) {
+        final.set(facet(edit), edit);
+        var list = contexts.get(edit.target.id) || [];
+        if (edit.after.context) list.unshift(edit.after.context);
+        contexts.set(edit.target.id, list);
+      });
+    });
+    return checked.map(function (tx) {
+      try {
+        if (tx.route !== studioRoute()) studioError('This transaction belongs to another route.');
+        if (studioProjectedDocument || studio.gesture || studio.pointer || studio.text || studio.capture || state.debugView) studioError('Reload the real source and connect without draft history before verification. Projected DOM is not proof of source.');
+        tx.edits.forEach(function (edit) {
+          var effective = final.get(facet(edit));
+          studioVerifyEdit(effective, contexts.get(edit.target.id) || []);
+        });
+        return { transactionId: tx.id, ok: true };
+      } catch (e) { return { transactionId: tx.id, ok: false, message: e.message || String(e) }; }
+    });
+  }
+
+  function studioOptions(options) {
+    if (!studioPlain(options) || typeof options.sessionId !== 'string' || !/^[a-zA-Z0-9_.:-]{1,160}$/.test(options.sessionId) ||
+      typeof options.embedded !== 'boolean' || typeof options.appUrl !== 'string' || options.appUrl.length > 2048 ||
+      !Number.isSafeInteger(options.revision) || options.revision < 0) studioError('Invalid Studio connection options.');
+    var url;
+    try { url = new URL(options.appUrl); } catch (e) { studioError('The app URL must be absolute.'); }
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password) studioError('The app URL must have an HTTP(S) origin.');
+    if (options.route != null && (typeof options.route !== 'string' || !options.route.startsWith('/') || options.route.length > 4096)) studioError('Invalid draft route.');
+    var history = studioValidateHistory(options.history, options.cursor), previews = Object.create(null), bytes = 0;
+    if (options.assetPreviews != null) {
+      if (!studioPlain(options.assetPreviews) || Object.keys(options.assetPreviews).length > 100) studioError('Invalid asset previews.');
+      Object.keys(options.assetPreviews).forEach(function (key) {
+        var value = studioValidateAsset(key, options.assetPreviews[key]);
+        bytes += value.length;
+        if (bytes > 32000000) studioError('Too many image preview bytes in this connection.');
+        previews[key] = value;
+      });
+    }
+    return { sessionId: options.sessionId, embedded: options.embedded, appUrl: url.href, origin: url.origin,
+      route: options.route || (url.pathname + url.search + url.hash), history: history, cursor: options.cursor, revision: options.revision, assetPreviews: previews };
+  }
+  function studioConnect(options) {
+    try {
+      var normalized = studioOptions(options);
+      if (normalized.embedded && isTop) return studioConnectRelay(normalized);
+      if (normalized.origin !== window.location.origin) studioError('Refusing to edit this frame: it is not the configured app origin.');
+      if (normalized.embedded) studioError('Only the top frame may create a Studio relay.');
+      if (studio && studio.sessionId === normalized.sessionId) { studioRefresh(); return studioSnapshot(); }
+      if (studio || studioRelay) studioDisconnect((studio || studioRelay).sessionId);
+      if (state.changes.length) studioError('Finish or discard legacy Design changes before connecting Studio.');
+      if (state.enabled) disable();
+      if (!document.documentElement || !document.body) studioError('The app document is not ready yet.');
+      frameRole = 'idle';
+      var documentId = studioDocumentIdentity();
+      studio = {
+        sessionId: normalized.sessionId, documentId: documentId, epoch: studioEpoch,
+        origin: normalized.origin, route: studioRoute(), history: normalized.history, cursor: normalized.cursor, revision: normalized.revision,
+        assets: normalized.assetPreviews, nodeIds: new WeakMap(), bindings: new Map(), identities: new Map(), sources: new Map(), chartCache: new WeakMap(),
+        applied: [], conflicts: [], acknowledged: [], results: new Map(), compare: false, capture: false, freeMove: false,
+        dirty: false, mutating: 0, discoveryDirty: true, discovery: null, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight,
+        gesture: null, closedGestures: new Set(), popup: null, pointer: null, text: null, keyGesture: null, observer: null, refreshTimer: 0, lastError: null, notice: null, verification: null
+      };
+      state.tool = 'select'; state.selection = []; state.selected = null;
+      enable(); studioChrome();
+      if (normalized.route !== studio.route && normalized.history.length) studio.notice = 'Recovered draft is scoped to ' + normalized.route + '; other routes will not be edited.';
+      studioReplay(false); studioObserve(); studioPublish();
+      return studioSnapshot();
+    } catch (e) {
+      if (studio && options && options.sessionId === studio.sessionId) return studioSnapshot(e.message || String(e));
+      return studioEmpty(options && options.sessionId, '', e.message || String(e), null, options && options.route);
+    }
+  }
+  function studioPeek(sessionId) {
+    if (studioRelay) {
+      if (studioRelay.sessionId !== sessionId || studioRelay.connecting || !studioRelay.snapshot) return null;
+      return studioJson(studioRelay.snapshot, STUDIO_LIMIT.journal + 600000);
+    }
+    if (!studio || studio.sessionId !== sessionId) return null;
+    try { studioRefresh(); return studioSnapshot(); }
+    catch (e) { return studioSnapshot('Unable to refresh Studio: ' + (e.message || e)); }
+  }
+  function studioCommand(envelope) {
+    if (!envelope || typeof envelope.commandId !== 'string' || !envelope.commandId || envelope.commandId.length > 200 ||
+      typeof envelope.sessionId !== 'string' || typeof envelope.documentId !== 'string') return studioReject(envelope, 'Invalid command envelope.');
+    if (studioRelay) return studioRelayCommand(envelope);
+    if (!studio) return studioReject(envelope, 'Studio is not connected.');
+    if (envelope.sessionId !== studio.sessionId || envelope.documentId !== studio.documentId || studioRoute() !== studio.route) {
+      return studioReject(envelope, 'Stale session or document. Reconnect before editing.');
+    }
+    if (studio.results.has(envelope.commandId)) return studioSnapshot(studio.results.get(envelope.commandId).error, envelope.commandId);
+    studio.lastError = null;
+    try {
+      if (envelope.type === 'verify') {
+        studio.verification = studioVerify(envelope.history, envelope.cursor);
+        return studioAck(envelope, null);
+      }
+      if (studio.capture && envelope.type !== 'capture') studioError('Capture is in progress; restore the canvas before editing.');
+      if (studio.compare && ['compare', 'capture', 'tool', 'select', 'clear', 'discard'].indexOf(envelope.type) < 0) studioError('Original comparison is read-only. Return to Draft to edit.');
+      studioRefresh();
+      if (studio.pointer && envelope.type !== 'capture') studioFinishPointer(true);
+      studioFinishKey(false);
+      studio.notice = null;
+      studioRunCommand(envelope);
+      return studioAck(envelope, null);
+    } catch (e) { return studioAck(envelope, e.message || String(e)); }
+  }
+  function studioDisconnect(sessionId) {
+    if (studioRelay) {
+      if (studioRelay.sessionId !== sessionId) return;
+      studioRelaySend({ cmd: 'disconnect', sessionId: sessionId, documentId: studioRelay.snapshot && studioRelay.snapshot.documentId });
+      if (studioRelay.timer) clearTimeout(studioRelay.timer);
+      studioRelay = null;
+      return;
+    }
+    if (!studio || studio.sessionId !== sessionId) return;
+    studioPopupFinish(false);
+    studioFinishPointer(true); studioCancelGesture(); studioFinishKey(true); studioFinishText(true);
+    restoreCaptureAffordances(); exitDebugView(); closeCommentEditor(); hideHint();
+    studioUnproject();
+    if (studio.observer) studio.observer.disconnect();
+    if (studio.refreshTimer) clearTimeout(studio.refreshTimer);
+    if (studio.syncTimer) clearInterval(studio.syncTimer);
+    window.removeEventListener('popstate', studioRouteEvent);
+    window.removeEventListener('hashchange', studioRouteEvent);
+    window.removeEventListener('resize', studioRouteEvent);
+    window.removeEventListener('pointercancel', studioPointerCancel, true);
+    window.removeEventListener('keyup', studioKeyUp, true);
+    window.removeEventListener('click', studioClick, true);
+    disable();
+    state.selection = []; state.selected = null; state.tool = 'select';
+    studio = null;
+  }
+
+  // ---- Studio: correlated, origin + source + document gated frame relay ----
+  var studioTopGeneration = -1;
+  function studioSourceWindow(source) {
+    if (!source || source === window || typeof source.postMessage !== 'function') return false;
+    try { return source.top === window; } catch (e) { return false; }
+  }
+  function studioFramePresent(wanted) {
+    var stack = [{ frame: window, depth: 0 }], count = 0;
+    while (stack.length && count++ < 80) {
+      var item = stack.pop();
+      if (item.frame === wanted) return true;
+      if (item.depth >= 8) return null;
+      try {
+        for (var i = 0; i < item.frame.frames.length && i < 40; i++) stack.push({ frame: item.frame.frames[i], depth: item.depth + 1 });
+      } catch (e) { return null; }
+    }
+    return stack.length ? null : false;
+  }
+  function studioRelaySend(message) {
+    if (!studioRelay || !studioRelay.appWindow) return;
+    var packet = Object.assign({ ns: STUDIO_MSG, protocol: 1, bridgeId: studioRelay.bridgeId, generation: studioRelay.generation }, message);
+    try { studioRelay.appWindow.postMessage(packet, studioRelay.origin); }
+    catch (e) {
+      studioRelay.error = 'Unable to reach the app frame: ' + (e.message || e);
+      if (studioRelay.snapshot) studioRelay.snapshot.error = studioRelay.error;
+    }
+  }
+  function studioRelayConnectApp() {
+    var previous = studioRelay.snapshot, options = Object.assign({}, studioRelay.options, { embedded: false });
+    delete options.origin;
+    if (previous) {
+      options.history = previous.history; options.cursor = previous.cursor; options.revision = previous.revision;
+      // Preserve the draft's original route, not the Fabric portal route.
+      options.route = studioRelay.options.route;
+    }
+    studioRelaySend({ cmd: 'connect', sessionId: studioRelay.sessionId, pageId: studioRelay.pageId, options: options,
+      theme: studioRelay.theme || state.theme, models: studioRelay.models || state.models, preferred: studioRelay.preferred || state.aiModel });
+  }
+  function studioRelayAdopt(hello) {
+    if (!studioRelay || hello.origin !== studioRelay.origin || !studioSourceWindow(hello.source) || typeof hello.pageId !== 'string' || hello.pageId.length > 200) return;
+    if (studioRelay.appWindow && hello.source !== studioRelay.appWindow && studioFramePresent(studioRelay.appWindow) !== false) return;
+    if (studioRelay.retired.has(hello.pageId)) return;
+    if (studioRelay.pageId && studioRelay.pageId !== hello.pageId) {
+      studioRelay.retired.add(studioRelay.pageId);
+      studioRelay.bridgeId = studioId('bridge'); studioRelay.generation = ++studioSeq; studioRelay.epoch = -1;
+      studioRelay.connecting = true; studioRelay.pending.clear();
+    }
+    studioRelay.appWindow = hello.source; studioRelay.pageId = hello.pageId;
+    if (studioRelay.timer) { clearTimeout(studioRelay.timer); studioRelay.timer = 0; }
+    studioRelayConnectApp();
+  }
+  function studioRelayPing() {
+    if (!studioRelay || studioRelay.appWindow) return;
+    var packet = { ns: STUDIO_MSG, protocol: 1, cmd: 'discover', sessionId: studioRelay.sessionId, bridgeId: studioRelay.bridgeId, generation: studioRelay.generation };
+    var stack = [{ frame: window, depth: 0 }], count = 0;
+    while (stack.length && count++ < 80) {
+      var item = stack.pop();
+      if (item.depth >= 8) continue;
+      try {
+        for (var i = 0; i < item.frame.frames.length && i < 40; i++) {
+          var child = item.frame.frames[i];
+          child.postMessage(packet, studioRelay.origin);
+          stack.push({ frame: child, depth: item.depth + 1 });
+        }
+      } catch (e) { studioRelay.error = 'Some nested frames could not be discovered; waiting for the app handshake.'; }
+    }
+    studioRelay.attempts++;
+    if (studioRelay.attempts < 12) studioRelay.timer = setTimeout(studioRelayPing, 500);
+    else studioRelay.error = 'The app frame did not connect. Open the deployed app directly or reload the preview.';
+  }
+  function studioConnectRelay(options) {
+    if (studioRelay && studioRelay.sessionId === options.sessionId) return studioRelay.snapshot ? studioJson(studioRelay.snapshot, STUDIO_LIMIT.journal + 600000) : studioPendingSnapshot();
+    if (studio || studioRelay) studioDisconnect((studio || studioRelay).sessionId);
+    if (state.changes.length) studioError('Finish or discard legacy Design changes before connecting Studio.');
+    if (state.enabled) disable();
+    if (relayActive) { relayActive = false; postToApp({ ns: MSG, cmd: 'disable' }); stopPing(); }
+    frameRole = 'idle';
+    studioRelay = { sessionId: options.sessionId, options: options, origin: options.origin, snapshot: null, appWindow: null,
+      pageId: null, bridgeId: studioId('bridge'), generation: ++studioSeq, epoch: -1, retired: new Set(), attempts: 0, timer: 0, pending: new Set(), error: null, connecting: true };
+    var hellos = studioHellos; studioHellos = [];
+    hellos.forEach(studioRelayAdopt);
+    studioRelayPing();
+    return studioRelay.snapshot ? studioJson(studioRelay.snapshot, STUDIO_LIMIT.journal + 600000) : studioPendingSnapshot();
+  }
+  function studioPendingSnapshot() {
+    var pending = studioEmpty(studioRelay.sessionId, '', studioRelay.error, null, studioRelay.options.route);
+    pending.history = studioJson(studioRelay.options.history); pending.cursor = studioRelay.options.cursor; pending.revision = studioRelay.options.revision;
+    pending.notice = 'Waiting for the embedded app frame. The Fabric shell is never edited.';
+    return pending;
+  }
+  function studioRelayCommand(envelope) {
+    if (envelope.sessionId !== studioRelay.sessionId || studioRelay.connecting || !studioRelay.snapshot || envelope.documentId !== studioRelay.snapshot.documentId) return studioReject(envelope, 'Stale or unavailable app document. Wait for the app frame to connect.');
+    if (studioRelay.snapshot.acknowledged.indexOf(envelope.commandId) >= 0) return studioJson(studioRelay.snapshot, STUDIO_LIMIT.journal + 600000);
+    if (studioRelay.pending.has(envelope.commandId)) return studioJson(studioRelay.snapshot, STUDIO_LIMIT.journal + 600000);
+    if (envelope.type === 'image') {
+      try { studioRelay.options.assetPreviews[envelope.assetId] = studioValidateAsset(envelope.assetId, envelope.dataUrl); }
+      catch (e) { return studioReject(envelope, e.message || String(e)); }
+    }
+    delete studioRelay.snapshot.error;
+    studioRelay.error = null;
+    studioRelay.pending.add(envelope.commandId);
+    if (studioRelay.pending.size > 128) { studioRelay.pending.delete(envelope.commandId); return studioReject(envelope, 'Too many unacknowledged commands. Reconnect the app frame.'); }
+    studioRelaySend({ cmd: 'command', sessionId: studioRelay.sessionId, documentId: envelope.documentId, envelope: envelope });
+    return studioJson(studioRelay.snapshot, STUDIO_LIMIT.journal + 600000);
+  }
+  function studioPublish(snapshot) {
+    if (!studio || isTop || !studio.bridgeId || !studioTopOrigin) return;
+    var result = snapshot || studioSnapshot();
+    try {
+      window.top.postMessage({ ns: STUDIO_MSG, protocol: 1, evt: 'snapshot', bridgeId: studio.bridgeId, pageId: studioSeed,
+        epoch: studio.epoch, sessionId: studio.sessionId, snapshot: result }, studioTopOrigin);
+    } catch (e) { studio.lastError = 'Unable to send Studio status: ' + (e.message || e); }
+  }
+  function studioHello(replyOrigin, bridgeId, sessionId) {
+    if (isTop || !window[NS] || window[NS].studio !== studioApi) return;
+    window.top.postMessage({ ns: STUDIO_MSG, protocol: 1, evt: 'hello', pageId: studioSeed, bridgeId: bridgeId || null, sessionId: sessionId || null }, replyOrigin || '*');
+  }
+  function studioValidSnapshot(snapshot) {
+    function strings(record) {
+      return studioPlain(record) && Object.keys(record).length <= 160 && Object.keys(record).every(function (key) { return typeof record[key] === 'string' && record[key].length <= 2048; });
+    }
+    function selected(element) {
+      return studioValidTarget(element) && strings(element.styles) && strings(element.inlineStyles) &&
+        typeof element.textEditable === 'boolean' && typeof element.ownText === 'string' && element.ownText.length <= 4096 &&
+        typeof element.width === 'number' && isFinite(element.width) && typeof element.height === 'number' && isFinite(element.height) &&
+        typeof element.canContain === 'boolean' && typeof element.canReorder === 'boolean' &&
+        Array.isArray(element.children) && element.children.length <= 40 && element.children.every(studioValidTarget) &&
+        (!element.parent || studioValidTarget(element.parent)) &&
+        (!element.image || (typeof element.image.src === 'string' && typeof element.image.alt === 'string')) &&
+        (!element.chart || (studioPlain(element.chart.spec) && Array.isArray(element.chart.types) && element.chart.types.length <= 40 &&
+          element.chart.types.every(function (type) { return typeof type.value === 'string' && typeof type.label === 'string' && typeof type.enabled === 'boolean'; })));
+    }
+    return snapshot && snapshot.protocol === 1 && typeof snapshot.sessionId === 'string' && typeof snapshot.documentId === 'string' &&
+      Number.isSafeInteger(snapshot.revision) && snapshot.revision >= 0 && typeof snapshot.enabled === 'boolean' &&
+      typeof snapshot.route === 'string' && ['select', 'interact', 'comment', 'draw'].indexOf(snapshot.tool) >= 0 && typeof snapshot.compare === 'boolean' &&
+      ['selection', 'layers', 'tokens', 'breakpoints', 'history', 'conflicts', 'acknowledged'].every(function (key) { return Array.isArray(snapshot[key]); }) &&
+      snapshot.selection.length <= STUDIO_LIMIT.selection && snapshot.selection.every(selected) &&
+      snapshot.layers.length <= 200 && snapshot.layers.every(studioValidTarget) &&
+      snapshot.tokens.length <= 120 && snapshot.tokens.every(function (token) {
+        return token && typeof token.name === 'string' && /^--[a-zA-Z0-9_-]{1,100}$/.test(token.name) &&
+          typeof token.value === 'string' && token.value.length <= 512 && ['color', 'length', 'font', 'other'].indexOf(token.kind) >= 0 && studioValidTarget(token.target);
+      }) &&
+      snapshot.breakpoints.length <= 24 && snapshot.breakpoints.every(function (scope) { return typeof scope === 'string' && scope.length <= 240; }) &&
+      snapshot.conflicts.length <= STUDIO_LIMIT.history && snapshot.conflicts.every(function (conflict) { return conflict && typeof conflict.transactionId === 'string' && typeof conflict.message === 'string'; }) &&
+      Number.isInteger(snapshot.cursor) && snapshot.cursor >= 0 && snapshot.cursor <= snapshot.history.length &&
+      snapshot.acknowledged.length <= 129 && snapshot.acknowledged.every(function (id) { return typeof id === 'string' && id.length <= 200; }) &&
+      snapshot.viewport && typeof snapshot.viewport.width === 'number' && isFinite(snapshot.viewport.width) && snapshot.viewport.width >= 0 &&
+      typeof snapshot.viewport.height === 'number' && isFinite(snapshot.viewport.height) && snapshot.viewport.height >= 0 &&
+      (snapshot.error == null || typeof snapshot.error === 'string') && (snapshot.notice == null || typeof snapshot.notice === 'string') &&
+      (snapshot.verification == null || (Array.isArray(snapshot.verification) && snapshot.verification.length <= STUDIO_LIMIT.history &&
+        snapshot.verification.every(function (verdict) { return verdict && typeof verdict.transactionId === 'string' && typeof verdict.ok === 'boolean' && (verdict.message == null || typeof verdict.message === 'string'); })));
+  }
+  function studioMessage(e) {
+    if (!window[NS] || window[NS].studio !== studioApi) return;
+    var d = e && e.data;
+    if (!d || d.ns !== STUDIO_MSG || d.protocol !== 1) return;
+    if (isTop) {
+      if (d.evt === 'hello') {
+        if (!studioSourceWindow(e.source) || typeof d.pageId !== 'string') return;
+        var hello = { source: e.source, origin: e.origin, pageId: d.pageId };
+        if (studioRelay) {
+          if ((d.sessionId && d.sessionId !== studioRelay.sessionId) || (d.bridgeId && d.bridgeId !== studioRelay.bridgeId)) return;
+          studioRelayAdopt(hello);
+        } else if (!studio) { studioHellos.push(hello); if (studioHellos.length > 12) studioHellos.shift(); }
+      } else if (d.evt === 'snapshot' && studioRelay) {
+        if (e.origin !== studioRelay.origin || e.source !== studioRelay.appWindow || d.bridgeId !== studioRelay.bridgeId ||
+          d.pageId !== studioRelay.pageId || d.sessionId !== studioRelay.sessionId || !Number.isInteger(d.epoch) || d.epoch < studioRelay.epoch) return;
+        if (d.snapshot && d.snapshot.sessionId !== studioRelay.sessionId) return;
+        try {
+          if (!studioValidSnapshot(d.snapshot) || d.snapshot.sessionId !== studioRelay.sessionId) studioError('The app frame returned an invalid Studio snapshot.');
+          if (studioRelay.snapshot && (d.snapshot.revision < studioRelay.snapshot.revision ||
+            (d.epoch === studioRelay.epoch && d.snapshot.documentId !== studioRelay.snapshot.documentId))) return;
+          studioValidateHistory(d.snapshot.history, d.snapshot.cursor);
+          if (studioRelay.snapshot && d.snapshot.documentId !== studioRelay.snapshot.documentId) studioRelay.pending.clear();
+          var acknowledgesPending = d.snapshot.acknowledged.some(function (id) { return studioRelay.pending.has(id); });
+          studioRelay.epoch = d.epoch;
+          studioRelay.snapshot = studioJson(d.snapshot, STUDIO_LIMIT.journal + 600000);
+          if (studioRelay.pending.size && !acknowledgesPending) delete studioRelay.snapshot.error;
+          studioRelay.connecting = false;
+          d.snapshot.acknowledged.forEach(function (id) { studioRelay.pending.delete(id); });
+          studioRelay.error = null;
+        } catch (error) {
+          studioRelay.error = error.message || String(error);
+          if (studioRelay.snapshot) studioRelay.snapshot.error = studioRelay.error;
+        }
+      }
+      return;
+    }
+    if (e.source !== window.top || !e.origin || e.origin === 'null' || (studioTopOrigin && e.origin !== studioTopOrigin)) return;
+    if (d.cmd === 'discover') { studioHello(e.origin, d.bridgeId, d.sessionId); return; }
+    if (d.cmd === 'connect') {
+      if (!Number.isInteger(d.generation) || d.generation < studioTopGeneration || d.pageId !== studioSeed ||
+        !d.options || d.options.sessionId !== d.sessionId || typeof d.bridgeId !== 'string') return;
+      studioTopGeneration = d.generation; studioTopOrigin = e.origin;
+      studioHelloTimers.forEach(clearTimeout); studioHelloTimers = [];
+      var connected = studioConnect(d.options);
+      if (studio) {
+        studio.bridgeId = d.bridgeId;
+        if (d.theme) localSetTheme(d.theme);
+        if (d.models) localSetModels(d.models, d.preferred);
+        if (!studio.syncTimer) studio.syncTimer = setInterval(function () {
+          if (!studio) return;
+          try { studioRefresh(); studioPublish(); } catch (e) { studio.lastError = e.message || String(e); studioPublish(); }
+        }, 250);
+        studioPublish(connected);
+      }
+      else window.top.postMessage({ ns: STUDIO_MSG, protocol: 1, evt: 'snapshot', bridgeId: d.bridgeId, pageId: studioSeed,
+        epoch: studioEpoch, sessionId: d.sessionId, snapshot: connected }, e.origin);
+    } else if (studio && d.bridgeId === studio.bridgeId && d.sessionId === studio.sessionId && d.documentId === studio.documentId) {
+      if (d.cmd === 'command' && d.envelope) studioPublish(studioCommand(d.envelope));
+      else if (d.cmd === 'disconnect') studioDisconnect(d.sessionId);
+      else if (d.cmd === 'theme') localSetTheme(d.theme);
+      else if (d.cmd === 'models') localSetModels(d.list, d.preferred);
+    }
+  }
+  // Direct calls return snapshots synchronously. A relay command returns its
+  // cache; the native caller waits for commandId in snapshot.acknowledged.
+  // Missing sessions/documents yield null from peek, not an empty JSON object.
+  var studioApi = { connect: studioConnect, peek: studioPeek, command: studioCommand, disconnect: studioDisconnect };
+
   // ---- public API ----------------------------------------------------------
   // Host calls always land in the TOP frame; each method dispatches by role so a
   // relay bridges to the app iframe while direct/app frames act locally.
   window[NS] = {
     __v: VERSION,
+    studio: studioApi,
     // `mode`: 'direct' (top frame is the app) or 'relay' (top = Fabric shell,
     // drive the app iframe at `appOrigin`). Legacy no-arg call → 'direct'.
     enable: function (mode, appOrigin) { try { hostEnable(mode, appOrigin); } catch (e) {} },
@@ -2877,6 +5810,7 @@
     // optional Graphein spec patch), recorded as revertable change-set entries.
     applyRestyle: function (id, patch) {
       try {
+        if (studio || studioRelay) return; // old asynchronous results never bypass the Studio journal
         if (frameRole === 'relay') postToApp({ ns: MSG, cmd: 'applyRestyle', id: id, patch: patch });
         else applyRestyle(id, patch);
       } catch (e) {}
@@ -2885,6 +5819,7 @@
     // failed → restore the describe state).
     applyGenerated: function (id, html) {
       try {
+        if (studio || studioRelay) return;
         if (frameRole === 'relay') postToApp({ ns: MSG, cmd: 'applyGenerated', id: id, html: html });
         else applyGenerated(id, html);
       } catch (e) {}
@@ -2893,6 +5828,12 @@
     // `[{id,name,fast}]`. Defaults the selection to the first fast model.
     setModels: function (list, preferred) {
       try {
+        if (studioRelay) {
+          localSetModels(list, preferred);
+          studioRelay.models = list; studioRelay.preferred = preferred;
+          studioRelaySend({ cmd: 'models', sessionId: studioRelay.sessionId, documentId: studioRelay.snapshot && studioRelay.snapshot.documentId, list: list, preferred: preferred });
+          return;
+        }
         if (frameRole === 'relay') {
           relayModels = Array.isArray(list) ? list : null;
           relayPreferred = preferred || null;
@@ -2906,13 +5847,22 @@
     // tools match the host app. Re-sent by the renderer after a preview reload.
     setTheme: function (theme) {
       try {
+        if (studioRelay) {
+          localSetTheme(theme);
+          studioRelay.theme = theme;
+          studioRelaySend({ cmd: 'theme', sessionId: studioRelay.sessionId, documentId: studioRelay.snapshot && studioRelay.snapshot.documentId, theme: theme });
+          return;
+        }
         if (frameRole === 'relay') {
           relayTheme = theme || null;
           postToApp({ ns: MSG, cmd: 'setTheme', theme: relayTheme });
         } else {
           localSetTheme(theme);
         }
-      } catch (e) {}
+      } catch (e) {
+        if (studio) { studio.lastError = 'Unable to update Studio theme: ' + (e.message || e); studioPublish(); }
+        else if (studioRelay) { studioRelay.error = 'Unable to update Studio theme: ' + (e.message || e); if (studioRelay.snapshot) studioRelay.snapshot.error = studioRelay.error; }
+      }
     },
     // Pure chart-type conversion helpers (no DOM / no mutation), exposed for unit tests.
     __convert: { chartTypes: CHART_TYPES, groups: TYPE_GROUPS, shapeOf: shapeOf, canConvert: canConvert, convertSpec: convertSpec },
@@ -2929,4 +5879,6 @@
   // (the top frame, once enabled) can find and drive the app iframe.
   try { window.addEventListener('message', onMessage, false); } catch (e) {}
   scheduleHellos();
+  window.addEventListener('message', studioMessage, false);
+  if (!isTop) [0, 250, 750, 1500, 3000, 6000].forEach(function (delay) { studioHelloTimers.push(setTimeout(function () { studioHello(); }, delay)); });
 })();

@@ -8,6 +8,7 @@ pub mod chat;
 pub mod custom_skills;
 pub mod deploy;
 pub mod design;
+pub mod design_studio;
 pub mod diagnostics;
 pub mod doctor;
 pub mod fabric;

@@ -67,10 +67,12 @@ export function useChatEventStore(setChats: Dispatch<SetStateAction<ChatStore>>)
       }
 
       flush()
-      if (event.type === 'mode-changed') writeChatMode(envelope.projectId, event.mode)
       setChats((all) => {
         const messages = all[envelope.projectId]
         if (!messages) return all
+        if (event.type === 'mode-changed' && !messages.some((message) =>
+          message.turnId === envelope.turnId && message.designApplyId
+        )) writeChatMode(envelope.projectId, event.mode)
         let changed = false
         const updated = messages.map((message) => {
           if (message.role !== 'assistant' || message.turnId !== envelope.turnId) return message

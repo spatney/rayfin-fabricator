@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { StudioProject } from '@shared/ipc'
 import { OverlayProvider, SuppressPreview } from '../overlay'
-import PreviewPane, { type DeployUiState, __resetPreviewSurfaceState } from './PreviewPane'
+import PreviewPane, { type DeployUiState, type StudioPreviewOptions, __resetPreviewSurfaceState } from './PreviewPane'
 import { installPreviewEnv, makeProject, type PreviewEnv } from '../../test/harness'
 import { deferred } from '../../test/deferred'
 
@@ -17,12 +17,18 @@ function Harnessed({
   project,
   suppressed,
   deploy,
-  localPreviewUrl
+  localPreviewUrl,
+  studio,
+  designStudioEnabled,
+  onOpenDesignStudio
 }: {
   project: StudioProject
   suppressed: boolean
   deploy?: DeployUiState
   localPreviewUrl?: string | null
+  studio?: StudioPreviewOptions
+  designStudioEnabled?: boolean
+  onOpenDesignStudio?: () => void
 }): JSX.Element {
   return (
     <OverlayProvider>
@@ -31,6 +37,9 @@ function Harnessed({
         project={project}
         deploy={deploy}
         localPreviewUrl={localPreviewUrl}
+        studio={studio}
+        designStudioEnabled={designStudioEnabled}
+        onOpenDesignStudio={onOpenDesignStudio}
         focused={false}
         onToggleFocus={() => {}}
       />
@@ -515,6 +524,101 @@ function fabricProject(id = 'p1'): StudioProject {
 }
 
 describe('PreviewPane design mode', () => {
+  it.each(['fabric', 'local'] as const)('reconnects to a retained %s document when native re-show replays navigation', async (source) => {
+    const project = fabricProject()
+    const localPreviewUrl = 'http://localhost:5173'
+    const url = source === 'fabric' ? project.lastDeploy!.portalUrl! : localPreviewUrl
+    const actualUrl = source === 'fabric' ? `${url}?experience=power-bi` : `${url}/dashboard`
+    const ready = vi.fn()
+    const pane = (
+      <Harnessed project={project} suppressed={false} localPreviewUrl={localPreviewUrl}
+        studio={{ source, onReady: ready }} />
+    )
+    const { unmount } = render(pane)
+    await settle(e)
+    await act(async () => e.emitNav({ url: actualUrl, loading: false }))
+    await settle(e)
+    unmount()
+    await settle(e)
+    ready.mockClear()
+    e.api.navigate.mockClear()
+    e.api.showUrl.mockImplementation(async () => {
+      e.emitNav({ url: actualUrl, loading: false })
+    })
+
+    render(pane)
+    await settle(e)
+    expect(e.api.navigate).not.toHaveBeenCalled()
+    expect(ready).toHaveBeenLastCalledWith({
+      url, appUrl: source === 'fabric' ? project.lastDeploy?.url : localPreviewUrl,
+      embedded: source === 'fabric'
+    })
+  })
+
+  it('does not connect Studio when native re-show reports a retained sign-in redirect', async () => {
+    const ready = vi.fn()
+    e.api.showUrl.mockImplementation(async () => {
+      e.emitNav({ url: 'https://login.microsoftonline.com/signin', loading: false })
+    })
+    render(<Harnessed project={fabricProject()} suppressed={false}
+      studio={{ source: 'fabric', onReady: ready }} />)
+    await settle(e)
+    expect(ready.mock.calls.every(([value]) => value === null)).toBe(true)
+  })
+
+  it('waits for the local origin instead of connecting Studio to the old deployed document', async () => {
+    const ready = vi.fn()
+    render(<Harnessed project={makeProject('p1')} suppressed={false}
+      localPreviewUrl="http://localhost:5173"
+      studio={{ source: 'local', onReady: ready }} />)
+    await settle(e)
+    expect(ready.mock.calls.every(([value]) => value === null)).toBe(true)
+    await act(async () => e.emitNav({ url: 'http://localhost:5173/auth', loading: false }))
+    await settle(e)
+    expect(ready).toHaveBeenLastCalledWith({
+      url: 'http://localhost:5173', appUrl: 'http://localhost:5173', embedded: false
+    })
+  })
+
+  it('opens the opt-in workspace without enabling the legacy overlay', async () => {
+    const open = vi.fn()
+    render(<Harnessed project={makeProject('p1')} suppressed={false} designStudioEnabled onOpenDesignStudio={open} />)
+    await settle(e)
+    fireEvent.click(screen.getByRole('button', { name: 'Design' }))
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(e.calls.some((call) => call.method === 'design.setEnabled')).toBe(false)
+  })
+
+  it('makes the new workspace available before the first deployment', async () => {
+    render(<Harnessed project={makeProject('p1', { lastDeploy: undefined })} suppressed={false} designStudioEnabled onOpenDesignStudio={vi.fn()} />)
+    expect((screen.getByRole('button', { name: 'Design' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('uses an explicit Studio source instead of swapping to a chat-owned local server', async () => {
+    const ready = vi.fn()
+    const project = makeProject('p1')
+    render(<Harnessed project={project} suppressed={false} localPreviewUrl="http://localhost:5173" studio={{ source: 'direct', onReady: ready, viewportWidth: 390 }} />)
+    await settle(e)
+    expect(e.calls.find((call) => call.method === 'showUrl')?.args[0]).toBe(project.lastDeploy?.url)
+    expect(ready).toHaveBeenLastCalledWith({ url: project.lastDeploy?.url, appUrl: project.lastDeploy?.url, embedded: false })
+    expect(screen.queryByRole('button', { name: 'Design' })).toBeNull()
+    const host = document.querySelector('.preview-webview-host') as HTMLElement
+    expect(host.style.width).toBe('390px')
+    expect(host.style.maxWidth).toBe('100%')
+  })
+
+  it('does not announce a usable design surface until native creation has completed', async () => {
+    const gate = deferred<void>()
+    e.api.showUrl.mockImplementationOnce(() => gate.promise)
+    const ready = vi.fn()
+    render(<Harnessed project={makeProject('p1')} suppressed={false} studio={{ source: 'direct', onReady: ready }} />)
+    await settle(e)
+    expect(ready.mock.calls.every(([value]) => value === null)).toBe(true)
+    await act(async () => gate.resolve())
+    await settle(e)
+    expect(ready.mock.calls.at(-1)?.[0]).toMatchObject({ embedded: false })
+  })
+
   // Regression: design mode used to be hard-disabled in the Fabric portal view
   // (the app runs in a cross-origin iframe the top-frame editor couldn't reach).
   // It must now be enabled and drive the app iframe through the top-frame relay.

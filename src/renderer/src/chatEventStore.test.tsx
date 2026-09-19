@@ -30,12 +30,13 @@ function Harness(): JSX.Element {
   return <output data-testid="chat-state">{JSON.stringify(chats.p1[0])}</output>
 }
 
-function AgentHarness(): JSX.Element {
+function AgentHarness({ designApplyId }: { designApplyId?: string }): JSX.Element {
   const [chats, setChats] = useState<ChatStore>({
     p1: [
       {
         id: 'assistant-1',
         turnId: 'turn-1',
+        designApplyId,
         role: 'assistant',
         text: '',
         tools: [],
@@ -67,6 +68,16 @@ afterEach(() => {
 })
 
 describe('workbench chat event store', () => {
+  it('does not overwrite the chat mode preference when Design temporarily uses Agent mode', async () => {
+    localStorage.setItem('rayfin.chatMode.p1', 'plan')
+    render(<AgentHarness designApplyId="apply-1" />)
+    await act(async () => emit({
+      projectId: 'p1', turnId: 'turn-1',
+      event: { type: 'mode-changed', mode: 'agent' }
+    }))
+    expect(localStorage.getItem('rayfin.chatMode.p1')).toBe('plan')
+  })
+
   it('does not show a Plan card when an ordinary Agent turn writes todos', async () => {
     render(<AgentHarness />)
     await act(async () => {

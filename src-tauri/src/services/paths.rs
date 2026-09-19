@@ -19,7 +19,23 @@ fn data_base() -> PathBuf {
 /// The per-user data directory (Electron `userData` equivalent). Prefers an
 /// existing candidate so prior Electron state is reused; otherwise the canonical
 /// product-name folder.
+///
+/// Debug builds may isolate a test instance with `FABRICATOR_DEV_DATA_DIR`.
+/// It must be a nonempty absolute path; invalid values terminate with exit code
+/// 2 rather than touching normal user data. Release builds ignore the variable.
+/// This overrides app-owned files only, not Tauri's webview profile identifier.
 pub fn data_dir() -> PathBuf {
+  #[cfg(debug_assertions)]
+  if let Some(value) = std::env::var_os("FABRICATOR_DEV_DATA_DIR") {
+    return match validated_dev_data_dir(&value) {
+      Ok(path) => path,
+      Err(error) => {
+        // Do not log through crashlog: its own path calls data_dir().
+        eprintln!("{error}");
+        std::process::exit(2);
+      }
+    };
+  }
   let base = data_base();
   for name in DATA_DIR_CANDIDATES {
     let p = base.join(name);
@@ -28,6 +44,17 @@ pub fn data_dir() -> PathBuf {
     }
   }
   base.join(DATA_DIR_CANDIDATES[0])
+}
+
+#[cfg(any(debug_assertions, test))]
+fn validated_dev_data_dir(value: &std::ffi::OsStr) -> Result<PathBuf, &'static str> {
+  let path = PathBuf::from(value);
+  if value.is_empty() || !path.is_absolute() {
+    return Err(
+      "FABRICATOR_DEV_DATA_DIR must be a nonempty absolute path; refusing to fall back to the normal application-data directory.",
+    );
+  }
+  Ok(path)
 }
 
 /// Ensure the data directory exists and return it.
@@ -156,4 +183,47 @@ pub fn bundled_npm_cache_dir(app: &tauri::AppHandle) -> PathBuf {
     .unwrap_or(crate_dir)
     .join("resources")
     .join("npm-cache")
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::ffi::OsStr;
+
+  #[test]
+  fn design_debug_data_dir_requires_an_absolute_nonempty_path() {
+    for invalid in ["", " ", ".", "..", "relative-data"] {
+      assert!(validated_dev_data_dir(OsStr::new(invalid)).is_err(), "{invalid:?}");
+    }
+    #[cfg(windows)]
+    for invalid in [r"C:relative-data", r"\rooted-without-a-drive"] {
+      assert!(validated_dev_data_dir(OsStr::new(invalid)).is_err(), "{invalid:?}");
+    }
+    let absolute = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("isolated-debug-data");
+    assert_eq!(validated_dev_data_dir(absolute.as_os_str()).unwrap(), absolute);
+  }
+
+  #[cfg(debug_assertions)]
+  #[test]
+  fn design_invalid_debug_data_dir_fails_explicitly_without_fallback() {
+    const CHILD: &str = "FABRICATOR_TEST_INVALID_DATA_DIR";
+    if std::env::var_os(CHILD).is_some() {
+      let _ = data_dir();
+      panic!("invalid override unexpectedly reached a data directory");
+    }
+    let result = std::process::Command::new(std::env::current_exe().unwrap())
+      .args([
+        "--exact",
+        "services::paths::tests::design_invalid_debug_data_dir_fails_explicitly_without_fallback",
+        "--nocapture",
+      ])
+      .env(CHILD, "1")
+      .env("FABRICATOR_DEV_DATA_DIR", "relative-data")
+      .output()
+      .unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    let error = String::from_utf8_lossy(&result.stderr);
+    assert!(error.contains("FABRICATOR_DEV_DATA_DIR"));
+    assert!(error.contains("refusing to fall back"));
+  }
 }

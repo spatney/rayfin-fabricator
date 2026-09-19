@@ -38,6 +38,7 @@ fn default_settings() -> AppSettings {
       compatibility_rendering: Some(false),
       chat_mode_selector: Some(false),
       local_dev_preview: Some(false),
+      design_studio: Some(false),
     }),
     full_diagnostics: Some(false),
   }
@@ -136,24 +137,24 @@ pub fn set_settings(
       c.settings.full_diagnostics = Some(v);
     }
     if let Some(patch) = experiments {
-      let current = c.settings.experiments.get_or_insert(ExperimentFlags {
-        compatibility_rendering: Some(false),
-        chat_mode_selector: Some(false),
-        local_dev_preview: Some(false),
-      });
-      if let Some(v) = patch.compatibility_rendering {
-        current.compatibility_rendering = Some(v);
-      }
-      if let Some(v) = patch.chat_mode_selector {
-        current.chat_mode_selector = Some(v);
-      }
-      if let Some(v) = patch.local_dev_preview {
-        current.local_dev_preview = Some(v);
-      }
+      merge_experiments(&mut c.settings.experiments, patch);
     }
     persist(c);
     c.settings.clone()
   })
+}
+
+fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: ExperimentFlags) {
+  let current = experiments.get_or_insert(ExperimentFlags {
+    compatibility_rendering: Some(false),
+    chat_mode_selector: Some(false),
+    local_dev_preview: Some(false),
+    design_studio: Some(false),
+  });
+  if let Some(v) = patch.compatibility_rendering { current.compatibility_rendering = Some(v); }
+  if let Some(v) = patch.chat_mode_selector { current.chat_mode_selector = Some(v); }
+  if let Some(v) = patch.local_dev_preview { current.local_dev_preview = Some(v); }
+  if let Some(v) = patch.design_studio { current.design_studio = Some(v); }
 }
 
 pub fn set_workspace_root(path: String) -> ProjectsState {
@@ -230,4 +231,26 @@ pub fn active_project() -> Option<StudioProject> {
     let id = c.state.active_project_id.clone()?;
     c.state.projects.iter().find(|p| p.id == id).cloned()
   })
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn design_experiment_deep_merge_preserves_existing_flags() {
+    let mut flags: Option<ExperimentFlags> = Some(serde_json::from_value(serde_json::json!({
+      "compatibilityRendering":true,"chatModeSelector":true,"localDevPreview":true
+    })).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"designStudio":true})).unwrap());
+    let merged = flags.as_ref().unwrap();
+    assert_eq!(merged.design_studio, Some(true));
+    assert_eq!(merged.compatibility_rendering, Some(true));
+    assert_eq!(merged.chat_mode_selector, Some(true));
+    assert_eq!(merged.local_dev_preview, Some(true));
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"localDevPreview":false})).unwrap());
+    let json = serde_json::to_value(flags.unwrap()).unwrap();
+    assert_eq!(json["designStudio"], true);
+    assert_eq!(json["localDevPreview"], false);
+  }
 }

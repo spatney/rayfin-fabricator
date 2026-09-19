@@ -143,6 +143,8 @@ interface Props {
   modeSelectorEnabled?: boolean
   /** The host owns the global chat-event subscription (keeps turns live while this panel is unmounted). */
   eventsManagedExternally?: boolean
+  /** A Design Apply owns source editing; keep the composer draft, but don't steer it. */
+  externalBusy?: boolean
   /** Open a file referenced by an @-mention chip (path without the leading @). */
   onOpenMention?: (ref: string) => void
   /** The current composer draft. Persisted by the parent (keyed by project) so a
@@ -1450,7 +1452,7 @@ const MessageRow = memo(function MessageRow({
         {m.error && !m.plan && (
           <div className="alert alert--error msg-error">
             <span className="msg-error-text">{m.error}</span>
-            {canRetry && (
+            {canRetry && !m.designApplyId && (
               <button
                 className="btn btn--xs btn--ghost msg-error-retry"
                 onClick={() => onRetry(m.id)}
@@ -1466,7 +1468,7 @@ const MessageRow = memo(function MessageRow({
             <span className="msg-interrupted-text">
               This response was interrupted when the app closed.
             </span>
-            {canResume && (
+            {canResume && !m.designApplyId && (
               <button
                 className="btn btn--xs btn--ghost msg-interrupted-resume"
                 onClick={() => onResume(m.id)}
@@ -1476,6 +1478,9 @@ const MessageRow = memo(function MessageRow({
               </button>
             )}
           </div>
+        )}
+        {m.designApplyId && !m.pending && (m.error || m.interrupted) && (
+          <div className="msg-notice">Open Design Studio to review or recover this Apply. Its source changes will not be replayed from chat.</div>
         )}
       </div>
     </div>
@@ -1505,6 +1510,7 @@ export default function ChatPanel({
   onRequestDeploy,
   modeSelectorEnabled = false,
   eventsManagedExternally = false,
+  externalBusy = false,
   onOpenMention,
   draft,
   onDraftChange,
@@ -2058,7 +2064,7 @@ export default function ChatPanel({
   const submitBlocked = deploying && blockSubmitWhileDeploying
 
   async function send(): Promise<void> {
-    if (deployLock) return
+    if (deployLock || externalBusy) return
     const text = input.trim()
     const shots = attachments ?? []
     // Mid-turn: interrupt the running reply with this message (conversation
@@ -2188,6 +2194,7 @@ export default function ChatPanel({
     modeOverride?: ChatMode,
     initialPlan?: ChatPlanArtifact
   ): Promise<void> {
+    if (externalBusy) return
     const turnId = uid()
     const assistantId = uid()
     const sendMode = modeOverride ?? activeMode
@@ -2242,6 +2249,7 @@ export default function ChatPanel({
     if (sending) return
     const idx = messages.findIndex((m) => m.id === assistantId)
     if (idx <= 0) return
+    if (messages[idx].designApplyId) return
     const user = messages[idx - 1]
     if (!user || user.role !== 'user' || user.text === '(screenshot)') return
     await dispatch(user.text, user.text, [])
@@ -2257,6 +2265,7 @@ export default function ChatPanel({
     if (sending) return
     const idx = messages.findIndex((m) => m.id === assistantId)
     if (idx <= 0) return
+    if (messages[idx].designApplyId) return
     const user = messages[idx - 1]
     if (!user || user.role !== 'user' || user.text === '(screenshot)') return
     const turnId = uid()
@@ -2635,7 +2644,7 @@ export default function ChatPanel({
   // replay every time this panel remounts (e.g. after switching tabs).
   const handledOutbound = useRef<string | null>(null)
   useEffect(() => {
-    if (!outbound || outbound.id === handledOutbound.current) return
+    if (!outbound || outbound.id === handledOutbound.current || externalBusy) return
     handledOutbound.current = outbound.id
     if (sending || outbound.stage) {
       setInput(outbound.prompt)
@@ -2644,7 +2653,7 @@ export default function ChatPanel({
       void dispatch(outbound.display, outbound.prompt, [])
     }
     onOutboundConsumed?.()
-  }, [outbound?.id])
+  }, [outbound?.id, externalBusy])
 
   // Precompute the conversation rows so a keystroke in the composer (which only
   // touches local `input` state) doesn't re-run `messages.map` and re-create N
@@ -3142,7 +3151,7 @@ export default function ChatPanel({
                   <button
                     className="composer-send composer-send--interject"
                     onClick={send}
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || externalBusy}
                     title="Interject — send this now without waiting"
                     aria-label="Interject this message"
                   >
@@ -3167,6 +3176,7 @@ export default function ChatPanel({
                     onClick={send}
                     disabled={
                       deployLock ||
+                      externalBusy ||
                       submitBlocked ||
                       (!input.trim() && (attachments?.length ?? 0) === 0)
                     }

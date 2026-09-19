@@ -100,6 +100,24 @@ On Windows, startup and **Re-check** refresh CLI discovery from the saved user/m
 
 The native preview follows the renderer's display scale and browser/pinch zoom, including moves between monitors. Creation, positioning, and visibility commands stay ordered so a slow-starting preview cannot leave an old surface over the chat or other tabs.
 
+### Design Studio (preview)
+
+Enable **Settings → Experiments → Design Studio**, then choose **Design** in the preview toolbar. Your app fills the canvas—there is no permanent inspector or tool rail. Click text to type in place, or select a button or card for a small contextual palette. Text offers Color, Size, and Weight; buttons offer Color, Shape, and Look; containers offer Color, Space, and Look. Ordinary edits do not require a prompt or a model request.
+
+Form controls have styling tools tailored to the control: fill or accent color, text or control size, and rounded corners. Design does not edit their values or options. Lists, flex stacks, and grids offer Color, Space, and Layout for spacing between items, direction, alignment, wrapping, list markers, or column counts as appropriate, without replacing their items.
+
+The popover follows the interface theme and text size. Swatches show the selected color, Look tiles preview the treatment, and sliders show their live value. On tighter canvases, longer layout palettes scroll while their action row stays visible. Motion respects the system's reduced-motion preference.
+
+Edits are **local design drafts**, not saved source changes. Preview a color or look before committing it, and use Undo or keyboard Redo to experiment safely. Acknowledged drafts are stored on this device for recovery after reloads and app restarts. Hold **Before** to compare, or choose **Use app** to interact normally. **Changes** opens an on-demand review area; missing targets and source changes are explained there rather than silently guessed.
+
+**Apply changes** sends the recorded changes to Copilot, then automatically deploys the updated project while keeping Design open. It preserves your chat draft and attachments. Deployment publishes the current project, including other pending source changes; it is not an isolated deployment of only the selected visual edits. A failed deployment can be retried without rerunning completed source edits. Interrupted or partially applied source work is recovered through Changes, not Chat's generic Retry or Resume actions.
+
+Use Desktop or Phone for a quick size change. Preview settings also offers a tablet size and local, directly deployed, or Fabric-embedded sources. Local preview requires the project's installed Vite and any backend/environment/sign-in prerequisites that the app itself needs. Design can keep that server open independently of chat turns; another app using Rayfin's fixed local port must be resolved before starting it.
+
+Design Studio remains opt-in. The on-canvas editing and source-to-Fabric publishing flow has been exercised on Windows; macOS native acceptance is still required before a broader rollout. The original Design experience remains available with the experiment off. Native controller changes require restarting the rebuilt desktop app, not only refreshing the renderer.
+
+### Validation and maintenance
+
 **Validate.** The Advisor runs AI security and policy checks, saves the results, and tells you when they've gone stale. The Model tab flags loose access on any entity and hands a one-click *harden* prompt to the agent.
 
 **Stay current.** Fabricator tracks each project's pinned Rayfin version and can hand an upgrade straight to the agent, keeping the app building as it goes.

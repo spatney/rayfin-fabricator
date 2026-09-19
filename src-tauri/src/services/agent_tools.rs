@@ -23,8 +23,9 @@ use tauri::AppHandle;
 use crate::services::semantic_model;
 
 /// Build the Fabricator in-process tool set for one project's chat session.
-pub fn fabricator_tools(_app: AppHandle, _project_id: String) -> Vec<Tool> {
+pub fn fabricator_tools(app: AppHandle, project_id: String) -> Vec<Tool> {
   vec![
+    crate::services::design_apply::report_tool(app, project_id),
     Tool::new("fabricator_locate_semantic_model")
       .with_description(
         "Find the Power BI / Fabric semantic model (dataset) behind a report, app, or dataset \

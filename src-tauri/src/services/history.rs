@@ -69,3 +69,31 @@ pub fn save_history(project_id: &str, messages: Vec<ChatMessage>) {
 pub fn clear_history(project_id: &str) {
   let _ = std::fs::remove_file(history_file(project_id));
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn design_apply_markers_survive_chat_history_sanitizing_and_serde() {
+    let rows: Vec<ChatMessage> = serde_json::from_value(serde_json::json!([
+      {"id":"apply-user","role":"user","text":"Apply the visual draft","designApplyId":"apply-1"},
+      {"id":"apply-1","role":"assistant","text":"","designApplyId":"apply-1","interrupted":true},
+      {"id":"old-merge","role":"assistant","kind":"merge","text":"Legacy merge"}
+    ])).unwrap();
+    let saved = serde_json::to_string(&sanitize(rows)).unwrap();
+    let reloaded = sanitize(serde_json::from_str(&saved).unwrap());
+    assert_eq!(reloaded.len(), 2);
+    assert!(reloaded.iter().all(|row| row.design_apply_id.as_deref() == Some("apply-1")));
+    assert_eq!(reloaded[1].interrupted, Some(true));
+    assert!(saved.contains("\"designApplyId\":\"apply-1\""));
+    assert!(!saved.contains("design_apply_id"));
+  }
+
+  #[test]
+  fn design_marker_is_optional_in_legacy_chat_history() {
+    let row: ChatMessage = serde_json::from_str(r#"{"id":"ordinary","role":"user","text":"Hello"}"#).unwrap();
+    assert!(row.design_apply_id.is_none());
+    assert!(!serde_json::to_string(&row).unwrap().contains("designApplyId"));
+  }
+}

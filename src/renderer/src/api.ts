@@ -223,7 +223,8 @@ export const api: RayfinStudioApi = {
   },
 
   deploy: {
-    run: (projectId: string, workspace?: string) => invoke('deploy_run', { projectId, workspace }),
+    run: (projectId: string, workspace?: string, applyId?: string) =>
+      invoke('deploy_run', { projectId, workspace, applyId }),
     list: (projectId: string) => invoke('deploy_list', { projectId }),
     switch: (projectId: string, workspace: string, byId?: boolean) =>
       invoke('deploy_switch', { projectId, workspace, byId }),
@@ -235,9 +236,28 @@ export const api: RayfinStudioApi = {
   },
 
   dev: {
-    start: (projectId: string) => invoke('dev_start', { projectId }),
-    stop: (projectId: string) => invoke('dev_stop', { projectId }),
+    start: (projectId: string, owner?: 'chat' | 'design') => invoke('dev_start', { projectId, owner }),
+    stop: (projectId: string, owner?: 'chat' | 'design') => invoke('dev_stop', { projectId, owner }),
     supported: (projectId: string) => invoke('dev_supported_cmd', { projectId })
+  },
+
+  designStudio: {
+    connect: (options) => invoke('preview_studio_connect', { options }),
+    poll: (sessionId) => invoke('preview_studio_poll', { sessionId }),
+    command: (command) => invoke('preview_studio_command', { command }),
+    disconnect: (sessionId) => invoke('preview_studio_disconnect', { sessionId }),
+    load: (projectId) => invoke('design_draft_load', { projectId }),
+    save: (draft) => invoke('design_draft_save', { draft }),
+    clear: (projectId) => invoke('design_draft_clear', { projectId }),
+    sourceRevision: (projectId) => invoke('design_source_revision', { projectId }),
+    assets: (projectId) => invoke('design_assets', { projectId }),
+    importAsset: (projectId) => invoke('design_import_asset', { projectId }),
+    assetPreview: (projectId, assetId) => invoke('design_asset_preview', { projectId, assetId }),
+    apply: (projectId, applyId, revision, screenshotPath) =>
+      invoke('design_apply', { projectId, applyId, revision, screenshotPath }),
+    receipt: (projectId) => invoke('design_apply_receipt', { projectId }),
+    finish: (projectId, applyId, verified) =>
+      invoke('design_apply_finish', { projectId, applyId, verified })
   },
 
   settings: {

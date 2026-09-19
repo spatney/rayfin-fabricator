@@ -46,9 +46,14 @@ import { authErrorMessage } from '../authErrors'
 import { reportIssue as runReportIssue } from './reportIssue'
 import { InfoIcon, GearIcon, SignOutIcon, CompareIcon } from '../components/icons'
 import { FabricatorMark } from '../components/FabricatorMark'
+import { useDesignStudio } from '../design/useDesignStudio'
+import { applyDesign, retryDesignDeployment, type DesignApplyServices } from '../design/apply'
+import { DeploymentQueue } from '../design/deploymentQueue'
+import { designError } from '../design/protocol'
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
+const DesignCanvas = lazy(() => import('../design/DesignCanvas'))
 
 /** Up-to-two-letter initials for the signed-in user's avatar, derived from their
  * email (e.g. "first.last@…" → "FL", "sapatney@…" → "SA"). */
@@ -64,6 +69,7 @@ function avatarInitials(email: string | null | undefined): string {
 function toUi(m: ChatMessage): UIChatMessage {
   return {
     ...m,
+    turnId: m.designApplyId,
     plan: planFromStorage(m.plan),
     // A standalone question left pending at persist time can't be answered on a
     // reloaded transcript (its turn/session is gone) — show it as interrupted.
@@ -82,6 +88,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
   return messages.map(
     ({
       id,
+      designApplyId,
       role,
       text,
       tools,
@@ -98,6 +105,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       const cutOff = (role === 'assistant' && pending) || interrupted
       return {
         id,
+        designApplyId,
         role,
         text,
         // A turn cut off mid-command leaves a tool 'running'; settle it so the
@@ -184,6 +192,7 @@ export default function Workbench({
   )
   /** Project content view: the build loop (chat + preview) or the code browser. */
   const [viewMode, setViewMode] = useState<'build' | 'code' | 'model' | 'advisor'>('build')
+  const [designProjectId, setDesignProjectId] = useState<string | null>(null)
   /** A pending request to open a specific file in the Code tab (Model → file). */
   const [codeOpen, setCodeOpen] = useState<{ path: string; nonce: number } | null>(null)
   /** Build-view focus: expand a single pane to fill the area (null = split). */
@@ -259,17 +268,22 @@ export default function Workbench({
   /** The currently active project (or null). Declared early — effects depend on it. */
   const active = projects?.projects.find((p) => p.id === projects.activeProjectId) ?? null
 
-  /** Projects with a deploy queued behind the running one (coalesced). */
-  const pendingDeployRef = useRef<Set<string>>(new Set())
+  const designOpen = Boolean(settings?.experiments?.designStudio && active?.id === designProjectId)
+  const onDesignError = useCallback((reason: unknown): void => {
+    toast.error(designError(reason), { title: 'Design Studio' })
+  }, [toast])
+  const { session: designSession, view: designView } = useDesignStudio(active, designOpen, onDesignError)
+  const designOwnerRef = useRef<string | null>(null)
+  designOwnerRef.current = designOpen ? active?.id ?? null : null
+
+  const deployQueueRef = useRef(new DeploymentQueue())
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      pendingDeployRef.current.clear()
+      deployQueueRef.current.cancelPending('The workbench closed before this deployment started.')
     }
   }, [])
-  /** Stable handle to runDeploy for use inside its own completion path. */
-  const runDeployRef = useRef<((projectId: string) => void) | null>(null)
   /** Project ids with a deployment reconcile in flight (dedupes overlapping calls). */
   const reconcilingRef = useRef<Set<string>>(new Set())
   /** Project ids currently being reconciled — drives a brief "checking" affordance. */
@@ -367,24 +381,22 @@ export default function Workbench({
     })()
   }, [active?.id])
 
-  const runDeploy = useCallback(
-    async (projectId: string, workspace?: string): Promise<void> => {
-      if (deployingIdRef.current) {
-        // A deploy is already streaming — queue this one to run right after.
-        pendingDeployRef.current.add(projectId)
-        return
-      }
+  const executeDeploy = useCallback(
+    async (projectId: string, workspace?: string, applyId?: string): Promise<DeployResult> => {
       deployingIdRef.current = projectId
       setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
+      let result: DeployResult = { ok: false, outcome: 'error' }
+      const request = (): Promise<DeployResult> => applyId
+        ? window.api.deploy.run(projectId, workspace, applyId)
+        : window.api.deploy.run(projectId, workspace)
       try {
-        let result: DeployResult = { ok: false, outcome: 'error' }
         try {
-          result = await window.api.deploy.run(projectId, workspace)
-          if (!mountedRef.current) return
+          result = await request()
+          if (!mountedRef.current) return result
           // Retry once, only after sign-in and its app-level verification succeed.
           if (!result.ok && result.outcome === 'not-signed-in') {
             const login = await window.api.auth.loginRayfin()
-            if (!mountedRef.current) return
+            if (!mountedRef.current) return result
             if (!login.ok) {
               result = {
                 ...result,
@@ -395,13 +407,13 @@ export default function Workbench({
               }
             } else {
               await onAuthChanged()
-              if (!mountedRef.current) return
-              result = await window.api.deploy.run(projectId, workspace)
-              if (!mountedRef.current) return
+              if (!mountedRef.current) return result
+              result = await request()
+              if (!mountedRef.current) return result
             }
           }
         } catch (reason) {
-          if (!mountedRef.current) return
+          if (!mountedRef.current) return result
           result = {
             ok: false,
             outcome: result.outcome,
@@ -410,7 +422,7 @@ export default function Workbench({
         }
         if (!result.ok && result.outcome === 'not-signed-in') {
           // Don't open more sign-in flows for deploys queued behind a failed login.
-          pendingDeployRef.current.clear()
+          deployQueueRef.current.cancelPending('Sign in to Fabric before retrying this deployment.')
         }
         setDeploys((all) => {
           const cur = all[projectId] ?? { running: false, log: [] }
@@ -433,21 +445,20 @@ export default function Workbench({
         }
         // Failures can reveal an expired session; never leave the titlebar stale.
         await refreshAuthWithFeedback()
+        return result
       } finally {
         deployingIdRef.current = null
         setGitRefresh((n) => n + 1)
         if (mountedRef.current) void refreshRayfinVer(projectId)
-        // Run the next coalesced deploy, if one was requested mid-flight.
-        if (mountedRef.current && pendingDeployRef.current.size > 0) {
-          const next = pendingDeployRef.current.values().next().value as string
-          pendingDeployRef.current.delete(next)
-          runDeployRef.current?.(next)
-        }
       }
     },
     [refreshProjects, refreshRayfinVer, toast, onAuthChanged, refreshAuthWithFeedback]
   )
-  runDeployRef.current = (projectId: string) => void runDeploy(projectId)
+  const runDeploy = useCallback(
+    (projectId: string, workspace?: string, applyId?: string): Promise<DeployResult> =>
+      deployQueueRef.current.enqueue({ projectId, workspace, applyId }, executeDeploy),
+    [executeDeploy]
+  )
 
   /**
    * User-initiated deploy funnel: warn first when the remote has changes the user
@@ -495,7 +506,10 @@ export default function Workbench({
     (projectId: string): void => {
       if (!settings?.experiments?.localDevPreview) return
       if (deployingIdRef.current === projectId) return // a deploy owns the surface
-      if (devServersRef.current[projectId]) return // already starting / running
+      if (devServersRef.current[projectId]) {
+        void window.api.dev.start(projectId, 'chat').catch(onDesignError)
+        return
+      }
       setDevServers((all) => ({ ...all, [projectId]: { status: 'starting' } }))
       void (async () => {
         let res: DevServerResult
@@ -526,7 +540,7 @@ export default function Workbench({
         })
       })()
     },
-    [settings, toast]
+    [settings, toast, onDesignError]
   )
 
   // After a chat turn, persist the transcript and auto-deploy when the agent left
@@ -536,12 +550,14 @@ export default function Workbench({
       // Stop the live local preview (if any) first, so the surface returns to the
       // deployed app and the after-turn deploy can take the stage (DeployStage).
       if (devServersRef.current[projectId]) {
-        setDevServers((all) => {
-          const next = { ...all }
-          delete next[projectId]
-          return next
-        })
-        void window.api.dev.stop(projectId)
+        if (designOwnerRef.current !== projectId) {
+          setDevServers((all) => {
+            const next = { ...all }
+            delete next[projectId]
+            return next
+          })
+        }
+        void window.api.dev.stop(projectId, 'chat').catch(onDesignError)
       }
       await refreshProjects()
       setGitRefresh((n) => n + 1)
@@ -552,8 +568,108 @@ export default function Workbench({
       const changed = await window.api.deploy.hasChanges(projectId)
       if (changed) void runDeploy(projectId)
     },
-    [refreshProjects, refreshRayfinVer, runDeploy]
+    [refreshProjects, refreshRayfinVer, runDeploy, onDesignError]
   )
+
+  const ensureDesignLocal = useCallback(async (projectId: string): Promise<void> => {
+    if (deployingIdRef.current === projectId) throw new Error('Wait for deployment to finish before starting local preview.')
+    if (!devServersRef.current[projectId]) {
+      setDevServers((all) => ({ ...all, [projectId]: { status: 'starting' } }))
+    }
+    try {
+      const result = await window.api.dev.start(projectId, 'design')
+      if (!result.ok || !result.url) {
+        throw new Error(result.error ?? 'Local Design needs the project dependencies and a locally installed Vite.')
+      }
+      if (designOwnerRef.current !== projectId) {
+        await window.api.dev.stop(projectId, 'design')
+        return
+      }
+      setDevServers((all) => ({ ...all, [projectId]: { status: 'running', url: result.url } }))
+    } catch (reason) {
+      setDevServers((all) => {
+        if (all[projectId]?.status !== 'starting') return all
+        const next = { ...all }
+        delete next[projectId]
+        return next
+      })
+      throw reason
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!designOpen || !active) return
+    const projectId = active.id
+    return () => {
+      void window.api.dev.stop(projectId, 'design').catch(onDesignError)
+      if (!mountedRef.current) return
+      const chatOwnsPreview = settings?.experiments?.localDevPreview &&
+        chatsRef.current[projectId]?.some((message) => message.pending && !message.designApplyId)
+      if (!chatOwnsPreview) {
+        setDevServers((all) => {
+          const next = { ...all }
+          delete next[projectId]
+          return next
+        })
+      }
+    }
+  }, [designOpen, active?.id, onDesignError, settings?.experiments?.localDevPreview])
+
+  const designApplyServices: DesignApplyServices = {
+    api: window.api.designStudio,
+    capture: () => window.api.preview.capture(),
+    saveScreenshot: (dataUrl) => window.api.screenshot.save(dataUrl),
+    cleanupScreenshot: (paths) => window.api.screenshot.cleanup(paths),
+    deploy: runDeploy,
+    refresh: async () => {
+      await refreshProjects()
+      setGitRefresh((value) => value + 1)
+    },
+    onTurnStart: (projectId, turnId, count) => {
+      setMessagesFor(projectId, (previous) => [...previous, {
+        id: crypto.randomUUID(), role: 'user', text: `Apply ${count} visual ${count === 1 ? 'change' : 'changes'} to my app`,
+        tools: [], pending: false, designApplyId: turnId
+      }, {
+        id: crypto.randomUUID(), role: 'assistant', text: '', turnId, designApplyId: turnId,
+        tools: [], segments: [], pending: true, startedAt: Date.now()
+      }])
+    },
+    onTurnComplete: (projectId, turnId, receipt, error) => {
+      const failure = error ?? receipt?.error
+      setMessagesFor(projectId, (previous) => previous.map((message) => message.turnId === turnId
+        ? {
+            ...message, pending: false, error: failure,
+            tools: message.tools.map((tool) => tool.state === 'running'
+              ? { ...tool, state: failure ? 'error' : 'success' }
+              : tool)
+          }
+        : message))
+    }
+  }
+
+  const answerDesignQuestion = async (projectId: string, requestId: string, answer: string, wasFreeform: boolean): Promise<void> => {
+    try {
+      await window.api.chat.resolveQuestion(requestId, answer, wasFreeform)
+      setMessagesFor(projectId, (previous) => previous.map((message) => ({
+        ...message,
+        questionError: undefined,
+        questions: message.questions?.map((question) => question.id === requestId
+          ? { ...question, state: 'answered', answer, wasFreeform }
+          : question),
+        plan: message.plan ? {
+          ...message.plan,
+          questions: message.plan.questions.map((question) => question.id === requestId
+            ? { ...question, state: 'answered', answer, wasFreeform }
+            : question)
+        } : undefined
+      })))
+    } catch (reason) {
+      setMessagesFor(projectId, (previous) => previous.map((message) => message.pending
+        ? { ...message, questionError: designError(reason) }
+        : message))
+      throw reason
+    }
+  }
 
   // Hydrate persisted chat history for the active project.
   useEffect(() => {
@@ -971,8 +1087,12 @@ export default function Workbench({
               } catch {
                 /* naming is best-effort; deploy anyway */
               }
-              await requestUserDeploy(projectId, workspaceId)
-            })()
+              if (designOpen && designSession?.projectId === projectId && designSession.getSnapshot().receipt?.phase === 'source-updated') {
+                await retryDesignDeployment(designSession, designApplyServices, workspaceId)
+              } else {
+                await requestUserDeploy(projectId, workspaceId)
+              }
+            })().catch(onDesignError)
           }}
           onContinueWithoutDeploy={() => setCreateMode(null)}
         />
@@ -983,7 +1103,7 @@ export default function Workbench({
             {active ? (
               <ProjectDependencyGuard project={active} onSwitchProjects={goHome} hidden={showHome}>
                 <div className={`project-pane${showHome ? ' project-pane--hidden' : ''}`}>
-                  <div className="project-header">
+                  <div className={`project-header${designOpen && viewMode === 'build' ? ' project-header--design' : ''}`}>
                     <div className="project-id">
                       <button
                         className="switch-projects-btn"
@@ -1081,6 +1201,33 @@ export default function Workbench({
                       onSignedIn={onAuthChanged}
                     />
                   ) : viewMode === 'build' ? (
+                    designOpen && designSession ? (
+                      <Suspense fallback={<div className="code-empty">Opening Design Studio...</div>}>
+                      <DesignCanvas
+                        key={active.id}
+                        project={active}
+                        session={designSession}
+                        view={designView}
+                        deploy={deploys[active.id]}
+                        localPreviewUrl={devServers[active.id]?.status === 'running' ? devServers[active.id]?.url : null}
+                        localStarting={devServers[active.id]?.status === 'starting'}
+                        copilotAuth={auth.copilot}
+                        messages={chats[active.id] ?? []}
+                        onExit={async () => {
+                          await designSession.suspend()
+                          setDesignProjectId(null)
+                        }}
+                        onApply={() => applyDesign(designSession, designApplyServices)}
+                        onRetryDeployment={() => retryDesignDeployment(designSession, designApplyServices)}
+                        onStartLocal={() => ensureDesignLocal(active.id)}
+                        onCancelApply={() => window.api.chat.cancel(active.id)}
+                        onAuthChanged={onAuthChanged}
+                        onOpenCode={() => setViewMode('code')}
+                        onChooseWorkspace={() => setCreateMode('deploy')}
+                        onAnswerQuestion={(requestId, answer, freeform) => answerDesignQuestion(active.id, requestId, answer, freeform)}
+                      />
+                      </Suspense>
+                    ) : (
                     <div
                       className={`panes${focusPane ? ` panes--focus-${focusPane}` : ''}${
                         resizing ? ' panes--resizing' : ''
@@ -1123,6 +1270,7 @@ export default function Workbench({
                           onRequestDeploy={() => setCreateMode('deploy')}
                           modeSelectorEnabled={Boolean(settings?.experiments?.chatModeSelector)}
                           eventsManagedExternally
+                          externalBusy={designView.busy}
                           onOpenMention={openMention}
                           draft={drafts[active.id] ?? ''}
                           onDraftChange={(value) => setDraftFor(active.id, value)}
@@ -1155,6 +1303,8 @@ export default function Workbench({
                             setFocusPane((f) => (f === 'preview' ? null : 'preview'))
                           }
                           onPreviewModeChanged={() => void refreshProjects()}
+                          designStudioEnabled={Boolean(settings?.experiments?.designStudio)}
+                          onOpenDesignStudio={() => setDesignProjectId(active.id)}
                           onDesignHandoff={(instruction, shot) => {
                             if (shot) addShot(active.id, shot)
                             // Make the composer visible (design mode may have focused
@@ -1192,6 +1342,7 @@ export default function Workbench({
                         />
                       )}
                     </div>
+                    )
                   ) : null}
                   {advisorMounted && (
                     <div

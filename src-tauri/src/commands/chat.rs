@@ -23,7 +23,7 @@ use github_copilot_sdk::{Attachment, DeliveryMode, MessageOptions};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::Value;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
@@ -536,12 +536,19 @@ pub async fn chat_send(
   attachments: Option<Vec<String>>,
   mode: Option<String>,
 ) -> Result<ChatTurnResult, String> {
-  run_turn(app, state.inner(), project_id, turn_id, text, attachments, mode).await
+  let _ = state;
+  // The task owns the lease until the real turn ends, even if the invoking
+  // renderer navigates away and stops awaiting its IPC promise.
+  tokio::spawn(async move {
+    let state = app.state::<AppState>();
+    run_turn(app.clone(), state.inner(), project_id, turn_id, text, attachments, mode, None).await
+  }).await.map_err(|e| format!("Chat task failed: {e}"))?
 }
 
 /// The turn engine behind `chat_send`. Drives one Copilot invocation and streams
-/// its events to `(project_id, turn_id)`. Always resolves to `Ok` — failures
-/// surface inside the [`ChatTurnResult`].
+/// its events to `(project_id, turn_id)`. Chat failures surface inside the
+/// [`ChatTurnResult`]; internal Apply authorization/mode failures reject outright.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_turn(
   app: AppHandle,
   state: &AppState,
@@ -550,8 +557,25 @@ pub(crate) async fn run_turn(
   text: String,
   attachments: Option<Vec<String>>,
   mode: Option<String>,
+  apply_id: Option<String>,
 ) -> Result<ChatTurnResult, String> {
   let attachments = attachments.unwrap_or_default();
+  let _mutation = if let Some(id) = &apply_id {
+    if id != &turn_id || !state.mutations.is_apply(&project_id, id, crate::services::project_mutation::ApplyStage::Editing) {
+      screenshot::cleanup(&attachments);
+      return Err("Design Apply does not own this source turn.".into());
+    }
+    None
+  } else {
+    match state.mutations.chat(&project_id) {
+      Ok(guard) => Some(guard),
+      Err(error) => {
+        screenshot::cleanup(&attachments);
+        emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: error.clone() });
+        return Ok(ChatTurnResult { ok: false, error: Some(error), files_modified: vec![], ran_deploy: false });
+      }
+    }
+  };
 
   let Some(project) = store::find_project(&project_id) else {
     emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: "Project not found.".into() });
@@ -576,7 +600,7 @@ pub(crate) async fn run_turn(
   };
 
   // Guard against two concurrent turns on the same project.
-  let Some(token) = state.try_begin_chat(&project_id) else {
+  let Some(token) = (if apply_id.is_some() { state.chat_token(&project_id) } else { state.try_begin_chat(&project_id) }) else {
     emit_chat_event(
       &app,
       &project_id,
@@ -628,7 +652,7 @@ pub(crate) async fn run_turn(
     Err(e) => {
       emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: e.clone() });
       screenshot::cleanup(&attachments);
-      state.end_chat(&project_id);
+      if apply_id.is_none() { state.end_chat(&project_id); }
       let empty = TurnCtx::new(full);
       record_turn_diagnostics(
         &app_version,
@@ -659,9 +683,14 @@ pub(crate) async fn run_turn(
 
   // Apply the requested mode (Agent / Plan / Autopilot) to the session before
   // sending. Mode is sticky on the session, so this also handles switching modes
-  // between turns. A failure here is non-fatal — fall back to the prior mode.
+  // between turns. Ordinary chat may fall back to the prior mode on failure;
+  // Design Apply must positively enter Agent mode before any source request.
   let session_mode = session_mode(&mode);
   if let Err(e) = session.rpc().mode().set(ModeSetRequest { mode: session_mode.clone() }).await {
+    if apply_id.is_some() {
+      screenshot::cleanup(&attachments);
+      return Err(format!("Design Apply could not enter explicit Agent mode: {e}"));
+    }
     log::warn!("failed to set session mode {session_mode:?}: {e}");
   }
 
@@ -720,6 +749,10 @@ pub(crate) async fn run_turn(
             });
           }
           if let Err(e) = session.rpc().mode().set(ModeSetRequest { mode: session_mode.clone() }).await {
+            if apply_id.is_some() {
+              send_error = Some(format!("Design Apply could not enter Agent mode after reconnecting: {e}"));
+              break;
+            }
             log::warn!("failed to set recovered session mode {session_mode:?}: {e}");
           }
         }
@@ -771,7 +804,7 @@ pub(crate) async fn run_turn(
             emit_plan_todos(&session, &app, &project_id, &turn_id).await;
             todos_dirty = false;
           }
-          let _ = session.abort().await;
+          abort_turn_and_wait(state, &project_id, &session).await;
           return DrainEnd::Cancelled;
         }
         tokio::select! {
@@ -780,7 +813,7 @@ pub(crate) async fn run_turn(
               emit_plan_todos(&session, &app, &project_id, &turn_id).await;
               todos_dirty = false;
             }
-            let _ = session.abort().await;
+            abort_turn_and_wait(state, &project_id, &session).await;
             return DrainEnd::Cancelled;
           }
           recv = sub.recv() => match recv {
@@ -831,7 +864,7 @@ pub(crate) async fn run_turn(
       Ok(DrainEnd::Finished) => {}
       Ok(DrainEnd::Closed) => ctx.stream_closed = true,
       Err(_) => {
-        let _ = session.abort().await;
+        abort_turn_and_wait(state, &project_id, &session).await;
         timed_out = true;
       }
     }
@@ -870,10 +903,13 @@ pub(crate) async fn run_turn(
   }
 
   screenshot::cleanup(&attachments);
-  if ctx.stream_closed {
-    state.copilot.forget(&project_id).await;
+  if ctx.saw_activity && !ctx.saw_result && !cancelled && !timed_out && !ctx.stream_closed {
+    abort_turn_and_wait(state, &project_id, &session).await;
   }
-  state.end_chat(&project_id);
+  if ctx.stream_closed {
+    state.copilot.invalidate_transport(&project_id, &session).await;
+  }
+  if apply_id.is_none() { state.end_chat(&project_id); }
   // Drop this turn's plan route and unblock any handler still awaiting a decision
   // (covers Stop / timeout while an approval card or a structured question is open).
   state.plan.clear_route(&session_key);
@@ -959,6 +995,25 @@ pub fn chat_cancel(state: State<'_, AppState>, project_id: String) {
   state.cancel_chat(&project_id);
 }
 
+/// Abort is a request, not proof that source-writing tools have stopped. Wait
+/// for idle before releasing ownership; a wedged owned runtime is torn down.
+async fn abort_turn_and_wait(state: &AppState, project_id: &str, session: &Arc<Session>) {
+  let mut events = session.subscribe();
+  let stopped = tokio::time::timeout(Duration::from_secs(30), async {
+    session.abort().await.map_err(|_| ())?;
+    loop {
+      match events.recv().await {
+        Ok(event) if event.event_type == "session.idle" => return Ok::<(), ()>(()),
+        Ok(_) => {}
+        Err(_) => return Err(()),
+      }
+    }
+  }).await;
+  if !matches!(stopped, Ok(Ok(()))) {
+    state.copilot.invalidate_transport(project_id, session).await;
+  }
+}
+
 /// Interject a message into the turn already running for `project` —
 /// conversation steering. Returns `{ steered: true }` when a turn was in flight:
 /// the message either interrupts the current step immediately (Immediate
@@ -975,6 +1030,10 @@ pub async fn chat_steer(
   attachments: Option<Vec<String>>,
 ) -> Result<SteerResult, String> {
   let attachments = attachments.unwrap_or_default();
+
+  if state.mutations.apply_id(&project_id).is_some() {
+    return Err("Design Apply owns this turn. Answer its question card or cancel Apply; normal chat steering is disabled.".into());
+  }
 
   // Nothing running → let the caller start a normal turn.
   if !state.is_chat_running(&project_id) {
@@ -1069,6 +1128,9 @@ pub async fn chat_steer(
 
 #[tauri::command]
 pub async fn chat_reset(state: State<'_, AppState>, project_id: String) -> Result<(), String> {
+  if state.mutations.apply_id(&project_id).is_some() {
+    return Err("Finish or cancel Design Apply before resetting chat.".into());
+  }
   // Stop any in-flight turn first (mirrors chat.ts resetSession → cancelMessage).
   state.cancel_chat(&project_id);
   // Drop the cached SDK session so the next turn starts a brand-new conversation.

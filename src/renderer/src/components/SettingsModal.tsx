@@ -301,9 +301,15 @@ export default function SettingsModal({
                   />
                   <ToggleRow
                     label="Live local preview"
-                    hint="While an agent turn runs, start the app's Vite dev server and show it in the preview so edits appear live. Stopped at turn end; needs a project with a dev script."
+                    hint="While an agent turn runs, show edits live from the project's installed Vite. Design Studio can keep its own local preview open."
                     checked={Boolean(settings.experiments?.localDevPreview)}
                     onChange={(v) => onChange({ experiments: { localDevPreview: v } })}
+                  />
+                  <ToggleRow
+                    label="Design Studio"
+                    hint="A canvas-first workspace for visual edits, saved drafts, and one-click Apply. Apply updates source with Copilot and redeploys your app."
+                    checked={Boolean(settings.experiments?.designStudio)}
+                    onChange={(v) => onChange({ experiments: { designStudio: v } })}
                   />
                 </div>
               )}
