@@ -20,7 +20,9 @@ function Harnessed({
   localPreviewUrl,
   studio,
   designStudioEnabled,
-  onOpenDesignStudio
+  onOpenDesignStudio,
+  onRefreshAuth,
+  authBusy
 }: {
   project: StudioProject
   suppressed: boolean
@@ -29,6 +31,8 @@ function Harnessed({
   studio?: StudioPreviewOptions
   designStudioEnabled?: boolean
   onOpenDesignStudio?: () => void
+  onRefreshAuth?: () => void
+  authBusy?: boolean
 }): JSX.Element {
   return (
     <OverlayProvider>
@@ -36,6 +40,8 @@ function Harnessed({
       <PreviewPane
         project={project}
         deploy={deploy}
+        onRefreshAuth={onRefreshAuth}
+        authBusy={authBusy}
         localPreviewUrl={localPreviewUrl}
         studio={studio}
         designStudioEnabled={designStudioEnabled}
@@ -79,6 +85,50 @@ afterEach(() => {
 })
 
 describe('PreviewPane visibility', () => {
+  it('keeps failed redeploy diagnostics and recovery accessible beside a live preview', async () => {
+    const project = makeProject('p1')
+    const onRefreshAuth = vi.fn()
+    const log = 'Build succeeded\nError: Could not acquire the token-cache lock\n'
+    const deploy: DeployUiState = {
+      running: false,
+      log: [log],
+      result: { ok: false, outcome: 'auth-cache-error', error: 'Refresh is needed' }
+    }
+    render(<Harnessed project={project} suppressed={false} deploy={deploy} onRefreshAuth={onRefreshAuth} />)
+    await settle(e)
+    expect(screen.getByRole('alert').textContent).toBe('Refresh is needed')
+    expect(screen.getByText('View deploy logs')).toBeTruthy()
+    fireEvent.click(screen.getByText('View deploy logs'))
+    expect(screen.getByText(/Build succeeded/).textContent).toBe(log)
+    expect(e.api.showUrl).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Fabric authentication' }))
+    expect(onRefreshAuth).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a first-deploy IPC error even before project state has refreshed', async () => {
+    const project = { ...makeProject('p1'), lastDeploy: undefined }
+    render(
+      <Harnessed
+        project={project}
+        suppressed={false}
+        deploy={{ running: false, log: [], result: { ok: false, outcome: 'error', error: 'Deploy process disconnected' } }}
+      />
+    )
+    expect(screen.getByRole('alert').textContent).toBe('Deploy process disconnected')
+  })
+
+  it('offers recovery for a persisted failure but disables it during another auth operation', async () => {
+    const project = makeProject('p1')
+    project.lastDeploy = { ...project.lastDeploy, status: 'error', outcome: 'auth-cache-error', error: 'Token cache is locked' }
+    const onRefreshAuth = vi.fn()
+    render(<Harnessed project={project} suppressed={false} onRefreshAuth={onRefreshAuth} authBusy />)
+    await settle(e)
+    const refresh = screen.getByRole('button', { name: 'Refresh Fabric authentication' }) as HTMLButtonElement
+    expect(refresh.disabled).toBe(true)
+    fireEvent.click(refresh)
+    expect(onRefreshAuth).not.toHaveBeenCalled()
+  })
+
   it('does not leave a ghost preview when creation finishes after unmount', async () => {
     const created = deferred<void>()
     let nativeCreated = false

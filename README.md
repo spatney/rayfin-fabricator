@@ -86,6 +86,10 @@ Use **Sign out** on the GitHub Copilot or Azure CLI account card in setup to rem
 
 Fabric and Azure checks also verify usable credentials, and the GitHub repository picker verifies the active GitHub identity through its API. Sign-in failures are shown in the app rather than silently continuing; expired credentials and permission failures are handled separately. Signing in does not automatically replay sharing or deletion operations.
 
+If deployment repeatedly fails even though Fabric sign-in appears successful, open **View deploy logs** in the preview's error banner; the logs remain available even when an older deployment is still live. Use **Refresh Fabric authentication** in that banner or the titlebar to confirm a credential reset. Fabricator runs the selected project's `rayfin logout`, then `rayfin login`, and verifies the new credential against Fabric. Rayfin owns stale-lock cleanup; Fabricator never deletes token-cache files itself. The reset affects the shared Rayfin CLI session, not Copilot, Azure CLI, or the preview browser, and keeps your project, conversation, and drafts open. Failed logout or sign-in stops recovery and shows the reason; after a successful refresh, use **Redeploy** to retry explicitly. Build, network, and permission failures do not automatically clear credentials.
+
+Bundled templates and capability packs require Rayfin **1.35.1 or newer**, including its stale token-cache lock recovery. Existing projects keep their pinned dependencies: use the **Rayfin** version control in the status bar and **Update with Copilot** to upgrade their CLI and SDK together.
+
 The app preview's browser sign-in is separate from Fabricator's Fabric CLI session. If silent token acquisition needs interaction, the semantic-model dialog offers **Sign in & retry** rather than repeatedly retrying without credentials.
 
 On Windows, startup and **Re-check** refresh CLI discovery from the saved user/machine PATH and common Scoop/pnpm locations. If a CLI is found but its version check fails, setup shows the failure and offers **Re-check** instead of installing another copy. **GitHub CLI (gh)** is optional repository tooling; it is separate from the bundled Copilot engine, so a pnpm Copilot installation does not satisfy the `gh` check.
@@ -95,6 +99,8 @@ On Windows, startup and **Re-check** refresh CLI discovery from the saved user/m
 **Author.** Chat with a built-in GitHub Copilot agent — pick the model and reasoning effort, steer it mid-turn, and keep separate threads (plus optional parallel side threads) with full history. Every turn runs in **Agent** mode; enable the experimental mode selector (Settings → Experiments) to also choose **Plan** or **Autopilot**. Inspect and edit any generated file in a built-in Monaco editor, see your data model as an entity diagram, browse the agent's reusable Skills, and lean on a git timeline you can diff and restore.
 
 **Ship.** One-click `rayfin up` deploys to Microsoft Fabric. A deployments panel handles create, switch, and redeploy across workspaces — and share a deployed app with people in your Entra tenant by email (each recipient gets Contributor on its workspace, and any semantic model the app uses in another workspace is automatically shared with Build access).
+
+After a successful chat turn, Fabricator automatically redeploys changes since the last deployed revision, including edits the agent has already committed. Unchanged content does not trigger another deploy. If the deployed revision is unknown (for example, after switching to another deployment), the next successful turn deploys once to establish a baseline. Failed or cancelled turns do not auto-deploy; if checking for changes fails, Fabricator shows an error with guidance to use **Redeploy**.
 
 **Preview.** A native inline preview loads your running app — navigation, reload, browser devtools (inspector), focus mode, a Fabric portal shell toggle, and annotate-a-screenshot-straight-into-chat.
 

@@ -401,6 +401,7 @@ export interface SemanticSchemaResult {
 export type ProcStreamId =
   | 'login:copilot'
   | 'login:rayfin'
+  | 'refresh:rayfin'
   | 'login:az'
   | 'logout:copilot'
   | 'logout:rayfin'
@@ -515,6 +516,7 @@ export type DeployOutcome =
   | 'error'
   | 'cancelled'
   | 'not-signed-in'
+  | 'auth-cache-error'
   | 'not-found'
   | 'needs-workspace'
 
@@ -1510,6 +1512,7 @@ export const IpcChannels = {
   authStatus: 'auth:status',
   authLoginCopilot: 'auth:loginCopilot',
   authLoginRayfin: 'auth:loginRayfin',
+  authRefreshRayfin: 'auth:refreshRayfin',
   authLoginAz: 'auth:loginAz',
   authLogoutCopilot: 'auth:logoutCopilot',
   authLogoutRayfin: 'auth:logoutRayfin',
@@ -1657,7 +1660,9 @@ export interface RayfinStudioApi {
   auth: {
     status: () => Promise<AuthStatus>
     loginCopilot: (host?: string) => Promise<ProcResult>
-    loginRayfin: (tenant?: string) => Promise<ProcResult>
+    loginRayfin: (tenant?: string, projectId?: string) => Promise<ProcResult>
+    /** Explicitly reset the shared CLI credentials, sign in, and verify Fabric access. */
+    refreshRayfin: (projectId: string, tenant?: string) => Promise<ProcResult>
     loginAz: () => Promise<ProcResult>
     logoutCopilot: () => Promise<ProcResult>
     logoutRayfin: () => Promise<ProcResult>
@@ -1990,7 +1995,10 @@ export interface RayfinStudioApi {
     run: (projectId: string, workspace?: string, applyId?: string) => Promise<DeployResult>
     /** Read the persisted deployment status (`rayfin up status --json`). */
     status: (projectId: string) => Promise<DeployStatus>
-    /** True when the project has uncommitted changes not yet deployed. */
+    /**
+     * True for uncommitted edits or content changes since the last deployed commit.
+     * An unknown deployment baseline also needs a deploy; Git failures reject.
+     */
     hasChanges: (projectId: string) => Promise<boolean>
     /** List the Fabric deployments recorded for this project (`rayfin up list`). */
     list: (projectId: string) => Promise<FabricDeployment[]>

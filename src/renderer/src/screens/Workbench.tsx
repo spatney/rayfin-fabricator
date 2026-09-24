@@ -44,7 +44,7 @@ import ModelTab from '../components/ModelTab'
 import { useToast } from '../toast'
 import { authErrorMessage } from '../authErrors'
 import { reportIssue as runReportIssue } from './reportIssue'
-import { InfoIcon, GearIcon, SignOutIcon, CompareIcon } from '../components/icons'
+import { InfoIcon, GearIcon, SignOutIcon, CompareIcon, ReloadIcon } from '../components/icons'
 import { FabricatorMark } from '../components/FabricatorMark'
 import { useDesignStudio } from '../design/useDesignStudio'
 import { applyDesign, retryDesignDeployment, type DesignApplyServices } from '../design/apply'
@@ -150,6 +150,15 @@ export default function Workbench({
   const [versions, setVersions] = useState<AppVersions | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
+  const [refreshingAuth, setRefreshingAuth] = useState(false)
+  const [authRefreshTarget, setAuthRefreshTarget] = useState<{
+    projectId: string
+    name: string
+    tenant?: string
+  } | null>(null)
+  const [authRefreshLog, setAuthRefreshLog] = useState<string[]>([])
+  const [authRefreshError, setAuthRefreshError] = useState<string | null>(null)
+  const authRefreshProjectRef = useRef<string | null>(null)
   const authActionRef = useRef(false)
   const mountedRef = useRef(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -336,14 +345,16 @@ export default function Workbench({
     if (activeIdRef.current === projectId) setRayfinVer(info)
   }, [])
 
-  // Route streamed `rayfin up` output to the deploying project's log buffer.
+  // Keep sign-in/reset diagnostics alongside the failed deploy, including late log events.
   useEffect(() => {
     const off = window.api.onProcLog((event) => {
-      if (event.channel !== 'deploy:run') return
-      const id = deployingIdRef.current
+      const refreshing = event.channel === 'refresh:rayfin'
+      if (refreshing) setAuthRefreshLog((log) => [...log, event.data])
+      if (!refreshing && event.channel !== 'deploy:run' && event.channel !== 'login:rayfin') return
+      const id = refreshing ? authRefreshProjectRef.current : deployingIdRef.current
       if (!id) return
       setDeploys((all) => {
-        const cur = all[id] ?? { running: true, log: [] }
+        const cur = all[id] ?? { running: !refreshing, log: [] }
         return { ...all, [id]: { ...cur, log: [...cur.log, event.data] } }
       })
     })
@@ -383,6 +394,11 @@ export default function Workbench({
 
   const executeDeploy = useCallback(
     async (projectId: string, workspace?: string, applyId?: string): Promise<DeployResult> => {
+      if (authActionRef.current) {
+        const error = 'Wait for Fabric authentication to finish, then use Redeploy.'
+        toast.error(error, { title: 'Deployment paused' })
+        return { ok: false, outcome: 'error', error }
+      }
       deployingIdRef.current = projectId
       setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
       let result: DeployResult = { ok: false, outcome: 'error' }
@@ -395,7 +411,7 @@ export default function Workbench({
           if (!mountedRef.current) return result
           // Retry once, only after sign-in and its app-level verification succeed.
           if (!result.ok && result.outcome === 'not-signed-in') {
-            const login = await window.api.auth.loginRayfin()
+            const login = await window.api.auth.loginRayfin(undefined, projectId)
             if (!mountedRef.current) return result
             if (!login.ok) {
               result = {
@@ -420,7 +436,10 @@ export default function Workbench({
             error: authErrorMessage(reason, 'The deployment did not complete. Please try again.')
           }
         }
-        if (!result.ok && result.outcome === 'not-signed-in') {
+        if (
+          !result.ok &&
+          (result.outcome === 'not-signed-in' || result.outcome === 'auth-cache-error')
+        ) {
           // Don't open more sign-in flows for deploys queued behind a failed login.
           deployQueueRef.current.cancelPending('Sign in to Fabric before retrying this deployment.')
         }
@@ -491,6 +510,12 @@ export default function Workbench({
         if (result.outcome === 'not-signed-in') await refreshAuthWithFeedback()
         return result
       }
+      setDeploys((all) => {
+        const previous = all[projectId]
+        return previous
+          ? { ...all, [projectId]: { ...previous, result: undefined } }
+          : all
+      })
       await refreshProjects()
       setGitRefresh((n) => n + 1)
       return result
@@ -559,16 +584,40 @@ export default function Workbench({
         }
         void window.api.dev.stop(projectId, 'chat').catch(onDesignError)
       }
-      await refreshProjects()
+      try {
+        await refreshProjects()
+      } catch (reason) {
+        toast.error(authErrorMessage(reason, 'Could not refresh the project after coding.'), {
+          title: 'Project refresh failed'
+        })
+      }
       setGitRefresh((n) => n + 1)
-      void window.api.chat.saveHistory(projectId, toStored(chatsRef.current[projectId] ?? []))
+      void window.api.chat
+        .saveHistory(projectId, toStored(chatsRef.current[projectId] ?? []))
+        .catch((reason) => {
+          toast.error(authErrorMessage(reason, 'Could not save the conversation.'), {
+            title: 'Chat history save failed'
+          })
+        })
       // The agent may have changed the Rayfin deps (e.g. an upgrade) — re-check.
-      void refreshRayfinVer(projectId)
-      if (!result.ok) return
-      const changed = await window.api.deploy.hasChanges(projectId)
-      if (changed) void runDeploy(projectId)
+      void refreshRayfinVer(projectId).catch((reason) => {
+        toast.error(authErrorMessage(reason, 'Could not refresh the Rayfin version.'), {
+          title: 'Version check failed'
+        })
+      })
+      if (!result.ok || !mountedRef.current) return
+      try {
+        const changed = await window.api.deploy.hasChanges(projectId)
+        if (changed && mountedRef.current) void runDeploy(projectId)
+      } catch (reason) {
+        if (!mountedRef.current) return
+        toast.error(
+          `${authErrorMessage(reason, 'Could not check for undeployed changes.')} Use Redeploy to publish your changes.`,
+          { title: 'Auto-deploy check failed' }
+        )
+      }
     },
-    [refreshProjects, refreshRayfinVer, runDeploy, onDesignError]
+    [refreshProjects, refreshRayfinVer, runDeploy, onDesignError, toast]
   )
 
   const ensureDesignLocal = useCallback(async (projectId: string): Promise<void> => {
@@ -953,7 +1002,7 @@ export default function Workbench({
   }
 
   async function signOut(): Promise<void> {
-    if (authActionRef.current) return
+    if (authActionRef.current || deployingIdRef.current) return
     authActionRef.current = true
     setSigningOut(true)
     try {
@@ -979,7 +1028,7 @@ export default function Workbench({
   }
 
   async function signIn(): Promise<void> {
-    if (authActionRef.current) return
+    if (authActionRef.current || deployingIdRef.current) return
     authActionRef.current = true
     setSigningIn(true)
     try {
@@ -1002,6 +1051,56 @@ export default function Workbench({
     }
   }
 
+  function openAuthRefresh(project: StudioProject): void {
+    setAuthRefreshTarget({
+      projectId: project.id,
+      name: project.name,
+      tenant: auth.rayfin.tenant
+    })
+    setAuthRefreshError(null)
+    setAuthRefreshLog([])
+  }
+
+  async function refreshFabricAuthentication(): Promise<void> {
+    const target = authRefreshTarget
+    if (!target) return
+    if (authActionRef.current || deployingIdRef.current) {
+      setAuthRefreshError('Wait for the current deployment or sign-in to finish, then retry.')
+      return
+    }
+    authActionRef.current = true
+    authRefreshProjectRef.current = target.projectId
+    setRefreshingAuth(true)
+    setAuthRefreshError(null)
+    try {
+      const result = await window.api.auth.refreshRayfin(target.projectId, target.tenant)
+      if (!mountedRef.current) return
+      if (!result.ok) {
+        throw new Error(
+          authErrorMessage(
+            result.error,
+            'Fabric authentication could not be refreshed. Please retry.'
+          )
+        )
+      }
+      await onAuthChanged()
+      if (!mountedRef.current) return
+      setAuthRefreshTarget(null)
+      toast.info('Fabric authentication is verified. Use Redeploy to retry your deployment.', {
+        title: 'Fabric authentication refreshed'
+      })
+    } catch (reason) {
+      if (!mountedRef.current) return
+      setAuthRefreshError(
+        authErrorMessage(reason, 'Fabric authentication could not be refreshed. Please retry.')
+      )
+      await refreshAuthWithFeedback()
+    } finally {
+      authActionRef.current = false
+      if (mountedRef.current) setRefreshingAuth(false)
+    }
+  }
+
   // Open a prefilled GitHub issue (app + system info) in the browser so bug
   // reports arrive with the version/environment details already filled in. A
   // diagnostics bundle is exported first (best-effort) and referenced in the
@@ -1015,6 +1114,9 @@ export default function Workbench({
       )
     }
   }
+
+  const fabricAuthBusy =
+    signingIn || signingOut || refreshingAuth || Object.values(deploys).some((d) => d.running)
 
   return (
     <div className="app-shell">
@@ -1038,10 +1140,21 @@ export default function Workbench({
               <GearIcon />
               Settings
             </button>
+            {active && (
+              <button
+                className="seg-btn"
+                disabled={fabricAuthBusy}
+                onClick={() => openAuthRefresh(active)}
+                title="Clear the shared Rayfin CLI credentials and sign in again"
+              >
+                <ReloadIcon />
+                {refreshingAuth ? 'Refreshing authentication…' : 'Refresh Fabric authentication'}
+              </button>
+            )}
             {auth.rayfin.signedIn ? (
               <button
                 className="seg-btn"
-                disabled={signingOut || signingIn}
+                disabled={fabricAuthBusy}
                 onClick={signOut}
                 title="Sign out"
               >
@@ -1049,7 +1162,7 @@ export default function Workbench({
                 {signingOut ? 'Signing out…' : 'Sign out'}
               </button>
             ) : (
-              <button className="seg-btn" disabled={signingIn || signingOut} onClick={signIn}>
+              <button className="seg-btn" disabled={fabricAuthBusy} onClick={signIn}>
                 {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
               </button>
             )}
@@ -1293,6 +1406,8 @@ export default function Workbench({
                         <PreviewPane
                           project={active}
                           deploy={deploys[active.id]}
+                          onRefreshAuth={() => openAuthRefresh(active)}
+                          authBusy={fabricAuthBusy}
                           localPreviewUrl={
                             devServers[active.id]?.status === 'running'
                               ? (devServers[active.id]?.url ?? null)
@@ -1508,6 +1623,44 @@ export default function Workbench({
                 them.
               </p>
               {deployGuardError && <p className="confirm-error">{deployGuardError}</p>}
+            </>
+          }
+        />
+      )}
+
+      {authRefreshTarget && (
+        <ConfirmModal
+          title="Refresh Fabric authentication"
+          confirmLabel="Clear credentials and sign in"
+          busy={refreshingAuth}
+          busyLabel="Refreshing authentication…"
+          onConfirm={() => void refreshFabricAuthentication()}
+          onCancel={() => setAuthRefreshTarget(null)}
+          message={
+            <>
+              <p>
+                Run <code>rayfin logout</code> and <code>rayfin login</code> with{' '}
+                <strong>{authRefreshTarget.name}</strong>&apos;s CLI, then verify the new Fabric credential.
+                This lets Rayfin recover stale token-cache locks and replace expired credentials.
+              </p>
+              <p>
+                Rayfin CLI credentials are shared across projects. This does not sign out of
+                Copilot, Azure CLI, or the preview browser, and it does not redeploy automatically.
+                Update older projects to Rayfin 1.35.1 or newer using the Rayfin version control.
+              </p>
+              {authRefreshError && (
+                <p className="confirm-error" role="alert">
+                  {authRefreshError}
+                </p>
+              )}
+              {authRefreshLog.length > 0 && (
+                <pre
+                  className="deploy-log deploy-log--static"
+                  aria-label="Authentication refresh log"
+                >
+                  {authRefreshLog.join('')}
+                </pre>
+              )}
             </>
           }
         />

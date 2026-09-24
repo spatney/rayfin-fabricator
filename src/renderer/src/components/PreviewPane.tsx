@@ -116,6 +116,9 @@ export function __resetPreviewSurfaceState(): void {
 interface Props {
   project: StudioProject
   deploy: DeployUiState | undefined
+  /** Offer an explicit credential reset without automatically replaying a deploy. */
+  onRefreshAuth?: () => void
+  authBusy?: boolean
   /** True when the preview pane is expanded to fill the build view (chat hidden). */
   focused: boolean
   /** Toggle preview focus (full-width preview ⇄ split with chat). */
@@ -209,6 +212,8 @@ function makeThumbFromDataUrl(dataUrl: string): Promise<string> {
 export default function PreviewPane({
   project,
   deploy,
+  onRefreshAuth,
+  authBusy = false,
   focused,
   onToggleFocus,
   onPreviewModeChanged,
@@ -227,8 +232,14 @@ export default function PreviewPane({
   // as `lastDeploy.portalUrl`; a toolbar toggle switches the webview between the
   // direct app URL and this Fabric-hosted view.
   const fabricUrl = project.lastDeploy?.portalUrl
-  const status = running ? 'deploying' : project.lastDeploy?.status
-  const error = project.lastDeploy?.error
+  const status = running
+    ? 'deploying'
+    : deploy?.result
+      ? deploy.result.ok
+        ? 'success'
+        : 'error'
+      : project.lastDeploy?.status
+  const error = deploy?.result ? deploy.result.error : project.lastDeploy?.error
   // The first deploy of a project has no recorded Fabric workspace — surface a
   // prompt instead of a dead error so the user can pick a target and retry.
   const outcome = deploy?.result?.outcome ?? project.lastDeploy?.outcome
@@ -1168,9 +1179,22 @@ export default function PreviewPane({
 
       {surfaceError && <div className="preview-error-banner" role="alert">{surfaceError}</div>}
 
-      {status === 'error' && error && !running && !needsWorkspace && (
-        <div className="preview-error-banner" title={error}>
-          ⚠ {error}
+      {status === 'error' && !running && !needsWorkspace && (
+        <div className="preview-error-banner">
+          <div className="preview-error-message" role="alert">
+            {error || 'The deployment did not complete.'}
+          </div>
+          {onRefreshAuth && outcome !== 'not-found' && outcome !== 'cancelled' && (
+            <button className="btn btn--sm" disabled={authBusy} onClick={onRefreshAuth}>
+              Refresh Fabric authentication
+            </button>
+          )}
+          {deploy?.log.length ? (
+            <details>
+              <summary>View deploy logs</summary>
+              <pre className="deploy-log deploy-log--static">{deploy.log.join('')}</pre>
+            </details>
+          ) : null}
         </div>
       )}
 
@@ -1208,13 +1232,11 @@ export default function PreviewPane({
           </div>
         ) : (
           <div className="preview-placeholder">
-            {error ? (
-              <>
-                <div className="alert alert--error">{error}</div>
-                {deploy?.log.length ? (
-                  <pre className="deploy-log deploy-log--static">{deploy.log.join('')}</pre>
-                ) : null}
-              </>
+            {status === 'error' ? (
+              <p>
+                Review the deployment error and logs above, then use <strong>Redeploy</strong> to
+                try again.
+              </p>
             ) : (
               <p>
                 Your deployed app will render here after a full <code>rayfin up</code>. Ask Copilot

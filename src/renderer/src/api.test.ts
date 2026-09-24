@@ -23,4 +23,17 @@ describe('authentication IPC', () => {
     await api.auth.logoutRayfin()
     expect(invoke).toHaveBeenLastCalledWith('auth_logout_rayfin')
   })
+
+  it('pins Fabric login and credential refresh to the selected project and tenant', async () => {
+    await api.auth.loginRayfin(undefined, 'deploying-project')
+    expect(invoke).toHaveBeenLastCalledWith('auth_login_rayfin', {
+      tenant: undefined,
+      projectId: 'deploying-project'
+    })
+    await api.auth.refreshRayfin('deploying-project', 'tenant-one')
+    expect(invoke).toHaveBeenLastCalledWith('auth_refresh_rayfin', {
+      projectId: 'deploying-project',
+      tenant: 'tenant-one'
+    })
+  })
 })

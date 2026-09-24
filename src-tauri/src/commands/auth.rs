@@ -4,7 +4,7 @@
 //! project's locally-installed CLI (falling back to a global `rayfin` on PATH).
 //! Login/logout stream their CLI output to the renderer.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
@@ -14,7 +14,7 @@ use tauri::{AppHandle, State};
 
 use crate::services::crashlog;
 use crate::services::emit::proc_streamer;
-use crate::services::exec::{self, RunOptions};
+use crate::services::exec::{self, OnData, RunOptions};
 use crate::services::store;
 use crate::services::telemetry::{self, TelemetryIdentity};
 use crate::state::AppState;
@@ -27,6 +27,7 @@ static CACHED_IDENTITY: Lazy<Mutex<Option<TelemetryIdentity>>> = Lazy::new(|| Mu
 static STARTUP_SIGNIN_SENT: AtomicBool = AtomicBool::new(false);
 static COPILOT_AUTH_ACTION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 static RAYFIN_AUTH_ACTION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+static RAYFIN_AUTH_USE: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
 static AZ_AUTH_ACTION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 fn set_identity(identity: Option<TelemetryIdentity>) {
@@ -47,13 +48,26 @@ static SIGNED_IN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)signed\s+in").u
 static USER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)User:\s*(.+)").unwrap());
 static TENANT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)Tenant:\s*(.+)").unwrap());
 
-/// Run the Rayfin CLI for Fabric auth, preferring the active project's
+/// Keep credential changes from interrupting a deploy or authentication probe.
+pub(crate) async fn rayfin_auth_read() -> tokio::sync::RwLockReadGuard<'static, ()> {
+  RAYFIN_AUTH_USE.read().await
+}
+
+fn rayfin_project_dir(project_id: Option<&str>) -> Result<Option<PathBuf>, String> {
+  let project = match project_id {
+    Some(id) => Some(store::find_project(id).ok_or_else(|| "Project not found.".to_string())?),
+    None => store::active_project(),
+  };
+  Ok(project.map(|p| PathBuf::from(p.path)))
+}
+
+/// Run the Rayfin CLI for Fabric auth, preferring the selected project's
 /// locally-installed CLI (so no global install is required) and falling back to a
 /// global `rayfin` on PATH when there's no active project. The MSAL token cache is
 /// shared across installs, so either resolves the same signed-in session.
-async fn run_rayfin(args: &[&str], opts: RunOptions) -> exec::RunResult {
-  match store::active_project() {
-    Some(project) => exec::run_project_rayfin(Path::new(&project.path), args, opts).await,
+async fn run_rayfin(project_dir: Option<&Path>, args: &[&str], opts: RunOptions) -> exec::RunResult {
+  match project_dir {
+    Some(dir) => exec::run_project_rayfin(dir, args, opts).await,
     None => exec::run("rayfin", args, opts).await,
   }
 }
@@ -61,7 +75,13 @@ async fn run_rayfin(args: &[&str], opts: RunOptions) -> exec::RunResult {
 /// Read the CLI identity, then verify its token against Fabric before reporting
 /// a connection. Cached `login status` output alone cannot prove access.
 pub async fn get_rayfin_auth() -> RayfinAuthStatus {
-  let res = run_rayfin(&["login", "status"], RunOptions::timeout(30_000)).await;
+  let _guard = rayfin_auth_read().await;
+  let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
+  get_rayfin_auth_for(project_dir.as_deref()).await
+}
+
+async fn get_rayfin_auth_for(project_dir: Option<&Path>) -> RayfinAuthStatus {
+  let res = run_rayfin(project_dir, &["login", "status"], RunOptions::timeout(30_000)).await;
   let text = format!("{}\n{}", res.stdout, res.stderr);
   let signed_in = res.ok && !NOT_SIGNED_IN_RE.is_match(&text) && SIGNED_IN_RE.is_match(&text);
   if !signed_in {
@@ -81,7 +101,7 @@ pub async fn get_rayfin_auth() -> RayfinAuthStatus {
       ..Default::default()
     };
   }
-  if let Err(error) = crate::commands::fabric::probe_rayfin_auth().await {
+  if let Err(error) = crate::commands::fabric::probe_rayfin_auth(project_dir).await {
     set_identity(None);
     return RayfinAuthStatus { error: Some(error), ..Default::default() };
   }
@@ -426,11 +446,20 @@ fn login_failure_detail(res: &exec::RunResult) -> String {
 }
 
 #[tauri::command]
-pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>) -> ProcResult {
+pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>, project_id: Option<String>) -> ProcResult {
   let Ok(_guard) = RAYFIN_AUTH_ACTION.try_lock() else {
-    return auth_failure("fabric-login", None, "A Fabric sign-in or sign-out is already in progress.".into());
+    return auth_failure("fabric-login", None, "A Fabric sign-in, sign-out, or credential refresh is already in progress.".into());
+  };
+  let project_dir = match rayfin_project_dir(project_id.as_deref()) {
+    Ok(dir) => dir,
+    Err(error) => return auth_failure("fabric-login", None, error),
   };
   let on_data = proc_streamer(&app, "login:rayfin");
+  let _access = RAYFIN_AUTH_USE.write().await;
+  login_rayfin(project_dir.as_deref(), tenant, on_data).await
+}
+
+async fn login_rayfin(project_dir: Option<&Path>, tenant: Option<String>, on_data: OnData) -> ProcResult {
   on_data(exec::Stream::Stdout, "Starting Fabric / Rayfin sign-in…\n");
   let mut args: Vec<String> = vec!["login".into(), "--select".into()];
   let tenant_label = tenant
@@ -444,26 +473,34 @@ pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>) -> ProcRe
   }
   let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
   let res = run_rayfin(
+    project_dir,
     &arg_refs,
     RunOptions {
-      on_data: Some(on_data),
+      on_data: Some(on_data.clone()),
       timeout_ms: Some(5 * 60_000),
       ..Default::default()
     },
   )
   .await;
   if res.ok {
-    let auth = get_rayfin_auth().await;
+    on_data(exec::Stream::System, "Verifying the refreshed credential against Fabric...\n");
+    let auth = get_rayfin_auth_for(project_dir).await;
     if auth.signed_in {
       telemetry::track_signin(cached_identity().as_ref(), "login");
+      on_data(exec::Stream::System, "Fabric authentication verified.\n");
     }
-    return verified_login("fabric-login", "Fabric", &res, auth.signed_in, auth.error);
+    let result = verified_login("fabric-login", "Fabric", &res, auth.signed_in, auth.error);
+    if let Some(error) = &result.error {
+      on_data(exec::Stream::Stderr, &format!("{error}\n"));
+    }
+    return result;
   }
   // Surface *why* sign-in failed: return a user-facing detail and record the
   // full CLI output to the crash log so it lands in the diagnostics bundle's
   // "Recent crash / hang log" section. Previously this was silently swallowed
   // (issue #17), so a failed sign-in looked like the button did nothing.
   let detail = login_failure_detail(&res);
+  on_data(exec::Stream::Stderr, &format!("{detail}\n"));
   crashlog::log_error(
     "fabric-login",
     &format!(
@@ -480,6 +517,50 @@ pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>) -> ProcRe
     exit_code: res.exit_code,
     error: Some(detail),
   }
+}
+
+#[tauri::command]
+pub async fn auth_refresh_rayfin(app: AppHandle, project_id: String, tenant: Option<String>) -> ProcResult {
+  let Ok(_guard) = RAYFIN_AUTH_ACTION.try_lock() else {
+    return auth_failure("fabric-refresh", None, "A Fabric sign-in, sign-out, or credential refresh is already in progress.".into());
+  };
+  let Some(project) = store::find_project(&project_id) else {
+    return auth_failure("fabric-refresh", None, "Project not found.".into());
+  };
+  let on_data = proc_streamer(&app, "refresh:rayfin");
+  on_data(exec::Stream::System, "Waiting for current Fabric operations to finish before refreshing credentials...\n");
+  let _access = RAYFIN_AUTH_USE.write().await;
+  refresh_rayfin(Path::new(&project.path), tenant, on_data).await
+}
+
+async fn refresh_rayfin(project_dir: &Path, tenant: Option<String>, on_data: OnData) -> ProcResult {
+  // Resolve/install the pinned CLI before discarding any shared credentials.
+  if let Err(error) = exec::ensure_project_dependencies(project_dir, Some(on_data.clone())).await {
+    on_data(exec::Stream::Stderr, &format!("{error}\n"));
+    return auth_failure("fabric-refresh", None, error);
+  }
+  on_data(exec::Stream::System, "Clearing the shared Fabric / Rayfin credentials with rayfin logout...\n");
+  let res = run_rayfin(
+    Some(project_dir),
+    &["logout"],
+    RunOptions {
+      on_data: Some(on_data.clone()),
+      timeout_ms: Some(60_000),
+      ..Default::default()
+    },
+  )
+  .await;
+  if !res.ok {
+    let error = cli_failure_detail(
+      &res,
+      "Fabric credential reset",
+      "Nothing was retried. Update this project's Rayfin CLI and SDK to 1.35.1 or newer, then try refreshing again.",
+    );
+    on_data(exec::Stream::Stderr, &format!("{error}\n"));
+    return auth_failure("fabric-refresh", res.exit_code, error);
+  }
+  set_identity(None);
+  login_rayfin(Some(project_dir), tenant, on_data).await
 }
 
 #[tauri::command]
@@ -566,10 +647,13 @@ fn verify_azure_signed_out(accounts: &exec::RunResult) -> Result<(), String> {
 #[tauri::command]
 pub async fn auth_logout_rayfin(app: AppHandle) -> ProcResult {
   let Ok(_guard) = RAYFIN_AUTH_ACTION.try_lock() else {
-    return auth_failure("fabric-logout", None, "A Fabric sign-in or sign-out is already in progress.".into());
+    return auth_failure("fabric-logout", None, "A Fabric sign-in, sign-out, or credential refresh is already in progress.".into());
   };
+  let project_dir = store::active_project().map(|p| PathBuf::from(p.path));
   let on_data = proc_streamer(&app, "logout:rayfin");
+  let _access = RAYFIN_AUTH_USE.write().await;
   let res = run_rayfin(
+    project_dir.as_deref(),
     &["logout"],
     RunOptions {
       on_data: Some(on_data),
@@ -601,6 +685,89 @@ pub fn get_cached_identity() -> Option<TelemetryIdentity> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  struct RayfinFixture(PathBuf);
+
+  impl RayfinFixture {
+    fn new(logout_exit: i32, login_exit: i32) -> Self {
+      let fixture = Self(std::env::temp_dir().join(format!("fabricator-auth-{}", uuid::Uuid::new_v4())));
+      let cli = fixture.0.join("node_modules").join("@microsoft").join("rayfin-cli");
+      std::fs::create_dir_all(cli.join("scripts")).unwrap();
+      std::fs::create_dir_all(cli.join("dist").join("auth")).unwrap();
+      std::fs::write(cli.join("dist").join("auth").join("index.js"), "").unwrap();
+      std::fs::write(cli.join("scripts").join("main.js"), r#"
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const config = JSON.parse(fs.readFileSync('fixture.json', 'utf8'));
+fs.appendFileSync('calls.jsonl', JSON.stringify(args) + '\n');
+if (args[0] === 'logout') {
+  if (config.logoutExit) console.error('Error: token-cache lock is still held by a live process');
+  else console.warn('Removed a stale token-cache lock left by an interrupted sign-in');
+  process.exit(config.logoutExit);
+}
+if (args[1] === 'status') {
+  console.log('Not signed in');
+  process.exit(0);
+}
+if (config.loginExit) console.error('Login failed: sign-in cancelled');
+process.exit(config.loginExit);
+"#).unwrap();
+      std::fs::write(
+        fixture.0.join("fixture.json"),
+        serde_json::json!({ "logoutExit": logout_exit, "loginExit": login_exit }).to_string(),
+      ).unwrap();
+      fixture
+    }
+
+    fn calls(&self) -> Vec<Vec<String>> {
+      std::fs::read_to_string(self.0.join("calls.jsonl")).unwrap()
+        .lines().map(|line| serde_json::from_str(line).unwrap()).collect()
+    }
+  }
+
+  impl Drop for RayfinFixture {
+    fn drop(&mut self) {
+      if let Err(error) = std::fs::remove_dir_all(&self.0) {
+        eprintln!("Could not remove auth fixture {}: {error}", self.0.display());
+      }
+    }
+  }
+
+  #[tokio::test]
+  async fn refresh_stops_before_login_when_logout_fails() {
+    let fixture = RayfinFixture::new(1, 0);
+    let result = refresh_rayfin(&fixture.0, None, std::sync::Arc::new(|_, _| {})).await;
+    assert!(!result.ok);
+    assert!(result.error.unwrap().contains("token-cache lock"));
+    assert_eq!(fixture.calls(), vec![vec!["logout"]]);
+  }
+
+  #[tokio::test]
+  async fn refresh_logs_cache_cleanup_and_preserves_the_requested_tenant() {
+    let fixture = RayfinFixture::new(0, 1);
+    let log = std::sync::Arc::new(Mutex::new(String::new()));
+    let capture = log.clone();
+    let result = refresh_rayfin(
+      &fixture.0,
+      Some("tenant-one".into()),
+      std::sync::Arc::new(move |_, chunk| capture.lock().unwrap().push_str(chunk)),
+    ).await;
+    assert!(!result.ok);
+    assert!(result.error.unwrap().contains("sign-in cancelled"));
+    assert_eq!(fixture.calls(), vec![vec!["logout"], vec!["login", "--select", "--tenant", "tenant-one"]]);
+    let log = log.lock().unwrap();
+    assert!(log.contains("Removed a stale token-cache lock"));
+    assert!(log.contains("Login failed"));
+  }
+
+  #[tokio::test]
+  async fn refresh_does_not_report_success_from_the_login_exit_code_alone() {
+    let fixture = RayfinFixture::new(0, 0);
+    let result = refresh_rayfin(&fixture.0, None, std::sync::Arc::new(|_, _| {})).await;
+    assert!(!result.ok);
+    assert!(result.error.unwrap().contains("authentication could not be verified"));
+    assert_eq!(fixture.calls(), vec![vec!["logout"], vec!["login", "--select"], vec!["login", "status"]]);
+  }
 
   fn res(exit_code: Option<i32>, not_found: bool, stdout: &str, stderr: &str) -> exec::RunResult {
     exec::RunResult {

@@ -208,6 +208,7 @@ pub fn run() {
       commands::auth::auth_status,
       commands::auth::auth_login_copilot,
       commands::auth::auth_login_rayfin,
+      commands::auth::auth_refresh_rayfin,
       commands::auth::auth_login_az,
       commands::auth::auth_logout_copilot,
       commands::auth::auth_logout_rayfin,

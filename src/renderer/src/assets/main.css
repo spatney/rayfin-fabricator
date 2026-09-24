@@ -6244,9 +6244,23 @@ code {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 14%, var(--bg-elev));
   border-bottom: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: none;
+  max-height: 45%;
+  overflow: auto;
+}
+
+.preview-error-message {
+  margin-bottom: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.preview-error-banner details {
+  margin-top: 8px;
+}
+
+.preview-error-banner summary {
+  cursor: pointer;
 }
 
 /* Deployments switcher popover */

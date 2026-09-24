@@ -234,15 +234,14 @@ async fn project_auth_module(project_dir: Option<&Path>) -> Result<PathBuf, Stri
 ///
 /// The helper owns no persistent token cache: every invocation opens the CLI's
 /// MSAL cache afresh. CLI login/logout is the only token-cache mutation needed.
-pub async fn probe_rayfin_auth() -> Result<(), String> {
+pub async fn probe_rayfin_auth(project_dir: Option<&Path>) -> Result<(), String> {
   #[derive(Deserialize)]
   struct ProbeResult {
     ok: bool,
     error: Option<String>,
   }
 
-  let project_dir = store::active_project().map(|project| PathBuf::from(project.path));
-  let auth_path = exec::project_rayfin_auth_module(project_dir.as_deref()).ok_or_else(|| {
+  let auth_path = exec::project_rayfin_auth_module(project_dir).ok_or_else(|| {
     "Could not locate the Rayfin CLI authentication module. Open a Rayfin project to reach Fabric.".to_string()
   })?;
   let script_path = write_helper("fabric-auth-probe.mjs", AUTH_PROBE_HELPER_SOURCE)
