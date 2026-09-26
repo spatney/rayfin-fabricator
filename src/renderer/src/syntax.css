@@ -1,0 +1,85 @@
+/* highlight.js token theme — keyed to the app palette; the code surface stays dark
+   in both themes, so a single (dark) token set is correct everywhere. */
+.md-codeblock-pre .hljs {
+  display: block;
+  background: transparent;
+  color: var(--code-text);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-doctag {
+  color: var(--syn-key);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-meta .hljs-string {
+  color: var(--syn-str);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--syn-num);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-built_in,
+.hljs-name {
+  color: var(--syn-fn);
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--syn-attr);
+}
+
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-title.class_,
+.hljs-params {
+  color: var(--syn-type);
+}
+
+.hljs-tag,
+.hljs-punctuation {
+  color: var(--syn-punct);
+}
+
+.hljs-meta {
+  color: var(--syn-comment);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+.hljs-deletion {
+  color: var(--danger);
+}
+
+.hljs-addition {
+  color: var(--ok);
+}
+
+.hljs-link {
+  color: var(--accent);
+}

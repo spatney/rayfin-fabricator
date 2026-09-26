@@ -965,8 +965,25 @@ export interface ChatToolCall {
   /** Human-friendly one-line summary (description / command / path). */
   title: string
   state: ChatToolState
-  /** Captured tool output once complete (may be truncated for display). */
+  /** Captured tool output once complete (may be truncated for display). While a
+   *  shell tool runs this accumulates its live output. */
   output?: string
+  /** Full command line for shell tools (`title` carries the description). */
+  command?: string
+  /** Files the call reads or writes, as reported by the tool (usually absolute). */
+  paths?: string[]
+  /** Unified diff for file-mutating tools (edit/create/apply_patch). */
+  diff?: string
+  /** True when `diff` was capped for size. */
+  diffTruncated?: boolean
+  /** Lines added/removed, counted from the full diff before capping. */
+  added?: number
+  removed?: number
+  /** Exit code reported by a shell tool. */
+  exitCode?: number
+  /** Epoch ms the renderer saw the call start / finish. */
+  startedAt?: number
+  endedAt?: number
 }
 
 /**
@@ -976,14 +993,16 @@ export interface ChatToolCall {
  * tool-state updates stay in one place; a `'question'` segment likewise
  * references a {@link ChatPlanQuestion} in `questions` by id, which docks the
  * question card at the point in the feed where it was asked instead of letting
- * it drift to the bottom as the turn keeps streaming. Persisted so reloaded
- * turns keep order.
+ * it drift to the bottom as the turn keeps streaming. A `'reasoning'` segment
+ * holds the model's readable thinking for one step. Persisted so reloaded turns
+ * keep order — every kind must also exist in the Rust `ChatSegment` DTO.
  */
 export type ChatSegment =
   | { kind: 'text'; text: string }
   | { kind: 'tool'; id: string }
   | { kind: 'question'; id: string }
   | { kind: 'interjection'; text: string; thumbs?: string[] }
+  | { kind: 'reasoning'; id?: string; text: string; startedAt?: number; elapsedMs?: number }
 
 /**
  * Streamed chat events sent from main -> renderer during a turn. The renderer
@@ -991,8 +1010,20 @@ export type ChatSegment =
  */
 export type ChatEvent =
   | { type: 'delta'; text: string }
+  | { type: 'reasoning'; id: string; text: string }
   | { type: 'tool-start'; tool: ChatToolCall }
-  | { type: 'tool-end'; id: string; state: ChatToolState; output?: string }
+  | { type: 'tool-output'; id: string; text: string }
+  | {
+      type: 'tool-end'
+      id: string
+      state: ChatToolState
+      output?: string
+      diff?: string
+      diffTruncated?: boolean
+      added?: number
+      removed?: number
+      exitCode?: number
+    }
   | { type: 'notice'; text: string }
   | { type: 'error'; text: string }
   | { type: 'result'; ok: boolean; filesModified: string[]; ranDeploy: boolean }
@@ -1332,6 +1363,8 @@ export interface ChatMessage {
   interrupted?: boolean
   /** Wall-clock duration of the assistant turn, in ms. Set when the turn finishes. */
   elapsedMs?: number
+  /** Epoch ms the message was created (shown as its timestamp). */
+  createdAt?: number
   /** Durable Plan-mode artifact owned by this assistant turn, when present. */
   plan?: ChatPlanArtifact
   /**

@@ -27,6 +27,7 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
+use crate::commands::chat_tools;
 use crate::commands::screenshot;
 use crate::services::copilot::{is_recoverable_session_error, PlanModeHandler};
 use crate::services::diagnostics;
@@ -39,7 +40,6 @@ use crate::types::{
   CopilotModel, SteerResult,
 };
 
-const MAX_TOOL_OUTPUT: usize = 4000;
 /// Up to this many copilot invocations per turn on a transient pre-work failure.
 const MAX_ATTEMPTS: u32 = 3;
 /// 1 hour per-turn timeout. Long agent turns (large refactors, multi-step
@@ -187,30 +187,6 @@ async fn emit_plan_content(session: &Session, app: &AppHandle, project_id: &str,
   }
 }
 
-fn truncate(text: &str, max: usize) -> String {
-  if text.chars().count() <= max {
-    return text.to_string();
-  }
-  let head: String = text.chars().take(max).collect();
-  let more = text.chars().count() - max;
-  format!("{head}\n… ({more} more characters)")
-}
-
-/// Derive a one-line summary for a tool call from its arguments.
-fn tool_title(tool_name: &str, args: Option<&Value>) -> String {
-  let Some(args) = args else {
-    return tool_name.to_string();
-  };
-  let raw = args
-    .get("description")
-    .and_then(|v| v.as_str())
-    .or_else(|| args.get("command").and_then(|v| v.as_str()))
-    .or_else(|| args.get("path").and_then(|v| v.as_str()))
-    .unwrap_or(tool_name);
-  let collapsed = raw.split_whitespace().collect::<Vec<_>>().join(" ");
-  truncate(collapsed.trim(), 200)
-}
-
 /// One tool invocation observed during a turn, accumulated for diagnostics.
 struct ToolCallAcc {
   id: String,
@@ -231,6 +207,10 @@ struct TurnCtx {
   errored: Option<String>,
   /// Characters of each assistant message already streamed as deltas (dedup).
   streamed: HashMap<String, usize>,
+  /// Characters of each reasoning block already streamed (dedup), by reasoningId.
+  reasoning_streamed: HashMap<String, usize>,
+  /// Live output of running tools, by toolCallId.
+  live_output: HashMap<String, chat_tools::LiveOutput>,
   /// The assistant message currently being appended. When the agent emits a new
   /// message mid-turn we insert a blank line, so consecutive messages don't run
   /// together (e.g. "…the implementation.Now let me…").
@@ -257,6 +237,8 @@ impl TurnCtx {
       saw_activity: false,
       errored: None,
       streamed: HashMap::new(),
+      reasoning_streamed: HashMap::new(),
+      live_output: HashMap::new(),
       cur_msg: None,
       capture_full,
       tool_calls: vec![],
@@ -274,6 +256,11 @@ impl TurnCtx {
       ok: None,
       output: None,
     });
+  }
+
+  /// Name of a tool call seen earlier in this turn, by its call id.
+  fn tool_name(&self, id: &str) -> Option<&str> {
+    self.tool_calls.iter().rev().find(|t| t.id == id).map(|t| t.name.as_str())
   }
 
   /// Record a tool call's outcome; capture its output only in full mode.
@@ -354,10 +341,34 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
         ctx.streamed.insert(id, total);
       }
     }
+    "assistant.reasoning_delta" | "assistant.reasoning" => {
+      // Readable reasoning streams as deltas; the complete event only fills in
+      // whatever the deltas missed. Reasoning deliberately does not count as
+      // `saw_activity`: a transient failure after thinking alone stays retryable.
+      let id = data.get("reasoningId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+      let text = if event_type == "assistant.reasoning_delta" {
+        let delta = data.get("deltaContent").and_then(|v| v.as_str()).unwrap_or("");
+        *ctx.reasoning_streamed.entry(id.clone()).or_insert(0) += delta.chars().count();
+        delta.to_string()
+      } else {
+        let content = data.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let total = content.chars().count();
+        let have = *ctx.reasoning_streamed.get(&id).unwrap_or(&0);
+        if total > have {
+          ctx.reasoning_streamed.insert(id.clone(), total);
+          content.chars().skip(have).collect()
+        } else {
+          String::new()
+        }
+      };
+      if !text.is_empty() {
+        sink(ChatEvent::Reasoning { id, text });
+      }
+    }
     "tool.execution_start" => {
       let tool_name = data.get("toolName").and_then(|v| v.as_str()).unwrap_or("tool").to_string();
       let args = data.get("arguments");
-      let title = tool_title(&tool_name, args);
+      let title = chat_tools::tool_title(&tool_name, args);
       let command = args.and_then(|a| a.get("command")).and_then(|v| v.as_str()).unwrap_or("");
       if RAYFIN_UP_RE.is_match(command) {
         ctx.ran_deploy = true;
@@ -372,28 +383,38 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
       sink(ChatEvent::ToolStart {
         tool: ChatToolCall {
           id,
+          command: chat_tools::shell_command(&tool_name, args),
+          paths: chat_tools::tool_paths(&tool_name, args),
           name: tool_name,
           title,
           state: ChatToolState::Running,
-          output: None,
+          ..Default::default()
         },
       });
     }
+    "tool.execution_partial_result" => {
+      let id = data.get("toolCallId").and_then(|v| v.as_str()).unwrap_or("");
+      let text = data.get("partialOutput").and_then(|v| v.as_str()).unwrap_or("");
+      if !id.is_empty() && !text.is_empty() {
+        let shown = ctx.live_output.entry(id.to_string()).or_default().push(&chat_tools::strip_ansi(text));
+        sink(ChatEvent::ToolOutput { id: id.to_string(), text: shown });
+      }
+    }
     "tool.execution_complete" => {
       let id = data.get("toolCallId").and_then(|v| v.as_str()).unwrap_or("").to_string();
+      ctx.live_output.remove(&id);
       let success = data.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
-      // Success carries `result.content`; failure carries `error.message`.
-      let output = data
-        .get("result")
-        .and_then(|r| r.get("content"))
-        .and_then(|v| v.as_str())
-        .or_else(|| data.get("error").and_then(|e| e.get("message")).and_then(|v| v.as_str()))
-        .map(|c| truncate(c, MAX_TOOL_OUTPUT));
-      ctx.tool_end(&id, success, output.as_deref());
+      let details = chat_tools::tool_end_details(ctx.tool_name(&id), data);
+      ctx.tool_end(&id, success, details.output.as_deref());
       sink(ChatEvent::ToolEnd {
         id,
         state: if success { ChatToolState::Success } else { ChatToolState::Error },
-        output,
+        output: details.output,
+        diff: details.diff,
+        diff_truncated: details.diff_truncated,
+        added: details.added,
+        removed: details.removed,
+        exit_code: details.exit_code,
       });
     }
     "session.info" => {
@@ -1490,7 +1511,7 @@ mod tests {
       &mut ctx,
     );
     match &events[0] {
-      ChatEvent::ToolEnd { id, state, output } => {
+      ChatEvent::ToolEnd { id, state, output, .. } => {
         assert_eq!(id, "t1");
         assert!(matches!(state, ChatToolState::Success));
         assert_eq!(output.as_deref(), Some("done"));
@@ -1510,7 +1531,7 @@ mod tests {
       &mut ctx,
     );
     match &events[0] {
-      ChatEvent::ToolEnd { id, state, output } => {
+      ChatEvent::ToolEnd { id, state, output, .. } => {
         assert_eq!(id, "t1");
         assert!(matches!(state, ChatToolState::Error));
         assert_eq!(output.as_deref(), Some("boom"));
@@ -1520,11 +1541,117 @@ mod tests {
   }
 
   #[test]
-  fn truncate_appends_more_marker() {
-    assert_eq!(truncate("hello", 10), "hello");
-    let out = truncate("abcdef", 3);
-    assert!(out.starts_with("abc"));
-    assert!(out.contains("3 more characters"));
+  fn shell_tool_start_carries_its_command_and_edit_carries_its_path() {
+    let mut ctx = TurnCtx::new(false);
+    let events = collect(
+      &[
+        (
+          "tool.execution_start",
+          json!({"toolCallId":"t1","toolName":"powershell","arguments":{"command":"npm run build","description":"Build the app"}}),
+        ),
+        (
+          "tool.execution_start",
+          json!({"toolCallId":"t2","toolName":"edit","arguments":{"path":"C:\\p\\src\\App.tsx","old_str":"a","new_str":"b"}}),
+        ),
+      ],
+      &mut ctx,
+    );
+    match (&events[0], &events[1]) {
+      (ChatEvent::ToolStart { tool: shell }, ChatEvent::ToolStart { tool: edit }) => {
+        assert_eq!(shell.title, "Build the app");
+        assert_eq!(shell.command.as_deref(), Some("npm run build"));
+        assert!(shell.paths.is_none());
+        assert_eq!(edit.title, "C:\\p\\src\\App.tsx");
+        assert_eq!(edit.paths.as_deref(), Some(&["C:\\p\\src\\App.tsx".to_string()][..]));
+        assert!(edit.command.is_none());
+      }
+      _ => panic!("expected two tool-starts"),
+    }
+  }
+
+  #[test]
+  fn edit_completion_forwards_the_diff_using_the_started_tool_name() {
+    let mut ctx = TurnCtx::new(false);
+    let events = collect(
+      &[
+        ("tool.execution_start", json!({"toolCallId":"t1","toolName":"edit","arguments":{"path":"C:\\p\\a.ts"}})),
+        (
+          "tool.execution_complete",
+          json!({"toolCallId":"t1","success":true,"result":{
+            "content":"File C:\\p\\a.ts updated with changes.",
+            "detailedContent":"\ndiff --git a/C:/p/a.ts b/C:/p/a.ts\n--- a/C:/p/a.ts\n+++ b/C:/p/a.ts\n@@ -1 +1,2 @@\n-a\n+b\n+c\n"
+          }}),
+        ),
+      ],
+      &mut ctx,
+    );
+    match &events[1] {
+      ChatEvent::ToolEnd { diff, added, removed, exit_code, .. } => {
+        assert!(diff.as_deref().unwrap().starts_with("diff --git"));
+        assert_eq!((*added, *removed), (Some(2), Some(1)));
+        assert_eq!(*exit_code, None);
+      }
+      _ => panic!("expected tool-end"),
+    }
+  }
+
+  #[test]
+  fn partial_tool_output_streams_the_cumulative_tail_without_ansi() {
+    let mut ctx = TurnCtx::new(false);
+    // Real shell partials repeat the whole output so far.
+    let events = collect(
+      &[
+        ("tool.execution_partial_result", json!({"toolCallId":"t1","partialOutput":"\n\u{1b}[32mvite\u{1b}[0m building\n"})),
+        ("tool.execution_partial_result", json!({"toolCallId":"t1","partialOutput":""})),
+        ("tool.execution_partial_result", json!({"toolCallId":"t1","partialOutput":"\nvite building\n✓ 42 modules\n"})),
+      ],
+      &mut ctx,
+    );
+    let shown: Vec<&str> = events
+      .iter()
+      .map(|e| match e {
+        ChatEvent::ToolOutput { id, text } => {
+          assert_eq!(id, "t1");
+          text.as_str()
+        }
+        _ => panic!("expected tool-output"),
+      })
+      .collect();
+    assert_eq!(shown, vec!["vite building\n", "vite building\n✓ 42 modules\n"]);
+  }
+
+  #[test]
+  fn reasoning_streams_once_and_is_not_counted_as_activity() {
+    let mut ctx = TurnCtx::new(false);
+    let events = collect(
+      &[
+        ("assistant.reasoning_delta", json!({"reasoningId":"r1","deltaContent":"Let me "})),
+        ("assistant.reasoning_delta", json!({"reasoningId":"r1","deltaContent":"look"})),
+        // The complete event only adds what the deltas missed.
+        ("assistant.reasoning", json!({"reasoningId":"r1","content":"Let me look at App.tsx"})),
+        ("assistant.reasoning", json!({"reasoningId":"r1","content":"Let me look at App.tsx"})),
+        // A complete block that never streamed is emitted whole.
+        ("assistant.reasoning", json!({"reasoningId":"r2","content":"Done thinking"})),
+      ],
+      &mut ctx,
+    );
+    let chunks: Vec<(String, String)> = events
+      .iter()
+      .map(|e| match e {
+        ChatEvent::Reasoning { id, text } => (id.clone(), text.clone()),
+        _ => panic!("expected reasoning"),
+      })
+      .collect();
+    assert_eq!(
+      chunks,
+      vec![
+        ("r1".to_string(), "Let me ".to_string()),
+        ("r1".to_string(), "look".to_string()),
+        ("r1".to_string(), " at App.tsx".to_string()),
+        ("r2".to_string(), "Done thinking".to_string()),
+      ]
+    );
+    assert!(!ctx.saw_activity);
   }
 
   #[test]

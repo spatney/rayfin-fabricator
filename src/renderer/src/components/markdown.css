@@ -1,0 +1,324 @@
+/* ── Markdown (chat answers, Advisor, Plan cards) ──
+   Flat and quiet: typography carries the hierarchy, code sits on the code
+   surface, and nothing gets a frame it doesn't need. */
+.msg-text--md {
+  white-space: normal;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md p {
+  margin: 0 0 10px;
+}
+
+.md ul,
+.md ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+
+.md li {
+  margin: 3px 0;
+}
+
+.md li > p {
+  margin: 0;
+}
+
+.md li::marker {
+  color: var(--text-faint);
+}
+
+.md ol > li::marker {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  margin: 18px 0 8px;
+  line-height: 1.3;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+.md h1 {
+  font-size: 18px;
+}
+
+.md h2 {
+  font-size: 16px;
+}
+
+.md h3 {
+  font-size: 14.5px;
+}
+
+.md h4 {
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+.md strong {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.md a {
+  color: var(--accent);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+.md a:hover {
+  text-decoration: underline;
+}
+
+.md blockquote {
+  margin: 0 0 10px;
+  padding: 2px 0 2px 14px;
+  color: var(--text-dim);
+  border-left: 2px solid var(--border);
+}
+
+.md hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.md img {
+  max-width: 100%;
+  border-radius: 10px;
+}
+
+/* Tables scroll inside their own frame. */
+.md-table-wrap {
+  margin: 0 0 12px;
+  overflow-x: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.md table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.md th,
+.md td {
+  padding: 7px 11px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.md th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+}
+
+.md tr:last-child td {
+  border-bottom: 0;
+}
+
+.md tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-elev) 45%, transparent);
+}
+
+/* GFM task lists. */
+.md li.task-list-item {
+  margin-left: -18px;
+  list-style: none;
+}
+
+.md li.task-list-item input[type='checkbox'] {
+  margin: 0 8px 0 0;
+  vertical-align: -2px;
+  accent-color: var(--accent);
+}
+
+/* Inline code: a soft fill, no frame. */
+.md-code-inline {
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  color: var(--code-inline-text);
+  background: var(--code-inline-bg);
+  border-radius: 5px;
+}
+
+/* A project file named in an answer: opens in the Code tab. */
+.md-file-link {
+  display: inline;
+  font-weight: 500;
+  line-height: inherit;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 0;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.md-file-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* Callouts: GitHub-style alerts (`> [!NOTE]`). */
+.md-callout {
+  --callout: var(--accent);
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--callout) 9%, transparent);
+  border-radius: 10px;
+}
+
+.md-callout--tip {
+  --callout: var(--ok);
+}
+
+.md-callout--important {
+  --callout: #a371f7;
+}
+
+.md-callout--warning {
+  --callout: var(--pending);
+}
+
+.md-callout--caution {
+  --callout: var(--danger);
+}
+
+.md-callout-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--callout);
+}
+
+.md-callout > p:last-child {
+  margin-bottom: 0;
+}
+
+/* Code blocks. */
+.md-codeblock {
+  position: relative;
+  margin: 0 0 12px;
+  overflow: hidden;
+  background: var(--code-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.md-codeblock-head {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--code-text) 9%, transparent);
+}
+
+.md-codeblock-lang {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--code-text) 55%, transparent);
+}
+
+.md-codeblock-tools {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.md-codeblock-btn {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  font: inherit;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--code-text) 70%, transparent);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.md-codeblock-btn:hover {
+  color: var(--code-text);
+  background: color-mix(in srgb, var(--code-text) 10%, transparent);
+}
+
+.md-codeblock-btn.is-on {
+  color: var(--accent);
+}
+
+.md-codeblock-pre {
+  max-height: 440px;
+  margin: 0;
+  padding: 10px 14px 12px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  color: var(--code-text);
+}
+
+.md-codeblock-pre code.hljs {
+  padding: 0;
+  overflow: visible;
+}
+
+.md-codeblock.is-wrap .md-codeblock-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.md-codeblock.is-collapsed .md-codeblock-pre {
+  max-height: calc(18 * 1.5em + 10px);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+
+.md-codeblock-more {
+  width: 100%;
+  display: block;
+  padding: 6px 12px 8px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.md-codeblock-more:hover {
+  background: color-mix(in srgb, var(--code-text) 6%, transparent);
+}

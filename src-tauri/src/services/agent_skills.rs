@@ -166,6 +166,39 @@ version), go ahead — but warn them up front that it is experimental and may fa
 Fabric, then deploy and validate as usual so they see the real result.
 "#;
 
+/// Always-on instruction shaping replies for Fabricator's chat, which folds tool
+/// calls into a collapsible work log and shows the final message as the answer.
+const CHAT_STYLE_INSTRUCTIONS: &str = r#"---
+applyTo: '**'
+---
+# Write replies that read well in Fabricator's chat (Fabricator)
+
+You are the coding agent inside **Fabricator**, and the person you're talking to is usually **not a
+developer**. Fabricator shows your steps (file reads, searches, commands, and every edit with its
+diff) in a collapsible work log, and shows your final message as the answer. Write for that layout.
+
+## While you work
+Before a batch of steps, say what you're about to do in **one short sentence** (for example, "I'll
+switch the list to real Rayfin data."). Skip narration for trivial steps and don't restate tool
+output.
+
+## End every turn with a short summary
+Finish with a brief, plain-language summary the user can act on:
+
+- **What changed**, in terms they'll notice in the app rather than implementation details.
+- **What to try next** in the preview, or what you need from them.
+
+Keep it short: a sentence or two, or a few bullets. Use headings only for long answers.
+
+## Formatting
+- Refer to files as backticked project-relative paths, such as `src/App.tsx`. Fabricator makes them
+  clickable. Don't use absolute paths.
+- Don't paste large code blocks or diffs, because Fabricator already shows every edit. Include code
+  only when the user asks for it or needs a short snippet to copy.
+- Put important caveats in a callout: `> [!NOTE]`, `> [!TIP]`, or `> [!WARNING]`.
+- Avoid jargon. When a technical term is unavoidable, explain it in a few words.
+"#;
+
 /// Model-invoked skill for finding and wiring the Power BI / Fabric semantic
 /// model (dataset) behind a report or app, using the in-process locator/search
 /// tools (see [`crate::services::agent_tools`]).
@@ -246,6 +279,7 @@ fn write_all(root: &std::path::Path) -> std::io::Result<()> {
   std::fs::create_dir_all(&instr_dir)?;
   std::fs::write(instr_dir.join("fabricator-validate.instructions.md"), VALIDATE_INSTRUCTIONS)?;
   std::fs::write(instr_dir.join("fabricator-stable-only.instructions.md"), STABLE_ONLY_INSTRUCTIONS)?;
+  std::fs::write(instr_dir.join("fabricator-chat-style.instructions.md"), CHAT_STYLE_INSTRUCTIONS)?;
   Ok(())
 }
 
@@ -338,6 +372,21 @@ mod tests {
   }
 
   #[test]
+  fn chat_style_instructions_fit_the_work_log_and_answer_layout() {
+    assert!(CHAT_STYLE_INSTRUCTIONS.contains("applyTo: '**'"));
+    for marker in [
+      "one short sentence",
+      "End every turn with a short summary",
+      "`src/App.tsx`",
+      "Don't use absolute paths",
+      "Don't paste large code blocks or diffs",
+      "> [!WARNING]",
+    ] {
+      assert!(CHAT_STYLE_INSTRUCTIONS.contains(marker), "chat style should cover {marker}");
+    }
+  }
+
+  #[test]
   fn write_all_creates_expected_layout() {
     let tmp = std::env::temp_dir().join(format!("fab-agent-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
@@ -347,13 +396,16 @@ mod tests {
     let connect = tmp.join("skills").join("connect-semantic-model").join("SKILL.md");
     let instr = tmp.join("instructions").join("fabricator-validate.instructions.md");
     let stable = tmp.join("instructions").join("fabricator-stable-only.instructions.md");
+    let style = tmp.join("instructions").join("fabricator-chat-style.instructions.md");
     assert!(skill.is_file(), "SKILL.md should exist at {skill:?}");
     assert!(connect.is_file(), "connect SKILL.md should exist at {connect:?}");
     assert!(instr.is_file(), "instructions file should exist at {instr:?}");
     assert!(stable.is_file(), "stable-only instructions should exist at {stable:?}");
+    assert!(style.is_file(), "chat-style instructions should exist at {style:?}");
     assert_eq!(std::fs::read_to_string(&skill).unwrap(), VALIDATE_HEADLESS_SKILL);
     assert_eq!(std::fs::read_to_string(&connect).unwrap(), CONNECT_MODEL_SKILL);
     assert_eq!(std::fs::read_to_string(&stable).unwrap(), STABLE_ONLY_INSTRUCTIONS);
+    assert_eq!(std::fs::read_to_string(&style).unwrap(), CHAT_STYLE_INSTRUCTIONS);
 
     let _ = std::fs::remove_dir_all(&tmp);
   }

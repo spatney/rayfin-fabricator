@@ -15,6 +15,7 @@ import python from 'highlight.js/lib/languages/python'
 import sql from 'highlight.js/lib/languages/sql'
 import yaml from 'highlight.js/lib/languages/yaml'
 import markdown from 'highlight.js/lib/languages/markdown'
+import './syntax.css'
 
 let registered = false
 function ensureLanguages(): void {
@@ -123,4 +124,37 @@ export function highlightCode(text: string, lang?: string): Highlight {
 export function langFromPath(path: string): string | undefined {
   const ext = /\.([a-z0-9]+)\s*$/i.exec(path.trim())?.[1]?.toLowerCase()
   return ext ? EXT_LANG[ext] : undefined
+}
+
+const HTML_TOKEN = /<span[^>]*>|<\/span>|\n|[^<\n]+|</g
+
+/**
+ * Highlight `lines` as one block (so multi-line strings and comments are
+ * tokenized correctly), then split the HTML back into one string per line,
+ * closing and re-opening any spans that cross a line break. Null when the
+ * language isn't registered.
+ */
+export function highlightLines(lines: readonly string[], lang?: string): string[] | null {
+  if (lines.length === 0) return []
+  const hl = highlightCode(lines.join('\n'), lang)
+  if (!hl) return null
+  const out: string[] = []
+  const open: string[] = []
+  let cur = ''
+  for (const token of hl.html.match(HTML_TOKEN) ?? []) {
+    if (token === '\n') {
+      out.push(cur + '</span>'.repeat(open.length))
+      cur = open.join('')
+    } else if (token.startsWith('<span')) {
+      open.push(token)
+      cur += token
+    } else if (token === '</span>') {
+      open.pop()
+      cur += token
+    } else {
+      cur += token
+    }
+  }
+  out.push(cur + '</span>'.repeat(open.length))
+  return out.length === lines.length ? out : null
 }

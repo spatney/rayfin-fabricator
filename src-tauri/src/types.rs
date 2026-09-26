@@ -843,15 +843,16 @@ pub struct FileContent {
 
 /* ----------------------------- chat ----------------------------- */
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ChatToolState {
+  #[default]
   Running,
   Success,
   Error,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatToolCall {
   pub id: String,
@@ -860,6 +861,31 @@ pub struct ChatToolCall {
   pub state: ChatToolState,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub output: Option<String>,
+  /// Full command line for shell tools (`title` carries the description).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub command: Option<String>,
+  /// Files the call reads or writes, as reported by the tool (usually absolute).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub paths: Option<Vec<String>>,
+  /// Unified diff for file-mutating tools (edit/create/apply_patch).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub diff: Option<String>,
+  /// True when `diff` was capped for size.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub diff_truncated: Option<bool>,
+  /// Lines added/removed, counted from the full diff before any capping.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub added: Option<u32>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub removed: Option<u32>,
+  /// Exit code reported by a shell tool.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub exit_code: Option<i64>,
+  /// Epoch ms the renderer saw the call start/finish (for step durations).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub started_at: Option<f64>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub ended_at: Option<f64>,
 }
 
 /// One chronological slice of an assistant turn (prose, a tool call, or a
@@ -867,6 +893,10 @@ pub struct ChatToolCall {
 /// tools it ran. A `Tool` segment references a `ChatToolCall` in `tools` by id;
 /// a `Question` segment references a `ChatPlanQuestion` in `questions` by id so
 /// the card re-renders docked where it was asked.
+///
+/// Every kind the renderer can produce must be listed here: this enum is
+/// strictly tagged, so an unrecognised kind would otherwise fail the whole
+/// transcript. `Unknown` absorbs kinds written by a newer build.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ChatSegment {
@@ -875,7 +905,23 @@ pub enum ChatSegment {
   Question { id: String },
   /// A message the user injected mid-turn (conversation steering), shown inline
   /// in the assistant feed as a small "you interjected" bubble.
-  Interjection { text: String },
+  Interjection {
+    text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    thumbs: Option<Vec<String>>,
+  },
+  /// The model's readable reasoning ("thinking") for one step of the turn.
+  Reasoning {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    text: String,
+    #[serde(default, rename = "startedAt", skip_serializing_if = "Option::is_none")]
+    started_at: Option<f64>,
+    #[serde(default, rename = "elapsedMs", skip_serializing_if = "Option::is_none")]
+    elapsed_ms: Option<f64>,
+  },
+  #[serde(other)]
+  Unknown,
 }
 
 /// One structured todo item from the session's SQL `todos` table (via
@@ -967,7 +1013,23 @@ pub enum ChatEvent {
     state: ChatToolState,
     #[serde(skip_serializing_if = "Option::is_none")]
     output: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diff: Option<String>,
+    #[serde(rename = "diffTruncated", skip_serializing_if = "Option::is_none")]
+    diff_truncated: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    added: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    removed: Option<u32>,
+    #[serde(rename = "exitCode", skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i64>,
   },
+  /// Incremental output from a still-running tool (appended by the renderer).
+  #[serde(rename = "tool-output")]
+  ToolOutput { id: String, text: String },
+  /// Streamed readable reasoning; `id` groups the deltas of one reasoning block.
+  #[serde(rename = "reasoning")]
+  Reasoning { id: String, text: String },
   #[serde(rename = "notice")]
   Notice { text: String },
   #[serde(rename = "error")]
@@ -1143,6 +1205,12 @@ pub struct ChatMessage {
   /// when the renderer persists history.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub questions: Option<Vec<ChatPlanQuestion>>,
+  /// Wall-clock duration of an assistant turn, in ms.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub elapsed_ms: Option<f64>,
+  /// Epoch ms the message was created (shown as its timestamp).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub created_at: Option<f64>,
 }
 
 /* ----------------------------- rayfin versions ----------------------------- */
@@ -1550,6 +1618,8 @@ mod tests {
         live_request_id: Some("req-1".into()),
       }),
       questions: None,
+      elapsed_ms: None,
+      created_at: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
     let back: ChatMessage = serde_json::from_str(&json).unwrap();
@@ -1584,6 +1654,8 @@ mod tests {
         answer: Some("Dark".into()),
         was_freeform: Some(false),
       }]),
+      elapsed_ms: None,
+      created_at: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
     let back: ChatMessage = serde_json::from_str(&json).unwrap();
@@ -1601,5 +1673,82 @@ mod tests {
     let msg: ChatMessage = serde_json::from_str(legacy).unwrap();
     assert!(msg.plan.is_none());
     assert!(msg.tools.is_empty());
+  }
+
+  #[test]
+  fn chat_message_keeps_turn_timing_tool_details_and_segment_extras() {
+    let raw = serde_json::json!({
+      "id": "a1",
+      "role": "assistant",
+      "text": "Done",
+      "elapsedMs": 83000,
+      "createdAt": 1790412554990.0,
+      "tools": [{
+        "id": "t1", "name": "edit", "title": "src/App.tsx", "state": "success",
+        "output": "ok", "command": "npm run build", "paths": ["C:/p/src/App.tsx"],
+        "diff": "@@ -1 +1 @@\n-a\n+b", "diffTruncated": true, "added": 1, "removed": 1,
+        "exitCode": 2, "startedAt": 10.0, "endedAt": 20.5
+      }],
+      "segments": [
+        {"kind": "reasoning", "id": "r1", "text": "Considering", "startedAt": 5, "elapsedMs": 1200},
+        {"kind": "interjection", "text": "also this", "thumbs": ["data:image/png;base64,AA"]},
+        {"kind": "tool", "id": "t1"},
+        {"kind": "text", "text": "Done"}
+      ]
+    });
+    let msg: ChatMessage = serde_json::from_value(raw).unwrap();
+    let back = serde_json::to_value(&msg).unwrap();
+    assert_eq!(back["elapsedMs"], 83000.0);
+    assert_eq!(back["createdAt"], 1790412554990.0);
+    let tool = &back["tools"][0];
+    assert_eq!(tool["command"], "npm run build");
+    assert_eq!(tool["paths"][0], "C:/p/src/App.tsx");
+    assert_eq!(tool["diffTruncated"], true);
+    assert_eq!(tool["added"], 1);
+    assert_eq!(tool["removed"], 1);
+    assert_eq!(tool["exitCode"], 2);
+    assert_eq!(tool["endedAt"], 20.5);
+    assert_eq!(back["segments"][0]["kind"], "reasoning");
+    assert_eq!(back["segments"][0]["id"], "r1");
+    assert_eq!(back["segments"][0]["elapsedMs"], 1200.0);
+    assert_eq!(back["segments"][1]["thumbs"][0], "data:image/png;base64,AA");
+  }
+
+  #[test]
+  fn unknown_segment_kind_does_not_drop_the_transcript() {
+    let raw = r#"[{"id":"a1","role":"assistant","text":"hi","segments":[
+      {"kind":"text","text":"hi"},{"kind":"fromTheFuture","payload":{"x":1}}]}]"#;
+    let msgs: Vec<ChatMessage> = serde_json::from_str(raw).unwrap();
+    let segments = msgs[0].segments.as_ref().unwrap();
+    assert!(matches!(segments[0], ChatSegment::Text { .. }));
+    assert!(matches!(segments[1], ChatSegment::Unknown));
+  }
+
+  #[test]
+  fn streamed_tool_output_reasoning_and_rich_tool_end_serialize() {
+    let out = serde_json::to_value(ChatEvent::ToolOutput { id: "t1".into(), text: "line\n".into() }).unwrap();
+    assert_eq!(out["type"], "tool-output");
+    assert_eq!(out["text"], "line\n");
+    let reasoning = serde_json::to_value(ChatEvent::Reasoning { id: "r1".into(), text: "Hm".into() }).unwrap();
+    assert_eq!(reasoning["type"], "reasoning");
+    assert_eq!(reasoning["id"], "r1");
+    let end = serde_json::to_value(ChatEvent::ToolEnd {
+      id: "t1".into(),
+      state: ChatToolState::Success,
+      output: None,
+      diff: Some("@@".into()),
+      diff_truncated: Some(false),
+      added: Some(3),
+      removed: None,
+      exit_code: Some(0),
+    })
+    .unwrap();
+    assert_eq!(end["type"], "tool-end");
+    assert_eq!(end["diff"], "@@");
+    assert_eq!(end["diffTruncated"], false);
+    assert_eq!(end["added"], 3);
+    assert_eq!(end["exitCode"], 0);
+    assert!(end.get("removed").is_none());
+    assert!(end.get("output").is_none());
   }
 }

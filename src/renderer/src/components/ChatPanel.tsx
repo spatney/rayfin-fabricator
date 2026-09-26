@@ -1,5 +1,4 @@
 import {
-  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -11,89 +10,47 @@ import {
   type DragEvent
 } from 'react'
 import {
-  type ChatEvent,
-  type ChatMessage,
   type ChatMode,
   type ChatPlanArtifact,
-  type ChatPlanQuestion,
-  type ChatSegment,
-  type ChatToolCall,
   type ChatTurnResult,
   type CopilotAuthStatus,
-  type FileNode,
   type ReasoningEffort,
-  type StudioProject,
-  type Suggestion
+  type StudioProject
 } from '@shared/ipc'
-import { useCopilotModels } from '@renderer/copilotModels'
 import { isCopilotAuthError } from '../copilotAuth'
 import CopilotSignInNotice from './CopilotSignInNotice'
 import type { PendingShot } from './PreviewPane'
-import Markdown from './Markdown'
-import { MentionText, splitMentions } from './MentionText'
-import { highlightCode, langFromPath } from '../syntax'
-import {
-  SparkleIcon,
-  EraserIcon,
-  ExpandIcon,
-  CollapseIcon,
-  CloseIcon,
-  StopIcon,
-  ImageIcon,
-  ChevronRightIcon,
-  ClockIcon,
-  Codicon
-} from './icons'
-import { FabricatorMark } from './FabricatorMark'
-import PlanCard from './PlanCard'
-import PlanQuestionCard from './PlanQuestionCard'
+import { splitMentions } from './MentionText'
+import { ExpandIcon, CollapseIcon, CloseIcon, StopIcon, ImageIcon, Codicon } from './icons'
 import ConnectModelModal from './ConnectModelModal'
+import ConfirmModal from './ConfirmModal'
+import { MarkdownLinksContext, type MarkdownLinks } from './Markdown'
 import {
   buildRecoveredPlanPrompt,
   createPlanArtifact,
   modeForPlanAction,
   readChatMode,
-  reducePlanEvent,
   setPlanSubmitting,
   shouldSuggestPlanMode,
   writeChatMode
 } from '../chatPlan'
+import type { OutboundPrompt, UIChatMessage } from './chat/types'
+import { suggestionsFor, useGeneratedSuggestions } from './chat/suggestions'
+import { ModeIcon, SendIcon } from './chat/icons'
+import { AddMenu, ModeMenu, ModelMenu } from './chat/ComposerMenus'
+import { Welcome } from './chat/Welcome'
+import { uid } from './chat/format'
+import { readAsDataUrl, toPngAndThumb } from './chat/images'
+import { reduceChatMessage, rollbackInterjection, settleRunningTools } from './chat/reducer'
+import { ChatEventBuffer, isStreamingEvent } from './chat/eventCoalescer'
+import { flattenFiles, rankFiles, type MentionFile } from './chat/mentions'
+import { createFileResolver } from './chat/paths'
+import { MessageRow } from './chat/MessageRow'
+import { tryAgainPrompt } from './chat/prompts'
+import './chat/chat.css'
 
-export interface UIChatMessage extends ChatMessage {
-  /** Correlates streamed events to the active assistant bubble (live only). */
-  turnId?: string
-  /** True while the assistant turn is still streaming. */
-  pending: boolean
-  /**
-   * Epoch ms when the assistant turn began (live only). Sourced here rather than
-   * from the status component's mount time so the elapsed timer keeps counting
-   * correctly after the chat unmounts/remounts (e.g. switching workbench tabs).
-   */
-  startedAt?: number
-  /** Transient status note (e.g. a transient-failure retry); not persisted. */
-  notice?: string
-  /** Transient error from answering a standalone Agent-mode question; not persisted. */
-  questionError?: string
-  /** This live turn's authentication error has been resolved by in-app sign-in. */
-  authResolved?: boolean
-}
-
-/**
- * A prompt queued from outside the chat (e.g. the status-bar "Update with
- * Copilot" hand-off). When a new `id` arrives the panel sends it as a turn —
- * `display` is the user-bubble text, `prompt` is what Copilot actually receives.
- */
-export interface OutboundPrompt {
-  id: string
-  display: string
-  prompt: string
-  /**
-   * When true the prompt is dropped into the composer (and focused) instead of
-   * being sent immediately — used to "stage" context (e.g. a slice of history)
-   * so the user can append their actual request before sending.
-   */
-  stage?: boolean
-}
+export type { OutboundPrompt, UIChatMessage } from './chat/types'
+export { reduceChatMessage } from './chat/reducer'
 
 interface Props {
   project: StudioProject
@@ -157,1336 +114,6 @@ interface Props {
   onCopilotAuthChanged?: () => Promise<void> | void
 }
 
-/** Reasoning efforts shown when the engine's per-model list is unavailable
- * (offline / pre-fetch / signed-out). Also defines the canonical display order. */
-const EFFORT_OPTIONS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
-const EFFORT_ORDER: ReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh', 'max']
-
-/** Words to drop when guessing what an app is "about" from its name. */
-const STOP_WORDS = new Set([
-  'app',
-  'apps',
-  'application',
-  'my',
-  'the',
-  'a',
-  'an',
-  'rayfin',
-  'fabric',
-  'fabricator',
-  'demo',
-  'test',
-  'sample',
-  'project',
-  'tracker',
-  'manager',
-  'management',
-  'hub',
-  'board',
-  'tool',
-  'studio',
-  'dashboard',
-  'system',
-  'portal',
-  'keeper',
-  'book',
-  'box',
-  'list',
-  'log',
-  'mate',
-  'buddy',
-  'pro',
-  'plus',
-  'lite'
-])
-
-/** Naive English pluralization — good enough for friendly UI copy. */
-function pluralize(w: string): string {
-  if (!w) return w
-  if (w.endsWith('s')) return w
-  if (/[^aeiou]y$/i.test(w)) return `${w.slice(0, -1)}ies`
-  if (/(x|z|ch|sh)$/i.test(w)) return `${w}es`
-  return `${w}s`
-}
-
-/** Naive singularization paired with {@link pluralize}. */
-function singularize(w: string): string {
-  if (w.endsWith('ies')) return `${w.slice(0, -3)}y`
-  if (w.endsWith('ses')) return w.slice(0, -2)
-  if (w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1)
-  return w
-}
-
-/**
- * Guess the "thing" an app manages from its name + template, so starter prompts
- * can be tailored ("Show all your plants" for a Plant Tracker). Falls back to a
- * sensible generic noun by template.
- */
-function deriveThings(project: StudioProject): { thing: string; things: string } {
-  const tpl = (project.template ?? '').toLowerCase()
-  const words = (project.name ?? '')
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean)
-    .filter((w) => !STOP_WORDS.has(w) && !/^\d+$/.test(w))
-  let base = words.length ? words[words.length - 1] : ''
-  if (!base || base.length < 2) {
-    base = tpl.includes('todo') ? 'task' : tpl.includes('data') ? 'record' : 'item'
-  }
-  return { thing: singularize(base), things: pluralize(base) }
-}
-
-/**
- * Build the empty-state starter prompts. These intentionally only cover what
- * Rayfin natively provides — data (lists/forms/search/charts), authentication,
- * file storage and design — never anything needing an external service (e.g.
- * payments or email).
- */
-function suggestionsFor(project: StudioProject): Suggestion[] {
-  const { thing, things } = deriveThings(project)
-  const cards = {
-    list: { icon: '📋', text: `Show all my ${things} on a clean page` },
-    create: { icon: '✏️', text: `Add a form to create and edit a ${thing}` },
-    search: { icon: '🔍', text: `Add search and filters to my ${things}` },
-    chart: { icon: '📊', text: `Add a dashboard that charts my ${things}` },
-    auth: { icon: '🔒', text: `Require sign-in so everyone gets their own ${things}` },
-    photo: { icon: '🖼️', text: `Let me attach a photo to each ${thing}` },
-    design: { icon: '🎨', text: 'Give the whole app a fresh, modern look' }
-  }
-  const tpl = (project.template ?? '').toLowerCase()
-  let order: (keyof typeof cards)[]
-  if (tpl.includes('auth')) order = ['auth', 'list', 'create', 'design']
-  else if (tpl.includes('todo')) order = ['list', 'create', 'auth', 'design']
-  else if (tpl.includes('data')) order = ['list', 'search', 'chart', 'create']
-  else order = ['list', 'create', 'chart', 'design']
-  return order.map((k) => cards[k])
-}
-
-/**
- * Ask Copilot for starter suggestions grounded in the project's actual code. The
- * backend caches per project (reused until the code changes), so this is cheap to
- * call whenever the empty Build chat is shown. The welcome screen shows the
- * instant heuristic suggestions right away and only swaps in this generated set
- * once it arrives, so `loading` never blocks the UI — it just drives a subtle
- * "Tailoring ideas…" hint. On any failure/timeout the heuristic fallback simply
- * stays. The in-flight request is cancelled when the empty state goes away (e.g.
- * the user sends a message) so it never competes with a real turn.
- */
-function useGeneratedSuggestions(
-  projectId: string,
-  enabled: boolean
-): { suggestions: Suggestion[] | null; loading: boolean; failed: boolean; refresh: () => void } {
-  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null)
-  // Start in the loading state when enabled so the skeletons show immediately,
-  // rather than flashing the heuristic fallback for a frame before the effect runs.
-  const [loading, setLoading] = useState(enabled)
-  const [failed, setFailed] = useState(false)
-  const [nonce, setNonce] = useState(0)
-
-  useEffect(() => {
-    if (!enabled) return
-    let cancelled = false
-    setLoading(true)
-    setFailed(false)
-    // A forced refresh should regenerate even if the code is unchanged.
-    const p = nonce > 0 ? window.api.chat.cancelSuggest(projectId).catch(() => false) : Promise.resolve(false)
-    void p.then(() =>
-      window.api.chat
-        .suggest(projectId)
-        .then((set) => {
-          if (cancelled) return
-          if (set.ok && set.suggestions.length > 0) {
-            setSuggestions(set.suggestions)
-          } else {
-            setFailed(true)
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setFailed(true)
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false)
-        })
-    )
-    return () => {
-      cancelled = true
-      // Stop any in-flight generation so it doesn't run alongside a real turn.
-      void window.api.chat.cancelSuggest(projectId).catch(() => undefined)
-    }
-  }, [projectId, enabled, nonce])
-
-  const refresh = (): void => {
-    setSuggestions(null)
-    setNonce((n) => n + 1)
-  }
-
-  return { suggestions, loading, failed, refresh }
-}
-
-/** Coarse classification of a Copilot tool call, used for both labels and icons. */
-type ToolKind =
-  | 'read'
-  | 'edit'
-  | 'create'
-  | 'search'
-  | 'run'
-  | 'delete'
-  | 'deploy'
-  | 'navigate'
-  | 'screenshot'
-  | 'other'
-
-function toolKind(name: string): ToolKind {
-  const n = name.toLowerCase()
-  // Fabricator's own tools first — their names ("fabricator_…") contain the
-  // substring "cat", which would otherwise be misread as a file "cat"/read.
-  if (n.includes('screenshot')) return 'screenshot'
-  if (n.includes('navigate')) return 'navigate'
-  if (n.includes('deploy')) return 'deploy'
-  if (n.includes('powershell') || n.includes('bash') || n.includes('shell')) return 'run'
-  if (n.includes('create')) return 'create'
-  if (n.includes('edit') || n.includes('replace') || n.includes('str_replace')) return 'edit'
-  if (n.includes('view') || n.includes('read') || /\bcat\b/.test(n)) return 'read'
-  if (n.includes('grep') || n.includes('search') || n.includes('glob') || n.includes('find'))
-    return 'search'
-  if (n.includes('delete') || n.includes('remove')) return 'delete'
-  return 'other'
-}
-
-const KIND_LABEL: Record<ToolKind, string> = {
-  run: 'Running a command',
-  create: 'Creating a file',
-  edit: 'Editing code',
-  read: 'Reading a file',
-  search: 'Searching the project',
-  delete: 'Removing a file',
-  deploy: 'Deploying the app',
-  navigate: 'Opening the preview',
-  screenshot: 'Taking a screenshot',
-  other: 'Working'
-}
-
-/** Friendly, non-jargon label for a Copilot tool call (for non-coders). */
-function friendlyTool(name: string): string {
-  return KIND_LABEL[toolKind(name)]
-}
-
-/**
- * Compact, client-side roll-up of what a finished turn did, derived from its
- * tool calls (e.g. "Edited 3 files · ran 2 commands · read 5 files"). Returns an
- * empty string when there is nothing meaningful to summarise.
- */
-function summarizeToolParts(tools: ChatToolCall[]): { parts: string[]; total: number } {
-  const c: Record<ToolKind, number> = {
-    read: 0,
-    edit: 0,
-    create: 0,
-    search: 0,
-    run: 0,
-    delete: 0,
-    deploy: 0,
-    navigate: 0,
-    screenshot: 0,
-    other: 0
-  }
-  for (const t of tools) c[toolKind(t.name)]++
-  const n = (count: number, one: string, many: string): string =>
-    `${count} ${count === 1 ? one : many}`
-  const parts: string[] = []
-  if (c.edit) parts.push(`Edited ${n(c.edit, 'file', 'files')}`)
-  if (c.create) parts.push(`Created ${n(c.create, 'file', 'files')}`)
-  if (c.run) parts.push(`Ran ${n(c.run, 'command', 'commands')}`)
-  if (c.read) parts.push(`Read ${n(c.read, 'file', 'files')}`)
-  if (c.search) parts.push(`Ran ${n(c.search, 'search', 'searches')}`)
-  if (c.delete) parts.push(`Removed ${n(c.delete, 'file', 'files')}`)
-  if (c.deploy) parts.push(`Deployed ${n(c.deploy, 'time', 'times')}`)
-  if (c.screenshot) parts.push(`Took ${n(c.screenshot, 'screenshot', 'screenshots')}`)
-  if (c.navigate) parts.push(`Opened ${n(c.navigate, 'page', 'pages')}`)
-  // Total actions accounted for by the breakdown above (excludes uncategorized
-  // "other" calls, which aren't shown as their own line).
-  const total =
-    c.edit + c.create + c.run + c.read + c.search + c.delete + c.deploy + c.screenshot + c.navigate
-  return { parts, total }
-}
-
-/** Cap a tool target for the single-line working bar (keep the filename for paths). */
-function capTarget(s: string): string {
-  const max = 44
-  if (s.length <= max) return s
-  if (/[\\/]/.test(s)) return '…' + s.slice(s.length - (max - 1))
-  return s.slice(0, max - 1) + '…'
-}
-
-/** Distinct line icon per tool kind, so the activity feed is scannable at a glance. */
-function ToolKindIcon({ kind, className }: { kind: ToolKind; className?: string }): JSX.Element {
-  const p = {
-    className: className ?? 'btn-ico',
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.8,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-    'aria-hidden': true
-  }
-  switch (kind) {
-    case 'read':
-      return (
-        <svg {...p}>
-          <path d="M7 3.5h7L18 7.5V20.5H7z" />
-          <path d="M14 3.5V8h4" />
-          <path d="M9.5 12.5h6M9.5 16h6" />
-        </svg>
-      )
-    case 'edit':
-      return (
-        <svg {...p}>
-          <path d="M4 20h4L19 9l-4-4L4 16z" />
-          <path d="M13.5 6.5l4 4" />
-        </svg>
-      )
-    case 'create':
-      return (
-        <svg {...p}>
-          <path d="M7 3.5h7L18 7.5V20.5H7z" />
-          <path d="M14 3.5V8h4" />
-          <path d="M12 11.5v5M9.5 14h5" />
-        </svg>
-      )
-    case 'search':
-      return (
-        <svg {...p}>
-          <circle cx="11" cy="11" r="6" />
-          <path d="M20 20l-3.6-3.6" />
-        </svg>
-      )
-    case 'run':
-      return (
-        <svg {...p}>
-          <rect x="3.5" y="5" width="17" height="14" rx="2" />
-          <path d="M7 10l3 2.5L7 15" />
-          <path d="M12.5 15h4" />
-        </svg>
-      )
-    case 'delete':
-      return (
-        <svg {...p}>
-          <path d="M5 7h14" />
-          <path d="M9 7V4.5h6V7" />
-          <path d="M6.5 7l1 12.5h9l1-12.5" />
-        </svg>
-      )
-    case 'deploy':
-      return (
-        <svg {...p}>
-          <path d="M6 16.5A3.5 3.5 0 0 1 6.5 9.6 5 5 0 0 1 16 8.8a3.6 3.6 0 0 1 2 6.7" />
-          <path d="M12 12v7" />
-          <path d="M9.5 14.5 12 12l2.5 2.5" />
-        </svg>
-      )
-    case 'navigate':
-      return (
-        <svg {...p}>
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M15.5 8.5 13 13l-4.5 2.5L11 11z" />
-        </svg>
-      )
-    case 'screenshot':
-      return (
-        <svg {...p}>
-          <path d="M4 8.5h3l1.5-2h7L17 8.5h3v10H4z" />
-          <circle cx="12" cy="13" r="3" />
-        </svg>
-      )
-    default:
-      return (
-        <svg {...p}>
-          <path d="M12 4.5l1.9 4.6 4.6 1.9-4.6 1.9L12 17.5l-1.9-4.6L5.5 11l4.6-1.9z" />
-        </svg>
-      )
-  }
-}
-
-function CopyIcon({ className }: { className?: string }): JSX.Element {
-  return (
-    <svg
-      className={className ?? 'btn-ico'}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="9" y="9" width="11" height="11" rx="2" />
-      <path d="M5 15V5a2 2 0 0 1 2-2h8" />
-    </svg>
-  )
-}
-
-function CheckIcon({ className }: { className?: string }): JSX.Element {
-  return (
-    <svg
-      className={className ?? 'btn-ico'}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M20 6L9 17l-5-5" />
-    </svg>
-  )
-}
-
-/** Small clipboard button with brief "Copied" feedback (used on assistant turns). */
-function CopyButton({ text, className }: { text: string; className?: string }): JSX.Element {
-  const [copied, setCopied] = useState(false)
-  async function copy(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1200)
-    } catch {
-      /* clipboard unavailable — ignore */
-    }
-  }
-  return (
-    <button
-      type="button"
-      className={`copy-btn${className ? ` ${className}` : ''}${copied ? ' copy-btn--done' : ''}`}
-      onClick={copy}
-      title="Copy message"
-      aria-label="Copy message"
-    >
-      {copied ? (
-        <span className="copy-btn-check" aria-hidden="true">
-          <Codicon name="check" />
-        </span>
-      ) : (
-        <CopyIcon />
-      )}
-      <span className="copy-btn-label">{copied ? 'Copied' : 'Copy'}</span>
-    </button>
-  )
-}
-
-/**
- * Shorten a tool's detail for display: absolute paths inside the project are
- * shown relative to the project root (e.g. `src\pages\HomePage.tsx`) so the feed
- * reads cleanly for non-coders. Commands / descriptions pass through unchanged.
- */
-function shortDetail(title: string, projectPath: string): string {
-  const root = projectPath.replace(/[\\/]+$/, '')
-  if (root && title.toLowerCase().startsWith(root.toLowerCase())) {
-    const rel = title.slice(root.length).replace(/^[\\/]+/, '')
-    return rel || 'project root'
-  }
-  return title
-}
-
-/** A stingray silhouette with eyes — on-brand for Rayfin, kept monochrome for the neutral user chip. */
-function UserIcon(): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-      {/* body / wings — eyes are cut as holes (evenodd) so the chip shows through */}
-      <path
-        fillRule="evenodd"
-        d="M12 4.4 C15.8 4.6 20.7 6.4 23 12 C20 13.6 15 14 12 16.2 C9 14 4 13.6 1 12 C3.3 6.4 8.2 4.6 12 4.4 Z M9 8.6 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 Z M13 8.6 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0 Z"
-      />
-      {/* tail */}
-      <path d="M11.4 15.8 L12 23.6 L12.6 15.8 Z" />
-    </svg>
-  )
-}
-
-function SendIcon(): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 19V5" />
-      <path d="M5 12l7-7 7 7" />
-    </svg>
-  )
-}
-
-/** Small glyph per chat mode, shown in the composer mode selector + its menu. */
-function ModeIcon({ mode, className }: { mode: ChatMode; className?: string }): JSX.Element {
-  const cls = className ?? 'btn-ico'
-  if (mode === 'plan') {
-    return (
-      <svg
-        className={cls}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M10 6h8" />
-        <path d="M10 12h8" />
-        <path d="M10 18h8" />
-        <path d="M4 5.4l1.2 1.3L7.6 4.3" />
-        <path d="M4.2 12h2.4" />
-        <path d="M4.2 18h2.4" />
-      </svg>
-    )
-  }
-  if (mode === 'autopilot') {
-    return (
-      <svg
-        className={cls}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M4.5 6.5 11 12l-6.5 5.5z" />
-        <path d="M12.5 6.5 19 12l-6.5 5.5z" />
-      </svg>
-    )
-  }
-  return (
-    <svg
-      className={cls}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="4.5" y="8" width="15" height="11" rx="3" />
-      <path d="M12 4.6V8" />
-      <circle cx="12" cy="4" r="1.1" />
-      <circle cx="9.6" cy="13" r="1.15" />
-      <circle cx="14.4" cy="13" r="1.15" />
-    </svg>
-  )
-}
-
-const NUM_LINE = /^(\s*)(\d+)\.\s?(.*)$/
-
-/** Detect the read/view tool's `N. <code>` line format; split numbers from code. */
-function parseNumbered(text: string): { nums: (number | null)[]; code: string } | null {
-  const lines = text.split('\n')
-  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop()
-  const nums: (number | null)[] = []
-  const codes: string[] = []
-  let matched = 0
-  for (const line of lines) {
-    const m = NUM_LINE.exec(line)
-    if (m) {
-      nums.push(Number(m[2]))
-      codes.push(m[3])
-      matched++
-    } else {
-      nums.push(null)
-      codes.push(line)
-    }
-  }
-  if (matched < Math.max(3, Math.ceil(lines.length * 0.7))) return null
-  return { nums, code: codes.join('\n') }
-}
-
-/**
- * Renders a tool's output. File reads (the `N. <code>` format) get a line-number
- * gutter + syntax highlighting; everything else (commands, errors) stays plain.
- */
-function ToolOutput({
-  name,
-  title,
-  output
-}: {
-  name: string
-  title: string
-  output: string
-}): JSX.Element {
-  const numbered = useMemo(() => parseNumbered(output), [output])
-  const kind = toolKind(name)
-  const lang =
-    kind === 'read' || kind === 'edit' || kind === 'create' ? langFromPath(title) : undefined
-  const hl = useMemo(
-    () => (numbered ? highlightCode(numbered.code, lang) : null),
-    [numbered, lang]
-  )
-
-  if (!numbered) return <pre className="tool-call-output">{output}</pre>
-
-  return (
-    <div className="tool-code">
-      <div className="tool-code-gutter" aria-hidden="true">
-        {numbered.nums.map((n, i) => (
-          <span key={i}>{n ?? ''}</span>
-        ))}
-      </div>
-      <pre className="tool-code-pre">
-        {hl ? (
-          <code className="hljs" dangerouslySetInnerHTML={{ __html: hl.html }} />
-        ) : (
-          <code className="hljs">{numbered.code}</code>
-        )}
-      </pre>
-    </div>
-  )
-}
-
-/** A single tool call row (expandable to its captured output). */
-function ToolRow({
-  tool: t,
-  projectPath
-}: {
-  tool: ChatToolCall
-  projectPath: string
-}): JSX.Element {
-  return (
-    <details className={`tool-call tool-call--${t.state}`}>
-      <summary title={t.title}>
-        <span className="tool-call-icon">
-          {t.state === 'running' ? (
-            <span className="tool-spin" />
-          ) : (
-            <ToolKindIcon kind={toolKind(t.name)} className="tool-kind-ico" />
-          )}
-        </span>
-        <span className="tool-call-name">{friendlyTool(t.name)}</span>
-        <span className="tool-call-title">{shortDetail(t.title, projectPath)}</span>
-      </summary>
-      {t.output && <ToolOutput name={t.name} title={t.title} output={t.output} />}
-    </details>
-  )
-}
-
-/** Renders a turn's tool-activity list. */
-function ToolActivity({
-  tools,
-  projectPath
-}: {
-  tools: ChatToolCall[]
-  projectPath: string
-}): JSX.Element {
-  return (
-    <div className="tool-activity">
-      {tools.map((t) => (
-        <ToolRow key={t.id} tool={t} projectPath={projectPath} />
-      ))}
-    </div>
-  )
-}
-
-/** Compact roll-up chip shown under a completed assistant turn. */
-function TurnSummary({ tools }: { tools: ChatToolCall[] }): JSX.Element | null {
-  const { parts, total } = useMemo(() => summarizeToolParts(tools), [tools])
-  const [expanded, setExpanded] = useState(false)
-  if (parts.length === 0) return null
-
-  // A single line is short enough to show inline — no toggle needed.
-  if (parts.length === 1) {
-    return (
-      <div className="turn-summary" title="What this turn did">
-        <CheckIcon className="turn-summary-ico" />
-        <span className="turn-summary-item">{parts[0]}</span>
-      </div>
-    )
-  }
-
-  // Multiple lines would stack tall and dominate the transcript, so collapse them
-  // behind a one-line "Took N actions" toggle that expands to the full breakdown.
-  return (
-    <div className={`turn-summary turn-summary--collapsible${expanded ? ' is-open' : ''}`}>
-      <button
-        type="button"
-        className="turn-summary-toggle"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        title="What this turn did"
-      >
-        <CheckIcon className="turn-summary-ico" />
-        <span>
-          Took {total} {total === 1 ? 'action' : 'actions'}
-        </span>
-        <ChevronRightIcon className="turn-summary-caret" />
-      </button>
-      {expanded && (
-        <ul className="turn-summary-list">
-          {parts.map((p, i) => (
-            <li key={i} className="turn-summary-item">
-              {p}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-/**
- * The "Fabricator needs your input" card for a standalone Agent-mode `ask_user`
- * question. Rendered inline in the turn feed at the point the question was
- * asked (see the `'question'` segment) so it stays docked there as the rest of
- * the turn streams in below it.
- */
-function AgentQuestionBlock({
-  questions,
-  busy,
-  error,
-  onAnswer
-}: {
-  questions: ChatPlanQuestion[]
-  busy: boolean
-  error?: string
-  onAnswer: (requestId: string, answer: string, wasFreeform: boolean) => void
-}): JSX.Element {
-  return (
-    <div className="chat-agent-questions">
-      <div className="chat-agent-questions-head">
-        <Codicon name="comment-discussion" /> Fabricator needs your input
-      </div>
-      {questions.map((q) => (
-        <PlanQuestionCard key={q.id} question={q} busy={busy} onAnswer={onAnswer} />
-      ))}
-      {error && (
-        <div className="chat-agent-questions-error">
-          <Codicon name="warning" /> {error}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/**
- * Renders an assistant turn body as a single chronological feed: prose, the
- * tool calls it ran, and any `ask_user` question cards, interleaved in the
- * order they streamed. Falls back to the legacy "all tools, then all text"
- * grouping for turns without segment data (e.g. older persisted history).
- */
-function AssistantBody({
-  message: m,
-  projectPath,
-  questionBusy,
-  onAnswerQuestion
-}: {
-  message: UIChatMessage
-  projectPath: string
-  questionBusy: boolean
-  onAnswerQuestion: (requestId: string, answer: string, wasFreeform: boolean) => void
-}): JSX.Element {
-  const segments = m.segments
-  if (segments && segments.length > 0) {
-    const lastIdx = segments.length - 1
-    const last = segments[lastIdx]
-    const caretAtTail = Boolean(m.pending) && last?.kind === 'text' && last.text.trim().length > 0
-    return (
-      <div className="turn-feed">
-        {segments.map((seg, i) => {
-          if (seg.kind === 'text') {
-            if (!seg.text.trim()) return null
-            return (
-              <div key={i} className="msg-text msg-text--md">
-                <Markdown>{seg.text}</Markdown>
-                {caretAtTail && i === lastIdx && (
-                  <span className="stream-caret" aria-hidden="true" />
-                )}
-              </div>
-            )
-          }
-          if (seg.kind === 'interjection') {
-            return (
-              <div key={i} className="turn-interject">
-                <span className="turn-interject-tag">You added</span>
-                <div className="turn-interject-text">
-                  <Markdown>{seg.text}</Markdown>
-                  {seg.thumbs && seg.thumbs.length > 0 && (
-                    <div className="msg-shots">
-                      {seg.thumbs.map((src, j) => (
-                        <img key={j} className="msg-shot" src={src} alt="Screenshot attachment" />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          }
-          if (seg.kind === 'question') {
-            const q = m.questions?.find((item) => item.id === seg.id)
-            if (!q) return null
-            return (
-              <AgentQuestionBlock
-                key={i}
-                questions={[q]}
-                busy={questionBusy}
-                error={q.state === 'pending' ? m.questionError : undefined}
-                onAnswer={onAnswerQuestion}
-              />
-            )
-          }
-          const tool = m.tools.find((t) => t.id === seg.id)
-          if (!tool) return null
-          return (
-            <div key={i} className="tool-activity">
-              <ToolRow tool={tool} projectPath={projectPath} />
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-  return (
-    <div className="turn-feed">
-      {m.tools.length > 0 && <ToolActivity tools={m.tools} projectPath={projectPath} />}
-      {m.text && (
-        <div className="msg-text msg-text--md">
-          <Markdown>{m.text}</Markdown>
-          {m.pending && m.text.trim().length > 0 && (
-            <span className="stream-caret" aria-hidden="true" />
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/**
- * Live "working" line shown at the bottom of an assistant turn while it streams.
- * Steps now render inline in the turn feed, so this is a slim pulse: a small orb,
- * a contextual label (what's happening right now) and a ticking timer. When the
- * turn is paused on a plan decision it switches to a calm "waiting" state with no
- * timer or work motion, so it never looks like it's still working.
- */
-function AgentStatus({
-  tools,
-  hasText,
-  notice,
-  projectPath,
-  awaitingDecision,
-  startedAt
-}: {
-  tools: ChatToolCall[]
-  hasText: boolean
-  notice?: string
-  projectPath: string
-  awaitingDecision?: boolean
-  startedAt?: number
-}): JSX.Element {
-  // Anchor the timer to the turn's real start time (persisted on the message),
-  // not this component's mount time — otherwise remounting (e.g. switching away
-  // from and back to the chat tab) would reset the elapsed counter to 0.
-  const startRef = useRef(startedAt ?? Date.now())
-  const [elapsed, setElapsed] = useState(() =>
-    Math.max(0, Math.floor((Date.now() - startRef.current) / 1000))
-  )
-  useEffect(() => {
-    if (startedAt != null) startRef.current = startedAt
-    const tick = (): void =>
-      setElapsed(Math.max(0, Math.floor((Date.now() - startRef.current) / 1000)))
-    tick()
-    const id = window.setInterval(tick, 1000)
-    return () => window.clearInterval(id)
-  }, [startedAt])
-
-  if (awaitingDecision) {
-    return (
-      <div className="agent-status agent-status--await" role="status" aria-live="polite">
-        <span className="agent-status-await-dot" aria-hidden="true" />
-        <span className="agent-status-await-label">Waiting for your decision</span>
-      </div>
-    )
-  }
-
-  const running = tools.find((t) => t.state === 'running')
-  let label: string
-  if (notice) label = notice
-  else if (running) {
-    const target = running.title ? capTarget(shortDetail(running.title, projectPath)) : ''
-    label = target ? `${friendlyTool(running.name)} — ${target}` : friendlyTool(running.name)
-  } else if (hasText) label = 'Writing the response'
-  else if (tools.length) label = 'Working through the steps'
-  else label = 'Thinking'
-
-  const mm = Math.floor(elapsed / 60)
-  const ss = String(elapsed % 60).padStart(2, '0')
-
-  return (
-    <div className={`agent-status${notice ? ' agent-status--notice' : ''}`}>
-      <span className="agent-status-orb" aria-hidden="true">
-        <span className="agent-status-orb-core" />
-      </span>
-      <span className="agent-status-label" role="status" aria-live="polite">
-        {notice ? <><Codicon name="refresh" /> {label}</> : `${label}…`}
-      </span>
-      <span className="agent-status-time" aria-hidden="true">
-        {mm}:{ss}
-      </span>
-    </div>
-  )
-}
-
-function uid(): string {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36)
-}
-
-/** Compact, human-readable turn duration: "<1s", "12s", "1m 23s". */
-function formatTurnDuration(ms: number): string {
-  if (ms < 1000) return '<1s'
-  const total = Math.round(ms / 1000)
-  if (total < 60) return `${total}s`
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return s ? `${m}m ${s}s` : `${m}m`
-}
-/** Largest dimension we keep when re-encoding pasted/added images (keeps temp
- *  files and the model's vision payload reasonable). */
-const MAX_IMAGE_DIM = 2000
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read image'))
-    reader.readAsDataURL(file)
-  })
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('Could not decode image'))
-    img.src = src
-  })
-}
-
-/** Re-encode an image data URL to a (possibly downscaled) PNG plus a small thumb. */
-async function toPngAndThumb(src: string): Promise<{ png: string; thumb: string }> {
-  const img = await loadImage(src)
-  const fit = Math.min(1, MAX_IMAGE_DIM / Math.max(img.naturalWidth, img.naturalHeight, 1))
-  const w = Math.max(1, Math.round(img.naturalWidth * fit))
-  const h = Math.max(1, Math.round(img.naturalHeight * fit))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas unavailable')
-  ctx.drawImage(img, 0, 0, w, h)
-  const png = canvas.toDataURL('image/png')
-
-  const tScale = Math.min(1, 176 / w)
-  const tw = Math.max(1, Math.round(w * tScale))
-  const th = Math.max(1, Math.round(h * tScale))
-  const tCanvas = document.createElement('canvas')
-  tCanvas.width = tw
-  tCanvas.height = th
-  const tCtx = tCanvas.getContext('2d')
-  if (!tCtx) return { png, thumb: png }
-  tCtx.drawImage(canvas, 0, 0, tw, th)
-  return { png, thumb: tCanvas.toDataURL('image/png') }
-}
-
-/**
- * Append streamed text to the segment list, merging into the trailing text
- * segment when possible so consecutive deltas stay one prose block (tool
- * segments in between naturally split the prose into chronological slices).
- */
-function appendText(segments: ChatSegment[] | undefined, text: string): ChatSegment[] {
-  const segs = segments ?? []
-  const last = segs[segs.length - 1]
-  if (last && last.kind === 'text') {
-    return [...segs.slice(0, -1), { kind: 'text', text: last.text + text }]
-  }
-  return [...segs, { kind: 'text', text }]
-}
-
-/**
- * Drop the most recent interjection segment matching `text` — used to undo an
- * optimistic steering bubble when the turn finished before it could interject.
- */
-function rollbackInterjection(
-  segments: ChatSegment[] | undefined,
-  text: string
-): ChatSegment[] | undefined {
-  if (!segments) return segments
-  for (let i = segments.length - 1; i >= 0; i--) {
-    const s = segments[i]
-    if (s.kind === 'interjection' && s.text === text) {
-      return [...segments.slice(0, i), ...segments.slice(i + 1)]
-    }
-  }
-  return segments
-}
-
-/**
- * Settle any tools still `running` to a terminal state. A `tool-end` can be
- * dropped when a turn is interrupted/cancelled mid-command, which would leave
- * its tile spinning forever (settled turns never re-render). Resolving them
- * when the turn ends keeps the UI honest. Returns the same array if nothing
- * was running, so memoized rows keep their identity.
- */
-function settleRunningTools(tools: ChatToolCall[], to: 'success' | 'error'): ChatToolCall[] {
-  if (!tools.some((t) => t.state === 'running')) return tools
-  return tools.map((t) => (t.state === 'running' ? { ...t, state: to } : t))
-}
-
-export function reduceChatMessage(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
-  let next: UIChatMessage
-  switch (ev.type) {
-    case 'delta':
-      next = {
-        ...msg,
-        text: msg.text + ev.text,
-        segments: appendText(msg.segments, ev.text),
-        notice: undefined
-      }
-      break
-    case 'tool-start':
-      if (msg.tools.some((t) => t.id === ev.tool.id)) return msg
-      next = {
-        ...msg,
-        tools: [...msg.tools, ev.tool],
-        segments: [...(msg.segments ?? []), { kind: 'tool', id: ev.tool.id }],
-        notice: undefined
-      }
-      break
-    case 'tool-end':
-      next = {
-        ...msg,
-        tools: msg.tools.map((t) =>
-          t.id === ev.id ? { ...t, state: ev.state, output: ev.output ?? t.output } : t
-        )
-      }
-      break
-    case 'notice':
-      next = { ...msg, notice: ev.text }
-      break
-    case 'error':
-      next = {
-        ...msg,
-        error: ev.text,
-        pending: false,
-        notice: undefined,
-        tools: settleRunningTools(msg.tools, 'error'),
-        elapsedMs: msg.startedAt ? Date.now() - msg.startedAt : msg.elapsedMs
-      }
-      break
-    case 'result':
-      next = {
-        ...msg,
-        pending: false,
-        notice: undefined,
-        tools: settleRunningTools(msg.tools, ev.ok ? 'success' : 'error'),
-        elapsedMs: msg.startedAt ? Date.now() - msg.startedAt : msg.elapsedMs
-      }
-      break
-    case 'plan-proposed':
-    case 'plan-resolved':
-    case 'plan-content':
-    case 'plan-todos':
-    case 'plan-question':
-      next = { ...msg, notice: undefined }
-      break
-    case 'agent-question': {
-      // A standalone `ask_user` question from an Agent-mode turn (no Plan card).
-      const question: ChatPlanQuestion = {
-        id: ev.requestId,
-        question: ev.question,
-        choices: ev.choices,
-        allowFreeform: ev.allowFreeform,
-        state: 'pending'
-      }
-      const existing = msg.questions ?? []
-      const idx = existing.findIndex((item) => item.id === ev.requestId)
-      const questions =
-        idx < 0 ? [...existing, question] : existing.map((item, i) => (i === idx ? question : item))
-      // Dock the card where it was asked: anchor it in the chronological feed
-      // rather than letting it trail the turn body as more output streams in.
-      const segments = (msg.segments ?? []).some(
-        (s) => s.kind === 'question' && s.id === ev.requestId
-      )
-        ? msg.segments
-        : [...(msg.segments ?? []), { kind: 'question' as const, id: ev.requestId }]
-      next = { ...msg, questions, segments, questionError: undefined, notice: undefined }
-      break
-    }
-    case 'plan-question-resolved': {
-      // Mark a standalone (Agent-mode) question answered; a Plan-mode question
-      // with the same id is handled by reducePlanEvent below.
-      const questions = msg.questions?.map((item) =>
-        item.id === ev.requestId
-          ? { ...item, state: 'answered' as const, answer: ev.answer ?? item.answer }
-          : item
-      )
-      next = { ...msg, questions: questions ?? msg.questions, notice: undefined }
-      break
-    }
-    default:
-      next = msg
-  }
-  const plan = reducePlanEvent(msg.plan, ev, `plan-${msg.id}`)
-  return plan === msg.plan ? next : { ...next, plan }
-}
-
-/** Composer mode options (Agent / Plan / Autopilot) with hover hints + menu copy. */
-const MODES: { id: ChatMode; label: string; hint: string; desc: string }[] = [
-  {
-    id: 'agent',
-    label: 'Agent',
-    hint: 'Agent — do the work, auto-approving tools (default).',
-    desc: 'Does the work for you, auto-approving tools. The everyday default.'
-  },
-  {
-    id: 'plan',
-    label: 'Plan',
-    hint: 'Plan — research first, then propose a plan for your approval before acting.',
-    desc: 'Researches first, then proposes a plan for your approval before acting.'
-  },
-  {
-    id: 'autopilot',
-    label: 'Autopilot',
-    hint: 'Autopilot — run autonomously end-to-end, auto-approving tools.',
-    desc: 'Runs autonomously end-to-end, auto-approving tools.'
-  }
-]
-
-/** A file the composer can reference via @-mention. */
-interface MentionFile {
-  name: string
-  path: string
-}
-
-/** Flatten a project file tree to a flat list of files (dirs + ignored dropped). */
-function flattenFiles(nodes: FileNode[], out: MentionFile[] = []): MentionFile[] {
-  for (const n of nodes) {
-    if (n.ignored) continue
-    if (n.type === 'file') out.push({ name: n.name, path: n.path })
-    else if (n.children) flattenFiles(n.children, out)
-  }
-  return out
-}
-
-/**
- * Rank files for an @-mention query: basename prefix beats basename-substring
- * beats path-substring; ties break toward shorter paths. Empty query lists all.
- */
-function rankFiles(files: MentionFile[], query: string): MentionFile[] {
-  const q = query.toLowerCase()
-  if (!q) return files.slice(0, 8)
-  const scored: { f: MentionFile; s: number }[] = []
-  for (const f of files) {
-    const name = f.name.toLowerCase()
-    let s = -1
-    if (name.startsWith(q)) s = 0
-    else if (name.includes(q)) s = 1
-    else if (f.path.toLowerCase().includes(q)) s = 2
-    if (s >= 0) scored.push({ f, s })
-  }
-  scored.sort((a, b) => a.s - b.s || a.f.path.length - b.f.path.length)
-  return scored.slice(0, 8).map((x) => x.f)
-}
-
-/**
- * One conversation row (assistant or user turn), memoized so the thousands of
- * state updates a streaming turn produces only re-render the *one* turn that
- * changed — completed turns keep their object identity (see `reduce`) and
- * therefore skip re-rendering entirely. Callbacks must be referentially stable
- * (the parent passes `useCallback`-wrapped wrappers) and `canRetry` is a
- * precomputed primitive, so memo's shallow compare holds for settled turns.
- */
-const MessageRow = memo(function MessageRow({
-  message: m,
-  projectName,
-  projectPath,
-  canRetry,
-  onRetry,
-  canResume,
-  onResume,
-  planBusy,
-  questionBusy,
-  onChangePlanContent,
-  onResolvePlan,
-  onAnswerPlanQuestion,
-  onResumePlan,
-  onExportPlan,
-  onOpenMention
-}: {
-  message: UIChatMessage
-  projectName: string
-  projectPath: string
-  canRetry: boolean
-  onRetry: (id: string) => void
-  canResume: boolean
-  onResume: (id: string) => void
-  planBusy: boolean
-  questionBusy: boolean
-  onChangePlanContent: (msgId: string, content: string) => void
-  onResolvePlan: (msgId: string, action: string, feedback?: string) => void
-  onAnswerPlanQuestion: (
-    msgId: string,
-    requestId: string,
-    answer: string,
-    wasFreeform: boolean
-  ) => void
-  onResumePlan: (
-    msgId: string,
-    kind: 'review' | 'execute' | 'revise',
-    action?: string,
-    feedback?: string
-  ) => void
-  onExportPlan: (msgId: string, content: string) => Promise<void> | void
-  onOpenMention?: (ref: string) => void
-}): JSX.Element {
-  const answerQuestion = useCallback(
-    (requestId: string, answer: string, wasFreeform: boolean) =>
-      onAnswerPlanQuestion(m.id, requestId, answer, wasFreeform),
-    [onAnswerPlanQuestion, m.id]
-  )
-  // Questions the feed already docks in place (via a `'question'` segment) are
-  // rendered there; anything left over — legacy turns persisted before segment
-  // anchoring — still falls back to a block at the end of the turn.
-  const unanchoredQuestions = useMemo(() => {
-    const all = m.questions ?? []
-    if (all.length === 0) return all
-    const anchored = new Set(
-      (m.segments ?? []).flatMap((s) => (s.kind === 'question' ? [s.id] : []))
-    )
-    return anchored.size === 0 ? all : all.filter((q) => !anchored.has(q.id))
-  }, [m.questions, m.segments])
-  return (
-    <div className={`turn turn--${m.role}`}>
-      <div className="turn-head">
-        <div className={`turn-avatar${m.pending ? ' turn-avatar--pending' : ''}`}>
-          {m.role === 'user' ? <UserIcon /> : <FabricatorMark />}
-        </div>
-        <div className="turn-role">{m.role === 'user' ? 'You' : 'Fabricator'}</div>
-        {m.role === 'assistant' && !m.pending && m.elapsedMs != null && (
-          <span className="turn-time" title="Time this turn took">
-            <ClockIcon className="turn-time-ico" />
-            {formatTurnDuration(m.elapsedMs)}
-          </span>
-        )}
-        {m.role === 'assistant' && Boolean(m.text) && !m.pending && (
-          <CopyButton text={m.text} className="turn-copy" />
-        )}
-        {m.role === 'user' && Boolean(m.text) && m.text !== '(screenshot)' && (
-          <CopyButton text={m.text} className="turn-copy" />
-        )}
-      </div>
-      <div className="turn-main">
-        {m.role === 'assistant' ? (
-          <AssistantBody
-            message={m}
-            projectPath={projectPath}
-            questionBusy={questionBusy}
-            onAnswerQuestion={answerQuestion}
-          />
-        ) : (
-          m.text && (
-            <div className="msg-text">
-              <MentionText text={m.text} onOpen={onOpenMention} />
-            </div>
-          )
-        )}
-        {m.role === 'assistant' && !m.pending && !m.error && m.tools.length > 0 && (
-          <TurnSummary tools={m.tools} />
-        )}
-        {m.plan && (
-          <PlanCard
-            plan={m.plan}
-            projectName={projectName}
-            busy={planBusy}
-            onContentChange={(content) => onChangePlanContent(m.id, content)}
-            onResolve={(action, feedback) => onResolvePlan(m.id, action, feedback)}
-            onAnswerQuestion={(requestId, answer, wasFreeform) =>
-              onAnswerPlanQuestion(m.id, requestId, answer, wasFreeform)
-            }
-            onResume={(kind, action, feedback) => onResumePlan(m.id, kind, action, feedback)}
-            onExport={(content) => onExportPlan(m.id, content)}
-          />
-        )}
-        {unanchoredQuestions.length > 0 && (
-          <AgentQuestionBlock
-            questions={unanchoredQuestions}
-            busy={questionBusy}
-            error={m.questionError}
-            onAnswer={answerQuestion}
-          />
-        )}
-        {m.attachmentThumbs && m.attachmentThumbs.length > 0 ? (
-          <div className="msg-shots">
-            {m.attachmentThumbs.map((src, i) => (
-              <img key={i} className="msg-shot" src={src} alt="Screenshot attachment" />
-            ))}
-          </div>
-        ) : m.attachments ? (
-          <div className="msg-attach">
-            <ImageIcon className="msg-attach-ico" />
-            {m.attachments} screenshot{m.attachments > 1 ? 's' : ''}
-          </div>
-        ) : null}
-        {m.notice && !m.pending && <div className="msg-notice"><Codicon name="refresh" /> {m.notice}</div>}
-        {m.pending && (
-          <AgentStatus
-            tools={m.tools}
-            hasText={Boolean(m.text)}
-            notice={m.notice}
-            projectPath={projectPath}
-            awaitingDecision={Boolean(
-              m.plan && (m.plan.phase === 'review' || m.plan.phase === 'clarifying')
-            )}
-            startedAt={m.startedAt}
-          />
-        )}
-        {m.error && !m.plan && (
-          <div className="alert alert--error msg-error">
-            <span className="msg-error-text">{m.error}</span>
-            {canRetry && !m.designApplyId && (
-              <button
-                className="btn btn--xs btn--ghost msg-error-retry"
-                onClick={() => onRetry(m.id)}
-                title="Re-send this message"
-              >
-                <Codicon name="refresh" /> Retry
-              </button>
-            )}
-          </div>
-        )}
-        {m.interrupted && !m.plan && !m.pending && !m.error && (
-          <div className="msg-interrupted">
-            <span className="msg-interrupted-text">
-              This response was interrupted when the app closed.
-            </span>
-            {canResume && !m.designApplyId && (
-              <button
-                className="btn btn--xs btn--ghost msg-interrupted-resume"
-                onClick={() => onResume(m.id)}
-                title="Re-run this prompt and continue"
-              >
-                ⟲ Resume
-              </button>
-            )}
-          </div>
-        )}
-        {m.designApplyId && !m.pending && (m.error || m.interrupted) && (
-          <div className="msg-notice">Open Design Studio to review or recover this Apply. Its source changes will not be replayed from chat.</div>
-        )}
-      </div>
-    </div>
-  )
-})
-
 export default function ChatPanel({
   project,
   messages,
@@ -1525,12 +152,15 @@ export default function ChatPanel({
   const onDraftChangeRef = useRef(onDraftChange)
   onDraftChangeRef.current = onDraftChange
   const [input, setInputState] = useState(draft ?? '')
+  // The latest draft, so functional updates chain correctly without resolving
+  // inside a state updater — the parent's `onDraftChange` must not run while
+  // React is computing this component's state.
+  const inputRef = useRef(input)
   const setInput = useCallback((next: string | ((prev: string) => string)): void => {
-    setInputState((prev) => {
-      const value = typeof next === 'function' ? next(prev) : next
-      onDraftChangeRef.current?.(value)
-      return value
-    })
+    const value = typeof next === 'function' ? next(inputRef.current) : next
+    inputRef.current = value
+    setInputState(value)
+    onDraftChangeRef.current?.(value)
   }, [])
   const [sending, setSending] = useState(false)
   // Recover the in-flight state when the panel remounts mid-turn — switching
@@ -1566,11 +196,9 @@ export default function ChatPanel({
   const activeMode: ChatMode = modeSelectorEnabled ? mode : 'agent'
   const [model, setModel] = useState(project.model ?? '')
   const [effort, setEffort] = useState<ReasoningEffort | ''>(project.effort ?? '')
-  const [showModel, setShowModel] = useState(false)
-  const [showMode, setShowMode] = useState(false)
   const [planBusyId, setPlanBusyId] = useState<string | null>(null)
   const [dismissedPlanSuggestion, setDismissedPlanSuggestion] = useState<string | null>(null)
-  const { models, loading: modelsLoading } = useCopilotModels(showModel)
+  const [confirmNewChat, setConfirmNewChat] = useState(false)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   // Referentially-stable wrappers for the per-row callbacks so memoized
@@ -1579,6 +207,8 @@ export default function ChatPanel({
   // always point at the latest closures, preserving current `messages`/`sending`.
   const retryRef = useRef(retry)
   retryRef.current = retry
+  const tryAgainRef = useRef(tryAgain)
+  tryAgainRef.current = tryAgain
   const resumeRef = useRef(resume)
   resumeRef.current = resume
   const resolvePlanRef = useRef(resolvePlan)
@@ -1592,6 +222,7 @@ export default function ChatPanel({
   const exportPlanRef = useRef(exportPlan)
   exportPlanRef.current = exportPlan
   const onRetry = useCallback((id: string) => void retryRef.current(id), [])
+  const onTryAgain = useCallback((id: string) => void tryAgainRef.current(id), [])
   const onResume = useCallback((id: string) => void resumeRef.current(id), [])
   const onResolvePlan = useCallback(
     (msgId: string, action: string, feedback?: string) =>
@@ -1627,6 +258,7 @@ export default function ChatPanel({
   const [dragOver, setDragOver] = useState(false)
   const dragDepth = useRef(0)
   const [fileList, setFileList] = useState<MentionFile[] | null>(null)
+  const knownFiles = useMemo(() => (fileList ? new Set(fileList.map((f) => f.path)) : undefined), [fileList])
   const [atOpen, setAtOpen] = useState(false)
   const [atStart, setAtStart] = useState(0)
   const [atQuery, setAtQuery] = useState('')
@@ -1638,8 +270,6 @@ export default function ChatPanel({
   const sizerRef = useRef<HTMLDivElement>(null)
   const revealRaf = useRef<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-  const modeMenuRef = useRef<HTMLDivElement>(null)
-  const modeTriggerRef = useRef<HTMLButtonElement>(null)
   const [attaching, setAttaching] = useState(false)
   const [connectOpen, setConnectOpen] = useState(false)
 
@@ -1737,12 +367,6 @@ export default function ChatPanel({
   } = useGeneratedSuggestions(project.id, messages.length === 0)
   const suggestions = generatedSuggestions ?? fallbackSuggestions
 
-  // The currently-selected model's metadata (when a concrete, still-listed model
-  // is chosen) — used to label the picker button and scope the effort options.
-  const selectedModel = useMemo(() => models.find((m) => m.id === model), [models, model])
-
-  // The active mode's copy, used to label the composer's mode pill.
-  const currentMode = MODES.find((m) => m.id === activeMode) ?? MODES[0]
   const showPlanSuggestion =
     modeSelectorEnabled &&
     activeMode === 'agent' &&
@@ -1750,74 +374,11 @@ export default function ChatPanel({
     shouldSuggestPlanMode(input) &&
     !(dismissedPlanSuggestion && input.startsWith(dismissedPlanSuggestion))
 
-  // Reasoning efforts offered for the current selection: the chosen model's own
-  // set, or — on Auto — the union across all models (an effort still rides along
-  // with whatever the engine picks). Falls back to the static list when empty.
-  const effortOptions = useMemo<ReasoningEffort[]>(() => {
-    let efforts: ReasoningEffort[]
-    if (selectedModel) {
-      efforts = selectedModel.supportedReasoningEfforts
-    } else {
-      const set = new Set<ReasoningEffort>()
-      for (const m of models) for (const e of m.supportedReasoningEfforts) set.add(e)
-      efforts = [...set]
-    }
-    if (efforts.length === 0) efforts = EFFORT_OPTIONS
-    return EFFORT_ORDER.filter((e) => efforts.includes(e))
-  }, [models, selectedModel])
-
-  // Close the model/effort popover on any outside click.
-  useEffect(() => {
-    if (!showModel) return
-    const close = (): void => setShowModel(false)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
-  }, [showModel])
-
-  // Same for the composer mode menu.
-  useEffect(() => {
-    if (!showMode) return
-    const close = (): void => setShowMode(false)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
-  }, [showMode])
-
-  useEffect(() => {
-    if (!showMode) return
-    const id = requestAnimationFrame(() => {
-      const selected = modeMenuRef.current?.querySelector<HTMLButtonElement>(
-        '[role="menuitemradio"][aria-checked="true"]'
-      )
-      selected?.focus()
-    })
-    return () => cancelAnimationFrame(id)
-  }, [showMode])
-
-  function onModeMenuKeyDown(e: KeyboardEvent<HTMLDivElement>): void {
-    if (e.key === 'Escape') {
-      setShowMode(false)
-      requestAnimationFrame(() => modeTriggerRef.current?.focus())
-      return
-    }
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
-    const items = Array.from(
-      e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')
-    )
-    if (!items.length) return
-    e.preventDefault()
-    const current = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement))
-    const next =
-      e.key === 'Home'
-        ? 0
-        : e.key === 'End'
-          ? items.length - 1
-          : e.key === 'ArrowDown'
-            ? (current + 1) % items.length
-            : (current - 1 + items.length) % items.length
-    items[next].focus()
-  }
-
+  // Persist a model / effort change (the picker already drops an effort the new
+  // model can't use).
   function saveOptions(nextModel: string, nextEffort: ReasoningEffort | ''): void {
+    setModel(nextModel)
+    setEffort(nextEffort)
     void window.api.chat.setOptions(project.id, {
       model: nextModel.trim() || undefined,
       effort: nextEffort || undefined
@@ -1825,37 +386,27 @@ export default function ChatPanel({
     onOptionsChanged?.()
   }
 
-  // Switch model; if the in-effect effort isn't valid for the new model, drop
-  // back to Auto so we never send an unsupported model/effort pair.
-  function selectModel(nextModel: string): void {
-    setModel(nextModel)
-    const next = models.find((m) => m.id === nextModel)
-    const stillValid = !effort || !next || next.supportedReasoningEfforts.includes(effort)
-    const nextEffort = stillValid ? effort : ''
-    if (nextEffort !== effort) setEffort(nextEffort)
-    saveOptions(nextModel, nextEffort)
-  }
-
-  // Coalesce high-frequency streamed `delta` events. The SDK emits one IPC event
-  // per token; applying each individually re-rendered the active turn and re-parsed
-  // its markdown thousands of times per reply — the dominant cause of the
-  // VM/Parallels "hang". We buffer delta text per turn and flush on a fixed time
-  // budget (~FLUSH_INTERVAL_MS), not once per animation frame: re-parsing the whole
-  // growing markdown bubble is the streaming hot path, so flushing ~11×/s instead of
-  // ~60×/s cuts that work several-fold with no visible difference. Structural events
-  // (tool/result/plan/error) still apply immediately after draining any buffered text
-  // so chronological order is kept, and the last chunk always lands (turn-end is a
-  // structural event, and any trailing deltas flush on the pending timer).
-  const deltaBufRef = useRef<Map<string, string>>(new Map())
+  // Coalesce high-frequency streamed events (text / reasoning deltas and live tool
+  // output). The SDK emits one IPC event per token; applying each individually
+  // re-rendered the active turn and re-parsed its markdown thousands of times per
+  // reply — the dominant cause of the VM/Parallels "hang". We buffer them per turn
+  // and flush on a fixed time budget (~FLUSH_INTERVAL_MS), not once per animation
+  // frame: re-parsing the whole growing markdown bubble is the streaming hot path,
+  // so flushing ~11×/s instead of ~60×/s cuts that work several-fold with no
+  // visible difference. Structural events (tool/result/plan/error) still apply
+  // immediately after draining the buffer so chronological order is kept, and the
+  // last chunk always lands (turn-end is a structural event, and anything left
+  // flushes on the pending timer).
+  const eventBufRef = useRef(new ChatEventBuffer())
   const flushTimerRef = useRef<number | null>(null)
   const lastFlushRef = useRef<number>(0)
 
   useEffect(() => {
     if (eventsManagedExternally) return
-    // Streamed deltas flush at most once per this interval (ms). Structural events
-    // bypass it via an immediate drain, so this only throttles plain text growth.
+    // Streamed events flush at most once per this interval (ms). Structural events
+    // bypass it via an immediate drain, so this only throttles streaming growth.
     const FLUSH_INTERVAL_MS = 90
-    const buf = deltaBufRef.current
+    const buf = eventBufRef.current
 
     const flush = (): void => {
       if (flushTimerRef.current !== null) {
@@ -1864,13 +415,12 @@ export default function ChatPanel({
       }
       lastFlushRef.current = performance.now()
       if (buf.size === 0) return
-      const pending = new Map(buf)
-      buf.clear()
+      const pending = buf.drain()
       onChangeRef.current((prev) =>
         prev.map((m) => {
           if (m.role !== 'assistant' || !m.turnId) return m
-          const text = pending.get(m.turnId)
-          return text !== undefined ? reduceChatMessage(m, { type: 'delta', text }) : m
+          const events = pending.get(m.turnId)
+          return events ? events.reduce(reduceChatMessage, m) : m
         })
       )
     }
@@ -1884,12 +434,12 @@ export default function ChatPanel({
     const off = window.api.onChatEvent((envelope) => {
       if (envelope.projectId !== project.id) return
       const ev = envelope.event
-      if (ev.type === 'delta') {
-        buf.set(envelope.turnId, (buf.get(envelope.turnId) ?? '') + ev.text)
+      if (isStreamingEvent(ev)) {
+        buf.push(envelope.turnId, ev)
         scheduleFlush()
         return
       }
-      // Structural event: drain buffered text first so deltas land before it.
+      // Structural event: drain buffered events first so they land before it.
       flush()
       if (ev.type === 'mode-changed' && modeSelectorEnabled) setMode(ev.mode)
       onChangeRef.current((prev) =>
@@ -2184,6 +734,7 @@ export default function ChatPanel({
       )
     )
     onTurnComplete?.(result)
+    if (filesRequested.current) void refreshFiles()
   }
 
   /** Append a fresh turn and stream its result. Shared by send + retry. */
@@ -2198,12 +749,14 @@ export default function ChatPanel({
     const turnId = uid()
     const assistantId = uid()
     const sendMode = modeOverride ?? activeMode
+    const now = Date.now()
     const userMsg: UIChatMessage = {
       id: uid(),
       role: 'user',
       text: displayText,
       tools: [],
       pending: false,
+      createdAt: now,
       attachments: shots.length || undefined,
       attachmentThumbs: shots.length ? shots.map((s) => s.thumb) : undefined
     }
@@ -2215,7 +768,8 @@ export default function ChatPanel({
       tools: [],
       segments: [],
       pending: true,
-      startedAt: Date.now(),
+      startedAt: now,
+      createdAt: now,
       plan:
         initialPlan ??
         (sendMode === 'plan' ? createPlanArtifact(`plan-${assistantId}`) : undefined)
@@ -2255,6 +809,18 @@ export default function ChatPanel({
     await dispatch(user.text, user.text, [])
   }
 
+  /** Re-run the latest prompt for a fresh attempt (its context and file changes stay). */
+  async function tryAgain(assistantId: string): Promise<void> {
+    if (sending || externalBusy || deployLock || submitBlocked) return
+    const idx = messages.findIndex((m) => m.id === assistantId)
+    if (idx <= 0 || idx !== messages.length - 1) return
+    const turn = messages[idx]
+    if (turn.pending || turn.plan || turn.designApplyId) return
+    const user = messages[idx - 1]
+    if (!user || user.role !== 'user' || !user.text || user.text === '(screenshot)') return
+    await dispatch(user.text, tryAgainPrompt(user.text), [])
+  }
+
   /**
    * Resume a turn that was interrupted by the app closing/crashing mid-stream.
    * The preceding user prompt is re-run in place: the stranded (partial)
@@ -2269,6 +835,7 @@ export default function ChatPanel({
     const user = messages[idx - 1]
     if (!user || user.role !== 'user' || user.text === '(screenshot)') return
     const turnId = uid()
+    const now = Date.now()
     const assistantMsg: UIChatMessage = {
       id: uid(),
       turnId,
@@ -2277,7 +844,8 @@ export default function ChatPanel({
       tools: [],
       segments: [],
       pending: true,
-      startedAt: Date.now()
+      startedAt: now,
+      createdAt: now
     }
     onChange((prev) => [...prev.filter((m) => m.id !== assistantId), assistantMsg])
     setSending(true)
@@ -2516,6 +1084,7 @@ export default function ChatPanel({
   }
 
   async function newChat(): Promise<void> {
+    setConfirmNewChat(false)
     await window.api.chat.reset(project.id)
     onChange(() => [])
     setMode('agent')
@@ -2525,6 +1094,21 @@ export default function ChatPanel({
   function applySuggestion(text: string): void {
     setInput(text)
     taRef.current?.focus()
+  }
+
+  /** Insert an "@" at the caret and open the file picker (the "+" menu's "Reference a file"). */
+  function insertMention(): void {
+    const caret = taRef.current?.selectionStart ?? input.length
+    const before = input.slice(0, caret)
+    const lead = before && !/\s$/.test(before) ? ' ' : ''
+    setInput(`${before}${lead}@${input.slice(caret)}`)
+    pendingCaret.current = before.length + lead.length + 1
+    setAtStart(before.length + lead.length)
+    setAtQuery('')
+    setAtIdx(0)
+    setAtDismissed(false)
+    setAtOpen(true)
+    void ensureFiles()
   }
 
   // @-mentions: typing "@" (after whitespace/start) opens a fuzzy file picker;
@@ -2542,6 +1126,37 @@ export default function ChatPanel({
       return []
     }
   }
+
+  // Re-read the file list in the background (the agent may have added files),
+  // keeping the current list until the new one arrives so links don't flicker.
+  const refreshFiles = useCallback(async (): Promise<void> => {
+    try {
+      setFileList(flattenFiles(await window.api.projects.files.tree(project.id)))
+    } catch {
+      /* keep the list we have */
+    }
+  }, [project.id])
+
+  // Once there's a conversation, load the file list so file paths the agent
+  // mentions can link to the Code tab.
+  const hasMessages = messages.length > 0
+  const filesRequested = useRef(false)
+  useEffect(() => {
+    if (!hasMessages || filesRequested.current) return
+    filesRequested.current = true
+    void ensureFiles()
+  }, [hasMessages])
+
+  const markdownLinks = useMemo<MarkdownLinks | null>(() => {
+    if (!onOpenMention || !fileList?.length) return null
+    return {
+      resolveFile: createFileResolver(
+        fileList.map((f) => f.path),
+        project.path
+      ),
+      openFile: (path) => onOpenMention(path)
+    }
+  }, [fileList, onOpenMention, project.path])
 
   /** Recompute the active @-token from the caret; opens/closes the picker. */
   function evalAt(): void {
@@ -2671,16 +1286,30 @@ export default function ChatPanel({
           prevUser.text !== '(screenshot)'
         const canRetry = Boolean(m.error) && !m.plan && rerunnable
         const canResume = Boolean(m.interrupted) && !m.plan && !m.pending && rerunnable
+        const latest = m.role === 'assistant' && i === messages.length - 1
+        const canTryAgain =
+          latest &&
+          rerunnable &&
+          !deployLock &&
+          !externalBusy &&
+          !m.pending &&
+          !m.error &&
+          !m.interrupted &&
+          !m.plan &&
+          !m.designApplyId
         return (
           <MessageRow
             key={m.id}
             message={m}
             projectName={project.name}
             projectPath={project.path}
+            latest={latest}
             canRetry={canRetry}
             onRetry={onRetry}
             canResume={canResume}
             onResume={onResume}
+            canTryAgain={canTryAgain}
+            onTryAgain={onTryAgain}
             planBusy={m.plan?.id === planBusyId}
             questionBusy={planBusyId === m.id}
             onChangePlanContent={onChangePlanContent}
@@ -2695,11 +1324,14 @@ export default function ChatPanel({
     [
       messages,
       sending,
+      deployLock,
+      externalBusy,
       project.name,
       project.path,
       planBusyId,
       onRetry,
       onResume,
+      onTryAgain,
       onChangePlanContent,
       onResolvePlan,
       onAnswerPlanQuestion,
@@ -2712,32 +1344,27 @@ export default function ChatPanel({
   return (
     <div className="chat">
       <div className="chat-toolbar">
-        <div className="seg seg--toolbar">
-          {onToggleFocus && (
-            <button
-              className={`seg-btn seg-btn--icon${focused ? ' seg-btn--on' : ''}`}
-              onClick={onToggleFocus}
-              title={
-                focused
-                  ? 'Exit focus — show the preview again'
-                  : 'Focus the chat — hide the preview'
-              }
-              aria-label={focused ? 'Exit focus' : 'Focus the chat'}
-            >
-              {focused ? <CollapseIcon /> : <ExpandIcon />}
-            </button>
-          )}
+        {onToggleFocus && (
           <button
-            className="seg-btn"
-            onClick={newChat}
-            disabled={sending || messages.length === 0}
-            title="Clear this conversation and start fresh"
+            type="button"
+            className={`chat-tool${focused ? ' is-on' : ''}`}
+            onClick={onToggleFocus}
+            title={focused ? 'Exit focus — show the preview again' : 'Focus the chat — hide the preview'}
+            aria-label={focused ? 'Exit focus' : 'Focus the chat'}
           >
-            <EraserIcon />
-            Clear chat
+            {focused ? <CollapseIcon /> : <ExpandIcon />}
           </button>
-        </div>
+        )}
         <span className="chat-toolbar-spacer" />
+        <button
+          type="button"
+          className="chat-tool chat-tool--label"
+          onClick={() => setConfirmNewChat(true)}
+          disabled={sending || messages.length === 0}
+          title="Clear this conversation and start fresh"
+        >
+          <Codicon name="add" /> New chat
+        </button>
       </div>
 
       <div className="chat-scroll" ref={scrollRef} onScroll={onScrollChat}>
@@ -2757,71 +1384,27 @@ export default function ChatPanel({
           />
         )}
         {messages.length === 0 && (
-          <div className="chat-welcome">
-            <div className="chat-welcome-badge">
-              <FabricatorMark />
-            </div>
-            <h2 className="chat-welcome-title">Let’s build {project.name}</h2>
-            <p className="chat-welcome-sub">
-              Describe what you want in plain language — I’ll write the code and deploy it live. No
-              coding required.
-            </p>
-            {suggestionsLoading && !generatedSuggestions && (
-              <p className="chat-suggest-status">
-                <SparkleIcon className="chat-suggest-status-icon" />
-                Tailoring ideas to your app…
-              </p>
-            )}
-            <div
-              className="chat-suggestions"
-              aria-busy={suggestionsLoading && !generatedSuggestions}
-            >
-              {suggestions.map((s) => (
-                <button
-                  key={s.text}
-                  className="chat-suggestion"
-                  onClick={() => applySuggestion(s.text)}
-                >
-                  <span className="chat-suggestion-icon" aria-hidden="true">
-                    {s.icon}
-                  </span>
-                  <span className="chat-suggestion-text">{s.text}</span>
-                  <span className="chat-suggestion-arrow" aria-hidden="true">
-                    →
-                  </span>
-                </button>
-              ))}
-            </div>
-            {generatedSuggestions && (
-              <button
-                className="chat-suggest-refresh"
-                onClick={refreshSuggestions}
-                title="Generate fresh ideas from your app's code"
-              >
-                <span className="chat-suggest-refresh-icon" aria-hidden="true">
-                  <Codicon name="refresh" />
-                </span>
-                Refresh ideas
-              </button>
-            )}
-            <p className="chat-welcome-foot">Or just type your own idea below ↓</p>
-          </div>
+          <Welcome
+            projectName={project.name}
+            suggestions={suggestions}
+            tailoring={suggestionsLoading && !generatedSuggestions}
+            generated={Boolean(generatedSuggestions)}
+            onPick={applySuggestion}
+            onRefresh={refreshSuggestions}
+          />
         )}
 
-        {messageList}
+        <MarkdownLinksContext.Provider value={markdownLinks}>{messageList}</MarkdownLinksContext.Provider>
         {showJump && messages.length > 0 && (
           <button
             type="button"
-            ref={modeTriggerRef}
             className={`chat-jump${jumpNew ? ' chat-jump--new' : ''}`}
             onClick={jumpToLatest}
             title="Jump to the latest message"
           >
             {jumpNew && <span className="chat-jump-dot" aria-hidden="true" />}
             <span className="chat-jump-label">{jumpNew ? 'New messages' : 'Jump to latest'}</span>
-            <span className="chat-jump-arrow" aria-hidden="true">
-              ↓
-            </span>
+            <Codicon name="arrow-down" className="chat-jump-arrow" />
           </button>
         )}
       </div>
@@ -2833,7 +1416,7 @@ export default function ChatPanel({
               <span className="ws-spinner deploy-gate-spin" aria-hidden="true" />
             ) : (
               <span className="deploy-gate-ico" aria-hidden="true">
-                🚀
+                <Codicon name="rocket" />
               </span>
             )}
             <div className="deploy-gate-text">
@@ -2855,23 +1438,6 @@ export default function ChatPanel({
                 Deploy now
               </button>
             )}
-          </div>
-        )}
-        {sending && <div className="composer-busyline" aria-hidden="true" />}
-        {(attachments?.length ?? 0) > 0 && (
-          <div className="chat-attachments">
-            {attachments!.map((a) => (
-              <div key={a.path} className="chat-attachment" title="Screenshot to send">
-                <img src={a.thumb} alt="screenshot" />
-                <button
-                  className="chat-attachment-x"
-                  onClick={() => onRemoveAttachment?.(a.path)}
-                  title="Remove"
-                >
-                  <CloseIcon />
-                </button>
-              </div>
-            ))}
           </div>
         )}
         {showPlanSuggestion && (
@@ -2909,6 +1475,7 @@ export default function ChatPanel({
           onDragOver={onComposerDragOver}
           onDragLeave={onComposerDragLeave}
         >
+          {sending && <div className="composer-busyline" aria-hidden="true" />}
           {dragOver && (
             <div className="composer-drop" aria-hidden="true">
               <ImageIcon className="composer-drop-ico" />
@@ -2942,9 +1509,32 @@ export default function ChatPanel({
               ))}
             </div>
           )}
+          {((attachments?.length ?? 0) > 0 || attaching) && (
+            <div className="chat-attachments">
+              {(attachments ?? []).map((a) => (
+                <div key={a.path} className="chat-attachment" title="Screenshot to send">
+                  <img src={a.thumb} alt="Screenshot to send" />
+                  <button
+                    type="button"
+                    className="chat-attachment-x"
+                    onClick={() => onRemoveAttachment?.(a.path)}
+                    title="Remove"
+                    aria-label="Remove screenshot"
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
+              ))}
+              {attaching && (
+                <div className="chat-attachment chat-attachment--loading" role="status" aria-label="Adding image">
+                  <span className="step-spin" aria-hidden="true" />
+                </div>
+              )}
+            </div>
+          )}
           <div className="composer-input-sizer" ref={sizerRef} data-replicated-value={input}>
             <div className="composer-highlight" ref={highlightRef} aria-hidden="true">
-              {splitMentions(input).map((p, i) =>
+              {splitMentions(input, knownFiles).map((p, i) =>
                 p.mention ? (
                   <mark key={i} className="composer-mention">
                     {p.text}
@@ -2975,180 +1565,25 @@ export default function ChatPanel({
           </div>
           <div className="composer-actions">
             <div className="composer-left">
-              {modeSelectorEnabled && (
-                <div
-                  className="mode-menu"
-                  ref={modeMenuRef}
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={onModeMenuKeyDown}
-                >
-                  <button
-                    type="button"
-                    className={`mode-trigger${showMode ? ' mode-trigger--open' : ''}`}
-                    onClick={() => setShowMode((s) => !s)}
-                    disabled={sending}
-                    aria-haspopup="menu"
-                    aria-expanded={showMode}
-                    title={currentMode.hint}
-                  >
-                    <ModeIcon mode={activeMode} className="mode-trigger-icon" />
-                    <span className="mode-trigger-label">{currentMode.label}</span>
-                    <span className="mode-trigger-caret"><Codicon name="chevron-down" /></span>
-                  </button>
-                  {showMode && (
-                    <div className="mode-pop" role="menu">
-                      {MODES.map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={activeMode === m.id}
-                          className={`mode-opt${activeMode === m.id ? ' mode-opt--on' : ''}`}
-                          onClick={() => {
-                            setMode(m.id)
-                            setShowMode(false)
-                            requestAnimationFrame(() => modeTriggerRef.current?.focus())
-                          }}
-                        >
-                          <ModeIcon mode={m.id} className="mode-opt-icon" />
-                          <span className="mode-opt-text">
-                            <span className="mode-opt-label">{m.label}</span>
-                            <span className="mode-opt-desc">{m.desc}</span>
-                          </span>
-                          {activeMode === m.id && (
-                            <span className="mode-opt-check" aria-hidden="true">
-                              <Codicon name="check" />
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <div
-                className="chat-model-menu"
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setShowModel(false)
-                }}
-              >
-                <button
-                  type="button"
-                  className={`chat-model-btn${showModel ? ' chat-model-btn--open' : ''}`}
-                  title={
-                    sending
-                      ? 'Model can’t be changed while the assistant is working'
-                      : 'Choose the AI model and reasoning effort'
-                  }
-                  onClick={() => setShowModel((s) => !s)}
-                  disabled={sending}
-                  aria-haspopup="dialog"
-                  aria-expanded={showModel}
-                >
-                  <SparkleIcon className="chat-model-btn-icon" />
-                  <span className="chat-model-btn-label">
-                    Model: {selectedModel?.name || model || 'Auto'}
-                  </span>
-                  <span className="chat-model-btn-caret"><Codicon name="chevron-down" /></span>
-                </button>
-                {showModel && (
-                  <div className="chat-model-pop" role="dialog" aria-label="Model settings">
-                    <label className="chat-model-field">
-                      <span className="chat-model-field-label">Model</span>
-                      <select
-                        className="chat-model-input"
-                        value={model}
-                        autoFocus
-                        disabled={sending}
-                        onChange={(e) => selectModel(e.target.value)}
-                      >
-                        <option value="">Auto (recommended)</option>
-                        {/* Keep a saved model selectable even if it's no longer listed. */}
-                        {model && !models.some((m) => m.id === model) && (
-                          <option value={model}>{model}</option>
-                        )}
-                        {models.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="chat-model-field">
-                      <span className="chat-model-field-label">Reasoning effort</span>
-                      <select
-                        className="chat-model-input"
-                        value={effort}
-                        disabled={sending}
-                        onChange={(e) => {
-                          const next = e.target.value as ReasoningEffort | ''
-                          setEffort(next)
-                          saveOptions(model, next)
-                        }}
-                      >
-                        <option value="">Auto</option>
-                        {effortOptions.map((o) => (
-                          <option key={o} value={o}>
-                            {o}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <p className="chat-model-hint">
-                      {modelsLoading && models.length === 0
-                        ? 'Loading models…'
-                        : 'Leave on Auto unless you know what you need.'}
-                    </p>
-                  </div>
-                )}
-              </div>
-              <span className="composer-hint">
-                <kbd>Enter</kbd>
-                <span>to send</span>
-                <span className="composer-hint-sep">·</span>
-                <kbd>Shift</kbd>
-                <kbd>Enter</kbd>
-                <span>for newline</span>
-                <span className="composer-hint-sep">·</span>
-                <kbd>@</kbd>
-                <span>for files</span>
-              </span>
+              <AddMenu
+                locked={deployLock}
+                attaching={attaching}
+                onImage={() => fileRef.current?.click()}
+                onConnectModel={() => setConnectOpen(true)}
+                onReferenceFile={insertMention}
+              />
+              {modeSelectorEnabled && <ModeMenu mode={activeMode} disabled={sending} onSelect={setMode} />}
+              <ModelMenu model={model} effort={effort} disabled={sending} onChange={saveOptions} />
             </div>
             <div className="composer-right">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                multiple
-                hidden
-                onChange={onPickFiles}
-              />
-              <button
-                className="composer-attach"
-                onClick={() => setConnectOpen(true)}
-                disabled={deployLock}
-                title={
-                  deployLock
-                    ? 'Deploy this app to a workspace before connecting a semantic model'
-                    : 'Connect a semantic model from your workspace'
-                }
-                aria-label="Connect a semantic model"
-              >
-                <Codicon name="database" />
-              </button>
-              <button
-                className="composer-attach"
-                onClick={() => fileRef.current?.click()}
-                disabled={attaching || deployLock}
-                title="Attach an image (or paste / drop one here)"
-                aria-label="Attach an image"
-              >
-                <ImageIcon />
-              </button>
+              <span className="composer-hint" aria-hidden="true">
+                <kbd>Enter</kbd> to send
+              </span>
+              <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onPickFiles} />
               {sending ? (
                 <>
                   <button
+                    type="button"
                     className="composer-send composer-send--interject"
                     onClick={send}
                     disabled={!input.trim() || externalBusy}
@@ -3158,6 +1593,7 @@ export default function ChatPanel({
                     <SendIcon />
                   </button>
                   <button
+                    type="button"
                     className="composer-send composer-send--stop"
                     onClick={stop}
                     title="Stop generating"
@@ -3172,6 +1608,7 @@ export default function ChatPanel({
                   title={submitBlocked ? 'Deploying — sending resumes when it goes live' : undefined}
                 >
                   <button
+                    type="button"
                     className="composer-send"
                     onClick={send}
                     disabled={
@@ -3200,6 +1637,15 @@ export default function ChatPanel({
           onConnect={(prompt) =>
             setInput((prev) => (prev.trim() ? `${prev}\n\n${prompt}` : prompt))
           }
+        />
+      )}
+      {confirmNewChat && (
+        <ConfirmModal
+          title="Start a new chat?"
+          message="This clears the conversation and starts Fabricator fresh. Your app and its files stay exactly as they are."
+          confirmLabel="New chat"
+          onConfirm={() => void newChat()}
+          onCancel={() => setConfirmNewChat(false)}
         />
       )}
     </div>

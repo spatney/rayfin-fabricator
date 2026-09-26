@@ -31,9 +31,12 @@
   --danger: #ff6058;
 
   --radius-sm: 7px;
+  --radius-md: 8px;
   --radius: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
+
+  --font-mono: 'Cascadia Code', 'Consolas', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.42);
@@ -41,6 +44,8 @@
 
   /* Code surfaces: blocks stay dark in both themes (editor look); inline is theme-aware. */
   --code-bg: #0a0d13;
+  /* Chat code surfaces sit a step above the canvas so they read without heavy frames. */
+  --code-surface: #0f131b;
   --code-text: #c7d0e0;
   --code-inline-bg: #1a1f2b;
   --code-inline-text: #d8def0;
@@ -92,6 +97,7 @@
 
   --code-inline-bg: #e7ebf2;
   --code-inline-text: #1f2733;
+  --code-surface: #151a23;
 
   /* Code blocks stay dark in light mode, so syntax tokens keep the dark palette. */
 
@@ -2764,6 +2770,18 @@ code {
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
   border-radius: var(--radius);
   animation: turnIn 0.18s ease;
+}
+
+/* Gentle rise-in used by chat turns and inline notices. */
+@keyframes turnIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .skills-error {
@@ -6831,97 +6849,6 @@ code {
   pointer-events: none;
 }
 
-/* Staged screenshot thumbnails above the chat input. */
-.chat-attachments {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.chat-attachment {
-  position: relative;
-  width: 88px;
-  height: 56px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.chat-attachment img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.chat-attachment-x {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  line-height: 1;
-  color: #fff;
-  background: color-mix(in srgb, #000 60%, transparent);
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.chat-attachment-x:hover {
-  background: var(--danger);
-}
-
-.chat-attachment-x svg {
-  width: 11px;
-  height: 11px;
-}
-
-.msg-attach {
-  display: inline-flex;
-  align-items: center;
-  align-self: flex-start;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 4px 11px 4px 8px;
-  font-size: 11.5px;
-  color: var(--text-dim);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-}
-
-.msg-attach-ico {
-  width: 13px;
-  height: 13px;
-  flex: none;
-  color: var(--text-faint);
-}
-
-/* Real screenshot thumbnails rendered inside a sent user message. */
-.msg-shots {
-  display: flex;
-  flex-wrap: wrap;
-  align-self: flex-start;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.msg-shot {
-  display: block;
-  max-width: 160px;
-  max-height: 120px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-elev-2);
-}
-
 /* Home / projects landing */
 .home {
   flex: 1;
@@ -8845,811 +8772,6 @@ code {
   width: 100%;
 }
 
-/* ------------------------------------------------------------------ *
- * Chat panel
- * ------------------------------------------------------------------ */
-
-.chat {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-toolbar {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elev);
-}
-
-.chat-toolbar-spacer {
-  flex: 1;
-}
-
-.chat-model-menu {
-  flex: none;
-  position: static;
-}
-
-.chat-model-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 9px;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition:
-    border-color 0.12s ease,
-    color 0.12s ease;
-}
-
-.chat-model-btn:hover:not(:disabled) {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-
-.chat-model-btn--open {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-
-.chat-model-btn:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.chat-model-btn-icon {
-  width: 14px;
-  height: 14px;
-  color: var(--accent);
-}
-
-.chat-model-btn-label {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-model-btn-caret {
-  font-size: 9px;
-  color: var(--text-faint);
-}
-
-/* Anchored to the composer-left cluster so the bottom-row popover opens upward
-   and stays within the composer instead of clipping below the chat pane. */
-.chat-model-pop {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  right: auto;
-  z-index: 40;
-  width: 252px;
-  max-width: calc(100cqw - 28px);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  background: var(--bg-elev-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  animation: statusIn 0.14s ease both;
-}
-
-.chat-model-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.chat-model-field-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-}
-
-.chat-model-input {
-  height: 32px;
-  font: inherit;
-  font-size: 12.5px;
-  color: var(--text);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0 9px;
-}
-
-.chat-model-input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.chat-model-hint {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-
-.chat-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 18px 18px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-
-.chat-welcome {
-  margin: auto;
-  width: 100%;
-  max-width: 540px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 28px 24px;
-  animation: welcomeIn 0.4s ease both;
-}
-
-@keyframes welcomeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.chat-welcome-badge {
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
-  border-radius: 16px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  margin-bottom: 2px;
-}
-
-.chat-welcome-badge .fab-mark {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-}
-
-.chat-welcome-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 680;
-  letter-spacing: -0.01em;
-}
-
-.chat-welcome-sub {
-  margin: 0;
-  max-width: 430px;
-  color: var(--text-dim);
-  line-height: 1.55;
-  font-size: 13.5px;
-}
-
-.chat-suggestions {
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.chat-suggestion {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  color: var(--text);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 13px 14px;
-  cursor: pointer;
-  transition:
-    border-color 0.14s ease,
-    background 0.14s ease;
-}
-
-.chat-suggestion:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-  background: var(--bg-elev-2);
-}
-
-.chat-suggestion-icon {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  font-size: 16px;
-  border-radius: 9px;
-  background: var(--accent-soft);
-}
-
-.chat-suggestion-text {
-  flex: 1;
-  min-width: 0;
-  line-height: 1.35;
-}
-
-.chat-suggestion-arrow {
-  flex: none;
-  color: var(--text-faint);
-  opacity: 0;
-  transform: translateX(-3px);
-  transition:
-    opacity 0.14s ease,
-    transform 0.14s ease,
-    color 0.14s ease;
-}
-
-.chat-suggestion:hover .chat-suggestion-arrow {
-  opacity: 1;
-  transform: none;
-  color: var(--accent);
-}
-
-.chat-welcome-foot {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-/* "Tailoring ideas…" label shown while Copilot generates starter suggestions. */
-.chat-suggest-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 2px 0 0;
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
-.chat-suggest-status-icon {
-  width: 16px;
-  height: 16px;
-  flex: none;
-  color: var(--accent);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-/* "Refresh ideas" pill under the generated suggestions. */
-.chat-suggest-refresh {
-  margin-top: 2px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--text-dim);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 5px 12px;
-  cursor: pointer;
-  transition:
-    color 0.14s ease,
-    border-color 0.14s ease,
-    background 0.14s ease;
-}
-
-.chat-suggest-refresh:hover {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-  background: var(--accent-soft);
-}
-
-.chat-suggest-refresh-icon {
-  font-size: 13px;
-  line-height: 1;
-}
-
-/* Inline "you added" bubble — a message interjected mid-turn (steering). Flat,
-   accent-tinted, and clearly the user's voice inside the assistant feed. */
-.turn-interject {
-  align-self: flex-start;
-  max-width: 92%;
-  margin: 1px 0;
-  padding: 7px 11px 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
-  border-left: 2px solid var(--accent);
-  border-radius: 4px 10px 10px 4px;
-  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
-}
-
-.turn-interject-tag {
-  display: block;
-  margin-bottom: 2px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.turn-interject-text {
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
-.turn-interject-text :first-child {
-  margin-top: 0;
-}
-
-.turn-interject-text :last-child {
-  margin-bottom: 0;
-}
-
-.turn {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  animation: turnIn 0.25s ease both;
-}
-
-@keyframes turnIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.turn-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.turn-avatar {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-}
-
-.turn-avatar .fab-mark {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.turn-avatar svg {
-  width: 15px;
-  height: 15px;
-}
-
-/* User: a calm neutral chip — keeps the single teal accent on the brand mark.
-   The stingray fills the chip (~18px) to match the assistant's brand mark. */
-.turn--user .turn-avatar {
-  background: var(--bg-elev-3);
-  color: var(--text-dim);
-}
-
-.turn--user .turn-avatar svg {
-  width: 18px;
-  height: 18px;
-}
-
-/* Assistant: subtle teal tint carrying the brand logo. */
-.turn--assistant .turn-avatar {
-  padding: 4px;
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
-}
-
-.turn-avatar--pending {
-  animation: avatarGlow 1.7s ease-in-out infinite;
-}
-
-@keyframes avatarGlow {
-  0%,
-  100% {
-    box-shadow: 0 0 4px 0 color-mix(in srgb, var(--accent) 24%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 10px 0 color-mix(in srgb, var(--accent) 42%, transparent);
-  }
-}
-
-.turn-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-left: 2px;
-}
-
-/* Interleaved assistant feed: prose blocks and tool rows in stream order. */
-.turn-feed {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.turn-role {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  letter-spacing: 0.2px;
-}
-
-/* Finished-turn duration stamp, right-aligned in the turn header. */
-.turn-time {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-}
-
-.turn-time-ico {
-  width: 12px;
-  height: 12px;
-  opacity: 0.8;
-}
-
-/* When a copy button is also present, it takes the right edge; the time sits beside it. */
-.turn-time + .turn-copy {
-  margin-left: 8px;
-}
-
-.msg-text {
-  line-height: 1.6;
-  word-break: break-word;
-}
-
-/* Blinking caret at the tail of streaming assistant prose. */
-.stream-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1.05em;
-  margin-left: 1px;
-  vertical-align: text-bottom;
-  background: var(--accent);
-  border-radius: 1px;
-  animation: streamCaret 1.05s step-end infinite;
-}
-
-@keyframes streamCaret {
-  0%,
-  45% {
-    opacity: 1;
-  }
-  46%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stream-caret {
-    animation: none;
-    opacity: 0.8;
-  }
-}
-
-.turn--user .msg-text {
-  align-self: flex-end;
-  max-width: 85%;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 10px 14px;
-  white-space: pre-wrap;
-}
-
-/* User turns sit on the right, chat-style: mirror the header so the avatar and
-   "You" label hug the right edge, and right-align the bubble + any attachments. */
-.turn--user .turn-head {
-  flex-direction: row-reverse;
-}
-
-.turn--user .turn-main {
-  align-items: flex-end;
-  padding-left: 0;
-  padding-right: 2px;
-}
-
-.turn--user .msg-shots,
-.turn--user .msg-attach {
-  align-self: flex-end;
-  justify-content: flex-end;
-}
-
-.msg-notice {
-  color: var(--text-dim);
-  font-size: 12px;
-  font-style: italic;
-  opacity: 0.85;
-}
-
-/* Compact roll-up chip under a completed assistant turn. */
-.turn-summary {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: flex-start;
-  gap: 7px;
-  margin-top: 2px;
-  padding: 6px 11px 6px 9px;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--text-dim);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.turn-summary-ico {
-  width: 12px;
-  height: 12px;
-  margin-top: 2px;
-  flex: none;
-  color: var(--accent);
-}
-
-.turn-summary-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.turn-summary-item {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Collapsible variant: a one-line "Took N actions" header that expands to the
-   full per-kind breakdown. The container keeps the chip frame; its children pad
-   themselves so the header reads as a single quiet line. */
-.turn-summary--collapsible {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-.turn-summary-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 11px 6px 9px;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--text-dim);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  transition: color 0.12s ease;
-}
-
-.turn-summary-toggle:hover {
-  color: var(--text);
-}
-
-.turn-summary-caret {
-  width: 12px;
-  height: 12px;
-  margin-left: 1px;
-  opacity: 0.7;
-  transition: transform 0.15s ease;
-}
-
-.turn-summary--collapsible.is-open .turn-summary-caret {
-  transform: rotate(90deg);
-}
-
-.turn-summary--collapsible .turn-summary-list {
-  padding: 0 12px 8px 28px;
-}
-
-/* Live "working" bar — keeps visible motion on screen while a turn streams, so
-   it never feels stalled even when tokens / tool updates briefly pause. */
-.agent-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  align-self: flex-start;
-  max-width: 100%;
-  margin-top: 4px;
-  padding: 2px 2px 2px 1px;
-  animation: statusIn 0.2s ease both;
-}
-
-@keyframes statusIn {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.agent-status-orb {
-  flex: none;
-  position: relative;
-  width: 14px;
-  height: 14px;
-  display: grid;
-  place-items: center;
-}
-
-.agent-status-orb::before {
-  content: '';
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 42%, transparent);
-  animation: orbRing 1.5s ease-out infinite;
-}
-
-.agent-status-orb-core {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 6px 0 color-mix(in srgb, var(--accent) 70%, transparent);
-  animation: orbCore 1.5s ease-in-out infinite;
-}
-
-@keyframes orbRing {
-  0% {
-    transform: scale(0.5);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(1.5);
-    opacity: 0;
-  }
-}
-
-@keyframes orbCore {
-  0%,
-  100% {
-    transform: scale(0.82);
-  }
-  50% {
-    transform: scale(1.12);
-  }
-}
-
-.agent-status-label {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-.agent-status-time {
-  flex: none;
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-faint);
-  letter-spacing: 0.3px;
-}
-
-/* Hairline middot separator so label · time read as one cohesive line. */
-.agent-status-time::before {
-  content: '·';
-  margin-right: 6px;
-  color: var(--text-faint);
-}
-
-/* Notice (retry) variant: amber pulse + label, still flat (no pill). */
-.agent-status--notice .agent-status-orb-core {
-  background: var(--pending);
-  box-shadow: 0 0 6px 0 color-mix(in srgb, var(--pending) 70%, transparent);
-}
-
-.agent-status--notice .agent-status-orb::before {
-  background: color-mix(in srgb, var(--pending) 42%, transparent);
-}
-
-.agent-status--notice .agent-status-label {
-  color: var(--pending);
-}
-
-/* Paused on a plan decision: calm, no work motion or timer — just a soft amber
-   breathing dot so the turn never looks like it's still working. */
-.agent-status--await {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  align-self: flex-start;
-  margin-top: 4px;
-  padding: 2px 2px 2px 1px;
-  animation: statusIn 0.2s ease both;
-}
-
-.agent-status-await-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--pending);
-  box-shadow: 0 0 6px 0 color-mix(in srgb, var(--pending) 55%, transparent);
-  animation: awaitBreathe 2.4s ease-in-out infinite;
-}
-
-.agent-status-await-label {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--pending);
-  white-space: nowrap;
-}
-
-@keyframes awaitBreathe {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .agent-status-orb::before,
-  .agent-status-orb-core,
-  .agent-status-await-dot {
-    animation: none;
-  }
-  .turn {
-    animation: none;
-  }
-  .turn-avatar--pending {
-    animation: none;
-  }
-}
-
 /* Advisor tab kept mounted across tab switches so an in-flight review keeps its
    live feed/timer/results; hidden (not unmounted) when another tab is active. */
 .advisor-host {
@@ -9670,1004 +8792,10 @@ code {
   color: var(--text-dim);
 }
 
-/* Markdown-rendered assistant messages */
-.msg-text--md {
-  white-space: normal;
-}
-
-.md > :first-child {
-  margin-top: 0;
-}
-
-.md > :last-child {
-  margin-bottom: 0;
-}
-
-.md p {
-  margin: 0 0 8px;
-}
-
-.md ul,
-.md ol {
-  margin: 0 0 8px;
-  padding-left: 20px;
-}
-
-.md li {
-  margin: 2px 0;
-}
-
-.md li > p {
-  margin: 0;
-}
-
-.md h1,
-.md h2,
-.md h3,
-.md h4 {
-  margin: 12px 0 6px;
-  line-height: 1.3;
-}
-
-.md h1 {
-  font-size: 18px;
-}
-
-.md h2 {
-  font-size: 16px;
-}
-
-.md h3 {
-  font-size: 14.5px;
-}
-
-.md h4 {
-  font-size: 13px;
-}
-
-.md a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.md a:hover {
-  text-decoration: underline;
-}
-
-.md blockquote {
-  margin: 0 0 8px;
-  padding: 2px 12px;
-  border-left: 3px solid var(--border);
-  color: var(--text-dim);
-}
-
-.md hr {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 12px 0;
-}
-
-.md table {
-  border-collapse: collapse;
-  margin: 0 0 8px;
-  font-size: 12.5px;
-  display: block;
-  overflow-x: auto;
-}
-
-.md th,
-.md td {
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  text-align: left;
-}
-
-.md th {
-  background: var(--bg-elev-2);
-}
-
-.md-code-inline {
-  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
-  font-size: 12px;
-  background: var(--code-inline-bg);
-  color: var(--code-inline-text);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 1px 5px;
-}
-
-.md-codeblock {
-  margin: 0 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--code-bg);
-}
-
-.md-codeblock-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 10px;
-  background: var(--bg-elev-2);
-  border-bottom: 1px solid var(--border);
-}
-
-.md-codeblock-lang {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--text-dim);
-}
-
-.md-codeblock-copy {
-  font-size: 11px;
-  color: var(--text-dim);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 1px 8px;
-  cursor: pointer;
-}
-
-.md-codeblock-copy:hover {
-  color: var(--text);
-  background: var(--bg-elev);
-}
-
-.md-codeblock-pre {
-  margin: 0;
-  padding: 10px 12px;
-  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--code-text);
-  white-space: pre;
-  overflow-x: auto;
-  max-height: 360px;
-  overflow-y: auto;
-}
-
-.msg-error {
-  margin-top: 2px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.msg-error-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.msg-error-retry {
-  flex: 0 0 auto;
-}
-
-/* Interrupted-turn banner: shown when an assistant turn was cut off by the app
-   closing mid-stream. Muted (not an error) — offers a Resume re-run. */
-.msg-interrupted {
-  margin-top: 2px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 11px;
-  font-size: 12.5px;
-  color: var(--text-dim);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.msg-interrupted-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.msg-interrupted-resume {
-  flex: 0 0 auto;
-}
-
-.tool-activity {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin: 0;
-}
-
-/* Tighten the gap between back-to-back tool rows in the interleaved feed,
-   without collapsing the larger breathing room around prose blocks. */
-.turn-feed > .tool-activity + .tool-activity {
-  margin-top: -4px;
-}
-
-/* Flat, lightweight rows that read as a live activity feed (not chunky cards). */
-.tool-call {
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  overflow: hidden;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-  animation: toolRowIn 0.2s ease both;
-}
-
-@keyframes toolRowIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.tool-call > summary {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 5px 9px;
-  cursor: pointer;
-  list-style: none;
-  font-size: 12.5px;
-  border-radius: 8px;
-}
-
-.tool-call > summary::-webkit-details-marker {
-  display: none;
-}
-
-.tool-call:not(.tool-call--running):hover {
-  background: var(--bg-elev);
-}
-
-.tool-call[open] {
-  border-color: var(--border);
-  background: var(--bg-elev);
-}
-
-.tool-call-icon {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  line-height: 1;
-}
-
-/* Calm, monochrome glyphs for completed steps; only errors draw the eye. */
-.tool-call--success .tool-call-icon {
-  color: var(--text-dim);
-}
-
-.tool-call--error .tool-call-icon {
-  color: var(--danger);
-}
-
-.tool-kind-ico {
-  width: 14px;
-  height: 14px;
-}
-
-/* Spinner for the action that's running right now. */
-.tool-spin {
-  width: 12px;
-  height: 12px;
-  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: ws-spin 0.7s linear infinite;
-}
-
-/* The active row gets a faint branded wash + a sweeping shimmer so it feels alive. */
-.tool-call--running {
-  background:
-    linear-gradient(
-      90deg,
-      transparent,
-      color-mix(in srgb, var(--accent) 13%, transparent),
-      transparent
-    ),
-    color-mix(in srgb, var(--accent) 7%, transparent);
-  background-size:
-    200% 100%,
-    auto;
-  background-repeat: no-repeat;
-  animation:
-    toolRowIn 0.2s ease both,
-    toolShimmer 1.5s linear infinite;
-}
-
-@keyframes toolShimmer {
-  from {
-    background-position:
-      200% 0,
-      0 0;
-  }
-  to {
-    background-position:
-      -200% 0,
-      0 0;
-  }
-}
-
-.tool-call-name {
-  font-weight: 600;
-  color: var(--text);
-  flex: none;
-}
-
-.tool-call--running .tool-call-name {
-  color: var(--accent);
-}
-
-.tool-call-title {
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 12px;
-}
-
-.tool-call-output {
-  margin: 0;
-  padding: 10px 12px;
-  border-top: 1px solid var(--border);
-  background: var(--code-bg);
-  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--code-text);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-/* File-read previews: a sticky line-number gutter + syntax-highlighted code.
-   Both columns share a fixed 18px line box so the numbers stay aligned to the
-   code even when highlighted tokens span multiple lines. */
-.tool-code {
-  display: flex;
-  max-height: 280px;
-  overflow: auto;
-  border-top: 1px solid var(--border);
-  background: var(--code-bg);
-  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
-  font-size: 11.5px;
-  line-height: 18px;
-}
-
-.tool-code-gutter {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding: 10px 8px 10px 12px;
-  background: var(--code-bg);
-  border-right: 1px solid var(--border);
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-  user-select: none;
-}
-
-.tool-code-gutter span {
-  display: block;
-  height: 18px;
-}
-
-.tool-code-pre {
-  flex: 1 0 auto;
-  margin: 0;
-  padding: 10px 14px;
-  line-height: 18px;
-  white-space: pre;
-}
-
-.tool-code-pre code.hljs {
-  background: transparent;
-  padding: 0;
-}
-
-.composer {
-  border-top: 1px solid var(--border);
-  padding: 12px 14px 14px;
-  background: var(--bg-elev);
-  position: relative;
-  container-type: inline-size;
-}
-
-/* Thin indeterminate progress line above the composer while a turn is running. */
-.composer-busyline {
-  position: absolute;
-  top: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.composer-busyline::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 38%;
-  border-radius: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--accent) 35%,
-    var(--accent-2) 65%,
-    transparent
-  );
-  animation: busySlide 1.25s ease-in-out infinite;
-}
-
-@keyframes busySlide {
-  0% {
-    left: -40%;
-  }
-  100% {
-    left: 100%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .composer-busyline::before {
-    animation: none;
-    left: 0;
-    width: 100%;
-    opacity: 0.5;
-  }
-}
-
-.composer-box {
-  position: relative;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--bg-elev-2);
-  padding: 10px 12px 10px 16px;
-  box-shadow: var(--shadow-sm);
-  transition:
-    border-color 0.12s ease,
-    box-shadow 0.12s ease;
-}
-
-.composer-box:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-  box-shadow: 0 0 0 4px var(--accent-soft);
-}
-
-.composer-box--drag {
-  border-color: var(--accent);
-}
-
-/* Dashed overlay shown while dragging an image over the composer. */
-.composer-drop {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  border: 2px dashed var(--accent);
-  border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  pointer-events: none;
-}
-
-.composer-drop-ico {
-  width: 18px;
-  height: 18px;
-}
-
-/* @-mention file picker popover, anchored above the composer box. */
-.mention-menu {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: calc(100% + 8px);
-  z-index: 20;
-  max-height: 280px;
-  overflow-y: auto;
-  padding: 5px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elev-3);
-  box-shadow: var(--shadow-md);
-  animation: mentionIn 0.12s ease;
-}
-
-@keyframes mentionIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.mention-menu-head {
-  padding: 4px 8px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.mention-opt {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.1s ease;
-}
-
-.mention-opt--on {
-  background: var(--accent-soft);
-}
-
-.mention-name {
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.mention-path {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: right;
-}
-
-.mention-empty {
-  padding: 8px;
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-/* Icon in the @-mention file picker. */
-.mention-ico {
-  font-size: 13px;
-  color: var(--text-faint);
-  align-self: center;
-  flex-shrink: 0;
-}
-
 /* Active/toggled ghost button (e.g. the Advisor's Explain toggle). */
 .btn.is-active {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mention-menu {
-    animation: none;
-  }
-}
-
-/* Auto-growing composer. An invisible replica of the text lives in the same
-   grid cell as the textarea and drives the height, so the field grows through
-   normal CSS layout. This avoids reading `scrollHeight` on every keystroke,
-   which forces a synchronous full-page reflow that gets progressively slower as
-   the conversation DOM grows. */
-.composer-input-sizer {
-  display: grid;
-  width: 100%;
-  /* The single scrollport for the composer. Both the textarea and the visible
-     highlight layer grow to full content height inside this cell, so scrolling
-     happens here — moving both layers together. This makes caret/text drift
-     structurally impossible (no per-layer scroll to fall out of sync). */
-  max-height: 200px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.composer-input-sizer::after {
-  content: attr(data-replicated-value) ' ';
-  visibility: hidden;
-  overflow: hidden;
-}
-
-.composer-input-sizer > .composer-input,
-.composer-input-sizer > .composer-highlight,
-.composer-input-sizer::after {
-  grid-area: 1 / 1 / 2 / 2;
-  width: 100%;
-  font: inherit;
-  line-height: 1.5;
-  padding: 4px 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
-.composer-input {
-  width: 100%;
-  resize: none;
-  border: none;
-  background: none;
-  color: transparent;
-  caret-color: var(--text);
-  position: relative;
-  z-index: 1;
-  font: inherit;
-  line-height: 1.5;
-  /* Grow to full content height; the shared .composer-input-sizer owns the
-     scroll. The textarea must not scroll internally or it would create a second
-     scroll offset that could drift from the highlight overlay. */
-  overflow: hidden;
-  padding: 4px 0;
-}
-
-.composer-input:focus {
-  outline: none;
-}
-
-.composer-input::placeholder {
-  color: var(--text-dim);
-}
-
-/* Visible text layer behind the (transparent-text) textarea — same metrics, so
-   the caret + selection still line up. It renders @-mentions as chips. */
-.composer-highlight {
-  color: var(--text);
-  overflow: hidden;
-  pointer-events: none;
-  user-select: none;
-}
-
-/* Composer chip: background + color only, with padding cancelled by a matching
-   negative margin so glyph advance (and thus caret alignment) is unchanged. */
-.composer-mention {
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 4px;
-  padding: 0 2px;
-  margin: 0 -2px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-/* Message chip: no alignment constraint, so a fuller pill. */
-.chat-mention {
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-ring);
-  border-radius: 6px;
-  padding: 0 6px;
-  font-weight: 500;
-  white-space: nowrap;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-.chat-mention--link {
-  cursor: pointer;
-  transition:
-    background 0.12s,
-    border-color 0.12s;
-}
-.chat-mention--link:hover {
-  background: color-mix(in srgb, var(--accent) 26%, transparent);
-  border-color: var(--accent);
-}
-.chat-mention--link:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--accent-soft);
-}
-
-.composer-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.composer-hint {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  white-space: nowrap;
-  gap: 4px;
-  font-size: 11.5px;
-  color: var(--text-faint);
-}
-
-/* In a narrow composer the mode/model selectors take priority — drop the
-   (decorative) keyboard hint before it collides with them. The breakpoint is
-   generous so the hint hides while the chat shares width with the preview pane. */
-@container (max-width: 720px) {
-  .composer-hint {
-    display: none;
-  }
-}
-
-.composer-hint kbd {
-  font: inherit;
-  font-size: 10px;
-  line-height: 1;
-  padding: 2px 5px;
-  border-radius: 5px;
-  background: var(--bg-elev-3);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-}
-
-.composer-hint-sep {
-  opacity: 0.6;
-}
-
-/* Composer left cluster: the mode selector sits beside the keyboard hint. */
-.composer-left {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-/* Compact mode selector: a labeled pill that opens an upward menu, so Plan /
-   Autopilot stay discoverable without crowding the default Agent mode. */
-.mode-menu {
-  position: relative;
-  flex: none;
-}
-
-.mode-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 9px;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition:
-    border-color 0.12s ease,
-    color 0.12s ease,
-    background 0.12s ease;
-}
-
-.mode-trigger:hover:not(:disabled),
-.mode-trigger--open {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-
-.mode-trigger:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.mode-trigger-icon {
-  width: 14px;
-  height: 14px;
-  color: var(--accent);
-}
-
-.mode-trigger-caret {
-  font-size: 9px;
-  color: var(--text-faint);
-}
-
-.mode-pop {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 6px);
-  z-index: 40;
-  width: 268px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px;
-  background: var(--bg-elev-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  animation: statusIn 0.14s ease both;
-}
-
-.mode-opt {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 8px 9px;
-  text-align: left;
-  font: inherit;
-  color: var(--text);
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.mode-opt:hover {
-  background: var(--bg-elev-2);
-}
-
-.mode-opt--on {
-  background: var(--accent-soft);
-}
-
-.mode-opt-icon {
-  width: 16px;
-  height: 16px;
-  margin-top: 1px;
-  flex: none;
-  color: var(--text-dim);
-}
-
-.mode-opt--on .mode-opt-icon {
-  color: var(--accent);
-}
-
-.mode-opt-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.mode-opt-label {
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.mode-opt--on .mode-opt-label {
-  color: var(--accent);
-}
-
-.mode-opt-desc {
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--text-dim);
-}
-
-.mode-opt-check {
-  flex: none;
-  margin-left: 2px;
-  color: var(--accent);
-  font-size: 12px;
-}
-
-.composer-send {
-  flex: none;
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 11px;
-  cursor: pointer;
-  color: var(--on-accent);
-  background: var(--accent);
-  transition:
-    opacity 0.12s ease,
-    filter 0.12s ease;
-}
-
-.composer-right {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.composer-attach {
-  flex: none;
-  width: 34px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  cursor: pointer;
-  color: var(--text-dim);
-  background: var(--bg-elev-3);
-  transition:
-    color 0.12s ease,
-    border-color 0.12s ease,
-    background 0.12s ease;
-}
-
-.composer-attach:hover:not(:disabled) {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-}
-
-.composer-attach:disabled {
-  opacity: 0.5;
-  cursor: progress;
-}
-
-.composer-attach svg {
-  width: 17px;
-  height: 17px;
-}
-.composer-attach .codicon {
-  font-size: 16px;
-}
-
-.composer-send:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.composer-send:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* Stop the in-flight turn — same footprint as send, but neutral → danger. */
-.composer-send--stop {
-  background: var(--bg-elev-3);
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-}
-
-.composer-send--stop:hover:not(:disabled) {
-  filter: none;
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
-}
-
-/* Interject the typed message into a running turn — accent-tinted, distinct
-   from Stop. Shares the send footprint; reads as "say this now". */
-.composer-send--interject {
-  background: var(--accent);
-  color: var(--on-accent);
-  border: 1px solid transparent;
-}
-
-.composer-send--interject:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.composer-send--interject:disabled {
-  background: var(--bg-elev-3);
-  color: var(--text-faint);
-  border-color: var(--border);
-}
-
-.composer-send svg {
-  width: 16px;
-  height: 16px;
 }
 
 /* Signing-out overlay — full-app, flat & modern, covers the logout + screen swap */
@@ -11001,239 +9129,6 @@ code {
   margin-top: 6px;
   font-size: 11.5px;
   color: var(--text-dim);
-}
-
-/* ── Chat polish: jump-to-latest, copy answer, syntax theme ──────────────────── */
-
-/* Floating "Jump to latest" pill — sticky to the bottom of the scroll viewport,
-   shown only when the user scrolled up while a turn is streaming. */
-.chat-jump {
-  position: sticky;
-  bottom: 6px;
-  align-self: center;
-  z-index: 20;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 30px;
-  padding: 0 13px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  background: var(--bg-elev-3);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  border-radius: 999px;
-  box-shadow: var(--shadow-md);
-  cursor: pointer;
-  animation: statusIn 0.16s ease both;
-  transition:
-    border-color 0.12s ease,
-    background 0.12s ease;
-}
-
-.chat-jump:hover {
-  border-color: var(--accent);
-  background: var(--bg-elev-2);
-}
-
-.chat-jump--new {
-  color: var(--on-accent);
-  background: var(--accent);
-  border-color: transparent;
-}
-
-.chat-jump--new:hover {
-  background: color-mix(in srgb, var(--accent) 88%, #000);
-  border-color: transparent;
-}
-
-.chat-jump-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-  animation: jumpDot 1.4s ease-in-out infinite;
-}
-
-.chat-jump--new .chat-jump-arrow {
-  color: var(--on-accent);
-}
-
-@keyframes jumpDot {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.15);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-jump-dot {
-    animation: none;
-  }
-}
-
-.chat-jump-arrow {
-  font-size: 13px;
-  line-height: 1;
-  color: var(--accent);
-}
-
-/* Hover-revealed copy button on assistant turns (mirrors the code-block copy). */
-.copy-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  padding: 0 8px;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  cursor: pointer;
-  transition:
-    color 0.12s ease,
-    border-color 0.12s ease,
-    background 0.12s ease,
-    opacity 0.12s ease;
-}
-
-.copy-btn:hover {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-}
-
-.copy-btn .btn-ico {
-  width: 13px;
-  height: 13px;
-}
-
-.copy-btn-check {
-  font-size: 12px;
-  line-height: 1;
-}
-
-.copy-btn--done {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
-}
-
-.turn-copy {
-  margin-left: auto;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.turn:hover .turn-copy,
-.turn-copy:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* highlight.js token theme — keyed to the app palette; the code surface stays dark
-   in both themes, so a single (dark) token set is correct everywhere. */
-.md-codeblock-pre .hljs {
-  display: block;
-  background: transparent;
-  color: var(--code-text);
-}
-
-.hljs-comment,
-.hljs-quote {
-  color: var(--syn-comment);
-  font-style: italic;
-}
-
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-literal,
-.hljs-section,
-.hljs-doctag {
-  color: var(--syn-key);
-}
-
-.hljs-string,
-.hljs-regexp,
-.hljs-meta .hljs-string {
-  color: var(--syn-str);
-}
-
-.hljs-number,
-.hljs-symbol,
-.hljs-bullet {
-  color: var(--syn-num);
-}
-
-.hljs-title,
-.hljs-title.function_,
-.hljs-built_in,
-.hljs-name {
-  color: var(--syn-fn);
-}
-
-.hljs-attr,
-.hljs-attribute,
-.hljs-variable,
-.hljs-template-variable,
-.hljs-selector-attr,
-.hljs-selector-pseudo {
-  color: var(--syn-attr);
-}
-
-.hljs-type,
-.hljs-class .hljs-title,
-.hljs-title.class_,
-.hljs-params {
-  color: var(--syn-type);
-}
-
-.hljs-tag,
-.hljs-punctuation {
-  color: var(--syn-punct);
-}
-
-.hljs-meta {
-  color: var(--syn-comment);
-}
-
-.hljs-emphasis {
-  font-style: italic;
-}
-
-.hljs-strong {
-  font-weight: 600;
-}
-
-.hljs-deletion {
-  color: var(--danger);
-}
-
-.hljs-addition {
-  color: var(--ok);
-}
-
-.hljs-link {
-  color: var(--accent);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tool-call {
-    animation: none;
-  }
-  .tool-call--running {
-    animation: toolShimmer 1.5s linear infinite;
-  }
-  .chat-jump {
-    animation: none;
-  }
 }
 
 /* ── Model tab (data-model visualizer) ──────────────────────────────────────
@@ -13366,54 +11261,6 @@ code {
   line-height: 1.4;
 }
 
-/* Chat hard-gate banner: shown above the composer until the project is deployed. */
-.deploy-gate {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  padding: 11px 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--accent-ring);
-  background: var(--accent-soft);
-}
-
-.deploy-gate-ico {
-  font-size: 19px;
-  line-height: 1;
-}
-
-.deploy-gate-spin {
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
-
-.deploy-gate-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-right: auto;
-  min-width: 0;
-}
-
-.deploy-gate-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.deploy-gate-sub {
-  font-size: 12px;
-  color: var(--text-dim);
-  line-height: 1.4;
-}
-
-.composer-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 /* ── Plan Mode card + review dialog (`.chat-plan-*`) ─────────────────────────
    Scoped namespace for the Plan-mode overhaul: the inline turn card
    (PlanCard), its clarifying-question sub-cards (PlanQuestionCard), and the
@@ -13801,32 +11648,32 @@ code {
   border-radius: 8px;
 }
 
-/* Standalone Agent-mode `ask_user` questions (no Plan card) */
+/* Agent-mode `ask_user` questions (no Plan card): a flat, softly tinted card
+   while waiting on you; once answered, only the exchange remains. */
 .chat-agent-questions {
-  margin-top: 10px;
-  padding: 13px 15px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--bg-elev-2);
+  padding: 12px 14px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
+  animation: turnIn 0.22s ease both;
 }
 
-/* Docked inline in the turn feed at the point it was asked — the feed's own
-   gap handles the spacing, so drop the trailing-block margin. */
-.turn-feed > .chat-agent-questions {
-  margin-top: 4px;
-  margin-bottom: 4px;
+.chat-agent-questions--done {
+  gap: 8px;
+  padding: 0;
+  background: none;
+  animation: none;
 }
 
 .chat-agent-questions-head {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.01em;
   color: var(--accent);
 }
 
@@ -13839,79 +11686,84 @@ code {
   line-height: 1.45;
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
   border-radius: 8px;
 }
 
-/* Clarifying questions */
+/* Clarifying questions (shared by Plan cards and Agent-mode questions) */
 .chat-plan-questions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .chat-plan-question {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 11px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-}
-
-.chat-plan-question--answered {
-  opacity: 0.75;
+  gap: 10px;
 }
 
 .chat-plan-question-text {
-  font-size: 12.5px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
   color: var(--text);
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
 }
 
-.chat-plan-question-answered-ico {
-  flex: none;
-  color: var(--ok);
-  margin-top: 1px;
-}
-
-.chat-plan-question-answer {
-  font-size: 12px;
-  color: var(--text-dim);
-  padding-left: 20px;
-}
-
+/* Choices are often whole sentences, so they stack as full-width options. */
 .chat-plan-question-choices {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
 }
 
 .chat-plan-choice {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
   color: var(--text);
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 5px 12px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 0;
+  border-radius: 10px;
   cursor: pointer;
   transition:
-    border-color 0.14s ease,
-    background 0.14s ease;
+    background 0.14s ease,
+    transform 0.14s ease;
 }
 
 .chat-plan-choice:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev-2));
+  background: var(--accent-soft);
+}
+
+.chat-plan-choice:active:not(:disabled) {
+  transform: scale(0.992);
 }
 
 .chat-plan-choice:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+.chat-plan-choice-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-plan-choice-badge {
+  flex: none;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
 }
 
 .chat-plan-question-freeform {
@@ -13925,21 +11777,79 @@ code {
   color: var(--text-faint);
 }
 
+.chat-plan-question-freeform-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.chat-plan-question-freeform-row .chat-plan-feedback {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+}
+
 /* Shared feedback textarea (revise flow + freeform answers) */
 .chat-plan-feedback {
+  min-height: 34px;
+  padding: 7px 11px;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text);
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
   resize: vertical;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .chat-plan-feedback:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Answered: the question, then your reply in your own bubble. */
+.chat-plan-question--answered,
+.chat-plan-question--interrupted {
+  gap: 6px;
+}
+
+.chat-plan-question-asked {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.chat-plan-question-asked-ico {
+  flex: none;
+  margin-top: 3px;
+  color: var(--text-faint);
+}
+
+.chat-plan-question-reply {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 7px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--text);
+  background: var(--user-bubble, color-mix(in srgb, var(--accent) 12%, var(--bg-elev)));
+  border: 1px solid var(--user-bubble-border, transparent);
+  border-radius: 14px 14px 5px 14px;
+}
+
+.chat-plan-question-missed {
+  padding-left: 21px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-faint);
 }
 
 /* Copy / export / review-full-plan row */

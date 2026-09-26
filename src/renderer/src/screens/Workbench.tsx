@@ -30,6 +30,7 @@ import ConfirmModal from '../components/ConfirmModal'
 import SettingsModal from '../components/SettingsModal'
 import { applyUiScale, UI_SCALES } from '../theme'
 import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../components/ChatPanel'
+import { segmentsForStorage, segmentsFromStorage } from '../components/chat/storage'
 import { planForStorage, planFromStorage } from '../chatPlan'
 import { useChatEventStore } from '../chatEventStore'
 import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
@@ -70,6 +71,7 @@ function toUi(m: ChatMessage): UIChatMessage {
   return {
     ...m,
     turnId: m.designApplyId,
+    segments: segmentsFromStorage(m.segments),
     plan: planFromStorage(m.plan),
     // A standalone question left pending at persist time can't be answered on a
     // reloaded transcript (its turn/session is gone) — show it as interrupted.
@@ -99,6 +101,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       pending,
       interrupted,
       elapsedMs,
+      createdAt,
       plan,
       questions
     }) => {
@@ -113,11 +116,12 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         tools: cutOff
           ? tools.map((t) => (t.state === 'running' ? { ...t, state: 'error' } : t))
           : tools,
-        segments,
+        segments: segmentsForStorage(segments),
         error,
         attachments,
         attachmentThumbs,
         elapsedMs,
+        createdAt,
         plan: planForStorage(plan, Boolean(cutOff)),
         // Mirror plan-question handling: a question still pending when the turn
         // was cut off can never be answered, so persist it as interrupted.
