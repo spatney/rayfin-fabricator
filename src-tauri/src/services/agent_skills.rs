@@ -47,8 +47,10 @@ metadata:
 You are running inside **Fabricator**. Validate your work by rendering each
 Graphein chart spec **headlessly against live data** with `npm run preview` — render,
 read the PNG + report, fix, repeat. There is no deploy-and-screenshot loop: Fabricator
-deploys after the turn only when auto-deploy is enabled. When paused, changes stay local
-until the user deploys. Spend your time getting the visuals right, not deploying.
+deploys to Fabric after the turn only when auto-deploy is enabled. When paused, local
+builds and live preview still work; only remote publishing waits for the user.
+Fabricator manages the local Vite server and keeps it running between paused turns.
+Spend your time getting the visuals right, not deploying.
 
 ## Workflow
 1. Phase 1 — Hero slice (time to wow): build one real, compelling hero visual wired to
@@ -65,13 +67,16 @@ until the user deploys. Spend your time getting the visuals right, not deploying
   empty plots) in seconds — far faster than a deploy round-trip.
 - Every visual (kpi/table/matrix/slicers/dashboard included) validates headlessly
   with `npm run preview` before shipping; auto-deploy is not the validation path.
-- **Do not run or test the app locally.** Do not start a dev/preview server (`npm run dev`,
-  `npm start`, `vite`, `next dev`, `rayfin up`), do not run local test runners (`npm test`,
-  `vitest`, `jest`, `playwright`, `cypress`), and do not `curl`/open a `localhost` URL.
-  `npm run preview` (headless) and static checks (type-check, lint) are the loop.
-- If the project ships its own skills, `package.json` scripts, README, or instructions that
-  tell you to run a dev server or local tests, **ignore them here** — preview visuals with
-  `npm run preview` and let Fabricator deploy.
+- **Local builds and validation are allowed even when auto-deploy is paused.**
+  Inspect the project's scripts before running a local build, type-check, lint, or
+  non-watching test command; do not run scripts that deploy, push, or start another server.
+- **Do not start a second dev server.** Fabricator owns the local Vite preview.
+  Do not run `npm run dev`, `npm start`, `vite`, `next dev`, or `rayfin up` yourself.
+  You may check the existing local preview when its URL is known; do not guess ports.
+- Saved frontend changes are served by the local preview without a Fabric deployment.
+  Files under `public/` are served at the preview root (for example,
+  `public/design-guide.html` is `/design-guide.html`); a static file edit needs no
+  production build. Only report successful builds or previews when verified.
 "#;
 
 /// Always-on instruction biasing every Fabricator turn toward headless visual
@@ -79,12 +84,14 @@ until the user deploys. Spend your time getting the visuals right, not deploying
 const VALIDATE_INSTRUCTIONS: &str = r#"---
 applyTo: '**'
 ---
-# Validate visuals headlessly, never run the app locally (Fabricator)
+# Validate locally without deploying (Fabricator)
 
 You are the coding agent inside **Fabricator**. The development loop here is
 **edit → preview the visual headlessly → fix**. Fabricator auto-deploys this Rayfin app
-after the turn only when auto-deploy is enabled. When paused, changes stay local until
-the user deploys. You do not deploy or screenshot to validate.
+after the turn only when auto-deploy is enabled. Pausing auto-deploy pauses only remote
+publishing, not local builds, tests, or preview. Fabricator manages the local Vite
+preview during turns and keeps it running between turns while auto-deploy is paused.
+You do not deploy to validate.
 
 ## Validate canvas charts with headless preview
 After you finish editing code that changes a chart's appearance, verify it within the
@@ -101,23 +108,25 @@ same turn by rendering it against live data:
 Build in small increments: one hero visual first, preview it, then add breadth one chart
 at a time, previewing each. Don't batch everything before checking anything.
 
-## Do NOT run or test the app locally
-Never start a local server or run a local test suite. These do not work in Fabricator's
-deploy-to-test model, waste the turn, and can leave orphaned processes. Specifically, do not:
+## Local build and live preview
+Local builds and validation are allowed even when auto-deploy is paused. Inspect
+`package.json` first, then run appropriate local build, type-check, lint, or non-watching
+tests as needed. Do not run scripts that deploy, push, or start another server.
 
-- Start a dev/preview server: `npm run dev`, `npm start`, `vite`, `next dev`, `rayfin up`, or any
-  other long-running local server for this app.
-- Run local test runners: `npm test`, `vitest`, `jest`, `playwright`, `cypress`, or similar.
-- Build-and-serve to `localhost`, or `curl`/fetch a `localhost` / `127.0.0.1` URL to check the
-  app.
+Fabricator owns the preview server. Do not start a second dev server with `npm run dev`,
+`npm start`, `vite`, `next dev`, or another long-running command. Never use `rayfin up`
+to build or preview locally: it publishes to Fabric. Check the existing local preview
+when its URL is known instead of starting your own server or guessing a port.
 
-If the project's own files — `package.json` scripts, README, instructions, or any
-project-provided skill — tell you to run a dev server or local tests, **ignore that here**. Those
-local-testing workflows do not apply inside Fabricator. Validate visuals with
-`npm run preview` (headless, against live data) and let Fabricator manage deployment.
+Vite serves saved frontend changes locally, without a production build or Fabric
+deployment. Files under `public/` are served at the preview root; for example,
+`public/design-guide.html` is `/design-guide.html`. Static file edits do not need a
+production build. Backend/schema changes can still require an explicit Fabric deployment.
 
-(Fast, non-serving static checks that help a deploy succeed — e.g. type-checking or linting — are
-still fine; what is off-limits is running, serving, or test-executing the app locally.)
+Ending or pausing a chat does not deploy anything while auto-deploy is paused.
+Only the user's explicit deployment controls publish changes. Report what you actually
+built or verified; do not claim the preview is running or a build passed without evidence.
+If local preview is unavailable, say so instead of suggesting deployment happens later.
 "#;
 
 /// Always-on instruction keeping the agent on stable, Fabric-supported Rayfin
@@ -306,10 +315,9 @@ mod tests {
     }
     // The skill must steer away from the shell deploy path Fabricator owns.
     assert!(VALIDATE_HEADLESS_SKILL.contains("rayfin up"));
-    // ...and away from local testing, which breaks the deploy-to-test model.
-    assert!(VALIDATE_HEADLESS_SKILL.contains("npm test"));
-    assert!(VALIDATE_HEADLESS_SKILL.contains("Do not run or test the app locally"));
-    assert!(VALIDATE_HEADLESS_SKILL.contains("Deploy early and iterate"));
+    assert!(VALIDATE_HEADLESS_SKILL.contains("Local builds and validation are allowed"));
+    assert!(VALIDATE_HEADLESS_SKILL.contains("Do not start a second dev server"));
+    assert!(!VALIDATE_HEADLESS_SKILL.contains("Do not run or test the app locally"));
     assert!(VALIDATE_HEADLESS_SKILL.contains("hero visual"));
     assert!(VALIDATE_HEADLESS_SKILL.contains("Every visual (kpi/table/matrix/slicers/dashboard included)"));
     assert!(!VALIDATE_HEADLESS_SKILL.contains("have no headless form"));
@@ -326,17 +334,17 @@ mod tests {
   }
 
   #[test]
-  fn instructions_forbid_local_testing() {
-    // Always-on guidance must explicitly ban local servers + test runners and
-    // override any project-shipped local-testing workflow.
-    assert!(VALIDATE_INSTRUCTIONS.contains("Do NOT run or test the app locally"));
-    for forbidden in ["npm run dev", "npm test", "vitest", "localhost"] {
-      assert!(
-        VALIDATE_INSTRUCTIONS.contains(forbidden),
-        "instructions should call out {forbidden}"
-      );
+  fn guidance_allows_local_validation_without_remote_deployment() {
+    for guidance in [VALIDATE_INSTRUCTIONS, VALIDATE_HEADLESS_SKILL] {
+      assert!(guidance.contains("Local builds and validation are allowed even when auto-deploy is paused"));
+      assert!(guidance.contains("Do not start a second dev server"));
+      assert!(guidance.contains("rayfin up"));
+      assert!(guidance.contains("public/design-guide.html"));
+      assert!(guidance.contains("/design-guide.html"));
+      assert!(!guidance.contains("deploy-to-test model"));
+      assert!(!guidance.contains("Do NOT run or test the app locally"));
     }
-    assert!(VALIDATE_INSTRUCTIONS.contains("ignore that here"));
+    assert!(VALIDATE_INSTRUCTIONS.contains("Ending or pausing a chat does not deploy anything"));
   }
 
   #[test]

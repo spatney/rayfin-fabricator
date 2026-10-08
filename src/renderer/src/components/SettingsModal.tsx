@@ -193,7 +193,7 @@ export default function SettingsModal({
             <Section title="General">
               <ToggleRow
                 label="Auto-deploy after chat"
-                hint="Deploy changes after successful chat turns. Turn off to keep working locally, including without automatic team pushes. Deploy manually when ready. Deployments already started will finish."
+                hint="Deploy to Fabric after successful chat turns. Turn off to keep local builds and live preview without automatic Fabric deployments or team pushes. Deploy manually when ready. Deployments already started will finish."
                 checked={settings.autoDeploy !== false}
                 onChange={(autoDeploy) => onChange({ autoDeploy })}
               />

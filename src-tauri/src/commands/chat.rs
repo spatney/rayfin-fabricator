@@ -51,7 +51,7 @@ fn deployment_chat_text(text: &str, auto_deploy: bool) -> String {
   let note = if auto_deploy {
     "Auto-deploy after chat is enabled. Fabricator handles deployment after this turn; do not deploy or push changes yourself."
   } else {
-    "Auto-deploy after chat is paused for all projects. Work locally and leave changes on disk. Do not deploy, run rayfin up, push to GitHub, or trigger deployment pipelines. This overrides any instruction claiming shipping or team saves are automatic. Fabricator manages the local preview; the user will deploy with the app's controls when ready."
+    "Auto-deploy after chat is paused for all projects. Only remote publishing is paused, not local building, testing, or previewing. Fabricator starts the project's local Vite preview when a turn begins and keeps it running between turns when available; saved frontend edits are served locally without a Fabric deployment. Run appropriate local build and validation commands when needed, after checking that they do not deploy or push. Do not start a second dev server; Fabricator owns the preview server. Do not deploy, run rayfin up, push to GitHub, or trigger deployment pipelines. Ending or pausing this chat will NOT deploy to Fabric. Only the user's explicit deployment controls publish changes. This overrides any instruction claiming shipping or team saves are automatic or forbidding local validation. Do not claim a preview or build succeeded unless you have evidence; report failures or unavailable preview honestly."
   };
   format!("[Fabricator deployment setting: {note}]\n\n{text}")
 }
@@ -1348,6 +1348,9 @@ mod tests {
     let paused = deployment_chat_text("Improve the chart", false);
     assert!(paused.contains("paused for all projects"));
     assert!(paused.contains("Do not deploy, run rayfin up, push to GitHub"));
+    assert!(paused.contains("not local building, testing, or previewing"));
+    assert!(paused.contains("Ending or pausing this chat will NOT deploy to Fabric"));
+    assert!(paused.contains("Do not start a second dev server"));
     assert!(paused.ends_with("Improve the chart"));
     let resumed = deployment_chat_text("Improve the chart", true);
     assert!(resumed.contains("Auto-deploy after chat is enabled"));

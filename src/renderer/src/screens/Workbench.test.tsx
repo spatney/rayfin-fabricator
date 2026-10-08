@@ -900,6 +900,33 @@ describe('Workbench live preview ports', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('uses another port locally while paused without registering, signing in, or deploying', async () => {
+    const { api, dev } = await mount({ theme: 'system', autoDeploy: false })
+    const { turn } = await beginTurn()
+    expect(screen.getByRole('dialog').textContent).toContain('nothing is pushed to Fabric')
+    fireEvent.click(screen.getByRole('button', { name: 'Use port 5174' }))
+    await act(async () => turn)
+    expect(dev.start).toHaveBeenCalledWith(project.id, 5174)
+    expect(dev.registerPort).not.toHaveBeenCalled()
+    expect(dev.freePort).not.toHaveBeenCalled()
+    expect(api.auth.loginRayfin).not.toHaveBeenCalled()
+    await act(async () => completeTurn())
+    expect(dev.stop).not.toHaveBeenCalled()
+    expect(api.deploy.run).not.toHaveBeenCalled()
+    expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBe('http://localhost:5174')
+  })
+
+  it('offers a local-only alternate port during plan execution while paused', async () => {
+    const { dev } = await mount({ theme: 'system', autoDeploy: false })
+    act(() => chatProps.mock.lastCall?.[0].onChange(() => [
+      { id: 'a1', role: 'assistant', text: '', tools: [], pending: true }
+    ]))
+    await act(async () => chatProps.mock.lastCall?.[0].onPlanExecutionStart?.())
+    fireEvent.click(screen.getByRole('button', { name: 'Use port 5174' }))
+    await waitFor(() => expect(dev.start).toHaveBeenCalledWith(project.id, 5174))
+    expect(dev.registerPort).not.toHaveBeenCalled()
+  })
+
   it('stops the process holding the port when asked, then starts on that port', async () => {
     const { dev } = await mount()
     const { turn } = await beginTurn()

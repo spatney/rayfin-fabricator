@@ -792,7 +792,7 @@ export default function Workbench({
       if (plan.port !== undefined) return plan.port
       const conflict = plan.conflict
       if (!conflict) return null
-      if (!hasPortChoice(conflict, context)) {
+      if (!hasPortChoice(conflict, context, !autoDeployRef.current)) {
         toast.info(
           `localhost:${conflict.port} is in use, so this turn shows your deployed app. Fabricator will ask again with your next message.`,
           { title: 'Live preview skipped' }
@@ -808,11 +808,15 @@ export default function Workbench({
     [toast]
   )
 
-  /** "Use port N": register it in rayfin.yml and push it to Fabric, then use it. */
+  /** "Use port N": use locally when paused; otherwise register it before starting. */
   const registerPromptPort = useCallback(async (): Promise<void> => {
     const prompt = portPromptRef.current
     const port = prompt?.conflict.suggestedPort
     if (!prompt || port === undefined || prompt.busy) return
+    if (!autoDeployRef.current) {
+      settlePortPrompt(port)
+      return
+    }
     setPortPrompt((p) => p && { ...p, busy: 'register', error: null, log: [] })
     const register = (): Promise<DeployResult> => window.api.dev.registerPort(prompt.projectId, port)
     let result: DeployResult
@@ -1868,6 +1872,7 @@ export default function Workbench({
                               ? (devServers[active.id]?.url ?? null)
                               : null
                           }
+                          localPreviewRefreshKey={gitRefresh}
                           focused={focusPane === 'preview'}
                           onToggleFocus={() =>
                             setFocusPane((f) => (f === 'preview' ? null : 'preview'))
@@ -2188,6 +2193,7 @@ export default function Workbench({
         <PortConflictModal
           conflict={portPrompt.conflict}
           context={portPrompt.context}
+          localOnly={!autoDeploy}
           busy={portPrompt.busy}
           error={portPrompt.error}
           log={portPrompt.log}

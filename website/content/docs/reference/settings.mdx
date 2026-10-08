@@ -19,6 +19,8 @@ Under **General**, **Auto-deploy after chat** is on by default. Turn it off to m
 
 While paused, Fabricator keeps the local preview running between turns when available. It still saves your conversation and local code, but does not automatically deploy or push team changes to GitHub. Queued automatic deployments are cancelled; deployments and team saves already started finish normally.
 
+Pausing only stops remote publishing. Local builds, checks, and live frontend preview still work. Vite serves saved frontend changes without a production build or Fabric deployment. For example, `public/design-guide.html` is available at `/design-guide.html` on the local preview server. Ending or pausing a chat does not trigger a deferred Fabric deployment. Backend or schema changes can still require an explicit deployment.
+
 Use **Redeploy** for a personal app, or **Deploy preview** for a team app, when ready. Team **Publish** remains available to publish for everyone. Manual deployment does not turn auto-deploy back on. Turning the setting back on resumes automatic deployment after future successful chat turns; it does not deploy immediately.
 
 The first Fabric deployment and sign-in requirements still apply. Local mode is not an offline mode.

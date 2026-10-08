@@ -9,16 +9,28 @@ Use this page when the inline preview does not show the app you expect.
 
 You see an empty preview, **Loading…** for a long time, a local browser error, or chat appears to hang while opening a preview.
 
-Fabricator shows either the deployed app or, during a chat turn, a local Vite preview. The local preview uses the existing Fabric deployment's configuration and can be interrupted by dependency installs, port conflicts, or a dev server that stops answering.
+Fabricator shows either the deployed app or, during a chat turn, a local Vite preview. With **Auto-deploy after chat** turned off, the local preview stays running between turns. The local preview uses the existing Fabric deployment's configuration and can be interrupted by dependency installs, port conflicts, or a dev server that stops answering.
 
 1. Select **Reload** in the preview toolbar.
 2. Select **Focus** to hide chat, then **Exit focus** to return. This forces the preview bounds to be recalculated.
-3. If the preview is local and the turn is still running, wait for the turn to finish. The normal deployed preview returns after the turn and deploy.
+3. If auto-deploy is enabled and the turn is still running, wait for the turn to finish. The normal deployed preview returns after the turn and deploy. If auto-deploy is paused, staying in **Local** is expected.
 4. If the app is deployed but the preview is blank, select **Redeploy**.
 5. If a local preview log says "Local preview didn't become ready in time." or "Timed out waiting for Vite to start.", retry the chat turn after dependencies finish installing.
 6. If the same project repeatedly hangs while opening preview, restart Fabricator.
 
 If the preview still hangs, [Report a problem](/docs/troubleshooting/report-a-problem).
+
+## Local preview shows the starter instead of my app
+
+The deployed app opens your custom page, but switching to **Local** shows the starter screen.
+
+Fabricator opens the entry document configured in `services.staticHosting.indexDocument` in `rayfin/rayfin.yml`. For example, `design-guide.html` opens `/design-guide.html` on the local server rather than the starter at `/`. Without a custom entry document, the normal Vite root is used.
+
+1. Check that the configured entry document is served by your local app. A file at `public/design-guide.html` is served at `/design-guide.html`.
+2. Restart Fabricator and send a new message to start a fresh local preview after changing the entry document.
+3. If Fabricator reports that the entry page is not responding successfully, check the filename and local preview log.
+
+No Fabric deployment is needed to preview a local static page. Static HTML entry pages refresh after chat edits, including while auto-deploy is paused; they do not depend on Vite's live-reload script being present.
 
 ## All preview ports are busy
 
@@ -28,13 +40,15 @@ You see a dialog titled "localhost:5173 is in use" or a similar localhost port. 
 
 During a chat turn, Fabricator runs the project's local Vite server on a localhost port that the app's sign-in accepts. If every registered port is busy, Fabricator asks what to do instead of stopping an unrelated process without permission.
 
-1. If the dialog offers **Use port 5174** or another port, select it. Fabricator adds `http://localhost:<port>` to `rayfin/rayfin.yml`. If the app already has a Fabric backend, it pushes sign-in settings to Fabric without rebuilding the app.
+1. If the dialog offers **Use port 5174** or another port, select it. With **Auto-deploy after chat** off, this starts local preview only: no redirect configuration is edited and no settings are pushed to Fabric. With auto-deploy on, Fabricator adds `http://localhost:<port>` to `rayfin/rayfin.yml` and, if the app has a backend, pushes sign-in settings without rebuilding the app.
 2. If the dialog identifies a process and offers a **Stop** button named for that process, such as **Stop node.exe**, use it only if you are sure that process can be closed. Unsaved work in that process is lost.
 3. Select **Skip live preview** to keep the chat turn moving without a local preview. You can use the deployed preview after the turn finishes.
-4. If Fabricator says switching ports cannot happen while Copilot is working, skip for now and send the next message after the turn ends.
+4. With auto-deploy on, if Fabricator says switching ports cannot happen while Copilot is working, skip for now and send the next message after the turn ends. With auto-deploy off, choosing another local port does not need a push and is available mid-turn.
 5. If the port becomes busy again, close the other app or choose another port when prompted.
 
 If Fabricator cannot identify or stop the process, [Report a problem](/docs/troubleshooting/report-a-problem) with the port number and dialog text.
+
+Localhost sign-in is supported. Fabricator prefers a free, configured sign-in port. If you choose a port the backend does not yet accept, browser sign-in may fail even though the frontend loads. To retain sign-in without pushing settings, free an existing configured port using the dialog's **Stop** action only when you know that process can be stopped. Pausing auto-deploy does not disable authentication.
 
 ## The preview shows an old version
 

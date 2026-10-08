@@ -6,18 +6,19 @@ import { openDocs } from '../docsLinks'
 export type PortPromptContext = 'turn' | 'plan'
 
 /** Whether "Use port N" can run now: a free port exists and any push is allowed. */
-export function canUsePort(conflict: PortConflict, context: PortPromptContext): boolean {
-  return conflict.suggestedPort !== undefined && !(context === 'plan' && conflict.needsPush)
+export function canUsePort(conflict: PortConflict, context: PortPromptContext, localOnly = false): boolean {
+  return conflict.suggestedPort !== undefined && !(context === 'plan' && conflict.needsPush && !localOnly)
 }
 
 /** Whether the prompt has any choice besides skipping. */
-export function hasPortChoice(conflict: PortConflict, context: PortPromptContext): boolean {
-  return canUsePort(conflict, context) || (conflict.canStop && conflict.occupant !== undefined)
+export function hasPortChoice(conflict: PortConflict, context: PortPromptContext, localOnly = false): boolean {
+  return canUsePort(conflict, context, localOnly) || (conflict.canStop && conflict.occupant !== undefined)
 }
 
 interface Props {
   conflict: PortConflict
   context: PortPromptContext
+  localOnly?: boolean
   /** The action in flight, which disables the other controls. */
   busy: 'register' | 'stop' | null
   error: string | null
@@ -30,12 +31,13 @@ interface Props {
 
 /**
  * Live local preview: every port the app's sign-in accepts is taken. Offers to
- * register the next free port (edits rayfin.yml, then pushes it to Fabric) or
- * to stop the process that holds the preferred one.
+ * use the next free port (registering only when auto-deploy is enabled) or
+ * stop the process that holds the preferred one.
  */
 export default function PortConflictModal({
   conflict,
   context,
+  localOnly = false,
   busy,
   error,
   log,
@@ -44,7 +46,7 @@ export default function PortConflictModal({
   onSkip
 }: Props): JSX.Element {
   const { port, occupant, ownProject, suggestedPort: next, needsPush } = conflict
-  const usePort = canUsePort(conflict, context)
+  const usePort = canUsePort(conflict, context, localOnly)
   const stop = conflict.canStop && occupant !== undefined
   const stopLabel = `Stop ${occupant?.name ?? 'it'}`
   const origin = `http://localhost:${next}`
@@ -54,7 +56,7 @@ export default function PortConflictModal({
       confirmLabel={usePort ? `Use port ${next}` : stopLabel}
       danger={!usePort}
       busy={busy === (usePort ? 'register' : 'stop')}
-      busyLabel={usePort ? (needsPush ? 'Pushing to Fabric…' : 'Updating rayfin.yml…') : 'Stopping…'}
+      busyLabel={usePort ? (localOnly ? 'Starting local preview…' : needsPush ? 'Pushing to Fabric…' : 'Updating rayfin.yml…') : 'Stopping…'}
       secondaryLabel={usePort && stop ? stopLabel : undefined}
       onSecondary={usePort && stop ? onStop : undefined}
       secondaryBusy={usePort && busy === 'stop'}
@@ -76,7 +78,9 @@ export default function PortConflictModal({
             ) : (
               <>Another app is listening on it, and Fabricator couldn&apos;t tell which one.</>
             )}{' '}
-            The live preview has to run on a port your app&apos;s sign-in accepts.
+            {localOnly
+              ? 'Auto-deploy is paused. You can preview locally on another port without pushing anything to Fabric.'
+              : <>The live preview has to run on a port your app&apos;s sign-in accepts.</>}
           </p>
           {occupant?.commandLine && (
             <p className="confirm-path port-conflict-command" title={occupant.path}>
@@ -86,11 +90,17 @@ export default function PortConflictModal({
           <ul className="port-conflict-options">
             {usePort && (
               <li>
-                <strong>Use port {next}</strong> adds <code>{origin}</code> to rayfin.yml
-                {needsPush
-                  ? ' and pushes your sign-in settings to Fabric. Your app isn’t rebuilt.'
-                  : '. Your next deploy registers it for sign-in.'}{' '}
-                Fabricator reuses it whenever port {port} is busy.
+                <strong>Use port {next}</strong>
+                {localOnly ? (
+                  <> starts your local preview at <code>{origin}</code>. No configuration is changed and nothing is pushed to Fabric. Local sign-in is supported, but this port must already be accepted by your backend for browser sign-in to work.</>
+                ) : (
+                  <> adds <code>{origin}</code> to rayfin.yml
+                    {needsPush
+                      ? ' and pushes your sign-in settings to Fabric. Your app isn’t rebuilt.'
+                      : '. Your next deploy registers it for sign-in.'}{' '}
+                    Fabricator reuses it whenever port {port} is busy.
+                  </>
+                )}
               </li>
             )}
             {stop && (

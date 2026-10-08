@@ -111,4 +111,6 @@ See [setup and sign-in troubleshooting](/docs/troubleshooting/setup-and-sign-in)
 
 ## Redirect URIs for live preview
 
-When a chat turn starts, Fabricator may run the project's local Vite preview on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next normal deploy publishes the app code.
+When a chat turn starts, Fabricator may run the project's local Vite preview on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port with **Auto-deploy after chat** enabled, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next normal deploy publishes the app code.
+
+With **Auto-deploy after chat** off, choosing another port only starts the local preview. It does not edit redirect configuration or push settings. Local sign-in still works on ports the backend accepts; for other ports, use an existing configured port if browser sign-in is needed without a remote settings change.
