@@ -206,7 +206,8 @@ describe('SettingsModal retired controls', () => {
       expect(screen.queryByText(label)).toBeNull()
     }
     expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    expect(screen.getByText('Auto-deploy after chat')).toBeTruthy()
     expect(screen.getByText('Team workspaces')).toBeTruthy()
     expect(screen.getByText('Full diagnostics')).toBeTruthy()
   })
