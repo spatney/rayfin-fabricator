@@ -68,6 +68,17 @@ afterEach(() => {
   delete (window as unknown as { api?: unknown }).api
 })
 
+describe('SettingsModal automatic deployment', () => {
+  it.each([undefined, true, false])('reflects autoDeploy=%s and persists changes', async (autoDeploy) => {
+    installApi()
+    const { onChange } = await renderModal({ settings: { theme: 'system', autoDeploy } })
+    const checkbox = screen.getByRole<HTMLInputElement>('checkbox', { name: /^Auto-deploy after chat/ })
+    expect(checkbox.checked).toBe(autoDeploy !== false)
+    fireEvent.click(checkbox)
+    expect(onChange).toHaveBeenCalledWith({ autoDeploy: autoDeploy === false })
+  })
+})
+
 describe('SettingsModal accounts and setup', () => {
   it('opens Accounts and setup when the workbench offers them', async () => {
     installApi()

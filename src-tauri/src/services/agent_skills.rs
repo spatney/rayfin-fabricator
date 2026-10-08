@@ -37,7 +37,7 @@ pub fn instructions_dir() -> PathBuf {
 /// debug, or see how the app's visuals look.
 const VALIDATE_HEADLESS_SKILL: &str = r#"---
 name: validate-headless
-description: "Validate this Rayfin data app's visuals fast with headless Graphein preview. Use after editing the app, or whenever the user wants to validate, verify, test, check, see, preview, or debug how a chart looks or behaves ('does it work', 'make sure it looks right'). Renders one spec against live DAX data to a PNG + report — no deploy or screenshot needed; Fabricator auto-deploys after the turn."
+description: "Validate this Rayfin data app's visuals fast with headless Graphein preview. Use after editing the app, or whenever the user wants to validate, verify, test, check, see, preview, or debug how a chart looks or behaves ('does it work', 'make sure it looks right'). Renders one spec against live DAX data to a PNG + report — no deploy or screenshot needed; Fabricator manages deployment."
 metadata:
   author: Fabricator
   version: 2.0.0
@@ -47,8 +47,8 @@ metadata:
 You are running inside **Fabricator**. Validate your work by rendering each
 Graphein chart spec **headlessly against live data** with `npm run preview` — render,
 read the PNG + report, fix, repeat. There is no deploy-and-screenshot loop: Fabricator
-auto-deploys the app after the turn, so shipping is automatic. Spend your time getting
-the visuals right, not deploying. Deploy early and iterate on each hero visual.
+deploys after the turn only when auto-deploy is enabled. When paused, changes stay local
+until the user deploys. Spend your time getting the visuals right, not deploying.
 
 ## Workflow
 1. Phase 1 — Hero slice (time to wow): build one real, compelling hero visual wired to
@@ -83,7 +83,8 @@ applyTo: '**'
 
 You are the coding agent inside **Fabricator**. The development loop here is
 **edit → preview the visual headlessly → fix**. Fabricator auto-deploys this Rayfin app
-after the turn, so shipping is automatic; you do not deploy or screenshot to validate.
+after the turn only when auto-deploy is enabled. When paused, changes stay local until
+the user deploys. You do not deploy or screenshot to validate.
 
 ## Validate canvas charts with headless preview
 After you finish editing code that changes a chart's appearance, verify it within the
@@ -113,7 +114,7 @@ deploy-to-test model, waste the turn, and can leave orphaned processes. Specific
 If the project's own files — `package.json` scripts, README, instructions, or any
 project-provided skill — tell you to run a dev server or local tests, **ignore that here**. Those
 local-testing workflows do not apply inside Fabricator. Validate visuals with
-`npm run preview` (headless, against live data) and let Fabricator auto-deploy.
+`npm run preview` (headless, against live data) and let Fabricator manage deployment.
 
 (Fast, non-serving static checks that help a deploy succeed — e.g. type-checking or linting — are
 still fine; what is off-limits is running, serving, or test-executing the app locally.)

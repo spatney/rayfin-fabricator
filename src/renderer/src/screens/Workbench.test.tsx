@@ -664,6 +664,60 @@ describe('Workbench app bar', () => {
 })
 
 describe('Workbench after-turn deployment', () => {
+  it('keeps successive turns local while paused, but allows a manual redeploy', async () => {
+    const api = installApi(true)
+    api.deploy.hasChanges.mockResolvedValue(true)
+    render(<Workbench {...makeProps({ settings: { theme: 'system', autoDeploy: false } })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    expect(screen.getByRole('button', { name: 'Auto-deploy paused' })).toBeTruthy()
+
+    await act(async () => completeTurn())
+    await act(async () => completeTurn())
+    expect(api.chat.saveHistory).toHaveBeenCalledTimes(2)
+    expect(api.deploy.hasChanges).not.toHaveBeenCalled()
+    expect(api.deploy.run).not.toHaveBeenCalled()
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Test deploy' })))
+    expect(api.deploy.run).toHaveBeenCalledTimes(1)
+    expect(api.projects.git.divergence).toHaveBeenCalledWith(project.id)
+    expect(screen.getByRole('button', { name: 'Auto-deploy paused' })).toBeTruthy()
+  })
+
+  it('honors pausing during change detection and resumes only on a subsequent turn', async () => {
+    const api = installApi(true)
+    const changed = deferred<boolean>()
+    api.deploy.hasChanges.mockReturnValueOnce(changed.promise)
+    const props = makeProps({ settings: { theme: 'system', autoDeploy: true } })
+    const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await act(async () => completeTurn())
+    rerender(<Workbench {...props} settings={{ theme: 'system', autoDeploy: false }} />)
+    await act(async () => changed.resolve(true))
+    expect(api.deploy.run).not.toHaveBeenCalled()
+
+    rerender(<Workbench {...props} />)
+    expect(api.deploy.run).not.toHaveBeenCalled()
+    api.deploy.hasChanges.mockResolvedValue(true)
+    await act(async () => completeTurn())
+    expect(api.deploy.run).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels queued auto-deploys when paused without cancelling the current deployment', async () => {
+    const api = installApi(true)
+    const deploying = deferred<DeployResult>()
+    api.deploy.hasChanges.mockResolvedValue(true)
+    api.deploy.run.mockReturnValueOnce(deploying.promise)
+    const props = makeProps()
+    const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await act(async () => completeTurn())
+    await act(async () => completeTurn())
+    rerender(<Workbench {...props} settings={{ theme: 'system', autoDeploy: false }} />)
+    await act(async () => deploying.resolve({ ok: true, outcome: 'success' }))
+    expect(api.deploy.run).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('deploy-state').textContent).toBe('idle')
+  })
+
   it('redeploys undeployed changes even without file-edit events from the agent', async () => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
@@ -799,9 +853,9 @@ describe('Workbench live preview ports', () => {
     const api = installApi(true)
     const dev = api.dev
     dev.plan.mockResolvedValue({ conflict })
-    render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
+    const view = render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
-    return { api, dev }
+    return { api, dev, view }
   }
 
   it('starts straight away on a free port that sign-in accepts', async () => {
@@ -1019,6 +1073,37 @@ describe('Workbench live preview ports', () => {
     }
   })
 
+  it.each([true, false])('keeps the paused local preview between turns (success: %s) until manual deploy', async (ok) => {
+    const { api, dev } = await mount({ theme: 'system', autoDeploy: false })
+    dev.plan.mockResolvedValue({ port: 5174 })
+    const { turn } = await beginTurn()
+    await act(async () => turn)
+    await act(async () => completeTurn({ ok, filesModified: [], ranDeploy: false }))
+    expect(dev.stop).not.toHaveBeenCalled()
+    expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBe('http://localhost:5174')
+    expect(api.deploy.run).not.toHaveBeenCalled()
+
+    const next = await beginTurn()
+    await act(async () => next.turn)
+    expect(dev.start).toHaveBeenCalledTimes(1)
+    await act(async () => completeTurn())
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Test deploy' })))
+    expect(dev.stop).toHaveBeenCalledWith(project.id)
+    expect(api.deploy.run).toHaveBeenCalledTimes(1)
+    expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
+  })
+
+  it('stops a paused local preview when leaving the workbench', async () => {
+    const { dev, view } = await mount({ theme: 'system', autoDeploy: false })
+    dev.plan.mockResolvedValue({ port: 5174 })
+    const { turn } = await beginTurn()
+    await act(async () => turn)
+    await act(async () => completeTurn())
+    expect(dev.stop).not.toHaveBeenCalled()
+    view.unmount()
+    expect(dev.stop).toHaveBeenCalledWith(project.id)
+  })
+
   it('does not resurrect a local preview whose startup finishes after the turn ended', async () => {
     const { dev } = await mount()
     const started = deferred<DevServerResult>()
@@ -1162,6 +1247,23 @@ describe('Workbench team workspaces', () => {
     expect(team.sync).toHaveBeenCalledWith('t1', '')
     expect(api.deploy.hasChanges).not.toHaveBeenCalled()
     expect(api.deploy.run).not.toHaveBeenCalled()
+  })
+
+  it('keeps team changes local while paused and deploys the preview only on request', async () => {
+    const { api, team } = installTeamApi()
+    render(<Workbench {...makeProps({ settings: { ...teamSettings, autoDeploy: false } })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await act(async () => completeTurn())
+    await act(async () => completeTurn())
+    expect(team.sync).not.toHaveBeenCalled()
+    expect(team.publish).not.toHaveBeenCalled()
+    expect(api.deploy.run).not.toHaveBeenCalled()
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Deploy preview' })))
+    expect(team.sync).toHaveBeenCalledWith(teamProject.id, 'Deploy local changes')
+    expect(team.publish).not.toHaveBeenCalled()
+    expect(api.deploy.run).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Auto-deploy paused' })).toBeTruthy()
   })
 
   it('does not save an unsuccessful turn', async () => {

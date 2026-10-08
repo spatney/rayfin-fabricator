@@ -1,7 +1,7 @@
 import { StrictMode, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { AuthProvider, AuthStatus, DoctorReport } from '@shared/ipc'
+import type { AppSettings, AuthProvider, AuthStatus, DoctorReport } from '@shared/ipc'
 import type { SetupAttention } from './startup'
 import { ToastProvider } from './toast'
 import { deferred } from '../test/deferred'
@@ -53,12 +53,16 @@ vi.mock('./screens/Workbench', () => ({
     auth,
     attention,
     onAuthChanged,
-    onReviewSetup
+    onReviewSetup,
+    settings,
+    onSettingsChange
   }: {
     auth: AuthStatus
     attention?: SetupAttention | null
     onAuthChanged: () => Promise<void>
     onReviewSetup: () => void
+    settings: AppSettings | null
+    onSettingsChange: (patch: Partial<AppSettings>) => void
   }) => {
     const [draft, setDraft] = useState('')
     const [error, setError] = useState('')
@@ -75,6 +79,8 @@ vi.mock('./screens/Workbench', () => ({
           Refresh accounts
         </button>
         <button onClick={onReviewSetup}>Review setup</button>
+        <output data-testid="auto-deploy">{String(settings?.autoDeploy !== false)}</output>
+        <button onClick={() => onSettingsChange({ autoDeploy: false })}>Pause auto-deploy</button>
         {error && <div role="alert">{error}</div>}
       </div>
     )
@@ -118,7 +124,10 @@ function installApi() {
       status: vi.fn().mockResolvedValue(signedIn),
       check: vi.fn<Check>((providers) => Promise.resolve(pick(providers)))
     },
-    settings: { get: vi.fn().mockResolvedValue(null) },
+    settings: {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn().mockResolvedValue({ theme: 'system', autoDeploy: false })
+    },
     diagnostics: { record: vi.fn().mockResolvedValue(undefined) }
   }
   ;(window as unknown as { api: unknown }).api = api
@@ -168,6 +177,27 @@ afterEach(() => {
 })
 
 describe('App startup', () => {
+  it('loads and saves the auto-deploy preference through persistent settings', async () => {
+    const api = installApi()
+    api.settings.get.mockResolvedValue({ theme: 'system', autoDeploy: false })
+    renderApp()
+    await finishSplash()
+    expect(screen.getByTestId('auto-deploy').textContent).toBe('false')
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Pause auto-deploy' })))
+    expect(api.settings.set).toHaveBeenCalledWith({ autoDeploy: false })
+    expect(screen.getByTestId('auto-deploy').textContent).toBe('false')
+  })
+
+  it('reports a failed settings save without changing the auto-deploy preference', async () => {
+    const api = installApi()
+    api.settings.set.mockRejectedValueOnce(new Error('Settings disk unavailable'))
+    renderApp()
+    await finishSplash()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Pause auto-deploy' })))
+    expect(screen.getByRole('alert').textContent).toContain('Settings disk unavailable')
+    expect(screen.getByTestId('auto-deploy').textContent).toBe('true')
+  })
+
   it('opens the app without the checklist when everything is ready at first launch', async () => {
     const api = installApi()
     renderApp()

@@ -67,13 +67,25 @@ After the first successful deployment, the primary button changes to **Redeploy*
 Fabricator also redeploys automatically after a successful Copilot turn when the project has undeployed changes. This includes edits that Copilot already committed to the project's git history. It does not redeploy when:
 
 - the Copilot turn failed or was cancelled,
+- **Auto-deploy after chat** is turned off in **Settings → General**,
 - there are no content changes since the last deployed revision,
 - a team workspace pipeline owns the app's deployment,
 - Fabricator cannot check whether changes are undeployed.
 
 If change detection fails, Fabricator shows "Could not check for undeployed changes." followed by "Use Redeploy to publish your changes." Use **Redeploy** to publish explicitly.
 
-When Fabricator switches to another deployment or cannot identify the deployed git baseline, the next successful turn deploys once to establish a new baseline.
+When Fabricator switches to another deployment or cannot identify the deployed git baseline, the next successful turn with auto-deploy enabled deploys once to establish a new baseline.
+
+### Pause automatic deployments
+
+1. Open **Settings**.
+2. Under **General**, turn off **Auto-deploy after chat**.
+3. Continue iterating in chat. The app bar shows **Auto-deploy paused**, and the local preview stays running between turns when available.
+4. Select **Redeploy** when you want to publish your local changes.
+
+The setting is saved for all projects on this computer, including team apps. Team changes stay local instead of automatically pushing to GitHub; select **Deploy preview** to save and deploy your team preview, or **Publish** to publish for everyone.
+
+Manual deployment leaves the setting paused. Turn it back on to resume auto-deploy after future successful turns. Already-started deployments and team saves finish; queued automatic deployments are cancelled. The first deployment is still required before chat, and local preview still uses Fabric services and sign-in.
 
 ## Work with multiple deployments
 

@@ -314,8 +314,14 @@ function App(): JSX.Element {
   }, [settings])
 
   const updateSettings = useCallback(async (patch: Partial<AppSettings>): Promise<void> => {
-    setSettings(await window.api.settings.set(patch))
-  }, [])
+    try {
+      setSettings(await window.api.settings.set(patch))
+    } catch (reason) {
+      toast.error(authErrorMessage(reason, 'Could not save settings. Please try again.'), {
+        title: 'Settings not saved'
+      })
+    }
+  }, [toast])
 
   const attention = useMemo(() => setupAttention(doctor, auth, checkError), [doctor, auth, checkError])
 

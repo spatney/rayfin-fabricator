@@ -294,9 +294,8 @@ export default function Workbench({
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
   useChatEventStore(setChats)
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
-  /** Live local preview: per-project Vite dev-server state. Present while a turn
-   *  runs — started at turn start, cleared/stopped at turn end. A team app's
-   *  `lingers` after its turn until the pipeline has deployed the saved change. */
+  /** Live local preview, retained between turns while auto-deploy is paused.
+   *  Team previews also linger until the pipeline has deployed the saved change. */
   const [devServers, setDevServers] = useState<
     Record<
       string,
@@ -386,13 +385,32 @@ export default function Workbench({
   )
 
   const deployQueueRef = useRef(new DeploymentQueue())
+  const autoDeploy = settings?.autoDeploy !== false
+  const autoDeployRef = useRef(autoDeploy)
+  autoDeployRef.current = autoDeploy
+  useEffect(() => {
+    if (!autoDeploy) {
+      deployQueueRef.current.cancelPending(
+        'Automatic deployments are paused. Deploy manually when ready.',
+        (request) => Boolean(request.automatic)
+      )
+      setDevServers((all) =>
+        Object.fromEntries(Object.entries(all).map(([id, server]) => [
+          id, { ...server, lingerSince: undefined }
+        ]))
+      )
+    }
+  }, [autoDeploy])
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
       deployQueueRef.current.cancelPending('The workbench closed before this deployment started.')
+      for (const projectId of Object.keys(devServersRef.current)) {
+        void window.api.dev.stop(projectId).catch(onDevServerError)
+      }
     }
-  }, [])
+  }, [onDevServerError])
   /** Project ids with a deployment reconcile in flight (dedupes overlapping calls). */
   const reconcilingRef = useRef<Set<string>>(new Set())
   /** Project ids currently being reconciled — drives a brief "checking" affordance. */
@@ -447,6 +465,18 @@ export default function Workbench({
       Boolean(projectsRef.current?.projects.find((p) => p.id === projectId)?.team),
     []
   )
+  const deployTeamPreview = useCallback(async (projectId: string, message: string): Promise<void> => {
+    try {
+      await teamWorkRef.current.afterTurn(projectId, message)
+    } catch (reason) {
+      toast.error(authErrorMessage(reason, 'Could not refresh the team app after saving.'), {
+        title: 'Team refresh failed'
+      })
+    }
+    setDevServers((all) =>
+      all[projectId] ? { ...all, [projectId]: { ...all[projectId], lingerSince: Date.now() } } : all
+    )
+  }, [toast])
   const activeTeamWorkspace = active?.team
     ? projects?.teamWorkspaces?.find((w) => w.id === active.team?.workspaceId)
     : undefined
@@ -480,6 +510,13 @@ export default function Workbench({
   // deploy, when you leave the app, or after 20 minutes.
   useEffect(() => {
     for (const [projectId, server] of Object.entries(devServers)) {
+      if (
+        projectId !== active?.id &&
+        !(chatsRef.current[projectId] ?? []).some((m) => m.role === 'assistant' && m.pending)
+      ) {
+        stopDevServer(projectId)
+        continue
+      }
       if (!server.lingerSince) continue
       const status = teamWork.status(projectId)
       const head = status?.pr?.headSha
@@ -491,7 +528,7 @@ export default function Workbench({
       const stale = Date.now() - server.lingerSince > 20 * 60_000
       if (projectId !== active?.id || settled || stale) stopDevServer(projectId)
     }
-  }, [devServers, teamWork, active?.id, stopDevServer])
+  }, [devServers, teamWork, active?.id, stopDevServer, autoDeploy])
 
   // Showing or hiding team workspaces changes which projects the backend lists.
   useEffect(() => {
@@ -606,6 +643,7 @@ export default function Workbench({
         return { ok: false, outcome: 'error', error }
       }
       deployingIdRef.current = projectId
+      stopDevServer(projectId)
       setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
       let result: DeployResult = { ok: false, outcome: 'error' }
       const request = (): Promise<DeployResult> => window.api.deploy.run(projectId, workspace)
@@ -675,11 +713,11 @@ export default function Workbench({
         if (mountedRef.current) void refreshRayfinVer(projectId)
       }
     },
-    [refreshProjects, refreshRayfinVer, toast, onAuthChanged, refreshAuthWithFeedback]
+    [refreshProjects, refreshRayfinVer, toast, onAuthChanged, refreshAuthWithFeedback, stopDevServer]
   )
   const runDeploy = useCallback(
-    (projectId: string, workspace?: string): Promise<DeployResult> =>
-      deployQueueRef.current.enqueue({ projectId, workspace }, executeDeploy),
+    (projectId: string, workspace?: string, automatic = false): Promise<DeployResult> =>
+      deployQueueRef.current.enqueue({ projectId, workspace, automatic }, executeDeploy),
     [executeDeploy]
   )
 
@@ -899,7 +937,7 @@ export default function Workbench({
       previewSkippedRef.current.delete(projectId)
       const prompt = portPromptRef.current
       if (prompt?.projectId === projectId && prompt.context === 'plan' && !prompt.busy) settlePortPrompt(null)
-      if (devServersRef.current[projectId] && !(result.ok && isTeamProject(projectId))) {
+      if (autoDeployRef.current && devServersRef.current[projectId] && !(result.ok && isTeamProject(projectId))) {
         // Stop the live local preview first, so the surface returns to the
         // deployed app and the after-turn deploy can take the stage (DeployStage).
         // (A team app keeps its preview while its change is saved and deployed.)
@@ -927,20 +965,19 @@ export default function Workbench({
         })
       })
       if (!result.ok || !mountedRef.current) return
+      if (!autoDeployRef.current) {
+        if (isTeamProject(projectId)) void teamWorkRef.current.refresh(projectId, false)
+        return
+      }
       // Team apps: save the turn to the working branch; the pipeline deploys the preview.
       if (isTeamProject(projectId)) {
         const lastUser = [...(chatsRef.current[projectId] ?? [])].reverse().find((m) => m.role === 'user')
-        void teamWorkRef.current.afterTurn(projectId, lastUser?.text ?? '').finally(() => {
-          // The local preview stays until the pipeline has deployed this save.
-          setDevServers((all) =>
-            all[projectId] ? { ...all, [projectId]: { ...all[projectId], lingerSince: Date.now() } } : all
-          )
-        })
+        void deployTeamPreview(projectId, lastUser?.text ?? '')
         return
       }
       try {
         const changed = await window.api.deploy.hasChanges(projectId)
-        if (changed && mountedRef.current) void runDeploy(projectId)
+        if (changed && mountedRef.current && autoDeployRef.current) void runDeploy(projectId, undefined, true)
       } catch (reason) {
         if (!mountedRef.current) return
         toast.error(
@@ -949,7 +986,7 @@ export default function Workbench({
         )
       }
     },
-    [refreshProjects, refreshRayfinVer, runDeploy, stopDevServer, toast, settlePortPrompt, isTeamProject]
+    [refreshProjects, refreshRayfinVer, runDeploy, stopDevServer, toast, settlePortPrompt, isTeamProject, deployTeamPreview]
   )
 
   // Hydrate persisted chat history for the active project.
@@ -1538,6 +1575,28 @@ export default function Workbench({
             )}
           </div>
           <div className="app-bar-end">
+            {active && projectToolsReady && !autoDeploy && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--sm btn--ghost"
+                  title="Auto-deploy is paused for all projects. Open Settings to resume."
+                  onClick={() => setShowSettings(true)}
+                >
+                  Auto-deploy paused
+                </button>
+                {active.team && (
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    disabled={activeChatBusy || teamWork.syncing(active.id)}
+                    onClick={() => void deployTeamPreview(active.id, 'Deploy local changes')}
+                  >
+                    Deploy preview
+                  </button>
+                )}
+              </>
+            )}
             {active && projectToolsReady && active.team && (
               <TeamPublishControl
                 project={active}

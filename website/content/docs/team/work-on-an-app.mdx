@@ -6,7 +6,9 @@ description: "Open a team app, work on your own branch, preview changes locally 
 > [!WARNING]
 > Team workspaces are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
 
-When you open a team app, Fabricator gives you your own working branch. Your edits are saved to GitHub after each change, and the team pipeline deploys your personal preview.
+When you open a team app, Fabricator gives you your own working branch. With **Auto-deploy after chat** enabled (the default), your edits are saved to GitHub after each successful chat turn, and the team pipeline deploys your personal preview.
+
+To iterate locally without pushing or triggering the pipeline, turn off **Auto-deploy after chat** in **Settings → General**. The setting applies to all projects and is saved between sessions. Select **Deploy preview** when you are ready to save and deploy your local changes, or **Publish** to publish for everyone. See [Pause automatic deployments](/docs/ship/deploy#pause-automatic-deployments).
 
 ## Open a team app
 

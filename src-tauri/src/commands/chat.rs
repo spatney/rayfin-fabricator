@@ -47,6 +47,15 @@ const MAX_ATTEMPTS: u32 = 3;
 /// deploys) can legitimately run well past an hour.
 const TURN_TIMEOUT_MS: u64 = 2 * 60 * 60_000;
 
+fn deployment_chat_text(text: &str, auto_deploy: bool) -> String {
+  let note = if auto_deploy {
+    "Auto-deploy after chat is enabled. Fabricator handles deployment after this turn; do not deploy or push changes yourself."
+  } else {
+    "Auto-deploy after chat is paused for all projects. Work locally and leave changes on disk. Do not deploy, run rayfin up, push to GitHub, or trigger deployment pipelines. This overrides any instruction claiming shipping or team saves are automatic. Fabricator manages the local preview; the user will deploy with the app's controls when ready."
+  };
+  format!("[Fabricator deployment setting: {note}]\n\n{text}")
+}
+
 /// Stderr signatures that indicate a transient, safe-to-retry failure.
 static TRANSIENT_RE: Lazy<Regex> = Lazy::new(|| {
   Regex::new(
@@ -806,7 +815,10 @@ pub(crate) async fn run_turn(
     // relative event order is preserved.
     let mut todos_dirty = false;
 
-    let mut opts = MessageOptions::new(crate::services::team::chat_text(&project_id, &text));
+    let mut opts = MessageOptions::new(deployment_chat_text(
+      &crate::services::team::chat_text(&project_id, &text),
+      store::get_settings().auto_deploy.unwrap_or(true),
+    ));
     if !attach.is_empty() {
       opts = opts.with_attachments(attach.clone());
     }
@@ -1132,7 +1144,10 @@ pub async fn chat_steer(
     .iter()
     .map(|a| Attachment::File { path: PathBuf::from(a), display_name: None, line_range: None })
     .collect();
-  let mut opts = MessageOptions::new(text).with_mode(DeliveryMode::Immediate);
+  let mut opts = MessageOptions::new(deployment_chat_text(
+    &text,
+    store::get_settings().auto_deploy.unwrap_or(true),
+  )).with_mode(DeliveryMode::Immediate);
   if !attach.is_empty() {
     opts = opts.with_attachments(attach);
   }
@@ -1327,6 +1342,18 @@ pub async fn chat_models(state: State<'_, AppState>) -> Result<Vec<CopilotModel>
 mod tests {
   use super::*;
   use serde_json::json;
+
+  #[test]
+  fn auto_deploy_chat_guidance_tracks_the_current_setting() {
+    let paused = deployment_chat_text("Improve the chart", false);
+    assert!(paused.contains("paused for all projects"));
+    assert!(paused.contains("Do not deploy, run rayfin up, push to GitHub"));
+    assert!(paused.ends_with("Improve the chart"));
+    let resumed = deployment_chat_text("Improve the chart", true);
+    assert!(resumed.contains("Auto-deploy after chat is enabled"));
+    assert!(!resumed.contains("paused"));
+    assert!(resumed.ends_with("Improve the chart"));
+  }
 
   fn collect(events: &[(&str, Value)], ctx: &mut TurnCtx) -> Vec<ChatEvent> {
     let mut out = vec![];

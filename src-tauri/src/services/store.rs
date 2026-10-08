@@ -41,6 +41,7 @@ fn default_settings() -> AppSettings {
   AppSettings {
     theme: "system".to_string(),
     ui_scale: Some(1.0),
+    auto_deploy: Some(true),
     experiments: Some(default_flags()),
     full_diagnostics: Some(false),
   }
@@ -130,6 +131,7 @@ pub fn set_settings(
   ui_scale: Option<f64>,
   experiments: Option<ExperimentFlags>,
   full_diagnostics: Option<bool>,
+  auto_deploy: Option<bool>,
 ) -> AppSettings {
   with_cache(|c| {
     if let Some(t) = theme {
@@ -140,6 +142,9 @@ pub fn set_settings(
     }
     if let Some(v) = full_diagnostics {
       c.settings.full_diagnostics = Some(v);
+    }
+    if let Some(v) = auto_deploy {
+      c.settings.auto_deploy = Some(v);
     }
     if let Some(patch) = experiments {
       merge_experiments(&mut c.settings.experiments, patch);
@@ -318,6 +323,21 @@ mod tests {
     assert_eq!(flags.as_ref().unwrap().team_workspaces, Some(false));
     merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"teamWorkspaces":true})).unwrap());
     assert_eq!(flags.unwrap().team_workspaces, Some(true));
+  }
+
+  #[test]
+  fn auto_deploy_defaults_on_and_round_trips_paused() {
+    assert_eq!(default_settings().auto_deploy, Some(true));
+    let legacy: AppSettings = serde_json::from_value(serde_json::json!({"theme":"system"})).unwrap();
+    assert!(legacy.auto_deploy.unwrap_or(true));
+    let raw: RawStore = serde_json::from_value(serde_json::json!({
+      "settings": {"theme":"dark", "autoDeploy":false}
+    })).unwrap();
+    let stored = serde_json::to_value(raw.settings.unwrap()).unwrap();
+    assert_eq!(stored["autoDeploy"], false);
+    let reloaded: AppSettings = serde_json::from_value(stored).unwrap();
+    assert_eq!(reloaded.auto_deploy, Some(false));
+    assert_eq!(reloaded.theme, "dark");
   }
 
   #[test]

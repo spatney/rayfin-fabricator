@@ -191,6 +191,12 @@ export default function SettingsModal({
 
           <div className="modal-body settings-body">
             <Section title="General">
+              <ToggleRow
+                label="Auto-deploy after chat"
+                hint="Deploy changes after successful chat turns. Turn off to keep working locally, including without automatic team pushes. Deploy manually when ready. Deployments already started will finish."
+                checked={settings.autoDeploy !== false}
+                onChange={(autoDeploy) => onChange({ autoDeploy })}
+              />
               {onManageAccounts && (
                 <Item
                   title="Accounts"

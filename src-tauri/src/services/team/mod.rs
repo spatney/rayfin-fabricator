@@ -199,7 +199,7 @@ pub fn save_binding(project_id: &str, f: impl FnOnce(&mut TeamBinding)) -> Optio
 
 /// Guidance prepended to each chat message in a team project. Skills are shared
 /// by every project, so the team-specific rules travel with the message.
-pub const CHAT_NOTE: &str = "[Fabricator: this app is in a team workspace. When this turn ends, Fabricator saves the changes to the team's working branch on GitHub, and the team pipeline deploys a personal preview. Don't deploy, sign in to Rayfin, or run git branch, push or merge commands, or gh: Fabricator handles those.]";
+pub const CHAT_NOTE: &str = "[Fabricator: this app is in a team workspace. When auto-deploy after chat is enabled, Fabricator saves the changes to the team's working branch on GitHub at turn end, and the team pipeline deploys a personal preview. When paused, changes stay local until the user deploys. Don't deploy, sign in to Rayfin, or run git branch, push or merge commands, or gh: Fabricator handles those.]";
 
 /// The text sent to Copilot for a chat message in `project_id`.
 pub fn chat_text(project_id: &str, text: &str) -> String {
