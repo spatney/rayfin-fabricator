@@ -1,0 +1,52 @@
+/* Ray, driven frame by frame.
+ *
+ * In the app, mascot.css animates his wings, body, tail and mouth with time-based keyframes
+ * and transitions. A video frame must depend only on the frame number, so here those
+ * animations are switched off and each part takes its transform from a CSS variable that
+ * VideoRay sets for the current frame. Keep these selectors in step with mascot.css. */
+
+.video-ray .ray-half,
+.video-ray .ray-rig,
+.video-ray .ray-tail-sway,
+.video-ray .ray-mouth--talk,
+.video-ray .ray-spiral {
+  animation: none !important;
+}
+
+.video-ray .ray-pupil,
+.video-ray .ray-eyes {
+  transition: none !important;
+}
+
+.video-ray .ray-half--l {
+  transform: skewY(var(--v-wing-l, 0deg)) !important;
+}
+
+.video-ray .ray-half--r {
+  transform: skewY(var(--v-wing-r, 0deg)) !important;
+}
+
+.video-ray .ray-rig {
+  transform: translateY(var(--v-rise, 0px)) !important;
+}
+
+.video-ray .ray-tail-sway {
+  transform: rotate(var(--v-sway, 0deg)) !important;
+}
+
+.video-ray .ray-eyes {
+  transform: scaleY(var(--v-eyes, 1)) !important;
+}
+
+.video-ray .ray-mouth--talk {
+  transform: scaleY(var(--v-mouth, 0.3)) !important;
+}
+
+.video-ray .ray-spiral {
+  transform: rotate(var(--v-spin, 0deg)) !important;
+}
+
+/* Gaze comes only from --ray-lx/--ray-ly here; reading looks down by setting --ray-ly. */
+.video-ray .ray-pupil {
+  transform: translate(calc(var(--ray-lx, 0) * 2.8px), calc(var(--ray-ly, 0) * 2.6px)) !important;
+}

@@ -1,0 +1,7 @@
+node_modules/
+# Renders, stills, auditions and contact sheets. Only the approved cut is published.
+out/
+# Screenshots and the logo, copied from website/public by `npm run assets`.
+public/ui/
+# Raw ElevenLabs responses, keyed by request hash, so retries don't spend credits twice.
+.cache/

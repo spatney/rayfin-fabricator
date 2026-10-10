@@ -1,0 +1,21 @@
+{
+  "src": "/video/fabricator-intro.mp4",
+  "poster": "/video/fabricator-intro-poster.webp",
+  "captions": "/video/fabricator-intro.en.vtt",
+  "width": 1920,
+  "height": 1080,
+  "durationSeconds": 86.2,
+  "transcript": [
+    "Oh, hi! I'm Ray, the stingray who lives inside Fabricator.",
+    "Building a Rayfin app usually means juggling CLIs, Copilot, git and a browser… whoa. The room is spinning.",
+    "Fabricator puts it all in one window.",
+    "Name your app, and I'll swim it over to Microsoft Fabric. Hey, that's me! Fins crossed.",
+    "And on deploy, Rayfin sets up your whole backend, automatically: database, APIs, auth, storage, functions and hosting. Scalable, governed, and inside your organization's boundary. You didn't lift a fin.",
+    "Then describe what you want, in plain English. GitHub Copilot writes the code… and I cheer!",
+    "Your app runs live, right next to the chat. See something to change? Point at it in Design, and ask.",
+    "After every successful chat turn, Fabricator redeploys your app. It's live! Then share it with people in your organization.",
+    "The Advisor grades your app's health. History keeps every change. And if something breaks, I'll dig through the logs with you.",
+    "It runs on the GitHub Copilot account you already have. Download Fabricator, and come say hi!",
+    "Psst… a group of stingrays is called a fever. I'm not making that up."
+  ]
+}

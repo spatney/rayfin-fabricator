@@ -1,0 +1,38 @@
+{
+  "name": "fabricator-intro-video",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The intro video on the docs site's landing page, hosted by Ray. Rendered with Remotion; voice, music and sound effects from ElevenLabs.",
+  "scripts": {
+    "assets": "node tools/sync-assets.mjs",
+    "studio": "npm run assets && remotion studio src/index.ts",
+    "render": "npm run assets && remotion render src/index.ts FabricatorIntro out/fabricator-intro.mp4 && node tools/master.mjs",
+    "audition": "node tools/audition.mjs",
+    "voice": "node tools/voice.mjs",
+    "sfx": "node tools/sfx.mjs",
+    "music": "node tools/music.mjs",
+    "contact-sheet": "node tools/contact-sheet.mjs",
+    "loudness": "node tools/loudness.mjs",
+    "publish": "node tools/publish.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"tools/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.532",
+    "@remotion/cli": "4.0.532",
+    "@remotion/media": "4.0.532",
+    "@remotion/media-utils": "4.0.532",
+    "@remotion/renderer": "4.0.532",
+    "@remotion/transitions": "4.0.532",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.532"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.6",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "typescript": "^5.6.3"
+  }
+}

@@ -8,7 +8,7 @@ import Link from 'next/link';
 
 import { DownloadButtons } from '@/components/download-buttons';
 
-import { ProductScreenshot } from '@/components/product-screenshot';
+import { ProductVideo } from '@/components/product-video';
 
 import { SiteFooter } from '@/components/site-footer';
 
@@ -261,7 +261,7 @@ export default function HomePage() {
 
 
 
-      <ProductScreenshot />
+      <ProductVideo />
 
 
 
