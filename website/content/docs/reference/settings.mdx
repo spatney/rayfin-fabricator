@@ -1,9 +1,9 @@
 ---
 title: "Settings"
-description: "Every option in Fabricator's Settings: accounts, auto-deploy, theme, text size, Ray, workspace folder, updates, setup, diagnostics and experiments."
+description: "Every option in Fabricator's Settings: accounts, theme, text size, Ray, workspace folder, updates, setup, diagnostics and experiments."
 ---
 
-Open **Settings** to manage your accounts, choose when apps deploy, change how Fabricator looks, where new projects are created, how diagnostics are captured, and whether experimental features are visible.
+Open **Settings** to manage your accounts, change how Fabricator looks, where new projects are created, how diagnostics are captured, and whether experimental features are visible.
 
 Settings groups its options into **General**, **Appearance**, **Updates & help**, **Diagnostics**, and **Experiments**. Each option shows its name and what it does, with its control on the right.
 
@@ -12,18 +12,6 @@ Settings groups its options into **General**, **Appearance**, **Updates & help**
 ## Accounts
 
 **Accounts** lists the services Fabricator signs in to: GitHub Copilot, Microsoft Fabric, the Azure CLI, and GitHub. Select **Manage accounts** to see who you're signed in as, sign in or out, and add or switch between Fabric, Azure CLI and GitHub accounts. See [Manage your accounts](/docs/start/accounts).
-
-## Auto-deploy after chat
-
-Under **General**, **Auto-deploy after chat** is on by default. Turn it off to make several chat changes locally before deploying. This setting applies to all projects on this computer and stays saved when you restart Fabricator.
-
-While paused, Fabricator keeps the local preview running between turns when available. It still saves your conversation and local code, but does not automatically deploy or push team changes to GitHub. Queued automatic deployments are cancelled; deployments and team saves already started finish normally.
-
-Pausing only stops remote publishing. Local builds, checks, and live frontend preview still work. Vite serves saved frontend changes without a production build or Fabric deployment. For example, `public/design-guide.html` is available at `/design-guide.html` on the local preview server. Ending or pausing a chat does not trigger a deferred Fabric deployment. Backend or schema changes can still require an explicit deployment.
-
-Use **Redeploy** for a personal app, or **Deploy preview** for a team app, when ready. Team **Publish** remains available to publish for everyone. Manual deployment does not turn auto-deploy back on. Turning the setting back on resumes automatic deployment after future successful chat turns; it does not deploy immediately.
-
-The first Fabric deployment and sign-in requirements still apply. Local mode is not an offline mode.
 
 ## Theme
 
@@ -112,6 +100,13 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 > [!WARNING]
 > Team workspaces are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
+
+### Deploy manually
+
+**Deploy manually** stops chat turns from deploying your app. Your changes stay on this computer until you select **Redeploy**, and the preview shows them from a local Vite server whenever the app is open. Team apps aren't affected: they still save after each turn. See [Deploy manually](/docs/ship/deploy#deploy-manually).
+
+> [!WARNING]
+> Deploy manually is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
 
 ## Version footer
 

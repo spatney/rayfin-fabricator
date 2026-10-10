@@ -67,25 +67,37 @@ After the first successful deployment, the primary button changes to **Redeploy*
 Fabricator also redeploys automatically after a successful Copilot turn when the project has undeployed changes. This includes edits that Copilot already committed to the project's git history. It does not redeploy when:
 
 - the Copilot turn failed or was cancelled,
-- **Auto-deploy after chat** is turned off in **Settings → General**,
+- you turned on the [Deploy manually](/docs/ship/deploy#deploy-manually) experiment,
 - there are no content changes since the last deployed revision,
 - a team workspace pipeline owns the app's deployment,
 - Fabricator cannot check whether changes are undeployed.
 
 If change detection fails, Fabricator shows "Could not check for undeployed changes." followed by "Use Redeploy to publish your changes." Use **Redeploy** to publish explicitly.
 
-When Fabricator switches to another deployment or cannot identify the deployed git baseline, the next successful turn with auto-deploy enabled deploys once to establish a new baseline.
+When Fabricator switches to another deployment or cannot identify the deployed git baseline, the next successful turn deploys once to establish a new baseline.
 
-### Pause automatic deployments
+## Deploy manually
 
-1. Open **Settings**.
-2. Under **General**, turn off **Auto-deploy after chat**.
-3. Continue iterating in chat. The app bar shows **Auto-deploy paused**, and the local preview stays running between turns when available.
-4. Select **Redeploy** when you want to publish your local changes.
+> [!WARNING]
+> Deploy manually is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
 
-The setting is saved for all projects on this computer, including team apps. Team changes stay local instead of automatically pushing to GitHub; select **Deploy preview** to save and deploy your team preview, or **Publish** to publish for everyone.
+Turn on **Deploy manually** to make several changes in chat before you deploy. Chat turns no longer deploy your app: your changes stay on this computer until you select **Redeploy**. Because the deployed app falls behind your code, the preview shows your app from a local Vite server whenever the app is open, not only while Copilot is working.
 
-Manual deployment leaves the setting paused. Turn it back on to resume auto-deploy after future successful turns. Already-started deployments and team saves finish; queued automatic deployments are cancelled. The first deployment is still required before chat, and local preview still uses Fabric services and sign-in.
+1. Open **Settings**, then expand **Experiments**.
+2. Turn on **Deploy manually**.
+3. Open your app. The status bar shows **Deploy manually**, and the preview shows your local app, marked **Local**.
+4. Keep chatting. Changes show in the preview as Copilot makes them.
+5. When you're ready, select **Redeploy** in the app bar. The preview shows the deploy's progress, then your local app again.
+
+While **Deploy manually** is on:
+
+- The local preview uses your deployed app's backend. Frontend changes show as Copilot makes them, but changes to data, permissions or functions work only after you select **Redeploy**. Fabricator asks Copilot to tell you when a change needs a deploy.
+- **Design** and the **Fabric** view work on the deployed app, so they're unavailable while **Deploy manually** is on.
+- The local preview stops when you switch to another app or close Fabricator, and the app you open next gets its own. If you switch your app to another deployment, its local preview starts again with that deployment's settings.
+- If the project has no local Vite installation, there's no local preview. The preview keeps showing the deployed app, without your latest changes, until you select **Redeploy**.
+- Team apps aren't affected. They still save to GitHub after each turn, and the team pipeline deploys your preview.
+
+Turning **Deploy manually** off closes the local preview and doesn't deploy anything. Your changes are still on this computer: the next successful chat turn deploys them, or you can select **Redeploy**.
 
 ## Work with multiple deployments
 
@@ -111,6 +123,4 @@ See [setup and sign-in troubleshooting](/docs/troubleshooting/setup-and-sign-in)
 
 ## Redirect URIs for live preview
 
-When a chat turn starts, Fabricator may run the project's local Vite preview on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port with **Auto-deploy after chat** enabled, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next normal deploy publishes the app code.
-
-With **Auto-deploy after chat** off, choosing another port only starts the local preview. It does not edit redirect configuration or push settings. Local sign-in still works on ports the backend accepts; for other ports, use an existing configured port if browser sign-in is needed without a remote settings change.
+When a chat turn starts, Fabricator may run the project's local Vite preview on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next normal deploy publishes the app code.

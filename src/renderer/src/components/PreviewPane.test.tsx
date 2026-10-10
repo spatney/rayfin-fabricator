@@ -20,7 +20,6 @@ function Harnessed({
   suppressed,
   deploy,
   localPreviewUrl,
-  localPreviewRefreshKey,
   onRefreshAuth,
   authBusy
 }: {
@@ -28,7 +27,6 @@ function Harnessed({
   suppressed: boolean
   deploy?: DeployUiState
   localPreviewUrl?: string | null
-  localPreviewRefreshKey?: number
   onRefreshAuth?: () => void
   authBusy?: boolean
 }): JSX.Element {
@@ -41,7 +39,6 @@ function Harnessed({
         onRefreshAuth={onRefreshAuth}
         authBusy={authBusy}
         localPreviewUrl={localPreviewUrl}
-        localPreviewRefreshKey={localPreviewRefreshKey}
         focused={false}
         onToggleFocus={() => {}}
       />
@@ -501,59 +498,37 @@ describe('PreviewPane status label', () => {
 describe('PreviewPane local preview', () => {
   const LOCAL = 'http://localhost:5173/'
 
-  it.each([
-    [`${LOCAL}design-guide.html`, 1],
-    [LOCAL, 0]
-  ] as const)('refreshes a static entry after edits without resetting navigation: %s', async (url, reloads) => {
-    const project = makeProject('p1')
-    const { rerender } = render(
-      <Harnessed project={project} suppressed={false} localPreviewUrl={url} localPreviewRefreshKey={0} />
-    )
-    await settle(e)
-    await act(async () => e.emitNav({ url: `${url}#rules`, loading: false }))
-    await settle(e)
-    const mark = e.calls.length
-
-    rerender(
-      <Harnessed project={project} suppressed={false} localPreviewUrl={url} localPreviewRefreshKey={1} />
-    )
-    await settle(e)
-    expect(e.api.reload).toHaveBeenCalledTimes(reloads)
-    expect(e.methodsAfter(mark)).not.toContain('navigate')
-    expect(screen.getByText('Local')).toBeTruthy()
-  })
-
   // Live local preview: while a Vite dev server is running for the
   // project, the surface swaps from the deployed app to the local URL and a
   // "Local" badge is shown. The swap goes through the normal load transition
   // (navigate hidden → reveal on load), so it's flash-free.
-  it.each([LOCAL, `${LOCAL}design-guide.html`])('swaps to the exact local entry URL %s (with a Local badge)', async (localUrl) => {
+  it('swaps to the local dev URL (with a Local badge) when a dev server is running', async () => {
     const { rerender } = render(<Harnessed project={makeProject('p1')} suppressed={false} />)
     await settle(e)
     const mark = e.calls.length
 
     // Turn starts → the dev server comes up and its URL is handed in.
-    rerender(<Harnessed project={makeProject('p1')} suppressed={false} localPreviewUrl={localUrl} />)
+    rerender(<Harnessed project={makeProject('p1')} suppressed={false} localPreviewUrl={LOCAL} />)
     await settle(e)
 
     const during = e.methodsAfter(mark)
     expect(during, 'must navigate the hidden surface to the local URL').toContain('navigate')
     const navCall = e.calls.slice(mark).find((c) => c.method === 'navigate')
-    expect(navCall!.args[0]).toBe(localUrl)
+    expect(navCall!.args[0]).toBe(LOCAL)
 
     // The local page finishes loading → revealed at the local URL, badge visible.
     await act(async () => {
-      e.emitNav({ url: localUrl, loading: true })
+      e.emitNav({ url: LOCAL, loading: true })
     })
     await act(async () => {
-      e.emitNav({ url: localUrl, loading: false })
+      e.emitNav({ url: LOCAL, loading: false })
     })
     await settle(e)
 
     const reveal = lastShowUrl(e)
     expect(reveal, 'the local preview was never revealed').not.toBeNull()
     expect(reveal!.index).toBeGreaterThanOrEqual(mark)
-    expect(reveal!.url).toBe(localUrl)
+    expect(reveal!.url).toBe(LOCAL)
     expect(screen.getByText('Local')).toBeTruthy()
   })
 

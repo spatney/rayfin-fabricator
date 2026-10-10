@@ -4,25 +4,6 @@ import { deferred } from '../test/deferred'
 import { DeploymentQueue } from './deploymentQueue'
 
 describe('shared deployment queue', () => {
-  it('cancels only queued automatic deployments, preserving active and manual work', async () => {
-    const first = deferred<DeployResult>()
-    const run = vi.fn()
-      .mockImplementationOnce(() => first.promise)
-      .mockResolvedValue({ ok: true, outcome: 'success' })
-    const queue = new DeploymentQueue()
-    const active = queue.enqueue({ projectId: 'p1', automatic: true }, run)
-    const automatic = queue.enqueue({ projectId: 'p2', automatic: true }, run)
-    const manual = queue.enqueue({ projectId: 'p2' }, run)
-    expect(manual).not.toBe(automatic)
-    queue.cancelPending('Auto-deploy paused', (request) => Boolean(request.automatic))
-    expect(await automatic).toEqual({ ok: false, outcome: 'error', error: 'Auto-deploy paused' })
-    expect(run).toHaveBeenCalledTimes(1)
-    first.resolve({ ok: true, outcome: 'success' })
-    await Promise.all([active, manual])
-    expect(run).toHaveBeenCalledTimes(2)
-    expect(run).toHaveBeenLastCalledWith('p2', undefined)
-  })
-
   it('serializes projects and returns each actual result', async () => {
     const first = deferred<DeployResult>()
     const run = vi

@@ -68,17 +68,6 @@ afterEach(() => {
   delete (window as unknown as { api?: unknown }).api
 })
 
-describe('SettingsModal automatic deployment', () => {
-  it.each([undefined, true, false])('reflects autoDeploy=%s and persists changes', async (autoDeploy) => {
-    installApi()
-    const { onChange } = await renderModal({ settings: { theme: 'system', autoDeploy } })
-    const checkbox = screen.getByRole<HTMLInputElement>('checkbox', { name: /^Auto-deploy after chat/ })
-    expect(checkbox.checked).toBe(autoDeploy !== false)
-    fireEvent.click(checkbox)
-    expect(onChange).toHaveBeenCalledWith({ autoDeploy: autoDeploy === false })
-  })
-})
-
 describe('SettingsModal accounts and setup', () => {
   it('opens Accounts and setup when the workbench offers them', async () => {
     installApi()
@@ -187,6 +176,18 @@ describe('SettingsModal team workspaces experiment', () => {
   })
 })
 
+describe('SettingsModal deploy manually experiment', () => {
+  it.each([undefined, false, true])('reflects manualDeploy=%s and saves the change', async (manualDeploy) => {
+    installApi()
+    const { onChange } = await renderModal({ settings: { theme: 'system', experiments: { manualDeploy } } })
+    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
+    const checkbox = screen.getByRole<HTMLInputElement>('checkbox', { name: /^Deploy manually/ })
+    expect(checkbox.checked).toBe(manualDeploy === true)
+    fireEvent.click(checkbox)
+    expect(onChange).toHaveBeenCalledWith({ experiments: { manualDeploy: !manualDeploy } })
+  })
+})
+
 describe('SettingsModal retired controls', () => {
   it.each([false, true])('does not show retired controls with legacy flags set to %s', async (enabled) => {
     installApi()
@@ -207,9 +208,9 @@ describe('SettingsModal retired controls', () => {
     }
     expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
     expect(screen.getAllByRole('checkbox')).toHaveLength(4)
-    expect(screen.getByText('Auto-deploy after chat')).toBeTruthy()
     expect(screen.getByText('Ray')).toBeTruthy()
     expect(screen.getByText('Team workspaces')).toBeTruthy()
+    expect(screen.getByText('Deploy manually')).toBeTruthy()
     expect(screen.getByText('Full diagnostics')).toBeTruthy()
   })
 })

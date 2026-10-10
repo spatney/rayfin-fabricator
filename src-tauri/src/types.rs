@@ -708,6 +708,11 @@ pub struct ExperimentFlags {
   /// default); turning it off hides team workspaces without deleting anything.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub team_workspaces: Option<bool>,
+  /// Deploy manually: chat turns don't deploy. Changes stay on this machine,
+  /// with the live local preview kept between turns, until the user redeploys.
+  /// Team projects aren't affected. Opt-in (off by default).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub manual_deploy: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -719,9 +724,6 @@ pub struct AppSettings {
   /// on large/high-DPI monitors. Clamped to 0.8–2.0 when applied.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub ui_scale: Option<f64>,
-  /// Deploy after successful chat turns, including team pushes. Defaults to on.
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub auto_deploy: Option<bool>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub experiments: Option<ExperimentFlags>,
   /// Capture full chat diagnostics (prompt/response text + tool I/O) for bug

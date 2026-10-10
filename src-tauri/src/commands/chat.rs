@@ -47,13 +47,19 @@ const MAX_ATTEMPTS: u32 = 3;
 /// deploys) can legitimately run well past an hour.
 const TURN_TIMEOUT_MS: u64 = 2 * 60 * 60_000;
 
-fn deployment_chat_text(text: &str, auto_deploy: bool) -> String {
-  let note = if auto_deploy {
-    "Auto-deploy after chat is enabled. Fabricator handles deployment after this turn; do not deploy or push changes yourself."
+/// Guidance prepended to each chat message while the Deploy manually experiment
+/// is on. Fabricator's always-on instructions say it deploys after every turn, so
+/// the exception travels with the message, as the team guidance does.
+const MANUAL_DEPLOY_NOTE: &str = "[Fabricator: the user turned on Deploy manually, so Fabricator doesn't deploy when this turn ends. The changes stay on this computer until the user selects Redeploy. Fabricator's local preview shows frontend changes as you make them, but it uses the deployed backend, so changes to data, permissions or functions work only after a deploy. Still don't deploy yourself. End by saying what to try in the preview and whether it needs Redeploy first.]";
+
+/// The text sent to Copilot for a chat message in `project_id`. Deploy manually
+/// doesn't apply to team apps: their pipeline deploys them.
+fn turn_text(project_id: &str, text: &str, manual_deploy: bool) -> String {
+  if manual_deploy && !crate::services::team::is_team_project_id(project_id) {
+    format!("{MANUAL_DEPLOY_NOTE}\n\n{text}")
   } else {
-    "Auto-deploy after chat is paused for all projects. Only remote publishing is paused, not local building, testing, or previewing. Fabricator starts the project's local Vite preview when a turn begins and keeps it running between turns when available; saved frontend edits are served locally without a Fabric deployment. Run appropriate local build and validation commands when needed, after checking that they do not deploy or push. Do not start a second dev server; Fabricator owns the preview server. Do not deploy, run rayfin up, push to GitHub, or trigger deployment pipelines. Ending or pausing this chat will NOT deploy to Fabric. Only the user's explicit deployment controls publish changes. This overrides any instruction claiming shipping or team saves are automatic or forbidding local validation. Do not claim a preview or build succeeded unless you have evidence; report failures or unavailable preview honestly."
-  };
-  format!("[Fabricator deployment setting: {note}]\n\n{text}")
+    crate::services::team::chat_text(project_id, text)
+  }
 }
 
 /// Stderr signatures that indicate a transient, safe-to-retry failure.
@@ -815,10 +821,7 @@ pub(crate) async fn run_turn(
     // relative event order is preserved.
     let mut todos_dirty = false;
 
-    let mut opts = MessageOptions::new(deployment_chat_text(
-      &crate::services::team::chat_text(&project_id, &text),
-      store::get_settings().auto_deploy.unwrap_or(true),
-    ));
+    let mut opts = MessageOptions::new(turn_text(&project_id, &text, store::manual_deploy_enabled()));
     if !attach.is_empty() {
       opts = opts.with_attachments(attach.clone());
     }
@@ -1144,10 +1147,7 @@ pub async fn chat_steer(
     .iter()
     .map(|a| Attachment::File { path: PathBuf::from(a), display_name: None, line_range: None })
     .collect();
-  let mut opts = MessageOptions::new(deployment_chat_text(
-    &text,
-    store::get_settings().auto_deploy.unwrap_or(true),
-  )).with_mode(DeliveryMode::Immediate);
+  let mut opts = MessageOptions::new(text).with_mode(DeliveryMode::Immediate);
   if !attach.is_empty() {
     opts = opts.with_attachments(attach);
   }
@@ -1342,21 +1342,6 @@ pub async fn chat_models(state: State<'_, AppState>) -> Result<Vec<CopilotModel>
 mod tests {
   use super::*;
   use serde_json::json;
-
-  #[test]
-  fn auto_deploy_chat_guidance_tracks_the_current_setting() {
-    let paused = deployment_chat_text("Improve the chart", false);
-    assert!(paused.contains("paused for all projects"));
-    assert!(paused.contains("Do not deploy, run rayfin up, push to GitHub"));
-    assert!(paused.contains("not local building, testing, or previewing"));
-    assert!(paused.contains("Ending or pausing this chat will NOT deploy to Fabric"));
-    assert!(paused.contains("Do not start a second dev server"));
-    assert!(paused.ends_with("Improve the chart"));
-    let resumed = deployment_chat_text("Improve the chart", true);
-    assert!(resumed.contains("Auto-deploy after chat is enabled"));
-    assert!(!resumed.contains("paused"));
-    assert!(resumed.ends_with("Improve the chart"));
-  }
 
   fn collect(events: &[(&str, Value)], ctx: &mut TurnCtx) -> Vec<ChatEvent> {
     let mut out = vec![];

@@ -6,11 +6,11 @@ import PortConflictModal, { canUsePort, hasPortChoice, type PortPromptContext } 
 
 const base: PortConflict = { port: 5173, canStop: false, suggestedPort: 5174, needsPush: true }
 
-function show(conflict: PortConflict, context: PortPromptContext = 'turn', localOnly = false) {
+function show(conflict: PortConflict, context: PortPromptContext = 'turn') {
   const handlers = { onUsePort: vi.fn(), onStop: vi.fn(), onSkip: vi.fn() }
   render(
     <OverlayProvider>
-      <PortConflictModal conflict={conflict} context={context} localOnly={localOnly} busy={null} error={null} log={[]} {...handlers} />
+      <PortConflictModal conflict={conflict} context={context} busy={null} error={null} log={[]} {...handlers} />
     </OverlayProvider>
   )
   return handlers
@@ -19,18 +19,6 @@ function show(conflict: PortConflict, context: PortPromptContext = 'turn', local
 afterEach(cleanup)
 
 describe('PortConflictModal', () => {
-  it.each(['turn', 'plan'] as const)('offers a local-only port without registration during %s', (context) => {
-    const handlers = show(base, context, true)
-    const text = screen.getByRole('dialog').textContent ?? ''
-    expect(text).toContain('No configuration is changed and nothing is pushed to Fabric')
-    expect(text).toContain('Local sign-in is supported')
-    expect(text).not.toContain('adds http://localhost:5174 to rayfin.yml')
-    expect(canUsePort(base, context, true)).toBe(true)
-    expect(hasPortChoice(base, context, true)).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Use port 5174' }))
-    expect(handlers.onUsePort).toHaveBeenCalledTimes(1)
-  })
-
   it('names another project in this window instead of offering to stop it', () => {
     show({ ...base, ownProject: 'Lead Tracker' })
     expect(screen.getByRole('dialog').textContent).toContain('Your live preview for Lead Tracker is using it.')

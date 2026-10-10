@@ -34,6 +34,7 @@ fn default_state() -> ProjectsState {
 fn default_flags() -> ExperimentFlags {
   ExperimentFlags {
     team_workspaces: Some(false),
+    manual_deploy: Some(false),
   }
 }
 
@@ -41,7 +42,6 @@ fn default_settings() -> AppSettings {
   AppSettings {
     theme: "system".to_string(),
     ui_scale: Some(1.0),
-    auto_deploy: Some(true),
     experiments: Some(default_flags()),
     full_diagnostics: Some(false),
     mascot: Some(true),
@@ -133,7 +133,6 @@ pub fn set_settings(
   experiments: Option<ExperimentFlags>,
   full_diagnostics: Option<bool>,
   mascot: Option<bool>,
-  auto_deploy: Option<bool>,
 ) -> AppSettings {
   with_cache(|c| {
     if let Some(t) = theme {
@@ -148,9 +147,6 @@ pub fn set_settings(
     if let Some(v) = mascot {
       c.settings.mascot = Some(v);
     }
-    if let Some(v) = auto_deploy {
-      c.settings.auto_deploy = Some(v);
-    }
     if let Some(patch) = experiments {
       merge_experiments(&mut c.settings.experiments, patch);
     }
@@ -162,6 +158,7 @@ pub fn set_settings(
 fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: ExperimentFlags) {
   let current = experiments.get_or_insert_with(default_flags);
   if let Some(v) = patch.team_workspaces { current.team_workspaces = Some(v); }
+  if let Some(v) = patch.manual_deploy { current.manual_deploy = Some(v); }
 }
 
 /// True when the Team workspaces experiment is on.
@@ -171,6 +168,17 @@ pub fn team_workspaces_enabled() -> bool {
       .experiments
       .as_ref()
       .and_then(|e| e.team_workspaces)
+      .unwrap_or(false)
+  })
+}
+
+/// True when the Deploy manually experiment is on.
+pub fn manual_deploy_enabled() -> bool {
+  with_cache(|c| {
+    c.settings
+      .experiments
+      .as_ref()
+      .and_then(|e| e.manual_deploy)
       .unwrap_or(false)
   })
 }
@@ -331,18 +339,16 @@ mod tests {
   }
 
   #[test]
-  fn auto_deploy_defaults_on_and_round_trips_paused() {
-    assert_eq!(default_settings().auto_deploy, Some(true));
-    let legacy: AppSettings = serde_json::from_value(serde_json::json!({"theme":"system"})).unwrap();
-    assert!(legacy.auto_deploy.unwrap_or(true));
-    let raw: RawStore = serde_json::from_value(serde_json::json!({
-      "settings": {"theme":"dark", "autoDeploy":false}
-    })).unwrap();
-    let stored = serde_json::to_value(raw.settings.unwrap()).unwrap();
-    assert_eq!(stored["autoDeploy"], false);
-    let reloaded: AppSettings = serde_json::from_value(stored).unwrap();
-    assert_eq!(reloaded.auto_deploy, Some(false));
-    assert_eq!(reloaded.theme, "dark");
+  fn manual_deploy_flag_defaults_off_and_merges_alone() {
+    assert_eq!(default_settings().experiments.unwrap().manual_deploy, Some(false));
+    let mut flags: Option<ExperimentFlags> = Some(serde_json::from_value(serde_json::json!({
+      "teamWorkspaces":true
+    })).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"manualDeploy":true})).unwrap());
+    assert_eq!(
+      serde_json::to_value(flags.unwrap()).unwrap(),
+      serde_json::json!({"teamWorkspaces":true, "manualDeploy":true})
+    );
   }
 
   #[test]

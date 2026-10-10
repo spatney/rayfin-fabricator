@@ -315,14 +315,8 @@ function App(): JSX.Element {
   }, [settings])
 
   const updateSettings = useCallback(async (patch: Partial<AppSettings>): Promise<void> => {
-    try {
-      setSettings(await window.api.settings.set(patch))
-    } catch (reason) {
-      toast.error(authErrorMessage(reason, 'Could not save settings. Please try again.'), {
-        title: 'Settings not saved'
-      })
-    }
-  }, [toast])
+    setSettings(await window.api.settings.set(patch))
+  }, [])
 
   const attention = useMemo(() => setupAttention(doctor, auth, checkError), [doctor, auth, checkError])
   // Ray is on unless turned off in Settings, including before settings load.

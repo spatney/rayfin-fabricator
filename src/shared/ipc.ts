@@ -1504,8 +1504,6 @@ export interface AppSettings {
   theme: ThemePreference
   /** UI zoom factor (1 = 100%). Scales the whole interface for large monitors. */
   uiScale?: number
-  /** Deploy after successful chat turns (including team pushes). Defaults to true. */
-  autoDeploy?: boolean
   /** Experimental, opt-in features (off by default). */
   experiments?: ExperimentFlags
   /**
@@ -1530,6 +1528,12 @@ export interface ExperimentFlags {
    * team workspaces without deleting anything.
    */
   teamWorkspaces?: boolean
+  /**
+   * Deploy manually: chat turns don't deploy. Changes stay on this computer,
+   * with the live local preview kept between turns, until the user selects
+   * Redeploy. Team apps aren't affected: they still save after each turn.
+   */
+  manualDeploy?: boolean
 }
 
 export interface CreateProjectInput {

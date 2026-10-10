@@ -121,8 +121,9 @@ interface Props {
    *  running), the preview surface shows this instead of the deployed app, with a
    *  "Local" badge. See {@link RayfinStudioApi.dev}. */
   localPreviewUrl?: string | null
-  /** Changes when project files may have changed (including a completed chat turn). */
-  localPreviewRefreshKey?: number
+  /** Deploy manually (experimental): the local preview runs whenever the app is
+   *  open, instead of only during turns. */
+  manualDeploy?: boolean
   /** A team app (experimental): its pipeline deploys it, so there's no Deploy here. */
   team?: boolean
   /** Team apps: the deployment the local preview's data comes from. */
@@ -213,7 +214,7 @@ export default function PreviewPane({
   onDesignSurface,
   onLoadingChange,
   localPreviewUrl,
-  localPreviewRefreshKey,
+  manualDeploy = false,
   team = false,
   localBackend,
   teamRun,
@@ -246,7 +247,6 @@ export default function PreviewPane({
   const hostRef = useRef<HTMLDivElement>(null)
   const prevRunningRef = useRef(running)
   const [displayUrl, setDisplayUrl] = useState(deployedUrl ?? '')
-  const localRefreshRef = useRef(localPreviewRefreshKey)
   const [loading, setLoading] = useState(false)
   const [canBack, setCanBack] = useState(false)
   const [canForward, setCanForward] = useState(false)
@@ -390,22 +390,6 @@ export default function PreviewPane({
       void window.api.preview.reload()
     }
   }, [running, deploy?.result, previewUrl, beginTransition])
-
-  useEffect(() => {
-    const changed = localRefreshRef.current !== localPreviewRefreshKey
-    localRefreshRef.current = localPreviewRefreshKey
-    // HTML served from public/ has no Vite HMR client. Refresh the current page
-    // after edits without navigating back to the entry URL or resetting its hash.
-    if (
-      changed && isLocal && localPreviewUrl && loadedUrlRef.current === previewUrl &&
-      /\.html?$/i.test(new URL(localPreviewUrl).pathname)
-    ) {
-      void window.api.preview.reload().catch((reason) => {
-        console.error('Local preview refresh failed', reason)
-        setSurfaceError('Could not refresh the local preview. Use Reload to try again.')
-      })
-    }
-  }, [localPreviewRefreshKey, isLocal, localPreviewUrl, previewUrl])
 
   useEffect(() => {
     if (deployedUrl) setDisplayUrl(deployedUrl)
@@ -838,8 +822,10 @@ export default function PreviewPane({
                         : localBackend === 'none'
                           ? 'Nothing is deployed yet, so it runs without data.'
                           : "It uses your preview's data."
-                    } Local frontend changes do not need a Fabric deployment.`
-                  : `Live local preview — saved frontend changes are served at ${localPreviewUrl} without deploying to Fabric`
+                    } It stays until the team pipeline has deployed your latest change.`
+                  : manualDeploy
+                    ? `Live local preview — your app is running from a local Vite dev server at ${localPreviewUrl}. With Deploy manually on, it shows your latest changes whenever the app is open.`
+                    : `Live local preview — your app is running from a local Vite dev server at ${localPreviewUrl} for this turn`
               }
             >
               {team
@@ -899,7 +885,9 @@ export default function PreviewPane({
                 designActive
                   ? 'Leave Design — your queued changes stay in the chat composer'
                   : isLocal
-                    ? 'Design works on the deployed app — available once this turn finishes'
+                    ? manualDeploy
+                      ? 'Design works on the deployed app — unavailable while Deploy manually is on'
+                      : 'Design works on the deployed app — available once this turn finishes'
                     : 'Design — click anything in your app to change it, preview the result live, then send it all to Copilot at once'
               }
             >

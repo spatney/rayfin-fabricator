@@ -3,7 +3,6 @@ import type { DeployResult } from '@shared/ipc'
 export interface DeploymentRequest {
   projectId: string
   workspace?: string
-  automatic?: boolean
 }
 
 type Runner = (projectId: string, workspace?: string) => Promise<DeployResult>
@@ -15,7 +14,7 @@ interface Job {
 }
 
 function key(request: DeploymentRequest): string {
-  return JSON.stringify([request.projectId, request.workspace ?? null, Boolean(request.automatic)])
+  return JSON.stringify([request.projectId, request.workspace ?? null])
 }
 
 /**
@@ -40,12 +39,8 @@ export class DeploymentQueue {
     return result
   }
 
-  cancelPending(error: string, matches: (request: DeploymentRequest) => boolean = () => true): void {
-    this.pending = this.pending.filter((job) => {
-      if (!matches(job.request)) return true
-      job.resolve({ ok: false, outcome: 'error', error })
-      return false
-    })
+  cancelPending(error: string): void {
+    for (const job of this.pending.splice(0)) job.resolve({ ok: false, outcome: 'error', error })
   }
 
   private advance(): void {

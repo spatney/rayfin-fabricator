@@ -191,12 +191,6 @@ export default function SettingsModal({
 
           <div className="modal-body settings-body">
             <Section title="General">
-              <ToggleRow
-                label="Auto-deploy after chat"
-                hint="Deploy to Fabric after successful chat turns. Turn off to keep local builds and live preview without automatic Fabric deployments or team pushes. Deploy manually when ready. Deployments already started will finish."
-                checked={settings.autoDeploy !== false}
-                onChange={(autoDeploy) => onChange({ autoDeploy })}
-              />
               {onManageAccounts && (
                 <Item
                   title="Accounts"
@@ -368,6 +362,12 @@ export default function SettingsModal({
                       hint="Build apps with your team in a private GitHub repository. Everyone works on their own copy, and a pipeline publishes to Fabric with a deploy identity that Fabricator sets up. Team apps never deploy from this computer. Needs the GitHub CLI."
                       checked={Boolean(settings.experiments?.teamWorkspaces)}
                       onChange={(v) => onChange({ experiments: { teamWorkspaces: v } })}
+                    />
+                    <ToggleRow
+                      label="Deploy manually"
+                      hint="Chat turns don’t deploy your app; select Redeploy when you’re ready. The preview always shows your latest changes, running on this computer. Team apps still save after each turn."
+                      checked={Boolean(settings.experiments?.manualDeploy)}
+                      onChange={(v) => onChange({ experiments: { manualDeploy: v } })}
                     />
                   </div>
                 )}
