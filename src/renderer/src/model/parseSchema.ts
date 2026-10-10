@@ -2,9 +2,10 @@
  * Static parser for a Rayfin project's data model.
  *
  * Rayfin has no schema/introspect CLI command, so the model is recovered by
- * statically reading `rayfin/data/schema.ts` (the aggregator) and the entity
- * files it references. Entities are plain classes decorated with the
- * `@microsoft/rayfin-core` decorator vocabulary:
+ * statically reading the file that registers the entities (the aggregator:
+ * `rayfin/data/schema.ts`, or a data package's `src/index.ts`; see
+ * {@link projectLayout}) and the entity files it references. Entities are plain
+ * classes decorated with the `@microsoft/rayfin-core` decorator vocabulary:
  *
  *   - field decorators: uuid/text/email/int/decimal/boolean/date/blob/set, plus
  *     the explicit relations one(() => X) / many(() => X);
@@ -18,6 +19,8 @@
  * option objects and arrow-function policies don't trip it up. Unknown
  * decorators degrade gracefully (the field keeps its TypeScript type).
  */
+
+import { projectLayout, SINGLE_PACKAGE_LAYOUT, type ProjectLayout } from './projectLayout'
 
 /** A reader that returns a project file's UTF-8 text, or null if missing/unreadable. */
 export type FileReader = (path: string) => Promise<string | null>
@@ -133,8 +136,26 @@ export interface DataModel {
   relations: ModelRelation[]
   /** Non-fatal issues (unresolved imports, empty schema, etc.). */
   warnings: string[]
-  /** True when `rayfin/data/schema.ts` exists at all. */
+  /** True when the file that registers the entities ({@link schemaFile}) exists at all. */
   hasSchema: boolean
+  /** Where the entities live: `rayfin/data`, or a data package's `src` folder. */
+  dataDir: string
+  /** The file that registers the entities: `rayfin/data/schema.ts`, or a data package's `src/index.ts`. */
+  schemaFile: string
+}
+
+/** A model with no entities, for an app laid out as `layout` (single-package by default). */
+export function emptyDataModel(
+  layout: Pick<ProjectLayout, 'dataDir' | 'schemaFile'> = SINGLE_PACKAGE_LAYOUT
+): DataModel {
+  return {
+    entities: [],
+    relations: [],
+    warnings: [],
+    hasSchema: false,
+    dataDir: layout.dataDir,
+    schemaFile: layout.schemaFile
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -695,8 +716,6 @@ function classifyAccess(permissions: EntityPermission[]): EntityAccess {
  * Schema aggregation
  * ------------------------------------------------------------------ */
 
-const DATA_DIR = 'rayfin/data'
-
 /** From `schema.ts`, read the `schema = [...]` entity names and their import files. */
 export function readSchemaList(src: string): { names: string[]; imports: Map<string, string> } {
   const imports = new Map<string, string>()
@@ -753,10 +772,20 @@ export function readSchemaTypeNames(
   return { typeName: best.typeName, names: best.names, offset: best.offset }
 }
 
-/** Resolve a module specifier from schema.ts to a project-relative `.ts` path. */
-function resolveEntityFile(mod: string): string {
-  const rel = mod.replace(/^\.\//, '').replace(/\.js$/, '').replace(/\.ts$/, '')
-  return `${DATA_DIR}/${rel}.ts`
+/**
+ * Resolve a relative module specifier imported from a file in `dir` to a
+ * project-relative `.ts` path; `undefined` for a package import, or one that
+ * would leave the project.
+ */
+function resolveEntityFile(dir: string, mod: string): string | undefined {
+  if (!mod.startsWith('.')) return undefined
+  const parts = dir.split('/').filter(Boolean)
+  for (const seg of mod.replace(/\.(js|ts)$/, '').split('/')) {
+    if (seg === '' || seg === '.') continue
+    if (seg !== '..') parts.push(seg)
+    else if (parts.pop() === undefined) return undefined
+  }
+  return parts.length ? `${parts.join('/')}.ts` : undefined
 }
 
 /** Add the `*_id` foreign-key-by-convention relations the explicit ones missed. */
@@ -785,19 +814,22 @@ function inferRelations(entities: ModelEntity[], explicit: ModelRelation[]): Mod
 
 /**
  * Parse a project's data model given a file reader. Pure (no `window` access) so
- * it can be unit-tested with an in-memory reader.
+ * it can be unit-tested with an in-memory reader. `rayfin/rayfin.yml` says where
+ * the entities live (see {@link projectLayout}).
  */
 export async function parseDataModel(read: FileReader): Promise<DataModel> {
+  const yml = (await read('rayfin/rayfin.yml')) ?? (await read('rayfin/rayfin.yaml'))
+  const layout = projectLayout(yml)
+  const { schemaFile } = layout
+  const schemaName = schemaFile.slice(schemaFile.lastIndexOf('/') + 1)
   const warnings: string[] = []
-  const schemaSrc = await read(`${DATA_DIR}/schema.ts`)
-  if (schemaSrc == null) {
-    return { entities: [], relations: [], warnings, hasSchema: false }
-  }
+  const schemaSrc = await read(schemaFile)
+  if (schemaSrc == null) return emptyDataModel(layout)
   const masked = maskComments(schemaSrc)
   const schemaLines = new LineIndex(schemaSrc)
   const { names, imports } = readSchemaList(masked)
 
-  // Entities can be declared inline in schema.ts or imported from sibling files.
+  // Entities can be declared inline in the schema file or imported from sibling files.
   const inline = parseClasses(masked)
   const inlineByName = new Map(inline.map((c) => [c.name, c]))
 
@@ -837,15 +869,19 @@ export async function parseDataModel(read: FileReader): Promise<DataModel> {
   const order = names.length ? names : inline.map((c) => c.name)
   for (const name of order) {
     if (inlineByName.has(name)) {
-      addClass(inlineByName.get(name)!, `${DATA_DIR}/schema.ts`, schemaLines)
+      addClass(inlineByName.get(name)!, schemaFile, schemaLines)
       continue
     }
     const mod = imports.get(name)
     if (!mod) {
-      warnings.push(`Entity "${name}" is listed in schema.ts but has no import.`)
+      warnings.push(`Entity "${name}" is listed in ${schemaName} but has no import.`)
       continue
     }
-    const file = resolveEntityFile(mod)
+    const file = resolveEntityFile(schemaFile.slice(0, schemaFile.lastIndexOf('/')), mod)
+    if (!file) {
+      warnings.push(`Entity "${name}" is imported from "${mod}", which isn't a file in this app.`)
+      continue
+    }
     const src = await read(file)
     if (src == null) {
       warnings.push(`Could not read entity file ${file} for "${name}".`)
@@ -860,11 +896,11 @@ export async function parseDataModel(read: FileReader): Promise<DataModel> {
   }
 
   if (entities.length === 0 && names.length === 0) {
-    warnings.push('schema.ts declares no entities yet.')
+    warnings.push(`${schemaName} declares no entities yet.`)
   }
 
   const relations = inferRelations(entities, explicitRelations)
-  return { entities, relations, warnings, hasSchema: true }
+  return { entities, relations, warnings, hasSchema: true, dataDir: layout.dataDir, schemaFile }
 }
 
 /** Convenience wrapper that reads a project's files through the Tauri IPC bridge. */

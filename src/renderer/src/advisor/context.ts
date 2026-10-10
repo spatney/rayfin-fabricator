@@ -11,6 +11,13 @@ import type {
   RayfinVersionInfo
 } from '@shared/ipc'
 import { parseDataModel, type DataModel } from '../model/parseSchema'
+import {
+  isUnder,
+  layoutOf,
+  relativeTo,
+  SINGLE_PACKAGE_LAYOUT,
+  type ProjectLayout
+} from '../model/projectLayout'
 import { sourceFile, type SourceFile } from './source'
 
 const CODE_FILE = /\.(tsx?|jsx?|mts|cts|mjs|cjs)$/i
@@ -19,8 +26,11 @@ const TEST_FILE = /(\.test\.|\.spec\.|(^|\/)__tests__\/|(^|\/)tests?\/)/i
 type Obj = Record<string, unknown>
 
 export interface PackageJsonInfo {
+  /** Declared in the root package.json or in one of its npm workspaces. */
   dependencies: Record<string, string>
+  /** Declared in the root package.json or in one of its npm workspaces. */
   devDependencies: Record<string, string>
+  /** The root package.json's scripts. */
   scripts: Record<string, string>
 }
 
@@ -30,8 +40,16 @@ export interface QuickContext {
   file(path: string): SourceFile | undefined
   /** Collected text files whose path matches. */
   sources(match: (path: string) => boolean): SourceFile[]
-  /** Runtime frontend code under `src/` (tests excluded). */
+  /** Runtime frontend code under the frontend's `src/` (tests excluded); see {@link layout}. */
   frontend: SourceFile[]
+  /**
+   * Where the app keeps its frontend, data model and functions: the project
+   * root's `src/` and `rayfin/`, or the npm packages rayfin.yml names, as in the
+   * Rayfin CLI's Universal App.
+   */
+  layout: ProjectLayout
+  /** The data package's npm name (such as `@rayfin-app/data`), when the data model is a package. */
+  dataPackage?: string
   /** Listing metadata for any project file (collected or not). */
   fileInfo(path: string): AdvisorProjectFile | undefined
   exists(path: string): boolean
@@ -42,7 +60,11 @@ export interface QuickContext {
   /** True when `services.<name>.enabled` is exactly `true`. */
   enabled(name: string): boolean
   packageJson: PackageJsonInfo | null
-  /** Every dependency declared in package.json (prod and dev). */
+  /**
+   * Every dependency declared in package.json (prod and dev), including the
+   * manifests of its npm workspaces, such as the Rayfin CLI Universal App's
+   * `packages/frontend`.
+   */
   hasDependency(name: string): boolean
   model: DataModel
   conditions: Set<AdvisorCondition>
@@ -62,8 +84,35 @@ function asStringMap(value: unknown): Record<string, string> {
   return out
 }
 
-export function isRuntimeFrontendFile(path: string): boolean {
-  return path.startsWith('src/') && CODE_FILE.test(path) && !TEST_FILE.test(path.slice(4))
+/** The `workspaces` globs of a root package.json (a list, or `{ packages }`). */
+function workspacePatterns(pkg: Obj): string[] {
+  const field = pkg.workspaces
+  const list = Array.isArray(field) ? field : asObj(field)?.packages
+  return Array.isArray(list) ? list.filter((p): p is string => typeof p === 'string') : []
+}
+
+/** Whether a project-relative folder matches an npm workspace glob such as `packages/*`. */
+export function matchesWorkspace(dir: string, pattern: string): boolean {
+  const clean = pattern.trim().replace(/^\.\//, '').replace(/\/+$/, '')
+  if (!clean || clean.split('/').includes('..')) return false
+  const source = clean
+    .split('/')
+    .map((seg) =>
+      seg === '**'
+        ? '.+'
+        : seg
+            .split('*')
+            .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+            .join('[^/]*')
+    )
+    .join('/')
+  return new RegExp(`^${source}$`).test(dir)
+}
+
+/** Runtime frontend code: a code file under the frontend's `srcDir`, tests excluded. */
+export function isRuntimeFrontendFile(path: string, srcDir = SINGLE_PACKAGE_LAYOUT.frontendSrc): boolean {
+  const rel = relativeTo(path, srcDir)
+  return rel !== undefined && CODE_FILE.test(path) && !TEST_FILE.test(rel)
 }
 
 export async function buildQuickContext(
@@ -102,17 +151,38 @@ export async function buildQuickContext(
   const services = asObj(yml?.data.services) ?? {}
   const service = (name: string): Obj | undefined => asObj(services[name])
   const enabled = (name: string): boolean => service(name)?.enabled === true
+  const layout = layoutOf(yml?.data)
+  let dataPackage: string | undefined
+  if (layout.dataRoot) {
+    try {
+      const name = asObj(JSON.parse(snapshot.contents[`${layout.dataRoot}/package.json`] ?? 'null'))?.name
+      if (typeof name === 'string' && name.trim()) dataPackage = name.trim()
+    } catch {
+      // An unreadable data package manifest names no package.
+    }
+  }
 
   let packageJson: PackageJsonInfo | null = null
   const rawPackage = snapshot.contents['package.json']
   if (rawPackage !== undefined) {
     try {
       const pkg = asObj(JSON.parse(rawPackage)) ?? {}
-      packageJson = {
-        dependencies: asStringMap(pkg.dependencies),
-        devDependencies: asStringMap(pkg.devDependencies),
-        scripts: asStringMap(pkg.scripts)
+      let dependencies = asStringMap(pkg.dependencies)
+      let devDependencies = asStringMap(pkg.devDependencies)
+      // npm workspaces declare the app's own dependencies too; the root's win.
+      const patterns = workspacePatterns(pkg)
+      for (const [path, text] of Object.entries(snapshot.contents)) {
+        const dir = path.endsWith('/package.json') ? path.slice(0, -'/package.json'.length) : null
+        if (!dir || !patterns.some((p) => matchesWorkspace(dir, p))) continue
+        try {
+          const ws = asObj(JSON.parse(text)) ?? {}
+          dependencies = { ...asStringMap(ws.dependencies), ...dependencies }
+          devDependencies = { ...asStringMap(ws.devDependencies), ...devDependencies }
+        } catch {
+          // An unreadable workspace manifest declares nothing.
+        }
       }
+      packageJson = { dependencies, devDependencies, scripts: asStringMap(pkg.scripts) }
     } catch {
       packageJson = null
     }
@@ -122,7 +192,9 @@ export async function buildQuickContext(
 
   const model = await parseDataModel(async (path) => snapshot.contents[path] ?? null)
 
-  const rayfinPaths = Object.keys(snapshot.contents).filter((p) => p.startsWith('rayfin/'))
+  const dataPaths = Object.keys(snapshot.contents).filter(
+    (p) => p.startsWith('rayfin/') || isUnder(p, layout.dataDir)
+  )
   const anyFileUnder = (prefix: string): boolean =>
     snapshot.files.some((f) => f.path.startsWith(prefix))
   const connectorsBlock = yml?.data.connectors
@@ -137,11 +209,11 @@ export async function buildQuickContext(
   }
   if (
     enabled('storage') ||
-    rayfinPaths.some((p) => /@blob\s*\(/.test(snapshot.contents[p] ?? ''))
+    dataPaths.some((p) => /@blob\s*\(/.test(snapshot.contents[p] ?? ''))
   ) {
     conditions.add('storage')
   }
-  if (enabled('functions') || anyFileUnder('rayfin/functions/')) conditions.add('functions')
+  if (enabled('functions') || anyFileUnder(`${layout.functionsRoot}/`)) conditions.add('functions')
   if (
     enabled('connectors') ||
     hasConnectorEntries ||
@@ -156,7 +228,9 @@ export async function buildQuickContext(
     snapshot,
     file,
     sources,
-    frontend: sources(isRuntimeFrontendFile),
+    frontend: sources((p) => isRuntimeFrontendFile(p, layout.frontendSrc)),
+    layout,
+    dataPackage,
     fileInfo: (path) => listing.get(path),
     exists: (path) => listing.has(path) || snapshot.contents[path] !== undefined,
     yml,

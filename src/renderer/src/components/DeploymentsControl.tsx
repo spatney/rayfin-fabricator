@@ -35,10 +35,15 @@ interface Props {
   /** Open the Accounts dialog to change it. */
   onManageAccounts?: () => void
   /**
-   * Bumped by an outside caller (the Help assistant's "share" action) to open
-   * the share dialog for the live deployment, the same as selecting Share here.
+   * Set by an outside caller (the Help assistant's "share" action) to open the
+   * share dialog for this project's live deployment, the same as selecting
+   * Share here. It can arrive before this control mounts (Help was opened over
+   * Home), so it's honoured on mount too, and reported back through
+   * `onShareRequestHandled` so the caller drops it.
    */
-  shareRequest?: number
+  shareRequest?: { projectId: string; nonce: number } | null
+  /** The `shareRequest` with this nonce has been acted on. */
+  onShareRequestHandled?: (nonce: number) => void
 }
 
 /** "F-SKU · F2" style label for a workspace's capacity. */
@@ -67,7 +72,8 @@ export default function DeploymentsControl({
   onSignedIn,
   account,
   onManageAccounts,
-  shareRequest
+  shareRequest,
+  onShareRequestHandled
 }: Props): JSX.Element {
   const [open, setOpen] = useState(false)
   const toast = useToast()
@@ -294,15 +300,23 @@ export default function DeploymentsControl({
     }
   }
 
-  // An outside caller (Help's "share" action) asked to open the dialog. The
-  // nonce starts at 0 and is only bumped by a deliberate request, so the dialog
-  // never opens on mount.
+  // Help's "share" action asked for the dialog. The request is reported
+  // handled the moment it's acted on, so the caller drops it. Otherwise every
+  // later mount of this control (going Home and back, switching projects)
+  // would open the dialog again. The ref keeps a re-run of this effect from
+  // acting on the same request twice.
   const shareRef = useRef(openShareForActive)
   shareRef.current = openShareForActive
+  const onShareHandledRef = useRef(onShareRequestHandled)
+  onShareHandledRef.current = onShareRequestHandled
+  const handledShareRef = useRef<number | null>(null)
   useEffect(() => {
-    if (!shareRequest) return
+    if (!shareRequest || shareRequest.projectId !== project.id) return
+    if (handledShareRef.current === shareRequest.nonce) return
+    handledShareRef.current = shareRequest.nonce
+    onShareHandledRef.current?.(shareRequest.nonce)
     void shareRef.current()
-  }, [shareRequest])
+  }, [shareRequest, project.id])
 
   return (
     <div className="dep-control" onClick={(e) => e.stopPropagation()}>

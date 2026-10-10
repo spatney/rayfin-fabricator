@@ -238,7 +238,7 @@ async fn create_project(app: AppHandle, workspace_id: String, input: CreateProje
     Err(e) => return fail(e),
   };
   let on = emit::proc_streamer(&app, CREATE_CHANNEL);
-  if let Err(e) = projects_impl::scaffold_project(&app, &worktree, &folder, &request, &on).await {
+  if let Err(e) = projects_impl::scaffold_project(&worktree, &folder, &request, &on).await {
     let _ = repo::remove_worktree(&ws, &folder).await;
     return fail(e);
   }

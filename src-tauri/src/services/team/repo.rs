@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use super::gh;
 use crate::services::exec::{OnData, RunOptions, RunResult};
 use crate::services::git;
+use crate::services::project_layout::{is_under, ProjectLayout};
 use crate::types::TeamWorkspace;
 
 const CLONE_DIR: &str = ".repo";
@@ -237,8 +238,9 @@ pub async fn list_projects(workspace: &TeamWorkspace) -> Result<Vec<(String, Str
 }
 
 /// The files the overview's data view reads from an app (project-relative):
-/// `rayfin.yml`, the data model, and the functions' source.
-pub fn is_app_config(path: &str) -> bool {
+/// `rayfin.yml`, the data model, and the functions' source, wherever `layout`
+/// says they are.
+pub fn is_app_config(path: &str, layout: &ProjectLayout) -> bool {
   let lower = path.to_ascii_lowercase();
   if lower == "rayfin/rayfin.yml" || lower == "rayfin/rayfin.yaml" {
     return true;
@@ -248,7 +250,9 @@ pub fn is_app_config(path: &str) -> bool {
   }
   lower.ends_with(".ts")
     && !lower.ends_with(".d.ts")
-    && (lower.starts_with("rayfin/data/") || lower.starts_with("rayfin/functions/src/"))
+    && [layout.data_dir.to_ascii_lowercase(), layout.functions_src().to_ascii_lowercase()]
+      .iter()
+      .any(|dir| is_under(&lower, dir))
 }
 
 /// At most this many config files per app, each at most this big.
@@ -258,14 +262,14 @@ const MAX_CONFIG_BYTES: usize = 256 * 1024;
 /// Config files rebuilt from `git grep -z -e "" <tree> -- …`, whose every
 /// line reads `<tree>:<path>\0<text>`. Paths come back project-relative; the
 /// flag is true when a file was left out for size.
-fn config_from_grep(output: &str, tree: &str, folder: &str) -> (BTreeMap<String, String>, bool) {
+fn config_from_grep(output: &str, tree: &str, folder: &str, layout: &ProjectLayout) -> (BTreeMap<String, String>, bool) {
   let prefix = format!("{tree}:{folder}/");
   let mut files: BTreeMap<String, String> = BTreeMap::new();
   let mut dropped: BTreeSet<String> = BTreeSet::new();
   for line in output.split('\n') {
     let Some((name, text)) = line.split_once('\0') else { continue };
     let Some(path) = name.strip_prefix(&prefix) else { continue };
-    if !is_app_config(path) || dropped.contains(path) {
+    if !is_app_config(path, layout) || dropped.contains(path) {
       continue;
     }
     let size = files.get(path).map(String::len);
@@ -285,20 +289,31 @@ fn config_from_grep(output: &str, tree: &str, folder: &str) -> (BTreeMap<String,
 /// An app's config files at `tree` in the team clone: `origin/main`, or a
 /// working copy's `origin/<branch>`. The flag is true when some were left out.
 pub async fn read_app_config(workspace: &TeamWorkspace, tree: &str, folder: &str) -> Result<(BTreeMap<String, String>, bool), String> {
+  let dir = clone_dir(workspace);
+  // rayfin.yml says where the data model and functions live.
+  let mut layout = ProjectLayout::default();
+  for name in ["rayfin.yml", "rayfin.yaml"] {
+    let spec = format!("{tree}:{folder}/rayfin/{name}");
+    let res = git_in(&dir, &["show", &spec], 60_000, None).await;
+    if res.ok {
+      layout = ProjectLayout::parse(&res.stdout);
+      break;
+    }
+  }
   let specs = [
     format!("{folder}/rayfin/rayfin.yml"),
     format!("{folder}/rayfin/rayfin.yaml"),
-    format!("{folder}/rayfin/data"),
-    format!("{folder}/rayfin/functions/src"),
+    format!("{folder}/{}", layout.data_dir),
+    format!("{folder}/{}", layout.functions_src()),
   ];
   // Every line of every file, each prefixed with its path (and no line numbers,
   // whatever the user's git config says).
   let mut args = vec!["-c", "grep.lineNumber=false", "-c", "grep.column=false", "grep", "--no-color", "-I", "-z", "-e", "", tree, "--"];
   args.extend(specs.iter().map(String::as_str));
-  let res = git_in(&clone_dir(workspace), &args, 60_000, None).await;
+  let res = git_in(&dir, &args, 60_000, None).await;
   // `git grep` exits with 1 when nothing matched: the app has none of these files.
   if res.ok || (res.exit_code == Some(1) && res.stderr.trim().is_empty()) {
-    Ok(config_from_grep(&res.stdout, tree, folder))
+    Ok(config_from_grep(&res.stdout, tree, folder, &layout))
   } else {
     Err(failure("Read the app's settings", &res))
   }
@@ -315,7 +330,14 @@ pub fn read_app_config_on_disk(project_dir: &Path) -> (BTreeMap<String, String>,
       files.insert(rel, text);
     }
   }
-  fn walk(root: &Path, dir: &Path, depth: usize, files: &mut BTreeMap<String, String>, dropped: &mut bool) {
+  fn walk(
+    root: &Path,
+    dir: &Path,
+    depth: usize,
+    layout: &ProjectLayout,
+    files: &mut BTreeMap<String, String>,
+    dropped: &mut bool,
+  ) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     let mut entries: Vec<_> = entries.flatten().collect();
     entries.sort_by_key(|e| e.file_name());
@@ -326,13 +348,14 @@ pub fn read_app_config_on_disk(project_dir: &Path) -> (BTreeMap<String, String>,
       let Ok(kind) = entry.file_type() else { continue };
       if kind.is_dir() {
         if depth > 0 {
-          walk(root, &path, depth - 1, files, dropped);
+          walk(root, &path, depth - 1, layout, files, dropped);
         }
-      } else if kind.is_file() && is_app_config(&rel) {
+      } else if kind.is_file() && is_app_config(&rel, layout) {
         add(files, dropped, &path, rel);
       }
     }
   }
+  let layout = ProjectLayout::read(project_dir);
   let mut files = BTreeMap::new();
   let mut dropped = false;
   for name in ["rayfin/rayfin.yml", "rayfin/rayfin.yaml"] {
@@ -341,8 +364,8 @@ pub fn read_app_config_on_disk(project_dir: &Path) -> (BTreeMap<String, String>,
       add(&mut files, &mut dropped, &path, name.to_string());
     }
   }
-  for dir in ["rayfin/data", "rayfin/functions/src"] {
-    walk(project_dir, &project_dir.join(dir), 4, &mut files, &mut dropped);
+  for dir in [layout.data_dir.clone(), layout.functions_src()] {
+    walk(project_dir, &project_dir.join(&dir), 4, &layout, &mut files, &mut dropped);
   }
   (files, dropped)
 }
@@ -780,6 +803,7 @@ mod tests {
 
   #[test]
   fn app_config_is_rayfin_yml_the_data_model_and_functions_source() {
+    let single = ProjectLayout::default();
     for kept in [
       "rayfin/rayfin.yml",
       "rayfin/rayfin.yaml",
@@ -787,7 +811,7 @@ mod tests {
       "rayfin/data/nested/Tag.ts",
       "rayfin/functions/src/function_app.ts",
     ] {
-      assert!(is_app_config(kept), "{kept}");
+      assert!(is_app_config(kept, &single), "{kept}");
     }
     for skipped in [
       "rayfin/data/schema.d.ts",
@@ -798,8 +822,18 @@ mod tests {
       "rayfin/.temp/compiled/data/Trip.ts",
       "rayfin/connectors/sales/schema.ts",
       "src/App.tsx",
+      "packages/data/src/Item.ts",
     ] {
-      assert!(!is_app_config(skipped), "{skipped}");
+      assert!(!is_app_config(skipped, &single), "{skipped}");
+    }
+    // The Rayfin CLI's Universal App keeps them in the packages rayfin.yml names.
+    let workspace =
+      ProjectLayout::parse("services:\n  data:\n    path: packages/data\n  functions:\n    path: packages/functions\n");
+    for kept in ["rayfin/rayfin.yml", "packages/data/src/Item.ts", "packages/data/src/index.ts", "packages/functions/src/function_app.ts"] {
+      assert!(is_app_config(kept, &workspace), "{kept}");
+    }
+    for skipped in ["rayfin/data/Trip.ts", "packages/data/dist/index.ts", "packages/frontend/src/App.tsx", "packages/shared/src/index.ts"] {
+      assert!(!is_app_config(skipped, &workspace), "{skipped}");
     }
   }
 
@@ -811,7 +845,7 @@ mod tests {
                origin/main:app/rayfin/data/schema.d.ts\0declare const x: 1\n\
                origin/main:other/rayfin/rayfin.yml\0name: Other\n\
                not a file line\n";
-    let (files, truncated) = config_from_grep(out, "origin/main", "app");
+    let (files, truncated) = config_from_grep(out, "origin/main", "app", &ProjectLayout::default());
     assert!(!truncated);
     assert_eq!(files.len(), 2);
     assert_eq!(files["rayfin/rayfin.yml"], "name: App\nservices: {}\n");
@@ -820,7 +854,7 @@ mod tests {
     // A file too big to read is left out whole, and says so.
     let big = "x".repeat(MAX_CONFIG_BYTES);
     let out = format!("t:app/rayfin/data/Big.ts\0{big}\nt:app/rayfin/data/Big.ts\0more\nt:app/rayfin/data/Small.ts\0ok\n");
-    let (files, truncated) = config_from_grep(&out, "t", "app");
+    let (files, truncated) = config_from_grep(&out, "t", "app", &ProjectLayout::default());
     assert!(truncated);
     assert_eq!(files.keys().map(String::as_str).collect::<Vec<_>>(), vec!["rayfin/data/Small.ts"]);
   }
@@ -849,6 +883,35 @@ mod tests {
     let _ = std::fs::remove_dir_all(&base);
   }
 
+  #[test]
+  fn app_config_on_disk_follows_the_packages_rayfin_yml_names() {
+    let base = std::env::temp_dir().join(format!("fab-config-ws-{}", uuid::Uuid::new_v4()));
+    for (path, text) in [
+      ("rayfin/rayfin.yml", "services:\n  data:\n    path: packages/data\n  functions:\n    path: packages/functions\n"),
+      ("packages/data/src/index.ts", "import { Item } from './Item.js';\nexport const schema = [Item];\n"),
+      ("packages/data/src/Item.ts", "export class Item {}\n"),
+      ("packages/data/dist/index.d.ts", "x"),
+      ("packages/functions/src/function_app.ts", "udf.func('a', async () => 1, [])\n"),
+      ("packages/frontend/src/App.tsx", "x"),
+      ("rayfin/data/Old.ts", "x"),
+    ] {
+      let file = base.join(path);
+      std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+      std::fs::write(file, text).unwrap();
+    }
+    let (files, _) = read_app_config_on_disk(&base);
+    assert_eq!(
+      files.keys().map(String::as_str).collect::<Vec<_>>(),
+      vec![
+        "packages/data/src/Item.ts",
+        "packages/data/src/index.ts",
+        "packages/functions/src/function_app.ts",
+        "rayfin/rayfin.yml"
+      ]
+    );
+    let _ = std::fs::remove_dir_all(&base);
+  }
+
   fn git(dir: &Path, args: &[&str]) {
     let out = std::process::Command::new("git").args(args).current_dir(dir).output().expect("git runs");
     assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
@@ -870,6 +933,10 @@ mod tests {
     write("app/rayfin/data/Trip.ts", "export class Trip {}\n");
     write("app/src/App.tsx", "x\n");
     write("other/rayfin/rayfin.yml", "name: Other\n");
+    // An app from the Rayfin CLI's Universal App keeps its data model in a package.
+    write("mono/rayfin/rayfin.yml", "name: Mono\nservices:\n  data:\n    path: packages/data\n");
+    write("mono/packages/data/src/index.ts", "export const schema = []\n");
+    write("mono/packages/frontend/src/App.tsx", "x\n");
     git(&seed, &["init", "-q", "-b", "main"]);
     git(&seed, &["add", "-A"]);
     git(&seed, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"]);
@@ -904,6 +971,8 @@ mod tests {
     assert!(main["rayfin/rayfin.yml"].contains("enabled: true"));
     let (copy, _) = read_app_config(&ws, "origin/fabricator/amy/app-20261003-101500", "app").await.unwrap();
     assert_eq!(copy["rayfin/functions/src/function_app.ts"], "udf.func('hello', async () => 'hi', [])\n");
+    let (mono, _) = read_app_config(&ws, "origin/main", "mono").await.unwrap();
+    assert_eq!(mono.keys().map(String::as_str).collect::<Vec<_>>(), vec!["packages/data/src/index.ts", "rayfin/rayfin.yml"]);
     // Nothing to read is an empty answer; a missing commit is an error.
     assert!(read_app_config(&ws, "origin/main", "missing").await.unwrap().0.is_empty());
     assert!(read_app_config(&ws, "origin/gone", "app").await.is_err());

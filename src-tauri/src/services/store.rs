@@ -44,6 +44,7 @@ fn default_settings() -> AppSettings {
     auto_deploy: Some(true),
     experiments: Some(default_flags()),
     full_diagnostics: Some(false),
+    mascot: Some(true),
   }
 }
 
@@ -131,6 +132,7 @@ pub fn set_settings(
   ui_scale: Option<f64>,
   experiments: Option<ExperimentFlags>,
   full_diagnostics: Option<bool>,
+  mascot: Option<bool>,
   auto_deploy: Option<bool>,
 ) -> AppSettings {
   with_cache(|c| {
@@ -142,6 +144,9 @@ pub fn set_settings(
     }
     if let Some(v) = full_diagnostics {
       c.settings.full_diagnostics = Some(v);
+    }
+    if let Some(v) = mascot {
+      c.settings.mascot = Some(v);
     }
     if let Some(v) = auto_deploy {
       c.settings.auto_deploy = Some(v);

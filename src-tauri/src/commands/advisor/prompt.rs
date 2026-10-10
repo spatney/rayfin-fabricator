@@ -8,6 +8,12 @@ use super::catalog::{category_title, RuleDef, CATALOG};
 use super::tools::{COMPLETE_TOOL, FINDING_TOOL, PROGRESS_TOOL, VERDICT_TOOL};
 use crate::types::{AdvisorFinding, AdvisorRunRequest};
 
+/// What a Rayfin app is and where its parts live, for the reviewer's bearings.
+const APP_SHAPE: &str = "a Microsoft Fabric app: a TypeScript/React frontend plus a Rayfin backend configured in `rayfin/rayfin.yml`. \
+Single-package apps keep the frontend in `src/` and the data model and functions under `rayfin/`. Workspace apps, such as \
+those from the Rayfin CLI's Universal App, keep each in the npm package `rayfin.yml` names with `services.<service>.path`, \
+such as `packages/frontend`, `packages/data` and `packages/functions`";
+
 const GROUND_RULES: &str = "\
 - READ-ONLY: never create, edit, or delete files, and never run shell commands, installs, builds, deploys, or `rayfin up`. Those tools are disabled in this session.
 - Don't open `.env*` files, keys, or other secret stores: secret checks already ran locally, and those reads are blocked.
@@ -49,7 +55,7 @@ pub fn review_prompt(req: &AdvisorRunRequest, rules: &[&RuleDef]) -> String {
   let mut out = String::new();
   let _ = writeln!(
     out,
-    "You are the Advisor for a Rayfin app — a Microsoft Fabric app with a TypeScript/React frontend under `src/` and a Rayfin backend defined under `rayfin/`. Perform a careful, READ-ONLY review of the app in this directory against the rules below.\n"
+    "You are the Advisor for a Rayfin app ({APP_SHAPE}). Perform a careful, READ-ONLY review of the app in this directory against the rules below.\n"
   );
   let _ = writeln!(out, "## Ground rules\n{GROUND_RULES}\n");
 
@@ -146,8 +152,8 @@ pub fn review_prompt(req: &AdvisorRunRequest, rules: &[&RuleDef]) -> String {
 
 /// The Verify instruction: re-check specific findings after a fix.
 pub fn verify_prompt(findings: &[AdvisorFinding]) -> String {
-  let mut out = String::from(
-    "You are the Advisor for a Rayfin app (a Microsoft Fabric app: a TypeScript/React frontend under `src/` plus a Rayfin backend under `rayfin/`). The findings below were reported earlier, and the developer has since changed the code to fix them. For each one, re-read the current code and decide whether the issue is still present.\n\n",
+  let mut out = format!(
+    "You are the Advisor for a Rayfin app ({APP_SHAPE}). The findings below were reported earlier, and the developer has since changed the code to fix them. For each one, re-read the current code and decide whether the issue is still present.\n\n",
   );
   let _ = writeln!(out, "## Ground rules\n{GROUND_RULES}\n");
   let _ = writeln!(out, "## Findings to re-check");
@@ -202,7 +208,7 @@ pub fn explain_prompt(finding: &AdvisorFinding) -> String {
     .map(|e| format!("\nCode:\n```\n{e}\n```\n"))
     .unwrap_or_default();
   format!(
-    r#"You are helping the owner of a Rayfin app (a Microsoft Fabric app: a TypeScript/React frontend under `src/` plus a Rayfin backend under `rayfin/`). The Advisor flagged the issue below. Explain it in depth: what the underlying problem is, why it matters for THIS app (read the relevant code to ground your explanation), and how you would fix it.
+    r#"You are helping the owner of a Rayfin app ({APP_SHAPE}). The Advisor flagged the issue below. Explain it in depth: what the underlying problem is, why it matters for THIS app (read the relevant code to ground your explanation), and how you would fix it.
 
 This is a READ-ONLY explanation. Do not modify, create, or delete files, and do not run shell commands or deploys. Don't open `.env*` files or other secret stores. Only recommend APIs documented for the installed Rayfin version — the version-locked guide is in `node_modules/@microsoft/rayfin-guide/assets/docs/` and the live docs are at https://rayfin.ai.
 

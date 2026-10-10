@@ -6,6 +6,7 @@ import UpdateBanner from './components/UpdateBanner'
 import UpdateModal from './components/UpdateModal'
 import ForcedUpdateScreen from './components/ForcedUpdateScreen'
 import SplashScreen from './components/SplashScreen'
+import { MascotProvider } from './components/mascot/stage'
 import { applyUiScale, watchTheme } from './theme'
 import { useUpdates } from './update'
 import { useToast } from './toast'
@@ -324,6 +325,8 @@ function App(): JSX.Element {
   }, [toast])
 
   const attention = useMemo(() => setupAttention(doctor, auth, checkError), [doctor, auth, checkError])
+  // Ray is on unless turned off in Settings, including before settings load.
+  const mascot = settings?.mascot !== false
 
   // A mandatory startup update blocks the entire app behind a forced-update screen
   // until it installs and restarts. Offline / up-to-date launches never set this.
@@ -343,7 +346,7 @@ function App(): JSX.Element {
 
   if (phase === 'ready' && auth) {
     return (
-      <>
+      <MascotProvider enabled={mascot}>
         <UpdateBanner />
         <UpdateModal />
         <Workbench
@@ -354,12 +357,12 @@ function App(): JSX.Element {
           settings={settings}
           onSettingsChange={updateSettings}
         />
-      </>
+      </MascotProvider>
     )
   }
 
   return (
-    <>
+    <MascotProvider enabled={mascot}>
       <UpdateBanner />
       <UpdateModal />
       <SetupScreen
@@ -371,7 +374,7 @@ function App(): JSX.Element {
         onEnter={enter}
         onBack={setupDone ? backToApp : undefined}
       />
-    </>
+    </MascotProvider>
   )
 }
 

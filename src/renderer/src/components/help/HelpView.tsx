@@ -18,8 +18,11 @@ import { openDocs } from '../../docsLinks'
 import { errorMessage, reportError, reportThrown } from '../../errorReport'
 import { HelpComposer } from './HelpComposer'
 import { HelpWorkLog } from './HelpWorkLog'
+import { HelpRayAvatar, HelpRayThinking, TypedLine } from './HelpRay'
 import { PROMPTS, Spinner } from './parts'
 import { describeWhen, fromSaved, toSaved } from './history'
+import { useMascot } from '../mascot/context'
+import { helpGreeting } from '../mascot/lines'
 import './help.css'
 
 /** One exchange in the transcript. */
@@ -493,6 +496,11 @@ function GroundingBadge({
   )
 }
 
+/**
+ * The empty state. Its host — Ray, or the Fabricator mark when he's turned
+ * off — sits on the left; the greeting, the starter questions and the version
+ * all share one text edge on the right.
+ */
 function Welcome({
   appVersion,
   onPick
@@ -500,29 +508,33 @@ function Welcome({
   appVersion?: string
   onPick: (text: string) => void
 }): JSX.Element {
+  const mascot = useMascot()
+  const greeting = useMemo(() => helpGreeting(), [])
   return (
-    <div className="help-welcome">
-      <div className="help-logo">
-        <FabricatorMark className="brand-mark" />
-        <span className="help-logo-text">
-          <span className="help-logo-name">fabricator help</span>
-          <span className="help-logo-sub">v{appVersion ?? '\u2014'} · read-only</span>
-        </span>
+    <div className={`help-welcome${mascot ? ' help-welcome--ray' : ''}`}>
+      <div className="help-hello-host">
+        {mascot ? <HelpRayAvatar /> : <FabricatorMark className="brand-mark" />}
       </div>
-      <p className="help-welcome-lead">
-        Ask about anything that isn&apos;t working. I can read what this machine has been doing, the
-        documentation, and your project.
-      </p>
-      <ul className="help-prompts">
-        {PROMPTS.map((text, i) => (
-          <li key={text} style={{ animationDelay: `${90 + i * 55}ms` }}>
-            <button onClick={() => onPick(text)}>
-              <Codicon name="chevron-right" />
-              {text}
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div className="help-hello-text">
+        <h2 className="help-hello-title">
+          {mascot ? <TypedLine text={greeting} /> : 'fabricator help'}
+        </h2>
+        <p className="help-hello-lead">
+          Ask about anything that isn&apos;t working. I can read what this machine has been
+          doing, the documentation, and your project.
+        </p>
+        <ul className="help-prompts">
+          {PROMPTS.map((text, i) => (
+            <li key={text} style={{ animationDelay: `${90 + i * 55}ms` }}>
+              <button onClick={() => onPick(text)}>
+                <Codicon name="chevron-right" />
+                {text}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <p className="help-hello-meta">v{appVersion ?? '\u2014'} · read-only</p>
+      </div>
     </div>
   )
 }
@@ -538,6 +550,7 @@ function ExchangeView({
 }): JSX.Element {
   const { status } = exchange
   const working = status === 'thinking' || status === 'streaming'
+  const mascot = useMascot()
 
   return (
     <article className="help-x">
@@ -562,12 +575,16 @@ function ExchangeView({
 
       {exchange.tools.length > 0 && <HelpWorkLog tools={exchange.tools} working={working} />}
 
-      {status === 'thinking' && !exchange.answer && (
-        <p className="help-thinking">
-          <Spinner />
-          <span>looking through your logs</span>
-        </p>
-      )}
+      {status === 'thinking' &&
+        !exchange.answer &&
+        (mascot ? (
+          <HelpRayThinking />
+        ) : (
+          <p className="help-thinking">
+            <Spinner />
+            <span>looking through your logs</span>
+          </p>
+        ))}
 
       {exchange.answer && (
         <div className={`help-a ${status === 'streaming' ? 'is-streaming' : ''}`}>

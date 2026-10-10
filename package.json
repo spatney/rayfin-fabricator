@@ -27,8 +27,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\"",
-    "warm-cache": "node scripts/warm-npm-cache.mjs"
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\""
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

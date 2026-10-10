@@ -1,6 +1,6 @@
 ---
 title: "Create and manage projects"
-description: "Start a new Rayfin app, open an existing project, clone from GitHub, and rename or remove projects from Fabricator."
+description: "Start a new Rayfin app, open an existing project, clone from GitHub, switch between projects, and rename or remove projects from Fabricator."
 ---
 
 Projects are the Rayfin apps Fabricator can open. From **Your projects**, you can start a new app, open a local folder, clone a GitHub repository, or return to a recent project.
@@ -9,7 +9,7 @@ Projects are the Rayfin apps Fabricator can open. From **Your projects**, you ca
 
 ## Create a new project
 
-A new Fabricator project starts from the bundled Universal App starter. You do not choose a template type up front. The starter begins small and Copilot grows it into the app you describe in chat.
+A new Fabricator project starts from the Universal App, the default template that comes with the Rayfin CLI. You do not choose a template type up front. The app begins small, with Fabric sign-in and no database, and Copilot grows it into the app you describe in chat. It turns on a database only when the app needs to store its own records.
 
 1. On **Your projects**, select **New project**.
 2. Type a **Project name**.
@@ -20,6 +20,8 @@ A new Fabricator project starts from the bundled Universal App starter. You do n
 ![The New project screen with Contoso Expenses typed as the project name, the folder name below it, and the Create project button.](/screenshots/new-project.webp)
 
 After the project is ready, Fabricator moves to **Deploy your app**. Select **Deploy app** to publish the first deployment, or **Continue without deploying →** to open the workbench with chat locked until you deploy. See [Deploy to Microsoft Fabric](/docs/ship/deploy).
+
+While the project installs its packages, Ray, Fabricator's stingray, keeps you company with facts about Rayfin and tips for Fabricator. He also turns up when a cloned or opened project takes a while to install. To turn him off, see [Ray](/docs/reference/settings#ray).
 
 > [!NOTE]
 > New local projects are saved under the **Workspace folder** in **Settings**. You can also use **Change folder** on **Your projects**.
@@ -35,7 +37,7 @@ Community examples are Rayfin templates, such as the `awesome-rayfin` gallery. U
 5. For a custom URL, paste an `https`, `git`, or `git+` template URL. If the repository has more than one template, enter the optional template name.
 6. Select **Create project**.
 
-Use **Start from scratch instead** to return to the Universal App starter.
+Use **Start from scratch instead** to return to the Universal App template.
 
 ## Open an existing local project
 
@@ -60,6 +62,17 @@ If the folder isn't in a git repository yet, Fabricator starts one when the proj
 5. Select **Clone and open**.
 
 Fabricator clones the repository into your workspace folder, verifies that it has `rayfin/rayfin.yml`, runs `npm install`, and opens it. If the repository is not a Rayfin project, Fabricator removes the fresh clone and reports the problem.
+
+## Switch between projects
+
+While a project is open, you can switch to another one from the app bar.
+
+1. In the app bar, select the project name.
+2. Under **Recent projects**, select the project you want to open.
+
+The menu lists up to six of your most recently opened projects. A project whose folder is missing isn't listed there; it appears on **Your projects** marked **Missing**.
+
+To see every project, select **All projects**. The project you had open keeps running behind **Your projects**, and the `Back to <project name>` button returns you to it.
 
 ## Manage recent projects
 

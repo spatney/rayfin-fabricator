@@ -263,6 +263,12 @@ export default function SettingsModal({
                   ))}
                 </div>
               </Item>
+              <ToggleRow
+                label="Ray"
+                hint="Fabricator’s stingray keeps you company while apps install, shares Rayfin facts, and greets you in Help."
+                checked={settings.mascot !== false}
+                onChange={(v) => onChange({ mascot: v })}
+              />
             </Section>
 
             <Section title="Updates & help">

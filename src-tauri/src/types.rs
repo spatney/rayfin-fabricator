@@ -729,6 +729,10 @@ pub struct AppSettings {
   /// Settings → Diagnostics.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub full_diagnostics: Option<bool>,
+  /// Show Ray, the stingray mascot, while apps install and in Help. On unless
+  /// turned off; an unset value means on.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub mascot: Option<bool>,
 }
 
 fn default_theme() -> String {

@@ -1,4 +1,5 @@
 import type { AdvisorSeverity } from '@shared/ipc'
+import { isUnder, relativeTo } from '../../model/projectLayout'
 import type { QuickContext } from '../context'
 import { maskEnvValues, maskSecrets } from '../mask'
 import type { QuickHit, QuickRuleImpl } from '../quick'
@@ -15,6 +16,7 @@ import { code, lineContaining } from './util'
 
 /** Local env files the CLI and frameworks read (root and `rayfin/`). */
 const ENV_FILE = /^(rayfin\/)?\.env(\.[^/]+)?$/
+const ENV_NAME = /^\.env(\.[^/]+)?$/
 const PUBLIC_PREFIX = /^(VITE_|RAYFIN_PUBLIC_|NEXT_PUBLIC_|PUBLIC_)/
 const HIGH_SECRET_NAME =
   /(SECRET|PASSWORD|PASSWD|PRIVATE_KEY|CONNECTION_STRING|CONN_STR|ACCOUNT_KEY|SAS_TOKEN|SERVICE_KEY)/
@@ -47,8 +49,18 @@ function secretSeverity(name: string): AdvisorSeverity | undefined {
   return undefined
 }
 
+/** A local env file the CLI or the frontend's build reads: the root's, `rayfin/`'s or the frontend package's. */
+function isEnvFile(ctx: QuickContext, path: string): boolean {
+  return ENV_FILE.test(path) || ENV_NAME.test(relativeTo(path, ctx.layout.frontendRoot) ?? '')
+}
+
+/** A file in the frontend package's folder itself, such as its `package.json`. */
+function atFrontendRoot(ctx: QuickContext, path: string, name: RegExp): boolean {
+  return name.test(relativeTo(path, ctx.layout.frontendRoot) ?? '')
+}
+
 function envFiles(ctx: QuickContext, includeTemplates = false): SourceFile[] {
-  return ctx.sources((p) => ENV_FILE.test(p) && (includeTemplates || !isTemplateEnvFile(p)))
+  return ctx.sources((p) => isEnvFile(ctx, p) && (includeTemplates || !isTemplateEnvFile(p)))
 }
 
 /** The masked lines around an env entry. */
@@ -105,7 +117,7 @@ export const secretRules: QuickRuleImpl[] = [
     run: (ctx) => {
       if (!ctx.snapshot.isGitRepo) return 'na'
       return ctx.snapshot.files
-        .filter((f) => ENV_FILE.test(f.path) && !isTemplateEnvFile(f.path) && !f.ignored)
+        .filter((f) => isEnvFile(ctx, f.path) && !isTemplateEnvFile(f.path) && !f.ignored)
         .map((f) => {
           const src = ctx.file(f.path)
           return {
@@ -122,6 +134,7 @@ export const secretRules: QuickRuleImpl[] = [
     id: 'secrets/hardcoded-credential',
     run: (ctx) => {
       const hits: QuickHit[] = []
+      const { frontendSrc, dataDir, functionsRoot } = ctx.layout
       const files = ctx.sources(
         (p) =>
           (p.startsWith('src/') ||
@@ -129,8 +142,12 @@ export const secretRules: QuickRuleImpl[] = [
             p.startsWith('scripts/') ||
             p.startsWith('.github/workflows/') ||
             p === 'package.json' ||
-            /^vite\.config\./.test(p)) &&
-          !ENV_FILE.test(p) &&
+            /^vite\.config\./.test(p) ||
+            isUnder(p, frontendSrc) ||
+            isUnder(p, dataDir) ||
+            isUnder(p, functionsRoot) ||
+            atFrontendRoot(ctx, p, /^(package\.json|vite\.config\..+)$/)) &&
+          !isEnvFile(ctx, p) &&
           committed(ctx, p)
       )
       for (const src of files) {
@@ -230,7 +247,8 @@ export const secretRules: QuickRuleImpl[] = [
             p.startsWith('.github/workflows/') ||
             p.startsWith('rayfin/') ||
             p === 'package.json' ||
-            ENV_FILE.test(p)) &&
+            atFrontendRoot(ctx, p, /^package\.json$/) ||
+            isEnvFile(ctx, p)) &&
           committed(ctx, p)
       )
       const re = /RAYFIN_ENCRYPTION_FALLBACK_ENABLED\s*[=:]\s*["']?(?:true|1)\b|--encryption-fallback-enabled\b/

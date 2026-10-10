@@ -32,9 +32,9 @@ const MAX_SUGGESTIONS: usize = 4;
 
 /// The instruction handed to Copilot. Read-only; ends with a strict JSON
 /// contract we can parse out of the assistant's final message.
-const SUGGEST_PROMPT: &str = r#"You are helping a NON-CODER decide what to build next in their Rayfin app (a Microsoft Fabric app: a TypeScript/React frontend under `src/` plus a Rayfin backend defined under `rayfin/`). Perform a READ-ONLY look at the app in this directory. DO NOT modify, create, or delete any files, and DO NOT run any deploy or `rayfin up` command.
+const SUGGEST_PROMPT: &str = r#"You are helping a NON-CODER decide what to build next in their Rayfin app (a Microsoft Fabric app: a TypeScript/React frontend plus a Rayfin backend configured in `rayfin/rayfin.yml`). Perform a READ-ONLY look at the app in this directory. DO NOT modify, create, or delete any files, and DO NOT run any deploy or `rayfin up` command.
 
-Read enough of the code to understand what the app currently does and what it manages: look at `rayfin/data/schema.ts` (the data entities/models), the frontend pages and routes under `src/` (e.g. `src/App.tsx`, `src/pages`), and `package.json`. Identify the main "thing" the app is about (e.g. slides, tasks, plants, recipes).
+Read enough of the code to understand what the app currently does and what it manages: look at the data entities/models (registered in `rayfin/data/schema.ts`, or, when `rayfin.yml` names a data package with `services.data.path`, in that package's `src/index.ts`, such as `packages/data/src/index.ts`), the frontend pages and routes (under `src/`, or the frontend package's `src/` that `services.staticHosting.path` names, such as `packages/frontend/src/App.tsx`), and `package.json`. Identify the main "thing" the app is about (e.g. slides, tasks, plants, recipes).
 
 Then propose exactly 4 short, concrete NEXT-STEP ideas the user could ask for, tailored to THIS app — a mix of things that are missing and natural improvements. Write each as a single plain-language sentence in the user's own voice, the way they would type it (imperative, friendly, no jargon, ideally 4-9 words). Examples of the right voice: "Show all my slides on a clean page", "Add a form to create and edit a slide", "Let people sign in to see their own slides", "Give the whole app a fresh, modern look".
 

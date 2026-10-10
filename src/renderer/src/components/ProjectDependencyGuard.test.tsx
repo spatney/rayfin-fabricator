@@ -2,6 +2,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StudioProject } from '@shared/ipc'
 import { OverlayProvider } from '../overlay'
+import { MascotProvider, resetMascotForTests } from './mascot/stage'
 import ProjectDependencyGuard from './ProjectDependencyGuard'
 
 function makeProject(): StudioProject {
@@ -113,5 +114,53 @@ describe('ProjectDependencyGuard', () => {
     expect(await screen.findByRole('alert', { name: 'Could not prepare Cloned app' })).toBeTruthy()
     expect(onReadyChange).not.toHaveBeenCalledWith('project-1', true)
     expect(onReadyChange).toHaveBeenLastCalledWith('project-1', false)
+  })
+})
+
+describe('ProjectDependencyGuard with Ray', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    resetMascotForTests()
+    delete (window as unknown as { matchMedia?: unknown }).matchMedia
+  })
+
+  it('brings Ray along for an install that takes a while, but not for a quick check', async () => {
+    vi.useFakeTimers()
+    // Reduced motion: Ray appears in place, so no animation frames are needed.
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('reduce'),
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    })) as unknown as typeof window.matchMedia
+    const preparation = deferred<{ ok: boolean }>()
+    installApi(vi.fn(() => preparation.promise))
+    const ray = (): HTMLElement | null =>
+      screen.queryByRole('button', { name: /Ray, the Fabricator stingray/ })
+
+    render(
+      <OverlayProvider>
+        <MascotProvider enabled>
+          <ProjectDependencyGuard project={makeProject()} onSwitchProjects={vi.fn()} hidden={false}>
+            <p>Project tools are ready</p>
+          </ProjectDependencyGuard>
+        </MascotProvider>
+      </OverlayProvider>
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(ray()).toBeNull()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700)
+    })
+    expect(ray()).not.toBeNull()
+
+    await act(async () => {
+      preparation.resolve({ ok: true })
+    })
+    expect(screen.getByText('Project tools are ready')).toBeTruthy()
+    expect(document.querySelector('.mascot-bubble')?.textContent).toMatch(/All set!/)
   })
 })

@@ -285,7 +285,15 @@ code {
   font-size: var(--bar-ico-lg);
 }
 
-/* The project's identity is the switcher: initial + name + unfold caret. */
+/* The project's identity is the switcher: initial + name + caret, opening a menu
+   of recent projects. */
+.project-switch {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .project-switcher {
   display: inline-flex;
   align-items: center;
@@ -305,7 +313,8 @@ code {
     border-color 0.15s ease;
 }
 
-.project-switcher:hover {
+.project-switcher:hover,
+.project-switcher.is-open {
   background: var(--bg-elev-2);
   border-color: var(--border);
 }
@@ -314,20 +323,28 @@ code {
   transform: translateY(0.5px);
 }
 
-/* Mirrors the launcher's project cards (.home-project-mark), a size down. */
-.project-switcher-mark {
+/* Each project's initial on its own hue, as on Home (.home-project-mark), a size
+   down, so a project looks the same in the bar, its menu and the launcher. */
+.project-switcher-mark,
+.project-menu-mark {
+  --hue: 205;
   display: grid;
   place-items: center;
   flex: none;
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  color: var(--accent);
+  color: hsl(var(--hue) 65% 68%);
   font-size: 11px;
   font-weight: 650;
   user-select: none;
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev-2));
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  background: hsl(var(--hue) 55% 50% / 0.15);
+}
+
+[data-theme='light'] .project-switcher-mark,
+[data-theme='light'] .project-menu-mark {
+  color: hsl(var(--hue) 55% 34%);
+  background: hsl(var(--hue) 55% 50% / 0.13);
 }
 
 .project-switcher-name {
@@ -347,8 +364,127 @@ code {
   transition: color 0.15s ease;
 }
 
-.project-switcher:hover .codicon.project-switcher-caret {
+.project-switcher:hover .codicon.project-switcher-caret,
+.project-switcher.is-open .codicon.project-switcher-caret {
   color: var(--text-dim);
+}
+
+/* The switcher's menu: recent projects, then every project on Home. */
+.project-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: 300px;
+  padding: 6px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+}
+
+.project-menu-label {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+
+.project-menu-label--empty {
+  padding: 6px 8px 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.project-menu-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.project-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-menu-item:hover,
+.project-menu-item:focus-visible {
+  background: var(--bg-elev-3);
+}
+
+.project-menu-item:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: -2px;
+}
+
+.project-menu-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.project-menu-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.project-menu-name,
+.project-menu-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-menu-name {
+  font-weight: 600;
+}
+
+.project-menu-detail {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* A team app's workspace, in place of a folder. */
+.project-menu-detail .codicon[class*='codicon-'] {
+  margin-right: 4px;
+  font-size: 11px;
+  vertical-align: -1px;
+}
+
+/* All projects: its icon sits in the marks' column, so the labels line up. */
+.project-menu-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  color: var(--text-dim);
+}
+
+.project-menu-icon .codicon[class*='codicon-'] {
+  font-size: var(--bar-ico);
+}
+
+.project-menu-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
 }
 
 /* Launcher shown over a still-open project: one click returns to it. */
@@ -6434,22 +6570,6 @@ code {
   background: hsl(var(--hue) 55% 50% / 0.13);
 }
 
-.project-manage-mark {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: none;
-  place-items: center;
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 650;
-  text-transform: uppercase;
-  user-select: none;
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev-2));
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
-  border-radius: 9px;
-}
-
 .home-project-main {
   display: flex;
   min-width: 0;
@@ -6618,103 +6738,76 @@ code {
   background: var(--accent-soft);
 }
 
-/* Project management modal */
+/* Project management modal: Settings' quiet sections over cards of rows. */
 .project-manage-modal {
-  max-width: 500px;
+  --set-raised: var(--bg-elev-3);
+  max-width: 540px;
+}
+
+[data-theme='light'] .project-manage-modal {
+  --set-raised: var(--bg-elev);
+}
+
+.project-manage-body {
+  gap: 20px;
+  padding: 18px 20px 22px;
 }
 
 .project-manage-summary {
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 11px;
-  padding: 11px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  gap: 12px;
 }
 
 .project-manage-summary-text {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .project-manage-summary-text strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 14px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .project-manage-path {
-  display: block;
   overflow: hidden;
   color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.project-manage-section {
+/* A text box or menu and its button, on a line of their own under the row's text. */
+.project-manage-field {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 13px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.project-manage-section--danger {
-  background: color-mix(in srgb, var(--danger) 5%, var(--bg-elev));
-  border-color: color-mix(in srgb, var(--danger) 36%, var(--border));
-}
-
-.project-manage-section-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.project-manage-label {
-  color: var(--text);
-  font-size: 12.5px;
-  font-weight: 650;
-}
-
-.project-manage-hint {
-  color: var(--text-dim);
-  font-size: 11.5px;
-  line-height: 1.45;
-}
-
-.project-manage-name-field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  color: var(--text-dim);
-  font-size: 11.5px;
-}
-
-.project-manage-rename-row {
-  display: flex;
+  flex: 1 0 100%;
   gap: 8px;
 }
 
 .project-manage-input {
   width: 100%;
   min-width: 0;
-  height: 30px;
+  height: 28px;
   flex: 1;
-  padding: 0 8px;
+  padding: 0 9px;
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
+}
+
+[data-theme='light'] .project-manage-input {
+  background: var(--bg-elev);
 }
 
 .project-manage-input:focus {
@@ -6722,7 +6815,26 @@ code {
   border-color: var(--accent);
 }
 
+/* Cards give their buttons the raised fill; Save keeps its accent once there's a name to save. */
+.project-manage-modal .set-card .btn--primary {
+  background: var(--accent);
+}
+
+.project-manage-modal .set-card .btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 90%, #fff);
+}
+
+/* The removal itself happens in the next step, so this only marks the dangerous choice. */
+.project-manage-danger {
+  color: var(--danger);
+}
+
+.project-manage-modal .project-manage-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+}
+
 .project-manage-error {
+  flex: 1 0 100%;
   margin: 0;
   padding: 7px 9px;
   color: var(--danger);
@@ -6731,10 +6843,6 @@ code {
   background: color-mix(in srgb, var(--danger) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border));
   border-radius: var(--radius-sm);
-}
-
-.project-manage-action {
-  align-self: flex-start;
 }
 
 @media (max-width: 680px) {
@@ -9885,8 +9993,8 @@ select.ws-input:disabled {
   align-self: flex-start;
 }
 
-/* New project starts from the bundled starter, so there's no template to pick;
-   community examples are a quiet, opt-in alternative. */
+/* New project starts from the Rayfin CLI's Universal App, so there's no template
+   to pick; community examples are a quiet, opt-in alternative. */
 .create-start {
   margin: 0;
   color: var(--text-dim);

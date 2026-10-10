@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { HelpAnswer, HelpEventEnvelope, HelpGrounding } from '@shared/ipc'
 import { HelpView } from './HelpView'
 import { ToastProvider } from '../../toast'
+import { MascotContext } from '../mascot/context'
 
 /** Push a streamed event to the subscriber the view registered. */
 let emit: (envelope: HelpEventEnvelope) => void = () => {}
@@ -95,6 +96,25 @@ describe('opening Help', () => {
   it('names the project it will answer about', async () => {
     setup({ projectName: 'Contoso Expenses' })
     expect(await screen.findByText('Contoso Expenses')).toBeTruthy()
+  })
+
+  it('is hosted by Ray, who greets the user', async () => {
+    setup()
+    expect(await screen.findByRole('button', { name: /Ray, the Fabricator stingray/ })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: /I’m Ray\.$/ })).toBeTruthy()
+  })
+
+  it('keeps the same page, hosted by the mark, when Ray is turned off', async () => {
+    render(
+      <ToastProvider>
+        <MascotContext.Provider value={false}>
+          <HelpView onClose={vi.fn()} onAction={vi.fn()} onReportIssue={vi.fn()} />
+        </MascotContext.Provider>
+      </ToastProvider>
+    )
+    expect(await screen.findByRole('heading', { name: 'fabricator help' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Ray/ })).toBeNull()
+    expect(screen.getByText('Why did my last deploy fail?')).toBeTruthy()
   })
 })
 

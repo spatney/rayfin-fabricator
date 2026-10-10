@@ -66,3 +66,52 @@ describe('readSchemaTypeNames', () => {
     expect(readSchemaTypeNames(src, ['Note', 'Tag'])).toMatchObject({ typeName: 'AppSchema', names: ['Note', 'Tag'] })
   })
 })
+
+describe('parseDataModel layouts', () => {
+  const read = (files: Record<string, string>) => async (p: string) => files[p] ?? null
+
+  it('reads rayfin/data in single-package apps', async () => {
+    const model = await parseDataModel(read({}))
+    expect(model).toMatchObject({ hasSchema: false, dataDir: 'rayfin/data', schemaFile: 'rayfin/data/schema.ts' })
+  })
+
+  it('reads the data package rayfin.yml names, as in the Rayfin CLI Universal App', async () => {
+    const yml = 'services:\n  data:\n    enabled: false\n    path: packages/data\n'
+    // The template's data package registers no entities until the app needs a database.
+    const empty = await parseDataModel(
+      read({ 'rayfin/rayfin.yml': yml, 'packages/data/src/index.ts': 'export const schema = [];\n' })
+    )
+    expect(empty).toMatchObject({
+      hasSchema: true,
+      entities: [],
+      dataDir: 'packages/data/src',
+      schemaFile: 'packages/data/src/index.ts',
+      warnings: ['index.ts declares no entities yet.']
+    })
+
+    const model = await parseDataModel(
+      read({
+        'rayfin/rayfin.yaml': yml,
+        'packages/data/src/index.ts': [
+          "import { Todo } from './Todo.js';",
+          "import { Tag } from './nested/../tags/Tag.js';",
+          "import type { UniversalAppSchema } from '@rayfin-app/shared';",
+          'export type { UniversalAppSchema };',
+          'export const schema = [Todo, Tag, UniversalAppSchema];',
+          ''
+        ].join('\n'),
+        'packages/data/src/Todo.ts': TODO,
+        'packages/data/src/tags/Tag.ts': TODO.replace('class Todo', 'class Tag'),
+        // A single-package copy left behind isn't read.
+        'rayfin/data/schema.ts': "import { Old } from './Old.js';\nexport const schema = [Old];\n"
+      })
+    )
+    expect(model.entities.map((e) => [e.name, e.file])).toEqual([
+      ['Todo', 'packages/data/src/Todo.ts'],
+      ['Tag', 'packages/data/src/tags/Tag.ts']
+    ])
+    expect(model.warnings).toEqual([
+      'Entity "UniversalAppSchema" is imported from "@rayfin-app/shared", which isn\'t a file in this app.'
+    ])
+  })
+})

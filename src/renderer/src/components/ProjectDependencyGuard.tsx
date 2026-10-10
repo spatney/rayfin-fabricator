@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { StudioProject } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
+import { useMascotInstall } from './mascot/stage'
 
 interface Props {
   project: StudioProject
@@ -47,6 +48,15 @@ export default function ProjectDependencyGuard({
   // webview that otherwise paints above every DOM element.
   useSuppressPreview(!ready)
 
+  // A real install takes a while; Ray shows up for those, never for a quick check.
+  // He leaves while the guard is hidden behind Home.
+  const sectionRef = useRef<HTMLElement>(null)
+  useMascotInstall(
+    'prepare',
+    hidden ? 'idle' : ready ? 'success' : error !== null ? 'error' : 'running',
+    sectionRef
+  )
+
   // Report in a layout effect so the app bar and the unlocked pane update in the
   // same paint. The ref keeps an inline callback from re-firing every render.
   const onReadyChangeRef = useRef(onReadyChange)
@@ -89,11 +99,13 @@ export default function ProjectDependencyGuard({
   const failed = error !== null
   return (
     <section
+      ref={sectionRef}
       className={`project-dependency-guard${hidden ? ' project-dependency-guard--hidden' : ''}`}
       role={failed ? 'alert' : 'status'}
       aria-label={failed ? `Could not prepare ${project.name}` : `Preparing ${project.name}`}
     >
       <div
+        data-mascot-avoid=""
         className={`project-dependency-guard-card${
           failed ? ' project-dependency-guard-card--error' : ''
         }`}

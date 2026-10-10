@@ -1,3 +1,4 @@
+import { isUnder, relativeTo } from '../../model/projectLayout'
 import type { QuickContext } from '../context'
 import type { QuickHit, QuickRuleImpl } from '../quick'
 import {
@@ -22,7 +23,17 @@ const VITE_CONFIG = /^vite\.config\.(ts|mts|js|mjs|cjs)$/
 const ENV_FILE = /^(rayfin\/)?\.env(\.[^/]+)?$/
 
 function viteConfig(ctx: QuickContext): SourceFile | undefined {
-  return ctx.sources((p) => VITE_CONFIG.test(p))[0]
+  return ctx.sources((p) => VITE_CONFIG.test(relativeTo(p, ctx.layout.frontendRoot) ?? ''))[0]
+}
+
+/** Whether an import from `fromFile` pulls in the data model (its folder, or the data package). */
+function importsDataModel(ctx: QuickContext, fromFile: string, spec: string): boolean {
+  const target = resolveRelative(fromFile, spec) ?? spec
+  if (/(^|\/)rayfin\/data(\/|$)/.test(target)) return true
+  const { dataRoot } = ctx.layout
+  if (dataRoot && (target === dataRoot || isUnder(target, dataRoot))) return true
+  const pkg = ctx.dataPackage
+  return Boolean(pkg && (spec === pkg || spec.startsWith(`${pkg}/`)))
 }
 
 /** Frontend imports that pull entity classes (not just types) into the bundle. */
@@ -30,8 +41,7 @@ function runtimeEntityImports(ctx: QuickContext): QuickHit[] {
   const hits: QuickHit[] = []
   for (const src of ctx.frontend) {
     for (const stmt of importsOf(src.masked)) {
-      const target = resolveRelative(src.path, stmt.from) ?? stmt.from
-      if (!/(^|\/)rayfin\/data(\/|$)/.test(target) || !importsValues(stmt)) continue
+      if (!importsDataModel(ctx, src.path, stmt.from) || !importsValues(stmt)) continue
       const line = lineOf(src, stmt.index)
       hits.push({
         file: src.path,

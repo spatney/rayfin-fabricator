@@ -161,7 +161,7 @@ describe('CreateProjectScreen starting point', () => {
     expect((screen.getByRole('button', { name: 'Create project' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('creates from the bundled starter without asking for a template', async () => {
+  it("creates from the Rayfin CLI's default template without asking for a template", async () => {
     await act(async () => renderCreate())
     expect(screen.queryByText('Featured')).toBeNull()
     expect(screen.queryByRole('button', { name: /Universal/ })).toBeNull()
@@ -173,7 +173,7 @@ describe('CreateProjectScreen starting point', () => {
     })
     expect(api().create).toHaveBeenCalledWith({
       name: 'Trip Logger',
-      template: 'fabricator-universal',
+      template: 'universal-app',
       templateName: undefined
     })
   })

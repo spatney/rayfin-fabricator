@@ -11,6 +11,7 @@ use serde::Deserialize;
 
 use crate::commands::files::{compute_ignores, Ignores};
 use crate::commands::util::looks_binary;
+use crate::services::project_layout::{is_under, relative_to, ProjectLayout};
 use crate::types::{AdvisorPackage, AdvisorProjectFile, AdvisorProjectSnapshot};
 
 /// Folders that never hold reviewable source and can be huge.
@@ -36,11 +37,25 @@ fn file_name(path: &str) -> &str {
   path.rsplit('/').next().unwrap_or(path)
 }
 
-/// Whether the quick checks read this project-relative file's contents.
-pub(crate) fn wants_contents(path: &str) -> bool {
+/// Whether the quick checks read this project-relative file's contents. Besides
+/// the project root's `src/` and `rayfin/`, that's the frontend, data model and
+/// functions packages `layout` names, as in the Rayfin CLI's Universal App.
+pub(crate) fn wants_contents(path: &str, layout: &ProjectLayout) -> bool {
   let name = file_name(path);
   let lower = path.to_ascii_lowercase();
   let depth = path.matches('/').count();
+  let source = SOURCE_EXTS.contains(&ext(path)) && !name.ends_with(".d.ts");
+  // The frontend and functions packages' own folders, read like the root:
+  // their manifests, Vite config and the env files Vite loads.
+  let in_package_root = |root: &str| !root.is_empty() && relative_to(path, root).is_some_and(|rel| !rel.contains('/'));
+  if in_package_root(&layout.frontend_root)
+    && (name == "package.json" || name.starts_with("vite.config.") || name.starts_with(".env"))
+  {
+    return true;
+  }
+  if in_package_root(&layout.functions_root) && name == "package.json" {
+    return true;
+  }
   if name.starts_with(".env") && (depth == 0 || lower.starts_with("rayfin/")) {
     return depth <= 1;
   }
@@ -52,15 +67,23 @@ pub(crate) fn wants_contents(path: &str) -> bool {
       || (name.starts_with("tsconfig") && name.ends_with(".json"))
       || name.starts_with("vite.config.");
   }
+  // npm workspace manifests, such as the Rayfin CLI Universal App's
+  // `packages/frontend/package.json`: an app's dependencies can be declared there.
+  if name == "package.json" && depth <= 2 {
+    return true;
+  }
   if lower.starts_with("rayfin/") {
     return name == "rayfin.yml"
       || name == "rayfin.yaml"
       || name == "package.json"
       || (name.starts_with("tsconfig") && name.ends_with(".json"))
-      || (SOURCE_EXTS.contains(&ext(path)) && !name.ends_with(".d.ts"));
+      || source;
   }
   if lower.starts_with("src/") {
-    return SOURCE_EXTS.contains(&ext(path)) && !name.ends_with(".d.ts");
+    return source;
+  }
+  if [layout.frontend_src(), layout.data_dir.clone(), layout.functions_src()].iter().any(|dir| is_under(path, dir)) {
+    return source;
   }
   if lower.starts_with("scripts/") {
     return SCRIPT_EXTS.contains(&ext(path));
@@ -166,10 +189,11 @@ fn collect_blocking(root: &Path, ignores: &Ignores, is_git_repo: bool) -> Adviso
   let mut truncated = false;
   walk(root, "", 0, ignores, &mut files, &mut truncated);
 
+  let layout = ProjectLayout::read(root);
   let mut contents = BTreeMap::new();
   let mut total = 0usize;
   for file in &files {
-    if !wants_contents(&file.path) {
+    if !wants_contents(&file.path, &layout) {
       continue;
     }
     if file.size > MAX_FILE_BYTES || total + file.size as usize > MAX_TOTAL_BYTES {
@@ -201,6 +225,7 @@ mod tests {
 
   #[test]
   fn wants_contents_selects_reviewable_files_only() {
+    let single = ProjectLayout::default();
     for path in [
       "package.json",
       "tsconfig.json",
@@ -214,12 +239,14 @@ mod tests {
       "rayfin/data/Todo.ts",
       "rayfin/functions/src/function_app.ts",
       "rayfin/functions/package.json",
+      "packages/frontend/package.json",
+      "frontend/package.json",
       "src/App.tsx",
       "src/services/rayfinClient.ts",
       "scripts/seed.mjs",
       ".github/workflows/deploy.yml",
     ] {
-      assert!(wants_contents(path), "{path} should be collected");
+      assert!(wants_contents(path, &single), "{path} should be collected");
     }
     for path in [
       "README.md",
@@ -230,8 +257,46 @@ mod tests {
       "docs/.env",
       "src/nested/.env",
       "rayfin/connectors/sales/metadata.json",
+      "packages/frontend/src/vendor/lib/package.json",
+      "packages/frontend/src/App.tsx",
+      "packages/frontend/.env",
     ] {
-      assert!(!wants_contents(path), "{path} should not be collected");
+      assert!(!wants_contents(path, &single), "{path} should not be collected");
+    }
+  }
+
+  #[test]
+  fn wants_contents_reads_the_packages_rayfin_yml_names() {
+    // The Rayfin CLI's Universal App, with its functions pack applied.
+    let layout = ProjectLayout::parse(
+      "services:\n  data:\n    path: packages/data\n  staticHosting:\n    path: packages/frontend\n  functions:\n    path: apps/api/functions\n",
+    );
+    for path in [
+      "packages/frontend/src/App.tsx",
+      "packages/frontend/src/lib/rayfin-client.ts",
+      "packages/frontend/vite.config.ts",
+      "packages/frontend/.env",
+      "packages/frontend/.env.local",
+      "packages/data/src/index.ts",
+      "packages/data/src/Item.ts",
+      "apps/api/functions/package.json",
+      "apps/api/functions/src/function_app.ts",
+      "rayfin/rayfin.yml",
+      "src/App.tsx",
+    ] {
+      assert!(wants_contents(path, &layout), "{path} should be collected");
+    }
+    for path in [
+      "packages/frontend/src/vite-env.d.ts",
+      "packages/frontend/src/global.css",
+      "packages/frontend/public/.env",
+      "packages/data/dist/index.js",
+      "packages/data/README.md",
+      "packages/shared/src/index.ts",
+      "apps/api/functions/local.settings.json",
+      "apps/api/functions/dist/index.js",
+    ] {
+      assert!(!wants_contents(path, &layout), "{path} should not be collected");
     }
   }
 

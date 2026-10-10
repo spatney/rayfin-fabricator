@@ -68,7 +68,7 @@ If the preview remains stale after a successful deploy, [Report a problem](/docs
 
 The app inside the preview opens a Microsoft sign-in prompt, asks again after Fabricator is signed in, or a semantic-model dialog offers **Sign in & retry**.
 
-The deployed app's browser session is separate from Fabricator's Rayfin CLI session. Fabricator can be signed in to Fabric for deploy while the embedded app still needs an interactive browser token. On Windows, Fabricator's WebView2 preview supports compliant-device Conditional Access through the OS primary account. The local preview of a Universal App starter app signs you in automatically; if that fails, see [The local preview says automatic sign-in failed](/docs/troubleshooting/preview#the-local-preview-says-automatic-sign-in-failed).
+The deployed app's browser session is separate from Fabricator's Rayfin CLI session. Fabricator can be signed in to Fabric for deploy while the embedded app still needs an interactive browser token. On Windows, Fabricator's WebView2 preview supports compliant-device Conditional Access through the OS primary account. The local preview of a Universal App signs you in automatically; if that fails, see [The local preview says automatic sign-in failed](/docs/troubleshooting/preview#the-local-preview-says-automatic-sign-in-failed).
 
 1. Complete the sign-in inside the preview when the app asks.
 2. If a semantic-model dialog shows **Sign in & retry**, select it and complete the browser flow.
@@ -82,7 +82,7 @@ If the preview sign-in loops, [Report a problem](/docs/troubleshooting/report-a-
 
 The local preview shows the app's sign-in page with a message that starts with "Automatic local sign-in failed."
 
-Apps from the Universal App starter sign in to the local preview with the Fabric account Fabricator deploys with. Fabric has to accept that account for this app, and the rest of the message says why it didn't.
+Universal Apps sign in to the local preview with the Fabric account Fabricator deploys with. Fabric has to accept that account for this app, and the rest of the message says why it didn't.
 
 1. If the message says "External Entra exchange is not enabled.", check that `rayfin/rayfin.yml` sets `externalEntraExchange: true` under `services.auth.fabric`. Then select **Redeploy** so the setting reaches Fabric.
 2. If it says "Could not sign you in automatically for local development." or "Entra authentication failed.", open the account menu and select **Refresh Fabric authentication**. Then select **Reload** in the preview.

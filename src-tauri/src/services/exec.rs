@@ -273,10 +273,10 @@ pub fn project_rayfin_cli_installed(project_dir: &Path) -> bool {
       .any(|entry| cli_dir.join("scripts").join(entry).is_file())
 }
 
-/// Whether a fresh scaffold lets us use the faster, deterministic `npm ci`
-/// (a committed lockfile and no `node_modules` yet) instead of `npm install`.
-/// `npm ci` skips dependency resolution and installs exactly the locked tree,
-/// every tarball of which is in the warm cache.
+/// Whether a dependency install can use the faster, deterministic `npm ci` (a
+/// committed lockfile and no `node_modules` yet, as in a fresh clone) instead of
+/// `npm install`. `npm ci` skips dependency resolution and installs exactly the
+/// locked tree.
 fn use_npm_ci(has_lockfile: bool, has_node_modules: bool) -> bool {
   has_lockfile && !has_node_modules
 }
@@ -290,9 +290,9 @@ fn npm_install_args(subcommand: &str) -> [&str; 4] {
   ]
 }
 
-/// Use the warm cache for both install modes, but only skip metadata freshness
+/// Reuse npm's cache for both install modes, but only skip metadata freshness
 /// checks when `ci` installs a locked tree. `install` may need published versions
-/// that a bundled packument doesn't know about yet.
+/// that a cached packument doesn't know about yet.
 async fn run_npm_install(project_dir: &Path, subcommand: &str, on_data: Option<OnData>) -> RunResult {
   run(
     "npm",
@@ -335,13 +335,13 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
   }
 
   if let Some(on) = &on_data {
-    on(Stream::System, "Project dependencies are missing; installing with the warm npm cache...\n");
+    on(Stream::System, "Project dependencies are missing; installing them with npm...\n");
   }
 
-  // Fresh scaffold with a committed lockfile → `npm ci` is fastest and fully
-  // deterministic (skips resolution, and every locked tarball is in the warm
-  // cache). Otherwise (no lockfile, or a partial `node_modules`) fall back to a
-  // cache-backed `npm install`, allowing stale registry metadata to refresh.
+  // A lockfile and no `node_modules` (a fresh clone) → `npm ci` is fastest and
+  // fully deterministic (skips resolution and installs the locked tree).
+  // Otherwise (no lockfile, or a partial `node_modules`) fall back to
+  // `npm install`, allowing stale registry metadata to refresh.
   // Both skip the slow audit/fund passes.
   let use_ci = use_npm_ci(
     project_dir.join("package-lock.json").is_file(),
@@ -350,8 +350,8 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
   let mut result = run_npm_install(project_dir, if use_ci { "ci" } else { "install" }, on_data.clone()).await;
 
   // `npm ci` aborts when the lockfile and package.json are out of sync (e.g. a
-  // scaffolder that rewrote package.json but kept an older lock). Fall back to a
-  // plain — still cache-backed — install rather than failing the whole deploy.
+  // package.json edited without updating the lock). Fall back to a plain install
+  // rather than failing the whole deploy.
   if use_ci && !result.ok && !result.not_found {
     if let Some(on) = &on_data {
       on(Stream::System, "npm ci was rejected; retrying with npm install...\n");
@@ -708,8 +708,8 @@ mod tests {
   }
 
   #[test]
-  fn npm_ci_only_on_a_fresh_scaffold_with_a_lockfile() {
-    // Committed lockfile + no node_modules (the fresh-scaffold case) → npm ci.
+  fn npm_ci_only_with_a_lockfile_and_no_node_modules() {
+    // Committed lockfile + no node_modules (a fresh clone) → npm ci.
     assert!(use_npm_ci(true, false));
     // No lockfile → must resolve, so npm install.
     assert!(!use_npm_ci(false, false));

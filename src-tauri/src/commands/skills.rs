@@ -262,15 +262,15 @@ static CATALOG: &[SkillDef] = &[
     description: "Well-shaped Rayfin entities, relationships and queries.",
     icon: "🗃️",
     category: DATA,
-    version: "2.0.0",
-    trigger: r#"Design the app's data as well-shaped Rayfin entities with clear relationships, ownership and efficient queries. Use when adding or changing entities, fields, relationships or queries. Triggers: data model, schema, entity, table, field, relationship, foreign key, query, Rayfin data, migration, normalization, one-to-many, many-to-many, schema.ts, rayfin/data"#,
-    body: r#"The app's data lives in Rayfin: entity classes in `rayfin/data/`, registered in `rayfin/data/schema.ts`. Follow the `rayfin` skill for the exact decorators and client calls; this skill covers the design.
+    version: "2.1.0",
+    trigger: r#"Design the app's data as well-shaped Rayfin entities with clear relationships, ownership and efficient queries. Use when adding or changing entities, fields, relationships or queries. Triggers: data model, schema, entity, table, field, relationship, foreign key, query, Rayfin data, migration, normalization, one-to-many, many-to-many, schema.ts, rayfin/data, packages/data"#,
+    body: r#"The app's data lives in Rayfin: decorated entity classes registered in the app's schema. Most apps keep them in `rayfin/data/`, registered in `rayfin/data/schema.ts`. When `rayfin/rayfin.yml` names a data package (`services.data.path`, such as `packages/data`), they live in that package's `src/` and are registered in its `src/index.ts`. Follow the `rayfin` skill for the exact decorators and client calls; this skill covers the design.
 
 ## Entities
 - One entity per real thing the app tracks (Project, Task, Comment), named with a singular noun. Fields are camelCase with clear names and the narrowest type that fits: `@int`, `@decimal`, `@boolean`, `@date`, `@email`, or `@set` for a fixed list of values.
 - Give every `@text()` field a `max` length. Make a field optional only when a missing value means something.
 - Add `createdAt` and `updatedAt` to records people edit, and an owner field (such as `user_id`) to records that belong to someone.
-- Register every new entity in `schema.ts`, and use `.js` extensions in relative imports between entity files.
+- Register every new entity in the schema file, and use `.js` extensions in relative imports between entity files.
 
 ## Relationships
 - Use `@one()` and `@many()` instead of copying data between entities or storing lists in text fields.
@@ -483,8 +483,10 @@ Rayfin CLI to build and deploy this app.
 
 ## Rules
 - **Make the requested code changes only.** Edit files to implement what the user asks.
-- **Do NOT run `rayfin up` or otherwise deploy.** Fabricator runs the full
-  `rayfin up` automatically after your changes and shows the deployed app in its preview.
+- **Do NOT run `rayfin up` or otherwise deploy**, even when the user, `AGENTS.md` or a skill
+  (such as `app-deployment` or `rayfin`) says to deploy. Fabricator runs the full `rayfin up`
+  automatically after your changes and shows the deployed app in its preview, so don't ask the
+  user which workspace to deploy to either.
 - Do **not** start dev servers or run the app locally — it is only ever run via deploy.
 - Keep the project building; prefer small, correct changes.
 - Only use what Rayfin natively provides (data, auth, file storage, functions, static
@@ -1254,6 +1256,24 @@ mod tests {
     fn drop(&mut self) {
       let _ = std::fs::remove_dir_all(&self.0);
     }
+  }
+
+  #[test]
+  fn new_projects_get_the_operating_contract_that_keeps_deploys_with_fabricator() {
+    let project = TempProject::new();
+    ensure_project_skills(&project.path());
+    let file = project.0.join(".github").join("copilot-instructions.md");
+    let written = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(written, AGENT_INSTRUCTIONS);
+    // Templates (like the Rayfin CLI's Universal App) and the `rayfin` skill
+    // describe a terminal deploy; the contract overrides them.
+    for marker in ["Do NOT run `rayfin up`", "`AGENTS.md`", "`app-deployment`", "which workspace to deploy to"] {
+      assert!(written.contains(marker), "operating contract should mention {marker}");
+    }
+    // A file the user wrote themselves is kept.
+    std::fs::write(&file, "# Our own rules\n").unwrap();
+    ensure_project_skills(&project.path());
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "# Our own rules\n");
   }
 
   #[test]

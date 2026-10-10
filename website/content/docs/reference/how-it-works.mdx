@@ -87,7 +87,7 @@ flowchart TD
 
 ## What runs on your computer
 
-Fabricator stores settings, project lists, chat history, Advisor state, logs, diagnostics exports, and npm cache files under the app data folder. Your Rayfin apps live in the workspace folder, which defaults to `RayfinProjects` in your home directory. See [Files and folders](/docs/reference/files).
+Fabricator stores settings, project lists, chat history, Advisor state, logs, and diagnostics exports under the app data folder. Your Rayfin apps live in the workspace folder, which defaults to `RayfinProjects` in your home directory. See [Files and folders](/docs/reference/files).
 
 The desktop app uses Tauri v2: a Rust core with a React renderer. On Windows, the embedded preview uses WebView2. On macOS, it uses the system web view.
 
@@ -109,7 +109,7 @@ Fabricator and the tools it runs can contact these services:
 - GitHub Copilot for chat, model access, design options, deep Advisor reviews, and team workspace diagnoses.
 - Microsoft Fabric and Rayfin services when you sign in, deploy, preview deployed apps, share apps, or inspect Fabric items.
 - GitHub for update checks, release downloads, cloning repositories, issue reporting, and team workspace repositories.
-- The npm registry when scaffolding or installing project dependencies, unless the bundled warm cache already satisfies the install.
+- The npm registry when creating a project from the Rayfin CLI's template or installing project dependencies.
 - Azure and GitHub APIs for team workspace setup and **Diagnose with Copilot** when the **Team workspaces** experiment is enabled.
 
 ## What the Advisor can read

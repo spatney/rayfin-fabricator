@@ -23,7 +23,6 @@ Fabricator creates this folder when it needs to save app-owned files.
 | `advisor/` | Saved Advisor reports and Advisor UI state for projects. | Yes, if you are comfortable losing saved findings, dismissals, and baselines. |
 | `suggestions/` | Cached starter suggestion sets for projects. | Yes. Fabricator can recreate suggestions. |
 | `logs/` | Diagnostics JSONL files, exported diagnostics bundles, and crash or hang logs. | Yes, if you no longer need them for bug reports. |
-| `npm-cache/` | The writable npm cache Fabricator points spawned npm processes at. It is seeded from the bundled warm cache on first launch for each app version. | Yes. Deleting it may make the next scaffold or install slower and may use the network. |
 | `fabric-accounts.json`, `fabric-accounts/` | The Fabric accounts you added after the first, each in its own Rayfin CLI config folder, and which one is in use. | Only to sign out of those accounts. Use **Accounts** instead; see [Manage your accounts](/docs/start/accounts). |
 
 Diagnostics files older than the retention window are pruned at startup.

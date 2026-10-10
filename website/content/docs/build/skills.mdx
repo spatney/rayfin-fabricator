@@ -71,24 +71,30 @@ Updating replaces the app's copy of the skill and saves the change to git histor
 
 ## Built-in project skills at a glance
 
-The Universal App starter ships with skills that route common Rayfin app requests:
+New projects use the Rayfin CLI's Universal App template, which ships with skills that route common Rayfin app requests. The exact set depends on the Rayfin CLI version that created the app. Current versions include:
 
 | Skill | What it helps Copilot do |
 | --- | --- |
-| `capability-router` | Choose the smallest needed capability packs before changing code. |
-| `rayfin-web-docs` | Look up official Rayfin documentation for version-aware Rayfin API work. |
-| `authentication` | Wire the existing Fabric sign-in scaffolding for protected pages and per-user data. |
-| `data-modeling` | Add Rayfin entities, schema registration, typed client reads and writes, and row-level security patterns. |
-| `graphein-visuals` | Build charts, KPIs, tables and dashboards with Graphein specs over app data. |
-| `analytics` | Turn on the Power BI or Fabric semantic-model dashboard pack. |
-| `build-workflow` | Build analytics dashboards in small loops: one hero visual, preview, then breadth and polish. |
-| `fabric-data` | Add and query Fabric semantic model connections with `fabric-app-data`. |
-| `dax` | Discover semantic model schema and write DAX queries at the visual grain. |
-| `visuals` | Author analytics dashboard visuals, KPI cards, tables, slicers and chart specs. |
-| `headless-preview` | Validate visuals with `npm run preview` and a PNG/report loop. |
-| `app-design` | Make dashboard layout, typography, tokens, states and visual polish cohesive. |
+| `capability-router` | Start every build request here: settle the data source, then turn on only the capabilities the app needs. |
+| `data-modeling` | Turn on the app's database and declare Rayfin entities, with row-level security for per-user data. |
+| `crud-ui` | Build the list, form and edit screens for the app's own records, with loading and error states. |
+| `connectors` | Connect existing Fabric data: a Warehouse, SQL database, Lakehouse SQL analytics endpoint or Power BI semantic model. |
+| `analytics` | Build dashboards and reports over an existing Power BI semantic model. |
+| `schema-discovery` | Explore a semantic model's tables, columns, measures and relationships. |
+| `dax-authoring` | Write and test DAX queries against a semantic model. |
+| `query-design` | Decide what to compute in DAX and what to compute in the app. |
+| `fabric-sdk` | Query Fabric data from the running app through the Rayfin connectors client. |
+| `visuals` | Add charts and data grids with Vega-Lite visuals and the data grid component. |
+| `app-design` | Keep the layout and components consistent, accessible and polished. |
+| `functions-capability` | Add server-side functions for secrets, external APIs and other trusted logic. |
+| `external-api-workflows` | Call a third-party API or custom model endpoint through a server-side function. |
+| `fabric-data-agent` | Call a published Fabric data agent from the app through a function. |
+| `app-validation` | Check the app before calling it done. In Fabricator, Copilot runs the static checks and you try the deployed app in the preview. |
+| `app-deployment` | Deploy from a terminal with the Rayfin CLI. In Fabricator, Copilot skips it because Fabricator deploys the app. |
 
-These skills are project files, so they travel with the app. They appear in **Added in this app**. Fabricator also injects Fabricator-specific operating instructions during chat, such as not running `rayfin up` because Fabricator deploys after a turn.
+Projects created by earlier Fabricator versions keep the skills their starter came with.
+
+These skills are project files, so they travel with the app. They appear in **Added in this app**. Fabricator also injects Fabricator-specific operating instructions during chat. For example, Copilot doesn't run `rayfin up` or follow a template's own deployment steps, because Fabricator deploys after a turn.
 
 ## Add a custom skill
 

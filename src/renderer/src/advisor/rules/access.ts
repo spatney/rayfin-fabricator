@@ -1,3 +1,4 @@
+import { isUnder } from '../../model/projectLayout'
 import type { QuickHit, QuickRuleImpl } from '../quick'
 import { listLabels } from '../quick'
 import { dynamicImports, importsOf, lineOf, yamlKeyLine } from '../source'
@@ -71,7 +72,7 @@ export const accessRules: QuickRuleImpl[] = [
     id: 'access/mock-auth-credentials',
     run: (ctx) => {
       const hits: QuickHit[] = []
-      for (const src of ctx.sources((p) => p.startsWith('src/') && CODE_FILE.test(p))) {
+      for (const src of ctx.sources((p) => isUnder(p, ctx.layout.frontendSrc) && CODE_FILE.test(p))) {
         if (!/\bclass\s+MockAuthService\b/.test(src.masked)) continue
         const cred = /\b(\w*PASSWORD\w*|password)\s*[:=]\s*(['"`])([^'"`\n]{4,})\2/i.exec(src.masked)
         if (!cred) continue
@@ -94,7 +95,9 @@ export const accessRules: QuickRuleImpl[] = [
       const fabric = ctx.service('auth')?.fabric as { externalEntraExchange?: unknown } | undefined
       if (fabric?.externalEntraExchange === true) return []
       return regexHits(
-        ctx.sources((p) => (p.startsWith('src/') || p.startsWith('scripts/')) && CODE_FILE.test(p)),
+        ctx.sources(
+          (p) => (isUnder(p, ctx.layout.frontendSrc) || p.startsWith('scripts/')) && CODE_FILE.test(p)
+        ),
         /\b(signInWithEntraToken|fetchRayfinLocalSessionToken)\s*\(/,
         (src, m) =>
           `${code(src.path)} calls ${code(`${m[1]}()`)}, but rayfin.yml doesn't set ${code('services.auth.fabric.externalEntraExchange: true')}.`

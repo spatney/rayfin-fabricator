@@ -2,16 +2,12 @@ import { useState, type CSSProperties } from 'react'
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
 import { FabricatorMark } from './FabricatorMark'
 import { AddIcon, BranchIcon, FolderIcon, GearIcon } from './icons'
+import { displayPath } from './projectDisplay'
 import TeamSection from './team/TeamSection'
 import { hueOf } from './team/map/parts'
 
 /** Recent projects shown before "Show all". */
 const RECENT_LIMIT = 6
-
-/** A project folder for display: the Windows user folder shortened to `~`. */
-export function displayPath(path: string): string {
-  return path.replace(/^[A-Za-z]:[\\/]Users[\\/][^\\/]+(?=[\\/])/i, '~').replace(/^\/(?:Users|home)\/[^/]+(?=\/)/, '~')
-}
 
 interface Props {
   /** All known projects, most-recently-used first. */

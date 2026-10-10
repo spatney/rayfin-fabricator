@@ -193,5 +193,39 @@ describe('ModelView', () => {
       expect.stringContaining('no data model yet'),
       true
     )
+    expect(onSendToChat.mock.calls[0][1]).toContain('register them in `rayfin/data/schema.ts`')
+  })
+
+  it('reads and asks for the data package an app from the CLI Universal App uses', async () => {
+    const yml = 'services:\n  data:\n    enabled: false\n    path: packages/data\n'
+    // The template ships an empty registration file in its data package.
+    installFiles({
+      'rayfin/rayfin.yml': yml,
+      'packages/data/src/index.ts': 'export const schema = [];\n',
+      'rayfin/data/schema.ts': SCHEMA
+    })
+    const onSendToChat = vi.fn()
+    render(
+      <ModelView project={makeProject('p3')} refreshKey={0} onOpenFile={vi.fn()} onSendToChat={onSendToChat} />
+    )
+    await screen.findByText('Your schema has no entities')
+    expect(screen.getByText('packages/data/src/index.ts')).toBeTruthy()
+    fireEvent.click(screen.getByText('Add an entity with Copilot'))
+    const prompt = onSendToChat.mock.calls[0][1] as string
+    expect(prompt).toContain('under `packages/data/src/`')
+    expect(prompt).toContain('register them in `packages/data/src/index.ts`')
+    expect(prompt).toContain('`services.data.enabled: true`')
+    expect(prompt).not.toContain('rayfin/data')
+    cleanup()
+
+    // Once it registers an entity, the diagram shows it from the package.
+    installFiles({
+      'rayfin/rayfin.yml': yml,
+      'packages/data/src/index.ts': "import { Item } from './Item.js';\nexport const schema = [Item];\n",
+      'packages/data/src/Item.ts': SCHEMA.replace('export class Tag', 'export class Item')
+    })
+    render(<ModelView project={makeProject('p3')} refreshKey={1} onOpenFile={vi.fn()} onSendToChat={vi.fn()} />)
+    await screen.findByText('Data model')
+    expect(cardOf('Item')).toBeTruthy()
   })
 })

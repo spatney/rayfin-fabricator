@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AI_RULES, CATEGORIES, QUICK_RULES, RULES } from '@shared/advisor/catalog'
+import { matchesWorkspace } from './context'
 import { QUICK_IMPLS } from './rules'
 import { GOOD_PROJECT, check, versionInfo } from './testFixtures'
 
@@ -35,6 +36,84 @@ describe('quick checks on a healthy project', () => {
     expect(out.results.filter((r) => r.status === 'skipped')).toEqual([])
     expect(out.status('data-model/text-without-max')).toBe('pass')
     expect(out.status('platform/functions-mssql')).toBe('na')
+  })
+})
+
+/**
+ * GOOD_PROJECT laid out like the Rayfin CLI's Universal App: the frontend and
+ * the data model each in the npm package rayfin.yml names.
+ */
+function workspaceApp(overrides: Record<string, string> = {}): Record<string, string | null> {
+  const files: Record<string, string | null> = {}
+  for (const [path, text] of Object.entries(GOOD_PROJECT)) {
+    const to =
+      path === 'rayfin/data/schema.ts'
+        ? 'packages/data/src/index.ts'
+        : path.startsWith('rayfin/data/')
+          ? `packages/data/src/${path.slice('rayfin/data/'.length)}`
+          : path.startsWith('src/') || path === 'vite.config.ts'
+            ? `packages/frontend/${path}`
+            : path
+    if (to !== path) files[path] = null
+    files[to] = text
+  }
+  files['rayfin/rayfin.yml'] = GOOD_PROJECT['rayfin/rayfin.yml']
+    .replace('  data:\n', '  data:\n    path: packages/data\n')
+    .replace('  staticHosting:\n', '  staticHosting:\n    path: packages/frontend\n')
+  files['packages/data/package.json'] = JSON.stringify({ name: '@rayfin-app/data' })
+  return { ...files, ...overrides }
+}
+
+describe('quick checks on a workspace app (the Rayfin CLI Universal App layout)', () => {
+  it('read the packages rayfin.yml names, and a healthy one reports no findings', async () => {
+    const out = await check(workspaceApp())
+    expect(out.findings).toEqual([])
+    expect(out.ctx.layout.frontendSrc).toBe('packages/frontend/src')
+    expect(out.ctx.dataPackage).toBe('@rayfin-app/data')
+    expect(out.ctx.model.entities.map((e) => e.file)).toEqual(['packages/data/src/Todo.ts'])
+    expect(out.ctx.frontend.map((f) => f.path)).toContain('packages/frontend/src/App.tsx')
+    expect(out.status('data-model/text-without-max')).toBe('pass')
+  })
+
+  it('check the frontend, data model and env files in those packages', async () => {
+    const out = await check(
+      workspaceApp({
+        'packages/data/src/Todo.ts': TODO.replace('@text({ max: 200 }) title', '@text() title'),
+        'packages/data/src/Note.ts': [
+          "import { entity, authenticated, uuid } from '@microsoft/rayfin-core';",
+          '@entity()',
+          "@authenticated('*', { policy: (claims, item) => claims.sub.eq(item.user_id) })",
+          'export class Note {',
+          '  @uuid() id!: string;',
+          '}',
+          ''
+        ].join('\n'),
+        'packages/frontend/src/auth.ts': 'client.auth.onAuthStateChange(() => {})\n',
+        'packages/frontend/src/form.ts': "import { Todo } from '@rayfin-app/data'\nexport const T = Todo\n",
+        'packages/frontend/.env': 'VITE_API_SECRET=k3yValue9a8b7c6d5e4f\n'
+      })
+    )
+    expect(out.ids).toEqual(
+      expect.arrayContaining([
+        'data-model/text-without-max',
+        'data-model/entity-not-registered',
+        'access/on-auth-state-change',
+        'config/swc-with-runtime-entities',
+        'secrets/secret-in-public-env',
+        'secrets/env-file-not-ignored'
+      ])
+    )
+    expect(out.finding('data-model/entity-not-registered')!.detail).toContain('in index.ts')
+    // The data model is reached by relative path too.
+    const relative = await check(
+      workspaceApp({ 'packages/frontend/src/form.ts': "import { Todo } from '../../data/src/Todo.js'\nexport const T = Todo\n" })
+    )
+    expect(relative.ids).toContain('config/swc-with-runtime-entities')
+    // A type-only import of the data package is fine.
+    const typeOnly = await check(
+      workspaceApp({ 'packages/frontend/src/form.ts': "import type { Todo } from '@rayfin-app/data'\n" })
+    )
+    expect(typeOnly.ids).not.toContain('config/swc-with-runtime-entities')
   })
 })
 
@@ -121,6 +200,36 @@ describe('access and policy rules', () => {
         "export async function signIn() {\n  const { ensureSignedInWithFabric } = await import('@microsoft/rayfin-auth-provider-fabric')\n}\n"
     })
     expect(lazy.ids).toContain('access/fabric-provider-dynamic-import')
+  })
+
+  it('reads dependencies declared in npm workspaces, like the Rayfin CLI Universal App', async () => {
+    const pkg = JSON.parse(GOOD_PROJECT['package.json'])
+    const provider = '@microsoft/rayfin-auth-provider-fabric'
+    const frontend = { name: '@app/frontend', dependencies: { [provider]: pkg.dependencies[provider] } }
+    delete pkg.dependencies[provider]
+    const monorepo = (workspaces: unknown, at = 'packages/frontend/package.json') =>
+      check({
+        'package.json': JSON.stringify({ ...pkg, workspaces }, null, 2),
+        [at]: JSON.stringify(frontend, null, 2)
+      })
+    expect((await monorepo(['packages/*'])).ids).not.toContain('access/fabric-provider-missing')
+    expect((await monorepo({ packages: ['packages/frontend'] })).ids).not.toContain('access/fabric-provider-missing')
+    // A manifest outside the declared workspaces doesn't count.
+    expect((await monorepo(['apps/*'])).ids).toContain('access/fabric-provider-missing')
+    expect((await monorepo(['packages/*'], 'packages/frontend/vendor/package.json')).ids).toContain(
+      'access/fabric-provider-missing'
+    )
+  })
+
+  it('matches npm workspace globs by folder', () => {
+    expect(matchesWorkspace('packages/frontend', 'packages/*')).toBe(true)
+    expect(matchesWorkspace('packages/frontend', './packages/frontend/')).toBe(true)
+    expect(matchesWorkspace('packages/a/b', 'packages/**')).toBe(true)
+    expect(matchesWorkspace('packages/a/b', 'packages/*')).toBe(false)
+    expect(matchesWorkspace('packages', 'packages/*')).toBe(false)
+    expect(matchesWorkspace('apps/web', 'app*/web')).toBe(true)
+    expect(matchesWorkspace('packages.x/web', 'packages/*')).toBe(false)
+    expect(matchesWorkspace('elsewhere', '../elsewhere')).toBe(false)
   })
 
   it('flags a wired-up mock auth service with fixture credentials', async () => {

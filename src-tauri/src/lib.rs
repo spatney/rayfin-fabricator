@@ -93,12 +93,11 @@ pub fn run() {
   // account has its own config folder). Also before anything spawns the CLI.
   services::fabric_accounts::init();
 
-  // Point every spawned npm at Fabricator's warm cache without freezing registry
-  // metadata at the bundled snapshot. Locked `npm ci` installs prefer offline
-  // data; scaffolding revalidates metadata for the latest CLI. Set before any
-  // child spawns so deploy-time installs and agent pack installs inherit it.
-  // The cache is populated by the background seed in `setup` below.
-  services::npm_cache::configure_env();
+  // Quiet npm installs (no audit or funding passes) with normal registry
+  // metadata freshness checks; scaffolding additionally revalidates metadata for
+  // the latest CLI. Set before any child spawns so deploy-time installs and agent
+  // installs inherit it.
+  services::npm_env::configure_env();
 
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
@@ -128,31 +127,23 @@ pub fn run() {
       // is never mistaken for a hang.
       services::watchdog::start(app.handle().clone());
 
-      // Seed the bundled warm npm cache into the writable per-user cache (once
-      // per app version) so the first project's `npm install` resolves offline.
-      // Backgrounded so it never delays startup; idempotent and best-effort, and
-      // `npm_config_cache` already points here (see `configure_env` above), so a
-      // project created before it finishes just falls back to the network.
-      {
-        let handle = app.handle().clone();
-        let version = app.package_info().version.to_string();
-        std::thread::spawn(move || {
-          services::npm_cache::ensure_seeded(&handle, &version);
-        });
-      }
-
       // Trim old chat-session diagnostics so the logs directory stays bounded.
       // Runs once at startup so per-turn capture adds no pruning I/O.
       services::diagnostics::prune();
 
-      // The retired Design Studio experiment kept drafts, receipts and imported
-      // assets under app-data. Nothing reads them anymore; remove them in the
-      // background (a no-op once they're gone).
+      // Retired app-data storage nothing reads anymore: the Design Studio
+      // experiment's drafts, receipts and imported assets, and the per-user npm
+      // cache earlier releases seeded from a cache bundled with the app. Remove
+      // them in the background (a no-op once they're gone).
       std::thread::spawn(|| {
-        let dir = services::paths::retired_design_studio_dir();
-        if dir.is_dir() {
-          if let Err(e) = std::fs::remove_dir_all(&dir) {
-            log::warn!("failed to remove retired Design Studio data at {}: {e}", dir.display());
+        for (dir, what) in [
+          (services::paths::retired_design_studio_dir(), "Design Studio data"),
+          (services::paths::retired_npm_cache_dir(), "npm cache"),
+        ] {
+          if dir.is_dir() {
+            if let Err(e) = std::fs::remove_dir_all(&dir) {
+              log::warn!("failed to remove retired {what} at {}: {e}", dir.display());
+            }
           }
         }
       });

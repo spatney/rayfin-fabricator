@@ -7,6 +7,7 @@
 import { parse as parseYaml } from 'yaml'
 import type { TeamMap, TeamMapApp, TeamMapCopy, TeamResourceRequest, TeamResourceSource } from '@shared/ipc'
 import { maskComments, parseDataModel, type AccessLevel } from '../../../model/parseSchema'
+import { layoutOf } from '../../../model/projectLayout'
 
 type Obj = Record<string, unknown>
 
@@ -91,6 +92,7 @@ export async function parseAppConfig(files: Record<string, string>): Promise<App
   }
   const services = asObj(yml.services) ?? {}
   const enabled = (name: string): boolean => asObj(services[name])?.enabled === true
+  const layout = layoutOf(yml)
 
   const model = await parseDataModel(async (path) => files[path] ?? null)
   const tables: TableInfo[] = model.entities.map((e) => ({
@@ -106,14 +108,14 @@ export async function parseAppConfig(files: Record<string, string>): Promise<App
       .filter(([path]) => path.startsWith(prefix))
       .map(([, source]) => maskComments(source))
       .join('\n')
-  const fnSource = under('rayfin/functions/src/')
+  const fnSource = under(`${layout.functionsRoot}/src/`)
   const names = unique([...fnSource.matchAll(/\budf\s*\.\s*func\s*\(\s*(['"`])([^'"`\n]+)\1/g)].map((m) => m[2]))
   const audiences = unique([...fnSource.matchAll(/\bAudienceType\s*\.\s*([A-Za-z]+)\b/g)].map((m) => m[1]))
 
   return {
     found: text !== undefined,
     database: enabled('data') || tables.length > 0 ? { tables, relations: model.relations.length } : null,
-    files: enabled('storage') || /@blob\s*\(/.test(under('rayfin/data/')),
+    files: enabled('storage') || /@blob\s*\(/.test(under(`${layout.dataDir}/`)),
     functions: enabled('functions') || names.length > 0 ? { names, audiences } : null,
     connectors: parseConnectors(yml.connectors)
   }
@@ -180,7 +182,13 @@ export function humanize(name: string): string {
 
 /* ------------------------------ which copies to read ------------------------------ */
 
-const CONFIG_PATH = /^[^/]+\/rayfin\/(rayfin\.ya?ml$|data\/|functions\/src\/)/i
+/**
+ * A change to what the overview shows: rayfin.yml, the data model or the
+ * functions' source, under `rayfin/` or in the Rayfin CLI Universal App's
+ * `packages/data` and `packages/functions`.
+ */
+const CONFIG_PATH =
+  /^[^/]+\/(rayfin\/(rayfin\.ya?ml$|data\/|functions\/src\/)|packages\/(data|functions)\/src\/)/i
 
 /** Whether a working copy may change what its app uses (or its file list is cut short). */
 export function touchesConfig(copy: TeamMapCopy): boolean {

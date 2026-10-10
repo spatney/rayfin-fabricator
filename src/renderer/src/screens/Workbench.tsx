@@ -202,8 +202,17 @@ export default function Workbench({
   const [showHelp, setShowHelp] = useState(false)
   /** The static fallback shown when the assistant can't run. */
   const [showHelpOffline, setShowHelpOffline] = useState(false)
-  /** Bumped to ask DeploymentsControl to open its share dialog (Help's share action). */
-  const [shareRequest, setShareRequest] = useState(0)
+  /**
+   * Help's share action, waiting for DeploymentsControl to open the dialog for
+   * this project. Cleared as soon as the control acts on it, so returning to
+   * the project later never opens the dialog again.
+   */
+  const [shareRequest, setShareRequest] = useState<{ projectId: string; nonce: number } | null>(
+    null
+  )
+  const onShareRequestHandled = useCallback((nonce: number): void => {
+    setShareRequest((current) => (current?.nonce === nonce ? null : current))
+  }, [])
   const [projects, setProjects] = useState<ProjectsState | null>(null)
   /** Fullscreen create/deploy flow: 'create' = new-project wizard, 'deploy' = first-deploy gate CTA. */
   const [createMode, setCreateMode] = useState<'create' | 'deploy' | null>(null)
@@ -348,6 +357,12 @@ export default function Workbench({
   projectsRef.current = projects
   /** The currently active project (or null). Declared early — effects depend on it. */
   const active = projects?.projects.find((p) => p.id === projects.activeProjectId) ?? null
+  // A share request that hasn't opened yet (the project was still preparing)
+  // belongs to the project Help was answering about. Moving to another project
+  // drops it, so it can't pop up when you come back later.
+  useEffect(() => {
+    setShareRequest((current) => (current && current.projectId !== active?.id ? null : current))
+  }, [active?.id])
   /** The Build chat for the active project is mid-turn. */
   const activeChatBusy = Boolean(
     active && (chats[active.id] ?? []).some((m) => m.role === 'assistant' && m.pending)
@@ -1478,13 +1493,15 @@ export default function Workbench({
         goHome()
         break
       case 'share-app':
+        // DeploymentsControl owns the share dialog and opens it for this
+        // request once it's on screen, then reports it handled. It is only
+        // mounted for personal projects, which is why Help never offers this
+        // for a team app (see PERSONAL_ONLY in the Help tools).
+        if (!active || active.team) break
         setShowHelp(false)
         setShowHome(false)
-        // DeploymentsControl owns the share dialog; bumping the nonce asks it
-        // to open for the active project's live deployment. It is only mounted
-        // for personal projects, which is why Help never offers this for a
-        // team app (see PERSONAL_ONLY in the Help tools).
-        setShareRequest((n) => n + 1)
+        setTeamMap(null)
+        setShareRequest({ projectId: active.id, nonce: Date.now() })
         break
       case 'open-team-access': {
         // A team app has no Share: an owner grants access to the whole
@@ -1564,7 +1581,13 @@ export default function Workbench({
                 onClick={() => setTeamMap(null)}
               />
             ) : active && onProjectScreen ? (
-              <ProjectSwitcher project={active} onClick={goHome} />
+              <ProjectSwitcher
+                project={active}
+                projects={projects?.projects ?? []}
+                teamWorkspaces={projects?.teamWorkspaces}
+                onSelect={(p) => void selectProject(p)}
+                onShowAll={goHome}
+              />
             ) : active && showHome && !createMode && !showClone ? (
               <BackToProject name={active.name} onClick={() => setShowHome(false)} />
             ) : null}
@@ -1625,6 +1648,7 @@ export default function Workbench({
                 running={Boolean(deploys[active.id]?.running)}
                 reconciling={reconciling.has(active.id)}
                 shareRequest={shareRequest}
+                onShareRequestHandled={onShareRequestHandled}
                 onCreate={(name, workspaceId) => {
                   setViewMode('build')
                   void (async () => {

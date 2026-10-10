@@ -206,9 +206,32 @@ describe('SettingsModal retired controls', () => {
       expect(screen.queryByText(label)).toBeNull()
     }
     expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(4)
     expect(screen.getByText('Auto-deploy after chat')).toBeTruthy()
+    expect(screen.getByText('Ray')).toBeTruthy()
     expect(screen.getByText('Team workspaces')).toBeTruthy()
     expect(screen.getByText('Full diagnostics')).toBeTruthy()
+  })
+})
+
+describe('SettingsModal Ray', () => {
+  function rayCheckbox(): HTMLInputElement {
+    const label = screen.getByText('Ray').closest('label')
+    if (!label) throw new Error('Ray label not found')
+    return label.querySelector('input[type="checkbox"]') as HTMLInputElement
+  }
+
+  it('shows Ray unless he was turned off, and saves turning him off', async () => {
+    installApi()
+    const { onChange } = await renderModal()
+    expect(rayCheckbox().checked).toBe(true)
+    fireEvent.click(rayCheckbox())
+    expect(onChange).toHaveBeenCalledWith({ mascot: false })
+  })
+
+  it('reflects Ray being turned off', async () => {
+    installApi()
+    await renderModal({ settings: { theme: 'system', mascot: false } })
+    expect(rayCheckbox().checked).toBe(false)
   })
 })

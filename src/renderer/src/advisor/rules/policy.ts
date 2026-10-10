@@ -1,4 +1,5 @@
 import { parseClasses } from '../../model/parseSchema'
+import { isUnder } from '../../model/projectLayout'
 import type { QuickHit, QuickRuleImpl } from '../quick'
 import { listLabels } from '../quick'
 import { lineOf, matchAll } from '../source'
@@ -103,8 +104,12 @@ export const policyRules: QuickRuleImpl[] = [
     id: 'policy/blob-without-permission',
     run: (ctx) => {
       const hits: QuickHit[] = []
+      const { dataDir, functionsRoot } = ctx.layout
       const files = ctx.sources(
-        (p) => p.startsWith('rayfin/') && /\.(ts|js)$/.test(p) && !p.startsWith('rayfin/functions/')
+        (p) =>
+          /\.(ts|js)$/.test(p) &&
+          ((p.startsWith('rayfin/') && !p.startsWith('rayfin/functions/') && !isUnder(p, functionsRoot)) ||
+            isUnder(p, dataDir))
       )
       for (const src of files) {
         for (const cls of parseClasses(src.masked)) {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FileNode, StudioProject, TeamManifest } from '@shared/ipc'
-import { parseProjectDataModel, type DataModel } from '../../model/parseSchema'
+import { emptyDataModel, parseProjectDataModel, type DataModel } from '../../model/parseSchema'
 import { loadProjectFabricConfig } from '../../model/fabricConfig'
 import {
   buildArchitecture,
@@ -95,9 +95,7 @@ async function loadBlueprint(projectId: string, projectName: string): Promise<Lo
   const ymlText = (await readText(projectId, 'rayfin/rayfin.yml')) ?? (await readText(projectId, 'rayfin/rayfin.yaml'))
   const functionsPath = (ymlText && parseRayfinConfig(ymlText)?.functions.path) || 'rayfin/functions'
   const [dataModel, fabric, functionSources] = await Promise.all([
-    parseProjectDataModel(projectId).catch(
-      (): DataModel => ({ entities: [], relations: [], warnings: [], hasSchema: false })
-    ),
+    parseProjectDataModel(projectId).catch((): DataModel => emptyDataModel()),
     loadProjectFabricConfig(projectId).catch(() => null),
     readFunctionSources(projectId, functionsPath)
   ])
@@ -116,7 +114,8 @@ async function loadBlueprint(projectId: string, projectName: string): Promise<Lo
  *
  *  - **Architecture**: the app's parts, what it connects to, and which identity
  *    each connection signs in as (each person, or the app, and whose credentials);
- *  - **Data model**: the entity diagram of `rayfin/data`;
+ *  - **Data model**: the entity diagram of the app's data model (`rayfin/data`,
+ *    or the data package rayfin.yml names);
  *  - **Semantic model**: live diagrams of the semantic models it uses (shown
  *    only when it uses some, from `fabric.yaml` or a connector).
  *

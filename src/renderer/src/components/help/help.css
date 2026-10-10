@@ -615,43 +615,83 @@
 
 /* ----------------------------- welcome ----------------------------- */
 
+/* The empty state is a two-column introduction. The host — Ray, or the
+   Fabricator mark when he's turned off — sits on the left. Everything he says
+   (the greeting, the starter questions, the version) shares one text edge on
+   the right, so the page reads as a single aligned column. */
 .help-welcome {
-  padding: 32px 0 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 18px;
+  align-items: start;
+  padding: 40px 0 8px;
 }
 
-.help-logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 20px;
+.help-hello-host {
+  position: relative;
   animation: helpRise 0.26s ease both;
 }
 
-.help-logo .brand-mark {
-  width: 30px;
-  height: 30px;
+/* His wingtip, not his drawing's padding, lines up with the column's edge. */
+.help-welcome--ray .help-hello-host {
+  margin: -9px 0 0 -6px;
 }
 
-.help-logo-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.35;
+.help-hello-host .brand-mark {
+  display: block;
+  width: 32px;
+  height: 32px;
 }
 
-.help-logo-name {
+.help-hello-text {
+  min-width: 0;
+}
+
+.help-hello-title {
+  margin: 4px 0 6px;
   color: var(--text);
-  letter-spacing: 0.04em;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
-.help-logo-sub {
+.help-hello-lead {
+  max-width: 62ch;
+  margin: 0 0 18px;
+  color: var(--text-dim);
+}
+
+.help-hello-meta {
+  margin: 16px 0 0;
   color: var(--text-faint);
   font-size: 11px;
 }
 
-.help-welcome-lead {
-  max-width: 62ch;
-  margin: 0 0 20px;
-  color: var(--text-dim);
+/* The greeting types out like terminal output; the caret rests, then fades. */
+.help-typed-caret {
+  display: inline-block;
+  width: 8px;
+  height: 1.05em;
+  margin-left: 2px;
+  background: var(--accent);
+  vertical-align: text-bottom;
+}
+
+.help-typed-caret.is-done {
+  animation:
+    helpBlink 1.05s steps(2, start) 3,
+    helpCaretOut 0.2s ease 3.15s forwards;
+}
+
+.help-typed-ghost {
+  color: transparent;
+}
+
+@keyframes helpCaretOut {
+  to {
+    opacity: 0;
+  }
 }
 
 .help-prompts {
@@ -661,15 +701,19 @@
 }
 
 .help-prompts li {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   animation: helpRise 0.22s ease both;
 }
 
+/* Pulled left by its padding, border and the glyph's own side bearing, so
+   each chevron sits on the text edge while the hover surface still has room
+   around it. */
 .help-prompts button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px 5px 6px;
+  margin-left: -13px;
+  padding: 5px 10px 5px 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: none;
@@ -683,6 +727,67 @@
   border-color: var(--border);
   background: var(--bg-elev);
   color: var(--text);
+}
+
+/* ----------------------------- Ray ----------------------------- */
+
+.help-ray-avatar {
+  position: relative;
+  display: block;
+}
+
+.help-ray-button {
+  display: block;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  animation: helpRayBob 2.8s ease-in-out infinite alternate;
+}
+
+.help-ray-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.help-ray-squish {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 70%;
+}
+
+.help-ray-button .ray {
+  width: 100%;
+  height: 100%;
+}
+
+/* While Help works, Ray reads along with his glasses on. */
+.help-ray-mini {
+  display: inline-block;
+  flex: none;
+  width: 30px;
+  height: 24px;
+  animation: helpRayBob 1.4s ease-in-out infinite alternate;
+}
+
+.help-ray-mini .ray {
+  width: 100%;
+  height: 100%;
+}
+
+.help-ray-verb {
+  animation: helpRise 0.2s ease both;
+}
+
+@keyframes helpRayBob {
+  from {
+    transform: translateY(-2px);
+  }
+  to {
+    transform: translateY(2px);
+  }
 }
 
 /* ----------------------------- composer ----------------------------- */
@@ -929,9 +1034,12 @@
 @media (prefers-reduced-motion: reduce) {
   .help,
   .help-x,
-  .help-logo,
+  .help-hello-host,
   .help-prompts li,
-  .help-log-steps {
+  .help-log-steps,
+  .help-ray-button,
+  .help-ray-mini,
+  .help-ray-verb {
     animation: none;
   }
 
@@ -940,5 +1048,10 @@
   .help-spin i {
     animation: none;
     opacity: 1;
+  }
+
+  /* No typing, so no caret to rest. */
+  .help-typed-caret {
+    display: none;
   }
 }

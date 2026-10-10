@@ -9,6 +9,7 @@ import {
 } from 'react'
 import type { StudioProject } from '@shared/ipc'
 import {
+  emptyDataModel,
   parseProjectDataModel,
   type AccessLevel,
   type DataModel,
@@ -200,7 +201,7 @@ export default function ModelView({
       })
       .catch(() => {
         if (alive) {
-          setModel({ entities: [], relations: [], warnings: [], hasSchema: false })
+          setModel(emptyDataModel())
           setLoading(false)
         }
       })
@@ -617,15 +618,18 @@ export default function ModelView({
   )
 
   const addModel = useCallback((): void => {
+    const { dataDir, schemaFile } = model ?? emptyDataModel()
     onSendToChat(
       'Add a data model',
       'This Rayfin app has no data model yet. Please add one or more entities under ' +
-        '`rayfin/data/` using the `@microsoft/rayfin-core` decorators (`@entity`, field ' +
+        `\`${dataDir}/\` using the \`@microsoft/rayfin-core\` decorators (\`@entity\`, field ` +
         'decorators like `@uuid`/`@text`/`@boolean`/`@date`, and `@role`/`@authenticated` with ' +
-        'a row-level `policy` for access control), and register them in `rayfin/data/schema.ts`. ',
+        `a row-level \`policy\` for access control), register them in \`${schemaFile}\`, and make ` +
+        'sure the data service is on (`services.data.enabled: true` in `rayfin/rayfin.yml`). ' +
+        'If the project has a `data-modeling` skill, follow it. ',
       true
     )
-  }, [onSendToChat])
+  }, [onSendToChat, model])
 
   if (loading && !model) {
     return (
@@ -636,14 +640,15 @@ export default function ModelView({
   }
 
   if (!model?.hasSchema) {
+    const { dataDir, schemaFile } = model ?? emptyDataModel()
     return (
       <div className="model-view">
         <div className="model-empty model-empty--cta">
           <div className="model-empty-title">No data model yet</div>
           <p className="model-empty-sub">
-            Rayfin entities live under <code>rayfin/data/</code> and are listed in{' '}
-            <code>schema.ts</code>. Once you add some, this tab draws them as an entity‑relationship
-            diagram with per‑entity access badges.
+            Rayfin entities live under <code>{dataDir}/</code> and are listed in{' '}
+            <code>{schemaFile.slice(schemaFile.lastIndexOf('/') + 1)}</code>. Once you add some, this tab
+            draws them as an entity‑relationship diagram with per‑entity access badges.
           </p>
           <button className="btn btn--primary" onClick={addModel}>
             Add a data model with Copilot
@@ -659,7 +664,7 @@ export default function ModelView({
         <div className="model-empty model-empty--cta">
           <div className="model-empty-title">Your schema has no entities</div>
           <p className="model-empty-sub">
-            <code>rayfin/data/schema.ts</code> exists but its <code>schema</code> array is empty.
+            <code>{model.schemaFile}</code> exists but its <code>schema</code> array is empty.
           </p>
           <button className="btn btn--primary" onClick={addModel}>
             Add an entity with Copilot

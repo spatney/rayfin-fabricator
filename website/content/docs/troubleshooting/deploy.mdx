@@ -87,7 +87,7 @@ If you cannot see the right workspace or capacity, contact your Fabric administr
 
 The deploy log says the Rayfin CLI could not be found, npm reports `ETARGET`, or project dependency installation fails before `rayfin up` starts.
 
-Current Fabricator versions use the Rayfin CLI pinned in each project and warm a per-user npm cache. Older releases had global Rayfin CLI checks and a stale npm metadata problem that could produce `ETARGET` even when the package existed.
+Current Fabricator versions use the Rayfin CLI pinned in each project, and refresh npm's package information when they create a project. Older releases had global Rayfin CLI checks and a stale npm metadata problem that could produce `ETARGET` even when the package existed.
 
 1. Update to the latest Fabricator version.
 2. Open the project and let dependency installation finish.

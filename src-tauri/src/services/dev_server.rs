@@ -5,14 +5,15 @@
 //! their pipeline deployment's settings (see [`team::local_preview`]).
 //!
 //! Unlike a deploy, this does NOT run `rayfin up` — it spawns Vite *directly*
-//! (`node <project>/node_modules/vite/bin/vite.js`) for a fast preview, after a
+//! (`node …/node_modules/vite/bin/vite.js`) for a fast preview, after a
 //! best-effort `rayfin env --framework vite` so the local app's `VITE_*` config
-//! is wired from the last recorded deployment. The spawned server is long-lived:
+//! is wired from the last recorded deployment. Vite runs in the frontend's
+//! folder: rayfin.yml's `services.staticHosting.path` (the Rayfin CLI's Universal
+//! App keeps its Vite app in `packages/frontend`), else the project root, which is
+//! also where `rayfin env` writes the config. The spawned server is long-lived:
 //! [`dev_start`] returns once Vite prints its `Local:` URL but leaves the process
 //! running under a per-project handle until [`dev_stop`] (or app exit) tree-kills
 //! it. Locally installed Vite is sufficient; no `dev` script is required.
-//! The preview opens the configured static-hosting index document, not always
-//! Vite's root (which can still be the starter page in a custom-entry app).
 //!
 //! Ports: Fabric sign-in only accepts origins listed in rayfin.yml's
 //! `services.auth.allowedRedirectUris` and pushed to the backend, so a preview
@@ -22,9 +23,6 @@
 //! pushes it, or [`dev_free_port`] stops the process they were shown. Nothing
 //! untracked is ever stopped or adopted without that explicit choice. Each
 //! project's server has its own port, so several can run at once.
-//! With auto-deploy paused, the user can choose an unregistered local port:
-//! no redirect configuration is changed or pushed, but browser sign-in still
-//! depends on the backend accepting the selected origin.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -40,6 +38,7 @@ use tokio::sync::oneshot;
 
 use crate::error::{AppError, AppResult};
 use crate::services::exec::{self, CancelToken, RunOptions, Stream};
+use crate::services::project_layout::ProjectLayout;
 use crate::services::{emit, local_ports, preview, redirect_uris, store, team};
 use crate::types::{DeployResult, DevPortPlan, DevServerResult, DevStateEvent, PortConflict, StudioProject};
 
@@ -80,37 +79,6 @@ pub fn parse_local_url(text: &str) -> Option<String> {
 
 fn local_url(port: u16) -> String {
     format!("http://localhost:{port}")
-}
-
-fn local_preview_url(project_dir: &Path, origin: &str) -> Result<String, String> {
-    let path = project_dir.join("rayfin").join("rayfin.yml");
-    let text = match std::fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(origin.into()),
-        Err(error) => return Err(format!("Couldn't read rayfin/rayfin.yml for local preview: {error}")),
-    };
-    let doc: serde_yaml::Value = serde_yaml::from_str(text.trim_start_matches('\u{feff}'))
-        .map_err(|error| format!("Couldn't read local preview entry page: rayfin/rayfin.yml isn't valid YAML: {error}"))?;
-    let entry = match doc.get("services").and_then(|s| s.get("staticHosting")).and_then(|s| s.get("indexDocument")) {
-        None | Some(serde_yaml::Value::Null) => return Ok(origin.into()),
-        Some(value) => value.as_str().ok_or_else(|| "services.staticHosting.indexDocument must be a local document path.".to_string())?,
-    };
-    let document = entry.trim_start_matches('/');
-    if document.is_empty()
-        || entry.starts_with("//")
-        || document.contains([':', '\\', '?', '#', '%'])
-        || document.split('/').any(|part| part.is_empty() || part == "." || part == "..")
-    {
-        return Err("services.staticHosting.indexDocument must be a local document path, such as design-guide.html.".into());
-    }
-    // Keep the normal Vite root for index.html, including any configured base.
-    if document == "index.html" {
-        return Ok(origin.into());
-    }
-    let mut url = tauri::Url::parse(origin)
-        .map_err(|error| format!("Invalid local preview URL: {error}"))?;
-    url.set_path(&format!("{}/{document}", url.path().trim_end_matches('/')));
-    Ok(url.into())
 }
 
 /// The ports a project's preview may use, in preference order.
@@ -159,7 +127,7 @@ fn has_backend(project: &StudioProject) -> bool {
 }
 
 /// Where this project's preview can start, probing ports but starting nothing.
-fn plan_for(servers: &DevServers, project: &StudioProject, auto_deploy: bool) -> DevPortPlan {
+fn plan_for(servers: &DevServers, project: &StudioProject) -> DevPortPlan {
     let dir = Path::new(&project.path);
     if !dev_supported(dir) {
         return DevPortPlan::default();
@@ -190,16 +158,16 @@ fn plan_for(servers: &DevServers, project: &StudioProject, auto_deploy: bool) ->
             own_project,
             can_stop,
             suggested_port: local_ports::next_free(FIRST_ALTERNATE_PORT, &skip),
-            needs_push: auto_deploy && has_backend(project),
+            needs_push: has_backend(project),
         }),
     }
 }
 
 /// The port [`start_server`] should use: an explicit `requested` one must still
-/// be free, and sign-in-ready unless auto-deploy is paused (local-only choice).
-fn resolve_port(servers: &DevServers, project: &StudioProject, requested: Option<u16>, auto_deploy: bool) -> Result<u16, DevServerResult> {
+/// be free and sign-in-ready (just registered, or just freed by the user).
+fn resolve_port(servers: &DevServers, project: &StudioProject, requested: Option<u16>) -> Result<u16, DevServerResult> {
     let Some(port) = requested else {
-        let plan = plan_for(servers, project, auto_deploy);
+        let plan = plan_for(servers, project);
         return match plan.port {
             Some(port) => Ok(port),
             None => Err(DevServerResult {
@@ -216,8 +184,10 @@ fn resolve_port(servers: &DevServers, project: &StudioProject, requested: Option
         };
     };
     let choice = port_choice(Path::new(&project.path));
-    if let Err(error) = validate_preview_port(&choice, port, auto_deploy) {
-        return Err(failed(&error));
+    if choice.needs_registration && !choice.registered.contains(&port) {
+        return Err(failed(&format!(
+            "localhost:{port} isn't in rayfin.yml's allowed redirect URIs, so sign-in wouldn't work there."
+        )));
     }
     let held = servers.ports_held_by_others(&project.id).iter().any(|(other, _)| *other == port);
     if held || !local_ports::is_free(port) {
@@ -226,16 +196,21 @@ fn resolve_port(servers: &DevServers, project: &StudioProject, requested: Option
     Ok(port)
 }
 
-fn validate_preview_port(choice: &PortChoice, port: u16, auto_deploy: bool) -> Result<(), String> {
-    if port < 1024 {
-        return Err(format!("Port {port} is reserved; choose one above 1023."));
-    }
-    if auto_deploy && choice.needs_registration && !choice.registered.contains(&port) {
-        return Err(format!(
-            "localhost:{port} isn't in rayfin.yml's allowed redirect URIs, so sign-in wouldn't work there."
-        ));
-    }
-    Ok(())
+/// The folder the project's frontend is served from: rayfin.yml's
+/// `services.staticHosting.path` when that folder exists, else the project root.
+fn frontend_dir(project_dir: &Path) -> PathBuf {
+    let root = ProjectLayout::read(project_dir).frontend_root;
+    let dir = root.split('/').filter(|s| !s.is_empty()).fold(project_dir.to_path_buf(), |dir, s| dir.join(s));
+    if dir.is_dir() { dir } else { project_dir.to_path_buf() }
+}
+
+/// The Vite that serves `frontend`: its own `node_modules` first, then the
+/// project root's, where npm workspaces hoist it.
+fn find_vite(project_dir: &Path, frontend: &Path) -> Option<PathBuf> {
+    [frontend, project_dir]
+        .into_iter()
+        .map(|dir| dir.join("node_modules").join("vite").join("bin").join("vite.js"))
+        .find(|script| script.is_file())
 }
 
 /// True when a project has Vite installed locally — the one requirement for the
@@ -243,28 +218,18 @@ fn validate_preview_port(choice: &PortChoice, port: u16, auto_deploy: bool) -> R
 /// a `dev` script: many real Rayfin apps don't declare one (their `npm run dev`
 /// would `rayfin up` first), yet Vite is always present and serves the frontend.
 pub fn dev_supported(project_dir: &Path) -> bool {
-    project_dir
-        .join("node_modules")
-        .join("vite")
-        .join("bin")
-        .join("vite.js")
-        .exists()
+    find_vite(project_dir, &frontend_dir(project_dir)).is_some()
 }
 
-/// Resolve a project's locally-installed Vite to a direct `node <script>`
-/// invocation (so we bypass the fragile `.cmd`/`npx` shims on Windows). Returns
-/// `None` when Vite isn't installed in the project or `node` isn't on PATH.
-fn project_vite(project_dir: &Path) -> Option<(PathBuf, PathBuf)> {
-    let script = project_dir
-        .join("node_modules")
-        .join("vite")
-        .join("bin")
-        .join("vite.js");
-    if !script.exists() {
-        return None;
-    }
+/// Resolve how to run a project's locally-installed Vite: a direct
+/// `node <script>` invocation (so we bypass the fragile `.cmd`/`npx` shims on
+/// Windows) in the frontend's folder. Returns `(node, script, folder)`, or `None`
+/// when Vite isn't installed in the project or `node` isn't on PATH.
+fn project_vite(project_dir: &Path) -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let frontend = frontend_dir(project_dir);
+    let script = find_vite(project_dir, &frontend)?;
     let node = which::which("node").ok()?;
-    Some((node, script))
+    Some((node, script, frontend))
 }
 
 /// Tree-kill a process by pid. Vite spawns esbuild workers, so a plain kill of
@@ -335,9 +300,7 @@ impl DevServers {
     /// Whether this project has a live, Fabricator-started server on its port.
     pub fn owns_project(&self, project_id: &str) -> bool {
         self.inner.lock().unwrap().get(project_id).is_some_and(|h| {
-            !h.cancel.is_cancelled() && h.url.as_deref()
-                .and_then(|url| tauri::Url::parse(url).ok())
-                .is_some_and(|url| url.origin().ascii_serialization() == local_url(h.port))
+            !h.cancel.is_cancelled() && h.url.as_deref() == Some(local_url(h.port).as_str())
         })
     }
 
@@ -493,7 +456,7 @@ async fn start_server(app: AppHandle, state: DevServers, project_id: String, req
 
     // The one requirement is that Vite is installed — we run it directly, no `dev`
     // script needed (many real Rayfin apps don't declare one).
-    let Some((node, vite_script)) = project_vite(&project_dir) else {
+    let Some((node, vite_script, serve_dir)) = project_vite(&project_dir) else {
         return Ok(unsupported(
             "Vite isn't installed in this project (run `npm install`), or Node wasn't found on PATH.",
         ));
@@ -502,8 +465,7 @@ async fn start_server(app: AppHandle, state: DevServers, project_id: String, req
     let renderer = emit::proc_streamer(&app, DEV_CHANNEL);
     let resolved = {
         let (servers, project) = (state.clone(), project.clone());
-        let auto_deploy = store::get_settings().auto_deploy.unwrap_or(true);
-        tokio::task::spawn_blocking(move || resolve_port(&servers, &project, requested, auto_deploy))
+        tokio::task::spawn_blocking(move || resolve_port(&servers, &project, requested))
             .await
             .map_err(|e| AppError::Msg(format!("Local preview port check failed: {e}")))?
     };
@@ -555,7 +517,7 @@ async fn start_server(app: AppHandle, state: DevServers, project_id: String, req
         });
     }
 
-    let launch = Launch { project_id: project_id.clone(), project_dir, node, vite_script, port, renderer: renderer.clone() };
+    let launch = Launch { project_id: project_id.clone(), serve_dir, node, vite_script, port, renderer: renderer.clone() };
     match spawn_vite(&state, &launch).await {
         Ok((url, token)) => {
             renderer(Stream::System, &format!("\n✅ Local preview at {url}\n"));
@@ -577,7 +539,8 @@ async fn start_server(app: AppHandle, state: DevServers, project_id: String, req
 #[derive(Clone)]
 struct Launch {
     project_id: String,
-    project_dir: PathBuf,
+    /// The frontend's folder (see [`frontend_dir`]), Vite's working directory.
+    serve_dir: PathBuf,
     node: PathBuf,
     vite_script: PathBuf,
     port: u16,
@@ -587,17 +550,15 @@ struct Launch {
 /// Spawn the project's Vite on its port and wait until it serves. Returns its URL
 /// and the token that stops it, or why it didn't start (nothing is left running).
 async fn spawn_vite(state: &DevServers, launch: &Launch) -> Result<(String, CancelToken), String> {
-    let Launch { project_id, project_dir, node, vite_script, port, renderer } = launch;
+    let Launch { project_id, serve_dir, node, vite_script, port, renderer } = launch;
     let port = *port;
     let expected = local_url(port);
-    // Resolve before spawning so invalid config cannot leave an orphaned server.
-    local_preview_url(project_dir, &expected)?;
     let mut cmd = tokio::process::Command::new(node);
     cmd.arg(vite_script)
         // Pin the sign-in-ready port and fail rather than let Vite silently fall
         // back to another one — an unregistered port would load but break sign-in.
         .args(["--host", "localhost", "--port", &port.to_string(), "--strictPort"])
-        .current_dir(project_dir)
+        .current_dir(serve_dir)
         .env("NO_COLOR", "1")
         .env("FORCE_COLOR", "0")
         .stdin(Stdio::null())
@@ -687,25 +648,14 @@ async fn spawn_vite(state: &DevServers, launch: &Launch) -> Result<(String, Canc
 
     match tokio::time::timeout(Duration::from_millis(READY_TIMEOUT_MS), ready_rx).await {
         Ok(Ok(Ok(url))) => {
-            let url = match local_preview_url(project_dir, &url) {
-                Ok(url) => url,
-                Err(reason) => {
-                    stop_project(state, project_id);
-                    return Err(reason);
-                }
-            };
             let responsive = match reqwest::Client::builder().no_proxy().timeout(Duration::from_secs(5))
                 .redirect(reqwest::redirect::Policy::none()).build() {
-                Ok(client) => client.get(&url).send().await
-                    .is_ok_and(|response| response.status().is_success() || response.status().is_redirection()),
+                Ok(client) => client.get(&url).send().await.is_ok(),
                 Err(_) => false,
             };
             if !responsive || !state.owns_project(project_id) {
                 stop_project(state, project_id);
-                return Err(format!("The local preview entry page at {url} is not responding successfully. Check the local preview log and services.staticHosting.indexDocument, then retry."));
-            }
-            if let Some(handle) = state.inner.lock().unwrap().get_mut(project_id) {
-                handle.url = Some(url.clone());
+                return Err("Vite printed a URL but the owned server is not responding. Check the local preview log and retry.".into());
             }
             Ok((url, token))
         }
@@ -784,7 +734,7 @@ async fn watch(app: AppHandle, state: DevServers, launch: Launch, mut token: Can
             Ok((url, next)) => {
                 token = next;
                 (launch.renderer)(Stream::System, &format!("\n✅ Local preview back at {url}\n"));
-                preview::reload_if_showing(&app, &local_url(launch.port));
+                preview::reload_if_showing(&app, &url);
                 emit_state(&app, &launch.project_id, "running", Some(url), None);
             }
             Err(reason) => {
@@ -824,8 +774,7 @@ pub async fn dev_port_plan(state: State<'_, DevServers>, project_id: String) -> 
     let Some(project) = store::find_project(&project_id) else {
         return Ok(DevPortPlan::default());
     };
-    let auto_deploy = store::get_settings().auto_deploy.unwrap_or(true);
-    tokio::task::spawn_blocking(move || plan_for(&servers, &project, auto_deploy))
+    tokio::task::spawn_blocking(move || plan_for(&servers, &project))
         .await
         .map_err(|e| AppError::Msg(format!("Local preview port check failed: {e}")))
 }
@@ -861,10 +810,6 @@ pub async fn dev_register_port(app: AppHandle, project_id: String, port: u16) ->
 }
 
 async fn register_port(app: AppHandle, project_id: String, port: u16) -> DeployResult {
-    if let Err(error) = require_port_registration_enabled(store::get_settings().auto_deploy.unwrap_or(true)) {
-        log::warn!("{error}");
-        return register_result(false, "error", Some(error));
-    }
     if port < 1024 {
         return register_result(false, "error", Some(format!("Port {port} is reserved; choose one above 1023.")));
     }
@@ -901,15 +846,6 @@ async fn register_port(app: AppHandle, project_id: String, port: u16) -> DeployR
         renderer(Stream::System, "This app isn't deployed yet; its first deploy registers the new port.\n");
         return register_result(true, "success", None);
     }
-    if let Err(error) = require_port_registration_enabled(store::get_settings().auto_deploy.unwrap_or(true)) {
-        renderer(Stream::System, &format!("{error}\n"));
-        if let Some(edit) = &edit {
-            if !redirect_uris::revert(&dir, edit) {
-                renderer(Stream::System, "The local redirect edit could not be undone because rayfin.yml changed. No settings were pushed.\n");
-            }
-        }
-        return register_result(false, "error", Some(error));
-    }
     renderer(Stream::System, "Pushing sign-in settings to Fabric (the app isn't rebuilt)…\n");
     let result = crate::commands::deploy::push_runtime_settings(&project, renderer.clone()).await;
     if result.ok {
@@ -924,13 +860,6 @@ async fn register_port(app: AppHandle, project_id: String, port: u16) -> DeployR
 
 fn register_result(ok: bool, outcome: &str, error: Option<String>) -> DeployResult {
     DeployResult { ok, outcome: outcome.into(), url: None, api_url: None, portal_url: None, error }
-}
-
-fn require_port_registration_enabled(auto_deploy: bool) -> Result<(), String> {
-    if !auto_deploy {
-        return Err("Auto-deploy is paused. Use the port for local preview without registering or pushing sign-in settings.".into());
-    }
-    Ok(())
 }
 
 /// A team app's new port is saved in rayfin.yml only: nothing deploys from this
@@ -1017,36 +946,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn local_preview_uses_the_static_hosting_entry_document() {
-        let dir = std::env::temp_dir().join(format!("fab-preview-entry-{}", uuid::Uuid::new_v4()));
-        let root = "http://localhost:5173";
-        assert_eq!(local_preview_url(&dir, root).unwrap(), root);
-        std::fs::create_dir_all(dir.join("rayfin")).unwrap();
-        let config = dir.join("rayfin").join("rayfin.yml");
-        for text in ["", "services: {}", "services:\n  staticHosting:\n    indexDocument: index.html\n"] {
-            std::fs::write(&config, text).unwrap();
-            assert_eq!(local_preview_url(&dir, root).unwrap(), root);
-        }
-        for (document, expected) in [
-            ("design-guide.html", "http://localhost:5173/design-guide.html"),
-            ("/guide/start.html", "http://localhost:5173/guide/start.html"),
-            ("design guide.html", "http://localhost:5173/design%20guide.html"),
-        ] {
-            std::fs::write(&config, format!("\u{feff}services:\n  staticHosting:\n    indexDocument: '{document}'\n")).unwrap();
-            assert_eq!(local_preview_url(&dir, root).unwrap(), expected);
-        }
-        std::fs::write(&config, "services:\n  staticHosting:\n    indexDocument: guide.html\n").unwrap();
-        assert_eq!(local_preview_url(&dir, "http://localhost:5174/app").unwrap(), "http://localhost:5174/app/guide.html");
-        for invalid in ["''", "42", "'../other.html'", "'https://example.com/guide.html'", "'//example.com/guide.html'", "'%2e%2e/guide.html'"] {
-            std::fs::write(&config, format!("services:\n  staticHosting:\n    indexDocument: {invalid}\n")).unwrap();
-            assert!(local_preview_url(&dir, root).unwrap_err().contains("indexDocument"));
-        }
-        std::fs::write(&config, "services: [").unwrap();
-        assert!(local_preview_url(&dir, root).unwrap_err().contains("isn't valid YAML"));
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
     fn serving_sees_a_listener_come_and_go() {
         let listener = std::net::TcpListener::bind("localhost:0").unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -1062,11 +961,6 @@ mod tests {
         let Ok(node) = which::which("node") else { return };
         let dir = std::env::temp_dir().join(format!("fab-vite-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(dir.join("rayfin")).unwrap();
-        std::fs::write(
-            dir.join("rayfin").join("rayfin.yml"),
-            "services:\n  staticHosting:\n    indexDocument: design-guide.html\n",
-        ).unwrap();
         let script = dir.join("fake-vite.js");
         std::fs::write(
             &script,
@@ -1076,10 +970,7 @@ const port = Number(process.argv[process.argv.indexOf('--port') + 1])
 const counter = path.join(__dirname, 'starts')
 const starts = (fs.existsSync(counter) ? Number(fs.readFileSync(counter, 'utf8')) : 0) + 1
 fs.writeFileSync(counter, String(starts))
-const server = http.createServer((req, res) => {
-  fs.writeFileSync(path.join(__dirname, 'requested-path'), req.url)
-  res.end(req.url === '/design-guide.html' ? 'Design guide' : 'Empty starter')
-}).listen(port, 'localhost', () => {
+const server = http.createServer((req, res) => res.end('ok')).listen(port, 'localhost', () => {
   console.log(`  VITE ready\n  ➜  Local:   http://localhost:${port}/`)
   // The first run loses its server, as a failed Vite restart does, but keeps running.
   if (starts === 1) setTimeout(() => server.close(), 400)
@@ -1091,7 +982,7 @@ setInterval(() => {}, 1000)
         let port = std::net::TcpListener::bind("localhost:0").unwrap().local_addr().unwrap().port();
         let launch = Launch {
             project_id: "p".into(),
-            project_dir: dir.clone(),
+            serve_dir: dir.clone(),
             node,
             vite_script: script,
             port,
@@ -1099,19 +990,14 @@ setInterval(() => {}, 1000)
         };
         let state = DevServers::default();
         let (url, first) = spawn_vite(&state, &launch).await.unwrap();
-        assert_eq!(url, format!("{}/design-guide.html", local_url(port)));
-        assert_eq!(std::fs::read_to_string(dir.join("requested-path")).unwrap(), "/design-guide.html");
-        assert_eq!(state.inner.lock().unwrap().get("p").unwrap().url.as_deref(), Some(url.as_str()));
-        assert!(state.owns_project("p"));
-        assert_eq!(state.running_port("p"), Some(port));
+        assert_eq!(url, local_url(port));
         tokio::time::sleep(Duration::from_millis(1200)).await;
         assert!(!serving(port), "the first run stopped serving");
         assert!(state.is_current("p", &first), "but it's still running");
 
         stop_project(&state, "p");
         state.wait_until_gone("p", Duration::from_secs(10)).await;
-        let (restarted_url, second) = spawn_vite(&state, &launch).await.unwrap();
-        assert_eq!(restarted_url, url);
+        let (_, second) = spawn_vite(&state, &launch).await.unwrap();
         assert!(serving(port));
         assert!(state.is_current("p", &second) && !state.is_current("p", &first));
         assert_eq!(std::fs::read_to_string(dir.join("starts")).unwrap(), "2");
@@ -1119,6 +1005,37 @@ setInterval(() => {}, 1000)
         stop_project(&state, "p");
         state.wait_until_gone("p", Duration::from_secs(10)).await;
         assert!(!serving(port));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn serves_the_frontend_folder_rayfin_yml_names() {
+        // The Rayfin CLI's Universal App keeps its Vite app in a workspace package.
+        let yml = "services:\n  staticHosting:\n    enabled: true\n    path: packages/frontend\n    folder: dist\n";
+        let dir = std::env::temp_dir().join(format!("fab-frontend-{}", uuid::Uuid::new_v4()));
+        let frontend = dir.join("packages").join("frontend");
+        std::fs::create_dir_all(&frontend).unwrap();
+        std::fs::create_dir_all(dir.join("rayfin")).unwrap();
+        std::fs::write(dir.join("rayfin").join("rayfin.yml"), yml).unwrap();
+        assert_eq!(frontend_dir(&dir), frontend);
+        assert_eq!(find_vite(&dir, &frontend), None);
+        assert!(!dev_supported(&dir));
+        // npm workspaces hoist Vite to the root; a copy in the package wins.
+        let hoisted = dir.join("node_modules").join("vite").join("bin").join("vite.js");
+        std::fs::create_dir_all(hoisted.parent().unwrap()).unwrap();
+        std::fs::write(&hoisted, "").unwrap();
+        assert_eq!(find_vite(&dir, &frontend), Some(hoisted));
+        assert!(dev_supported(&dir));
+        let local = frontend.join("node_modules").join("vite").join("bin").join("vite.js");
+        std::fs::create_dir_all(local.parent().unwrap()).unwrap();
+        std::fs::write(&local, "").unwrap();
+        assert_eq!(find_vite(&dir, &frontend), Some(local));
+        // A configured folder that doesn't exist falls back to the root, as does
+        // one that would leave the project.
+        std::fs::remove_dir_all(dir.join("packages")).unwrap();
+        assert_eq!(frontend_dir(&dir), dir);
+        std::fs::write(dir.join("rayfin").join("rayfin.yml"), "services:\n  staticHosting:\n    path: ..\n").unwrap();
+        assert_eq!(frontend_dir(&dir), dir);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1158,9 +1075,6 @@ setInterval(() => {}, 1000)
         servers.inner.lock().unwrap().insert("mismatch".into(), DevHandle {
             pid: None, cancel: CancelToken::new(), port: 5175, url: Some(local_url(5173)),
         });
-        assert!(servers.owns_project("p"));
-        assert_eq!(servers.running_port("p"), Some(5174));
-        servers.inner.lock().unwrap().get_mut("p").unwrap().url = Some(format!("{}/design-guide.html", local_url(5174)));
         assert!(servers.owns_project("p"));
         assert_eq!(servers.running_port("p"), Some(5174));
         assert!(!servers.owns_project("starting"));
@@ -1252,32 +1166,15 @@ setInterval(() => {}, 1000)
         )
         .unwrap();
         let servers = DevServers::default();
-        let error = resolve_port(&servers, &project_at(&dir), Some(5199), true).unwrap_err();
+        let error = resolve_port(&servers, &project_at(&dir), Some(5199)).unwrap_err();
         assert!(error.error.unwrap().contains("isn't in rayfin.yml"));
 
         servers.inner.lock().unwrap().insert("other".into(), DevHandle {
             pid: None, cancel: CancelToken::new(), port: 5173, url: None,
         });
-        let error = resolve_port(&servers, &project_at(&dir), Some(5173), true).unwrap_err();
-        assert!(error.error.unwrap().contains("in use again"));
-        let error = resolve_port(&servers, &project_at(&dir), Some(5173), false).unwrap_err();
+        let error = resolve_port(&servers, &project_at(&dir), Some(5173)).unwrap_err();
         assert!(error.error.unwrap().contains("in use again"));
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn paused_preview_allows_local_ports_but_refuses_registration() {
-        let choice = PortChoice { registered: vec![5173], needs_registration: true };
-        assert!(validate_preview_port(&choice, 5174, false).is_ok());
-        assert!(validate_preview_port(&choice, 5174, true).is_err());
-        for auto_deploy in [false, true] {
-            assert!(validate_preview_port(&choice, 5173, auto_deploy).is_ok());
-            assert!(validate_preview_port(&choice, 80, auto_deploy).is_err());
-        }
-        assert!(require_port_registration_enabled(false).unwrap_err().contains("Auto-deploy is paused"));
-        assert!(require_port_registration_enabled(true).is_ok());
-        // Pausing publishing does not disable the preference for sign-in-ready ports.
-        assert_eq!(pick_port(&choice, &[], |_| true), Some(5173));
     }
 
     #[test]

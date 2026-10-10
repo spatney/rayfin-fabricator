@@ -1,5 +1,7 @@
 import { parseClasses, readSchemaList, readSchemaTypeNames, skipBalanced } from '../../model/parseSchema'
 import type { ModelField } from '../../model/parseSchema'
+import { relativeTo } from '../../model/projectLayout'
+import type { QuickContext } from '../context'
 import type { QuickHit, QuickRuleImpl } from '../quick'
 import { listLabels } from '../quick'
 import { firstLine, importsOf, lineOf, matchAll } from '../source'
@@ -20,7 +22,9 @@ const FIELD_DECORATORS = new Set([
   'many'
 ])
 const RELATIONS = new Set(['one', 'many'])
-const DATA_FILE = /^rayfin\/data\/[^/]+\.ts$/
+/** A TypeScript file directly in the data model's folder (`rayfin/data/`, or a data package's `src/`). */
+const isDataFile = (ctx: QuickContext, path: string): boolean =>
+  /^[^/]+\.ts$/.test(relativeTo(path, ctx.layout.dataDir) ?? '')
 /** GraphQL type names the generated schema already defines (case-sensitive), per Rayfin 1.36. */
 const RESERVED_NAMES = new Set([
   'Any', 'Base64String', 'Boolean', 'Byte', 'ByteArray', 'Date', 'DateTime', 'Decimal', 'Duration',
@@ -128,7 +132,7 @@ export const dataModelRules: QuickRuleImpl[] = [
     id: 'data-model/relation-import-type',
     run: (ctx) => {
       const hits: QuickHit[] = []
-      for (const src of ctx.sources((p) => DATA_FILE.test(p))) {
+      for (const src of ctx.sources((p) => isDataFile(ctx, p))) {
         const targets = new Set(
           matchAll(/@(?:one|many)\s*\(\s*\(\s*\)\s*=>\s*([A-Za-z_$][\w$]*)/, src.masked).map((m) => m[1])
         )
@@ -161,13 +165,15 @@ export const dataModelRules: QuickRuleImpl[] = [
   {
     id: 'data-model/entity-not-registered',
     run: (ctx) => {
-      const schema = ctx.file('rayfin/data/schema.ts')
+      const schemaPath = ctx.layout.schemaFile
+      const schemaName = schemaPath.slice(schemaPath.lastIndexOf('/') + 1)
+      const schema = ctx.file(schemaPath)
       if (!schema) return 'na'
       const { names } = readSchemaList(schema.masked)
       const typeInfo = readSchemaTypeNames(schema.masked, names)
       const hits: QuickHit[] = []
       const reported = new Set<string>()
-      for (const src of ctx.sources((p) => DATA_FILE.test(p) && p !== 'rayfin/data/schema.ts')) {
+      for (const src of ctx.sources((p) => isDataFile(ctx, p) && p !== schemaPath)) {
         for (const cls of parseClasses(src.masked)) {
           if (!cls.decorators.some((d) => d.name === 'entity') || names.includes(cls.name)) continue
           reported.add(cls.name)
@@ -175,7 +181,7 @@ export const dataModelRules: QuickRuleImpl[] = [
             file: src.path,
             line: lineOf(src, cls.offset),
             label: cls.name,
-            message: `${code(cls.name)} (${code(src.path)}) isn't listed in the ${code('schema')} array in schema.ts.`
+            message: `${code(cls.name)} (${code(src.path)}) isn't listed in the ${code('schema')} array in ${schemaName}.`
           })
         }
       }

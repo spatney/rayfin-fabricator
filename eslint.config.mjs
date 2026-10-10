@@ -3,7 +3,7 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['out/**', 'dist/**', 'node_modules/**', 'out-tsc/**', 'src-tauri/src/**', 'src-tauri/target/**', 'src-tauri/vendor/**', 'resources/fabricator-templates/**', 'website/**'] },
+  { ignores: ['out/**', 'dist/**', 'node_modules/**', 'out-tsc/**', 'src-tauri/src/**', 'src-tauri/target/**', 'src-tauri/vendor/**', 'website/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -3,7 +3,7 @@ title: "Blueprint: architecture and data models"
 description: "Use Blueprint to see what your app is made of, what it connects to and which identity each connection uses, plus its Rayfin data model and Fabric semantic models."
 ---
 
-Use **Blueprint** to see how your app is put together. The **Architecture** view shows what the app is made of, what it connects to, and which identity each connection uses. The **Data model** view shows the Rayfin data model from `rayfin/data/`, and the **Semantic model** view shows the Fabric semantic models the app uses.
+Use **Blueprint** to see how your app is put together. The **Architecture** view shows what the app is made of, what it connects to, and which identity each connection uses. The **Data model** view shows the Rayfin data model, and the **Semantic model** view shows the Fabric semantic models the app uses.
 
 ![The Architecture view of the Contoso Expenses sample app. People on the left connect to the app in the middle, which lists its app identity and its pieces: Website, Sign-in, Database, File storage, Connectors, Functions and Secrets. Lines run from the Connectors and Functions ports to the semantic models, warehouse, Azure services and web API on the right, grouped by where they live.](/screenshots/blueprint.webp)
 
@@ -126,9 +126,11 @@ Learn more in the [Rayfin permissions docs](https://rayfin.ai/docs/data/permissi
 
 ## Add a data model
 
-If the app has no schema yet, the **Data model** view says **No data model yet** and offers **Add a data model with Copilot**. If `rayfin/data/schema.ts` exists but has no entities, it says **Your schema has no entities** and offers **Add an entity with Copilot**.
+The data model is where the app keeps its entities. New projects keep it in `packages/data/src/`, registered in `packages/data/src/index.ts`. Apps that keep everything in one package use `rayfin/data/`, registered in `rayfin/data/schema.ts`. Fabricator reads `rayfin/rayfin.yml` to find it.
 
-Those actions stage a prompt in the Build chat composer.
+If the app has no schema file yet, the **Data model** view says **No data model yet** and offers **Add a data model with Copilot**. If the schema file exists but lists no entities, as in a new project, it says **Your schema has no entities** and offers **Add an entity with Copilot**.
+
+Those actions stage a prompt in the Build chat composer. New projects start without a database, so the prompt also asks Copilot to turn on the data service.
 
 ```prompt title="Add an entity and relationship"
 Add Project and Task entities. A project has many tasks. Tasks have a title, due date, status and owner. Restrict access so users only see their own projects and tasks.

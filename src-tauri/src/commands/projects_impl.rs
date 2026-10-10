@@ -23,12 +23,13 @@ use crate::types::{
 
 const CREATE_CHANNEL: &str = "create:project";
 
-/// The bundled starter every new project uses unless the user picks a community
-/// example: the Universal App (`resources/fabricator-templates/fabricator-universal`),
-/// a lean base whose capability router grows it into whatever the user
-/// describes, so nobody has to choose an app shape up front. Its metadata and
-/// lockfile ship with the app, so creating from it works offline.
-pub(crate) const STARTER_TEMPLATE: &str = "fabricator-universal";
+/// The template every new project uses unless the user picks a community
+/// example: the Rayfin CLI's built-in Universal App (the CLI's own picker offers
+/// it as "Use default template"). It starts as a small authenticated app with the
+/// data service off, so no database is created until the app needs one, and its
+/// capability router grows it into whatever the user describes, so nobody has to
+/// choose an app shape up front.
+pub(crate) const STARTER_TEMPLATE: &str = "universal-app";
 
 /// Default community gallery (the user can point at any compatible repo).
 const DEFAULT_GALLERY: &str = "https://github.com/microsoft/awesome-rayfin";
@@ -285,21 +286,6 @@ fn err(message: impl Into<String>) -> ProjectActionResult {
   }
 }
 
-/// Ensure a freshly scaffolded Fabricator project carries the template's
-/// committed `package-lock.json`. The bundled templates ship a lockfile so the
-/// first dependency install can use the deterministic, warm-cache-friendly
-/// `npm ci`; if the scaffolder didn't copy it through, drop it in ourselves.
-/// Best-effort — a missing/failed copy just means the install uses `npm install`.
-fn ensure_template_lockfile(template_dir: &Path, project_dir: &Path) {
-  let src = template_dir.join("package-lock.json");
-  let dst = project_dir.join("package-lock.json");
-  if src.is_file() && !dst.exists() {
-    if let Err(e) = std::fs::copy(&src, &dst) {
-      log::warn!("could not seed template package-lock.json into new project: {e}");
-    }
-  }
-}
-
 /// A validated request to scaffold a project.
 pub(crate) struct ScaffoldRequest {
   pub name: String,
@@ -310,10 +296,6 @@ pub(crate) struct ScaffoldRequest {
 }
 
 impl ScaffoldRequest {
-  pub fn is_fabricator_template(&self) -> bool {
-    self.template == STARTER_TEMPLATE
-  }
-
   pub fn label(&self) -> String {
     if self.is_url { "community template".to_string() } else { format!("{} template", self.template) }
   }
@@ -368,64 +350,55 @@ pub(crate) fn scaffold_request(input: &CreateProjectInput) -> Result<ScaffoldReq
   Ok(ScaffoldRequest { name, slug, template, template_name, is_url })
 }
 
-/// Run the Rayfin scaffolder into `<root>/<folder>` and prepare the result
-/// (skills, template lockfile). Doesn't touch git. Returns the project dir.
+/// The `npm` arguments that scaffold `request` into `<cwd>/<folder>`:
+///
+/// `npm create @microsoft/rayfin@latest -- <folder> -t <template>
+///   [--template-name <name>] --project-name "<name>"`
+///
+/// `<template>` is a template built into the Rayfin CLI (resolved against the
+/// CLI's own set) or a community template URL, which may also name one entry of
+/// a multi-template gallery. The positional `<folder>` is the target directory;
+/// `--project-name` carries the human identity (rayfin.yml id/name + package
+/// name).
+fn create_args(folder: &str, request: &ScaffoldRequest) -> Vec<String> {
+  let mut args: Vec<String> = vec![
+    "create".into(),
+    "@microsoft/rayfin@latest".into(),
+    "--".into(),
+    folder.to_string(),
+    "-t".into(),
+    request.template.clone(),
+  ];
+  if request.is_url {
+    if let Some(tn) = &request.template_name {
+      args.push("--template-name".into());
+      args.push(tn.clone());
+    }
+  }
+  args.push("--project-name".into());
+  args.push(request.name.clone());
+  args
+}
+
+/// Run the Rayfin scaffolder into `<root>/<folder>` and add Fabricator's agent
+/// instructions. Doesn't touch git. Returns the project dir.
 pub(crate) async fn scaffold_project(
-  app: &AppHandle,
   root: &Path,
   folder: &str,
   request: &ScaffoldRequest,
   on: &OnData,
 ) -> Result<PathBuf, String> {
   let dir = root.join(folder);
-  // Resolve the template source passed to `-t`:
-  //   - bundled Fabricator templates -> the local template dir under resources
-  //     (an absolute path, which the scaffolder treats as a local template),
-  //   - community/URL templates       -> the URL (+ optional --template-name),
-  //   - upstream built-in names       -> the bare name (the scaffolder resolves
-  //     it against its bundled set).
-  let is_fabricator = request.is_fabricator_template();
-  let template_source = if is_fabricator {
-    let tmpl_dir = crate::services::paths::fabricator_templates_dir(app).join(&request.template);
-    if !tmpl_dir.is_dir() {
-      return Err(format!("The bundled \"{}\" template is missing from this install.", request.template));
-    }
-    tmpl_dir.to_string_lossy().to_string()
-  } else {
-    request.template.clone()
-  };
-
   say(on, &format!("Creating \"{folder}\" from the {}…\n", request.label()));
 
-  // npm create @microsoft/rayfin@latest -- <folder> -t <source>
-  //   [--template-name <name>] --project-name "<name>"
-  // The positional <folder> is the target directory; --project-name carries the
-  // human identity (rayfin.yml id/name + package name). A bundled single-entry
-  // local template needs no --template-name.
-  let mut create_args: Vec<String> = vec![
-    "create".into(),
-    "@microsoft/rayfin@latest".into(),
-    "--".into(),
-    folder.to_string(),
-    "-t".into(),
-    template_source,
-  ];
-  if request.is_url {
-    if let Some(tn) = &request.template_name {
-      create_args.push("--template-name".into());
-      create_args.push(tn.clone());
-    }
-  }
-  create_args.push("--project-name".into());
-  create_args.push(request.name.clone());
-
+  let create_args = create_args(folder, request);
   let arg_refs: Vec<&str> = create_args.iter().map(String::as_str).collect();
   let init = run(
     "npm",
     &arg_refs,
     RunOptions {
       cwd: Some(root.to_path_buf()),
-      env: crate::services::npm_cache::fresh_registry_env(),
+      env: crate::services::npm_env::fresh_registry_env(),
       on_data: Some(on.clone()),
       timeout_ms: Some(600_000),
       ..Default::default()
@@ -446,12 +419,6 @@ pub(crate) async fn scaffold_project(
   }
 
   crate::commands::skills::ensure_project_skills(dir.to_string_lossy().as_ref());
-  // Bundled templates ship a committed lockfile so the first install can use the
-  // deterministic, warm-cache-backed `npm ci`; make sure it survived scaffolding.
-  if is_fabricator {
-    let tmpl_dir = crate::services::paths::fabricator_templates_dir(app).join(&request.template);
-    ensure_template_lockfile(&tmpl_dir, &dir);
-  }
   Ok(dir)
 }
 
@@ -474,7 +441,7 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   }
 
   let on = emit::proc_streamer(app, CREATE_CHANNEL);
-  let dir = match scaffold_project(app, Path::new(&root), &request.slug, &request, &on).await {
+  let dir = match scaffold_project(Path::new(&root), &request.slug, &request, &on).await {
     Ok(dir) => dir,
     Err(e) => return err(e),
   };
@@ -708,20 +675,35 @@ entries:
   }
 
   #[test]
-  fn new_projects_start_from_the_bundled_universal_app() {
-    let input = |template: &str| CreateProjectInput {
+  fn new_projects_start_from_the_cli_universal_app() {
+    let input = |template: &str, template_name: Option<&str>| CreateProjectInput {
       name: "Trip Logger".into(),
       template: template.into(),
-      template_name: None,
+      template_name: template_name.map(String::from),
     };
-    let blank = scaffold_request(&input("")).unwrap();
+    let args = |request: &ScaffoldRequest| create_args(&request.slug, request).join(" ");
+
+    // A blank template means the CLI's built-in Universal App, by name.
+    let blank = scaffold_request(&input("", None)).unwrap();
     assert_eq!(blank.template, STARTER_TEMPLATE);
-    assert!(blank.is_fabricator_template() && !blank.is_url);
-    let example = scaffold_request(&input("https://github.com/microsoft/awesome-rayfin")).unwrap();
-    assert!(example.is_url && !example.is_fabricator_template());
-    // The starter must ship with the app.
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/fabricator-templates").join(STARTER_TEMPLATE);
-    assert!(dir.join("rayfin-template.yml").is_file(), "{} is missing", dir.display());
+    assert!(!blank.is_url);
+    assert_eq!(
+      args(&blank),
+      "create @microsoft/rayfin@latest -- trip-logger -t universal-app --project-name Trip Logger"
+    );
+
+    // A community gallery is passed by URL, with the chosen entry's name.
+    let example = scaffold_request(&input("https://github.com/microsoft/awesome-rayfin", Some(" Todo App "))).unwrap();
+    assert!(example.is_url);
+    assert_eq!(
+      args(&example),
+      "create @microsoft/rayfin@latest -- trip-logger -t https://github.com/microsoft/awesome-rayfin \
+       --template-name Todo App --project-name Trip Logger"
+    );
+
+    // Only URL sources take a template name.
+    let named = scaffold_request(&input("universal-app", Some("Todo App"))).unwrap();
+    assert!(!args(&named).contains("--template-name"));
   }
 
   #[test]

@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { FabricWorkspacesResult, ProcResult, StudioProject } from '@shared/ipc'
@@ -208,8 +209,8 @@ describe('DeploymentsControl chip', () => {
   })
 
   describe('DeploymentsControl share', () => {
-    function renderDeployed(): HTMLElement {
-      const { container } = render(
+    function control(extra: Partial<ComponentProps<typeof DeploymentsControl>> = {}): JSX.Element {
+      return (
         <ToastProvider>
           <OverlayProvider>
             <DeploymentsControl
@@ -222,12 +223,50 @@ describe('DeploymentsControl chip', () => {
               onRedeploy={vi.fn()}
               onSwitch={vi.fn()}
               onChanged={vi.fn()}
+              {...extra}
             />
           </OverlayProvider>
         </ToastProvider>
       )
-      return container
     }
+
+    function renderDeployed(): HTMLElement {
+      return render(control()).container
+    }
+
+    const live = [{ workspaceName: 'Sales', name: 'Production', workspaceId: 'ws1', active: true }]
+
+    it('opens the dialog for Help once, and reports the request handled', async () => {
+      const api = installApi()
+      api.deploy.list.mockResolvedValue(live)
+      const onShareRequestHandled = vi.fn()
+      // Made before the control was on screen, as when Help is opened over Home.
+      const { rerender } = render(
+        control({ shareRequest: { projectId: 'p1', nonce: 7 }, onShareRequestHandled })
+      )
+
+      expect(await screen.findByRole('dialog')).toBeTruthy()
+      expect(onShareRequestHandled).toHaveBeenCalledWith(7)
+
+      // The same request again (the parent re-rendered before dropping it).
+      rerender(control({ shareRequest: { projectId: 'p1', nonce: 7 }, onShareRequestHandled }))
+      await act(async () => {})
+      expect(onShareRequestHandled).toHaveBeenCalledTimes(1)
+      expect(api.deploy.list).toHaveBeenCalledTimes(1)
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    })
+
+    it('ignores a request for another project', async () => {
+      const api = installApi()
+      api.deploy.list.mockResolvedValue(live)
+      const onShareRequestHandled = vi.fn()
+      render(control({ shareRequest: { projectId: 'p2', nonce: 3 }, onShareRequestHandled }))
+      await act(async () => {})
+
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(api.deploy.list).not.toHaveBeenCalled()
+      expect(onShareRequestHandled).not.toHaveBeenCalled()
+    })
 
     it('shows progress while the deployment loads and opens the dialog once', async () => {
       const api = installApi()

@@ -1,0 +1,575 @@
+/* Ray, Fabricator's mascot.
+ *
+ * Flat like the rest of the app: solid fills in the brand mark's blues with a
+ * green tip, no glows, no gradients, no drop shadows. His colours are fixed
+ * (like the mark) so he looks the same in both themes. Every animation stops
+ * under reduced motion.
+ */
+
+/* ----------------------------- the character ----------------------------- */
+
+.ray {
+  --ray-rim-fill: #1373c0;
+  --ray-disc-fill: #1d92e2;
+  --ray-spot-fill: #b8e8fb;
+  --ray-tip: #41c795;
+  --ray-ink: #0e2238;
+  --ray-blush: #ffa3bd;
+  display: block;
+  overflow: visible;
+}
+
+.ray-rim {
+  fill: var(--ray-rim-fill);
+}
+
+.ray-disc {
+  fill: var(--ray-disc-fill);
+}
+
+.ray-spot {
+  fill: var(--ray-spot-fill);
+}
+
+.ray-tail-tip {
+  fill: var(--ray-tip);
+}
+
+.ray-sclera,
+.ray-glint {
+  fill: #fff;
+}
+
+.ray-iris,
+.ray-mouth {
+  fill: var(--ray-ink);
+}
+
+.ray-tongue {
+  fill: #ff7f9c;
+}
+
+.ray-blush ellipse {
+  fill: var(--ray-blush);
+}
+
+.ray--love .ray-blush ellipse {
+  fill: #ff7fa3;
+}
+
+.ray-line,
+.ray-spiral,
+.ray-glasses rect,
+.ray-glasses path {
+  fill: none;
+  stroke: var(--ray-ink);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ray-line--eye {
+  stroke-width: 3.2;
+}
+
+.ray-spiral {
+  stroke-width: 1.8;
+  animation: raySpin 0.9s linear infinite;
+}
+
+.ray-spiral--l {
+  transform-origin: 67px 40px;
+}
+
+.ray-spiral--r {
+  transform-origin: 93px 40px;
+}
+
+.ray-glasses rect,
+.ray-glasses path {
+  stroke-width: 2.2;
+}
+
+/* His gaze: a parent sets --ray-lx / --ray-ly (-1…1) as often as it likes. */
+.ray-pupil {
+  transform: translate(calc(var(--ray-lx, 0) * 2.8px), calc(var(--ray-ly, 0) * 2.6px));
+  transition: transform 0.14s ease-out;
+}
+
+.ray--read .ray-pupil {
+  transform: translate(0, 2.8px);
+}
+
+.ray-eyes {
+  transform-origin: 80px 40px;
+  transition: transform 0.07s ease;
+}
+
+.ray.is-blinking .ray-eyes {
+  transform: scaleY(0.1);
+}
+
+.ray-mouth--talk {
+  transform-origin: 80px 55px;
+  animation: rayTalk 0.19s ease-in-out infinite alternate;
+}
+
+/* Flying: each half of his disc skews about his middle, so the wingtips rise
+   and fall while the middle stays put; his body lifts as they push down. The
+   beat quickens while he swims (see .mascot-roamer.is-swimming). */
+.ray-half {
+  transform-origin: 80px 56px;
+}
+
+.ray-half--l {
+  animation: rayFlapL var(--ray-flap, 1.5s) ease-in-out infinite alternate;
+}
+
+.ray-half--r {
+  animation: rayFlapR var(--ray-flap, 1.5s) ease-in-out infinite alternate;
+}
+
+.ray-rig {
+  animation: rayRise var(--ray-flap, 1.5s) ease-in-out infinite alternate;
+}
+
+.ray.is-waving .ray-half--r {
+  animation: rayWave 0.26s ease-in-out 5 alternate;
+}
+
+.ray-tail {
+  transform: rotate(var(--ray-steer, 0deg));
+  transform-origin: 80px 89px;
+}
+
+.ray-tail-sway {
+  transform-origin: 80px 89px;
+  animation: raySway calc(var(--ray-flap, 1.5s) * 1.4) ease-in-out infinite alternate;
+}
+
+@keyframes rayFlapR {
+  from {
+    transform: skewY(calc(var(--ray-lift, 8deg) * -1));
+  }
+  to {
+    transform: skewY(var(--ray-beat, 6deg));
+  }
+}
+
+@keyframes rayFlapL {
+  from {
+    transform: skewY(var(--ray-lift, 8deg));
+  }
+  to {
+    transform: skewY(calc(var(--ray-beat, 6deg) * -1));
+  }
+}
+
+@keyframes rayRise {
+  from {
+    transform: translateY(1.5px);
+  }
+  to {
+    transform: translateY(-1.5px);
+  }
+}
+
+@keyframes rayWave {
+  from {
+    transform: skewY(5deg);
+  }
+  to {
+    transform: skewY(-20deg);
+  }
+}
+
+@keyframes raySway {
+  from {
+    transform: rotate(-7deg);
+  }
+  to {
+    transform: rotate(7deg);
+  }
+}
+
+@keyframes rayTalk {
+  from {
+    transform: scaleY(0.3);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes raySpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* ----------------------------- the stage ----------------------------- */
+
+/* Above screen content, below dialogs (50), Help (60) and toasts. Only Ray
+   and his bubble take the pointer; everything else passes through. */
+.mascot-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.26s ease;
+}
+
+.mascot-stage.is-fading {
+  opacity: 0;
+}
+
+.mascot-roamer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate3d(-400px, 0, 0);
+  will-change: transform;
+}
+
+.mascot-roamer-body,
+.mascot-roamer-bob,
+.mascot-roamer-squish {
+  width: 100%;
+  height: 100%;
+}
+
+.mascot-roamer-body {
+  transform-origin: 50% 44%;
+}
+
+.mascot-roamer-bob {
+  animation: mascotBob 2.8s ease-in-out infinite alternate;
+}
+
+.mascot-roamer-squish {
+  transform-origin: 50% 70%;
+}
+
+.mascot-roamer .ray {
+  width: 100%;
+  height: 100%;
+}
+
+/* Swimming: faster, deeper wingbeats. */
+.mascot-roamer.is-swimming .ray {
+  --ray-flap: 0.42s;
+  --ray-lift: 15deg;
+  --ray-beat: 11deg;
+}
+
+.mascot-roamer.is-swimming .mascot-roamer-bob,
+.mascot-roamer.is-dragging .mascot-roamer-bob {
+  animation-duration: 0.9s;
+}
+
+/* The body, not the whole box (or his tail), is what you can touch. */
+.mascot-roamer-hit {
+  position: absolute;
+  inset: 11% 8% 27% 8%;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.mascot-roamer.is-dragging .mascot-roamer-hit {
+  cursor: grabbing;
+}
+
+.mascot-roamer-hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.mascot-roamer-close {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: auto;
+  transform: scale(0.8);
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+
+.mascot-roamer:hover .mascot-roamer-close,
+.mascot-roamer:has(:focus-visible) .mascot-roamer-close {
+  opacity: 1;
+  transform: none;
+}
+
+.mascot-roamer.is-dragging .mascot-roamer-close {
+  opacity: 0;
+}
+
+.mascot-roamer-close:hover {
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+
+@keyframes mascotBob {
+  from {
+    transform: translateY(-3px);
+  }
+  to {
+    transform: translateY(4px);
+  }
+}
+
+/* ----------------------------- speech bubble ----------------------------- */
+
+.mascot-bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 252px;
+  padding: 9px 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate3d(-9999px, 0, 0);
+  user-select: none;
+  will-change: transform;
+}
+
+.mascot-bubble-text {
+  display: block;
+  animation: mascotPop 0.18s ease-out both;
+}
+
+.mascot-bubble-ghost {
+  color: transparent;
+}
+
+.mascot-bubble-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mascot-bubble-label::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  content: '';
+}
+
+.mascot-bubble--tip .mascot-bubble-label::before {
+  background: var(--accent-2);
+}
+
+.mascot-bubble--ray .mascot-bubble-label::before {
+  background: var(--ok);
+}
+
+/* A flat tail: a square turned 45° that carries the bubble's two borders. */
+.mascot-bubble-tail {
+  position: absolute;
+  bottom: -6px;
+  left: var(--tail-x, 50%);
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  transform: rotate(45deg);
+}
+
+.mascot-bubble.is-below .mascot-bubble-tail {
+  top: -6px;
+  bottom: auto;
+  transform: rotate(225deg);
+}
+
+@keyframes mascotPop {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.97);
+  }
+}
+
+/* ----------------------------- the water ----------------------------- */
+
+/* The water Ray swims in. His wake is drawn here in the accent colour, as
+   hairlines that fade: flat like everything else, no fill, blur or glow. */
+.mascot-wake {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+/* ----------------------------- effects ----------------------------- */
+
+.mascot-fx {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.mascot-p {
+  position: absolute;
+  display: block;
+  animation-duration: var(--dur);
+  animation-delay: var(--delay);
+  animation-fill-mode: both;
+}
+
+.mascot-p--bubble {
+  margin: -5px 0 0 -5px;
+  border: 1.5px solid #7fd8ee;
+  border-radius: 50%;
+  background: color-mix(in srgb, #7fd8ee 18%, transparent);
+  animation-name: mascotRise;
+  animation-timing-function: ease-out;
+}
+
+.mascot-p--heart {
+  width: var(--size);
+  height: var(--size);
+  margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
+  animation-name: mascotHeart;
+  animation-timing-function: ease-out;
+}
+
+.mascot-p--heart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: #ff7fa3;
+}
+
+/* Celebration tiles, in the mark's colours. */
+.mascot-p--confetti {
+  animation-name: mascotConfetti;
+}
+
+.mascot-p--zzz {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  animation-name: mascotZ;
+  animation-timing-function: ease-out;
+}
+
+@keyframes mascotRise {
+  from {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(calc(var(--dx) * -0.4), -10px) scale(1);
+  }
+  55% {
+    transform: translate(var(--dx), calc(var(--rise) * -0.55));
+  }
+  to {
+    opacity: 0;
+    transform: translate(calc(var(--dx) * -0.3), calc(var(--rise) * -1));
+  }
+}
+
+@keyframes mascotHeart {
+  from {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3) rotate(0);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(calc(var(--dx) * 0.4), -14px) scale(1.15) rotate(var(--rot));
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--dx), calc(var(--rise) * -1)) scale(0.9) rotate(var(--rot));
+  }
+}
+
+@keyframes mascotConfetti {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0);
+    animation-timing-function: cubic-bezier(0.15, 0.6, 0.35, 1);
+  }
+  40% {
+    opacity: 1;
+    transform: translate(calc(var(--dx) * 0.8), var(--dy)) rotate(calc(var(--rot) * 0.45));
+    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--dx), calc(var(--dy) + var(--fall))) rotate(var(--rot));
+  }
+}
+
+@keyframes mascotZ {
+  from {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--dx), calc(var(--rise) * -1)) scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ray-half--l,
+  .ray-half--r,
+  .ray-rig,
+  .ray-tail-sway,
+  .ray-spiral,
+  .ray-mouth--talk,
+  .ray.is-waving .ray-half--r,
+  .mascot-roamer-bob,
+  .mascot-bubble-text {
+    animation: none;
+  }
+
+  .ray-pupil,
+  .ray-eyes {
+    transition: none;
+  }
+
+  .mascot-fx,
+  .mascot-wake {
+    display: none;
+  }
+}

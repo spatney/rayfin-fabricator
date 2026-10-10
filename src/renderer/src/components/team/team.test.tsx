@@ -480,7 +480,7 @@ describe('CreateProjectScreen team destination', () => {
 
     expect(createProject).toHaveBeenCalledWith('w1', {
       name: 'Leads',
-      template: 'fabricator-universal',
+      template: 'universal-app',
       templateName: undefined
     })
     expect(create).not.toHaveBeenCalled()

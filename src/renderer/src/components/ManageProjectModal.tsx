@@ -1,7 +1,15 @@
-import { useEffect, useId, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useId,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode
+} from 'react'
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
+import { hueOf } from './team/map/parts'
 
 interface Props {
   project: StudioProject
@@ -22,6 +30,19 @@ function messageFor(error: unknown): string {
     : 'Could not rename the project. Please try again.'
 }
 
+/** A group of related controls: a quiet heading over a card of rows, as in Settings. */
+function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+  const id = useId()
+  return (
+    <section className="set-section" aria-labelledby={id}>
+      <h3 className="set-section-title" id={id}>
+        {title}
+      </h3>
+      <div className="set-card">{children}</div>
+    </section>
+  )
+}
+
 /** Keeps project metadata, recents cleanup, and local-file cleanup visibly separate. */
 export default function ManageProjectModal({
   project,
@@ -34,6 +55,7 @@ export default function ManageProjectModal({
 }: Props): JSX.Element {
   useSuppressPreview()
   const titleId = useId()
+  const nameId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const [name, setName] = useState(project.name)
   const [saving, setSaving] = useState(false)
@@ -116,10 +138,15 @@ export default function ManageProjectModal({
     onMoveToTrash(project)
   }
 
+  const recentsHint = project.team
+    ? 'Remove this entry from Fabricator. Your work saved to GitHub stays, and you can open the app again from its team workspace.'
+    : 'Remove this entry from Fabricator without changing the local folder or any Fabric app.'
+  const canMove = !project.team && onMoveToTeam && moveTargets.length > 0
+
   return (
     <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
       <div
-        className="modal modal--sm project-manage-modal"
+        className="modal project-manage-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -139,30 +166,36 @@ export default function ManageProjectModal({
           </button>
         </div>
 
-        <div className="modal-body">
+        <div className="modal-body project-manage-body">
           <div className="project-manage-summary">
-            <span className="project-manage-mark" aria-hidden="true">
+            <span
+              className="home-project-mark"
+              aria-hidden="true"
+              style={{ '--hue': hueOf(project.name) } as CSSProperties}
+            >
               {project.name.trim()[0]?.toUpperCase() ?? '?'}
             </span>
             <span className="project-manage-summary-text">
               <strong>{project.name}</strong>
-              <code className="project-manage-path" title={project.path}>
+              <span className="project-manage-path" title={project.path}>
                 {project.path}
-              </code>
+              </span>
             </span>
           </div>
 
-          <form className="project-manage-section" onSubmit={(event) => void saveName(event)}>
-            <div className="project-manage-section-heading">
-              <span className="project-manage-label">Project details</span>
-              <span className="project-manage-hint">
-                Changing the name also updates <code>rayfin/rayfin.yml</code>.
-              </span>
-            </div>
-            <label className="project-manage-name-field">
-              <span>Project name</span>
-              <div className="project-manage-rename-row">
+          <Section title="Project details">
+            <form className="set-item" onSubmit={(event) => void saveName(event)}>
+              <div className="set-item-text">
+                <label className="set-item-title" htmlFor={nameId}>
+                  Project name
+                </label>
+                <span className="set-item-desc">
+                  Changing the name also updates <code>rayfin/rayfin.yml</code>.
+                </span>
+              </div>
+              <div className="project-manage-field">
                 <input
+                  id={nameId}
                   className="project-manage-input"
                   value={name}
                   autoFocus
@@ -172,122 +205,120 @@ export default function ManageProjectModal({
                     setError(null)
                   }}
                 />
-                <button type="submit" className="btn btn--primary btn--sm" disabled={!canSave}>
+                <button
+                  type="submit"
+                  className={`btn btn--sm${canSave ? ' btn--primary' : ''}`}
+                  disabled={!canSave}
+                >
                   {saving ? 'Saving...' : 'Save name'}
                 </button>
               </div>
-            </label>
-            {error && (
-              <p className="project-manage-error" role="alert">
-                {error}
-              </p>
-            )}
-          </form>
-
-          <section className="project-manage-section" aria-labelledby="project-recents-title">
-            <div className="project-manage-section-heading">
-              <span id="project-recents-title" className="project-manage-label">
-                Recent projects
-              </span>
-              <span className="project-manage-hint">
-                {project.team
-                  ? 'Remove this entry from Fabricator. Your work saved to GitHub stays, and you can open the app again from its team workspace.'
-                  : 'Remove this entry from Fabricator without changing the local folder or any Fabric app.'}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="btn btn--ghost btn--sm project-manage-action"
-              disabled={saving}
-              onClick={removeFromRecents}
-            >
-              Remove from recent projects
-            </button>
-          </section>
-
-          {!project.team && onMoveToTeam && moveTargets.length > 0 && (
-            <section className="project-manage-section" aria-labelledby="project-team-title">
-              <div className="project-manage-section-heading">
-                <span id="project-team-title" className="project-manage-label">
-                  Move to a team workspace
-                </span>
-                <span className="project-manage-hint">
-                  Copies this app into the team workspace (with this chat) so your team can work on
-                  it. The team pipeline then deploys it as a new app; data in this project&apos;s
-                  current deployment isn&apos;t copied. This local project stays as it is.
-                </span>
-              </div>
-              <div className="project-manage-rename-row">
-                <select
-                  className="project-manage-input"
-                  value={moveTarget}
-                  disabled={saving}
-                  onChange={(event) => setMoveTarget(event.target.value)}
-                >
-                  {moveTargets.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="btn btn--primary btn--sm"
-                  disabled={saving || !moveTarget}
-                  onClick={() => void moveToTeam()}
-                >
-                  {saving ? 'Moving…' : 'Move'}
-                </button>
-              </div>
-              {moveError && (
+              {error && (
                 <p className="project-manage-error" role="alert">
-                  {moveError}
+                  {error}
                 </p>
               )}
-            </section>
+            </form>
+          </Section>
+
+          {canMove && (
+            <Section title="Team workspace">
+              <div className="set-item">
+                <div className="set-item-text">
+                  <span className="set-item-title">Move to a team workspace</span>
+                  <span className="set-item-desc">
+                    Copies this app and its chat into the team workspace so your team can work on
+                    it. The team pipeline deploys it as a new app, without the data in this
+                    project&apos;s current deployment. This local project stays as it is.
+                  </span>
+                </div>
+                <div className="project-manage-field">
+                  <select
+                    className="project-manage-input"
+                    aria-label="Team workspace"
+                    value={moveTarget}
+                    disabled={saving}
+                    onChange={(event) => setMoveTarget(event.target.value)}
+                  >
+                    {moveTargets.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    disabled={saving || !moveTarget}
+                    onClick={() => void moveToTeam()}
+                  >
+                    {saving ? 'Moving…' : 'Move'}
+                  </button>
+                </div>
+                {moveError && (
+                  <p className="project-manage-error" role="alert">
+                    {moveError}
+                  </p>
+                )}
+              </div>
+            </Section>
           )}
 
-          {project.team ? (
-            <section className="project-manage-section" aria-labelledby="project-team-note">
-              <div className="project-manage-section-heading">
-                <span id="project-team-note" className="project-manage-label">
-                  Team app
-                </span>
-                <span className="project-manage-hint">
-                  This app belongs to the team workspace {teamName ? <strong>{teamName}</strong> : 'it was opened from'}.
-                  Its owners can remove it for everyone from the workspace&apos;s settings.
-                </span>
+          <Section title="Remove">
+            <div className="set-item">
+              <div className="set-item-text">
+                <span className="set-item-title">Recent projects</span>
+                <span className="set-item-desc">{recentsHint}</span>
               </div>
-            </section>
-          ) : (
-          <section
-            className="project-manage-section project-manage-section--danger"
-            aria-labelledby="project-removal-title"
-          >
-            <div className="project-manage-section-heading">
-              <span id="project-removal-title" className="project-manage-label">
-                Remove project
-              </span>
-              <span className="project-manage-hint">
-                {hasDeploy
-                  ? "Review two independent removal options in the next step: move this local folder to your system trash, and optionally permanently delete this project's deployed Fabric app and data. Your Fabric workspace is never deleted."
-                  : 'Move this local folder to your system trash in the next step. You can restore it there; no Fabric app will be changed.'}
-              </span>
+              <div className="set-item-control">
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  disabled={saving}
+                  onClick={removeFromRecents}
+                >
+                  Remove from recent projects
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              className="btn btn--danger btn--sm project-manage-action"
-              disabled={saving}
-              onClick={moveToTrash}
-            >
-              Review removal options...
-            </button>
-          </section>
-          )}
+            {project.team ? (
+              <div className="set-item">
+                <div className="set-item-text">
+                  <span className="set-item-title">Team app</span>
+                  <span className="set-item-desc">
+                    This app belongs to the team workspace{' '}
+                    {teamName ? <strong>{teamName}</strong> : 'it was opened from'}. Its owners can
+                    remove it for everyone from the workspace&apos;s settings.
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="set-item">
+                <div className="set-item-text">
+                  <span className="set-item-title">Remove project</span>
+                  <span className="set-item-desc">
+                    {hasDeploy
+                      ? "Review two independent removal options in the next step: move this local folder to your system trash, and optionally delete this project's deployed Fabric app and its data for good. Your Fabric workspace is never deleted."
+                      : 'Move this local folder to your system trash in the next step. You can restore it there; no Fabric app will be changed.'}
+                  </span>
+                </div>
+                <div className="set-item-control">
+                  <button
+                    type="button"
+                    className="btn btn--sm project-manage-danger"
+                    disabled={saving}
+                    onClick={moveToTrash}
+                  >
+                    Review removal options...
+                  </button>
+                </div>
+              </div>
+            )}
+          </Section>
         </div>
 
         <div className="modal-footer">
-          <button type="button" className="btn btn--ghost" disabled={saving} onClick={onClose}>
+          <button type="button" className="btn" disabled={saving} onClick={onClose}>
             Done
           </button>
         </div>

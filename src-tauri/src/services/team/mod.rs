@@ -341,24 +341,6 @@ mod tests {
   }
 
   #[test]
-  fn bundled_templates_pin_a_rayfin_cli_the_pipeline_supports() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/fabricator-templates");
-    let mut checked = 0;
-    for entry in std::fs::read_dir(&root).unwrap().flatten() {
-      let Ok(text) = std::fs::read_to_string(entry.path().join("package.json")) else { continue };
-      let pkg: serde_json::Value = serde_json::from_str(&text).unwrap();
-      let range = pkg.pointer("/devDependencies/@microsoft~1rayfin-cli").and_then(|v| v.as_str()).unwrap_or_default();
-      let pinned = range.trim_start_matches(|c| c == '^' || c == '~');
-      assert!(rayfin_supported(pinned), "{} pins @microsoft/rayfin-cli {range:?}", entry.path().display());
-      if let Some(locked) = deploy_cli_version(&entry.path()) {
-        assert!(rayfin_supported(&locked), "{} locks @microsoft/rayfin-cli {locked}", entry.path().display());
-      }
-      checked += 1;
-    }
-    assert!(checked >= 1, "expected the bundled starter under {}", root.display());
-  }
-
-  #[test]
   fn records_map_to_preview_states() {
     assert_eq!(deploy_info(&record("p", "success", Some("https://a"))).status.as_deref(), Some("success"));
     assert_eq!(deploy_info(&record("p", "in_progress", None)).status.as_deref(), Some("deploying"));

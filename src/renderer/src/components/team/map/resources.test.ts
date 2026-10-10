@@ -59,6 +59,20 @@ describe('parseAppConfig', () => {
     expect((await parseAppConfig({ 'rayfin/rayfin.yml': ': not yaml: [' })).connectors).toEqual([])
     expect(humanize('coffee-shop_sales')).toBe('Coffee shop sales')
   })
+
+  it('reads the data model and functions from the packages rayfin.yml names', async () => {
+    const config = await parseAppConfig({
+      'rayfin/rayfin.yml':
+        'services:\n  data:\n    enabled: true\n    path: packages/data\n  functions:\n    enabled: true\n    path: packages/functions\n',
+      'packages/data/src/index.ts': "import { Item } from './Item.js';\nexport const schema = [Item];\n",
+      'packages/data/src/Item.ts':
+        "@entity()\n@authenticated('*')\nexport class Item {\n  @uuid() id!: string;\n  @blob() photo!: Blob;\n}\n",
+      'packages/functions/src/function_app.ts': "udf.func('summarize', async () => 'hi', [])\n"
+    })
+    expect(config.database?.tables.map((t) => t.name)).toEqual(['Item'])
+    expect(config.files).toBe(true)
+    expect(config.functions).toEqual({ names: ['summarize'], audiences: [] })
+  })
 })
 
 describe('resourceRequests', () => {
@@ -75,6 +89,17 @@ describe('resourceRequests', () => {
     expect(resourceRequests(map)).not.toContainEqual({ folder: 'trips', local: true })
     map.apps[0].copies[0].changedFiles = 200
     expect(resourceRequests(map)).toContainEqual({ folder: 'trips', local: true })
+  })
+
+  it('reads working copies that change the data or functions package of a CLI Universal App', () => {
+    for (const path of ['trips/packages/data/src/Item.ts', 'trips/packages/functions/src/function_app.ts']) {
+      const map = sampleMap()
+      map.apps[0].copies[1].files.push({ path, change: 'modified', additions: 1, deletions: 0 })
+      expect(resourceRequests(map), path).toContainEqual({ folder: 'trips', branch: AMYS })
+    }
+    const map = sampleMap()
+    map.apps[0].copies[1].files.push({ path: 'trips/packages/frontend/src/App.tsx', change: 'modified', additions: 1, deletions: 0 })
+    expect(resourceRequests(map)).not.toContainEqual({ folder: 'trips', branch: AMYS })
   })
 })
 

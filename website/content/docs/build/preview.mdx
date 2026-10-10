@@ -44,7 +44,7 @@ In Design mode, device widths account for Fabricator's UI scale, so **Tablet** a
 
 Signing in to the deployed app is separate from Fabricator's Fabric CLI session. The app preview has its own browser session and cookies. If the app opens a Fabric or Microsoft Entra sign-in popup, Fabricator lets the preview browser handle that popup.
 
-In apps created from the Universal App starter, the local preview signs you in automatically once the app has sign-in. It uses the Fabric account that Fabricator deploys with, so a chat turn doesn't stop at the app's sign-in page. The deployed app doesn't include this and still asks you to sign in. Rayfin describes how it works in [Local automatic sign-in](https://rayfin.ai/docs/start/develop-locally#local-automatic-sign-in).
+In apps created from the Universal App template, the local preview signs you in automatically when the app uses sign-in. It uses the Fabric account that Fabricator deploys with, so a chat turn doesn't stop at the app's sign-in page. The deployed app doesn't include this and still asks you to sign in. Rayfin describes how it works in [Local automatic sign-in](https://rayfin.ai/docs/start/develop-locally#local-automatic-sign-in).
 
 Older apps need Rayfin 1.36 or newer for this. See [Rayfin versions](/docs/ship/rayfin-versions). To add it to an older app, paste this prompt:
 

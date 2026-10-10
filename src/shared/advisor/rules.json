@@ -107,7 +107,7 @@
       "summary": "Pages that use app data wait for the session and require sign-in",
       "why": "Without a guard, signed-out visitors can open pages that call the data API — the calls fail or show UI meant for signed-in users — and apps that never wire up sign-in can't load authenticated data at all.",
       "fix": "Wrap protected routes in a guard that waits for the auth context's `loading` state and redirects to the sign-in page when `!isAuthenticated`, and make sure the auth provider is set up before any data call.",
-      "check": "Read src/main.tsx, src/App.tsx (or the router config) and the pages. Flag routes or pages that call client.data (directly or through services) but render without a guard that checks isAuthenticated/loading from the auth context. Also flag an app whose data calls run while its auth provider/bootstrap is never wired (for example, auth scaffolding left commented out). Don't flag genuinely public pages that use no Rayfin data.",
+      "check": "Read the frontend's entry point, app component (or router config) and pages: src/main.tsx and src/App.tsx, or the same files under the frontend package's src/ when rayfin.yml's services.staticHosting.path names one (such as packages/frontend/src). Flag routes or pages that call client.data (directly or through services) but render without a guard that checks isAuthenticated/loading from the auth context. Also flag an app whose data calls run while its auth provider/bootstrap is never wired (for example, auth scaffolding left commented out). Don't flag genuinely public pages that use no Rayfin data.",
       "docs": [
         { "title": "Guard routes", "url": "https://rayfin.ai/docs/auth/react#guard-routes" },
         { "title": "Add AuthProvider and useAuth", "url": "https://rayfin.ai/docs/auth/react#add-authprovider-and-useauth" }
@@ -326,7 +326,7 @@
       "summary": "Sensitive fields are excluded from read grants",
       "why": "Fields such as secrets, tokens, passwords, or sensitive personal data are returned to every caller allowed to read the entity unless they are excluded.",
       "fix": "Add `exclude: ['field']` to the read grant (use separate decorators per action if writes still need it), or move the value out of the entity to a server-side secret.",
-      "check": "In the rayfin/data entities, find fields holding secrets, credentials, tokens, API keys, passwords or sensitive personal data (for example ssn, salary, date of birth). Flag them when a read grant for any role neither lists them in exclude nor omits them from include. Ordinary profile data such as display names isn't sensitive.",
+      "check": "In the data model's entities (rayfin/data/, or the data package's src/ when rayfin.yml's services.data.path names one, such as packages/data/src), find fields holding secrets, credentials, tokens, API keys, passwords or sensitive personal data (for example ssn, salary, date of birth). Flag them when a read grant for any role neither lists them in exclude nor omits them from include. Ordinary profile data such as display names isn't sensitive.",
       "docs": [
         { "title": "Field-level permissions", "url": "https://rayfin.ai/docs/data/permissions#field-level-permissions" }
       ]
@@ -552,7 +552,7 @@
       "appliesWhen": ["data"],
       "title": "Entity import won't work at runtime",
       "summary": "Entity files import related classes as values, with `.js` paths",
-      "why": "Relationship decorators need the runtime class, but `import type` is erased at compile time. Relative imports under `rayfin/data` also need the `.js` extension to resolve as ESM.",
+      "why": "Relationship decorators need the runtime class, but `import type` is erased at compile time. Relative imports between entity files also need the `.js` extension to resolve as ESM.",
       "fix": "Use `import { Target } from './Target.js'`.",
       "docs": [
         { "title": "Use import, not import type", "url": "https://rayfin.ai/docs/data/relationships#use-import-not-import-type" },
@@ -565,9 +565,9 @@
       "engine": "quick",
       "severity": "high",
       "appliesWhen": ["data"],
-      "title": "Entity isn't fully registered in schema.ts",
+      "title": "Entity isn't fully registered in the schema",
       "summary": "Every entity is in both the `schema` array and the schema type",
-      "why": "An entity missing from `schema.ts` isn't part of the typed client (`client.data.<Entity>` won't exist), and one listed in only the array or only the type is half-registered.",
+      "why": "An entity missing from the schema file (`schema.ts`, or a data package's `src/index.ts`) isn't part of the typed client (`client.data.<Entity>` won't exist), and one listed in only the array or only the type is half-registered.",
       "fix": "Import it with a `.js` path and add it to both the exported schema type and the `schema` array.",
       "docs": [
         { "title": "Register the entity in schema.ts", "url": "https://rayfin.ai/docs/data/modeling#register-the-entity-in-schemats" }
@@ -1185,7 +1185,7 @@
       "summary": "Every function handler is registered with `udf.func`",
       "why": "Only handlers registered with `udf.func(...)` are deployed and typed for the client. `types.ts` is generated, so hand edits are overwritten.",
       "fix": "Register each handler with `udf.func(name, handler, …)`, and regenerate types instead of editing `types.ts`.",
-      "check": "In rayfin/functions, find exported handlers that are never passed to udf.func, and manual edits to the generated types.ts.",
+      "check": "In the functions' source (rayfin/functions/, or the functions package rayfin.yml's services.functions.path names, such as packages/functions), find exported handlers that are never passed to udf.func, and manual edits to the generated types.ts.",
       "docs": [
         { "title": "Register handlers with udf.func", "url": "https://rayfin.ai/docs/functions/writing-functions#register-handlers-with-udffunc" },
         { "title": "Generated types.ts", "url": "https://rayfin.ai/docs/functions/writing-functions#generated-typests" }

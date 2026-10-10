@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
-import HomeView, { displayPath } from './HomeView'
+import HomeView from './HomeView'
+import { displayPath } from './projectDisplay'
 import { makeProject } from '../../test/harness'
 
 function baseProps(): ComponentProps<typeof HomeView> {

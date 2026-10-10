@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { GithubRepo, GithubStatus, InstallResult } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { authErrorMessage } from '../authErrors'
+import { useMascotInstall } from './mascot/stage'
 
 interface Props {
   /** Abandon the flow (no clone happened). */
@@ -163,6 +164,14 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
   const [now, setNow] = useState(() => Date.now())
 
   const busy = checking || installing || cloning || startingLogin
+
+  // Ray keeps the user company while the repository clones and installs.
+  const screenRef = useRef<HTMLDivElement>(null)
+  const mascot = useMascotInstall(
+    'clone',
+    cloning ? 'running' : cloneError ? 'error' : 'idle',
+    screenRef
+  )
 
   function clearRepos(): void {
     ++reposSeqRef.current
@@ -366,6 +375,8 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
       }
       const res = await window.api.github.clone(cloneTarget)
       if (res.ok) {
+        // The screen closes in the same moment, so tell Ray directly.
+        mascot.succeed()
         onCloned()
       } else {
         setCloneError(res.error ?? 'Clone failed.')
@@ -429,9 +440,9 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
           : 'GitHub CLI needed'
 
   return (
-    <div className="create-screen clone-screen">
+    <div className="create-screen clone-screen" ref={screenRef}>
       <div className="create-shell clone-shell">
-        <header className="create-head clone-head">
+        <header className="create-head clone-head" data-mascot-avoid="">
           <span className="clone-head-icon" aria-hidden="true">
             <span className="codicon codicon-repo-clone" />
           </span>
@@ -451,7 +462,10 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
           </span>
         </header>
 
-        <div className={`create-body clone-body${cloning ? ' clone-body--progress' : ''}`}>
+        <div
+          className={`create-body clone-body${cloning ? ' clone-body--progress' : ''}`}
+          data-mascot-avoid=""
+        >
           {initialChecking && (
             <section className="clone-loading-card" aria-label="Checking GitHub connection">
               <div className="clone-loading-copy">
@@ -856,7 +870,7 @@ export default function CloneFromGitHubScreen({ onCancel, onCloned }: Props): JS
           {cloneError && <div className="alert alert--error" role="alert">{cloneError}</div>}
         </div>
 
-        <footer className="create-foot clone-foot">
+        <footer className="create-foot clone-foot" data-mascot-avoid="">
           <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
             Cancel
           </button>

@@ -10,17 +10,19 @@ import type {
 } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import DeploymentCreateForm, { checkActiveDeployTarget } from './DeploymentCreateForm'
+import { useMascotInstall } from './mascot/stage'
 
 type Mode = 'create' | 'deploy'
 type Step = 'details' | 'deploy'
-/** `scratch` = the bundled starter that grows into anything; `example` = a community template. */
+/** `scratch` = the Rayfin CLI's Universal App that grows into anything; `example` = a community template. */
 type Start = 'scratch' | 'example'
 
 /**
- * The bundled starter (resources/fabricator-templates). Its capability router
- * grows it into whatever the user describes, so nobody picks an app shape up front.
+ * The Rayfin CLI's built-in Universal App (the CLI's "Use default template"). It
+ * starts small with no database, and its capability router grows it into whatever
+ * the user describes, so nobody picks an app shape up front.
  */
-export const STARTER_TEMPLATE = 'fabricator-universal'
+export const STARTER_TEMPLATE = 'universal-app'
 
 interface Props {
   /** 'create' runs Details → Deploy; 'deploy' shows only the Deploy step for the active project. */
@@ -170,6 +172,14 @@ export default function CreateProjectScreen({
   const [now, setNow] = useState(0)
   const [done, setDone] = useState(false)
   const logRef = useRef<HTMLPreElement>(null)
+  const screenRef = useRef<HTMLDivElement>(null)
+
+  // Ray keeps the user company through the slow scaffold and npm install.
+  const mascot = useMascotInstall(
+    'create',
+    busy ? 'running' : done ? 'success' : error ? 'error' : 'idle',
+    screenRef
+  )
 
   // ----- Deploy step -----
   const [wsResult, setWsResult] = useState<FabricWorkspacesResult | null>(null)
@@ -291,6 +301,8 @@ export default function CreateProjectScreen({
         })
         if (teamResult.project) {
           setDone(true)
+          // The screen closes in the same moment, so tell Ray directly.
+          mascot.succeed()
           onTeamCreated?.(teamResult)
         } else {
           setError(teamResult.error ?? 'Project creation failed.')
@@ -390,9 +402,9 @@ export default function CreateProjectScreen({
   const skipLabel = mode === 'deploy' ? 'Maybe later' : 'Continue without deploying →'
 
   return (
-    <div className="create-screen">
+    <div className="create-screen" ref={screenRef}>
       <div className="create-shell">
-        <header className="create-head">
+        <header className="create-head" data-mascot-avoid="">
           <div className="create-head-text">
             <h1 className="create-title">{heading}</h1>
             <p className="create-sub">{sub}</p>
@@ -417,7 +429,7 @@ export default function CreateProjectScreen({
 
         {step === 'details' ? (
           <>
-            <div className="create-body">
+            <div className="create-body" data-mascot-avoid="">
               <label className={`field${busy ? ' create-field-hidden' : ''}`}>
                 <span className="field-label">Project name</span>
                 <input
@@ -689,7 +701,7 @@ export default function CreateProjectScreen({
               {error && <div className="alert alert--error">{error}</div>}
             </div>
 
-            <footer className="create-foot">
+            <footer className="create-foot" data-mascot-avoid="">
               <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
                 Cancel
               </button>
@@ -699,7 +711,7 @@ export default function CreateProjectScreen({
             </footer>
           </>
         ) : (
-          <div className="create-body create-body--deploy">
+          <div className="create-body create-body--deploy" data-mascot-avoid="">
             <div className="create-deploy">
               <DeploymentCreateForm
                 wsResult={wsResult}

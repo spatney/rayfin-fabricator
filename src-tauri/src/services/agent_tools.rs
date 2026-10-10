@@ -32,8 +32,8 @@ pub fn fabricator_tools(_app: AppHandle, _project_id: String) -> Vec<Tool> {
          model-editor link (.../modeling/<id>/modelView) — or a bare GUID as `target`. Returns \
          the model's name, workspace id, and item id. \
          A Power BI dataset id IS its Fabric semantic-model item id, so you can wire the model \
-         straight into this app's data with `fabric-app-data add <alias> -w <workspaceId> -i \
-         <itemId>` (see the fabric-data skill), then run a build. Use this to turn a report/app \
+         straight into this app (see the connect-semantic-model skill: a Rayfin connector, or \
+         `fabric-app-data add` in apps with a fabric.yaml). Use this to turn a report/app \
          link the user pastes into the underlying model the app should connect to.",
       )
       .with_parameters(serde_json::json!({
@@ -61,9 +61,9 @@ pub fn fabricator_tools(_app: AppHandle, _project_id: String) -> Vec<Tool> {
         "Search Microsoft Fabric for semantic models (datasets) by description or keywords when \
          you do NOT have a direct link or id. Pass natural-language keywords as `query` (e.g. \
          \"sales pipeline\", \"finance revenue by region\"). Returns matching models with their \
-         workspace id and item id, ready to wire into this app's data with `fabric-app-data add \
-         <alias> -w <workspaceId> -i <itemId>` (see the fabric-data skill). If you already have a \
-         report/app link or id, use fabricator_locate_semantic_model instead. Requires Azure CLI \
+         workspace id and item id, ready to wire into this app (see the connect-semantic-model \
+         skill). If you already have a report/app link or id, use \
+         fabricator_locate_semantic_model instead. Requires Azure CLI \
          sign-in (handled by the Fabricator setup screen).",
       )
       .with_parameters(serde_json::json!({
@@ -169,8 +169,8 @@ impl ToolHandler for SearchSemanticModelsTool {
 }
 
 /// Render a [`semantic_model::SemanticModelResult`] (from either tool) into a
-/// compact text block the agent can act on, including the `fabric-app-data add`
-/// wiring command for the top match and any access/admin notes.
+/// compact text block the agent can act on, including the wiring commands for
+/// the top match and any access/admin notes.
 fn render_semantic_model_result(r: &semantic_model::SemanticModelResult) -> ToolResult {
   use std::fmt::Write as _;
 
@@ -250,8 +250,11 @@ fn render_semantic_model_result(r: &semantic_model::SemanticModelResult) -> Tool
     ) {
       let _ = write!(
         out,
-        "\nTo connect this app to the first model, add it to the app's data with:\n  \
-         fabric-app-data add <alias> -w {ws} -i {item}\nthen run a build (see the fabric-data skill).\n"
+        "\nTo connect this app to the first model:\n\
+         - Apps that read semantic models through Rayfin connectors (follow the project's analytics skill):\n    \
+         npx rayfin connector add --type fabric-semanticmodel --workspace-id {ws} --item-id {item} --name <alias>\n\
+         - Apps with a fabric.yaml:\n    \
+         fabric-app-data add <alias> -w {ws} -i {item}\n  then run a build (see the fabric-data skill).\n"
       );
     }
   }
@@ -332,6 +335,10 @@ mod tests {
     assert!(t.contains("item id (= dataset id): ds-1"), "got: {t}");
     assert!(
       t.contains("fabric-app-data add <alias> -w ws-1 -i ds-1"),
+      "got: {t}"
+    );
+    assert!(
+      t.contains("npx rayfin connector add --type fabric-semanticmodel --workspace-id ws-1 --item-id ds-1 --name <alias>"),
       "got: {t}"
     );
   }
