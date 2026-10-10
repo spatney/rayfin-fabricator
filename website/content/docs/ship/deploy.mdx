@@ -103,7 +103,7 @@ To go back to deploying after each turn for a while, choose **Auto deploy** in t
 While the status bar shows **Manual deploy**:
 
 - The local preview uses your deployed app's backend. Frontend changes show as Copilot makes them, but changes to data, permissions or functions work only after you select **Redeploy**. Fabricator asks Copilot to tell you when a change needs a deploy.
-- **Design** and the **Fabric** view work on the deployed app, so they're unavailable.
+- **Design** works on the local preview, so you can queue visual changes and send them to Copilot without deploying. The **Fabric** view remains unavailable while the local preview is showing.
 - The local preview stops when you switch to another app or close Fabricator, and the app you open next gets its own. If you switch your app to another deployment, its local preview starts again with that deployment's settings.
 - If the project has no local Vite installation, there's no local preview. The preview keeps showing the deployed app, without your latest changes, until you select **Redeploy**.
 - Team apps aren't affected. They still save to GitHub after each turn, and the team pipeline deploys your preview.

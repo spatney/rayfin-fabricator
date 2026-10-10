@@ -111,7 +111,7 @@ interface Props {
   /** Send the queued design changes to chat (the composer text is the note). */
   onDesignSend?: () => void
   /** Report the surface Design can run on — the deployed app, directly or
-   *  embedded in Fabric — or null while it can't (deploying, loading, local). */
+   *  embedded in Fabric, or the manual-deploy local preview — or null while unavailable. */
   onDesignSurface?: (surface: DesignSurface | null) => void
   /** Report the project-load overlay state so the parent can render a centered
    *  "Loading <name>…" over the whole build view (a project switch reloads the
@@ -374,7 +374,7 @@ export default function PreviewPane({
   const deployedPreviewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
   // Live local preview: while a Vite dev server is running for this
   // project, the surface shows its localhost URL instead of the deployed app. A
-  // running deploy still wins (DeployStage), so this only applies mid-turn.
+  // running deploy still wins (DeployStage).
   const isLocal = Boolean(localPreviewUrl) && !running
   const previewUrl = isLocal ? (localPreviewUrl ?? undefined) : deployedPreviewUrl
   const showWebview = !running && Boolean(previewUrl)
@@ -744,17 +744,18 @@ export default function PreviewPane({
   // ── Design mode ("visual chat") ───────────────────────────────────────────
   // The session (queue, polling, AI requests, capture) lives in the Workbench so
   // the chat composer can show and send the queue; this pane reports the surface
-  // Design can run on — the deployed app, direct or embedded in Fabric — and
+  // Design can run on — the deployed app or the manual-deploy local preview — and
   // renders the design toolbar + device width. See `useDesignSession` and the
   // injected `design_agent.js`.
   const designActive = Boolean(design?.active)
-  const embedded = previewMode === 'fabric' && Boolean(fabricUrl)
+  const embedded = !isLocal && previewMode === 'fabric' && Boolean(fabricUrl)
+  const designAppUrl = isLocal ? previewUrl : deployedUrl
   const designSurface = useMemo<DesignSurface | null>(
     () =>
-      showWebview && !transitioning && !isLocal && previewUrl && deployedUrl
-        ? { url: previewUrl, embedded, appUrl: deployedUrl }
+      showWebview && !transitioning && (!isLocal || manualDeploy) && previewUrl && designAppUrl
+        ? { url: previewUrl, embedded, appUrl: designAppUrl }
         : null,
-    [showWebview, transitioning, isLocal, previewUrl, deployedUrl, embedded]
+    [showWebview, transitioning, isLocal, manualDeploy, previewUrl, designAppUrl, embedded]
   )
   useEffect(() => {
     onDesignSurface?.(designSurface)
@@ -894,10 +895,8 @@ export default function PreviewPane({
               title={
                 designActive
                   ? 'Leave Design — your queued changes stay in the chat composer'
-                  : isLocal
-                    ? manualDeploy
-                      ? 'Design works on the deployed app — unavailable while Deploy manually is on'
-                      : 'Design works on the deployed app — available once this turn finishes'
+                  : isLocal && !manualDeploy
+                    ? 'Design works on the deployed app — available once this turn finishes'
                     : 'Design — click anything in your app to change it, preview the result live, then send it all to Copilot at once'
               }
             >

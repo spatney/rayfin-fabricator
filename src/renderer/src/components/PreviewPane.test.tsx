@@ -821,10 +821,47 @@ describe('PreviewPane design mode', () => {
     expect(e.calls.filter((c) => c.method === 'design.setEnabled').at(-1)!.args).toEqual([false])
   })
 
-  it('keeps Design off while the live local preview is showing', async () => {
+  it('keeps Design off during a temporary auto-deploy local preview', async () => {
     render(<DesignHarnessed project={makeProject('p1')} localPreviewUrl="http://localhost:5173" />)
     await settle(e)
     expect((screen.getByRole('button', { name: /^design/i }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it.each(['direct', 'fabric'] as const)('enables Design on the manual-deploy local preview with %s selected', async (mode) => {
+    const project = mode === 'fabric' ? fabricProject('p1') : makeProject('p1')
+    const localPreviewUrl = 'http://localhost:5173'
+    render(<DesignHarnessed project={project} localPreviewUrl={localPreviewUrl} manualDeploy />)
+    await settle(e)
+
+    const designBtn = screen.getByRole<HTMLButtonElement>('button', { name: /^design/i })
+    expect(designBtn.disabled).toBe(false)
+    expect(designBtn.title).not.toContain('unavailable')
+    fireEvent.click(designBtn)
+    await settle(e)
+
+    const call = e.calls.find((c) => c.method === 'design.setEnabled')
+    expect(call!.args.slice(0, 3)).toEqual([true, false, localPreviewUrl])
+    expect(call!.args[3]).toMatchObject({ items: [], sessionId: expect.any(String) })
+    expect(screen.getByRole('toolbar', { name: 'Design tools' })).toBeTruthy()
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: /fabric/i }).disabled).toBe(true)
+  })
+
+  it('ends local Design when a manual redeploy starts', async () => {
+    const props = {
+      project: makeProject('p1'),
+      localPreviewUrl: 'http://localhost:5173',
+      manualDeploy: true
+    }
+    const { rerender } = render(<DesignHarnessed {...props} />)
+    await settle(e)
+    fireEvent.click(screen.getByRole('button', { name: /^design/i }))
+    await settle(e)
+    expect(screen.getByRole('toolbar', { name: 'Design tools' })).toBeTruthy()
+
+    rerender(<DesignHarnessed {...props} deploy={{ running: true, log: [] }} />)
+    await settle(e)
+    expect(screen.queryByRole('toolbar', { name: 'Design tools' })).toBeNull()
+    expect(e.calls.filter((c) => c.method === 'design.setEnabled').at(-1)!.args).toEqual([false])
   })
 
   it('no longer renders an Annotate button (design mode replaced it)', async () => {
@@ -839,11 +876,13 @@ function DesignHarnessed({
   project,
   deploy,
   localPreviewUrl,
+  manualDeploy,
   onSend
 }: {
   project: StudioProject
   deploy?: DeployUiState
   localPreviewUrl?: string | null
+  manualDeploy?: boolean
   onSend?: () => void
 }): JSX.Element {
   const [surface, setSurface] = useState<DesignSurface | null>(null)
@@ -854,6 +893,7 @@ function DesignHarnessed({
         project={project}
         deploy={deploy}
         localPreviewUrl={localPreviewUrl}
+        manualDeploy={manualDeploy}
         focused={false}
         onToggleFocus={() => {}}
         design={design}
