@@ -63,7 +63,7 @@ export const LINES: readonly ScriptLine[] = [
   },
   {
     id: 'tricks',
-    text: "The Advisor grades your app's health. History keeps every change. [whispering] And if something breaks, I'll dig through the logs with you.",
+    text: "The Advisor grades your app's health. Blueprint maps how it all connects. [whispering] And if something breaks, I'll dig through the logs with you.",
   },
   {
     id: 'outro',

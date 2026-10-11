@@ -2,14 +2,14 @@ import type { ReactNode } from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
 import { ease, fadeOut, pop, ramp, track } from '../anim';
 import { Burst } from '../fx/Burst';
-import { AppWindow, Patch, SHOTS, Spotlight, Typed } from '../ui/AppWindow';
+import { AppWindow, Patch, SHOTS, ShotRegion, Spotlight, Typed, onScreen } from '../ui/AppWindow';
 import { AppTile } from '../ui/Brand';
 import { Cursor } from '../ui/Cursor';
 import { Chip, KineticTitle } from '../ui/Kit';
-import { C, FONT } from '../theme';
+import { FONT, alpha, useTheme } from '../theme';
 import type { SceneCtx, SceneDef } from './types';
 
-const icon = (d: ReactNode, size = 60, color: string = C.accent) => (
+const icon = (d: ReactNode, color: string, size = 60) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
     {d}
   </svg>
@@ -111,6 +111,7 @@ export const backend: SceneDef = {
   View: ({ ctx }) => {
     const frame = useCurrentFrame();
     const { fps } = useVideoConfig();
+    const C = useTheme();
     const shrink = ramp(frame, 0, 16, ease.inOut);
     const app = pop(frame, fps, 10, 12, 0.7);
     const panel = ramp(frame, ctx.w('sets') - 4, 22, ease.out);
@@ -133,7 +134,7 @@ export const backend: SceneDef = {
                 <rect x="200" y="100" width="1520" height="745" rx="40" fill="none" stroke="#fff" strokeWidth="14" pathLength={1} strokeDasharray={`${boundary} 1`} />
               </mask>
             </defs>
-            <rect x="200" y="100" width="1520" height="745" rx="40" fill={`rgba(70,204,176,${0.05 * boundary})`} stroke={C.accent2} strokeWidth="4" strokeDasharray="18 12" mask="url(#boundary-draw)" />
+            <rect x="200" y="100" width="1520" height="745" rx="40" fill={alpha(C.accent2, 0.05 * boundary)} stroke={C.accent2} strokeWidth="4" strokeDasharray="18 12" mask="url(#boundary-draw)" />
           </svg>
         ) : null}
         <Chip x={560} y={100} from={ctx.w("organization's")} to={ctx.span.duration + 20} accent={C.accent2} size={26}>
@@ -172,18 +173,18 @@ export const backend: SceneDef = {
             width: 1420,
             height: 390,
             borderRadius: 30,
-            background: 'rgba(12,19,30,0.92)',
-            border: `2px solid ${C.border}`,
-            boxShadow: '0 30px 80px rgba(0,0,0,0.45)',
+            background: C.panel.bg,
+            border: `2px solid ${C.panel.border}`,
+            boxShadow: C.shadow.panel,
             transform: `scaleX(${panel})`,
             opacity: Math.min(1, panel * 2),
           }}
         >
-          <div style={{ position: 'absolute', left: 36, top: 22, fontFamily: FONT, fontSize: 30, fontWeight: 700, color: '#f4f8fc', opacity: ramp(frame, ctx.w('Rayfin') - 4, 8) }}>
+          <div style={{ position: 'absolute', left: 36, top: 22, fontFamily: FONT, fontSize: 30, fontWeight: 700, color: C.ink, opacity: ramp(frame, ctx.w('Rayfin') - 4, 8) }}>
             Rayfin <span style={{ color: C.dim, fontWeight: 500 }}>backend</span>
           </div>
           <div style={{ position: 'absolute', right: 36, top: 18, display: 'flex', alignItems: 'center', gap: 10, fontFamily: FONT, fontSize: 26, color: C.accent2, opacity: Math.min(1, auto * 1.4), transform: `scale(${0.7 + 0.3 * auto})` }}>
-            <span style={{ display: 'inline-block', transform: `rotate(${frame * 4}deg)` }}>{icon(ICONS.gear, 34, C.accent2)}</span>
+            <span style={{ display: 'inline-block', transform: `rotate(${frame * 4}deg)` }}>{icon(ICONS.gear, C.accent2, 34)}</span>
             Set up automatically on deploy
           </div>
         </div>
@@ -203,7 +204,7 @@ export const backend: SceneDef = {
                 width: TILE_W,
                 height: 200,
                 borderRadius: 22,
-                background: '#152033',
+                background: C.panel.ghost,
                 border: `2px solid ${C.accent}66`,
                 opacity: alpha,
               }}
@@ -221,9 +222,9 @@ export const backend: SceneDef = {
                   width: TILE_W,
                   height: 200,
                   borderRadius: 22,
-                  background: 'linear-gradient(180deg, #1a2940, #121c2c)',
+                  background: C.panel.tile,
                   border: `2px solid ${C.accent}`,
-                  boxShadow: `0 14px 40px rgba(0,0,0,0.45), 0 0 26px ${C.accent}33`,
+                  boxShadow: `${C.shadow.tile}, ${C.glow(`${C.accent}33`, 26)}`,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -234,8 +235,8 @@ export const backend: SceneDef = {
                   fontFamily: FONT,
                 }}
               >
-                {icon(t.icon, 58)}
-                <div style={{ fontSize: 32, fontWeight: 700, color: '#f4f8fc' }}>{t.label}</div>
+                {icon(t.icon, C.accent, 58)}
+                <div style={{ fontSize: 32, fontWeight: 700, color: C.ink }}>{t.label}</div>
                 <div style={{ fontSize: 19, color: C.dim, whiteSpace: 'nowrap' }}>{t.sub}</div>
               </div>
             </div>
@@ -244,12 +245,12 @@ export const backend: SceneDef = {
 
         <Chip x={470} y={330} from={ctx.w('Scalable')} to={ctx.span.duration + 20} size={30}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            {icon(ICONS.scale, 34)} Scalable
+            {icon(ICONS.scale, C.accent, 34)} Scalable
           </span>
         </Chip>
         <Chip x={1450} y={330} from={ctx.w('governed')} to={ctx.span.duration + 20} accent={C.accent2} size={30}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            {icon(ICONS.shield, 34, C.accent2)} Governed
+            {icon(ICONS.shield, C.accent2, 34)} Governed
           </span>
         </Chip>
         <Burst kind="sparkles" at={ctx.w('governed')} x={1450} y={330} count={10} seed={21} spread={1.6} />
@@ -261,16 +262,24 @@ export const backend: SceneDef = {
 
 /* ------------------------------- 6. Describe it ------------------------------- */
 
-const PROMPT = 'Build an expense tracker for my team…';
+/** The prompt in chat-working, typed into the composer before it's sent. */
+const PROMPT = 'Show at most 10 rows in the recent expenses table, with a Show more button that loads the next 10.';
+
+/**
+ * chat-working's new turn, top to bottom, in image pixels: the prompt's bubble, then each row
+ * of the work log. Every boundary lies in the gap between two rows, so a row shows whole.
+ */
+const TURN = [405, 520, 596, 629, 662, 696, 729, 762, 801, 848] as const;
 
 function Keycap({ x, y, from }: { x: number; y: number; from: number }): JSX.Element | null {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const { keycap } = useTheme();
   if (frame < from || frame > from + 22) return null;
   const p = pop(frame, fps, from, 10, 0.5);
   const press = frame - from < 5 ? 3 : 0;
   return (
-    <div style={{ position: 'absolute', left: x, top: y + press, transform: `translate(-50%, -50%) scale(${p})`, opacity: fadeOut(frame, from + 22, 6), padding: '8px 18px', borderRadius: 10, background: '#2b3445', border: '2px solid #46536a', boxShadow: `0 ${6 - press}px 0 #161c26`, color: '#f4f8fc', fontFamily: FONT, fontSize: 26, fontWeight: 600, whiteSpace: 'nowrap' }}>
+    <div style={{ position: 'absolute', left: x, top: y + press, transform: `translate(-50%, -50%) scale(${p})`, opacity: fadeOut(frame, from + 22, 6), padding: '8px 18px', borderRadius: 10, background: keycap.bg, border: `2px solid ${keycap.border}`, boxShadow: `0 ${6 - press}px 0 ${keycap.edge}`, color: keycap.text, fontFamily: FONT, fontSize: 26, fontWeight: 600, whiteSpace: 'nowrap' }}>
       Enter ↵
     </div>
   );
@@ -311,48 +320,55 @@ export const describe: SceneDef = {
   View: ({ ctx }) => {
     const frame = useCurrentFrame();
     const { fps } = useVideoConfig();
+    const C = useTheme();
     const enter = pop(frame, fps, 28, 13, 0.8);
     const typeFrom = ctx.w('describe');
+    const typeTo = ctx.w('English') + 10;
     const send = ctx.w('English') + 16;
-    const reveal = ramp(frame, send + 2, ctx.w('code') - send, ease.out);
-    const swap = ramp(frame, ctx.w('code') + 2, 12);
+    const code = ctx.w('code');
+    // The bubble appears as the prompt is sent; then Copilot's work log fills in, row by row.
+    const shown = TURN.slice(0, -1).map((_, i) => (i === 0 ? send + 2 : send + 8 + ((i - 1) * (code - send - 8)) / (TURN.length - 3)));
     const zoom = track(frame, [
-      [28, 1.55],
-      [send, 1.55],
-      [send + 30, 1.25],
-      [ctx.w('code'), 1.25],
-      [ctx.w('code') + 30, 1, ease.inOut],
+      [28, 1.8],
+      [send, 1.8],
+      [send + 24, 1.3],
+      [code, 1.3],
+      [code + 30, 1],
     ]);
     const fy = track(frame, [
-      [28, 700],
-      [send, 700],
-      [send + 30, 480],
-      [ctx.w('code') + 30, 500],
+      [28, 900],
+      [send, 900],
+      [send + 24, 640],
+      [code, 640],
+      [code + 30, 500],
     ]);
     const fx = track(frame, [
       [28, 400],
-      [ctx.w('code'), 400],
-      [ctx.w('code') + 30, 800],
+      [code, 400],
+      [code + 30, 800],
     ]);
     const y = 1450 - (1450 - 560) * enter;
-    const cam = { zoom, fx, fy };
+    // Fades under the next scene's entrance rather than vanishing from under it.
+    const out = fadeOut(frame, ctx.span.duration, 10);
     return (
-      <AbsoluteFill>
+      <AbsoluteFill style={{ opacity: out }}>
         {frame >= 26 ? (
-          <>
-            <AppWindow shot={SHOTS.chatWorking} x={960} y={y} width={1400} {...cam}>
-              {/* An empty chat until the prompt is sent; then the turn appears as Copilot works. */}
-              <Patch x={0} y={100 + (848 - 100) * reveal} w={800} h={(848 - 100) * (1 - reveal)} color={C.bg} />
-              {frame < send + 2 ? (
-                <Patch x={30} y={866} w={560} h={32} color={C.composer}>
-                  <Typed text={PROMPT} frame={frame} from={typeFrom} to={ctx.w('English') + 10} style={{ position: 'absolute', left: 2, top: 3, fontSize: 18, color: C.text }} />
-                </Patch>
-              ) : null}
-            </AppWindow>
-            {swap > 0 ? <AppWindow shot={SHOTS.workbench} x={960} y={y} width={1400} {...cam} opacity={swap} /> : null}
-          </>
+          <AppWindow shot={SHOTS.chatWorking} x={960} y={y} width={1400} zoom={zoom} fx={fx} fy={fy}>
+            {TURN.slice(0, -1).map((top, i) => {
+              const hidden = 1 - ramp(frame, shown[i], 5);
+              return hidden > 0 ? <Patch key={top} x={0} y={top} w={787} h={TURN[i + 1] - top} color={C.bg} opacity={hidden} /> : null;
+            })}
+            {frame < send ? (
+              <>
+                {/* Until it's sent, the composer is idle, as in the workbench shot, and the prompt types into it. */}
+                <ShotRegion shot={SHOTS.workbench} x={4} y={844} w={789} h={109} />
+                {frame >= typeFrom ? <Patch x={28} y={866} w={320} h={28} color={C.composer} /> : null}
+                <Typed text={PROMPT} frame={frame} from={typeFrom} to={typeTo} style={{ position: 'absolute', left: 32, top: 868, fontSize: 14.5, lineHeight: '22px', color: C.text, whiteSpace: 'nowrap' }} />
+              </>
+            ) : null}
+          </AppWindow>
         ) : null}
-        <Keycap x={1160} y={960} from={send - 2} />
+        <Keycap x={1440} y={958} from={send - 2} />
         <KineticTitle text="Describe it." from={0} to={30} />
         <Burst kind="confetti" at={ctx.w('cheer')} x={1650} y={720} count={46} seed={31} />
         <Burst kind="bubbles" at={ctx.w('cheer') + 4} x={1650} y={760} count={8} seed={32} />
@@ -382,7 +398,7 @@ export const preview: SceneDef = {
       { f: c.w('ask'), mood: 'happy' },
     ],
     waves: [c.w('Point')],
-    hops: [c.wEnd('ask') + 8],
+    hops: [c.w('ask') + 16],
     gaze: [
       [0, -0.6, 0.2],
       [34, 1, -0.2],
@@ -396,13 +412,14 @@ export const preview: SceneDef = {
     { f: c.w('live'), id: 'pop', volume: 0.4 },
     { f: c.w('See') + 2, id: 'sweep', volume: 0.25 },
     { f: c.w('it', 1), id: 'click', volume: 0.6 },
-    { f: c.w('ask') - 2, id: 'typing', volume: 0.3, duration: 22 },
-    { f: c.wEnd('ask') + 18, id: 'click', volume: 0.55 },
-    { f: c.wEnd('ask') + 20, id: 'shimmer', volume: 0.3 },
+    { f: c.w('ask') - 6, id: 'typing', volume: 0.3, duration: 16 },
+    { f: c.w('ask') + 16, id: 'click', volume: 0.55 },
+    { f: c.w('ask') + 18, id: 'shimmer', volume: 0.3 },
   ],
   View: ({ ctx }) => {
     const frame = useCurrentFrame();
     const { fps } = useVideoConfig();
+    const C = useTheme();
     const see = ctx.w('See');
     const dimTitle = 1 - ramp(frame, 26, 10);
     const zoom = track(frame, [
@@ -419,8 +436,8 @@ export const preview: SceneDef = {
     ]);
     const fy = track(frame, [
       [ctx.w('Your') - 4, 500],
-      [ctx.w('live') - 2, 330],
-      [ctx.w('right'), 330],
+      [ctx.w('live') - 2, 300],
+      [ctx.w('right'), 300],
       [ctx.w('chat') + 2, 500],
     ]);
     const liveSpot = ramp(frame, ctx.w('live'), 6) * fadeOut(frame, ctx.w('right') + 4, 8);
@@ -428,29 +445,31 @@ export const preview: SceneDef = {
     const swap = ramp(frame, see, 14, ease.inOut);
     const design = pop(frame, fps, see + 2, 13, 0.8);
     const click = ctx.w('it', 1);
-    const typeFrom = ctx.w('ask') - 2;
-    const typeTo = typeFrom + 22;
-    const add = ctx.wEnd('ask') + 18;
+    // Typed as he says "and ask", and added before the next scene comes in.
+    const typeFrom = ctx.w('ask') - 6;
+    const typeTo = ctx.w('ask') + 10;
+    const add = ctx.w('ask') + 16;
     const totalSpot = ramp(frame, click, 6) * fadeOut(frame, ctx.w('Design') - 2, 6);
     const designBtn = ramp(frame, ctx.w('Design') - 2, 6) * fadeOut(frame, ctx.w('ask') - 2, 6);
     const cardSpot = ramp(frame, ctx.w('ask') - 4, 6);
+    const out = fadeOut(frame, ctx.span.duration, 10);
 
     return (
-      <AbsoluteFill>
+      <AbsoluteFill style={{ opacity: out }}>
         {swap < 1 ? (
           <AppWindow shot={SHOTS.workbench} x={1080} y={560} width={1300} zoom={zoom} fx={fx} fy={fy} opacity={1 - swap} scale={1 - 0.05 * swap}>
-            <Spotlight x={922} y={60} w={130} h={28} opacity={liveSpot} radius={14} />
-            <Spotlight x={6} y={100} w={790} h={858} opacity={chatSpot} radius={10} dim={0.35} />
+            <Spotlight x={918} y={57} w={436} h={28} opacity={liveSpot} radius={14} />
+            <Spotlight x={4} y={98} w={790} h={856} opacity={chatSpot} radius={10} dim={0.35} />
           </AppWindow>
         ) : null}
         {frame >= see ? (
           <AppWindow shot={SHOTS.design} x={1230} y={560} width={DESIGN_W} height={940} opacity={Math.min(1, design * 1.4)} scale={0.9 + 0.1 * design}>
-            <Spotlight x={72} y={358} w={918} h={72} opacity={totalSpot} radius={8} />
-            <Spotlight x={897} y={18} w={120} h={42} opacity={designBtn} radius={8} />
-            <Spotlight x={80} y={443} w={466} h={510} opacity={cardSpot} radius={18} dim={0.4} />
+            <Spotlight x={65} y={360} w={934} h={74} opacity={totalSpot} radius={8} />
+            <Spotlight x={895} y={12} w={124} h={46} opacity={designBtn} radius={8} />
+            <Spotlight x={73} y={445} w={468} h={511} opacity={cardSpot} radius={14} dim={0.4} />
             {frame >= typeFrom - 2 ? (
-              <Patch x={110} y={538} w={410} h={64} color={C.field}>
-                <Typed text="Make the total bigger and bolder" frame={frame} from={typeFrom} to={typeTo} style={{ position: 'absolute', left: 2, top: 4, fontSize: 21, lineHeight: 1.35, color: C.text }} />
+              <Patch x={100} y={541} w={405} h={56} color={C.field}>
+                <Typed text="Make the total bigger and bolder" frame={frame} from={typeFrom} to={typeTo} style={{ position: 'absolute', left: 6, top: 3, fontSize: 20, lineHeight: 1.35, color: C.text }} />
               </Patch>
             ) : null}
             <Cursor
@@ -459,8 +478,7 @@ export const preview: SceneDef = {
                 { f: see + 6, x: 780, y: 1080 },
                 { f: ctx.w('Point'), x: 460, y: 400 },
                 { f: click + 4, x: 450, y: 398 },
-                { f: typeTo + 2, x: 470, y: 690 },
-                { f: add - 3, x: 492, y: 742 },
+                { f: add - 3, x: 488, y: 744 },
               ]}
               clicks={[click, add]}
               scale={1.3}
@@ -468,8 +486,8 @@ export const preview: SceneDef = {
             />
           </AppWindow>
         ) : null}
-        <Burst kind="sparkles" at={add + 2} x={1230 - DESIGN_W / 2 + (530 * DESIGN_W) / 1080} y={560 - 470 + (394 * 940) / 1290} count={14} seed={41} spread={2} />
-        <AbsoluteFill style={{ background: 'rgba(4,8,14,0.6)', opacity: dimTitle }} />
+        <Burst kind="sparkles" at={add + 2} {...onScreen({ shot: SHOTS.design, x: 1230, y: 560, width: DESIGN_W, height: 940 }, 532, 397)} count={14} seed={41} spread={2} />
+        <AbsoluteFill style={{ background: C.titleWash, opacity: dimTitle }} />
         <KineticTitle text="Watch it run." from={0} to={26} />
       </AbsoluteFill>
     );
@@ -481,18 +499,19 @@ export const preview: SceneDef = {
 function DeployPill({ x, y, from, liveAt }: { x: number; y: number; from: number; liveAt: number }): JSX.Element | null {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const C = useTheme();
   if (frame < from) return null;
   const p = pop(frame, fps, from, 12, 0.6);
   const progress = ramp(frame, from, liveAt - from, ease.inOut);
   const live = frame >= liveAt;
   return (
-    <div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%, 0) scale(${p})`, transformOrigin: '50% 0', padding: '8px 14px 10px', borderRadius: 10, background: live ? '#0f2a1d' : '#131a26', border: `1.5px solid ${live ? C.ok : C.accent}`, fontFamily: FONT, fontSize: 15, color: '#f4f8fc', whiteSpace: 'nowrap', boxShadow: '0 10px 24px rgba(0,0,0,0.5)' }}>
+    <div style={{ position: 'absolute', left: x, top: y, transform: `translate(-50%, 0) scale(${p})`, transformOrigin: '50% 0', padding: '8px 14px 10px', borderRadius: 10, background: live ? C.pill.liveBg : C.pill.bg, border: `1.5px solid ${live ? C.ok : C.accent}`, fontFamily: FONT, fontSize: 15, color: C.pill.text, whiteSpace: 'nowrap', boxShadow: C.shadow.pill }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ width: 9, height: 9, borderRadius: '50%', background: live ? C.ok : C.accent, display: 'inline-block' }} />
         {live ? 'Live in Microsoft Fabric ✓' : 'Redeploying to Fabric…'}
       </div>
       {!live ? (
-        <div style={{ marginTop: 7, height: 4, borderRadius: 2, background: '#26303d' }}>
+        <div style={{ marginTop: 7, height: 4, borderRadius: 2, background: C.pill.track }}>
           <div style={{ width: `${progress * 100}%`, height: '100%', borderRadius: 2, background: C.accent }} />
         </div>
       ) : null}
@@ -534,6 +553,7 @@ export const ship: SceneDef = {
   View: ({ ctx }) => {
     const frame = useCurrentFrame();
     const { fps } = useVideoConfig();
+    const C = useTheme();
     const dimTitle = 1 - ramp(frame, 24, 10);
     const turn = ctx.w('successful');
     const redeploy = ctx.w('Fabricator');
@@ -542,7 +562,7 @@ export const ship: SceneDef = {
     const zoom = track(frame, [
       [turn - 14, 1],
       [turn, 2.1],
-      [redeploy - 2, 2.1],
+      [redeploy - 8, 2.1],
       [redeploy + 14, 2.3],
       [then - 2, 2.3],
       [then + 14, 1, ease.inOut],
@@ -550,7 +570,7 @@ export const ship: SceneDef = {
     const fx = track(frame, [
       [turn - 14, 800],
       [turn, 330],
-      [redeploy - 2, 330],
+      [redeploy - 8, 330],
       [redeploy + 14, 1250],
       [then - 2, 1250],
       [then + 14, 800],
@@ -558,7 +578,7 @@ export const ship: SceneDef = {
     const fy = track(frame, [
       [turn - 14, 500],
       [turn, 300],
-      [redeploy - 2, 300],
+      [redeploy - 8, 300],
       [redeploy + 14, 120],
       [then - 2, 120],
       [then + 14, 500],
@@ -571,26 +591,27 @@ export const ship: SceneDef = {
     const confirm = ctx.wEnd('organization') + 8;
     const winX = 1080;
     const winW = 1300;
+    const out = fadeOut(frame, ctx.span.duration, 10);
     return (
-      <AbsoluteFill>
+      <AbsoluteFill style={{ opacity: out }}>
         <AppWindow shot={SHOTS.workbench} x={winX} y={560} width={winW} zoom={zoom} fx={fx} fy={fy}>
-          <Spotlight x={10} y={268} w={420} h={32} opacity={turnSpot} radius={8} />
-          <Spotlight x={1118} y={6} w={316} h={38} opacity={deploySpot} radius={10} />
-          <DeployPill x={1276} y={52} from={ctx.w('redeploys')} liveAt={live} />
-          <Cursor frame={frame} keys={[{ f: then + 6, x: 1200, y: 300 }, { f: share - 2, x: 1468, y: 26 }]} clicks={[share]} scale={1.2} opacity={ramp(frame, then + 6, 6) * fadeOut(frame, share + 8, 6)} />
+          <Spotlight x={8} y={291} w={410} h={30} opacity={turnSpot} radius={8} />
+          <Spotlight x={1166} y={4} w={242} h={38} opacity={deploySpot} radius={10} />
+          <DeployPill x={1362} y={52} from={ctx.w('redeploys')} liveAt={live} />
+          <Cursor frame={frame} keys={[{ f: then + 6, x: 1200, y: 300 }, { f: share - 2, x: 1450, y: 24 }]} clicks={[share]} scale={1.2} opacity={ramp(frame, then + 6, 6) * fadeOut(frame, share + 8, 6)} />
         </AppWindow>
         {frame >= share + 4 ? (
           <>
-            <AbsoluteFill style={{ background: 'rgba(3,6,12,0.55)', opacity: Math.min(1, dialog) }} />
+            <AbsoluteFill style={{ background: C.backdrop, opacity: Math.min(1, dialog) }} />
             <AppWindow shot={SHOTS.share} x={winX} y={560} width={860} scale={0.85 + 0.15 * dialog} opacity={Math.min(1, dialog * 1.5)}>
               <Spotlight x={152} y={378} w={656} h={58} opacity={ramp(frame, people, 6)} radius={10} dim={0.3} />
               <Cursor frame={frame} keys={[{ f: people, x: 600, y: 450 }, { f: confirm - 3, x: 762, y: 515 }]} clicks={[confirm]} scale={1.1} opacity={ramp(frame, people, 6)} />
             </AppWindow>
           </>
         ) : null}
-        <Burst kind="confetti" at={live} x={1130} y={280} count={40} seed={51} />
-        <Burst kind="sparkles" at={confirm + 2} x={winX + 120} y={680} count={12} seed={52} spread={1.8} />
-        <AbsoluteFill style={{ background: 'rgba(4,8,14,0.6)', opacity: dimTitle }} />
+        <Burst kind="confetti" at={live} {...onScreen({ shot: SHOTS.workbench, x: winX, y: 560, width: winW, zoom: 2.3, fx: 1250, fy: 120 }, 1362, 92)} count={40} seed={51} />
+        <Burst kind="sparkles" at={confirm + 2} {...onScreen({ shot: SHOTS.share, x: winX, y: 560, width: 860 }, 762, 514)} count={12} seed={52} spread={1.8} />
+        <AbsoluteFill style={{ background: C.titleWash, opacity: dimTitle }} />
         <KineticTitle text="Ship it." from={0} to={24} />
       </AbsoluteFill>
     );

@@ -1,12 +1,11 @@
 import { useMemo } from 'react';
 import { useCurrentFrame, useVideoConfig } from 'remotion';
 import { rng } from '../ray/rig';
-import { C } from '../theme';
+import { useTheme } from '../theme';
 
 export type BurstKind = 'bubbles' | 'confetti' | 'hearts' | 'sparkles';
 
 const LIFE: Record<BurstKind, number> = { bubbles: 1.6, confetti: 2.2, hearts: 1.5, sparkles: 1.1 };
-const CONFETTI = [C.accent, C.accent2, '#1d92e2', C.warn, C.pink, '#b8e8fb', '#41c795'];
 
 interface Particle {
   dx: number;
@@ -35,6 +34,8 @@ interface BurstProps {
 export function Burst({ kind, at, x, y, count = 12, seed = 1, spread = 1 }: BurstProps): JSX.Element | null {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const C = useTheme();
+  const confetti = C.confetti;
   const parts = useMemo<Particle[]>(() => {
     const random = rng(seed * 7919 + count);
     return Array.from({ length: count }, (_, i) => {
@@ -47,11 +48,11 @@ export function Burst({ kind, at, x, y, count = 12, seed = 1, spread = 1 }: Burs
         rot: random() * 360,
         spin: (random() - 0.5) * 900,
         delay: kind === 'bubbles' ? i * 0.05 + random() * 0.15 : random() * 0.12,
-        color: CONFETTI[Math.floor(random() * CONFETTI.length)],
+        color: confetti[Math.floor(random() * confetti.length)],
         wobble: random() * Math.PI * 2,
       };
     });
-  }, [kind, count, seed, spread]);
+  }, [kind, count, seed, spread, confetti]);
 
   const age = (frame - at) / fps;
   if (age < 0 || age > LIFE[kind] + 0.4) return null;
@@ -98,7 +99,7 @@ export function Burst({ kind, at, x, y, count = 12, seed = 1, spread = 1 }: Burs
             scale = 0.4 + Math.sin(Math.min(1, k) * Math.PI) * 0.8;
             content = (
               <svg width={p.size} height={p.size} viewBox="0 0 24 24" style={{ display: 'block' }}>
-                <path d="M12 0 L14.2 9.8 L24 12 L14.2 14.2 L12 24 L9.8 14.2 L0 12 L9.8 9.8 Z" fill={i % 3 === 0 ? C.warn : '#e9fbff'} />
+                <path d="M12 0 L14.2 9.8 L24 12 L14.2 14.2 L12 24 L9.8 14.2 L0 12 L9.8 9.8 Z" fill={C.sparkle[i % 3 === 0 ? 0 : 1]} />
               </svg>
             );
             break;
@@ -109,7 +110,7 @@ export function Burst({ kind, at, x, y, count = 12, seed = 1, spread = 1 }: Burs
             opacity = k < 0.15 ? k / 0.15 : 1 - Math.max(0, (k - 0.55) / 0.45);
             scale = 0.5 + Math.min(1, k * 3) * 0.6;
             content = (
-              <div style={{ width: p.size, height: p.size, borderRadius: '50%', border: `2px solid ${C.bubble}`, background: 'rgba(127,216,238,0.18)' }} />
+              <div style={{ width: p.size, height: p.size, borderRadius: '50%', border: `2px solid ${C.bubble.ring}`, background: C.bubble.fill }} />
             );
           }
         }
@@ -136,6 +137,7 @@ export function Burst({ kind, at, x, y, count = 12, seed = 1, spread = 1 }: Burs
 export function DizzyStars({ x, y, radius, from, to }: { x: number; y: number; radius: number; from: number; to: number }): JSX.Element | null {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const C = useTheme();
   if (frame < from || frame > to) return null;
   const t = (frame - from) / fps;
   const fade = Math.min(1, (frame - from) / 6, (to - frame) / 6);
@@ -148,7 +150,7 @@ export function DizzyStars({ x, y, radius, from, to }: { x: number; y: number; r
         const front = Math.sin(a) > 0;
         return (
           <svg key={i} width="30" height="30" viewBox="0 0 24 24" style={{ position: 'absolute', left: sx - 15, top: sy - 15, opacity: front ? 1 : 0.55, transform: `scale(${front ? 1 : 0.75})` }}>
-            <path d="M12 1.5l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.3 5.7 20.9l1.5-7.1L1.8 8.9 9 8.1z" fill={C.warn} />
+            <path d="M12 1.5l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.3 5.7 20.9l1.5-7.1L1.8 8.9 9 8.1z" fill={C.star} />
           </svg>
         );
       })}

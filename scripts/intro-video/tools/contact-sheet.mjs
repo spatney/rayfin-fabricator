@@ -1,20 +1,23 @@
 // Contact sheet: renders stills of a composition and tiles them into one image, for reviewing
 // framing, legibility and timing without watching the whole cut.
 //
-//   node tools/contact-sheet.mjs                       24 evenly spaced frames of the video
+//   node tools/contact-sheet.mjs                       24 evenly spaced frames of the dark cut
+//   node tools/contact-sheet.mjs --theme light         the same of the light cut
 //   node tools/contact-sheet.mjs --count 40
 //   node tools/contact-sheet.mjs --frames 30,95,400    exact frames
 //   node tools/contact-sheet.mjs --scenes              the middle of every scene, plus its first word
 //   node tools/contact-sheet.mjs --composition RayCheck --frames 10,30,60
 //
-// Writes out/contact-sheet.jpg and keeps the full-size stills in out/stills/.
+// Writes out/contact-sheet.jpg (out/contact-sheet.light.jpg for the light cut, and
+// out/contact-sheet-<id>.jpg for any other composition) and keeps the full-size stills in
+// out/stills/.
 import { createRequire } from 'node:module';
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { bundle } from '@remotion/bundler';
 import { ensureBrowser, renderStill, selectComposition } from '@remotion/renderer';
 import { webpackOverride } from '../webpack-override.mjs';
-import { OUT, REPO, ROOT, TIMELINE } from './paths.mjs';
+import { CUTS, OUT, REPO, ROOT, TIMELINE } from './paths.mjs';
 import { layout } from '../src/timing.ts';
 
 const sharp = createRequire(path.join(REPO, 'website', 'package.json'))('sharp');
@@ -40,7 +43,10 @@ async function framesToShow(composition) {
 }
 
 async function main() {
-  const id = option('composition', 'FabricatorIntro');
+  const theme = option('theme', 'dark');
+  const cut = CUTS[theme];
+  if (!cut) throw new Error(`--theme must be one of ${Object.keys(CUTS).join(', ')}.`);
+  const id = option('composition', cut.composition);
   await ensureBrowser();
   const serveUrl = await bundle({ entryPoint: path.join(ROOT, 'src', 'index.ts'), webpackOverride: webpackOverride(ROOT) });
   const composition = await selectComposition({ serveUrl, id });
@@ -71,7 +77,8 @@ async function main() {
     const svg = `<svg width="${tileW}" height="${label}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#111"/><text x="8" y="18" font-family="Segoe UI, sans-serif" font-size="15" fill="#ddd">frame ${tile.frame} · ${secs}s</text></svg>`;
     composites.push({ input: Buffer.from(svg), left, top });
   }
-  const sheet = path.join(OUT, `contact-sheet${id === 'FabricatorIntro' ? '' : `-${id}`}.jpg`);
+  const named = { [CUTS.dark.composition]: 'contact-sheet', [CUTS.light.composition]: 'contact-sheet.light' };
+  const sheet = path.join(OUT, `${named[id] ?? `contact-sheet-${id}`}.jpg`);
   await sharp({ create: { width: cols * tileW, height: rows * (tileH + label), channels: 3, background: '#000' } })
     .composite(composites)
     .jpeg({ quality: 82 })

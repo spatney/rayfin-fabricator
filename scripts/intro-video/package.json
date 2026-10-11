@@ -7,7 +7,9 @@
   "scripts": {
     "assets": "node tools/sync-assets.mjs",
     "studio": "npm run assets && remotion studio src/index.ts",
-    "render": "npm run assets && remotion render src/index.ts FabricatorIntro out/fabricator-intro.mp4 && node tools/master.mjs",
+    "render": "npm run assets && remotion render src/index.ts FabricatorIntro out/fabricator-intro.mp4 && remotion render src/index.ts FabricatorIntroLight out/fabricator-intro.light.mp4 && node tools/master.mjs out/fabricator-intro.mp4 out/fabricator-intro.light.mp4",
+    "render:dark": "npm run assets && remotion render src/index.ts FabricatorIntro out/fabricator-intro.mp4 && node tools/master.mjs out/fabricator-intro.mp4",
+    "render:light": "npm run assets && remotion render src/index.ts FabricatorIntroLight out/fabricator-intro.light.mp4 && node tools/master.mjs out/fabricator-intro.light.mp4",
     "audition": "node tools/audition.mjs",
     "voice": "node tools/voice.mjs",
     "sfx": "node tools/sfx.mjs",

@@ -4,6 +4,8 @@ import { useCurrentFrame, useVideoConfig } from 'remotion';
 import { Ray, RAY_VIEWBOX, type RayMood } from '../../../../src/renderer/src/components/mascot/Ray';
 import type { TimelineLine } from '../timing';
 import { ease, track, type Ease, type Key } from '../anim';
+import { MOOD_MOUTH, lipTrack, settle, voiced, type MouthShape } from './lipsync';
+import { Mouth } from './Mouth';
 import { blinkSchedule, bob, clamp, eyesAt, flapSpeed, smoothstep, waveWing, wings } from './rig';
 import './ray-video.css';
 
@@ -54,7 +56,8 @@ export interface RayActorProps {
   style?: CSSProperties;
 }
 
-const NO_TALK: ReadonlySet<RayMood> = new Set(['dizzy', 'sleep', 'blow']);
+/** Moods he never talks in: asleep, or blowing bubbles. */
+const QUIET: ReadonlySet<RayMood> = new Set(['sleep', 'blow']);
 const SPEED_SAMPLE = 3;
 
 function prop(keys: readonly RayKey[], get: (k: RayKey) => number | undefined, fallback: number): Key[] {
@@ -65,6 +68,8 @@ function prop(keys: readonly RayKey[], get: (k: RayKey) => number | undefined, f
     return [k.f, last, k.e ?? ease.inOut] as const;
   });
 }
+
+const moodAt = (moods: readonly MoodCue[], f: number): MoodCue | undefined => [...moods].reverse().find((m) => m.f <= f);
 
 export function RayActor({
   keys,
@@ -118,6 +123,29 @@ export function RayActor({
 
   const blinks = useMemo(() => blinkSchedule(seed, durationInFrames / fps + 10), [seed, durationInFrames, fps]);
 
+  // His mouth on every frame: his mood's own mouth, or the shapes of what he's saying (in his
+  // mood: a happy ray talks with a smile), eased from frame to frame. Null keeps the app's.
+  const mouths = useMemo(() => {
+    const tracks = speech.map((sp) => ({ at: sp.f, ...lipTrack(sp.line, fps) }));
+    const out: Array<MouthShape | null> = [];
+    let now: MouthShape | null = null;
+    for (let f = 0; f <= durationInFrames; f++) {
+      const mood = moodAt(moods, f)?.mood ?? 'idle';
+      let target = MOOD_MOUTH[mood];
+      if (!QUIET.has(mood)) {
+        for (const t of tracks) {
+          const i = f - t.at - t.start;
+          if (i < 0 || i >= t.visemes.length) continue;
+          const v = t.visemes[i];
+          target = v === 'rest' ? (target ?? MOOD_MOUTH.idle) : voiced(v, mood, t.loud[i]);
+        }
+      }
+      now = target && now ? settle(now, target) : target;
+      out.push(now);
+    }
+    return out;
+  }, [speech, moods, fps, durationInFrames]);
+
   const f = Math.min(frame, durationInFrames);
   const t = f / fps;
   const x = track(f, tracks.x);
@@ -163,22 +191,10 @@ export function RayActor({
     }
   }
 
-  // Mood, and talking: his mouth follows the voice; in a real pause his expression shows.
-  const cue = [...moods].reverse().find((m) => m.f <= f);
-  const base: RayMood = cue?.mood ?? 'idle';
-  let mood: RayMood = base;
-  let mouth = 0;
-  for (const sp of speech) {
-    const i = f - sp.f;
-    const env = sp.line.envelope;
-    if (i < 0 || i >= env.length) continue;
-    let loud = 0;
-    for (let k = Math.max(0, i - 4); k <= Math.min(env.length - 1, i + 4); k++) loud = Math.max(loud, env[k]);
-    if (loud > 0.08 && !NO_TALK.has(base)) {
-      mood = 'talk';
-      mouth = env[i];
-    }
-  }
+  // His mood shows while he talks too; only his mouth follows the voice.
+  const cue = moodAt(moods, f);
+  const mood: RayMood = cue?.mood ?? 'idle';
+  const mouth = mouths[f] ?? null;
 
   const look = gaze ? gaze(f) : { x: 0, y: 0.15 };
   const eyes = eyesAt(t, blinks);
@@ -191,11 +207,10 @@ export function RayActor({
     '--v-rise': `${pose.rise.toFixed(2)}px`,
     '--v-sway': `${pose.sway.toFixed(2)}deg`,
     '--v-eyes': eyes.toFixed(3),
-    '--v-mouth': (0.15 + 0.85 * mouth).toFixed(3),
     '--v-spin': `${(t * 400) % 360}deg`,
     '--ray-steer': `${steer.toFixed(2)}deg`,
     '--ray-lx': look.x.toFixed(3),
-    '--ray-ly': (base === 'read' && mood !== 'talk' ? 1 : look.y).toFixed(3),
+    '--ray-ly': (mood === 'read' ? 1 : look.y).toFixed(3),
   } as CSSProperties;
 
   return (
@@ -211,8 +226,9 @@ export function RayActor({
         ...style,
       }}
     >
-      <div style={{ width: '100%', height: '100%', transform: `scale(${sx}, ${sy})`, transformOrigin: '50% 70%' }}>
-        <Ray mood={mood} glasses={cue?.glasses ?? false} blink={false} className="video-ray" style={vars} />
+      <div style={{ position: 'relative', width: '100%', height: '100%', transform: `scale(${sx}, ${sy})`, transformOrigin: '50% 70%' }}>
+        <Ray mood={mood} glasses={cue?.glasses ?? false} blink={false} className={mouth ? 'video-ray has-mouth' : 'video-ray'} style={vars} />
+        {mouth ? <Mouth shape={mouth} rise={pose.rise} /> : null}
       </div>
       {children}
     </div>

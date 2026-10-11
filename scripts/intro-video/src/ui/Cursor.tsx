@@ -1,4 +1,5 @@
 import { track, type Key } from '../anim';
+import { alpha, useTheme } from '../theme';
 
 export interface CursorKey {
   f: number;
@@ -18,6 +19,7 @@ interface CursorProps {
 
 /** A pointer that glides between keys and clicks with a ripple. */
 export function Cursor({ frame, keys, clicks = [], scale = 1, opacity = 1 }: CursorProps): JSX.Element | null {
+  const C = useTheme();
   if (opacity <= 0.001 || keys.length === 0) return null;
   const xs: Key[] = keys.map((k) => [k.f, k.x] as const);
   const ys: Key[] = keys.map((k) => [k.f, k.y] as const);
@@ -39,8 +41,8 @@ export function Cursor({ frame, keys, clicks = [], scale = 1, opacity = 1 }: Cur
             width: 80 * ripple + 12,
             height: 80 * ripple + 12,
             borderRadius: '50%',
-            border: `3px solid rgba(53,163,234,${1 - ripple})`,
-            background: `rgba(53,163,234,${0.25 * (1 - ripple)})`,
+            border: `3px solid ${alpha(C.accent, 1 - ripple)}`,
+            background: alpha(C.accent, 0.25 * (1 - ripple)),
           }}
         />
       ) : null}

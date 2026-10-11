@@ -122,8 +122,11 @@ Expenses"), or rendered from the app's components with sample data. Personal det
 values before capture. Never add an image that shows real personal data. The tooling and
 procedure are in [`scripts/docs-screenshots/`](../scripts/docs-screenshots/README.md).
 
-Images are WebP files in `public/screenshots/`. The alt text describes what the image shows
-for someone who can't see it:
+Images are WebP files in `public/screenshots/`. Every screenshot has two captures of the same
+screen: `<id>.webp` in Fabricator's dark theme and `<id>.light.webp` in its light theme, with the
+sample app in the preview in the same theme. Pages link only the dark capture; the site shows the
+one that matches the reader's theme, and `npm run check:docs` fails when a light capture is
+missing. The alt text describes what the image shows for someone who can't see it:
 
 ```md
 ![The deployments panel listing the active Development deployment, with a New deployment link](/screenshots/deployments.webp)

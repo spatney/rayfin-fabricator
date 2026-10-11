@@ -1,11 +1,12 @@
-// Checks a rendered cut against its delivery targets: length, file size, loudness, true peak,
-// and whether it can start playing before it has fully downloaded (moov before mdat).
+// Checks rendered cuts against their delivery targets: length, file size, loudness, true peak,
+// and whether each can start playing before it has fully downloaded (moov before mdat).
 //
-//   node tools/loudness.mjs [file]      defaults to out/fabricator-intro.mp4
+//   node tools/loudness.mjs [file...]      defaults to both cuts in out/
+import { existsSync } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { durationSeconds, loudness } from './audio.mjs';
-import { OUT } from './paths.mjs';
+import { CUTS, OUT, ROOT } from './paths.mjs';
 
 const TARGETS = { minSeconds: 60, maxSeconds: 90, maxMB: 15, lufs: -16, lufsTolerance: 1.5, maxTruePeak: -1 };
 
@@ -33,8 +34,13 @@ async function topLevelBoxes(file) {
   }
 }
 
-async function main() {
-  const file = path.resolve(process.argv[2] ?? path.join(OUT, 'fabricator-intro.mp4'));
+/** Prints the checks for one file; resolves with its length, or null if a check failed. */
+async function check(file) {
+  console.log(path.relative(ROOT, file));
+  if (!existsSync(file)) {
+    console.log('✗ missing         render it first (npm run render)');
+    return null;
+  }
   const seconds = await durationSeconds(file);
   const mb = (await stat(file)).size / 1024 / 1024;
   const level = await loudness(file);
@@ -50,7 +56,22 @@ async function main() {
     ['streams early', faststart ? 'yes (moov before mdat)' : `no (${boxes.join(' ')})`, faststart],
   ];
   for (const [name, value, ok] of checks) console.log(`${ok ? '✓' : '✗'} ${name.padEnd(15)} ${value}`);
-  if (checks.some(([, , ok]) => !ok)) process.exitCode = 1;
+  return checks.every(([, , ok]) => ok) ? seconds : null;
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const files = (args.length ? args : Object.values(CUTS).map((cut) => path.join(OUT, cut.video))).map((f) => path.resolve(f));
+  const lengths = [];
+  for (const file of files) {
+    lengths.push(await check(file));
+    console.log('');
+  }
+  if (lengths.some((s) => s === null)) process.exitCode = 1;
+  else if (lengths.length > 1 && Math.max(...lengths) - Math.min(...lengths) > 0.05) {
+    console.log(`✗ the cuts differ in length (${lengths.map((s) => `${s.toFixed(2)} s`).join(', ')}); render them again`);
+    process.exitCode = 1;
+  }
 }
 
 main().catch((err) => {

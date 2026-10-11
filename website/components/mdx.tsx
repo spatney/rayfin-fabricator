@@ -14,12 +14,24 @@ function Pre(props: ComponentProps<'pre'> & { title?: string }) {
   return DefaultPre ? <DefaultPre {...props} /> : <pre {...props} />;
 }
 
+/** A screenshot page authors link to: the dark capture. Its light twin is `<id>.light.webp`. */
+const SCREENSHOT = /^\/screenshots\/([\w-]+)\.webp$/;
+
 function Img(props: ComponentProps<'img'>) {
   const imported = props.src && typeof props.src === 'object' && 'src' in props.src ? (props.src as { src: string; width?: number; height?: number }) : undefined;
-  const src = withBasePath(imported?.src ?? (typeof props.src === 'string' ? props.src : ''));
+  const path = imported?.src ?? (typeof props.src === 'string' ? props.src : '');
   const width = props.width ?? imported?.width;
   const height = props.height ?? imported?.height;
-  return <img {...props} src={src} width={width} height={height} />;
+  const shot = SCREENSHOT.exec(path);
+  if (!shot) return <img {...props} src={withBasePath(path)} width={width} height={height} />;
+  // Both captures, one per site theme; a lazy image that isn't displayed is never fetched.
+  const classes = (theme: string) => [props.className, theme].filter(Boolean).join(' ');
+  return (
+    <>
+      <img {...props} src={withBasePath(`/screenshots/${shot[1]}.light.webp`)} width={width} height={height} loading="lazy" decoding="async" className={classes('dark:hidden')} />
+      <img {...props} src={withBasePath(path)} width={width} height={height} loading="lazy" decoding="async" className={classes('hidden dark:block')} />
+    </>
+  );
 }
 
 function fenceLanguage(children: ReactNode): string | undefined {

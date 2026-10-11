@@ -35,6 +35,9 @@ export const docs = defineDocs({
 export default defineConfig({
   mdxOptions: {
     remarkNpmOptions: { persist: { id: 'package-manager' } },
+    // Keep images at their /public paths so components/mdx.tsx can find each screenshot's
+    // light twin (`<id>.light.webp`) next to it.
+    remarkImageOptions: { useImport: false },
     remarkStructureOptions: { stringify: (node) => plainText(node as MdastLike) },
     rehypeCodeOptions: {
       ...rehypeCodeDefaultOptions,

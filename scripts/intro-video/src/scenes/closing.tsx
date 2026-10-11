@@ -1,11 +1,11 @@
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion';
-import { ease, fadeOut, pop, ramp } from '../anim';
+import { ease, fadeOut, pop, ramp, track } from '../anim';
 import { Burst } from '../fx/Burst';
 import { RayActor } from '../ray/RayActor';
-import { AppWindow, SHOTS, Spotlight, type Shot } from '../ui/AppWindow';
+import { AppWindow, SHOTS, Spotlight, onScreen, type Shot } from '../ui/AppWindow';
 import { EndCard } from '../ui/Brand';
 import { Chip } from '../ui/Kit';
-import type { SceneDef } from './types';
+import type { SceneCtx, SceneDef } from './types';
 
 /* ---------------------------------- 9. Tricks ---------------------------------- */
 
@@ -34,6 +34,27 @@ function Card({ shot, from, to, zoom, fx, fy, shake = false, children }: { shot:
   );
 }
 
+/**
+ * Blueprint's camera, in image pixels: it lands on the whole map, pushes in on the app's card
+ * (with the people who use it), then follows the connection lines out to where they lead.
+ */
+const blueprintCamera = (c: SceneCtx, frame: number) => {
+  const map = c.w('Blueprint') - 4;
+  const card = c.w('maps') - 2;
+  const lines = c.w('connects') - 6;
+  const keys = (wide: number, app: number, out: number) =>
+    [
+      [map + 12, wide],
+      [card + 18, app, ease.inOut],
+      [lines + 22, out, ease.inOut],
+    ] as const;
+  return {
+    zoom: track(frame, keys(1.12, 1.78, 1.5)),
+    fx: track(frame, keys(785, 700, 1010)),
+    fy: track(frame, keys(495, 420, 495)),
+  };
+};
+
 export const tricks: SceneDef = {
   id: 'tricks',
   ray: (c) => ({
@@ -45,17 +66,18 @@ export const tricks: SceneDef = {
     ],
     moods: [
       { f: 0, mood: 'read', glasses: true },
-      { f: c.w('History') - 2, mood: 'surprised' },
-      { f: c.w('keeps') + 6, mood: 'happy' },
+      { f: c.w('Blueprint') - 2, mood: 'surprised' },
+      { f: c.w('maps') + 6, mood: 'happy' },
       { f: c.w('something'), mood: 'worried' },
       { f: c.w('dig') - 2, mood: 'read', glasses: true },
       { f: c.w('you'), mood: 'happy' },
     ],
-    rolls: [c.w('History')],
+    rolls: [c.w('Blueprint')],
     hops: [c.wEnd('you')],
     gaze: [
       [0, 1, -0.2],
-      [c.w('History'), 1, 0],
+      [c.w('Blueprint'), 1, 0],
+      [c.w('connects'), 1, -0.1],
       [c.w('something'), 1, 0.2],
       [c.w('you'), 0, 0.1],
     ],
@@ -63,39 +85,40 @@ export const tricks: SceneDef = {
   sfx: (c) => [
     { f: 2, id: 'swim-whoosh', volume: 0.25 },
     { f: c.w('grades'), id: 'stamp', volume: 0.6 },
-    { f: c.w('History') - 2, id: 'rewind', volume: 0.5 },
+    { f: c.w('Blueprint') - 2, id: 'sweep', volume: 0.35 },
     { f: c.w('breaks'), id: 'thud', volume: 0.55 },
     { f: c.w('dig'), id: 'sweep', volume: 0.25 },
     { f: c.w('logs'), id: 'shimmer', volume: 0.3 },
   ],
   View: ({ ctx }) => {
     const frame = useCurrentFrame();
-    const history = ctx.w('History') - 4;
+    const blueprint = ctx.w('Blueprint') - 4;
     const breaks = ctx.w('something') - 4;
     const help = ctx.w("I'll") - 4;
-    const end = ctx.span.duration;
+    // Help is gone before the outro's wordmark lands where it was.
+    const leave = ctx.span.duration - 24;
+    // The Advisor's grade ring, where Cards place the Advisor once it has slid in.
+    const grade = onScreen({ shot: SHOTS.advisor, x: 1100, y: 560, width: 1300, zoom: 1.2, fx: 790, fy: 230 }, 181, 183);
     return (
       <AbsoluteFill>
-        <Card shot={SHOTS.advisor} from={0} to={history} zoom={1.2} fx={790} fy={230}>
-          <Spotlight x={138} y={140} w={92} h={92} radius={46} opacity={ramp(frame, ctx.w('grades'), 6) * fadeOut(frame, history, 6)} />
+        <Card shot={SHOTS.advisor} from={0} to={blueprint} zoom={1.2} fx={790} fy={230}>
+          <Spotlight x={135} y={137} w={92} h={92} radius={46} opacity={ramp(frame, ctx.w('grades'), 6) * fadeOut(frame, blueprint, 6)} />
         </Card>
-        <Card shot={SHOTS.history} from={history} to={breaks} zoom={1.4} fx={480} fy={330}>
-          <Spotlight x={6} y={244} w={312} h={182} radius={10} opacity={ramp(frame, ctx.w('keeps'), 6) * fadeOut(frame, breaks, 6)} />
-        </Card>
+        <Card shot={SHOTS.blueprint} from={blueprint} to={breaks} {...blueprintCamera(ctx, frame)} />
         <Card shot={SHOTS.deployError} from={breaks} to={help} shake />
-        <Card shot={SHOTS.help} from={help} to={end - 12} zoom={1.12} fx={760} fy={260}>
-          <Spotlight x={336} y={140} w={920} h={330} radius={14} dim={0.35} opacity={ramp(frame, ctx.w('logs') - 2, 8)} />
+        <Card shot={SHOTS.help} from={help} to={leave} zoom={1.12} fx={760} fy={260}>
+          <Spotlight x={332} y={140} w={916} h={330} radius={14} dim={0.35} opacity={ramp(frame, ctx.w('logs') - 2, 8)} />
         </Card>
-        <Chip x={1100} y={118} from={2} to={history - 2}>
+        <Chip x={1100} y={118} from={2} to={blueprint - 2}>
           The Advisor
         </Chip>
-        <Chip x={1100} y={118} from={history + 4} to={breaks - 2}>
-          History
+        <Chip x={1100} y={118} from={blueprint + 4} to={breaks - 2}>
+          Blueprint
         </Chip>
-        <Chip x={1100} y={218} from={help + 4} to={end - 12}>
+        <Chip x={1100} y={218} from={help + 4} to={leave}>
           Help
         </Chip>
-        <Burst kind="sparkles" at={ctx.w('grades')} x={1100 - 650 + 184 * (1300 / 1600) * 1.2} y={300} count={10} seed={61} spread={1.5} />
+        <Burst kind="sparkles" at={ctx.w('grades')} {...grade} count={10} seed={61} spread={1.5} />
       </AbsoluteFill>
     );
   },

@@ -7,6 +7,7 @@
 //   node cdp.mjs targets                         list debuggable pages
 //   node cdp.mjs eval "<js>"                     evaluate in the app window (prints JSON)
 //   node cdp.mjs click "<css or text:Label>"     click an element in the app window
+//   node cdp.mjs press "<css>"                   click it with real mouse events (no focus ring)
 //   node cdp.mjs type "<css>" <text...>          type into an input (replaces its value)
 //   node cdp.mjs scrub <replacements.json>       replace personal details in the DOM
 //   node cdp.mjs shot <out.png> [css]            screenshot the page, or one element
@@ -17,7 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const APP_URL = /^(tauri|http:\/\/tauri\.localhost|https?:\/\/localhost:1420)/;
+export const APP_URL = /^(tauri|http:\/\/tauri\.localhost|https?:\/\/localhost:1420)/;
 
 export async function listTargets(port = 9333) {
   const res = await fetch(`http://127.0.0.1:${port}/json/list`);
@@ -25,13 +26,15 @@ export async function listTargets(port = 9333) {
   return (await res.json()).filter((t) => t.type === 'page');
 }
 
-/** Connect to the app window (default) or the first page whose URL contains `url`. */
-export async function connect({ port = 9333, url } = {}) {
+/** Connect to the app window (default), the target with id `id`, or the first page whose URL contains `url`. */
+export async function connect({ port = 9333, url, id } = {}) {
   const targets = await listTargets(port);
-  const target = url
-    ? targets.find((t) => t.url.includes(url))
-    : (targets.find((t) => APP_URL.test(t.url)) ?? targets[0]);
-  if (!target) throw new Error(`No page target${url ? ` matching ${url}` : ''} on port ${port}`);
+  const target = id
+    ? targets.find((t) => t.id === id)
+    : url
+      ? targets.find((t) => t.url.includes(url))
+      : (targets.find((t) => APP_URL.test(t.url)) ?? targets[0]);
+  if (!target) throw new Error(`No page target${id ? ` with id ${id}` : url ? ` matching ${url}` : ''} on port ${port}`);
 
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
@@ -41,14 +44,33 @@ export async function connect({ port = 9333, url } = {}) {
 
   let nextId = 0;
   const pending = new Map();
+  const listeners = new Map();
   ws.addEventListener('message', (event) => {
     const msg = JSON.parse(event.data);
+    if (msg.method) {
+      for (const listener of listeners.get(msg.method) ?? []) listener(msg.params);
+      return;
+    }
     const waiter = msg.id !== undefined ? pending.get(msg.id) : undefined;
     if (!waiter) return;
     pending.delete(msg.id);
     if (msg.error) waiter.reject(new Error(`${msg.error.message} (${msg.error.code})`));
     else waiter.resolve(msg.result);
   });
+
+  /** The next `method` event's params, or null after `timeout` ms. */
+  const once = (method, timeout = 10000) =>
+    new Promise((resolve) => {
+      const list = listeners.get(method) ?? new Set();
+      listeners.set(method, list);
+      const done = (params) => {
+        list.delete(done);
+        clearTimeout(timer);
+        resolve(params);
+      };
+      const timer = setTimeout(() => done(null), timeout);
+      list.add(done);
+    });
 
   const send = (method, params = {}) =>
     new Promise((resolve, reject) => {
@@ -118,6 +140,24 @@ export async function connect({ port = 9333, url } = {}) {
       return el.textContent.trim().slice(0, 80);
     })()`);
 
+  /**
+   * Click `selector` with real mouse events at its center. Menus that focus their first item
+   * then don't draw a keyboard focus ring, as they would after a scripted click.
+   */
+  const press = async (selector) => {
+    const box = await evaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    })()`);
+    if (!box) throw new Error(`No element matches ${selector}`);
+    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+      await send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
+    }
+    return selector;
+  };
+
   /** Focus `selector` and type `text` as real keyboard input (works with React inputs). */
   const type = async (selector, text, { clear = true } = {}) => {
     await evaluate(`(() => {
@@ -135,7 +175,7 @@ export async function connect({ port = 9333, url } = {}) {
     return evaluate(`(${source}\n)(${JSON.stringify(replacements)})`);
   };
 
-  return { target, send, evaluate, screenshot, click, type, scrub, close: () => ws.close() };
+  return { target, send, once, evaluate, screenshot, click, press, type, scrub, close: () => ws.close() };
 }
 
 async function main() {
@@ -159,6 +199,7 @@ async function main() {
   try {
     if (command === 'eval') console.log(JSON.stringify(await page.evaluate(rest.join(' ')), null, 2));
     else if (command === 'click') console.log(await page.click(rest.join(' ')));
+    else if (command === 'press') console.log(await page.press(rest.join(' ')));
     else if (command === 'type') await page.type(rest[0], rest.slice(1).join(' '));
     else if (command === 'scrub') console.log(await page.scrub(JSON.parse(await readFile(rest[0], 'utf8'))));
     else if (command === 'shot') console.log(await page.screenshot(rest[0], { selector: rest[1] }));

@@ -7,6 +7,7 @@ import { outro, stinger, tricks } from './scenes/closing';
 import { fabric, hello, oldWay, oneWindow } from './scenes/opening';
 import { RAY_SIZE, type SceneCtx, type SceneDef, type SfxCue } from './scenes/types';
 import { layout, wordAt, type Timeline } from './timing';
+import { THEMES, ThemeProvider, type ThemeName } from './theme';
 import { Ocean } from './ui/Ocean';
 import timelineJson from './timeline.json';
 
@@ -86,7 +87,7 @@ const SFX: Array<SfxCue & { at: number }> = SCENES.flatMap((def, i) =>
   (def.sfx?.(CONTEXTS[i]) ?? []).map((cue) => ({ ...cue, at: CONTEXTS[i].span.from + cue.f })),
 );
 
-/** How dark the water gets behind busy screens, per scene. */
+/** How much the water calms down behind busy screens, per scene. */
 const WATER_DIM: Record<string, number> = {
   hello: 0,
   'old-way': 0.15,
@@ -148,48 +149,55 @@ function SfxClip({ cue }: { cue: SfxCue }): JSX.Element {
 
 /* ------------------------------- the picture ------------------------------- */
 
-export function Intro(): JSX.Element {
+export type IntroProps = {
+  /** Which cut: the deep-sea dark one or the sunlit light one. The sound is the same. */
+  theme: ThemeName;
+};
+
+export function Intro({ theme }: IntroProps): JSX.Element {
   const frame = useCurrentFrame();
   return (
-    <AbsoluteFill style={{ background: '#070b12' }}>
-      <Ocean dim={track(frame, DIM_KEYS)} />
+    <ThemeProvider value={THEMES[theme]}>
+      <AbsoluteFill data-theme={theme} style={{ background: THEMES[theme].base }}>
+        <Ocean dim={track(frame, DIM_KEYS)} />
 
-      {SCENES.map((def, i) => {
-        const ctx = CONTEXTS[i];
-        const View = def.View;
-        return (
-          <Sequence key={def.id} name={def.id} from={ctx.span.from} durationInFrames={ctx.span.duration}>
-            <View ctx={ctx} />
+        {SCENES.map((def, i) => {
+          const ctx = CONTEXTS[i];
+          const View = def.View;
+          return (
+            <Sequence key={def.id} name={def.id} from={ctx.span.from} durationInFrames={ctx.span.duration}>
+              <View ctx={ctx} />
+            </Sequence>
+          );
+        })}
+
+        <RayActor
+          size={RAY_SIZE}
+          keys={PERFORMANCE.keys}
+          moods={PERFORMANCE.moods}
+          speech={PERFORMANCE.speech}
+          waves={PERFORMANCE.waves}
+          hops={PERFORMANCE.hops}
+          rolls={PERFORMANCE.rolls}
+          squishes={PERFORMANCE.squishes}
+          gaze={glance}
+          seed={3}
+        />
+
+        {timeline.lines.map((line) => (
+          <Sequence key={line.id} name={`voice: ${line.id}`} from={LAYOUT.lines[line.id].from} durationInFrames={LAYOUT.lines[line.id].duration + 4}>
+            <Audio src={staticFile(line.file)} volume={VOICE} />
           </Sequence>
-        );
-      })}
-
-      <RayActor
-        size={RAY_SIZE}
-        keys={PERFORMANCE.keys}
-        moods={PERFORMANCE.moods}
-        speech={PERFORMANCE.speech}
-        waves={PERFORMANCE.waves}
-        hops={PERFORMANCE.hops}
-        rolls={PERFORMANCE.rolls}
-        squishes={PERFORMANCE.squishes}
-        gaze={glance}
-        seed={3}
-      />
-
-      {timeline.lines.map((line) => (
-        <Sequence key={line.id} name={`voice: ${line.id}`} from={LAYOUT.lines[line.id].from} durationInFrames={LAYOUT.lines[line.id].duration + 4}>
-          <Audio src={staticFile(line.file)} volume={VOICE} />
+        ))}
+        {SFX.map((cue, i) => (
+          <Sequence key={i} name={`sfx: ${cue.id}`} from={cue.at} durationInFrames={cue.duration ?? FPS * 4}>
+            <SfxClip cue={cue} />
+          </Sequence>
+        ))}
+        <Sequence name="music" from={0} durationInFrames={LAYOUT.total}>
+          <Music />
         </Sequence>
-      ))}
-      {SFX.map((cue, i) => (
-        <Sequence key={i} name={`sfx: ${cue.id}`} from={cue.at} durationInFrames={cue.duration ?? FPS * 4}>
-          <SfxClip cue={cue} />
-        </Sequence>
-      ))}
-      <Sequence name="music" from={0} durationInFrames={LAYOUT.total}>
-        <Music />
-      </Sequence>
-    </AbsoluteFill>
+      </AbsoluteFill>
+    </ThemeProvider>
   );
 }

@@ -5,8 +5,8 @@
 .DESCRIPTION
   Copies harness/docs-harness.{html,tsx} into a checkout's src/renderer (use the same
   clean worktree as launch.ps1, not your working copy), serves it with Vite on a spare
-  port, and screenshots each shot with headless Microsoft Edge. The copied files are
-  removed afterwards.
+  port, and screenshots each shot with headless Microsoft Edge, once per theme:
+  <shot>.png in dark and <shot>.light.png in light. The copied files are removed afterwards.
 
 .EXAMPLE
   ./capture-harness.ps1 -Checkout $env:TEMP\fab-docs\wt -Out $env:TEMP\fab-docs\shots -Shots team-overview,port-conflict
@@ -14,13 +14,16 @@
 param(
   [Parameter(Mandatory)] [string] $Checkout,
   [Parameter(Mandatory)] [string] $Out,
-  [string[]] $Shots = @('team-overview', 'team-publish', 'rayfin-version', 'port-conflict', 'skills', 'secrets', 'deploy-progress', 'deploy-error'),
+  [string[]] $Shots = @('team-overview', 'team-publish', 'team-create', 'rayfin-version', 'port-conflict', 'plan', 'skills', 'secrets', 'setup', 'help', 'deploy-progress', 'deploy-error', 'blueprint'),
+  [ValidateSet('dark', 'light')] [string[]] $Themes = @('dark', 'light'),
   [int] $Port = 1437,
   [int] $Width = 1440,
-  [int] $Height = 900,
+  # Window height; 0 uses each shot's own (setup and help are framed in a shorter window).
+  [int] $Height = 0,
   [double] $Scale = 1.5
 )
 $ErrorActionPreference = 'Stop'
+$ShotHeights = @{ 'setup' = 760; 'help' = 680 }
 $Checkout = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Checkout)
 $Out = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Out)
 $renderer = Join-Path $Checkout 'src\renderer'
@@ -48,11 +51,14 @@ try {
 
   $profile = Join-Path ([System.IO.Path]::GetTempPath()) "docs-harness-edge-$PID"
   foreach ($shot in $Shots) {
-    $file = Join-Path $Out "$shot.png"
-    & $edge --headless=new --disable-gpu --hide-scrollbars --user-data-dir="$profile" `
-      --window-size="$Width,$Height" --force-device-scale-factor=$Scale --virtual-time-budget=10000 `
-      --screenshot="$file" "http://localhost:$Port/docs-harness.html?shot=$shot" 2>$null | Out-Null
-    Write-Output $file
+    $h = if ($Height -gt 0) { $Height } elseif ($ShotHeights.ContainsKey($shot)) { $ShotHeights[$shot] } else { 900 }
+    foreach ($theme in $Themes) {
+      $file = Join-Path $Out ($(if ($theme -eq 'dark') { "$shot.png" } else { "$shot.$theme.png" }))
+      & $edge --headless=new --disable-gpu --hide-scrollbars --user-data-dir="$profile" `
+        --window-size="$Width,$h" --force-device-scale-factor=$Scale --virtual-time-budget=10000 `
+        --screenshot="$file" "http://localhost:$Port/docs-harness.html?shot=$shot&theme=$theme" 2>$null | Out-Null
+      Write-Output $file
+    }
   }
   Remove-Item -Recurse -Force $profile -ErrorAction SilentlyContinue
 } finally {

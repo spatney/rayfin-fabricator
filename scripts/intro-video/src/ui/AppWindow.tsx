@@ -1,26 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Img, staticFile } from 'remotion';
-import { C, FONT, MONO } from '../theme';
+import { shotFile, type Shot } from '../shots';
+import { FONT, MONO, useTheme } from '../theme';
 
-export interface Shot {
-  src: string;
-  w: number;
-  h: number;
-}
-
-/** The scrubbed sample-data screenshots, copied from website/public by `npm run assets`. */
-export const SHOTS = {
-  workbench: { src: 'ui/workbench.webp', w: 1600, h: 1000 },
-  chatWorking: { src: 'ui/chat-working.webp', w: 1600, h: 1000 },
-  newProject: { src: 'ui/new-project.webp', w: 1600, h: 422 },
-  deployProgress: { src: 'ui/deploy-progress.webp', w: 1140, h: 1080 },
-  design: { src: 'ui/design.webp', w: 1080, h: 1290 },
-  advisor: { src: 'ui/advisor.webp', w: 1600, h: 1000 },
-  history: { src: 'ui/history.webp', w: 1600, h: 1000 },
-  help: { src: 'ui/help.webp', w: 1600, h: 756 },
-  share: { src: 'ui/share.webp', w: 960, h: 630 },
-  deployError: { src: 'ui/deploy-error.webp', w: 1356, h: 201 },
-} satisfies Record<string, Shot>;
+export { SHOTS, type Shot } from '../shots';
 
 export interface AppWindowProps {
   shot: Shot;
@@ -42,6 +25,30 @@ export interface AppWindowProps {
   style?: CSSProperties;
 }
 
+/** Where a window sits on screen and where its camera points: AppWindow's layout props. */
+type Framing = Pick<AppWindowProps, 'shot' | 'x' | 'y' | 'width' | 'height' | 'zoom' | 'fx' | 'fy'>;
+
+/** The camera's pan (tx, ty) and scale (s), and the window's height. */
+function camera({ shot, width, height, zoom = 1, fx, fy }: Framing) {
+  const fit = width / shot.w;
+  const h = height ?? shot.h * fit;
+  const s = fit * zoom;
+  const cx = fx ?? shot.w / 2;
+  const cy = fy ?? shot.h / 2;
+  const tx = Math.min(0, Math.max(width - shot.w * s, width / 2 - cx * s));
+  const ty = Math.min(0, Math.max(h - shot.h * s, h / 2 - cy * s));
+  return { h, s, tx, ty };
+}
+
+/**
+ * Where a pixel of a window's screenshot is on screen (at the window's own scale 1), for
+ * effects that must not be clipped by the window, such as sparkles.
+ */
+export function onScreen(framing: Framing, px: number, py: number): { x: number; y: number } {
+  const { h, s, tx, ty } = camera(framing);
+  return { x: framing.x - framing.width / 2 + tx + px * s, y: framing.y - h / 2 + ty + py * s };
+}
+
 /** A screenshot in a floating window, with a camera that can push in on any part of it. */
 export function AppWindow({
   shot,
@@ -58,13 +65,8 @@ export function AppWindow({
   children,
   style,
 }: AppWindowProps): JSX.Element {
-  const fit = width / shot.w;
-  const h = height ?? shot.h * fit;
-  const s = fit * zoom;
-  const cx = fx ?? shot.w / 2;
-  const cy = fy ?? shot.h / 2;
-  const tx = Math.min(0, Math.max(width - shot.w * s, width / 2 - cx * s));
-  const ty = Math.min(0, Math.max(h - shot.h * s, h / 2 - cy * s));
+  const C = useTheme();
+  const { h, s, tx, ty } = camera({ shot, x, y, width, height, zoom, fx, fy });
 
   return (
     <div
@@ -79,7 +81,7 @@ export function AppWindow({
         background: C.bg,
         opacity,
         transform: `scale(${scale}) rotate(${rotate}deg)`,
-        boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 30px 90px rgba(0,0,0,0.55), 0 20px 70px rgba(15,108,189,0.22)`,
+        boxShadow: C.shadow.window,
         ...style,
       }}
     >
@@ -94,7 +96,7 @@ export function AppWindow({
           transform: `translate(${tx}px, ${ty}px) scale(${s})`,
         }}
       >
-        <Img src={staticFile(shot.src)} style={{ display: 'block', width: shot.w, height: shot.h }} />
+        <Img src={staticFile(`ui/${shotFile(shot, C.name)}`)} style={{ display: 'block', width: shot.w, height: shot.h }} />
         {children}
       </div>
     </div>
@@ -110,6 +112,7 @@ interface RectProps {
 
 /** Dims everything but a rounded rect, ringed in the accent color. In image pixels. */
 export function Spotlight({ x, y, w, h, opacity = 1, radius = 12, dim = 0.55 }: RectProps & { opacity?: number; radius?: number; dim?: number }): JSX.Element | null {
+  const C = useTheme();
   if (opacity <= 0.001) return null;
   return (
     <div
@@ -120,7 +123,7 @@ export function Spotlight({ x, y, w, h, opacity = 1, radius = 12, dim = 0.55 }: 
         width: w,
         height: h,
         borderRadius: radius,
-        boxShadow: `0 0 0 4000px rgba(3,7,13,${dim * opacity}), 0 0 0 3px ${C.accent}, 0 0 28px 6px ${C.accent}88`,
+        boxShadow: `0 0 0 4000px ${C.scrim(dim * opacity)}, 0 0 0 3px ${C.accent}, ${C.glow(`${C.accent}88`, 28, 6)}`,
         opacity: Math.min(1, opacity * 1.2),
         pointerEvents: 'none',
       }}
@@ -133,6 +136,20 @@ export function Patch({ x, y, w, h, color, radius = 0, opacity = 1, children }: 
   return (
     <div style={{ position: 'absolute', left: x, top: y, width: w, height: h, background: color, borderRadius: radius, opacity, overflow: 'hidden' }}>
       {children}
+    </div>
+  );
+}
+
+/**
+ * The same region of another screenshot of the same size, laid over this one: a moment the shot
+ * doesn't show, such as the composer before a turn starts. Its edges must fall where the two
+ * screenshots are alike. In image pixels.
+ */
+export function ShotRegion({ shot, x, y, w, h }: RectProps & { shot: Shot }): JSX.Element {
+  const C = useTheme();
+  return (
+    <div style={{ position: 'absolute', left: x, top: y, width: w, height: h, overflow: 'hidden' }}>
+      <Img src={staticFile(`ui/${shotFile(shot, C.name)}`)} style={{ position: 'absolute', left: -x, top: -y, width: shot.w, height: shot.h, maxWidth: 'none' }} />
     </div>
   );
 }
@@ -155,6 +172,7 @@ export function Typed({
   caret?: boolean;
   mono?: boolean;
 }): JSX.Element {
+  const C = useTheme();
   const chars = Array.from(text);
   const n = Math.round(Math.min(1, Math.max(0, (frame - from) / Math.max(1, to - from))) * chars.length);
   const typing = frame >= from && frame <= to + 12;

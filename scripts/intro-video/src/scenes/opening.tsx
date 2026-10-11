@@ -5,7 +5,7 @@ import { AppWindow, Patch, SHOTS, Typed } from '../ui/AppWindow';
 import { AppTile, FabricPortal, Wordmark } from '../ui/Brand';
 import { Cursor } from '../ui/Cursor';
 import { BrowserWindow, Terminal } from '../ui/Kit';
-import { C } from '../theme';
+import { alpha, useTheme } from '../theme';
 import { rayAt, type SceneCtx, type SceneDef } from './types';
 
 /* --------------------------------- 1. Hello --------------------------------- */
@@ -43,6 +43,7 @@ export const hello: SceneDef = {
   ],
   View: ({ ctx }) => {
     const frame = useCurrentFrame();
+    const C = useTheme();
     const fab = ctx.w('Fabricator');
     const end = ctx.span.duration;
     const mouth = rayAt(helloRay(ctx).keys, ctx.w('hi'));
@@ -51,7 +52,7 @@ export const hello: SceneDef = {
         <Burst kind="bubbles" at={ctx.w('hi')} x={mouth.x} y={mouth.y + 20} count={9} seed={1} />
         <Wordmark x={960} y={780} size={118} from={fab} opacity={fadeOut(frame, end, 12)} />
         <Burst kind="sparkles" at={fab + 2} x={960} y={780} count={14} seed={2} spread={2.6} />
-        <AbsoluteFill style={{ background: '#000', opacity: 1 - ramp(frame, 0, 14) }} />
+        <AbsoluteFill style={{ background: C.fadeIn, opacity: 1 - ramp(frame, 0, 14) }} />
       </AbsoluteFill>
     );
   },
@@ -129,6 +130,7 @@ export const oldWay: SceneDef = {
   View: ({ ctx }) => {
     const frame = useCurrentFrame();
     const { fps } = useVideoConfig();
+    const C = useTheme();
     const items = pile(ctx);
     const spinFrom = ctx.w('The');
     const spinTo = ctx.wEnd('spinning');
@@ -175,7 +177,7 @@ export const oldWay: SceneDef = {
         })()}
         <DizzyStars x={head.x} y={head.y - 120} radius={150} from={ctx.w('whoa')} to={ctx.wEnd('spinning') + 4} />
         {/* Everything gets swept into one place. */}
-        <AbsoluteFill style={{ background: `radial-gradient(circle at 50% 50%, ${C.accent}${Math.round(sweep * 120).toString(16).padStart(2, '0')}, transparent 40%)` }} />
+        <AbsoluteFill style={{ background: `radial-gradient(circle at 50% 50%, ${alpha(C.sweep, Math.round(sweep * 120) / 255)}, transparent 40%)` }} />
       </AbsoluteFill>
     );
   },
@@ -202,6 +204,7 @@ export const oneWindow: SceneDef = {
   View: ({ ctx }) => {
     const frame = useCurrentFrame();
     const { fps } = useVideoConfig();
+    const C = useTheme();
     const p = pop(frame, fps, 4, 12, 0.8);
     const ring = ramp(frame, ctx.w('one'), 26, ease.out);
     const out = fadeOut(frame, ctx.span.duration, 10);
@@ -209,7 +212,7 @@ export const oneWindow: SceneDef = {
       <AbsoluteFill style={{ opacity: out }}>
         <AppWindow shot={SHOTS.workbench} x={960} y={560} width={1400} scale={0.2 + 0.8 * p} opacity={Math.min(1, p * 2)} />
         {ring > 0 && ring < 1 ? (
-          <div style={{ position: 'absolute', left: 960 - 700 - ring * 40, top: 560 - 437.5 - ring * 40, width: 1400 + ring * 80, height: 875 + ring * 80, borderRadius: 26, border: `4px solid ${C.accent}`, opacity: 1 - ring, boxShadow: `0 0 40px ${C.accent}` }} />
+          <div style={{ position: 'absolute', left: 960 - 700 - ring * 40, top: 560 - 437.5 - ring * 40, width: 1400 + ring * 80, height: 875 + ring * 80, borderRadius: 26, border: `4px solid ${C.accent}`, opacity: 1 - ring, boxShadow: C.glow(C.accent, 40) }} />
         ) : null}
         <AbsoluteFill style={{ background: '#fff', opacity: Math.max(0, 0.35 - frame / 20) }} />
       </AbsoluteFill>
@@ -267,6 +270,7 @@ export const fabric: SceneDef = {
   View: ({ ctx }) => {
     const frame = useCurrentFrame();
     const { fps } = useVideoConfig();
+    const C = useTheme();
     const name = ctx.w('Name');
     const click = ctx.w('and');
     const swim = ctx.w('swim');
@@ -304,7 +308,7 @@ export const fabric: SceneDef = {
         <Burst kind="sparkles" at={drop + 4} x={1520} y={520} count={16} seed={4} spread={2.2} />
         {frame >= hey - 10 ? (
           <AppWindow shot={SHOTS.deployProgress} x={1170} y={545} width={740} scale={0.85 + 0.15 * deploy} opacity={Math.min(1, deploy * 1.6)}>
-            {fins > 0 ? <div style={{ position: 'absolute', left: 392, top: 176, width: 360, height: 296, borderRadius: 24, boxShadow: `0 0 0 4000px rgba(3,7,13,${0.5 * fins}), 0 0 0 4px ${C.accent}, 0 0 34px 8px ${C.accent}88`, opacity: fins }} /> : null}
+            {fins > 0 ? <div style={{ position: 'absolute', left: 392, top: 176, width: 360, height: 296, borderRadius: 24, boxShadow: `0 0 0 4000px ${C.scrim(0.5 * fins)}, 0 0 0 4px ${C.accent}, ${C.glow(`${C.accent}88`, 34, 8)}`, opacity: fins }} /> : null}
           </AppWindow>
         ) : null}
         <Burst kind="hearts" at={ctx.w('me')} x={520} y={470} count={6} seed={5} />

@@ -133,8 +133,21 @@ function checkImages(file: string, content: string) {
     if (!ALLOWED_IMAGE_EXTENSIONS.has(ext)) { problems.push({ file, message: `image ${src} must use a supported image extension (${[...ALLOWED_IMAGE_EXTENSIONS].join(', ')})` }); continue; }
     const full = path.join(PUBLIC, src.replace(/^\//, ''));
     if (!existsSync(full)) problems.push({ file, message: `image ${src} does not exist under public/` });
+    checkScreenshotTwin(file, src);
   }
   screenshotComments += [...content.matchAll(/\{\/\*\s*screenshot:[\s\S]*?\*\/\}/g)].length;
+}
+
+/**
+ * Pages link a screenshot's dark capture, `/screenshots/<id>.webp`; the site swaps in its light
+ * twin, `<id>.light.webp`, for the light theme (components/mdx.tsx), so both must exist.
+ */
+function checkScreenshotTwin(file: string, src: string) {
+  if (!src.startsWith('/screenshots/')) return;
+  if (/\.light\.webp$/i.test(src)) { problems.push({ file, message: `image ${src}: link the dark capture (${src.replace(/\.light\.webp$/i, '.webp')}); the site shows the light one in the light theme` }); return; }
+  if (!/^\/screenshots\/[\w-]+\.webp$/.test(src)) { problems.push({ file, message: `image ${src}: screenshots are /screenshots/<id>.webp, with a light twin <id>.light.webp` }); return; }
+  const twin = path.join(PUBLIC, src.replace(/^\//, '').replace(/\.webp$/, '.light.webp'));
+  if (!existsSync(twin)) problems.push({ file, message: `image ${src} has no light twin ${src.replace(/\.webp$/, '.light.webp')} under public/` });
 }
 
 function checkPlaceholders(file: string, content: string) { if (content.trim() === 'This page is being written.') warnings.push({ file, message: 'page body is still exactly "This page is being written."' }); }

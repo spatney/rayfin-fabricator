@@ -19,7 +19,11 @@
 
 <div align="center">
   <a href="https://spatney.github.io/rayfin-fabricator/">
-    <img src="./website/public/screenshots/workbench.webp" alt="The Fabricator workbench: the chat on the left shows a finished Copilot turn that built an expense tracker, and the live preview on the right shows the deployed app." width="100%" />
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./website/public/screenshots/workbench.webp" />
+      <source media="(prefers-color-scheme: light)" srcset="./website/public/screenshots/workbench.light.webp" />
+      <img src="./website/public/screenshots/workbench.webp" alt="The Fabricator workbench: the chat on the left shows a finished Copilot turn that built an expense tracker, and the live preview on the right shows the deployed app." width="100%" />
+    </picture>
   </a>
   <p><sub>Build, preview, and ship — all in one window.</sub></p>
 </div>

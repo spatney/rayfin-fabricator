@@ -38,8 +38,13 @@
   transform: scaleY(var(--v-eyes, 1)) !important;
 }
 
-.video-ray .ray-mouth--talk {
-  transform: scaleY(var(--v-mouth, 0.3)) !important;
+/* The video draws his mouth itself (Mouth.tsx), shaped to what he says, so the app's mouth
+ * hides while it does. A mouth is a .ray-mouth shape (with a .ray-tongue), or the last line
+ * drawn straight on the rig, after his eyes and any brows. */
+.video-ray.has-mouth .ray-mouth,
+.video-ray.has-mouth .ray-tongue,
+.video-ray.has-mouth .ray-rig > path.ray-line:last-of-type:not(.ray-line--eye) {
+  visibility: hidden;
 }
 
 .video-ray .ray-spiral {

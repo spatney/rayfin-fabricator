@@ -2,7 +2,7 @@
 // instance (team workspaces, error dialogs, update prompts). Copied into a checkout's
 // src/renderer by capture-harness.ps1; it is never part of the app build.
 //
-// Open /docs-harness.html?shot=<id>. Every value here is sample data.
+// Open /docs-harness.html?shot=<id>[&theme=light]. Every value here is sample data.
 import '@vscode/codicons/dist/codicon.css'
 import './assets/main.css'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -11,13 +11,20 @@ import type {
   AuthStatus,
   ChatPlanArtifact,
   DoctorReport,
+  FabricCapacitiesResult,
+  FabricWorkspace,
+  FileNode,
   RayfinVersionInfo,
   SecretsState,
   SkillInfo,
   StudioProject,
+  TeamEnvStatus,
+  TeamOwnersResult,
+  TeamReposResult,
   TeamResourceRequest,
   TeamSessionStatus,
-  ToolStatus
+  ToolStatus,
+  WorkspaceModel
 } from '@shared/ipc'
 import { OverlayProvider } from './overlay'
 import { ToastProvider } from './toast'
@@ -27,6 +34,7 @@ import { HelpView } from './components/help/HelpView'
 import TeamMapView from './components/team/map/TeamMapView'
 import { sampleMap, sampleResources, sampleRun, sampleWorkspace } from './components/team/map/fixtures'
 import TeamPublishControl from './components/team/TeamPublishControl'
+import CreateTeamWorkspaceModal from './components/team/CreateTeamWorkspaceModal'
 import RayfinVersionControl from './components/RayfinVersionControl'
 import PortConflictModal from './components/PortConflictModal'
 import PlanCard from './components/PlanCard'
@@ -34,6 +42,7 @@ import SkillsView from './components/SkillsView'
 import SecretsView from './components/SecretsView'
 import DeployStage from './components/DeployStage'
 import PreviewPane from './components/PreviewPane'
+import BlueprintTab from './components/blueprint/BlueprintTab'
 import './components/chat/chat.css'
 
 const ok = <T,>(value: T) => (): Promise<T> => Promise.resolve(value)
@@ -170,6 +179,243 @@ function SelectSecret({ name, children }: { name: string; children: ReactNode })
   return <>{children}</>
 }
 
+/* Blueprint: the sample app's files, as Blueprint reads them, and what Fabric says about them. */
+
+const FINANCE_WS = '11111111-1111-4111-8111-111111111111'
+const FINANCE_WAREHOUSE = '22222222-2222-4222-8222-222222222222'
+const SPEND_MODEL = '33333333-3333-4333-8333-333333333333'
+const BUDGETS_MODEL = '44444444-4444-4444-8444-444444444444'
+const APPS_WS = '55555555-5555-4555-8555-555555555555'
+const EXPENSES_ITEM = '66666666-6666-4666-8666-666666666666'
+const EXPENSES_URL = 'https://contoso-expenses-1a2b3c4d5e-westus.webapp.fabricapps.net'
+
+/**
+ * Contoso Expenses: a website with sign-in, four tables, file storage, two connectors to
+ * Finance analytics, two semantic models in fabric.yaml, and four functions that reach
+ * Fabric, Azure and a receipt-reading web API.
+ */
+const expensesFiles: Record<string, string> = {
+  'rayfin/rayfin.yml': `id: contoso-expenses
+name: Contoso Expenses
+version: 1.0.0
+services:
+  auth:
+    enabled: true
+    fabric:
+      enabled: true
+    allowedRedirectUris:
+      - http://localhost:5173
+      - ${EXPENSES_URL}
+  data:
+    enabled: true
+    dialect: mssql
+  staticHosting:
+    enabled: true
+    folder: dist
+    assetAccess: protected
+  functions:
+    enabled: true
+    auth:
+      type: application
+  storage:
+    enabled: true
+connectors:
+  - name: finance-warehouse
+    type: fabric-warehouse
+    config:
+      workspaceId: ${FINANCE_WS}
+      itemId: ${FINANCE_WAREHOUSE}
+    auth:
+      type: application
+    operations:
+      - name: read
+  - name: spend-model
+    type: fabric-semanticmodel
+    version: '1'
+    config:
+      workspaceId: ${FINANCE_WS}
+      itemId: ${SPEND_MODEL}
+    auth:
+      type: delegated
+secrets:
+  - name: RECEIPT_OCR_KEY
+    description: Key for the receipt reader
+`,
+  'fabric.yaml': `activeProfile: default
+profiles:
+  default:
+    semanticModels:
+      spend:
+        workspaceId: ${FINANCE_WS}
+        itemId: ${SPEND_MODEL}
+      budgets:
+        workspaceId: ${FINANCE_WS}
+        itemId: ${BUDGETS_MODEL}
+`,
+  'rayfin/data/schema.ts': `import { Category } from './Category.js'
+import { Expense } from './Expense.js'
+import { Receipt } from './Receipt.js'
+import { Report } from './Report.js'
+export const schema = [Expense, Report, Receipt, Category]
+`,
+  'rayfin/data/Expense.ts': `import { entity, authenticated, uuid, text, decimal, date, one } from '@microsoft/rayfin-core'
+import { Category } from './Category.js'
+import { Report } from './Report.js'
+@entity()
+@authenticated('*', { policy: (q, claims) => q.where('owner_id', claims.sub) })
+export class Expense {
+  @uuid() id!: string
+  @text() owner_id!: string
+  @decimal() amount!: number
+  @date() spentAt!: Date
+  @one(() => Category) category!: Category
+  @one(() => Report) report!: Report
+}
+`,
+  'rayfin/data/Report.ts': `import { entity, anonymous, uuid, text } from '@microsoft/rayfin-core'
+@entity()
+@anonymous('read')
+export class Report {
+  @uuid() id!: string
+  @text() title!: string
+}
+`,
+  'rayfin/data/Receipt.ts': `import { entity, authenticated, uuid, text, one } from '@microsoft/rayfin-core'
+import { Expense } from './Expense.js'
+@entity()
+@authenticated('*', { policy: (q, claims) => q.where('owner_id', claims.sub) })
+export class Receipt {
+  @uuid() id!: string
+  @text() owner_id!: string
+  @text() fileName!: string
+  @one(() => Expense) expense!: Expense
+}
+`,
+  'rayfin/data/Category.ts': `import { entity, authenticated, uuid, text } from '@microsoft/rayfin-core'
+@entity()
+@authenticated('read')
+export class Category {
+  @uuid() id!: string
+  @text() name!: string
+}
+`,
+  'rayfin/functions/src/function_app.ts': `import { AudienceType, UserDataFunctions, type RayfinContext } from '@microsoft/fabric-user-data-functions'
+import type { AppSchema } from '../../data/schema.js'
+
+const udf = new UserDataFunctions()
+
+udf.func(
+  'summarizeReport',
+  async (ctx: RayfinContext<AppSchema, AudienceType.AzureAI>): Promise<string> => ctx.Tokens.AzureAI,
+  []
+)
+
+udf.func('syncBudgets', async (ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Fabric>) => 1, [])
+
+udf.func('archiveReceipts', async (ctx: RayfinContext<AppSchema, AudienceType.Storage>) => ctx.Tokens.Storage, [])
+
+udf.func(
+  'readReceipt',
+  async (ctx: RayfinContext<AppSchema>, image: string) => {
+    const res = await fetch('https://api.mindee.net/v1/products/mindee/expense_receipts/v5/predict', {
+      method: 'POST',
+      headers: { Authorization: 'Token ' + ctx.Secrets.RECEIPT_OCR_KEY },
+      body: image
+    })
+    return res.json()
+  },
+  []
+)
+`
+}
+
+/** The project's file tree holding `paths`, as `projects.files.tree` returns it. */
+function fileTree(paths: string[]): FileNode[] {
+  const root: FileNode[] = []
+  for (const path of paths) {
+    let level = root
+    const parts = path.split('/')
+    parts.forEach((name, i) => {
+      const at = parts.slice(0, i + 1).join('/')
+      const leaf = i === parts.length - 1
+      let node = level.find((n) => n.path === at)
+      if (!node) {
+        node = leaf ? { name, path: at, type: 'file' } : { name, path: at, type: 'dir', children: [] }
+        level.push(node)
+      }
+      level = node.children ?? []
+    })
+  }
+  return root
+}
+
+/** The workspaces the sample app (Contoso Apps) and its data (Finance analytics) live in. */
+const expensesWorkspaces: FabricWorkspace[] = [
+  { id: APPS_WS, displayName: 'Contoso Apps', type: 'Workspace', sku: 'F8', region: 'West US', capacityKind: 'fabric', eligible: true },
+  { id: FINANCE_WS, displayName: 'Finance analytics', type: 'Workspace', sku: 'F64', region: 'West US 2', capacityKind: 'fabric', eligible: true }
+]
+
+/** Semantic models by workspace id. */
+const workspaceModels: Record<string, WorkspaceModel[]> = {
+  [FINANCE_WS]: [
+    { id: SPEND_MODEL, name: 'Spend analysis' },
+    { id: BUDGETS_MODEL, name: 'Budgets 2026' }
+  ]
+}
+
+/** Creating a team workspace: one GitHub account with every permission it needs, and Azure signed in. */
+const teamEnv: TeamEnvStatus = {
+  enabled: true,
+  ghInstalled: true,
+  ghSignedIn: true,
+  ghUser: 'averychen',
+  ghMissingScopes: [],
+  ghCanDeleteRepos: false,
+  ghAccounts: [
+    { login: 'averychen', active: true, signedIn: true, missingScopes: [], canDeleteRepos: false }
+  ],
+  azSignedIn: true,
+  azUser: 'avery.chen@contoso.com'
+}
+
+/** Where averychen can create the team's repository. */
+const teamOwners: TeamOwnersResult = {
+  ok: true,
+  owners: [
+    { login: 'averychen', isOrg: false },
+    { login: 'contoso', isOrg: true, canCreate: true }
+  ]
+}
+
+/** Repositories offered for an existing-repository setup. */
+const teamRepos: TeamReposResult = {
+  ok: true,
+  repos: [{ fullName: 'contoso/finance-apps', description: 'Apps for the finance team' }]
+}
+
+/** The Fabric capacities averychen can create the team's workspaces on. */
+const teamCapacities: FabricCapacitiesResult = {
+  ok: true,
+  capacities: [
+    {
+      id: '77777777-7777-4777-8777-777777777777',
+      displayName: 'contoso-f2',
+      sku: 'F2',
+      region: 'West US',
+      kind: 'fabric',
+      eligible: true
+    },
+    {
+      id: '88888888-8888-4888-8888-888888888888',
+      displayName: 'contoso-f64',
+      sku: 'F64',
+      region: 'West US 2',
+      kind: 'fabric',
+      eligible: true
+    }
+  ]
+}
+
 /** `window.api` with sample responses; anything not listed resolves to undefined. */
 function installApi(): void {
   const api = {
@@ -188,6 +434,22 @@ function installApi(): void {
     secrets: {
       list: ok(secrets)
     },
+    projects: {
+      files: {
+        read: (_project: string, path: string) =>
+          Promise.resolve(
+            path in expensesFiles
+              ? { path, size: expensesFiles[path].length, content: expensesFiles[path] }
+              : { path, size: 0, error: 'Not found' }
+          ),
+        tree: ok(fileTree(Object.keys(expensesFiles)))
+      }
+    },
+    fabric: {
+      listWorkspaces: ok({ ok: true, workspaces: expensesWorkspaces }),
+      listWorkspaceModels: (workspaceId: string) =>
+        Promise.resolve({ ok: true, models: workspaceModels[workspaceId.toLowerCase()] ?? [] })
+    },
     team: {
       map: ok(sampleMap()),
       resources: (_id: string, requests: TeamResourceRequest[]) =>
@@ -204,6 +466,10 @@ function installApi(): void {
       health: ok({ ok: true, items: [{ id: 'pipeline', label: 'The pipeline is up to date', state: 'ok', repairable: false }] }),
       fabricAccess: ok({ ok: true, people: [] }),
       diff: ok({ ok: true, truncated: false, files: [] }),
+      envStatus: ok(teamEnv),
+      owners: ok(teamOwners),
+      repos: ok(teamRepos),
+      capacities: ok(teamCapacities),
       onProgress: () => () => {}
     },
     help: {
@@ -393,6 +659,35 @@ function Open({ selector, children }: { selector: string; children: ReactNode })
 }
 
 /**
+ * Types `text` into the input that shows `placeholder` once it renders, then takes the focus
+ * off it, so the capture shows no caret or focus ring.
+ */
+function TypeInto({
+  placeholder,
+  text,
+  children
+}: {
+  placeholder: string
+  text: string
+  children: ReactNode
+}): JSX.Element {
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const input = document.querySelector<HTMLInputElement>(`input[placeholder="${placeholder}"]`)
+      if (!input) return
+      window.clearInterval(id)
+      // React ignores a plain `input.value =` on a controlled input: use the native setter and
+      // fire the `input` event typing would.
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, text)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.blur()
+    }, 100)
+    return () => window.clearInterval(id)
+  }, [placeholder, text])
+  return <>{children}</>
+}
+
+/**
  * A Rayfin 1.36 deploy of the sample app, as `rayfin up` streams it, timed so the
  * capture (10 s of virtual time) lands in the build.
  */
@@ -487,6 +782,43 @@ function DeployFailed(): JSX.Element {
   )
 }
 
+/** The sample app, deployed to its Contoso Apps workspace. */
+const expensesApp: StudioProject = {
+  id: 'p2',
+  name: 'Contoso Expenses',
+  path: 'C:/Users/avery/RayfinProjects/contoso-expenses',
+  addedAt: '',
+  workspace: APPS_WS,
+  workspaceName: 'Contoso Apps',
+  lastDeploy: {
+    url: EXPENSES_URL,
+    portalUrl: `https://app.fabric.microsoft.com/groups/${APPS_WS}/appbackends/${EXPENSES_ITEM}`,
+    status: 'success'
+  }
+}
+
+/** Blueprint's Architecture view of the sample app, filling the window as it fills the Build area. */
+function Blueprint(): JSX.Element {
+  // Blueprint opens on the view last chosen for the project.
+  localStorage.setItem(`rayfin.model.view.${expensesApp.id}`, 'architecture')
+  return (
+    <div className="workbench" style={{ flex: 1 }}>
+      <main className="content">
+        <div className="project-pane">
+          <BlueprintTab
+            project={expensesApp}
+            refreshKey={0}
+            onOpenFile={noop}
+            onSendToChat={noop}
+            onOpenSecrets={noop}
+            fabricUser="avery.chen@contoso.com"
+          />
+        </div>
+      </main>
+    </div>
+  )
+}
+
 function Shot({ id }: { id: string | null }): JSX.Element {
   switch (id) {
     case 'team-overview': {
@@ -514,6 +846,13 @@ function Shot({ id }: { id: string | null }): JSX.Element {
             />
           </Open>
         </div>
+      )
+    case 'team-create':
+      // Its checks pass and its pickers load from the sample `team` API, then the name is typed in.
+      return (
+        <TypeInto placeholder="Sales team apps" text="Finance Team">
+          <CreateTeamWorkspaceModal onClose={noop} onChanged={noop} />
+        </TypeInto>
       )
     case 'rayfin-version':
       return (
@@ -605,18 +944,21 @@ function Shot({ id }: { id: string | null }): JSX.Element {
       return <Deploying />
     case 'deploy-error':
       return <DeployFailed />
+    case 'blueprint':
+      return <Blueprint />
     default:
       return <p style={{ padding: 24 }}>Unknown shot: {String(id)}</p>
   }
 }
 
 installApi()
-applyTheme('dark')
+const params = new URLSearchParams(location.search)
+applyTheme(params.get('theme') === 'light' ? 'light' : 'dark')
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <OverlayProvider>
     <ToastProvider>
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <Shot id={new URLSearchParams(location.search).get('shot')} />
+        <Shot id={params.get('shot')} />
       </div>
     </ToastProvider>
   </OverlayProvider>
