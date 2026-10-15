@@ -20,6 +20,8 @@ function Harnessed({
   suppressed,
   deploy,
   localPreviewUrl,
+  manualDeploy,
+  turnRunning,
   onRefreshAuth,
   authBusy,
   onDiagnoseDeploy,
@@ -29,6 +31,8 @@ function Harnessed({
   suppressed: boolean
   deploy?: DeployUiState
   localPreviewUrl?: string | null
+  manualDeploy?: boolean
+  turnRunning?: boolean
   onRefreshAuth?: () => void
   authBusy?: boolean
   onDiagnoseDeploy?: () => void
@@ -44,6 +48,8 @@ function Harnessed({
         authBusy={authBusy}
         onDiagnoseDeploy={onDiagnoseDeploy}
         localPreviewUrl={localPreviewUrl}
+        manualDeploy={manualDeploy}
+        turnRunning={turnRunning}
         focused={false}
         onToggleFocus={() => {}}
         onSettle={onSettle}
@@ -741,6 +747,67 @@ describe('PreviewPane local preview', () => {
     expect(reveal, 'the local preview should show without a deployment').not.toBeNull()
     expect(reveal!.url).toBe(LOCAL)
     expect(screen.getByText('Local')).toBeTruthy()
+  })
+
+  it('reloads the retained local preview after a manual-deploy turn finishes', async () => {
+    const project = makeProject('p1')
+    const { rerender } = render(
+      <Harnessed
+        project={project}
+        suppressed={false}
+        localPreviewUrl={LOCAL}
+        manualDeploy
+        turnRunning={false}
+      />
+    )
+    await settle(e)
+    expect(e.api.reload).not.toHaveBeenCalled()
+
+    rerender(
+      <Harnessed
+        project={project}
+        suppressed={false}
+        localPreviewUrl={LOCAL}
+        manualDeploy
+        turnRunning
+      />
+    )
+    await settle(e)
+    expect(e.api.reload).not.toHaveBeenCalled()
+
+    rerender(
+      <Harnessed
+        project={project}
+        suppressed={false}
+        localPreviewUrl={LOCAL}
+        manualDeploy
+        turnRunning={false}
+      />
+    )
+    expect(e.api.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not reload a local preview after an auto-deploy turn finishes', async () => {
+    const project = makeProject('p1')
+    const { rerender } = render(
+      <Harnessed
+        project={project}
+        suppressed={false}
+        localPreviewUrl={LOCAL}
+        turnRunning
+      />
+    )
+    await settle(e)
+
+    rerender(
+      <Harnessed
+        project={project}
+        suppressed={false}
+        localPreviewUrl={LOCAL}
+        turnRunning={false}
+      />
+    )
+    expect(e.api.reload).not.toHaveBeenCalled()
   })
 
   it('lets a running deploy override the local preview (DeployStage wins)', async () => {

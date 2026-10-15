@@ -135,7 +135,7 @@ interface Props {
    *  "Local" badge. See {@link RayfinStudioApi.dev}. */
   localPreviewUrl?: string | null
   /** Deploy manually (experimental): the local preview runs whenever the app is
-   *  open, instead of only during turns. */
+   *  open, instead of only during turns, and reloads when a turn finishes. */
   manualDeploy?: boolean
   /** A chat turn is running for this app, so its local preview changes as
    *  Copilot works. */
@@ -276,6 +276,7 @@ export default function PreviewPane({
 
   const hostRef = useRef<HTMLDivElement>(null)
   const prevRunningRef = useRef(running)
+  const previousTurnRef = useRef({ projectId: project.id, running: Boolean(turnRunning) })
   const [displayUrl, setDisplayUrl] = useState(deployedUrl ?? '')
   const [loading, setLoading] = useState(false)
   const [canBack, setCanBack] = useState(false)
@@ -437,6 +438,20 @@ export default function PreviewPane({
       void window.api.preview.reload()
     }
   }, [running, deploy?.result, previewUrl, beginTransition])
+
+  // Vite's hot updates do not cover every change (for example, configuration or
+  // entry-point edits). The retained manual-deploy preview therefore gets one
+  // full refresh after Copilot finishes, while auto deploy keeps its existing
+  // stop-and-deploy handoff.
+  useEffect(() => {
+    const previous = previousTurnRef.current
+    previousTurnRef.current = { projectId: project.id, running: Boolean(turnRunning) }
+    const finished =
+      previous.projectId === project.id && previous.running && !turnRunning
+    if (finished && manualDeploy && isLocal && previewUrl) {
+      void window.api.preview.reload()
+    }
+  }, [project.id, turnRunning, manualDeploy, isLocal, previewUrl])
 
   useEffect(() => {
     if (deployedUrl) setDisplayUrl(deployedUrl)
