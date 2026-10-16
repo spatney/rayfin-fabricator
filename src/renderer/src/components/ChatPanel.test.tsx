@@ -1235,6 +1235,28 @@ describe('ChatPanel Design changes', () => {
     expect(cards).toHaveLength(2)
     expect(cards[1].querySelector('img')).toBeNull()
   })
+
+  it('keeps queued Design changes in Agent mode when the composer is in Plan mode', async () => {
+    const api = installApi()
+    const build = vi.fn(async () => TURN)
+    const { rerender } = render(<DesignHarness items={[]} buildDesignTurn={build} />)
+    const input = screen.getByPlaceholderText(PLACEHOLDER)
+    fireEvent.change(input, { target: { value: '/plan ' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByText('Mode: Plan')).toBeTruthy()
+
+    rerender(<DesignHarness buildDesignTurn={build} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+    expect(api.chat.send).toHaveBeenCalledWith(
+      'p1',
+      expect.any(String),
+      TURN.prompt,
+      ['C:/tmp/full.png', 'C:/tmp/crop.png'],
+      'agent'
+    )
+  })
 })
 
 /**
@@ -1265,7 +1287,8 @@ describe('ChatPanel Advisor fixes', () => {
     line: 12
   }
   const SUMMARY: ChatAdvisorSummary = { fixes: [MAX, LABEL] }
-  const PROMPT = 'The Advisor found 2 issues in this app. Please fix all of them, most severe first.'
+  const PROMPT =
+    'The Advisor found 2 issues in this app. Please fix all of them, most severe first.'
 
   function AdvisorHarness({
     initial = [],
@@ -1293,9 +1316,20 @@ describe('ChatPanel Advisor fixes', () => {
     )
   }
 
-  function sent(advisor: ChatAdvisorSummary = SUMMARY, extra: Partial<UIChatMessage> = {}): UIChatMessage[] {
+  function sent(
+    advisor: ChatAdvisorSummary = SUMMARY,
+    extra: Partial<UIChatMessage> = {}
+  ): UIChatMessage[] {
     return [
-      { id: 'u1', role: 'user', text: 'Fix 2 Advisor issues', tools: [], pending: false, advisor, prompt: PROMPT },
+      {
+        id: 'u1',
+        role: 'user',
+        text: 'Fix 2 Advisor issues',
+        tools: [],
+        pending: false,
+        advisor,
+        prompt: PROMPT
+      },
       { id: 'a1', role: 'assistant', text: 'Fixed both.', tools: [], pending: false, ...extra }
     ]
   }
@@ -1306,7 +1340,12 @@ describe('ChatPanel Advisor fixes', () => {
     api.chat.send.mockImplementationOnce(() => turn.promise)
     render(
       <AdvisorHarness
-        outbound={{ id: 'fix-1', display: 'Fix 2 Advisor issues', prompt: PROMPT, advisor: SUMMARY }}
+        outbound={{
+          id: 'fix-1',
+          display: 'Fix 2 Advisor issues',
+          prompt: PROMPT,
+          advisor: SUMMARY
+        }}
       />
     )
     await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
@@ -1352,7 +1391,11 @@ describe('ChatPanel Advisor fixes', () => {
   it('folds a long list behind “Show more”', async () => {
     installApi()
     const many: ChatAdvisorSummary = {
-      fixes: Array.from({ length: 8 }, (_, i) => ({ ...LABEL, id: `ai:rule-${i}`, title: `Issue ${i + 1}` }))
+      fixes: Array.from({ length: 8 }, (_, i) => ({
+        ...LABEL,
+        id: `ai:rule-${i}`,
+        title: `Issue ${i + 1}`
+      }))
     }
     render(<AdvisorHarness initial={sent(many)} />)
     const card = screen.getByRole('group', { name: 'Advisor issues to fix (8)' })
@@ -1380,10 +1423,19 @@ describe('ChatPanel Advisor fixes', () => {
   it('keeps a hand-off’s full prompt so Retry re-sends what Copilot received', async () => {
     const api = installApi()
     api.chat.send.mockImplementationOnce(() =>
-      Promise.resolve({ ok: false, error: 'The model is unavailable.', filesModified: [], ranDeploy: false })
+      Promise.resolve({
+        ok: false,
+        error: 'The model is unavailable.',
+        filesModified: [],
+        ranDeploy: false
+      })
     )
     const upgrade = 'Please upgrade this app’s Rayfin packages to the latest version.'
-    render(<AdvisorHarness outbound={{ id: 'up-1', display: 'Update Rayfin to 1.36.2', prompt: upgrade }} />)
+    render(
+      <AdvisorHarness
+        outbound={{ id: 'up-1', display: 'Update Rayfin to 1.36.2', prompt: upgrade }}
+      />
+    )
     const retry = await screen.findByRole('button', { name: /Retry/ })
     expect(screen.getByText('Update Rayfin to 1.36.2')).toBeTruthy()
     await act(async () => {
@@ -1391,5 +1443,333 @@ describe('ChatPanel Advisor fixes', () => {
     })
     await waitFor(() => expect(api.chat.send).toHaveBeenCalledTimes(2))
     expect((api.chat.send.mock.calls[1] as unknown[])[2]).toBe(upgrade)
+  })
+
+  it('keeps Advisor hand-offs in Agent mode when the composer is in Plan mode', async () => {
+    const api = installApi()
+    const { rerender } = render(<AdvisorHarness />)
+    const input = screen.getByPlaceholderText(PLACEHOLDER)
+    fireEvent.change(input, { target: { value: '/plan ' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByText('Mode: Plan')).toBeTruthy()
+
+    rerender(
+      <AdvisorHarness
+        outbound={{
+          id: 'fix-1',
+          display: 'Fix 2 Advisor issues',
+          prompt: PROMPT,
+          advisor: SUMMARY
+        }}
+      />
+    )
+
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+    expect(api.chat.send).toHaveBeenCalledWith('p1', expect.any(String), PROMPT, [], 'agent')
+  })
+
+  it('keeps Try again in Agent mode rather than applying the current composer mode', async () => {
+    const api = installApi()
+    render(<AdvisorHarness initial={sent()} />)
+    const input = screen.getByPlaceholderText(PLACEHOLDER)
+    fireEvent.change(input, { target: { value: '/plan ' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByText('Mode: Plan')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /Try again/ }))
+
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+    expect(api.chat.send).toHaveBeenCalledWith(
+      'p1',
+      expect.any(String),
+      tryAgainPrompt(PROMPT),
+      [],
+      'agent'
+    )
+  })
+
+  describe('slash commands', () => {
+    it('opens slash command menu when typing / and allows navigation', async () => {
+      installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER)
+      fireEvent.change(input, { target: { value: '/' } })
+
+      const menu = screen.getByRole('listbox', { name: 'Slash commands' })
+      expect(menu).toBeTruthy()
+      expect(within(menu).getByText('/plan')).toBeTruthy()
+      expect(within(menu).getByText('/autopilot')).toBeTruthy()
+      expect(within(menu).getByText('/agent')).toBeTruthy()
+      expect(within(menu).getByText('create an implementation plan before coding')).toBeTruthy()
+      expect(within(menu).getByText('switch to autopilot mode with an objective')).toBeTruthy()
+
+      // Keyboard navigation selects item
+      fireEvent.keyDown(input, { key: 'ArrowDown' })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(screen.queryByRole('listbox', { name: 'Slash commands' })).toBeNull()
+      expect((input as HTMLTextAreaElement).value).toBe('/autopilot ')
+    })
+
+    it('closes autocomplete after submitting a bare command with Send', () => {
+      const api = installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+      fireEvent.change(input, { target: { value: '/plan' } })
+      expect(screen.getByRole('listbox', { name: 'Slash commands' })).toBeTruthy()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+      expect(input.value).toBe('')
+      expect(screen.queryByRole('listbox', { name: 'Slash commands' })).toBeNull()
+      expect(screen.getByText('Mode: Plan')).toBeTruthy()
+      expect(api.chat.send).not.toHaveBeenCalled()
+    })
+
+    it('selects a command through the option click handler', () => {
+      installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+      fireEvent.change(input, { target: { value: '/' } })
+      fireEvent.click(
+        screen.getByRole('option', { name: '/plan create an implementation plan before coding' })
+      )
+
+      expect(input.value).toBe('/plan ')
+      expect(screen.queryByRole('listbox', { name: 'Slash commands' })).toBeNull()
+      expect(document.activeElement).toBe(input)
+    })
+
+    it('offers autocomplete after leading whitespace', () => {
+      installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+      fireEvent.change(input, { target: { value: '  /pl' } })
+
+      expect(screen.getByRole('listbox', { name: 'Slash commands' })).toBeTruthy()
+      fireEvent.keyDown(input, { key: 'Tab' })
+      expect(input.value).toBe('/plan ')
+    })
+
+    it('replaces the whole command token at a moved caret without corrupting the prompt', () => {
+      installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+      fireEvent.change(input, { target: { value: '/autopilot build a tracker' } })
+      input.setSelectionRange(5, 5)
+      fireEvent.select(input)
+      fireEvent.keyDown(input, { key: 'Tab' })
+
+      expect(input.value).toBe('/autopilot build a tracker')
+      expect(input.selectionStart).toBe('/autopilot '.length)
+    })
+
+    it('dismisses autocomplete with Escape without discarding the draft', () => {
+      installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+      fireEvent.change(input, { target: { value: '/plan' } })
+      fireEvent.keyDown(input, { key: 'Escape' })
+
+      expect(input.value).toBe('/plan')
+      expect(screen.queryByRole('listbox', { name: 'Slash commands' })).toBeNull()
+      fireEvent.select(input)
+      expect(screen.queryByRole('listbox', { name: 'Slash commands' })).toBeNull()
+    })
+
+    it('does not select an autocomplete option or send on Shift+Enter', () => {
+      const api = installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+      fireEvent.change(input, { target: { value: '/pl' } })
+      fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
+
+      expect(input.value).toBe('/pl')
+      expect(screen.getByRole('listbox', { name: 'Slash commands' })).toBeTruthy()
+      expect(api.chat.send).not.toHaveBeenCalled()
+    })
+
+    it('sends an unrecognized command as ordinary text', async () => {
+      const api = installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER)
+      fireEvent.change(input, { target: { value: '/unknown keep this text' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+      expect(api.chat.send).toHaveBeenCalledWith(
+        'p1',
+        expect.any(String),
+        '/unknown keep this text',
+        [],
+        'agent'
+      )
+    })
+
+    it('keeps Autopilot selected for subsequent composer messages', async () => {
+      const api = installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER)
+      fireEvent.change(input, { target: { value: '/autopilot build a tracker' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+
+      fireEvent.change(input, { target: { value: 'add filtering' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(api.chat.send).toHaveBeenCalledTimes(2))
+      expect(api.chat.send).toHaveBeenLastCalledWith(
+        'p1',
+        expect.any(String),
+        'add filtering',
+        [],
+        'autopilot'
+      )
+    })
+
+    it.each(['/', '  /pl', '/unknown'])(
+      'hides the badge for a draft beginning with %j',
+      (draft) => {
+        installApi()
+        render(<Harness />)
+        const input = screen.getByPlaceholderText(PLACEHOLDER)
+        fireEvent.change(input, { target: { value: '/autopilot ' } })
+        fireEvent.keyDown(input, { key: 'Enter' })
+        expect(screen.getByText('Mode: Autopilot')).toBeTruthy()
+
+        fireEvent.change(input, { target: { value: draft } })
+        expect(screen.queryByText(/Mode:/)).toBeNull()
+        fireEvent.change(input, { target: { value: 'ordinary text with /plan in the middle' } })
+        expect(screen.getByText('Mode: Autopilot')).toBeTruthy()
+      }
+    )
+
+    it('dispatches with plan mode on /plan <prompt> and updates mode indicator immediately', async () => {
+      const api = installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER)
+      fireEvent.change(input, { target: { value: '/plan build dark mode' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      // Mode indicator immediately shows Plan
+      expect(screen.getByText('Mode: Plan')).toBeTruthy()
+
+      await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+      expect(api.chat.send).toHaveBeenCalledWith(
+        'p1',
+        expect.any(String),
+        'build dark mode',
+        [],
+        'plan'
+      )
+
+      // Typing /agent clears the indicator immediately
+      fireEvent.change(input, { target: { value: '/agent' } })
+      // Auto-complete select then submit
+      fireEvent.keyDown(input, { key: 'Enter' })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(screen.queryByText('Mode: Plan')).toBeNull()
+      expect(screen.queryByText(/Mode:/)).toBeNull()
+    })
+
+    it('updates mode indicator immediately on /autopilot <prompt> and clears on /agent <prompt>', async () => {
+      const api = installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER)
+      fireEvent.change(input, { target: { value: '/autopilot implement user login' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      // Mode indicator immediately shows Autopilot
+      expect(screen.getByText('Mode: Autopilot')).toBeTruthy()
+
+      await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+      expect(api.chat.send).toHaveBeenCalledWith(
+        'p1',
+        expect.any(String),
+        'implement user login',
+        [],
+        'autopilot'
+      )
+
+      // Entering /agent with prompt clears the indicator and sends with agent mode
+      fireEvent.change(input, { target: { value: '/agent back to normal' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(screen.queryByText(/Mode:/)).toBeNull()
+      await waitFor(() => expect(api.chat.send).toHaveBeenCalledTimes(2))
+      expect(api.chat.send).toHaveBeenLastCalledWith(
+        'p1',
+        expect.any(String),
+        'back to normal',
+        [],
+        'agent'
+      )
+    })
+
+    it('toggles mode and updates placeholder on bare /plan', async () => {
+      const api = installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER)
+      fireEvent.change(input, { target: { value: '/plan' } })
+      // First Enter selects from autocomplete menu, inserting '/plan '
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect((input as HTMLTextAreaElement).value).toBe('/plan ')
+      // Second Enter submits the bare command
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      // Should NOT send to backend immediately
+      expect(api.chat.send).not.toHaveBeenCalled()
+      // Input is cleared
+      expect((input as HTMLTextAreaElement).value).toBe('')
+      // Badge is visible
+      expect(screen.getByText('Mode: Plan')).toBeTruthy()
+      // Placeholder updated
+      expect(screen.getByPlaceholderText(/Plan mode/)).toBeTruthy()
+
+      // Sending regular text now sends with 'plan' mode
+      fireEvent.change(input, { target: { value: 'implement authentication' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+      expect(api.chat.send).toHaveBeenCalledWith(
+        'p1',
+        expect.any(String),
+        'implement authentication',
+        [],
+        'plan'
+      )
+
+      // Clicking x exits plan mode
+      const exitBtn = screen.getByRole('button', { name: 'Exit mode' })
+      fireEvent.click(exitBtn)
+      expect(screen.queryByText('Mode: Plan')).toBeNull()
+    })
+
+    it('hides active mode badge while typing a slash command to prevent conflicting info', async () => {
+      const api = installApi()
+      render(<Harness />)
+      const input = screen.getByPlaceholderText(PLACEHOLDER)
+
+      // Enter Autopilot mode
+      fireEvent.change(input, { target: { value: '/autopilot' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(screen.getByText('Mode: Autopilot')).toBeTruthy()
+
+      // Start typing /plan (as seen in the user screenshot)
+      fireEvent.change(input, { target: { value: '/plan' } })
+      // Badge should be hidden while typing /plan so there is no conflicting info
+      expect(screen.queryByText('Mode: Autopilot')).toBeNull()
+      expect(screen.queryByText(/Mode:/)).toBeNull()
+
+      // Erasing input restores the active Autopilot mode badge
+      fireEvent.change(input, { target: { value: '' } })
+      expect(screen.getByText('Mode: Autopilot')).toBeTruthy()
+
+      // Typing /plan with prompt and submitting switches to Plan mode immediately
+      fireEvent.change(input, { target: { value: '/plan create an api' } })
+      expect(screen.queryByText('Mode: Autopilot')).toBeNull()
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      // Submitted: Mode is now Plan!
+      expect(screen.getByText('Mode: Plan')).toBeTruthy()
+      await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+    })
   })
 })
