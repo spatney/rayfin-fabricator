@@ -33,9 +33,9 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "@tauri-apps/api": "^2.12.3",
-    "@tauri-apps/plugin-dialog": "^2.8.2",
-    "@tauri-apps/plugin-opener": "^2.7.1",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-dialog": "^2.8.3",
+    "@tauri-apps/plugin-opener": "^2.7.2",
     "@vscode/codicons": "^0.0.45",
     "highlight.js": "^11.12.0",
     "monaco-editor": "^0.57.0",
@@ -47,7 +47,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@tauri-apps/cli": "^2.12.2",
+    "@tauri-apps/cli": "^2.12.3",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^24.19.2",
