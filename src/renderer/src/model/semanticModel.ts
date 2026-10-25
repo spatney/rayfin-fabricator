@@ -1,7 +1,8 @@
 /**
  * View-model + edge derivation for the **semantic model** diagram (the Fabric /
  * Power BI model behind a data-app), the live-queried counterpart to the offline
- * Rayfin data model in `parseSchema.ts`.
+ * Rayfin data model in `parseSchema.ts`. The same diagram draws the tables of a
+ * SQL connector (see `sqlSource.ts`), whose cards carry the optional `sql` details.
  *
  * `buildSemanticModel` folds the flat `SemanticSchemaResult` rows (tables,
  * columns, measures, relationships — as returned by the `INFO.VIEW.*` DAX query)
@@ -19,14 +20,48 @@ import type {
 } from '@shared/ipc'
 import type { DerivedEdges, EndMarker, RelEdge, SelfEdge } from './relationships'
 
+/** What a card shows about a SQL table. */
+export interface SqlTableDetail {
+  schema: string
+  /** The app's entity for the table, when the app uses it. */
+  entity?: {
+    name: string
+    file: string
+    /** Its role grants, e.g. `authenticated: read`. */
+    grants: string[]
+  }
+}
+
+/** What a card row shows about a SQL column. */
+export interface SqlColumnDetail {
+  /** The SQL type with its size, e.g. `nvarchar(30)` or `decimal(8,2)`. */
+  typeLabel: string
+  /** Which chip color the type gets. */
+  family: 'num' | 'text' | 'date' | 'bool' | 'blob' | 'unknown'
+  nullable: boolean
+  /** The column a foreign key on it points to, as `table.column`. */
+  references?: string
+  /** How the database fills it in: `identity`, `default`, `computed`… */
+  generated?: string
+  /** False when the table's entity leaves the column out. */
+  mapped: boolean
+}
+
+/** A column on a card: a semantic-model column, or a SQL column with its details. */
+export interface DiagramColumn extends SemanticColumn {
+  sql?: SqlColumnDetail
+}
+
 /** A semantic-model table card: its columns and measures grouped together. */
 export interface SemanticModelTable {
   name: string
   description?: string
   isHidden: boolean
   storageMode?: string
-  columns: SemanticColumn[]
+  columns: DiagramColumn[]
   measures: SemanticMeasure[]
+  /** Set for a SQL table. */
+  sql?: SqlTableDetail
 }
 
 export interface SemanticModel {

@@ -175,7 +175,9 @@ in `.md`.
 | `advisor-finding` | An open Advisor issue with its fix actions | `/docs/ship/advisor` |
 | `rayfin-version` | The Rayfin version control with an update available | `/docs/ship/rayfin-versions` |
 | `settings` | The Settings dialog: General (with **API keys**), Appearance and the start of Diagnostics (sample data) | `/docs/reference/settings` |
-| `settings-experiments` | Settings' Experiments section with **Team workspaces** (sample data) | `/docs/team` |
+| `settings-experiments` | Settings' Experiments section with **Team workspaces** and **Migrate Power BI reports** (sample data) | `/docs/team`, `/docs/build/migrate-power-bi` |
+| `migrate-report` | **Migrate a Power BI report** with a report picked: its workspace, semantic model, pages and the three checks, all passing (sample data) | `/docs/build/migrate-power-bi` |
+| `migration-card` | The Migration card above the chat composer after the first page, with **Migrate next page** and **Migrate the rest** (sample data) | `/docs/build/migrate-power-bi` |
 | `account-menu` | The account menu with **Refresh Fabric authentication** and **Settings** (sample data) | `/docs/start/tour`, `/docs/troubleshooting/deploy` |
 | `deploy-error` | Ray above the preview after a failed deploy, offering **Find out why** and **View logs** (sample data) | `/docs/troubleshooting/deploy` |
 | `port-conflict` | The dialog shown when the preview's port is in use | `/docs/troubleshooting/preview` |

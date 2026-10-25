@@ -37,8 +37,9 @@ use crate::services::store;
 const HELPER_TIMEOUT_MS: u64 = 120_000;
 
 /// The Node helper, embedded at compile time. Written to the app data dir at
-/// runtime (see [`write_helper`]) so the system `node` can execute it.
-const HELPER_SOURCE: &str = include_str!("semantic_model_helper.mjs");
+/// runtime (see [`write_helper`]) so the system `node` can execute it; the
+/// report-migration helper imports it too.
+pub(crate) const HELPER_SOURCE: &str = include_str!("semantic_model_helper.mjs");
 
 /// One semantic model in a result. A Power BI `dataset` *is* a Fabric
 /// semantic-model item, so [`item_id`](SemanticModel::item_id) ==

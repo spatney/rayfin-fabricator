@@ -727,6 +727,11 @@ pub struct ExperimentFlags {
   /// default); turning it off hides team workspaces without deleting anything.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub team_workspaces: Option<bool>,
+  /// Migrate Power BI reports: Home offers to turn a report into a new app,
+  /// connected live to the report's semantic model, which Copilot then builds
+  /// page by page. Opt-in (off by default).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub report_migration: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -2610,6 +2615,11 @@ pub struct ChatMessage {
   /// is dropped when the renderer persists history.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub data: Option<serde_json::Value>,
+  /// The report-migration page a user message asked Copilot to build
+  /// (`ChatMigrationRef`), rendered as a chip in the transcript. Opaque to Rust;
+  /// must round-trip or it is dropped when the renderer persists history.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub migration: Option<serde_json::Value>,
   /// The prompt Copilot received when it differs from `text` (a Design turn's
   /// structured changes, or a hand-off's full instructions); re-sent by Retry /
   /// Try again / Resume.
@@ -3476,6 +3486,7 @@ mod tests {
       design: None,
       advisor: None,
       data: None,
+      migration: None,
       prompt: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
@@ -3515,6 +3526,7 @@ mod tests {
       design: None,
       advisor: None,
       data: None,
+      migration: None,
       prompt: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
@@ -3524,6 +3536,19 @@ mod tests {
     assert_eq!(questions[0].state, "answered");
     assert_eq!(questions[0].answer.as_deref(), Some("Dark"));
     assert!(back.plan.is_none());
+  }
+
+  #[test]
+  fn chat_message_round_trips_a_migration_chip() {
+    let raw = serde_json::json!({
+      "id": "u1",
+      "role": "user",
+      "text": "Migrate page 2 of 5: Regional sales",
+      "migration": {"reportName": "Sales", "page": {"index": 1, "count": 5, "name": "Regional sales"}},
+      "prompt": "[Fabricator: migrate…]"
+    });
+    let msg: ChatMessage = serde_json::from_value(raw.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&msg).unwrap()["migration"], raw["migration"]);
   }
 
   #[test]

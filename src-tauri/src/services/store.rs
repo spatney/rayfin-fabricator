@@ -36,6 +36,7 @@ fn default_state() -> ProjectsState {
 fn default_flags() -> ExperimentFlags {
   ExperimentFlags {
     team_workspaces: Some(false),
+    report_migration: Some(false),
   }
 }
 
@@ -196,6 +197,7 @@ pub fn set_settings(
 fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: ExperimentFlags) {
   let current = experiments.get_or_insert_with(default_flags);
   if let Some(v) = patch.team_workspaces { current.team_workspaces = Some(v); }
+  if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -226,6 +228,17 @@ pub fn team_workspaces_enabled() -> bool {
       .experiments
       .as_ref()
       .and_then(|e| e.team_workspaces)
+      .unwrap_or(false)
+  })
+}
+
+/// True when the Migrate Power BI reports experiment is on.
+pub fn report_migration_enabled() -> bool {
+  with_cache(|c| {
+    c.settings
+      .experiments
+      .as_ref()
+      .and_then(|e| e.report_migration)
       .unwrap_or(false)
   })
 }
@@ -394,6 +407,20 @@ mod tests {
     assert_eq!(flags.as_ref().unwrap().team_workspaces, Some(false));
     merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"teamWorkspaces":true})).unwrap());
     assert_eq!(flags.unwrap().team_workspaces, Some(true));
+  }
+
+  #[test]
+  fn report_migration_flag_merges_and_defaults_off() {
+    assert_eq!(default_settings().experiments.unwrap().report_migration, Some(false));
+    let mut flags: Option<ExperimentFlags> =
+      Some(serde_json::from_value(serde_json::json!({"teamWorkspaces":true})).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"reportMigration":true})).unwrap());
+    assert_eq!(flags.as_ref().unwrap().report_migration, Some(true));
+    assert_eq!(flags.as_ref().unwrap().team_workspaces, Some(true));
+    assert_eq!(
+      serde_json::to_value(flags.unwrap()).unwrap(),
+      serde_json::json!({"teamWorkspaces":true,"reportMigration":true})
+    );
   }
 
   #[test]

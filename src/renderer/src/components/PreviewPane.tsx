@@ -150,6 +150,9 @@ interface Props {
   /** Chat turns don't deploy (the user turned off "Deploy after each chat turn"):
    *  the local preview runs whenever the app is open, instead of only during turns. */
   manualDeploy?: boolean
+  /** Changes when a chat turn that changed files ends while chat turns don't
+   *  deploy, to reload the local preview once. */
+  localReload?: number
   /** A chat turn is running for this app, so its local preview changes as
    *  Copilot works. */
   turnRunning?: boolean
@@ -269,6 +272,7 @@ export default function PreviewPane({
   onLoadingChange,
   localPreviewUrl,
   manualDeploy = false,
+  localReload = 0,
   turnRunning = false,
   team = false,
   localBackend,
@@ -316,6 +320,7 @@ export default function PreviewPane({
 
   const hostRef = useRef<HTMLDivElement>(null)
   const prevRunningRef = useRef(running)
+  const localReloadRef = useRef(localReload)
   const [displayUrl, setDisplayUrl] = useState(deployedUrl ?? '')
   const [loading, setLoading] = useState(false)
   const [canBack, setCanBack] = useState(false)
@@ -484,6 +489,21 @@ export default function PreviewPane({
       }
     }
   }, [running, deploy?.result, previewUrl, beginTransition])
+
+  // While chat turns don't deploy, the local preview stays up between turns and
+  // only takes Vite's hot updates, which keep the page's state through a turn's
+  // edits and can leave it out of step with the code (state Fast Refresh kept,
+  // module-level caches, an error mid-turn). So after a turn that changed files
+  // it reloads once, hidden like a redeploy's reload, to show the finished app
+  // from a fresh start. Only when the surface holds the local page.
+  useEffect(() => {
+    if (localReload === localReloadRef.current) return
+    localReloadRef.current = localReload
+    if (isLocal && previewUrl && (loadedUrlRef.current ?? surfaceShownUrl) === previewUrl) {
+      beginTransition(previewUrl)
+      void window.api.preview.reload()
+    }
+  }, [localReload, isLocal, previewUrl, beginTransition])
 
   useEffect(() => {
     if (deployedUrl) setDisplayUrl(deployedUrl)

@@ -6,8 +6,17 @@ import {
   buildArchitecture,
   describeAppIdentity,
   parseRayfinConfig,
-  type AppArchitecture
+  SQL_CONNECTOR_TYPES,
+  type AppArchitecture,
+  type ConnectorConfig
 } from '../../model/architecture'
+import {
+  buildSqlSource,
+  connectorDir,
+  metadataPaths,
+  type SqlSourceFiles,
+  type SqlSourceModel
+} from '../../model/sqlSource'
 import ModelView from '../ModelView'
 import SemanticModelView from '../SemanticModelView'
 import { Codicon } from '../icons'
@@ -30,16 +39,20 @@ interface Props {
   onOpenSecrets?: () => void
 }
 
-export type BlueprintView = 'architecture' | 'data' | 'semantic'
+export type BlueprintView = 'architecture' | 'data' | 'fabric'
 
 const VIEW_PREF_PREFIX = 'rayfin.model.view.'
 /** Enough for any real functions folder; a runaway tree doesn't stall the tab. */
 const MAX_FUNCTION_FILES = 40
+/** Entity files read per SQL connector (one per table the app uses, plus schema.ts). */
+const MAX_CONNECTOR_FILES = 150
 
 function readViewPref(projectId: string): BlueprintView | null {
   try {
     const v = localStorage.getItem(VIEW_PREF_PREFIX + projectId)
-    return v === 'architecture' || v === 'data' || v === 'semantic' ? v : null
+    // The Fabric data view was called Semantic model before it drew SQL sources too.
+    if (v === 'semantic') return 'fabric'
+    return v === 'architecture' || v === 'data' || v === 'fabric' ? v : null
   } catch {
     return null
   }
@@ -55,17 +68,20 @@ async function readText(projectId: string, path: string): Promise<string | null>
   }
 }
 
-/** Every source file under the functions package's `src/`. */
-async function readFunctionSources(
-  projectId: string,
-  functionsPath: string
-): Promise<{ path: string; text: string }[]> {
-  let tree: FileNode[]
+async function readTree(projectId: string): Promise<FileNode[]> {
   try {
-    tree = await window.api.projects.files.tree(projectId)
+    return await window.api.projects.files.tree(projectId)
   } catch {
     return []
   }
+}
+
+/** Every source file under the functions package's `src/`. */
+async function readFunctionSources(
+  projectId: string,
+  tree: FileNode[],
+  functionsPath: string
+): Promise<{ path: string; text: string }[]> {
   const prefix = `${functionsPath}/src/`
   const paths: string[] = []
   const walk = (nodes: FileNode[]): void => {
@@ -86,18 +102,79 @@ async function readFunctionSources(
   return read.flatMap((r) => (r.text == null ? [] : [{ path: r.path, text: r.text }]))
 }
 
+/** The files directly inside a project folder, from the tree. */
+function filesIn(tree: FileNode[], dir: string): string[] {
+  let nodes = tree
+  for (const path of dir.split('/').map((_, i, parts) => parts.slice(0, i + 1).join('/'))) {
+    const next = nodes.find((n) => n.type === 'dir' && n.path.toLowerCase() === path.toLowerCase())
+    if (!next) return []
+    nodes = next.children ?? []
+  }
+  return nodes.filter((n) => n.type === 'file').map((n) => n.path)
+}
+
+/** A connector's metadata.json, from where current or older Rayfin CLIs write it. */
+async function readMetadata(projectId: string, connectorName: string): Promise<SqlSourceFiles['metadata']> {
+  for (const path of metadataPaths(connectorName)) {
+    let fc
+    try {
+      fc = await window.api.projects.files.read(projectId, path)
+    } catch {
+      continue
+    }
+    if (fc.tooLarge) return { path, text: null, problem: 'metadata.json is too large to read.' }
+    if (fc.error) continue
+    return { path, text: fc.binary ? null : (fc.content ?? '') }
+  }
+  return undefined
+}
+
+/** Each SQL connector's tables: its metadata.json and the entity files beside it. */
+async function readSqlSources(
+  projectId: string,
+  tree: FileNode[],
+  connectors: ConnectorConfig[]
+): Promise<SqlSourceModel[]> {
+  return Promise.all(
+    connectors.map(async (connector) => {
+      const dir = connectorDir(connector.name)
+      const warnings: string[] = []
+      let paths = filesIn(tree, dir).filter((p) => /\.[cm]?ts$/.test(p) && !/\.d\.[cm]?ts$/.test(p))
+      if (paths.length > MAX_CONNECTOR_FILES) {
+        warnings.push(`Read the first ${MAX_CONNECTOR_FILES} of ${paths.length} files in ${dir}/.`)
+        paths = paths.slice(0, MAX_CONNECTOR_FILES)
+      }
+      const [metadata, files] = await Promise.all([
+        readMetadata(projectId, connector.name),
+        Promise.all(paths.map(async (path) => ({ path, text: await readText(projectId, path) })))
+      ])
+      return buildSqlSource({
+        connector,
+        metadata,
+        files: files.flatMap((f) => (f.text == null ? [] : [{ path: f.path, text: f.text }])),
+        warnings
+      })
+    })
+  )
+}
+
 interface Loaded {
   dataModel: DataModel
   arch: AppArchitecture | { error: string }
+  sqlSources: SqlSourceModel[]
 }
 
 async function loadBlueprint(projectId: string, projectName: string): Promise<Loaded> {
   const ymlText = (await readText(projectId, 'rayfin/rayfin.yml')) ?? (await readText(projectId, 'rayfin/rayfin.yaml'))
-  const functionsPath = (ymlText && parseRayfinConfig(ymlText)?.functions.path) || 'rayfin/functions'
-  const [dataModel, fabric, functionSources] = await Promise.all([
+  const config = ymlText ? parseRayfinConfig(ymlText) : null
+  const functionsPath = config?.functions.path || 'rayfin/functions'
+  const sqlConnectors = (config?.connectors ?? []).filter((c) => SQL_CONNECTOR_TYPES.has(c.type))
+  const tree = readTree(projectId)
+  const [dataModel, fabric, functionSources, sqlSources] = await Promise.all([
     parseProjectDataModel(projectId).catch((): DataModel => emptyDataModel()),
     loadProjectFabricConfig(projectId).catch(() => null),
-    readFunctionSources(projectId, functionsPath)
+    tree.then((nodes) => readFunctionSources(projectId, nodes, functionsPath)),
+    tree.then((nodes) => readSqlSources(projectId, nodes, sqlConnectors))
   ])
   const arch = buildArchitecture({
     projectName,
@@ -106,7 +183,7 @@ async function loadBlueprint(projectId: string, projectName: string): Promise<Lo
     dataModel,
     functionSources
   })
-  return { dataModel, arch }
+  return { dataModel, arch, sqlSources }
 }
 
 /**
@@ -116,8 +193,10 @@ async function loadBlueprint(projectId: string, projectName: string): Promise<Lo
  *    each connection signs in as (each person, or the app, and whose credentials);
  *  - **Data model**: the entity diagram of the app's data model (`rayfin/data`,
  *    or the data package rayfin.yml names);
- *  - **Semantic model**: live diagrams of the semantic models it uses (shown
- *    only when it uses some, from `fabric.yaml` or a connector).
+ *  - **Fabric data**: diagrams of the Fabric data it connects to (shown only
+ *    when it connects to some): semantic models, read live from `fabric.yaml` or
+ *    a connector, and the tables of its SQL database, warehouse and lakehouse
+ *    connectors, read from the project.
  *
  * The chosen view is remembered per project.
  */
@@ -135,7 +214,7 @@ export default function BlueprintTab({
   const [view, setView] = useState<BlueprintView>(() => readViewPref(project.id) ?? 'architecture')
   const [slot, setSlot] = useState<HTMLElement | null>(null)
   const [entityRequest, setEntityRequest] = useState<{ entity: string; nonce: number } | null>(null)
-  const [modelRequest, setModelRequest] = useState<{ key: string; nonce: number } | null>(null)
+  const [sourceRequest, setSourceRequest] = useState<{ key: string; nonce: number } | null>(null)
   const [activeAccount, setActiveAccount] = useState<string | undefined>(undefined)
 
   // The sign-in status doesn't always name the account; the account list does.
@@ -180,9 +259,10 @@ export default function BlueprintTab({
 
   const arch = loaded && !('error' in loaded.arch) ? loaded.arch : null
   const semanticModels = useMemo(() => arch?.semanticModels ?? [], [arch])
-  const hasSemantic = semanticModels.length > 0
-  // A remembered Semantic model view falls back when the app no longer has one.
-  const active: BlueprintView = view === 'semantic' && !hasSemantic ? 'architecture' : view
+  const sqlSources = useMemo(() => loaded?.sqlSources ?? [], [loaded])
+  const fabricSources = semanticModels.length + sqlSources.length
+  // A remembered Fabric data view falls back when the app no longer connects to any.
+  const active: BlueprintView = view === 'fabric' && !fabricSources ? 'architecture' : view
 
   const owner = fabricUser || activeAccount
   const appIdentity = useMemo(
@@ -202,10 +282,10 @@ export default function BlueprintTab({
     },
     [pick]
   )
-  const openSemanticModel = useCallback(
+  const openFabricData = useCallback(
     (key: string): void => {
-      pick('semantic')
-      setModelRequest({ key, nonce: Date.now() })
+      pick('fabric')
+      setSourceRequest({ key, nonce: Date.now() })
     },
     [pick]
   )
@@ -214,13 +294,13 @@ export default function BlueprintTab({
   const tabs: { id: BlueprintView; label: string; icon: string; count?: number }[] = [
     { id: 'architecture', label: 'Architecture', icon: 'type-hierarchy-sub' },
     { id: 'data', label: 'Data model', icon: 'database', count: tables || undefined },
-    ...(hasSemantic
+    ...(fabricSources
       ? [
           {
-            id: 'semantic' as const,
-            label: 'Semantic model',
-            icon: 'graph',
-            count: semanticModels.length > 1 ? semanticModels.length : undefined
+            id: 'fabric' as const,
+            label: 'Fabric data',
+            icon: 'plug',
+            count: fabricSources > 1 ? fabricSources : undefined
           }
         ]
       : [])
@@ -240,14 +320,17 @@ export default function BlueprintTab({
         focusRequest={entityRequest}
       />
     )
-  } else if (active === 'semantic') {
+  } else if (active === 'fabric') {
     body = (
       <SemanticModelView
         projectId={project.id}
         models={semanticModels}
+        sqlSources={sqlSources}
         refreshKey={refreshKey}
         onSignedIn={onSignedIn}
-        selectRequest={modelRequest}
+        onOpenFile={onOpenFile}
+        onSendToChat={onSendToChat}
+        selectRequest={sourceRequest}
       />
     )
   } else if ('error' in loaded.arch) {
@@ -270,7 +353,7 @@ export default function BlueprintTab({
         onOpenFile={onOpenFile}
         onSendToChat={onSendToChat}
         onOpenEntity={openEntity}
-        onOpenSemanticModel={openSemanticModel}
+        onOpenFabricData={openFabricData}
         onOpenSecrets={onOpenSecrets}
       />
     )

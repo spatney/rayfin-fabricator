@@ -61,7 +61,7 @@ async function parallelFind(items, probe, workers = 24) {
 }
 
 // ── Input parsing ─────────────────────────────────────────────────────────--
-function parseTarget(value) {
+export function parseTarget(value) {
   const v = String(value || '').trim()
   const res = { kind: null, id: null, workspace: null, appReport: null }
 
@@ -460,7 +460,7 @@ const tmslBool = (v) => v === true
 
 // Fold a parsed `model.bim` `model` node into the flat friendly schema the Rust
 // layer + renderer consume. Pure — exercised by `--selftest` without any network.
-function normalizeTmsl(model) {
+export function normalizeTmsl(model) {
   const tables = Array.isArray(model && model.tables) ? model.tables : []
   const outTables = []
   const outColumns = []

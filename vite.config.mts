@@ -21,6 +21,11 @@ export default defineConfig({
   },
   // Prevent Vite from obscuring Rust compiler errors during `tauri dev`.
   clearScreen: false,
+  // pdf.js is only imported lazily (a report migration's pages), so Vite would
+  // find it on first use and reload the page mid-migration to optimize it.
+  optimizeDeps: {
+    include: ['pdfjs-dist/legacy/build/pdf.mjs']
+  },
   // Expose TAURI_* env vars to the client so build-time platform info is available.
   envPrefix: ['VITE_', 'TAURI_ENV_'],
   server: {

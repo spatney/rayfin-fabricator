@@ -9722,9 +9722,72 @@ select.ws-input:disabled {
   color: var(--text-dim);
 }
 
-.semantic-model-picker {
+/* The sources (semantic models and SQL connectors), shown in every state so
+   one that can't be read never hides the others; and the SQL table filter. */
+.semantic-sources {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  flex: none;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  overflow-x: auto;
+}
+.semantic-seg {
+  flex: none;
+  margin-bottom: 0;
+}
+.semantic-seg .seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.model-toolbar .semantic-seg {
+  padding: 2px;
+}
+.model-toolbar .semantic-seg .seg-btn {
+  padding: 2px 9px;
+  font-size: 11.5px;
+}
+.semantic-seg .seg-btn .codicon {
+  font-size: 13px;
+}
+.semantic-seg .seg-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.semantic-seg-note {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+/* A SQL source's note about what the app doesn't build on yet. */
+.semantic-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.semantic-notice-ico {
+  flex: none;
+  color: var(--text-faint);
+}
+.semantic-notice-text {
+  min-width: 0;
+}
+.semantic-empty-note {
+  max-width: 440px;
+  font-size: 11.5px;
+  color: var(--text-faint);
 }
 
 /* Table card. */
@@ -9763,6 +9826,18 @@ select.ws-input:disabled {
 }
 .semantic-card--hidden {
   opacity: 0.72;
+}
+/* A SQL table the app has no entity for: a quiet header, so the ones it uses stand out. */
+.semantic-card--unused .semantic-card-head {
+  background: var(--bg-elev-3);
+  color: var(--text);
+}
+.semantic-card--unused .semantic-card-collapse,
+.semantic-card--unused .semantic-card-focus {
+  color: var(--text-dim);
+}
+.semantic-card--unused .semantic-card-focus:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .semantic-card-head {
@@ -9868,6 +9943,9 @@ select.ws-input:disabled {
 .semantic-field--hidden {
   opacity: 0.55;
 }
+.semantic-field--unmapped {
+  opacity: 0.5;
+}
 .semantic-field--empty {
   color: var(--text-faint);
   font-style: italic;
@@ -9875,6 +9953,7 @@ select.ws-input:disabled {
 .semantic-field-gutter {
   display: inline-flex;
   align-items: center;
+  gap: 7px;
   flex: none;
 }
 .semantic-field-ico {
@@ -9886,6 +9965,9 @@ select.ws-input:disabled {
 }
 .semantic-field-ico--pk {
   color: var(--accent);
+}
+.semantic-field-ico--fk {
+  color: var(--text-dim);
 }
 .semantic-field-name {
   min-width: 0;
@@ -10028,6 +10110,40 @@ select.ws-input:disabled {
   white-space: nowrap;
   font-size: 11px;
   color: var(--text-faint);
+}
+/* A SQL table's entity in the app, which opens its file. */
+.semantic-entity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+.semantic-entity:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.semantic-card .semantic-entity:disabled {
+  cursor: default;
+}
+.semantic-entity .codicon {
+  flex: none;
+  font-size: 12px;
+  color: var(--accent);
+}
+.semantic-entity-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Relationship edges: active = solid, inactive = dashed (Power BI convention).

@@ -66,7 +66,8 @@ interface Props {
   onOpenFile: (path: string) => void
   onPrompt: (prompt: ChatPrompt) => void
   onOpenEntity: (entity: string) => void
-  onOpenSemanticModel: (key: string) => void
+  /** Show a semantic model (`workspaceId:itemId`) or a SQL source's tables in the Fabric data view. */
+  onOpenFabricData: (key: string) => void
   /** Open Code → Secrets, where values are added and changed. */
   onOpenSecrets?: () => void
 }
@@ -965,7 +966,7 @@ function SourceDetails({
   onSelect,
   onOpenFile,
   onPrompt,
-  onOpenSemanticModel
+  onOpenFabricData
 }: Props & { src: SourceNode }): JSX.Element {
   const ws = src.workspaceId ? info?.workspaces.get(src.workspaceId.toLowerCase()) : undefined
   const model = src.itemId ? info?.models.get(src.itemId.toLowerCase()) : undefined
@@ -1000,8 +1001,13 @@ function SourceDetails({
         </button>
       )}
       {src.semanticKey && (
-        <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenSemanticModel(src.semanticKey!)}>
+        <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFabricData(src.semanticKey!)}>
           <Codicon name="graph" /> View the model
+        </button>
+      )}
+      {src.tablesKey && (
+        <button type="button" className="btn btn--sm btn--ghost" onClick={() => onOpenFabricData(src.tablesKey!)}>
+          <Codicon name="table" /> View the tables
         </button>
       )}
       {(model?.webUrl || workspaceUrl) && (

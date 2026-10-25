@@ -35,6 +35,10 @@ Change it from **Settings → Workspace folder → Change…**. Changing the wor
 
 Your workspace folder contains the actual app source code, git repository, Rayfin files, package files, and any app assets. Do not delete a project folder unless you mean to delete that app's local working copy.
 
+## Report migration material
+
+A project you created with **Migrate a Power BI report** keeps what Copilot works from in `.fabricator/migration/` in the project folder: the report's definition, its semantic model's tables and measures, and an image and the text of each page. Fabricator keeps the folder out of git, because the page images and text show real data. The app doesn't use it, so you can delete it once every page is migrated. See [Migrate a Power BI report](/docs/build/migrate-power-bi#where-the-reports-material-lives).
+
 ## Temporary screenshots
 
 Fabricator stores temporary screenshot attachments under the operating system temp folder in a `rayfin-fabricator-shots` directory. It deletes the screenshot files it owns after they are no longer needed.

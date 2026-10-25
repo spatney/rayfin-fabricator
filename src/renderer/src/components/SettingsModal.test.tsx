@@ -167,6 +167,30 @@ describe('SettingsModal team workspaces experiment', () => {
   })
 })
 
+describe('SettingsModal report migration experiment', () => {
+  function migrationCheckbox(): HTMLInputElement {
+    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
+    const label = screen.getByText('Migrate Power BI reports').closest('label')
+    if (!label) throw new Error('Migrate Power BI reports label not found')
+    return label.querySelector('input[type="checkbox"]') as HTMLInputElement
+  }
+
+  it('is off by default and turns on through the experiment flags', async () => {
+    installApi()
+    const { onChange } = await renderModal()
+    const checkbox = migrationCheckbox()
+    expect(checkbox.checked).toBe(false)
+    fireEvent.click(checkbox)
+    expect(onChange).toHaveBeenCalledWith({ experiments: { reportMigration: true } })
+  })
+
+  it('reflects the persisted flag', async () => {
+    installApi()
+    await renderModal({ settings: { theme: 'system', experiments: { reportMigration: true } } })
+    expect(migrationCheckbox().checked).toBe(true)
+  })
+})
+
 describe('SettingsModal retired controls', () => {
   it.each([false, true])('does not show retired controls with legacy flags set to %s', async (enabled) => {
     installApi()
@@ -197,8 +221,9 @@ describe('SettingsModal retired controls', () => {
       expect(screen.queryByText(label)).toBeNull()
     }
     expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
     expect(screen.getByText('Team workspaces')).toBeTruthy()
+    expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
     expect(screen.getByText('Full diagnostics')).toBeTruthy()
   })
 })

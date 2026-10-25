@@ -5,6 +5,7 @@
 //   - index.html carries the Content-Security-Policy, and it allows no remote origins.
 //     tauri.conf.json sets `csp: null`, so this tag is the app's only CSP.
 //   - Every Monaco web worker is bundled, so the editors work offline.
+//   - pdf.js's worker is bundled, so a report migration can draw its pages offline.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -39,9 +40,14 @@ for (const worker of WORKERS) {
     )
   }
 }
+if (!assets.some((name) => name.startsWith('pdf.worker.min-') && name.endsWith('.mjs'))) {
+  problems.push("dist/assets has no pdf.worker.min-*.mjs, so pdf.js's worker isn't bundled")
+}
 
 if (problems.length) {
   console.error(`Renderer build check failed:\n  ${problems.join('\n  ')}`)
   process.exit(1)
 }
-console.log(`Renderer build check passed: relative assets, CSP, ${WORKERS.length} Monaco workers.`)
+console.log(
+  `Renderer build check passed: relative assets, CSP, ${WORKERS.length} Monaco workers, the pdf.js worker.`
+)

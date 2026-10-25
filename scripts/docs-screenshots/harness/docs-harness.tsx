@@ -17,7 +17,13 @@ import type {
   FabricCapacitiesResult,
   FabricWorkspace,
   FileNode,
+  MigrationInspectedPage,
+  MigrationPage,
+  MigrationReportItem,
+  MigrationState,
+  MigrationWorkspace,
   RayfinVersionInfo,
+  ReportInspection,
   SecretsState,
   SkillInfo,
   StudioProject,
@@ -55,6 +61,8 @@ import { ModelPicker } from './components/models/ModelPicker'
 import { AddMenu } from './components/chat/ComposerMenus'
 import { DataTray } from './components/chat/DataTray'
 import ConnectDataModal from './components/ConnectDataModal'
+import MigrateReportScreen from './components/migrate/MigrateReportScreen'
+import MigrationCard from './components/migrate/MigrationCard'
 import type { DataSource } from './fabricData'
 import type { ModelSelection } from './modelSelection'
 import './components/chat/chat.css'
@@ -646,6 +654,174 @@ const pickedData: DataSource[] = [
   { workspaceId: FINANCE_WS, workspaceName: 'Finance analytics', item: workspaceData[FINANCE_WS][3] }
 ]
 
+/* Migrate a Power BI report: the sample user's Power BI workspaces and the Sales performance report. */
+
+const SALES_WS = 'c1111111-1111-4111-8111-111111111111'
+const SALES_REPORT = 'c2222222-2222-4222-8222-222222222222'
+const SALES_MODEL = 'c3333333-3333-4333-8333-333333333333'
+
+/** The workspaces the Azure CLI's account can open, My workspace first, as Fabricator lists them. */
+const migrationWorkspaces: MigrationWorkspace[] = [
+  { id: 'c0000000-0000-4000-8000-000000000000', name: 'My workspace', personal: true },
+  { id: APPS_WS, name: 'Contoso Apps', personal: false, capacityId: 'd1111111-1111-4111-8111-111111111111' },
+  { id: FINANCE_WS, name: 'Finance analytics', personal: false, capacityId: 'd2222222-2222-4222-8222-222222222222' },
+  { id: 'b1111111-1111-4111-8111-111111111111', name: 'Marketing', personal: false },
+  { id: 'b2222222-2222-4222-8222-222222222222', name: 'Operations', personal: false },
+  { id: SALES_WS, name: 'Sales analytics', personal: false, capacityId: 'd2222222-2222-4222-8222-222222222222' }
+]
+
+/** Power BI reports by workspace id, by name. */
+const migrationReports: Record<string, MigrationReportItem[]> = {
+  [SALES_WS]: [
+    { id: 'c4444444-4444-4444-8444-444444444444', name: 'Customer insights', workspaceId: SALES_WS },
+    { id: SALES_REPORT, name: 'Sales performance', workspaceId: SALES_WS },
+    { id: 'c5555555-5555-4555-8555-555555555555', name: 'Sales targets 2026', workspaceId: SALES_WS },
+    { id: 'c6666666-6666-4666-8666-666666666666', name: 'Store operations', workspaceId: SALES_WS }
+  ],
+  [FINANCE_WS]: [
+    { id: 'c7777777-7777-4777-8777-777777777777', name: 'Budget vs actuals', workspaceId: FINANCE_WS },
+    { id: 'c8888888-8888-4888-8888-888888888888', name: 'Spend overview', workspaceId: FINANCE_WS }
+  ]
+}
+
+const salesPages: MigrationInspectedPage[] = ['Overview', 'Regions', 'Products', 'Customers', 'Store details'].map(
+  (displayName, order) => ({ name: `ReportSection${order + 1}`, displayName, order })
+)
+
+/** What Fabricator can read of Sales performance: everything, so it can be migrated. */
+const salesInspection: ReportInspection = {
+  ok: true,
+  report: {
+    id: SALES_REPORT,
+    name: 'Sales performance',
+    workspaceId: SALES_WS,
+    workspaceName: 'Sales analytics',
+    personal: false,
+    format: 'PBIR',
+    reportType: 'PowerBIReport'
+  },
+  model: { id: SALES_MODEL, name: 'Sales model', workspaceId: SALES_WS, workspaceName: 'Sales analytics' },
+  pages: salesPages,
+  checks: {
+    definition: { status: 'ok', message: 'Pages, visuals, fields and filters can be read.' },
+    model: { status: 'ok', message: 'Copilot can query “Sales model” live.' },
+    images: { status: 'ok', message: 'Pages can be exported to PDF for Copilot to look at.' }
+  }
+}
+
+/** A report page's preview, as the Migration card shows it: shapes only, on a white page. */
+function pageThumb(shapes: string): string {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180">' +
+    '<rect width="320" height="180" fill="#ffffff"/><rect x="12" y="10" width="110" height="9" rx="2" fill="#252423"/>' +
+    shapes +
+    '</svg>'
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
+const panel = (x: number, y: number, w: number, h: number): string =>
+  `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#f3f2f1"/>`
+
+const kpiRow = (count: number): string =>
+  Array.from({ length: count }, (_, i) => {
+    const w = (296 - (count - 1) * 8) / count
+    const x = 12 + i * (w + 8)
+    return `${panel(x, 28, w, 30)}<rect x="${x + 6}" y="34" width="${w * 0.5}" height="8" rx="1" fill="#252423"/><rect x="${x + 6}" y="46" width="${w * 0.35}" height="5" rx="1" fill="#a19f9d"/>`
+  }).join('')
+
+const columns = (x: number, y: number, w: number, h: number, values: number[], color: string): string =>
+  values
+    .map((v, i) => {
+      const step = w / values.length
+      return `<rect x="${x + i * step + step * 0.2}" y="${y + h * (1 - v)}" width="${step * 0.6}" height="${h * v}" fill="${color}"/>`
+    })
+    .join('')
+
+const bars = (x: number, y: number, w: number, h: number, values: number[], color: string): string =>
+  values
+    .map((v, i) => {
+      const step = h / values.length
+      return `<rect x="${x}" y="${y + i * step + step * 0.2}" width="${w * v}" height="${step * 0.6}" fill="${color}"/>`
+    })
+    .join('')
+
+const trend = (x: number, y: number, w: number, h: number, values: number[], color: string): string =>
+  `<polyline fill="none" stroke="${color}" stroke-width="3" points="${values
+    .map((v, i) => `${x + (i * w) / (values.length - 1)},${y + h * (1 - v)}`)
+    .join(' ')}"/>`
+
+const rows = (x: number, y: number, w: number, count: number): string =>
+  `<rect x="${x}" y="${y}" width="${w}" height="9" fill="#118dff"/>` +
+  Array.from({ length: count }, (_, i) => `<rect x="${x}" y="${y + 13 + i * 11}" width="${w}" height="6" rx="1" fill="${i % 2 ? '#e1dfdd' : '#edebe9'}"/>`).join('')
+
+/** The five pages of Sales performance, as the export draws them. */
+const salesThumbs = [
+  pageThumb(
+    kpiRow(4) +
+      panel(12, 66, 144, 104) +
+      columns(18, 76, 132, 86, [0.55, 0.7, 0.62, 0.85, 0.78, 0.95], '#118dff') +
+      panel(164, 66, 144, 104) +
+      trend(172, 80, 128, 78, [0.3, 0.45, 0.4, 0.62, 0.58, 0.8, 0.9], '#12239e')
+  ),
+  pageThumb(panel(12, 28, 140, 142) + bars(20, 36, 120, 126, [0.95, 0.8, 0.66, 0.5, 0.38, 0.25], '#e66c37') + panel(160, 28, 148, 142) + rows(168, 38, 132, 9)),
+  pageThumb(
+    panel(12, 28, 180, 142) +
+      '<rect x="20" y="36" width="96" height="126" fill="#118dff"/><rect x="120" y="36" width="64" height="70" fill="#12239e"/>' +
+      '<rect x="120" y="110" width="64" height="52" fill="#e66c37"/>' +
+      panel(200, 28, 108, 142) +
+      columns(206, 40, 96, 120, [0.9, 0.7, 0.55, 0.4], '#6b007b')
+  ),
+  pageThumb(
+    kpiRow(3) +
+      panel(12, 66, 120, 104) +
+      '<circle cx="72" cy="118" r="34" fill="none" stroke="#118dff" stroke-width="16" stroke-dasharray="120 214"/>' +
+      '<circle cx="72" cy="118" r="34" fill="none" stroke="#e66c37" stroke-width="16" stroke-dasharray="60 214" stroke-dashoffset="-120"/>' +
+      '<circle cx="72" cy="118" r="34" fill="none" stroke="#12239e" stroke-width="16" stroke-dasharray="34 214" stroke-dashoffset="-180"/>' +
+      panel(140, 66, 168, 104) +
+      rows(148, 74, 152, 7)
+  ),
+  pageThumb(kpiRow(2) + panel(12, 66, 296, 104) + rows(20, 74, 280, 7))
+]
+
+/** Sales performance's migration once its first page is done: the next one waits for you. */
+const salesMigration: MigrationState = {
+  version: 1,
+  dir: '.fabricator/migration/sales-performance',
+  alias: 'salesModel',
+  source: {
+    reportId: SALES_REPORT,
+    reportName: 'Sales performance',
+    workspaceId: SALES_WS,
+    workspaceName: 'Sales analytics',
+    personal: false,
+    format: 'PBIR',
+    modelId: SALES_MODEL,
+    modelName: 'Sales model',
+    modelWorkspaceId: SALES_WS,
+    modelWorkspaceName: 'Sales analytics'
+  },
+  stages: {
+    definition: { status: 'done' },
+    model: { status: 'done' },
+    export: { status: 'done' },
+    images: { status: 'done' }
+  },
+  pages: salesPages.map(
+    (p, i): MigrationPage => ({
+      ...p,
+      kind: i === 4 ? 'drillthrough' : 'page',
+      hidden: i === 4,
+      stem: `0${i + 1}-${p.displayName.toLowerCase().replace(/\s+/g, '-')}`,
+      thumb: salesThumbs[i],
+      status: i === 0 ? 'done' : 'pending'
+    })
+  ),
+  pdfs: ['export-1.pdf'],
+  warnings: [],
+  startedAt: '',
+  dismissed: false
+}
+
 /** Creating a team workspace: one GitHub account with every permission it needs, and Azure signed in. */
 const teamEnv: TeamEnvStatus = {
   enabled: true,
@@ -786,6 +962,13 @@ function installApi(): void {
             deployedAt: new Date(Date.now() - 2 * 3_600_000).toISOString()
           }
         ])
+    },
+    // Migrate a Power BI report: read with the sample user's Azure CLI sign-in.
+    migration: {
+      workspaces: ok({ ok: true, workspaces: migrationWorkspaces, account: { user: 'avery.chen@contoso.com', domain: 'contoso.com' } }),
+      reports: (workspaceId: string) => Promise.resolve({ ok: true, reports: migrationReports[workspaceId] ?? [] }),
+      search: ok({ ok: true, reports: [] }),
+      inspect: ok(salesInspection)
     },
     team: {
       map: ok(sampleMap()),
@@ -1017,13 +1200,25 @@ function Steps({ clicks, children }: { clicks: string[]; children: ReactNode }):
 }
 
 /** The Build chat's composer, chat-wide beside an empty preview, with its model picker
- *  (and any Fabric data waiting to go with the next message). */
-function ComposerPicker({ value, data }: { value: ModelSelection; data?: DataSource[] }): JSX.Element {
+ *  (and any Fabric data waiting to go with the next message, or a banner above it, such as
+ *  a report migration's card). */
+function ComposerPicker({
+  value,
+  data,
+  banner,
+  project = 'Contoso Expenses'
+}: {
+  value: ModelSelection
+  data?: DataSource[]
+  banner?: ReactNode
+  project?: string
+}): JSX.Element {
   const [selection, setSelection] = useState(value)
   return (
     <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '720px 1fr' }}>
       <div className="chat" style={{ justifyContent: 'flex-end' }}>
         <div className="composer">
+          {banner}
           <div className="composer-box">
             {data && <DataTray sources={data} onOpen={noop} onRemove={noop} />}
             <div className="composer-input-sizer" data-replicated-value="">
@@ -1033,7 +1228,7 @@ function ComposerPicker({ value, data }: { value: ModelSelection; data?: DataSou
                 placeholder={
                   data
                     ? 'Say what to build with this data, or just press Enter to connect it'
-                    : 'Message Fabricator about Contoso Expenses…'
+                    : `Message Fabricator about ${project}…`
                 }
                 readOnly
               />
@@ -1575,6 +1770,34 @@ function Shot({ id }: { id: string | null }): JSX.Element {
       return <SettingsShot />
     case 'settings-experiments':
       return <SettingsShot experiments />
+    case 'migrate-report':
+      // The picker opens on Contoso Apps, where the sample app deploys; the shot opens Sales
+      // analytics and picks Sales performance, and Fabricator shows what it can read of it.
+      return (
+        <Steps clicks={['.mig-ws li:nth-child(6) button', '.mig-reports li:nth-child(2) button']}>
+          <MigrateReportScreen recentWorkspaces={[APPS_WS]} onCancel={noop} onPicked={noop} />
+        </Steps>
+      )
+    case 'migration-card':
+      return (
+        <ComposerPicker
+          value={{ model: 'claude-opus-5.5', effort: 'high', autoTier: '', contextTier: '' }}
+          project="Sales performance"
+          banner={
+            <MigrationCard
+              state={salesMigration}
+              drawing={false}
+              chaining={false}
+              onNext={noop}
+              onRest={noop}
+              onStopRest={noop}
+              onRetry={noop}
+              onSkipImages={noop}
+              onDismiss={noop}
+            />
+          }
+        />
+      )
     default:
       return <p style={{ padding: 24 }}>Unknown shot: {String(id)}</p>
   }

@@ -11,6 +11,7 @@
     "skills": "/docs/build/skills",
     "secrets": "/docs/build/secrets",
     "apiKeys": "/docs/build/your-own-api-keys",
+    "migrate": "/docs/build/migrate-power-bi",
     "teamAdmins": "/docs/team/administrators"
   }
 }

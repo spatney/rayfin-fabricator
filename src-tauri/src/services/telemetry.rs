@@ -117,8 +117,9 @@ fn send(conn: &ParsedConnection, name: &str, user_id: String, properties: Map<St
   });
   let url = format!("{}/v2/track", conn.ingestion_endpoint);
   let body = envelope.to_string();
-  // Fire-and-forget; telemetry must never slow or break a user action.
-  tokio::spawn(async move {
+  // Fire-and-forget; telemetry must never slow or break a user action. Tauri's
+  // runtime spawns from any thread, including a synchronous command's main thread.
+  tauri::async_runtime::spawn(async move {
     if let Ok(client) = reqwest::Client::builder()
       .timeout(Duration::from_secs(5))
       .build()
@@ -172,4 +173,30 @@ pub fn track_deploy(identity: Option<&TelemetryIdentity>, success: bool) {
 /// whether it succeeded. No repository, workspace or app names are sent.
 pub fn track_team(identity: Option<&TelemetryIdentity>, action: &str, success: bool) {
   track("team", identity, &[("action", action.to_string()), ("success", success.to_string())]);
+}
+
+/// Record a report-migration step (`start`, `extract`, `page`) with counts,
+/// formats and outcomes. No report, workspace, model or page names are sent.
+pub fn track_migration(identity: Option<&TelemetryIdentity>, step: &str, props: &[(&str, String)]) {
+  let mut all = vec![("step", step.to_string())];
+  all.extend(props.iter().map(|(k, v)| (*k, v.clone())));
+  track("migration", identity, &all);
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  // Synchronous Tauri commands run on the main thread, outside any Tokio runtime:
+  // an event sent from one must not panic (a panic there aborts the app).
+  #[test]
+  fn sending_from_a_thread_without_a_runtime_does_not_panic() {
+    let conn = ParsedConnection {
+      instrumentation_key: "00000000-0000-0000-0000-000000000000".into(),
+      ingestion_endpoint: "http://127.0.0.1:9".into(),
+    };
+    std::thread::spawn(move || send(&conn, "migration", "user".into(), Map::new()))
+      .join()
+      .expect("sending telemetry panicked");
+  }
 }

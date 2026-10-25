@@ -382,6 +382,12 @@ export default function SettingsModal({
                       checked={Boolean(settings.experiments?.teamWorkspaces)}
                       onChange={(v) => onChange({ experiments: { teamWorkspaces: v } })}
                     />
+                    <ToggleRow
+                      label="Migrate Power BI reports"
+                      hint="Turn a Power BI report into a new app from Home. The app reads the report's semantic model live, and Copilot rebuilds the report's pages, visuals and filters one page at a time. Needs the Azure CLI."
+                      checked={Boolean(settings.experiments?.reportMigration)}
+                      onChange={(v) => onChange({ experiments: { reportMigration: v } })}
+                    />
                   </div>
                 )}
               </div>

@@ -161,6 +161,36 @@ describe('CreateProjectScreen starting point', () => {
     expect((screen.getByRole('button', { name: 'Create project' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
+  it('says right away when the Rayfin CLI would refuse a name, and keeps Create disabled', async () => {
+    await act(async () => renderCreate())
+    fireEvent.change(screen.getByPlaceholderText('My Rayfin App'), { target: { value: 'SalesBenchmark (migrated)' } })
+
+    expect(screen.getByRole('alert').textContent).toBe('Use only letters, numbers, spaces, hyphens and underscores.')
+    expect((screen.getByRole('button', { name: 'Create project' }) as HTMLButtonElement).disabled).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    expect(api().checkName).not.toHaveBeenCalledWith('SalesBenchmark (migrated)', undefined)
+  })
+
+  it('offers a Copilot model for an app made from a report', async () => {
+    const onChange = vi.fn()
+    await act(async () => {
+      render(
+        <OverlayProvider>
+          <CreateProjectScreen
+            mode="create"
+            onCancel={() => {}}
+            onDeploy={() => {}}
+            onContinueWithoutDeploy={() => {}}
+            source={{ label: 'From Power BI', detail: 'Sales · 3 pages' }}
+            model={{ value: { model: '', effort: '', autoTier: '', contextTier: '' }, onChange }}
+          />
+        </OverlayProvider>
+      )
+    })
+    expect(screen.getByText('Copilot model')).toBeTruthy()
+    expect(screen.getByText(/Copilot rebuilds the report with this model/)).toBeTruthy()
+  })
+
   it("creates from the Rayfin CLI's default template without asking for a template", async () => {
     await act(async () => renderCreate())
     expect(screen.queryByText('Featured')).toBeNull()

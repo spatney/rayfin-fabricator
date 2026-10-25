@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type JSX } from 'react'
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
 import { FabricatorMark } from './FabricatorMark'
-import { AddIcon, BranchIcon, FolderIcon, GearIcon } from './icons'
+import { AddIcon, BranchIcon, Codicon, FolderIcon, GearIcon } from './icons'
 import { displayPath } from './projectDisplay'
 import TeamSection from './team/TeamSection'
 import { hueOf } from './team/map/parts'
@@ -26,6 +26,8 @@ interface Props {
   onOpenExisting: () => void
   /** Start the sign-in/browse/clone flow. */
   onCloneFromGitHub: () => void
+  /** Migrate a Power BI report into a new app (experimental); the action shows only when set. */
+  onMigrateReport?: () => void
   onChangeWorkspaceRoot: () => void
   /** Team workspaces (experimental); the section shows only when set. */
   team?: {
@@ -49,6 +51,7 @@ export default function HomeView({
   onNewProject,
   onOpenExisting,
   onCloneFromGitHub,
+  onMigrateReport,
   onChangeWorkspaceRoot,
   team
 }: Props): JSX.Element {
@@ -110,6 +113,17 @@ export default function HomeView({
                 <span className="home-action-hint">Bring a repository into Fabricator</span>
               </span>
             </button>
+            {onMigrateReport && (
+              <button type="button" className="home-action" onClick={onMigrateReport}>
+                <span className="home-action-icon" aria-hidden="true">
+                  <Codicon name="graph" className="home-action-svg" />
+                </span>
+                <span className="home-action-text">
+                  <span className="home-action-label">Migrate a Power BI report</span>
+                  <span className="home-action-hint">Turn a report into an app</span>
+                </span>
+              </button>
+            )}
           </div>
         </header>
 

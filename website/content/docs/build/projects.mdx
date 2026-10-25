@@ -12,7 +12,9 @@ Projects are the Rayfin apps Fabricator can open. From **Your projects**, you ca
 A new Fabricator project starts from the Universal App, the default template that comes with the Rayfin CLI. You do not choose a template type up front. The app begins small, with Fabric sign-in and no database, and Copilot grows it into the app you describe in chat. It turns on a database only when the app needs to store its own records.
 
 1. On **Your projects**, select **New project**.
-2. Type a **Project name**.
+2. Type a **Project name**. Use letters, numbers, spaces, hyphens and underscores; Fabricator says
+   so under the name when it has other characters, and **Create project** stays off until you
+   change it.
 3. Check the folder hint. Fabricator turns the name into a folder name and checks whether that folder already exists in your projects folder.
 4. If team workspaces are enabled, choose **Just me, on this computer** unless you are creating a team app.
 5. Select **Create project**.
@@ -38,6 +40,10 @@ Community examples are Rayfin templates, such as the `awesome-rayfin` gallery. U
 6. Select **Create project**.
 
 Use **Start from scratch instead** to return to the Universal App template.
+
+## Migrate a Power BI report
+
+With the **Migrate Power BI reports** experiment turned on in **Settings → Experiments**, Home also has **Migrate a Power BI report**. It creates a new app from a Power BI report: the app reads the report's semantic model live, and Copilot rebuilds the report's pages one at a time. See [Migrate a Power BI report](/docs/build/migrate-power-bi).
 
 ## Open an existing local project
 

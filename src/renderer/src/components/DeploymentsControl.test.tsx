@@ -299,6 +299,25 @@ describe('DeploymentsControl chip', () => {
       expect(screen.getByRole('button', { name: 'Deploy changes' })).toBeTruthy()
     })
 
+    it('holds every deploy while Copilot is working on the app', () => {
+      const onRedeploy = vi.fn()
+      const held = 'Copilot is working on this app. Deploys wait until the turn finishes.'
+      const { rerender } = render(control({ onRedeploy, chatBusy: true, pending: { changed: true, files: 2 } }))
+      const changes = screen.getByRole('button', { name: 'Deploy 2 changes' }) as HTMLButtonElement
+      expect(changes.disabled).toBe(true)
+      expect(changes.title).toBe(held)
+      fireEvent.click(changes)
+
+      const failed = { running: false, log: [], result: { ok: false, outcome: 'error' as const, error: 'Busy' } }
+      rerender(control({ onRedeploy, chatBusy: true, deploy: failed }))
+      expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(true)
+      expect(onRedeploy).not.toHaveBeenCalled()
+
+      rerender(control({ onRedeploy, chatBusy: false, deploy: failed }))
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+      expect(onRedeploy).toHaveBeenCalledTimes(1)
+    })
+
     it('says a deploy failed on the chip and offers to try again and find out why', async () => {
       const api = installApi()
       api.deploy.list.mockResolvedValue([{ workspaceName: 'Sales', name: 'Production', workspaceId: 'ws1', active: true }])

@@ -28,6 +28,10 @@ import {
   type CustomSkillSaveInput,
   type DevStateEvent,
   type HelpEventEnvelope,
+  type MigrationInspectedPage,
+  type MigrationPage,
+  type MigrationSource,
+  type MigrationStateEvent,
   type PreviewBounds,
   type PreviewNavState,
   type PreviewAgentEvent,
@@ -174,6 +178,33 @@ export const api: RayfinStudioApi = {
     listWorkspaceData: (workspaceId: string) =>
       invoke('fabric_list_workspace_data', { workspaceId }),
     checkDeployTarget: (workspaceId: string) => invoke('fabric_check_deploy_target', { workspaceId })
+  },
+
+  migration: {
+    workspaces: () => invoke('migration_workspaces'),
+    reports: (workspaceId: string) => invoke('migration_reports', { workspaceId }),
+    search: (query: string) => invoke('migration_search', { query }),
+    inspect: (request: { target?: string; workspaceId?: string; reportId?: string }) =>
+      invoke('migration_inspect', {
+        target: request.target ?? null,
+        workspaceId: request.workspaceId ?? null,
+        reportId: request.reportId ?? null
+      }),
+    start: (projectId: string, source: MigrationSource, pages: MigrationInspectedPage[]) =>
+      invoke('migration_start', { projectId, source, pages }),
+    state: (projectId: string) => invoke('migration_state', { projectId }),
+    resume: (projectId: string) => invoke('migration_resume', { projectId }),
+    pdf: (projectId: string, index: number) => invoke('migration_pdf', { projectId, index }),
+    savePage: (projectId: string, index: number, png: string, text: string, thumb?: string) =>
+      invoke('migration_save_page', { projectId, index, png, text, thumb: thumb ?? null }),
+    finishImages: (projectId: string, error?: string) =>
+      invoke('migration_finish_images', { projectId, error: error ?? null }),
+    setPageStatus: (projectId: string, index: number, status: MigrationPage['status']) =>
+      invoke('migration_set_page_status', { projectId, index, status }),
+    cancel: (projectId: string) => invoke('migration_cancel', { projectId }),
+    dismiss: (projectId: string, dismissed: boolean) => invoke('migration_dismiss', { projectId, dismissed }),
+    onState: (cb: (event: MigrationStateEvent) => void) =>
+      subscribe<MigrationStateEvent>(IpcChannels.migrationState, cb)
   },
 
   projects: {

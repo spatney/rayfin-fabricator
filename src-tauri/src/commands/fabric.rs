@@ -775,13 +775,65 @@ fn parse_semantic_models_yaml(text: &str) -> Vec<SemanticModelRef> {
   models
 }
 
-/// Read the project's `fabric.yaml` semantic-model connections. A missing file is
-/// not an error (an app can use no models) — it just yields an empty list.
+/// Read the project's semantic models: the `fabric.yaml` connections, plus the
+/// `fabric-semanticmodel` connectors in `rayfin/rayfin.yml` (one model counted
+/// once, by item id). Missing files are not an error (an app can use no models).
 pub(crate) fn read_project_semantic_models(project_dir: &Path) -> Vec<SemanticModelRef> {
-  match std::fs::read_to_string(project_dir.join("fabric.yaml")) {
+  let mut models = match std::fs::read_to_string(project_dir.join("fabric.yaml")) {
     Ok(text) => parse_semantic_models_yaml(&text),
     Err(_) => vec![],
+  };
+  let rayfin = project_dir.join("rayfin");
+  let config = std::fs::read_to_string(rayfin.join("rayfin.yml"))
+    .or_else(|_| std::fs::read_to_string(rayfin.join("rayfin.yaml")));
+  if let Ok(text) = config {
+    for model in parse_connector_models_yaml(&text) {
+      if !models.iter().any(|m| m.item_id.eq_ignore_ascii_case(&model.item_id)) {
+        models.push(model);
+      }
+    }
   }
+  models.sort_by(|a, b| a.alias.to_lowercase().cmp(&b.alias.to_lowercase()));
+  models
+}
+
+/// One `rayfin.yml` connector — only the fields we read.
+#[derive(Deserialize)]
+struct RayfinConnector {
+  #[serde(default)]
+  name: String,
+  #[serde(default, rename = "type")]
+  kind: String,
+  #[serde(default)]
+  config: RayfinConnectorConfig,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct RayfinConnectorConfig {
+  #[serde(default)]
+  workspace_id: String,
+  #[serde(default)]
+  item_id: String,
+}
+
+/// The semantic models a `rayfin.yml` reads through `fabric-semanticmodel`
+/// connectors, named by connector. Entries that don't parse are skipped, so one
+/// odd connector never hides the rest.
+fn parse_connector_models_yaml(text: &str) -> Vec<SemanticModelRef> {
+  let Ok(root) = serde_yaml::from_str::<serde_yaml::Value>(text) else { return vec![] };
+  let Some(connectors) = root.get("connectors").and_then(|c| c.as_sequence()) else { return vec![] };
+  connectors
+    .iter()
+    .filter_map(|entry| serde_yaml::from_value::<RayfinConnector>(entry.clone()).ok())
+    .filter(|c| c.kind == "fabric-semanticmodel")
+    .filter(|c| !c.config.workspace_id.trim().is_empty() && !c.config.item_id.trim().is_empty())
+    .map(|c| SemanticModelRef {
+      alias: c.name,
+      workspace_id: c.config.workspace_id.trim().to_string(),
+      item_id: c.config.item_id.trim().to_string(),
+    })
+    .collect()
 }
 
 /// Split models into `(different_workspace, same_workspace)` relative to the app's
@@ -798,9 +850,9 @@ fn split_models_by_workspace(
     .partition(|m| m.workspace_id.trim().to_lowercase() != app)
 }
 
-/// List the semantic-model connections declared in the project's `fabric.yaml`
-/// active profile — surfaced to the Share dialog so the user can see which models
-/// will also be shared. Never throws.
+/// List the semantic models the project uses (its `fabric.yaml` active profile
+/// and its `fabric-semanticmodel` connectors) — surfaced to the Share dialog so
+/// the user can see which models will also be shared. Never throws.
 #[tauri::command]
 pub async fn fabric_project_semantic_models(project_id: String) -> Vec<SemanticModelRef> {
   match store::find_project(&project_id) {
@@ -1186,6 +1238,62 @@ profiles:
     // A model missing ids is skipped.
     let partial = "activeProfile: d\nprofiles:\n  d:\n    semanticModels:\n      x:\n        workspaceId: \"\"\n        itemId: \"i\"\n";
     assert!(parse_semantic_models_yaml(partial).is_empty());
+  }
+
+  #[test]
+  fn connector_models_come_from_semantic_model_connectors_only() {
+    let yaml = r#"
+id: sales-dashboard
+connectors:
+  - name: sales
+    type: fabric-semanticmodel
+    config:
+      workspaceId: ws-1
+      itemId: ds-1
+    auth:
+      type: delegated
+    operations:
+      - name: executeQuery
+  - name: orders
+    type: fabric-warehouse
+    config:
+      workspaceId: ws-1
+      itemId: wh-1
+  - name: broken
+    type: fabric-semanticmodel
+    config: not-a-map
+  - name: noIds
+    type: fabric-semanticmodel
+    config:
+      workspaceId: ws-1
+"#;
+    let models = parse_connector_models_yaml(yaml);
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].alias, "sales");
+    assert_eq!(models[0].workspace_id, "ws-1");
+    assert_eq!(models[0].item_id, "ds-1");
+    assert!(parse_connector_models_yaml("id: no-connectors\n").is_empty());
+    assert!(parse_connector_models_yaml(":: not yaml ::").is_empty());
+  }
+
+  #[test]
+  fn project_models_merge_fabric_yaml_and_connectors_once() {
+    let dir = std::env::temp_dir().join(format!("fab-models-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("rayfin")).unwrap();
+    std::fs::write(
+      dir.join("fabric.yaml"),
+      "activeProfile: d\nprofiles:\n  d:\n    semanticModels:\n      finance:\n        workspaceId: ws-2\n        itemId: DS-2\n",
+    )
+    .unwrap();
+    std::fs::write(
+      dir.join("rayfin").join("rayfin.yml"),
+      "connectors:\n  - name: sales\n    type: fabric-semanticmodel\n    config:\n      workspaceId: ws-1\n      itemId: ds-1\n  - name: financeAgain\n    type: fabric-semanticmodel\n    config:\n      workspaceId: ws-2\n      itemId: ds-2\n",
+    )
+    .unwrap();
+    let models = read_project_semantic_models(&dir);
+    let _ = std::fs::remove_dir_all(&dir);
+    let aliases: Vec<&str> = models.iter().map(|m| m.alias.as_str()).collect();
+    assert_eq!(aliases, vec!["finance", "sales"]);
   }
 
   #[test]

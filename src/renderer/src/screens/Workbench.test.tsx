@@ -1241,6 +1241,18 @@ describe('Workbench live preview ports', () => {
     expect(api.deploy.run).not.toHaveBeenCalled()
   })
 
+  it('leaves the local preview to the after-turn deploy while chat turns deploy', async () => {
+    const { api, dev } = await mount()
+    dev.plan.mockResolvedValue({ port: 5174 })
+    api.deploy.hasChanges.mockResolvedValue(true)
+    const { turn } = await beginTurn()
+    await act(async () => turn)
+
+    await act(async () => completeTurn({ ok: true, filesModified: ['src/App.tsx'], ranDeploy: false }))
+    expect(api.deploy.run).toHaveBeenCalledTimes(1)
+    expect(previewProps.mock.lastCall?.[0].localReload, 'the deploy reloads the app instead').toBe(0)
+  })
+
   it('keeps the local preview on screen through the after-turn redeploy, and closes it when it ends', async () => {
     const { api, dev } = await mount()
     dev.plan.mockResolvedValue({ port: 5174 })
@@ -1301,6 +1313,22 @@ describe('Workbench live preview ports', () => {
     expect(api.deploy.run).toHaveBeenCalledTimes(1)
     expect(dev.stop).not.toHaveBeenCalled()
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBe('http://localhost:5174')
+  })
+
+  it('reloads the kept local preview after a turn that changed files, not after one that changed nothing', async () => {
+    await mountManual()
+    const reloads = (): number | undefined => previewProps.mock.lastCall?.[0].localReload
+    expect(reloads()).toBe(0)
+
+    let { turn } = await beginTurn()
+    await act(async () => turn)
+    await act(async () => completeTurn({ ok: true, filesModified: [], ranDeploy: false }))
+    expect(reloads(), 'a turn that only answered').toBe(0)
+
+    ;({ turn } = await beginTurn())
+    await act(async () => turn)
+    await act(async () => completeTurn({ ok: false, error: 'Stopped', filesModified: ['src/App.tsx'], ranDeploy: false }))
+    expect(reloads(), 'a stopped turn that changed files').toBe(1)
   })
 
   it('tells the preview while a turn runs, so Design waits for it on the local preview', async () => {
@@ -1472,6 +1500,22 @@ describe('Workbench chat history', () => {
     await act(async () => completeTurn())
     const saved = api.chat.saveHistory.mock.lastCall?.[1] as { data?: unknown; prompt?: string }[]
     expect(saved[0]).toMatchObject({ data, prompt: 'Chart spending + how to connect' })
+  })
+
+  it('keeps the migration chip a message carried when it saves the transcript', async () => {
+    const api = installApi(true)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    const migration = { reportName: 'Sales', foundation: true, page: { index: 0, count: 3, name: 'Overview' } }
+    act(() =>
+      chatProps.mock.lastCall![0].onChange(() => [
+        { id: 'u1', role: 'user', text: 'Migrate “Sales” from Power BI', tools: [], pending: false, migration, prompt: 'Migrate…' },
+        { id: 'a1', role: 'assistant', text: 'Done.', tools: [], pending: false }
+      ])
+    )
+    await act(async () => completeTurn())
+    const saved = api.chat.saveHistory.mock.lastCall?.[1] as { migration?: unknown }[]
+    expect(saved[0]).toMatchObject({ migration })
   })
 })
 
