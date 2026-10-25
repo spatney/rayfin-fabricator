@@ -1,6 +1,6 @@
 ---
 title: "Chat and Copilot problems"
-description: "Fix Copilot chat errors, stuck turns, new engine sessions, Copilot credit use, and Rayfin dependency failures."
+description: "Fix Copilot chat errors, stuck turns, new engine sessions, Copilot credit use, errors from models on your own API key, and Rayfin dependency failures."
 ---
 
 Use this page when the chat panel shows an error, a turn does not finish, or Copilot seems to lose context.
@@ -13,7 +13,7 @@ Fabricator sends your prompt to the bundled GitHub Copilot engine. Authenticatio
 
 1. If the error asks you to sign in, select **Sign in to Copilot** in chat and complete the browser or device-code flow.
 2. Retry the message yourself. Fabricator keeps your displayed conversation and draft, but does not automatically replay work after a failed or partially started turn.
-3. If the model was marked **Unavailable** in the **Model** menu, open the model picker and choose **Auto** or another listed model.
+3. If the model pill shows a warning sign, or the model list says "Not available anymore. Choose another model.", open the model picker and turn on **Auto** or choose another model.
 4. If models do not load, sign out and back in to Copilot from setup or the chat notice.
 5. If the error mentions rate limits or unavailable service, wait a few minutes, choose **Auto** or a fast model, and retry.
 6. If repeated "Session not found" errors continue on the latest version, start **New chat**. This clears the conversation view, not your app files.
@@ -54,14 +54,63 @@ Your GitHub Copilot plan shows included credits or premium requests being used f
 
 Fabricator uses your own GitHub Copilot entitlement. Each chat turn, deep review, design option, model selection, image attachment, and retry can use Copilot capacity. Fabricator cannot increase your plan limits.
 
-1. Use the **Model** menu and choose **Auto** or a model marked **Fast** when you do not need a deep implementation pass.
-2. Leave **Reasoning effort** on **Auto** or a lower effort for small edits.
+1. Open the model picker and turn on **Auto**, or choose a model marked **Fast**, when you do not need a deep implementation pass.
+2. Choose a lower **Effort** for small edits.
 3. Break broad requests into smaller prompts with clear acceptance criteria.
 4. Avoid repeated **Try again** or **Retry** on the same large prompt; steer with a shorter correction instead.
 5. Use quick checks and local inspection before running deep Copilot reviews.
 6. Attach screenshots only when visual context is necessary.
 
 If usage looks unrelated to your prompts, collect diagnostics and [Report a problem](/docs/troubleshooting/report-a-problem). Diagnostics do not include your Copilot billing data.
+
+## A model on your own API key shows an error
+
+A chat turn, Advisor review or Design request on a model on your own API key stops with a message from the provider.
+
+The provider runs these models and bills your account, so its key, credit and plan limits apply. Fabricator puts the provider's error in plain words:
+
+| Message | What to do |
+| --- | --- |
+| "`<Provider>` didn't accept your API key. Replace it in Accounts, or choose another model." | In **Accounts → Model providers**, select **Replace** and paste a working key. |
+| "Your `<Provider>` account is out of credit or over its spending limit. Check your billing with `<Provider>`, or choose another model." | Add credit or raise the spending limit on the provider's website. |
+| "This request is bigger than your `<Provider>` plan allows per minute. Fabricator's requests are large, so upgrade your `<Provider>` plan, or choose another model." | Upgrade your plan with the provider, or choose another model. |
+| "`<Provider>` is limiting how often your key can be used. Wait a minute and try again, or choose another model." | Wait a minute, then select **Retry**. |
+| "`<Provider>` is overloaded right now. Try again in a minute, or choose another model." | Wait a minute, then select **Retry**. |
+| "`<Provider>` doesn't offer `<model>` to your key anymore. Check your models in Accounts, or choose another model." | In **Accounts → Model providers**, select **Check again** to update the provider's list of models, and choose another model. |
+
+1. Follow the step for your message in the table.
+2. To keep working meanwhile, open the model picker and choose a Copilot model or **Auto**.
+
+When you add a key, Fabricator checks it first. If the provider turns it down, you see "`<Provider>` didn't accept this key. Check that you copied all of it." and nothing is saved.
+
+If an error keeps coming back with a working key, [Report a problem](/docs/troubleshooting/report-a-problem).
+
+## A model on your own API key isn't available
+
+A turn on one of your own models stops before it starts, with one of these messages:
+
+- "`<model>` isn't one of your `<Provider>` models anymore. Turn it on in Accounts, or choose another model."
+- "Your `<Provider>` API key isn't set up. Add it in Accounts, or choose another model."
+- "`<model>` isn't available anymore. Choose another model."
+
+The chat, Advisor or Design bar is set to a model that the pickers no longer offer: you turned the model off or removed its key. Fabricator never switches to another model by itself.
+
+1. Open the model picker. Its pill shows a warning sign next to the model.
+2. Choose another model, or turn on **Auto**.
+3. To use the model again, turn it back on in **Accounts → Model providers**, or add its key again.
+
+See [Use your own API keys](/docs/build/your-own-api-keys).
+
+## The model stopped before finishing
+
+A turn on one of your own models shows "The model stopped before finishing. Asking it to continue…", and sometimes ends with "The model stopped before finishing. Select Retry, or choose another model."
+
+A model can end a response with no reply and no next step. Fabricator asks it to continue, up to twice, before it gives up.
+
+1. Select **Retry**.
+2. If it happens again, choose another model and send the request again.
+
+If it keeps happening with one model, [Report a problem](/docs/troubleshooting/report-a-problem) and name the model.
 
 ## Rayfin CLI reports missing dependencies
 

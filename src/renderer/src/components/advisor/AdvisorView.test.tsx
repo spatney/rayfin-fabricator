@@ -8,6 +8,7 @@ import { normalizeSnapshot } from '../../advisor/legacy'
 import { deriveAdvisor, emptyState } from '../../advisor/lifecycle'
 import type { AdvisorController } from '../../advisor/store'
 import { GOOD_PROJECT, snapshotOf, versionInfo } from '../../advisor/testFixtures'
+import { AUTO_SELECTION } from '../../modelSelection'
 import AdvisorView from './AdvisorView'
 
 const project: StudioProject = {
@@ -87,9 +88,8 @@ function controller(
     review,
     derived,
     state,
-    model: '',
-    effort: '',
-    setModel: vi.fn(),
+    selection: AUTO_SELECTION,
+    setSelection: vi.fn(),
     refreshQuick: vi.fn(),
     startReview: vi.fn(async () => {}),
     cancelReview: vi.fn(),

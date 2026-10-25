@@ -38,6 +38,17 @@ describe('HomeView project launcher', () => {
     expect(document.querySelectorAll('.home-action-icon > svg')).toHaveLength(3)
   })
 
+  it('offers to migrate a Power BI report only when the experiment provides it', () => {
+    const props = baseProps()
+    const { rerender } = render(<HomeView {...props} />)
+    expect(screen.queryByRole('button', { name: /migrate a power bi report/i })).toBeNull()
+
+    const onMigrateReport = vi.fn()
+    rerender(<HomeView {...props} onMigrateReport={onMigrateReport} />)
+    fireEvent.click(screen.getByRole('button', { name: /migrate a power bi report/i }))
+    expect(onMigrateReport).toHaveBeenCalledTimes(1)
+  })
+
   it('uses separate native controls to open and manage a recent project', () => {
     const props = baseProps()
     const project = makeProject('p1', { name: 'Sales' })

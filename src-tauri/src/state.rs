@@ -28,11 +28,15 @@ pub struct AppState {
   verify_cancels: Mutex<HashMap<String, CancelToken>>,
   /// Long team operations (publish, setup verification), keyed by project or workspace id.
   team_cancels: Mutex<HashMap<String, CancelToken>>,
+  /// Report migrations gathering their material in the background, keyed by `projectId`.
+  migration_cancels: Mutex<HashMap<String, CancelToken>>,
   /// The in-flight Help assistant turn. The Help overlay is a single
   /// app-wide surface, so at most one turn runs at a time (no key needed).
   help_cancel: Mutex<Option<CancelToken>>,
   /// Shared Copilot SDK client + per-thread session cache.
   pub copilot: CopilotManager,
+  /// Your own API keys: saved keys and their models.
+  pub byok: crate::services::byok::ByokManager,
   /// Bridges Plan-mode `exit_plan_mode` requests to the renderer's approval UI.
   pub plan: Arc<PlanGate>,
   /// Per-project lease shared by source-writing chat turns and deployments.
@@ -475,6 +479,40 @@ impl AppState {
     } else {
       false
     }
+  }
+
+  /// Start gathering a project's migration material, unless it's already
+  /// running (then `None`).
+  pub fn begin_migration(&self, project_id: &str) -> Option<CancelToken> {
+    let mut map = self.migration_cancels.lock().unwrap();
+    if map.contains_key(project_id) {
+      return None;
+    }
+    let token = CancelToken::new();
+    map.insert(project_id.to_string(), token.clone());
+    Some(token)
+  }
+
+  /// Release the slot, only when it still holds `token`.
+  pub fn end_migration(&self, project_id: &str, token: &CancelToken) {
+    let mut map = self.migration_cancels.lock().unwrap();
+    if map.get(project_id).is_some_and(|t| t.same(token)) {
+      map.remove(project_id);
+    }
+  }
+
+  /// Stop gathering a project's migration material. Returns true when it was running.
+  pub fn cancel_migration(&self, project_id: &str) -> bool {
+    if let Some(token) = self.migration_cancels.lock().unwrap().remove(project_id) {
+      token.cancel();
+      true
+    } else {
+      false
+    }
+  }
+
+  pub fn migration_running(&self, project_id: &str) -> bool {
+    self.migration_cancels.lock().unwrap().contains_key(project_id)
   }
 }
 

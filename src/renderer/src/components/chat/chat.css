@@ -2184,25 +2184,6 @@ button.thinking-head:hover {
   }
 }
 
-.composer-pop {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  z-index: 40;
-  width: 284px;
-  max-width: calc(100cqw - 24px);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px;
-  background: var(--bg-elev-3);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: var(--shadow-lg);
-  transform-origin: bottom left;
-  animation: popIn 0.14s ease both;
-}
-
 @keyframes popIn {
   from {
     opacity: 0;
@@ -2214,242 +2195,143 @@ button.thinking-head:hover {
   }
 }
 
-.composer-opt {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 10px;
-  font: inherit;
-  text-align: left;
-  color: var(--text);
-  background: none;
-  border: 0;
-  border-radius: 9px;
-  cursor: pointer;
-  transition: background 0.12s ease;
+/* The "+" menu: the model picker's menu (modelPicker.css), with a leading icon
+   and a faint hint at the end of each row. */
+.mp-panel.am-main,
+.mp-panel.am-fly {
+  width: 236px;
 }
 
-.composer-opt:hover:not(:disabled),
-.composer-opt:focus-visible {
-  outline: none;
-  background: var(--bg-elev-2);
-}
-
-.composer-opt:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.composer-opt-icon {
+.mp-item .am-icon,
+.mp-item .codicon[class*='codicon-'].am-icon {
   flex: none;
   width: 16px;
   height: 16px;
-  margin-top: 1px;
-  font-size: 15px;
+  font-size: 14px;
+  line-height: 16px;
+  text-align: center;
   color: var(--text-dim);
 }
 
-.composer-opt-text {
+.mp-item .mp-item-label.am-label {
   flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
-.composer-opt-label {
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.composer-opt-desc {
+.am-hint {
+  flex: none;
   font-size: 11px;
-  line-height: 1.35;
-  color: var(--text-dim);
-}
-
-/* Model picker: a scrollable list (grouped by family) plus an effort control. */
-.model-pop {
-  width: 300px;
-  gap: 10px;
-  padding: 8px;
-}
-
-.model-pop-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.model-pop-section--effort {
-  padding: 8px 4px 2px;
-  border-top: 1px solid var(--border-soft);
-}
-
-.model-pop-label {
-  padding: 2px 6px 0;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--text-faint);
 }
 
-.model-pop-section--effort .model-pop-label {
-  padding: 0 2px;
+.am-hint kbd {
+  font: inherit;
+  font-family: var(--font-mono, monospace);
 }
 
-.model-filter {
-  height: 30px;
-  margin: 0 2px;
-  padding: 0 10px;
-  font: inherit;
-  font-size: 12.5px;
+/* Fabric data: chips waiting in the composer, and on the message that sent them.
+   Flat, like the rest of the composer: a solid surface and a neutral border. */
+.data-tray,
+.msg-data {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.data-tray {
+  margin: 1px 6px 8px 0;
+}
+
+.msg-data {
+  justify-content: flex-end;
+}
+
+.data-chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  height: 26px;
+  font-size: 12px;
   color: var(--text);
   background: var(--bg-elev-2);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  outline: none;
-  transition: border-color 0.12s ease;
+  border: 1px solid var(--border);
+  border-radius: 7px;
 }
 
-.model-filter:focus {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+.data-chip--sent {
+  gap: 6px;
+  padding: 0 8px;
 }
 
-.model-list {
-  max-height: 264px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  overscroll-behavior: contain;
-}
-
-.model-group {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.model-group-label {
-  padding: 8px 10px 3px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-faint);
-}
-
-.model-opt {
-  min-height: 32px;
-  display: flex;
+.data-chip-main {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 2px 0 8px;
   font: inherit;
-  font-size: 12.5px;
-  text-align: left;
-  color: var(--text);
+  color: inherit;
   background: none;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px 0 0 7px;
   cursor: pointer;
-  transition: background 0.1s ease;
 }
 
-.model-opt:hover,
-.model-opt:focus-visible {
-  outline: none;
-  background: var(--bg-elev-2);
+.data-chip .codicon[class*='codicon-'].data-chip-ico {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-dim);
 }
 
-.model-opt.is-on {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.model-opt-name {
-  flex: 1;
+.data-chip-name,
+.data-chip-ws {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.data-chip-name {
   font-weight: 500;
 }
 
-.model-opt-badge {
-  flex: none;
-  padding: 1px 6px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text-dim);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 999px;
-}
-
-.model-opt.is-on .model-opt-badge {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.model-opt-check {
-  flex: none;
-  font-size: 13px;
-}
-
-.model-empty {
-  padding: 10px;
-  font-size: 12px;
+.data-chip-ws {
   color: var(--text-faint);
 }
 
-/* Reasoning effort: a flat segmented control. */
-.effort-seg {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  background: var(--bg-elev-2);
-  border-radius: 9px;
-}
-
-.effort-opt {
-  flex: 1;
-  height: 26px;
-  padding: 0 4px;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  color: var(--text-dim);
+.data-chip-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 100%;
+  padding: 0;
+  color: var(--text-faint);
   background: none;
   border: 0;
-  border-radius: 7px;
+  border-radius: 0 7px 7px 0;
   cursor: pointer;
-  transition:
-    color 0.12s ease,
-    background 0.12s ease;
 }
 
-.effort-opt:hover {
+.data-chip-x:hover,
+.data-chip-main:hover .data-chip-name {
   color: var(--text);
 }
 
-.effort-opt.is-on {
-  color: var(--text);
-  background: var(--bg-elev-3);
-  box-shadow: inset 0 0 0 1px var(--border);
+.data-chip-x svg {
+  width: 11px;
+  height: 11px;
 }
 
-.effort-opt:focus-visible {
-  outline: 2px solid var(--accent-ring);
-  outline-offset: -2px;
-}
-
-.model-pop-hint {
-  margin: 0;
-  padding: 0 2px;
-  font-size: 11.5px;
-  line-height: 1.45;
+/* Also styles other views' .model-empty text (main.css sets the rest). */
+.model-empty {
+  padding: 10px;
+  font-size: 12px;
   color: var(--text-faint);
 }
 
@@ -2513,6 +2395,23 @@ button.thinking-head:hover {
   flex-wrap: wrap;
   gap: 8px;
   margin: 1px 0 8px;
+}
+
+/* The chosen model (on the user's own key) can't read the attached images. */
+.chat-attachments-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+.chat-attachments-note .codicon[class*='codicon-'] {
+  flex: none;
+  font-size: 13px;
+  color: var(--pending);
 }
 
 .chat-attachment {

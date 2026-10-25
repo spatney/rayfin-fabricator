@@ -183,6 +183,12 @@ pub fn run() {
       // settings
       commands::settings::settings_get,
       commands::settings::settings_set,
+      // your own API keys
+      commands::byok::byok_status,
+      commands::byok::byok_set_key,
+      commands::byok::byok_refresh,
+      commands::byok::byok_remove_key,
+      commands::byok::byok_set_models,
       // doctor
       commands::doctor::doctor_check,
       commands::doctor::doctor_install,
@@ -271,7 +277,21 @@ pub fn run() {
       commands::fabric::fabric_share_app,
       commands::fabric::fabric_directory_search,
       commands::fabric::fabric_list_workspace_models,
+      commands::fabric::fabric_list_workspace_data,
       commands::fabric::fabric_check_deploy_target,
+      commands::migration::migration_workspaces,
+      commands::migration::migration_reports,
+      commands::migration::migration_search,
+      commands::migration::migration_inspect,
+      commands::migration::migration_start,
+      commands::migration::migration_state,
+      commands::migration::migration_resume,
+      commands::migration::migration_pdf,
+      commands::migration::migration_save_page,
+      commands::migration::migration_finish_images,
+      commands::migration::migration_set_page_status,
+      commands::migration::migration_cancel,
+      commands::migration::migration_dismiss,
       // projects
       commands::projects::projects_state,
       commands::projects::projects_check_name,
@@ -352,6 +372,7 @@ pub fn run() {
       commands::chat::chat_save_history,
       commands::chat::chat_set_options,
       commands::chat::chat_models,
+      commands::chat::chat_auto_tiers,
       // suggestions
       commands::suggest::chat_suggest,
       commands::suggest::chat_suggest_cancel,

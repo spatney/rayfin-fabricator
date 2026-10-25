@@ -7,7 +7,7 @@ Deploying publishes the app in your current project to Microsoft Fabric. Fabrica
 
 Rayfin apps deploy as Fabric apps in a Fabric workspace. For Rayfin's platform details, see [Deploy Fabric apps](https://rayfin.ai/docs/deploy/fabric-apps). Deployment uses your Fabric capacity; see [Rayfin pricing and capacity notes](https://rayfin.ai/docs/deploy/pricing).
 
-![The deployment panel for the Development deployment: deployed 2 hours ago, with a green dot for live, its app address, its workspace with region and capacity, the Fabric account that deploys, and New deployment.](/screenshots/deployments.webp)
+![The deployment panel for the Development deployment: deployed 2 hours ago, with a green dot for live, its app address, its workspace with region and capacity, the Fabric account that deploys, Deploy after each chat turn turned on, and New deployment.](/screenshots/deployments.webp)
 
 ## Sign in to Fabric
 
@@ -86,10 +86,12 @@ After the first successful deployment, the deployment control in the app bar nam
 | **Try again** | The last deploy didn't finish, and the deployment control says **Failed**. Open it to see what went wrong, and select **Find out why** to ask Help. |
 | **Deploying…** | A deploy is running, with how far it has got. Select it to see the step in progress. |
 
+While Copilot is working on a turn, the button is turned off: a deploy then would publish a half-finished change. Its tooltip says "Copilot is working on this app. Deploys wait until the turn finishes."
+
 Fabricator also redeploys automatically after a successful Copilot turn when the project has undeployed changes. This includes edits that Copilot already committed to the project's git history. It does not redeploy when:
 
 - the Copilot turn failed or was cancelled,
-- the [Deploy manually](/docs/ship/deploy#deploy-manually) experiment is on and **Deploy after each chat turn** is off,
+- you turned off **Deploy after each chat turn** (see [Deploy manually](/docs/ship/deploy#deploy-manually)),
 - there are no content changes since the last deployed revision,
 - a team workspace pipeline owns the app's deployment,
 - Fabricator cannot check whether changes are undeployed.
@@ -102,28 +104,25 @@ When Fabricator switches to another deployment or cannot identify the deployed g
 
 ## Deploy manually
 
-> [!WARNING]
-> Deploy manually is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
+Fabricator deploys your app after each chat turn. To make several changes in chat before you deploy, turn that off: your changes then stay on this computer until you deploy them. Because the deployed app falls behind your code, the preview shows your app from a local Vite server whenever the app is open, not only while Copilot is working.
 
-Turn on **Deploy manually** to make several changes in chat before you deploy. Chat turns no longer deploy your app: your changes stay on this computer until you deploy them. Because the deployed app falls behind your code, the preview shows your app from a local Vite server whenever the app is open, not only while Copilot is working.
+1. In the app bar, select the deployment control, which shows the deployment's name.
+2. Turn off **Deploy after each chat turn**. The deployment control now says **Manual** after the deployment's name, for example **Prod · Manual**.
+3. Keep chatting. The preview shows your app running on this computer, at a `localhost` address. Changes show there as Copilot makes them, and the button in the app bar counts them, for example **Deploy 3 changes**.
+4. When you're ready, select that button. Your local app stays in the preview while the deploy runs.
 
-1. Open **Settings**, then expand **Experiments**.
-2. Turn on **Deploy manually**.
-3. Open your app. The preview shows your app running on this computer, at a `localhost` address.
-4. Keep chatting. Changes show in the preview as Copilot makes them, and the button in the app bar counts them, for example **Deploy 3 changes**.
-5. When you're ready, select that button. Your local app stays in the preview while the deploy runs.
-
-To go back to deploying after each turn for a while, open the deployment control and turn on **Deploy after each chat turn**. The deployment control in the app bar says which way chat changes deploy, after the deployment's name: **Prod · Auto** while the switch is on, and **Prod · Manual** while it's off. Turn it off to switch back. The experiment stays on, so the switch stays in the panel. Turning **Deploy manually** on again starts you with the switch off.
+To deploy after each turn again, turn **Deploy after each chat turn** back on. Your choice applies to all your apps, and Fabricator remembers it.
 
 While **Deploy after each chat turn** is off:
 
 - The local preview uses your deployed app's backend. Frontend changes show as Copilot makes them, but changes to data, permissions or functions work only after you deploy them. Fabricator asks Copilot to tell you when a change needs a deploy.
+- When a turn that changed your app ends, the preview reloads once, so it shows the finished app from a fresh start, not only the live updates made while Copilot worked. A turn that changed nothing, such as a question, leaves the page as it is.
 - **Design** works on the local preview between turns, so you can queue visual changes and send them to Copilot without deploying first. It turns off when a turn starts, because Copilot's changes show in the preview as it makes them. The **Fabric** view works on the deployed app, so it's unavailable.
 - The local preview stops when you switch to another app or close Fabricator, and the app you open next gets its own. If you switch your app to another deployment, its local preview starts again with that deployment's settings.
 - If the project has no local Vite installation, there's no local preview. The preview keeps showing the deployed app, without your latest changes, until you deploy them.
 - Team apps aren't affected. They still save to GitHub after each turn, and the team pipeline deploys your preview.
 
-Turning on **Deploy after each chat turn**, or turning **Deploy manually** off, closes the local preview and doesn't deploy anything. Your changes are still on this computer: the next successful chat turn deploys them, or you can deploy them from the app bar.
+Turning **Deploy after each chat turn** back on closes the local preview and doesn't deploy anything. Your changes are still on this computer: the next successful chat turn deploys them, or you can deploy them from the app bar.
 
 ## Work with multiple deployments
 
@@ -135,7 +134,7 @@ In the app bar, select the deployment control, which shows the deployment's name
 - **Workspace**, the Fabric workspace, with its region and capacity. Select **Open the workspace in Fabric** to open it in the Fabric portal. The region and capacity show once you're signed in to Fabric.
 - **Account**, the Fabric account that deploys. Select **Change** to use another, or **Sign in** when you're signed out.
 - **Other deployments**, the project's other recorded deployments. Select **Switch** on one to make it the active deployment: the preview shows it, and deploys go to it. Point at a deployment to rename it.
-- **Deploy after each chat turn**, while the [Deploy manually](/docs/ship/deploy#deploy-manually) experiment is on. Turn it off to keep chat changes on this computer until you deploy them.
+- **Deploy after each chat turn**, on to start with. Turn it off to keep chat changes on this computer until you deploy them. See [Deploy manually](/docs/ship/deploy#deploy-manually).
 - **New deployment…**, to deploy the same project to another workspace.
 
 **Share** is next to the deployment control once the app has a deployment. See [Share your app](/docs/ship/share).

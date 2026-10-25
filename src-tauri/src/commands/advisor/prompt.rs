@@ -242,6 +242,8 @@ mod tests {
     AdvisorRunRequest {
       model: None,
       effort: None,
+      auto_tier: None,
+      context_tier: None,
       facts: AdvisorFacts {
         services: vec!["auth".into(), "data".into()],
         conditions: vec!["data".into(), "auth".into()],

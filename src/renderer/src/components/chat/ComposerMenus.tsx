@@ -1,355 +1,246 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import type { CopilotModel, ReasoningEffort } from '@shared/ipc'
-import { isFastModel, useCopilotModels } from '@renderer/copilotModels'
+import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { DATA_KINDS, type DataKind } from '@renderer/fabricData'
 import { moveMenuFocus } from '@renderer/menuFocus'
+import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
+import { useSuppressPreview } from '@renderer/overlay'
 import { Codicon, ImageIcon } from '../icons'
-import { EFFORT_OPTIONS, EFFORT_ORDER } from './modes'
+import fabricSvg from '../../assets/brands/fabric.svg'
+import '../models/modelPicker.css'
 
-/** Open/close state for a composer popover that closes on any outside click. */
-function usePopover(): [boolean, (open: boolean | ((o: boolean) => boolean)) => void] {
-  const [open, setOpen] = useState(false)
-  useEffect(() => {
-    if (!open) return
-    const close = (): void => setOpen(false)
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
-  }, [open])
-  return [open, setOpen]
+const MAIN_WIDTH = 236
+const FLY_WIDTH = 236
+const GAP = 6
+
+/** What each kind of Fabric data lets the app do, in a word or two. */
+const DATA_HINT: Record<DataKind, string> = {
+  semanticmodel: 'DAX',
+  warehouse: 'Read & write',
+  sqldatabase: 'Read & write',
+  lakehouse: 'Read-only'
 }
-
-/** Display names for reasoning efforts; short forms fit the composer pill. */
-const EFFORT_LABEL: Record<ReasoningEffort, { label: string; short: string; hint: string }> = {
-  none: { label: 'None', short: 'None', hint: 'Answers without extra thinking.' },
-  low: { label: 'Low', short: 'Low', hint: 'Quick — fine for small, clear changes.' },
-  medium: { label: 'Medium', short: 'Med', hint: 'Balanced speed and care.' },
-  high: { label: 'High', short: 'High', hint: 'Thinks longer — good for tricky changes.' },
-  xhigh: { label: 'Extra high', short: 'XHigh', hint: 'Thinks much longer on hard problems.' },
-  max: { label: 'Max', short: 'Max', hint: 'The most thinking — slowest, for the hardest work.' }
-}
-
-/** The model family a model belongs to, for grouping a long list. */
-function modelFamily(m: CopilotModel): string {
-  const id = m.id.toLowerCase()
-  if (id.startsWith('claude')) return 'Anthropic'
-  if (id.startsWith('gpt') || /^o\d/.test(id)) return 'OpenAI'
-  if (id.startsWith('gemini')) return 'Google'
-  if (id.startsWith('grok')) return 'xAI'
-  if (id.startsWith('mai')) return 'Microsoft'
-  return 'Other'
-}
-
-/** Show a filter box once the list is long enough to need one. */
-const FILTER_AFTER = 8
 
 /**
- * Model + reasoning-effort picker: a scrollable list of models (grouped by
- * family, with a filter when long) and effort as a segmented control. Loads
- * the model list the first time it opens.
+ * The composer's "+" menu, after the model picker: an image, a file, or Fabric
+ * data, whose kinds open in a list beside it. Each kind opens the data picker on
+ * that kind; "Browse all" opens it on every kind.
  */
-export function ModelMenu({
-  model,
-  effort,
-  disabled,
-  onChange
-}: {
-  model: string
-  effort: ReasoningEffort | ''
-  disabled: boolean
-  onChange: (model: string, effort: ReasoningEffort | '') => void
-}): JSX.Element {
-  const [open, setOpen] = usePopover()
-  const [query, setQuery] = useState('')
-  const listRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const { models, loading } = useCopilotModels(open)
-  const selected = useMemo(() => models.find((m) => m.id === model), [models, model])
-
-  // The chosen model's efforts, or — on Auto — the union across all models (an
-  // effort still rides along with whatever the engine picks).
-  const effortOptions = useMemo<ReasoningEffort[]>(() => {
-    let efforts: ReasoningEffort[]
-    if (selected) efforts = selected.supportedReasoningEfforts
-    else {
-      const set = new Set<ReasoningEffort>()
-      for (const m of models) for (const e of m.supportedReasoningEfforts) set.add(e)
-      efforts = [...set]
-    }
-    if (efforts.length === 0 && models.length === 0) efforts = EFFORT_OPTIONS
-    return EFFORT_ORDER.filter((e) => efforts.includes(e))
-  }, [models, selected])
-
-  const groups = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const shown = q ? models.filter((m) => `${m.name} ${m.id}`.toLowerCase().includes(q)) : models
-    const byFamily = new Map<string, CopilotModel[]>()
-    for (const m of shown) {
-      const family = modelFamily(m)
-      byFamily.set(family, [...(byFamily.get(family) ?? []), m])
-    }
-    return [...byFamily.entries()]
-  }, [models, query])
-
-  useEffect(() => {
-    if (!open) {
-      setQuery('')
-      return
-    }
-    const id = requestAnimationFrame(() => {
-      const list = listRef.current
-      const current = list?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')
-      current?.scrollIntoView({ block: 'nearest' })
-      const filter = list?.parentElement?.querySelector<HTMLInputElement>('.model-filter')
-      ;(filter ?? current)?.focus()
-    })
-    return () => cancelAnimationFrame(id)
-  }, [open])
-
-  // Switching model drops an effort the new model can't use back to Auto, so an
-  // unsupported model/effort pair is never sent.
-  const selectModel = (next: string): void => {
-    const m = models.find((x) => x.id === next)
-    const stillValid = !effort || !m || m.supportedReasoningEfforts.includes(effort)
-    onChange(next, stillValid ? effort : '')
-  }
-
-  const label = selected?.name || model || 'Auto'
-  const defaultEffort = selected?.defaultReasoningEffort
-  const effortHint = effort
-    ? EFFORT_LABEL[effort].hint
-    : defaultEffort
-      ? `Uses the model's default (${EFFORT_LABEL[defaultEffort].label.toLowerCase()}).`
-      : 'Lets the model decide how long to think.'
-  const savedMissing = Boolean(model) && models.length > 0 && !selected
-  const option = (id: string, name: string, badge?: string): JSX.Element => (
-    <button
-      key={id || 'auto'}
-      type="button"
-      role="option"
-      aria-selected={model === id}
-      className={`model-opt${model === id ? ' is-on' : ''}`}
-      onClick={() => selectModel(id)}
-    >
-      <span className="model-opt-name">{name}</span>
-      {badge && <span className="model-opt-badge">{badge}</span>}
-      {model === id && <Codicon name="check" className="model-opt-check" />}
-    </button>
-  )
-
-  return (
-    <div
-      className="composer-menu"
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape' && open) {
-          e.preventDefault()
-          setOpen(false)
-          requestAnimationFrame(() => triggerRef.current?.focus())
-        }
-      }}
-    >
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`composer-pill${open ? ' is-open' : ''}`}
-        title={
-          disabled
-            ? 'The model can’t be changed while the assistant is working'
-            : `Model: ${label} — choose the AI model and reasoning effort`
-        }
-        onClick={() => setOpen((o) => !o)}
-        disabled={disabled}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-label={`Model: ${label}${effort ? `, ${EFFORT_LABEL[effort].label} effort` : ''}`}
-      >
-        <span className="composer-pill-label composer-pill-label--model">{label}</span>
-        {effort && <span className="composer-pill-tag">{EFFORT_LABEL[effort].short}</span>}
-        <Codicon name="chevron-down" className="composer-pill-caret" />
-      </button>
-      {open && (
-        <div className="composer-pop model-pop" role="dialog" aria-label="Model settings">
-          <div className="model-pop-section">
-            <div className="model-pop-label">Model</div>
-            {models.length > FILTER_AFTER && (
-              <input
-                className="model-filter"
-                type="search"
-                placeholder="Find a model…"
-                aria-label="Find a model"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault()
-                    listRef.current?.querySelector<HTMLButtonElement>('[role="option"]')?.focus()
-                  }
-                }}
-              />
-            )}
-            <div
-              className="model-list"
-              role="listbox"
-              aria-label="Model"
-              ref={listRef}
-              onKeyDown={(e) => moveMenuFocus(e, '[role="option"]')}
-            >
-              {!query && option('', 'Auto', 'Recommended')}
-              {savedMissing && !query && option(model, model, 'Unavailable')}
-              {groups.map(([family, list]) => (
-                <div key={family} className="model-group" role="group" aria-label={family}>
-                  {groups.length > 1 && <div className="model-group-label">{family}</div>}
-                  {list.map((m) => option(m.id, m.name, isFastModel(m) ? 'Fast' : undefined))}
-                </div>
-              ))}
-              {loading && models.length === 0 && (
-                <div className="model-empty shimmer-text">Loading models…</div>
-              )}
-              {!loading && query && groups.length === 0 && (
-                <div className="model-empty">No models match “{query}”</div>
-              )}
-            </div>
-          </div>
-          {effortOptions.length > 0 && (
-            <div className="model-pop-section model-pop-section--effort">
-              <div className="model-pop-label">Reasoning effort</div>
-              <div
-                className="effort-seg"
-                role="radiogroup"
-                aria-label="Reasoning effort"
-                onKeyDown={(e) => moveMenuFocus(e, '[role="radio"]')}
-              >
-                {(['', ...effortOptions] as (ReasoningEffort | '')[]).map((e) => (
-                  <button
-                    key={e || 'auto'}
-                    type="button"
-                    role="radio"
-                    aria-checked={effort === e}
-                    className={`effort-opt${effort === e ? ' is-on' : ''}`}
-                    onClick={() => onChange(model, e)}
-                    title={e ? EFFORT_LABEL[e].hint : 'Let the model decide'}
-                  >
-                    {e ? EFFORT_LABEL[e].short : 'Auto'}
-                  </button>
-                ))}
-              </div>
-              <p className="model-pop-hint">{effortHint}</p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** The composer's "+" menu: attach an image, connect a semantic model, or reference a file. */
 export function AddMenu({
   locked,
   attaching,
+  imageNote,
   onImage,
-  onConnectModel,
+  onConnectData,
   onReferenceFile
 }: {
-  /** The project has no deployment yet (connecting a model needs a workspace). */
+  /** The composer is locked (the app's first deploy is running). */
   locked: boolean
   attaching: boolean
+  /** Why images can't be added (the chosen model can't read them). */
+  imageNote?: string
   onImage: () => void
-  onConnectModel: () => void
+  /** Open the data picker on one kind of data, or on every kind. */
+  onConnectData: (kind?: DataKind) => void
   onReferenceFile: () => void
 }): JSX.Element {
-  const [open, setOpen] = usePopover()
+  const [open, setOpen] = useState(false)
+  const [fly, setFly] = useState(false)
+  const [layout, setLayout] = useState<MenuLayout>({ side: 'right', style: {} })
+  const rootRef = useRef<HTMLDivElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const mainRef = useRef<HTMLDivElement>(null)
+  const flyRef = useRef<HTMLDivElement>(null)
+  // The list beside the menu can reach over the native preview.
+  useSuppressPreview(open && fly)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent): void => {
+      const target = event.target as Node
+      if (!rootRef.current?.contains(target) && !popRef.current?.contains(target)) closeMenu(false)
+    }
+    const resize = (): void => closeMenu(false)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('resize', resize)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('resize', resize)
+    }
+  }, [open])
+
+  // Focus the menu's first item when it opens, and the list's when it opens.
   useEffect(() => {
     if (!open) return
     const id = requestAnimationFrame(() =>
-      menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus()
+      mainRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus()
     )
     return () => cancelAnimationFrame(id)
   }, [open])
-  const pick = (action: () => void): void => {
+  useEffect(() => {
+    if (!fly) return
+    const id = requestAnimationFrame(() =>
+      flyRef.current?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')?.focus()
+    )
+    return () => cancelAnimationFrame(id)
+  }, [fly])
+
+  function openMenu(): void {
+    const r = triggerRef.current?.getBoundingClientRect()
+    if (r) setLayout(menuLayout(r, 'up', MAIN_WIDTH + GAP + FLY_WIDTH + 12))
+    setOpen(true)
+  }
+
+  function closeMenu(focusTrigger = true): void {
     setOpen(false)
+    setFly(false)
+    if (focusTrigger) requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+
+  function closeFly(): void {
+    setFly(false)
+    requestAnimationFrame(() => mainRef.current?.querySelector<HTMLElement>('[data-sub]')?.focus())
+  }
+
+  const pick = (action: () => void): void => {
+    closeMenu(false)
     action()
   }
+
+  const into = layout.side === 'right' ? 'ArrowRight' : 'ArrowLeft'
+  const back = layout.side === 'right' ? 'ArrowLeft' : 'ArrowRight'
+
+  function onMainKey(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === into && (event.target as HTMLElement).dataset?.sub) {
+      event.preventDefault()
+      setFly(true)
+      return
+    }
+    moveMenuFocus(event, '[role="menuitem"]')
+  }
+
+  function onFlyKey(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === back) {
+      event.preventDefault()
+      closeFly()
+      return
+    }
+    moveMenuFocus(event, '[role="menuitem"]')
+  }
+
   return (
     <div
-      className="composer-menu"
-      ref={menuRef}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape' && open) {
-          e.preventDefault()
-          setOpen(false)
-          requestAnimationFrame(() => triggerRef.current?.focus())
-          return
-        }
-        if (open) moveMenuFocus(e, '[role="menuitem"]')
+      ref={rootRef}
+      className="composer-menu add-menu"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !open) return
+        event.preventDefault()
+        event.stopPropagation()
+        if (fly) closeFly()
+        else closeMenu()
       }}
     >
       <button
         ref={triggerRef}
         type="button"
         className={`composer-icon-btn${open ? ' is-open' : ''}`}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? closeMenu(false) : openMenu())}
         disabled={locked}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Add images, data, or files"
-        title="Add images, data, or files"
+        aria-label="Add images, files or data"
+        title="Add images, files or data"
       >
         {attaching ? <span className="step-spin" aria-hidden="true" /> : <Codicon name="add" />}
       </button>
-      {open && (
-        <div className="composer-pop" role="menu">
-          <button
-            type="button"
-            role="menuitem"
-            className="composer-opt"
-            disabled={attaching || locked}
-            onClick={() => pick(onImage)}
+      {open &&
+        createPortal(
+          <div
+            ref={popRef}
+            className={`mp-pop mp-pop--up mp-pop--${layout.side} am-pop`}
+            style={layout.style}
           >
-            <ImageIcon className="composer-opt-icon" />
-            <span className="composer-opt-text">
-              <span className="composer-opt-label">Add an image</span>
-              <span className="composer-opt-desc">Or paste / drop a screenshot into the box</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="composer-opt"
-            disabled={locked}
-            onClick={() => pick(onConnectModel)}
-            title={
-              locked
-                ? 'Deploy this app to a workspace before connecting a semantic model'
-                : undefined
-            }
-          >
-            <Codicon name="database" className="composer-opt-icon" />
-            <span className="composer-opt-text">
-              <span className="composer-opt-label">Connect a semantic model</span>
-              <span className="composer-opt-desc">
-                Use data from a Power BI model in your workspace
-              </span>
-            </span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="composer-opt"
-            disabled={locked}
-            onClick={() => pick(onReferenceFile)}
-          >
-            <Codicon name="mention" className="composer-opt-icon" />
-            <span className="composer-opt-text">
-              <span className="composer-opt-label">Reference a file</span>
-              <span className="composer-opt-desc">
-                Point Fabricator at a file in your project (type @)
-              </span>
-            </span>
-          </button>
-        </div>
-      )}
+            <div
+              className="mp-panel am-main"
+              role="menu"
+              aria-label="Add"
+              ref={mainRef}
+              onKeyDown={onMainKey}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="mp-item"
+                disabled={attaching || Boolean(imageNote)}
+                title={imageNote}
+                onClick={() => pick(onImage)}
+              >
+                <ImageIcon className="am-icon" />
+                <span className="mp-item-text">
+                  <span className="mp-item-label">Image</span>
+                  {imageNote && <span className="mp-item-desc">{imageNote}</span>}
+                </span>
+                {!imageNote && <span className="am-hint">Or paste</span>}
+              </button>
+              <button type="button" role="menuitem" className="mp-item" onClick={() => pick(onReferenceFile)}>
+                <Codicon name="mention" className="am-icon" />
+                <span className="mp-item-label am-label">File</span>
+                <span className="am-hint">
+                  <kbd>@</kbd>
+                </span>
+              </button>
+              <div className="mp-sep" role="separator" />
+              <button
+                type="button"
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded={fly}
+                data-sub="data"
+                className={`mp-item mp-sub${fly ? ' is-open' : ''}`}
+                onClick={() => (fly ? closeFly() : setFly(true))}
+              >
+                <img src={fabricSvg} alt="" draggable={false} className="am-icon" />
+                <span className="mp-item-label am-label">Fabric data</span>
+                <Codicon name="chevron-right" className="mp-caret" />
+              </button>
+            </div>
+            {fly && (
+              <div
+                className="mp-panel mp-fly am-fly"
+                role="menu"
+                aria-label="Fabric data"
+                ref={flyRef}
+                onKeyDown={onFlyKey}
+              >
+                {DATA_KINDS.map((k) => (
+                  <button
+                    key={k.kind}
+                    type="button"
+                    role="menuitem"
+                    className="mp-item"
+                    title={k.hint}
+                    onClick={() => pick(() => onConnectData(k.kind))}
+                  >
+                    <Codicon name={k.icon} className="am-icon" />
+                    <span className="mp-item-label am-label">{k.label}</span>
+                    <span className="am-hint">{DATA_HINT[k.kind]}</span>
+                  </button>
+                ))}
+                <div className="mp-sep" role="separator" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="mp-item mp-quiet"
+                  onClick={() => pick(() => onConnectData())}
+                >
+                  <Codicon name="search" className="am-icon" />
+                  <span className="mp-item-label am-label">Browse all Fabric data…</span>
+                </button>
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

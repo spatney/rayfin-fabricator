@@ -7,6 +7,7 @@ import { Codicon, ImageIcon } from '../icons'
 import { AgentStatus } from './AgentStatus'
 import { AgentQuestionBlock, AssistantBody } from './AssistantBody'
 import { CopyButton } from './CopyButton'
+import { SentData, SentMigration } from './DataTray'
 import { formatClock, formatFullDate } from './format'
 import { TurnFooter } from './TurnFooter'
 import type { UIChatMessage } from './types'
@@ -43,6 +44,8 @@ function UserMessage({
             {m.attachments} screenshot{m.attachments > 1 ? 's' : ''}
           </div>
         ) : null}
+        {m.data && m.data.length > 0 && <SentData data={m.data} />}
+        {m.migration && <SentMigration migration={m.migration} />}
         {hasText && !m.advisor && (
           <div className="msg-text user-bubble">
             <MentionText text={m.text} onOpen={onOpenMention} />

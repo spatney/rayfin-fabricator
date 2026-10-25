@@ -16,6 +16,8 @@ interface Props {
   onClose: () => void
   /** Open the Accounts dialog. */
   onManageAccounts?: () => void
+  /** Open the Accounts dialog at Model providers (your own API keys). */
+  onManageKeys?: () => void
   /** Leave for the setup screen to re-check tools and sign-ins. */
   onReviewSetup?: () => void
 }
@@ -157,6 +159,7 @@ export default function SettingsModal({
   onChange,
   onClose,
   onManageAccounts,
+  onManageKeys,
   onReviewSetup
 }: Props): JSX.Element {
   useSuppressPreview()
@@ -243,6 +246,16 @@ export default function SettingsModal({
                 >
                   <button type="button" className="btn btn--sm" onClick={onManageAccounts}>
                     Manage accounts
+                  </button>
+                </Item>
+              )}
+              {onManageKeys && (
+                <Item
+                  title="API keys"
+                  desc="Use models from Anthropic, OpenAI, xAI and Google with your own API keys, next to your Copilot models. The provider bills you for them."
+                >
+                  <button type="button" className="btn btn--sm" onClick={onManageKeys}>
+                    Manage API keys
                   </button>
                 </Item>
               )}
@@ -370,16 +383,10 @@ export default function SettingsModal({
                       onChange={(v) => onChange({ experiments: { teamWorkspaces: v } })}
                     />
                     <ToggleRow
-                      label="Deploy manually"
-                      hint="Chat turns don’t deploy your app; select Redeploy when you’re ready. The preview always shows your latest changes, running on this computer. Switch between Manual and Auto deploy in the status bar. Team apps still save after each turn."
-                      checked={Boolean(settings.experiments?.manualDeploy)}
-                      onChange={(v) =>
-                        onChange(
-                          v
-                            ? { experiments: { manualDeploy: true }, deployMode: 'manual' }
-                            : { experiments: { manualDeploy: false } }
-                        )
-                      }
+                      label="Migrate Power BI reports"
+                      hint="Turn a Power BI report into a new app from Home. The app reads the report's semantic model live, and Copilot rebuilds the report's pages, visuals and filters one page at a time. Needs the Azure CLI."
+                      checked={Boolean(settings.experiments?.reportMigration)}
+                      onChange={(v) => onChange({ experiments: { reportMigration: v } })}
                     />
                   </div>
                 )}

@@ -23,12 +23,12 @@ use github_copilot_sdk::handler::{
   ApproveAllHandler, ExitPlanModeHandler, ExitPlanModeResult, PermissionHandler, UserInputHandler,
   UserInputResponse,
 };
-use github_copilot_sdk::rpc::{AccountLogoutRequest, AuthInfo};
+use github_copilot_sdk::rpc::{AccountLogoutRequest, AuthInfo, AutoTierMetadata};
 use github_copilot_sdk::session::Session;
 use github_copilot_sdk::types::GetAuthStatusResponse;
 use github_copilot_sdk::{
   CliProgram, Client, ClientOptions, Error as SdkError, ExitPlanModeData, Model, ResumeSessionConfig,
-  SessionConfig, SessionId, SetModelOptions, Tool, Transport,
+  SessionConfig, SessionId, Tool, Transport,
 };
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -54,13 +54,65 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 pub const COPILOT_SIGN_IN_REQUIRED: &str =
   "GitHub Copilot is not signed in. Sign in to Copilot in Fabricator, then retry your message.";
 
-/// A live session plus the model/effort currently applied to it, so a turn only
-/// issues a `set_model` RPC when the user actually changed them.
+/// A live session plus the model choice currently applied to it, so a turn only
+/// issues a `set_model` RPC when the user actually changed it.
 struct Entry {
   session: Arc<Session>,
   cwd: String,
-  model: Option<String>,
-  effort: Option<String>,
+  choice: ModelChoice,
+  /// Revision of the provider registry (Your own API keys) the session was
+  /// opened with; a different one (a key replaced, a model added) reopens it.
+  registry_rev: Option<String>,
+}
+
+/// Context window tiers (SDK `ContextTier`).
+const CONTEXT_TIERS: [&str; 2] = ["default", "long_context"];
+
+/// What a session runs: a model (`None` is Copilot's Auto router), its
+/// reasoning effort, and, with Auto, what routing optimizes for, or, with a
+/// model that offers several, its context window. Always normalized: on Auto,
+/// Copilot also decides how hard the model thinks, so there's no effort.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModelChoice {
+  pub model: Option<String>,
+  pub effort: Option<String>,
+  pub auto_tier: Option<String>,
+  pub context_tier: Option<String>,
+}
+
+impl ModelChoice {
+  pub fn new(
+    model: Option<String>,
+    effort: Option<String>,
+    auto_tier: Option<String>,
+    context_tier: Option<String>,
+  ) -> Self {
+    let model = concrete_model(&model);
+    let context = context_tier
+      .map(|t| t.trim().to_ascii_lowercase())
+      .filter(|t| CONTEXT_TIERS.contains(&t.as_str()));
+    ModelChoice {
+      effort: if model.is_some() { norm_effort(&effort) } else { None },
+      auto_tier: if model.is_none() { auto_tier_id(auto_tier) } else { None },
+      context_tier: if model.is_some() { context } else { None },
+      model,
+    }
+  }
+
+  /// A model and effort, with no tiers.
+  pub fn of(model: Option<String>, effort: Option<String>) -> Self {
+    Self::new(model, effort, None, None)
+  }
+}
+
+/// An Auto routing tier as Copilot advertises it (`"balance"`): an opaque id,
+/// passed through unchanged when it looks like one.
+fn auto_tier_id(tier: Option<String>) -> Option<String> {
+  let tier = tier?.trim().to_string();
+  let valid = !tier.is_empty()
+    && tier.len() <= 64
+    && tier.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+  valid.then_some(tier)
 }
 
 /// Lazily-started shared client and the per-thread session cache. Held in
@@ -141,23 +193,12 @@ enum Sync {
   Apply,
 }
 
-/// Decide how to reconcile a cached session against the model/effort a turn wants.
+/// Decide how to reconcile a cached session against the choice a turn wants.
 /// Any change — crucially including switching *to* Auto — needs [`Sync::Apply`],
 /// because a live/resumed session keeps its last concrete model until `set_model`
 /// says otherwise (see [`apply_options`]).
-fn session_sync(
-  cur_model: &Option<String>,
-  cur_effort: &Option<String>,
-  want_model: &Option<String>,
-  want_effort: &Option<String>,
-) -> Sync {
-  if concrete_model(cur_model) == concrete_model(want_model)
-    && norm_effort(cur_effort) == norm_effort(want_effort)
-  {
-    Sync::Reuse
-  } else {
-    Sync::Apply
-  }
+fn session_sync(current: &ModelChoice, wanted: &ModelChoice) -> Sync {
+  if current == wanted { Sync::Reuse } else { Sync::Apply }
 }
 
 /// Normalize the effort string: treat empty as unset.
@@ -169,20 +210,44 @@ fn norm_effort(effort: &Option<String>) -> Option<String> {
     .map(str::to_string)
 }
 
-/// Apply model/effort to a live session via `set_model`. Always switches — to the
-/// concrete model, or back to the `"auto"` router — so returning to Auto after
-/// using a named model actually takes effect (a live/resumed session keeps its
-/// last model otherwise). The reasoning effort rides along on the switch.
-async fn apply_options(
-  session: &Session,
-  model: &Option<String>,
-  effort: &Option<String>,
-) -> Result<(), SdkError> {
-  let mut opts = SetModelOptions::default();
-  if let Some(e) = norm_effort(effort) {
-    opts = opts.with_reasoning_effort(e);
+/// Apply a model choice to a live session. Always switches — to the concrete
+/// model, or back to the `"auto"` router — so returning to Auto after using a
+/// named model actually takes effect (a live/resumed session keeps its last
+/// model otherwise). The effort and tiers ride along on the switch.
+///
+/// The switch always carries `reasoningEffort`, as `null` when unset: omitting
+/// it keeps the session's previous effort, so moving from a model run at "low"
+/// to one without reasoning effort failed ("Reasoning effort 'low' is not
+/// supported"). Null resets it to the new model's default, which is what the
+/// picker's default effort means. On Auto, `autoTier` is always sent too, as
+/// `null` for Copilot's default routing: omitted, the runtime reuses the tier
+/// chosen last. A runtime that rejects a tier (Auto routing tiers must be
+/// enabled for the account) still gets the model switch.
+async fn apply_options(session: &Session, choice: &ModelChoice) -> Result<(), SdkError> {
+  let mut params = serde_json::json!({
+    "sessionId": session.id().as_str(),
+    "modelId": set_model_target(&choice.model),
+    "reasoningEffort": choice.effort,
+  });
+  if choice.model.is_none() {
+    params["autoTier"] = serde_json::json!(choice.auto_tier);
   }
-  session.set_model(&set_model_target(model), Some(opts)).await
+  if let Some(tier) = &choice.context_tier {
+    params["contextTier"] = serde_json::json!(tier);
+  }
+  let tiered = params.get("autoTier").is_some() || params.get("contextTier").is_some();
+  match session.client().call("session.model.switchTo", Some(params.clone())).await {
+    Ok(_) => Ok(()),
+    Err(e) if tiered && !e.is_transport_failure() => {
+      log::warn!("switching the model with a tier failed ({e}); switching without it");
+      if let Some(o) = params.as_object_mut() {
+        o.remove("autoTier");
+        o.remove("contextTier");
+      }
+      session.client().call("session.model.switchTo", Some(params)).await.map(|_| ())
+    }
+    Err(e) => Err(e),
+  }
 }
 
 /// Bridges the SDK's `exit_plan_mode` and `ask_user` callbacks to the renderer.
@@ -293,6 +358,10 @@ pub struct SessionOptions {
   /// Allowlist of built-in tools; `Some(vec![])` makes a tool-less session for
   /// one-shot generation, where tool schemas only add prompt size and latency.
   pub available_tools: Option<Vec<String>>,
+  /// Providers on the user's own keys and their models, which the session can
+  /// switch to. The runtime doesn't persist them, so they are re-supplied on
+  /// every resume.
+  pub byok: Option<crate::services::byok::registry::ByokRegistry>,
 }
 
 /// Ask the runtime to resume, or create a session bound to `session_id`,
@@ -301,16 +370,13 @@ async fn open_session(
   client: &Client,
   cwd: &str,
   session_id: &str,
-  model: &Option<String>,
-  effort: &Option<String>,
+  choice: &ModelChoice,
   opts: &SessionOptions,
   resume: bool,
 ) -> Result<TurnSession, SdkError> {
   let handler: Arc<dyn PermissionHandler> = opts.permission.clone().unwrap_or_else(|| Arc::new(ApproveAllHandler));
   let sid = SessionId::new(session_id.to_string());
   let cwd_pb = PathBuf::from(cwd);
-  let eff = norm_effort(effort);
-  let model = concrete_model(model);
 
   let mut recreated = false;
   if resume {
@@ -340,10 +406,13 @@ async fn open_session(
     if let Some(h) = opts.user_input.clone() {
       cfg = cfg.with_user_input_handler(h);
     }
-    cfg.reasoning_effort = eff.clone();
+    if let Some(byok) = &opts.byok {
+      cfg = cfg.with_providers(byok.providers.clone()).with_models(byok.models.clone());
+    }
+    cfg.reasoning_effort = choice.effort.clone();
     match client.resume_session(cfg).await {
       Ok(session) => {
-        if let Err(e) = apply_options(&session, &model, effort).await {
+        if let Err(e) = apply_options(&session, choice).await {
           if e.is_transport_failure() || is_session_not_found(&e.to_string()) {
             return Err(e);
           }
@@ -387,11 +456,24 @@ async fn open_session(
   if let Some(h) = opts.user_input.clone() {
     cfg = cfg.with_user_input_handler(h);
   }
-  cfg.reasoning_effort = eff;
-  if let Some(m) = &model {
+  if let Some(byok) = &opts.byok {
+    cfg = cfg.with_providers(byok.providers.clone()).with_models(byok.models.clone());
+  }
+  cfg.reasoning_effort = choice.effort.clone();
+  if let Some(m) = &choice.model {
     cfg = cfg.with_model(m.clone());
   }
   let session = client.create_session(cfg).await?;
+  // Tiers go on with a switch rather than in the config, so a runtime that
+  // rejects one still opens the session (see `apply_options`).
+  if choice.auto_tier.is_some() || choice.context_tier.is_some() {
+    if let Err(e) = apply_options(&session, choice).await {
+      if e.is_transport_failure() {
+        return Err(e);
+      }
+      log::warn!("failed to apply the model tier on a new Copilot session: {e}");
+    }
+  }
   Ok(TurnSession { session: Arc::new(session), recreated })
 }
 /// Map an SDK [`Model`] to the renderer DTO, dropping models disabled by org
@@ -420,7 +502,59 @@ fn map_model(m: &Model) -> Option<crate::types::CopilotModel> {
     category: m.model_picker_category.as_ref().and_then(wire_str),
     price_category: m.model_picker_price_category.as_ref().and_then(wire_str),
     vision: m.capabilities.supports.as_ref().and_then(|s| s.vision).unwrap_or(false),
+    vendor: m.vendor.clone(),
+    context_tiers: context_tiers(m),
+    byok: None,
   })
+}
+
+/// The context windows a model offers, with their sizes (prompt budget plus
+/// output), when there is more than one. Copilot models carry the long-context
+/// tier in their token pricing; other providers advertise their tiers.
+fn context_tiers(m: &Model) -> Vec<crate::types::ContextTierOption> {
+  let prices = m.billing.as_ref().and_then(|b| b.token_prices.as_ref());
+  let long = prices.and_then(|p| p.long_context.as_ref());
+  let names: Vec<String> = match &m.supported_context_tiers {
+    Some(tiers) => tiers.clone(),
+    None if long.is_some() => vec!["default".into(), "long_context".into()],
+    None => Vec::new(),
+  };
+  let output = m.capabilities.limits.as_ref().and_then(|l| l.max_output_tokens).unwrap_or(0).max(0) as u64;
+  let prompt = |tier: &str| -> Option<i64> {
+    match tier {
+      "default" => prices
+        .and_then(|p| p.max_prompt_tokens)
+        .or_else(|| m.capabilities.limits.as_ref().and_then(|l| l.max_prompt_tokens)),
+      "long_context" => long.and_then(|l| l.max_prompt_tokens),
+      _ => None,
+    }
+  };
+  let tiers: Vec<crate::types::ContextTierOption> = names
+    .iter()
+    .filter_map(|tier| {
+      let tokens = prompt(tier).filter(|p| *p > 0)? as u64 + output;
+      Some(crate::types::ContextTierOption { tier: tier.clone(), tokens })
+    })
+    .collect();
+  if tiers.len() > 1 { tiers } else { Vec::new() }
+}
+
+/// Copilot's Auto routing metadata as the picker's "Optimized for" options: its
+/// `auto` preferences, in Copilot's order. `None` when it offers none.
+fn map_auto_tiers(meta: AutoTierMetadata) -> Option<crate::types::AutoTiers> {
+  let tiers: Vec<crate::types::AutoTierOption> = meta
+    .tiers
+    .into_iter()
+    .filter(|t| t.r#type == "auto" && auto_tier_id(Some(t.id.clone())).as_deref() == Some(t.id.as_str()))
+    .map(|t| crate::types::AutoTierOption {
+      name: if t.display_name.trim().is_empty() { t.id.clone() } else { t.display_name },
+      id: t.id,
+      description: t.description,
+      enabled: t.status.enabled,
+      note: t.status.message.filter(|m| !m.trim().is_empty()),
+    })
+    .collect();
+  (!tiers.is_empty()).then(|| crate::types::AutoTiers { default_tier: meta.default_tier, tiers })
 }
 
 /// The wire string of an SDK enum (`"lightweight"`, `"low"`…), or `None` for the
@@ -647,6 +781,11 @@ impl CopilotManager {
   /// authenticated" before it resolves; the SDK doesn't cache that failure, so we
   /// give it a couple of brief retries before giving up.
   pub async fn list_models(&self) -> Result<Vec<crate::types::CopilotModel>, String> {
+    Ok(self.list_sdk_models().await?.iter().filter_map(map_model).collect())
+  }
+
+  /// Copilot's catalog as the SDK reports it (see [`Self::list_models`]).
+  pub async fn list_sdk_models(&self) -> Result<Vec<Model>, String> {
     let (client, generation) = {
       let mut engine = self.engine.lock().await;
       self.check_available()?;
@@ -659,7 +798,7 @@ impl CopilotManager {
         tokio::time::sleep(std::time::Duration::from_millis(600)).await;
       }
       match client.list_models().await {
-        Ok(models) => return Ok(models.iter().filter_map(map_model).collect()),
+        Ok(models) => return Ok(models),
         Err(e) => {
           transport_failed = e.is_transport_failure();
           last_err = e.to_string();
@@ -675,6 +814,22 @@ impl CopilotManager {
       }
     }
     Err(format!("Failed to list Copilot models: {last_err}"))
+  }
+
+  /// What Auto can optimize for, for the signed-in account. Copilot only lists
+  /// it per session, so this reads it from a short-lived one, then deletes that
+  /// session so the probe leaves nothing in Copilot's saved sessions. `None`
+  /// when Copilot offers no choice.
+  pub async fn auto_tiers(&self) -> Result<Option<crate::types::AutoTiers>, String> {
+    let cwd = std::env::temp_dir();
+    let session = self.transient_session(&cwd.to_string_lossy(), ModelChoice::default()).await?;
+    let listed = session.rpc().model().list().await;
+    let _ = session.disconnect().await;
+    if let Err(e) = session.client().delete_session(session.id()).await {
+      log::debug!("couldn't delete the session that read Auto's options: {e}");
+    }
+    let listed = listed.map_err(|e| format!("Couldn't read Auto's options: {e}"))?;
+    Ok(listed.auto.and_then(map_auto_tiers))
   }
 
   async fn probe_auth(&self) -> Result<CopilotAuthStatus, String> {
@@ -694,20 +849,24 @@ impl CopilotManager {
   }
 
   /// Get the persistent, cached session for a project turn, creating or
-  /// resuming it as needed and reconciling the current model/effort.
+  /// resuming it as needed and reconciling the current model choice. `byok` is
+  /// the registry of providers on the user's own keys; a cached session opened
+  /// with a different one is reopened, since the runtime only takes the
+  /// registry when a session is created or resumed.
   #[allow(clippy::too_many_arguments)]
   pub async fn turn_session(
     &self,
     project_id: &str,
     cwd: &str,
     session_id: &str,
-    model: Option<String>,
-    effort: Option<String>,
+    choice: ModelChoice,
     exit_plan: Option<Arc<dyn ExitPlanModeHandler>>,
     user_input: Option<Arc<dyn UserInputHandler>>,
     tools: Vec<Tool>,
+    byok: Option<crate::services::byok::registry::ByokRegistry>,
   ) -> Result<TurnSession, String> {
     let key = project_id.to_string();
+    let registry_rev = byok.as_ref().map(|r| r.revision.clone());
     let mut engine = self.engine.lock().await;
     self.check_available()?;
     let client = Self::wait_for_auth(&mut engine).await?;
@@ -719,23 +878,24 @@ impl CopilotManager {
       Reopen,
     }
     let action = match engine.sessions.get(&key) {
-      Some(e) if e.cwd == cwd && e.session.id().as_str() == session_id => match session_sync(&e.model, &e.effort, &model, &effort) {
-        // Model and/or effort changed — apply on the live session. `set_model`
-        // now switches back to the "auto" router too, so returning to Auto takes
-        // effect (previously it reopened → resumed → kept the old model).
-        Sync::Apply => Action::ApplyThenReuse(e.session.clone()),
-        Sync::Reuse => Action::Reuse(e.session.clone()),
-      },
+      Some(e) if e.cwd == cwd && e.session.id().as_str() == session_id && e.registry_rev == registry_rev => {
+        match session_sync(&e.choice, &choice) {
+          // The choice changed — apply it on the live session. `set_model`
+          // switches back to the "auto" router too, so returning to Auto takes
+          // effect (previously it reopened → resumed → kept the old model).
+          Sync::Apply => Action::ApplyThenReuse(e.session.clone()),
+          Sync::Reuse => Action::Reuse(e.session.clone()),
+        }
+      }
       _ => Action::Reopen,
     };
 
     match action {
       Action::Reuse(session) => return Ok(TurnSession { session, recreated: false }),
-      Action::ApplyThenReuse(s) => match apply_options(&s, &model, &effort).await {
+      Action::ApplyThenReuse(s) => match apply_options(&s, &choice).await {
         Ok(()) => {
           if let Some(e) = engine.sessions.get_mut(&key) {
-            e.model = model;
-            e.effort = effort;
+            e.choice = choice;
           }
           return Ok(TurnSession { session: s, recreated: false });
         }
@@ -758,15 +918,16 @@ impl CopilotManager {
       tools,
       // Team projects may not deploy, push or merge from chat (see team::guard).
       permission: crate::services::team::guard::chat_policy(project_id),
+      byok,
       ..Default::default()
     };
-    let opened = match open_session(&client, cwd, session_id, &model, &effort, &opts, true).await {
+    let opened = match open_session(&client, cwd, session_id, &choice, &opts, true).await {
       Ok(s) => s,
       Err(e) if e.is_transport_failure() => {
         // The CLI server died — restart it and try once more.
         engine.reset_client().await;
         let client = Self::wait_for_auth(&mut engine).await?;
-        open_session(&client, cwd, session_id, &model, &effort, &opts, true)
+        open_session(&client, cwd, session_id, &choice, &opts, true)
           .await
           .map_err(|e| e.to_string())?
       }
@@ -778,8 +939,8 @@ impl CopilotManager {
       Entry {
         session: opened.session.clone(),
         cwd: cwd.to_string(),
-        model,
-        effort,
+        choice,
+        registry_rev,
       },
     );
     Ok(opened)
@@ -787,13 +948,8 @@ impl CopilotManager {
 
   /// Open a one-off, uncached session (used by starter suggestions). The caller
   /// is responsible for [`Session::disconnect`]ing it when done.
-  pub async fn transient_session(
-    &self,
-    cwd: &str,
-    model: Option<String>,
-    effort: Option<String>,
-  ) -> Result<Arc<Session>, String> {
-    self.transient_session_with(cwd, model, effort, SessionOptions::default()).await
+  pub async fn transient_session(&self, cwd: &str, choice: ModelChoice) -> Result<Arc<Session>, String> {
+    self.transient_session_with(cwd, choice, SessionOptions::default()).await
   }
 
   /// Open a one-off, uncached session with custom tools, permissions, and tool
@@ -802,20 +958,19 @@ impl CopilotManager {
   pub async fn transient_session_with(
     &self,
     cwd: &str,
-    model: Option<String>,
-    effort: Option<String>,
+    choice: ModelChoice,
     opts: SessionOptions,
   ) -> Result<Arc<Session>, String> {
     let mut engine = self.engine.lock().await;
     self.check_available()?;
     let client = Self::wait_for_auth(&mut engine).await?;
     let id = uuid::Uuid::new_v4().to_string();
-    let opened = match open_session(&client, cwd, &id, &model, &effort, &opts, false).await {
+    let opened = match open_session(&client, cwd, &id, &choice, &opts, false).await {
       Ok(s) => s,
       Err(e) if e.is_transport_failure() => {
         engine.reset_client().await;
         let client = Self::wait_for_auth(&mut engine).await?;
-        open_session(&client, cwd, &id, &model, &effort, &opts, false)
+        open_session(&client, cwd, &id, &choice, &opts, false)
           .await
           .map_err(|e| e.to_string())?
       }
@@ -933,6 +1088,10 @@ mod tests {
         assert_eq!(request["method"], method);
         let mut reply = json!({ "jsonrpc": "2.0", "id": request["id"] });
         reply.as_object_mut().unwrap().extend(payload.as_object().unwrap().clone());
+        // A session the code names itself (a random id): answer with its id.
+        if reply["result"]["sessionId"] == "<requested>" {
+          reply["result"]["sessionId"] = request["params"]["sessionId"].clone();
+        }
         let body = serde_json::to_vec(&reply).unwrap();
         writer.write_all(format!("Content-Length: {}\r\n\r\n", body.len()).as_bytes()).await.unwrap();
         writer.write_all(&body).await.unwrap();
@@ -1147,7 +1306,7 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), model: None, effort: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
     });
     manager.reload_auth().await;
     let engine = manager.engine.lock().await;
@@ -1166,7 +1325,7 @@ mod tests {
       ("session.create", json!({ "result": { "sessionId": "saved-session" } })),
     ]);
     let opened = open_session(
-      &client, ".", "saved-session", &None, &None, &SessionOptions::default(), true,
+      &client, ".", "saved-session", &ModelChoice::default(), &SessionOptions::default(), true,
     ).await.unwrap();
     assert!(opened.recreated);
     assert_eq!(opened.session.id().as_str(), "saved-session");
@@ -1188,7 +1347,7 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), model: None, effort: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
     });
     assert!(manager.list_models().await.is_err());
     let engine = manager.engine.lock().await;
@@ -1215,7 +1374,7 @@ mod tests {
     ).await.unwrap());
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: current.clone(), cwd: ".".into(), model: None, effort: None,
+      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
     });
     manager.invalidate_transport("project", &stale).await;
     assert!(manager.engine.lock().await.client.is_some());
@@ -1233,7 +1392,7 @@ mod tests {
       ("session.resume", rpc_error("Not authenticated")),
     ]);
     let result = open_session(
-      &client, ".", "saved-session", &None, &None, &SessionOptions::default(), true,
+      &client, ".", "saved-session", &ModelChoice::default(), &SessionOptions::default(), true,
     ).await;
     assert!(result.is_err());
     assert_eq!(server.await.unwrap().len(), 1);
@@ -1255,15 +1414,155 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(old), cwd: ".".into(), model: None, effort: None,
+      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
     });
     let opened = manager.turn_session(
-      "project", ".", "new-session", None, None, None, None, Vec::new(),
+      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None,
     ).await.unwrap();
     assert_eq!(opened.session.id().as_str(), "new-session");
     assert!(!opened.recreated);
     server.await.unwrap();
     client.force_stop();
+  }
+
+  /// The runtime only takes the provider registry on create/resume, and a
+  /// resume without it silently runs a provider selection on a Copilot model.
+  /// So a changed registry (a key replaced, a model added) reopens the cached
+  /// session with it; and switching with no effort clears the previous one
+  /// (explicit null).
+  #[tokio::test]
+  async fn a_changed_provider_registry_reopens_the_session_with_it() {
+    let (client, server) = fake_client(vec![
+      ("session.create", json!({ "result": { "sessionId": "thread" } })),
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": true } })),
+      ("session.detach", json!({ "result": {} })),
+      ("session.resume", json!({ "result": { "sessionId": "thread" } })),
+      ("session.skills.reload", json!({ "result": {} })),
+      ("session.model.switchTo", json!({ "result": {} })),
+    ]);
+    let cached = client.create_session(SessionConfig::default().with_session_id(SessionId::new("thread"))).await.unwrap();
+    let manager = manager_with(client.clone());
+    let choice = ModelChoice::of(m("anthropic/claude-opus-5-5"), None);
+    manager.engine.lock().await.sessions.insert("project".into(), Entry {
+      session: Arc::new(cached), cwd: ".".into(), choice: choice.clone(),
+      registry_rev: Some("before-the-new-key".into()),
+    });
+    let mut settings = crate::types::ByokSettings::default();
+    settings.providers.insert("anthropic".into(), crate::types::ByokProviderSettings {
+      models: vec![crate::types::ByokModelInfo {
+        id: "claude-opus-5-5".into(), name: "Claude Opus 5.5".into(), context_window: 1_000_000, max_output: 128_000,
+        ..Default::default()
+      }],
+      enabled: vec!["claude-opus-5-5".into()],
+      checked_at: None,
+    });
+    let keys = HashMap::from([("anthropic".to_string(), "sk-ant-test".to_string())]);
+    let registry = crate::services::byok::registry::build(&settings, &keys);
+    manager.turn_session(
+      "project", ".", "thread", choice, None, None, Vec::new(), Some(registry.clone()),
+    ).await.unwrap();
+    let requests = server.await.unwrap();
+    let resume = &requests[3]["params"];
+    assert_eq!(resume["providers"][0]["name"], "anthropic");
+    assert!(resume["models"].as_array().unwrap().iter().any(|m| m["id"] == "claude-opus-5-5"));
+    let switch = requests[5]["params"].as_object().unwrap();
+    assert_eq!(switch["modelId"], "anthropic/claude-opus-5-5");
+    assert!(switch.contains_key("reasoningEffort") && switch["reasoningEffort"].is_null());
+    assert!(!switch.contains_key("autoTier") && !switch.contains_key("contextTier"));
+    assert_eq!(manager.engine.lock().await.sessions["project"].registry_rev, Some(registry.revision));
+    client.force_stop();
+  }
+
+  #[tokio::test]
+  async fn an_explicit_effort_rides_along_on_the_switch() {
+    let (client, server) = fake_client(vec![
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+      ("session.model.switchTo", json!({ "result": {} })),
+    ]);
+    let session = client.create_session(SessionConfig::default().with_session_id(SessionId::new("s"))).await.unwrap();
+    apply_options(&session, &ModelChoice::of(m("anthropic/claude-opus-5-5"), m("low"))).await.unwrap();
+    let requests = server.await.unwrap();
+    assert_eq!(requests[1]["params"]["reasoningEffort"], "low");
+    client.force_stop();
+  }
+
+  /// Auto routing tiers must be enabled for the account; a runtime that
+  /// rejects one still switches the model.
+  #[tokio::test]
+  async fn tiers_ride_along_and_a_rejected_tier_still_switches_the_model() {
+    let (client, server) = fake_client(vec![
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+      ("session.model.switchTo", json!({ "result": {} })),
+      ("session.model.switchTo", json!({ "error": { "code": -32602, "message": "Auto tier 'intelligence' is not enabled" } })),
+      ("session.model.switchTo", json!({ "result": {} })),
+      ("session.model.switchTo", json!({ "result": {} })),
+    ]);
+    let session = client.create_session(SessionConfig::default().with_session_id(SessionId::new("s"))).await.unwrap();
+    apply_options(&session, &ModelChoice::new(m("gpt-6-astra"), m("high"), m("balance"), m("long_context"))).await.unwrap();
+    apply_options(&session, &ModelChoice::new(None, None, m("intelligence"), m("long_context"))).await.unwrap();
+    apply_options(&session, &ModelChoice::default()).await.unwrap();
+    let requests = server.await.unwrap();
+    let concrete = requests[1]["params"].as_object().unwrap();
+    // A model takes a context tier; an Auto tier only goes with Auto.
+    assert_eq!((concrete["modelId"].as_str(), concrete["contextTier"].as_str()), (Some("gpt-6-astra"), Some("long_context")));
+    assert!(!concrete.contains_key("autoTier"));
+    let auto = requests[2]["params"].as_object().unwrap();
+    assert_eq!((auto["modelId"].as_str(), auto["autoTier"].as_str()), (Some("auto"), Some("intelligence")));
+    assert!(!auto.contains_key("contextTier"));
+    let retried = requests[3]["params"].as_object().unwrap();
+    assert_eq!(retried["modelId"], "auto");
+    assert!(!retried.contains_key("autoTier"));
+    // Plain Auto says so, or the runtime would keep the tier chosen before.
+    let plain = requests[4]["params"].as_object().unwrap();
+    assert_eq!((plain["modelId"].as_str(), plain.get("autoTier")), (Some("auto"), Some(&Value::Null)));
+    client.force_stop();
+  }
+
+  #[tokio::test]
+  async fn reading_autos_options_leaves_no_session_behind() {
+    let (client, server) = fake_client(vec![
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": true } })),
+      ("session.create", json!({ "result": { "sessionId": "<requested>" } })),
+      ("session.model.list", json!({ "result": { "list": [], "auto": { "defaultTier": "balance", "tiers": [
+        { "id": "balance", "displayName": "Balance", "description": "A mix", "status": { "enabled": true }, "type": "auto" }
+      ] } } })),
+      ("session.detach", json!({ "result": {} })),
+      ("session.delete", json!({ "result": {} })),
+    ]);
+    let manager = manager_with(client.clone());
+    let tiers = manager.auto_tiers().await.unwrap().unwrap();
+    assert_eq!((tiers.default_tier.as_str(), tiers.tiers[0].name.as_str()), ("balance", "Balance"));
+    let requests = server.await.unwrap();
+    let probe = &requests[1]["params"]["sessionId"];
+    assert!(probe.is_string());
+    assert_eq!(&requests[4]["params"]["sessionId"], probe);
+    client.force_stop();
+  }
+
+  #[test]
+  fn auto_offers_copilots_routing_preferences_in_its_order() {
+    let meta: AutoTierMetadata = serde_json::from_value(json!({
+      "defaultTier": "balance",
+      "tiers": [
+        { "id": "efficiency", "displayName": "Efficiency", "description": "Faster, lighter models", "status": { "enabled": true }, "type": "auto" },
+        { "id": "balance", "displayName": "Balance", "description": "A mix", "status": { "enabled": true, "message": " " }, "type": "auto" },
+        { "id": "intelligence", "displayName": "Intelligence", "description": "The most capable models", "status": { "enabled": false, "message": "Not on your plan" }, "type": "auto" },
+        { "id": "fast", "displayName": "Fast", "description": "", "status": { "enabled": true }, "type": "latency" },
+        { "id": "a b", "displayName": "Odd", "description": "", "status": { "enabled": true }, "type": "auto" }
+      ]
+    }))
+    .unwrap();
+    let tiers = map_auto_tiers(meta).unwrap();
+    assert_eq!(tiers.default_tier, "balance");
+    let shown: Vec<(&str, &str, bool, Option<&str>)> =
+      tiers.tiers.iter().map(|t| (t.id.as_str(), t.name.as_str(), t.enabled, t.note.as_deref())).collect();
+    assert_eq!(shown, [
+      ("efficiency", "Efficiency", true, None),
+      ("balance", "Balance", true, None),
+      ("intelligence", "Intelligence", false, Some("Not on your plan")),
+    ]);
+    let none: AutoTierMetadata = serde_json::from_value(json!({ "defaultTier": "balance", "tiers": [] })).unwrap();
+    assert!(map_auto_tiers(none).is_none());
   }
 
   #[test]
@@ -1285,7 +1584,7 @@ mod tests {
     ]);
     let manager = manager_with(client);
     let result = manager.turn_session(
-      "project", ".", "unauthenticated-session", None, None, None, None, Vec::new(),
+      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None,
     ).await;
     assert!(result.err().unwrap().contains("Sign in to Copilot"));
     assert!(manager.engine.lock().await.sessions.is_empty());
@@ -1347,8 +1646,13 @@ mod tests {
   fn switching_to_auto_from_a_named_model_re_applies() {
     // The bug: a session on a concrete model, switched back to Auto, must
     // re-apply (set_model "auto") — not silently reuse the old model.
-    assert_eq!(session_sync(&m("gpt-5.4-mini"), &None, &None, &None), Sync::Apply);
-    assert_eq!(session_sync(&m("gpt-5.4-mini"), &None, &m("auto"), &None), Sync::Apply);
+    assert_eq!(session_sync(&c("gpt-5.4-mini", ""), &c("", "")), Sync::Apply);
+    assert_eq!(session_sync(&c("gpt-5.4-mini", ""), &c("auto", "")), Sync::Apply);
+  }
+
+  /// A model choice from a model and effort ("" for none).
+  fn c(model: &str, effort: &str) -> ModelChoice {
+    ModelChoice::of(m(model), m(effort))
   }
 
   #[test]
@@ -1382,18 +1686,56 @@ mod tests {
 
   #[test]
   fn unchanged_model_and_effort_reuses() {
-    assert_eq!(session_sync(&None, &None, &None, &None), Sync::Reuse);
-    assert_eq!(session_sync(&m("x"), &m("high"), &m("x"), &m("high")), Sync::Reuse);
+    assert_eq!(session_sync(&c("", ""), &c("", "")), Sync::Reuse);
+    assert_eq!(session_sync(&c("x", "high"), &c("x", "high")), Sync::Reuse);
     // None and "auto" (and blank) are equivalent, so auto→auto reuses.
-    assert_eq!(session_sync(&None, &None, &m("auto"), &None), Sync::Reuse);
-    assert_eq!(session_sync(&m("auto"), &None, &None, &None), Sync::Reuse);
+    assert_eq!(session_sync(&c("", ""), &c("auto", "")), Sync::Reuse);
+    assert_eq!(session_sync(&c("auto", ""), &c("", "")), Sync::Reuse);
   }
 
   #[test]
-  fn model_or_effort_change_applies() {
-    assert_eq!(session_sync(&m("a"), &None, &m("b"), &None), Sync::Apply);
-    assert_eq!(session_sync(&None, &m("low"), &None, &m("high")), Sync::Apply);
+  fn model_effort_or_tier_change_applies() {
+    assert_eq!(session_sync(&c("a", ""), &c("b", "")), Sync::Apply);
+    assert_eq!(session_sync(&c("a", "low"), &c("a", "high")), Sync::Apply);
     // Auto → a concrete model also needs applying.
-    assert_eq!(session_sync(&None, &None, &m("gpt"), &None), Sync::Apply);
+    assert_eq!(session_sync(&c("", ""), &c("gpt", "")), Sync::Apply);
+    let auto = |tier: &str| ModelChoice::new(None, None, m(tier), None);
+    assert_eq!(session_sync(&auto("balance"), &auto("intelligence")), Sync::Apply);
+    let long = ModelChoice::new(m("gpt-6-astra"), None, None, m("long_context"));
+    assert_eq!(session_sync(&c("gpt-6-astra", ""), &long), Sync::Apply);
+  }
+
+  #[test]
+  fn tiers_only_stick_where_they_apply() {
+    // An Auto tier needs Auto; a context tier needs a model; unknown ones drop.
+    let choice = ModelChoice::new(m("gpt-6-astra"), m(" high "), m("balance"), m("LONG_CONTEXT"));
+    assert_eq!((choice.effort.as_deref(), choice.auto_tier, choice.context_tier.as_deref()), (Some("high"), None, Some("long_context")));
+    let auto = ModelChoice::new(m("auto"), None, m("efficiency"), m("long_context"));
+    assert_eq!((auto.model, auto.auto_tier.as_deref(), auto.context_tier), (None, Some("efficiency"), None));
+    assert_eq!(ModelChoice::new(None, None, m("not a tier!"), None).auto_tier, None);
+    assert_eq!(ModelChoice::new(m("gpt-6-astra"), None, None, m("huge")).context_tier, None);
+    // On Auto, Copilot decides how hard the model thinks too.
+    assert_eq!(ModelChoice::new(None, m("high"), None, None).effort, None);
+  }
+
+  #[test]
+  fn long_context_models_offer_both_windows_with_their_sizes() {
+    let astra: Model = serde_json::from_value(json!({
+      "id": "gpt-6-astra",
+      "name": "GPT-6 Astra",
+      "vendor": "OpenAI",
+      "capabilities": { "limits": { "max_output_tokens": 128000, "max_prompt_tokens": 272000 } },
+      "billing": { "tokenPrices": { "maxPromptTokens": 272000, "longContext": { "maxPromptTokens": 922000 } } }
+    }))
+    .unwrap();
+    let dto = map_model(&astra).unwrap();
+    assert_eq!(dto.vendor.as_deref(), Some("OpenAI"));
+    let tiers: Vec<(&str, u64)> = dto.context_tiers.iter().map(|t| (t.tier.as_str(), t.tokens)).collect();
+    assert_eq!(tiers, [("default", 400_000), ("long_context", 1_050_000)]);
+    let plain: Model = serde_json::from_value(json!({
+      "id": "gpt-6-luna", "name": "GPT-6 Luna", "capabilities": { "limits": { "max_output_tokens": 128000 } }
+    }))
+    .unwrap();
+    assert!(map_model(&plain).unwrap().context_tiers.is_empty());
   }
 }

@@ -12,9 +12,11 @@ After an app is deployed, you can share it with people or groups in your Microso
 For each recipient, Fabricator grants:
 
 - **Contributor** on the deployed app's Fabric workspace.
-- **Build** access to each semantic model the app uses from a different workspace.
+- **Build** access to each semantic model the app reads from a different workspace: the models it connects to through Rayfin semantic model connectors, and the ones in its `fabric.yaml`.
 
 Semantic models in the same workspace are marked **Covered by workspace** because the workspace role already covers them.
+
+An app that reads a semantic model as each person who uses it, such as a [migrated Power BI report](/docs/build/migrate-power-bi#share-a-migrated-app), only shows the model's data to people with Build permission on it. Sharing from Fabricator takes care of that.
 
 > [!IMPORTANT]
 > **Contributor** is broad workspace access. Share only with people who should be able to contribute to the app's Fabric workspace.

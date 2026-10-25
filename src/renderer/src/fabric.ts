@@ -19,14 +19,21 @@ export function fabricWorkspaceUrl(workspaceId?: string): string | undefined {
   return `https://app.fabric.microsoft.com/groups/${id}/`
 }
 
+/** A workspace one of your apps uses, and when it last did (ms; 0 when unknown). */
+export interface WorkspaceUse {
+  /** A workspace id, or briefly its display name (see {@link StudioProject.workspace}). */
+  workspace: string
+  at: number
+}
+
 /**
  * The workspaces your apps use, most recently used first: each app's recorded
- * {@link StudioProject.workspace} (an id, or briefly a display name), ordered by
+ * {@link StudioProject.workspace} (an id, or briefly a display name), timed by
  * `lastDeploy.at`, which a deploy or opening the app updates. Team apps are left
- * out, since their pipeline deploys them. The deploy picker lists these first.
+ * out, since their pipeline deploys them.
  */
-export function recentWorkspaces(projects: readonly StudioProject[]): string[] {
-  const latest = new Map<string, { workspace: string; at: number }>()
+export function workspaceUses(projects: readonly StudioProject[]): WorkspaceUse[] {
+  const latest = new Map<string, WorkspaceUse>()
   for (const p of projects) {
     const workspace = p.workspace?.trim()
     if (!workspace || p.team) continue
@@ -35,5 +42,11 @@ export function recentWorkspaces(projects: readonly StudioProject[]): string[] {
     const seen = latest.get(key)
     if (!seen || at > seen.at) latest.set(key, { workspace, at })
   }
-  return [...latest.values()].sort((a, b) => b.at - a.at).map((r) => r.workspace)
+  return [...latest.values()].sort((a, b) => b.at - a.at)
+}
+
+/** The workspaces your apps use, most recently used first (see {@link workspaceUses}).
+ *  The deploy picker lists these first. */
+export function recentWorkspaces(projects: readonly StudioProject[]): string[] {
+  return workspaceUses(projects).map((r) => r.workspace)
 }

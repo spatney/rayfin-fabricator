@@ -101,6 +101,10 @@ local.settings.json
 /rayfin/.*.tmp
 rayfin.config.json
 .rayfin/
+
+# Fabricator's working files for this computer, such as a report migration's
+# page images
+.fabricator/
 ";
 
 /// One start at a time, so two callers can't both create the repository.

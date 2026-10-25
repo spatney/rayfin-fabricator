@@ -15,10 +15,12 @@ import type {
   AdvisorUiState,
   AdvisorDismissReason,
   ChatToolCall,
+  ContextTier,
   RayfinVersionInfo,
   ReasoningEffort,
   StudioProject
 } from '@shared/ipc'
+import { selectionArgs, selectionOf, type ModelSelection } from '../modelSelection'
 import { quickRefs, runQuickChecks, type QuickCheckResult } from './engine'
 import { isCurrent, normalizeSnapshot, type NormalizedSnapshot } from './legacy'
 import {
@@ -41,6 +43,8 @@ import {
 
 const MODEL_KEY = 'rayfin.advisor.aiModel'
 const EFFORT_KEY = 'rayfin.advisor.aiEffort'
+const AUTO_TIER_KEY = 'rayfin.advisor.aiAutoTier'
+const CONTEXT_TIER_KEY = 'rayfin.advisor.aiContextTier'
 const SAVE_DELAY_MS = 500
 const QUICK_DELAY_MS = 350
 const MAX_ACTIVITY = 200
@@ -81,9 +85,9 @@ export interface AdvisorController {
   review: ReviewRun
   derived: DerivedAdvisor
   state: AdvisorUiState
-  model: string
-  effort: ReasoningEffort | ''
-  setModel: (model: string, effort: ReasoningEffort | '') => void
+  /** The model the Advisor's own sessions use (kept on this computer). */
+  selection: ModelSelection
+  setSelection: (next: ModelSelection) => void
   refreshQuick: () => void
   startReview: () => Promise<void>
   cancelReview: () => void
@@ -160,8 +164,14 @@ export function useAdvisor(
   const [explains, setExplains] = useState<Record<string, ExplainState>>({})
   const [explaining, setExplaining] = useState<string | null>(null)
   const [verify, setVerify] = useState<VerifyRun>(IDLE_VERIFY)
-  const [model, setModelState] = useState(() => readStored(MODEL_KEY))
-  const [effort, setEffortState] = useState<ReasoningEffort | ''>(() => readStored(EFFORT_KEY) as ReasoningEffort | '')
+  const [selection, setSelectionState] = useState<ModelSelection>(() =>
+    selectionOf({
+      model: readStored(MODEL_KEY),
+      effort: readStored(EFFORT_KEY) as ReasoningEffort | '',
+      autoTier: readStored(AUTO_TIER_KEY),
+      contextTier: readStored(CONTEXT_TIER_KEY) as ContextTier | ''
+    })
+  )
 
   const projectRef = useRef(projectId)
   projectRef.current = projectId
@@ -181,11 +191,12 @@ export function useAdvisor(
   const explainingRef = useRef<string | null>(null)
   const verifyIdRef = useRef<string | null>(null)
 
-  const setModel = useCallback((next: string, nextEffort: ReasoningEffort | '') => {
-    setModelState(next)
-    setEffortState(nextEffort)
-    writeStored(MODEL_KEY, next)
-    writeStored(EFFORT_KEY, nextEffort)
+  const setSelection = useCallback((next: ModelSelection) => {
+    setSelectionState(next)
+    writeStored(MODEL_KEY, next.model)
+    writeStored(EFFORT_KEY, next.effort)
+    writeStored(AUTO_TIER_KEY, next.autoTier)
+    writeStored(CONTEXT_TIER_KEY, next.contextTier)
   }, [])
 
   // Run the quick checks now; a request while one is running queues one more pass.
@@ -352,8 +363,7 @@ export function useAdvisor(
       const last = deepRef.current?.report.ok ? deepRef.current.report.findings : []
       const open = last.filter((f) => f.ruleId && !s.dismissed[f.id] && !s.muted[f.ruleId] && !s.resolved[f.id])
       const snapshot = await window.api.advisor.run(id, {
-        model: model || undefined,
-        effort: effort || undefined,
+        ...selectionArgs(selection),
         facts: base.facts,
         quick: quickRefs(base.findings),
         previous: quickRefs(open)
@@ -374,7 +384,7 @@ export function useAdvisor(
         setReview({ ...IDLE_REVIEW, error: cancelledRef.current ? undefined : errorText(err) })
       }
     }
-  }, [model, effort])
+  }, [selection])
 
   const cancelReview = useCallback(() => {
     const id = projectRef.current
@@ -391,7 +401,7 @@ export function useAdvisor(
       setExplaining(f.id)
       setExplains((prev) => ({ ...prev, [f.id]: { status: 'loading', text: '' } }))
       window.api.advisor
-        .explain(id, f.id, f, model || undefined, effort || undefined)
+        .explain(id, f.id, f, selectionArgs(selection))
         .then((full) => {
           if (projectRef.current !== id) return
           setExplains((prev) => ({ ...prev, [f.id]: { status: 'done', text: full } }))
@@ -416,7 +426,7 @@ export function useAdvisor(
           }
         })
     },
-    [model, effort]
+    [selection]
   )
 
   const cancelExplain = useCallback(() => {
@@ -432,7 +442,7 @@ export function useAdvisor(
       verifyIdRef.current = verifyId
       setVerify({ running: true, ids: findings.map((f) => f.id) })
       try {
-        const verdicts = await window.api.advisor.verify(id, verifyId, findings, model || undefined, effort || undefined)
+        const verdicts = await window.api.advisor.verify(id, verifyId, findings, selectionArgs(selection))
         if (projectRef.current !== id) return
         setState((s) => applyVerdicts(s, verdicts, findings, new Date().toISOString()))
         setVerify(IDLE_VERIFY)
@@ -444,7 +454,7 @@ export function useAdvisor(
         if (verifyIdRef.current === verifyId) verifyIdRef.current = null
       }
     },
-    [model, effort]
+    [selection]
   )
 
   const cancelVerify = useCallback(() => {
@@ -491,9 +501,8 @@ export function useAdvisor(
     review,
     derived,
     state,
-    model,
-    effort,
-    setModel,
+    selection,
+    setSelection,
     refreshQuick,
     startReview,
     cancelReview,

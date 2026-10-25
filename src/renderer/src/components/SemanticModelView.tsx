@@ -21,10 +21,13 @@ import {
 import {
   buildSemanticModel,
   deriveSemanticEdges,
+  type DiagramColumn,
   type SemanticEdgeMeta,
   type SemanticModel
 } from '../model/semanticModel'
 import type { SemanticModelRef } from '../model/fabricConfig'
+import { connectorKind, humanize } from '../model/architecture'
+import { connectorDir, sqlDiagram, usedTableCount, type SqlSourceModel } from '../model/sqlSource'
 import { tokenizeDax } from '../model/daxHighlight'
 import {
   getCachedSchema,
@@ -41,17 +44,28 @@ import { ViewHead } from './blueprint/ViewHead'
 interface Props {
   /** Project id — used to persist manual card positions per project. */
   projectId: string
-  /** The app's semantic model(s), from `fabric.yaml` and connectors; at least one. */
+  /** The app's semantic model(s), from `fabric.yaml` and connectors. */
   models: SemanticModelRef[]
+  /** The tables of the app's SQL connectors, read from the project. */
+  sqlSources?: SqlSourceModel[]
   /** Bumped by the parent when the model may have changed (e.g. after a deploy). */
   refreshKey: number
   /** Refresh app auth after sign-in; rejection prevents retrying the schema query. */
   onSignedIn?: () => Promise<void> | void
-  /** Show one model (`workspaceId:itemId`, lowercase), asked for from elsewhere. */
+  /** Open a project file in Code, such as a table's entity file. */
+  onOpenFile?: (path: string) => void
+  /** Hand a prompt to the Build chat (stage stages it in the composer). */
+  onSendToChat?: (display: string, prompt: string, stage?: boolean) => void
+  /** Show one source, asked for from elsewhere: a model's `workspaceId:itemId` (lowercase) or a SQL source's key. */
   selectRequest?: { key: string; nonce: number } | null
 }
 
 const modelKey = (m: SemanticModelRef): string => `${m.workspaceId}:${m.itemId}`.toLowerCase()
+
+/** One source the view can draw: a semantic model, read live, or a SQL connector's tables. */
+type DataSource =
+  | { kind: 'semantic'; key: string; label: string; icon: string; typeLabel: string; ref: SemanticModelRef }
+  | { kind: 'sql'; key: string; label: string; icon: string; typeLabel: string; sql: SqlSourceModel }
 
 interface XY {
   x: number
@@ -100,15 +114,19 @@ const MAX_SCALE = 2.2
 const DRAG_THRESHOLD = 4
 const ROW_H = 26
 const STORAGE_PREFIX = 'rayfin.semantic.layout.'
+const SQL_STORAGE_PREFIX = 'rayfin.sql.layout.'
 const CROW_LEN = 12
 const CROW_SPREAD = 6
 const ONE_OFF = 8
 const ONE_HALF = 6
+const NO_SQL_SOURCES: SqlSourceModel[] = []
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v))
 
-/** A compact type chip for a semantic column's data type. */
-function columnChip(dataType?: string): { label: string; cls: string } {
+/** A compact type chip for a column's data type: a SQL column's type as written, or a semantic type in a word. */
+function columnChip(col: DiagramColumn): { label: string; cls: string } {
+  if (col.sql) return { label: col.sql.typeLabel, cls: `semantic-chip--${col.sql.family}` }
+  const dataType = col.dataType
   const t = (dataType ?? '').toLowerCase()
   if (!t) return { label: '—', cls: 'semantic-chip--unknown' }
   if (/bool/.test(t)) return { label: 'bool', cls: 'semantic-chip--bool' }
@@ -119,6 +137,17 @@ function columnChip(dataType?: string): { label: string; cls: string } {
   if (/(string|text|char)/.test(t)) return { label: 'text', cls: 'semantic-chip--text' }
   if (/binary/.test(t)) return { label: 'binary', cls: 'semantic-chip--blob' }
   return { label: dataType ?? '—', cls: 'semantic-chip--unknown' }
+}
+
+/** A SQL column's row tooltip: its type, whether it can be empty, and where its values come from. */
+function sqlColumnTitle(col: DiagramColumn): string {
+  const sql = col.sql!
+  const parts = [`${sql.typeLabel}, ${sql.nullable ? 'can be empty' : 'required'}`]
+  if (col.isKey) parts.push('primary key')
+  if (sql.references) parts.push(`references ${sql.references}`)
+  if (sql.generated) parts.push(`filled in by the database${sql.generated === 'auto' ? '' : ` (${sql.generated})`}`)
+  if (!sql.mapped) parts.push('not in the app’s entity')
+  return parts.join(' · ')
 }
 
 function markerKind(m: EndMarker): 'one' | 'many' | null {
@@ -134,13 +163,13 @@ function estimateHeight(table: SemanticModel['tables'][number]): number {
   const shown = Math.min(table.measures.length, MEASURE_PREVIEW)
   const more = table.measures.length > MEASURE_PREVIEW ? ROW_H : 0
   const measures = table.measures.length ? 22 + shown * ROW_H + more : 0
-  const foot = table.storageMode || table.description ? 30 : 0
+  const foot = table.storageMode || table.description || table.sql ? 30 : 0
   return head + cols + measures + foot + 10
 }
 
-function loadStoredPositions(projectId: string): Record<string, XY> {
+function loadStoredPositions(storageKey: string): Record<string, XY> {
   try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + projectId)
+    const raw = localStorage.getItem(storageKey)
     if (!raw) return {}
     const parsed = JSON.parse(raw)
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, XY>) : {}
@@ -149,25 +178,83 @@ function loadStoredPositions(projectId: string): Record<string, XY> {
   }
 }
 
+/** "Oct 25, 2026" for an ISO timestamp; undefined when it isn't one. */
+function shortDate(iso?: string): string | undefined {
+  const t = iso ? Date.parse(iso) : NaN
+  return Number.isNaN(t)
+    ? undefined
+    : new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+/** Ask Copilot to rediscover a SQL connector's tables without losing what the app built on it. */
+function discoverPrompt(source: SqlSourceModel): string {
+  const c = source.connector
+  const dir = connectorDir(c.name)
+  const add =
+    c.workspaceId && c.itemId
+      ? ` (\`npx rayfin connector add --type ${c.type} --workspace-id ${c.workspaceId} --item-id ${c.itemId} --name ${c.name}\`)`
+      : ''
+  return (
+    `Fabricator can't show the tables of the \`${c.name}\` connector (${c.type}) because \`${dir}/metadata.json\` ` +
+    `is missing or lists no tables. Run Rayfin's schema discovery for it again${add} so metadata.json lists its tables. ` +
+    `Keep the connector's \`operations\` and \`auth.type\` in \`rayfin/rayfin.yml\`, its entity files, and \`${dir}/schema.ts\` ` +
+    `as they are: \`connector add --yes\` overwrites schema.ts and the rayfin.yml entry, so restore them afterwards. ` +
+    `If discovery fails, tell me why instead of working around it.`
+  )
+}
+
+/** Ask Copilot to generate entities for the tables the app needs. */
+function entitiesPrompt(source: SqlSourceModel): string {
+  const c = source.connector
+  const dir = connectorDir(c.name)
+  return (
+    `Generate entity files for the tables of the \`${c.name}\` connector (${c.type}) that this app needs, from ` +
+    `\`${source.metadataFile ?? `${dir}/metadata.json`}\`, and replace the placeholder \`${dir}/schema.ts\` with the aggregate schema, following ` +
+    `https://rayfin.ai/docs/connectors/entity-generation.md. Ask me which tables to use if it isn't clear, and keep each ` +
+    `entity's \`@role\` actions within the connector's operations.`
+  )
+}
+
 export default function SemanticModelView({
   projectId,
   models,
+  sqlSources = NO_SQL_SOURCES,
   refreshKey,
   onSignedIn,
+  onOpenFile,
+  onSendToChat,
   selectRequest
 }: Props): JSX.Element {
-  // Start on the requested model, so the first query isn't for the wrong one.
-  const [selectedIdx, setSelectedIdx] = useState(() =>
-    Math.max(0, selectRequest ? models.findIndex((m) => modelKey(m) === selectRequest.key) : 0)
+  const sources = useMemo<DataSource[]>(
+    () => [
+      ...models.map(
+        (m): DataSource => ({
+          kind: 'semantic',
+          key: modelKey(m),
+          label: humanize(m.alias),
+          icon: 'graph',
+          typeLabel: 'Semantic model',
+          ref: m
+        })
+      ),
+      ...sqlSources.map((s): DataSource => {
+        const kind = connectorKind(s.connector.type)
+        return { kind: 'sql', key: s.key, label: humanize(s.connector.name), icon: kind.icon, typeLabel: kind.label, sql: s }
+      })
+    ],
+    [models, sqlSources]
   )
-  const selected = models[Math.min(selectedIdx, models.length - 1)] ?? models[0]
+  // Start on the requested source, so the first query isn't for the wrong one.
+  const [selectedKey, setSelectedKey] = useState<string | null>(() => selectRequest?.key ?? null)
+  const selected = sources.find((s) => s.key === selectedKey) ?? sources[0]
+  const semanticRef = selected?.kind === 'semantic' ? selected.ref : null
+  const sqlSource = selected?.kind === 'sql' ? selected.sql : null
   const handledSelect = useRef(selectRequest?.nonce ?? null)
   useEffect(() => {
     if (!selectRequest || handledSelect.current === selectRequest.nonce) return
     handledSelect.current = selectRequest.nonce
-    const idx = models.findIndex((m) => modelKey(m) === selectRequest.key)
-    if (idx >= 0) setSelectedIdx(idx)
-  }, [selectRequest, models])
+    if (sources.some((s) => s.key === selectRequest.key)) setSelectedKey(selectRequest.key)
+  }, [selectRequest, sources])
 
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [reloadTick, setReloadTick] = useState(0)
@@ -182,7 +269,18 @@ export default function SemanticModelView({
     return () => {
       ++loginSeqRef.current
     }
-  }, [projectId, selected?.workspaceId, selected?.itemId])
+  }, [projectId, semanticRef?.workspaceId, semanticRef?.itemId])
+
+  // A SQL source shows the tables the app uses unless asked for all of them.
+  const [usedOnly, setUsedOnly] = useState(true)
+  const usedTables = sqlSource ? usedTableCount(sqlSource) : 0
+  const allTables = sqlSource?.tables.length ?? 0
+  const canFilter = usedTables > 0 && usedTables < allTables
+  const showUsedOnly = canFilter && usedOnly
+  const sqlModel = useMemo(() => (sqlSource ? sqlDiagram(sqlSource, showUsedOnly) : null), [sqlSource, showUsedOnly])
+  const storageKey = sqlSource
+    ? `${SQL_STORAGE_PREFIX}${projectId}.${sqlSource.connector.name}.${showUsedOnly ? 'used' : 'all'}`
+    : STORAGE_PREFIX + projectId
 
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState<string | null>(null)
@@ -231,19 +329,20 @@ export default function SemanticModelView({
   // mere remount or selection change, which may be served from the schema cache.
   const loadTicks = useRef({ refreshKey, reloadTick })
 
-  const model = state.status === 'ok' ? state.model : null
+  const model = sqlSource ? sqlModel : state.status === 'ok' ? state.model : null
 
   // Load the live schema whenever the selected model, refresh key or an explicit
   // reload changes. Served from a session cache on mount / selection change so
   // toggling Data <-> Semantic (which remounts this view) doesn't re-query Fabric;
   // Refresh and a parent refreshKey bump always fetch fresh and update the cache.
+  // A SQL source is drawn from the project's files, so it has nothing to load.
   useEffect(() => {
-    if (!selected) return
     const prev = loadTicks.current
     const isRefresh = prev.refreshKey !== refreshKey || prev.reloadTick !== reloadTick
     loadTicks.current = { refreshKey, reloadTick }
+    if (!semanticRef) return
 
-    const key = schemaCacheKey(selected.workspaceId, selected.itemId)
+    const key = schemaCacheKey(semanticRef.workspaceId, semanticRef.itemId)
     if (!isRefresh) {
       const cached = getCachedSchema(key)
       if (cached) {
@@ -255,7 +354,7 @@ export default function SemanticModelView({
     let alive = true
     setState({ status: 'loading' })
     window.api.fabric
-      .semanticModelSchema(selected.workspaceId, selected.itemId)
+      .semanticModelSchema(semanticRef.workspaceId, semanticRef.itemId)
       .then((res) => {
         if (!alive) return
         if (res.ok) {
@@ -278,7 +377,7 @@ export default function SemanticModelView({
     return () => {
       alive = false
     }
-  }, [selected, refreshKey, reloadTick])
+  }, [semanticRef, refreshKey, reloadTick])
 
   const { derived, meta } = useMemo(
     () =>
@@ -355,7 +454,7 @@ export default function SemanticModelView({
           ? Math.min(2.6, Math.max(1.3, vp.clientWidth / vp.clientHeight))
           : undefined
       const auto = computeLayout(nodes, layoutEdges, { targetAspect }).positions
-      const stored = useStored ? loadStoredPositions(projectId) : {}
+      const stored = useStored ? loadStoredPositions(storageKey) : {}
       const merged = new Map<string, XY>()
       for (const [name, rect] of auto) {
         const s = stored[name]
@@ -366,7 +465,7 @@ export default function SemanticModelView({
       }
       return merged
     },
-    [projectId]
+    [storageKey]
   )
 
   useLayoutEffect(() => {
@@ -388,11 +487,11 @@ export default function SemanticModelView({
       obj[name] = { x: Math.round(p.x), y: Math.round(p.y) }
     })
     try {
-      localStorage.setItem(STORAGE_PREFIX + projectId, JSON.stringify(obj))
+      localStorage.setItem(storageKey, JSON.stringify(obj))
     } catch {
       /* best-effort */
     }
-  }, [projectId])
+  }, [storageKey])
 
   const isCollapsed = useCallback(
     (name: string): boolean => (collapsed.has(name) ? collapsed.get(name)! : collapsedAll),
@@ -736,102 +835,138 @@ export default function SemanticModelView({
 
   // -- Render states ---------------------------------------------------------
 
-  const picker =
-    models.length > 1 ? (
-      <div className="semantic-model-picker" role="group" aria-label="Semantic model">
-        {models.map((m, i) => (
-          <button
-            key={`${m.workspaceId}:${m.itemId}`}
-            className={`seg-btn${i === selectedIdx ? ' seg-btn--active' : ''}`}
-            onClick={() => setSelectedIdx(i)}
-          >
-            {m.alias}
-          </button>
-        ))}
+  // Every state shows the sources, so one that can't be read never hides the others.
+  const sourceBar =
+    sources.length > 1 ? (
+      <div className="semantic-sources">
+        <div className="seg semantic-seg" role="group" aria-label="Fabric data">
+          {sources.map((s) => (
+            <button
+              key={s.key}
+              className={`seg-btn${s === selected ? ' seg-btn--active' : ''}`}
+              aria-pressed={s === selected}
+              onClick={() => setSelectedKey(s.key)}
+            >
+              <Codicon name={s.icon} />
+              {s.label}{' '}
+              <span className="semantic-seg-note">{s.typeLabel}</span>
+            </button>
+          ))}
+        </div>
       </div>
     ) : null
+  const frame = (content: JSX.Element): JSX.Element => (
+    <div className="semantic-view">
+      {sourceBar}
+      {content}
+    </div>
+  )
 
-  if (state.status === 'loading') {
-    return (
-      <div className="semantic-view">
-        <div className="semantic-empty">Reading your semantic model…</div>
-      </div>
-    )
-  }
+  if (!selected) return frame(<div className="semantic-empty">There’s no Fabric data to draw.</div>)
 
-  if (state.status === 'needs-login') {
-    return (
-      <div className="semantic-view">
-        <div className="semantic-empty semantic-empty--cta">
-          <div className="semantic-empty-title">Sign in to view the semantic model</div>
-          <p className="semantic-empty-sub">
-            The semantic model is read live from Fabric, so you need an active Fabric session.
-          </p>
+  if (sqlSource && !sqlSource.tables.length) {
+    const discovered = shortDate(sqlSource.discoveredAt)
+    return frame(
+      <div className="semantic-empty semantic-empty--cta">
+        <div className="semantic-empty-title">No tables to draw yet</div>
+        <p className="semantic-empty-sub">
+          {sqlSource.origin === 'metadata' ? (
+            <>Rayfin found no tables in {selected.label} when it last looked{discovered ? ` (${discovered})` : ''}.</>
+          ) : (
+            <>
+              Fabricator draws a source’s tables from the <code>metadata.json</code> Rayfin writes when it adds the
+              connector, and from the app’s entity files. <code>{connectorDir(sqlSource.connector.name)}/</code> has
+              neither yet.
+            </>
+          )}
+        </p>
+        {onSendToChat && (
           <button
             className="btn btn--primary"
-            disabled={reauthing}
-            onClick={() => void signInAndReload('rayfin')}
+            onClick={() => onSendToChat(`Discover the tables in ${selected.label}`, discoverPrompt(sqlSource), true)}
           >
-            {reauthing ? 'Signing in…' : 'Sign in to Fabric'}
+            Discover the tables with Copilot
           </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (state.status === 'needs-az') {
-    return (
-      <div className="semantic-view">
-        <div className="semantic-empty semantic-empty--cta">
-          <div className="semantic-empty-title">Sign in to Azure to view the semantic model</div>
-          <p className="semantic-empty-sub">
-            The semantic model’s schema is read live from Fabric using your Azure CLI session. Sign
-            in with <code>az login</code> to continue.
+        )}
+        {sqlSource.warnings.map((w, i) => (
+          <p key={i} className="semantic-empty-note">
+            {w}
           </p>
-          <button
-            className="btn btn--primary"
-            disabled={reauthing}
-            onClick={() => void signInAndReload('az')}
-          >
-            {reauthing ? 'Signing in…' : 'Sign in to Azure'}
-          </button>
-        </div>
+        ))}
       </div>
     )
   }
 
-  if (state.status === 'error') {
-    return (
-      <div className="semantic-view">
-        <div className="semantic-empty semantic-empty--cta">
-          <div className="semantic-empty-title">Couldn’t read the semantic model</div>
-          <p className="semantic-empty-sub">{state.error}</p>
-          <button className="btn btn--primary" onClick={() => setReloadTick((n) => n + 1)}>
-            Try again
-          </button>
-        </div>
+  if (!sqlSource && state.status === 'loading') {
+    return frame(<div className="semantic-empty">Reading your semantic model…</div>)
+  }
+
+  if (!sqlSource && state.status === 'needs-login') {
+    return frame(
+      <div className="semantic-empty semantic-empty--cta">
+        <div className="semantic-empty-title">Sign in to view the semantic model</div>
+        <p className="semantic-empty-sub">
+          The semantic model is read live from Fabric, so you need an active Fabric session.
+        </p>
+        <button
+          className="btn btn--primary"
+          disabled={reauthing}
+          onClick={() => void signInAndReload('rayfin')}
+        >
+          {reauthing ? 'Signing in…' : 'Sign in to Fabric'}
+        </button>
+      </div>
+    )
+  }
+
+  if (!sqlSource && state.status === 'needs-az') {
+    return frame(
+      <div className="semantic-empty semantic-empty--cta">
+        <div className="semantic-empty-title">Sign in to Azure to view the semantic model</div>
+        <p className="semantic-empty-sub">
+          The semantic model’s schema is read live from Fabric using your Azure CLI session. Sign
+          in with <code>az login</code> to continue.
+        </p>
+        <button
+          className="btn btn--primary"
+          disabled={reauthing}
+          onClick={() => void signInAndReload('az')}
+        >
+          {reauthing ? 'Signing in…' : 'Sign in to Azure'}
+        </button>
+      </div>
+    )
+  }
+
+  if (!sqlSource && state.status === 'error') {
+    return frame(
+      <div className="semantic-empty semantic-empty--cta">
+        <div className="semantic-empty-title">Couldn’t read the semantic model</div>
+        <p className="semantic-empty-sub">{state.error}</p>
+        <button className="btn btn--primary" onClick={() => setReloadTick((n) => n + 1)}>
+          Try again
+        </button>
       </div>
     )
   }
 
   if (!model || !model.hasModel) {
-    return (
-      <div className="semantic-view">
-        <div className="semantic-empty semantic-empty--cta">
-          <div className="semantic-empty-title">This semantic model has no tables</div>
-          <p className="semantic-empty-sub">
-            The connected model returned no tables. It may still be loading data in Fabric.
-          </p>
-          <button className="btn btn--primary" onClick={() => setReloadTick((n) => n + 1)}>
-            Refresh
-          </button>
-        </div>
+    return frame(
+      <div className="semantic-empty semantic-empty--cta">
+        <div className="semantic-empty-title">This semantic model has no tables</div>
+        <p className="semantic-empty-sub">
+          The connected model returned no tables. It may still be loading data in Fabric.
+        </p>
+        <button className="btn btn--primary" onClick={() => setReloadTick((n) => n + 1)}>
+          Refresh
+        </button>
       </div>
     )
   }
 
   const tableCount = model.tables.length
   const relCount = derived.pairs.length + derived.selfs.length
+  const discovered = shortDate(sqlSource?.discoveredAt)
 
   const cardDimmed = (name: string): boolean => {
     if (matched && !matched.has(name)) return true
@@ -850,36 +985,86 @@ export default function SemanticModelView({
     return ''
   }
 
+  const cardinalityLegend = (
+    <>
+      <span className="model-legend-item">
+        <svg className="semantic-legend-mark" viewBox="0 0 24 14" width="24" height="14">
+          <path d="M2,7 H22 M7,2 V12" />
+        </svg>
+        one
+      </span>
+      <span className="model-legend-item">
+        <svg className="semantic-legend-mark" viewBox="0 0 24 14" width="24" height="14">
+          <path d="M2,7 H22 M22,7 L10,2 M22,7 L10,12" />
+        </svg>
+        many
+      </span>
+    </>
+  )
+
+  // What the app hasn't built on yet, with a way to ask Copilot for it.
+  const notice =
+    sqlSource && (usedTables === 0 || sqlSource.origin === 'entities') ? (
+      <div className="semantic-notice" role="note">
+        <Codicon name="info" className="semantic-notice-ico" />
+        <span className="semantic-notice-text">
+          {usedTables === 0
+            ? 'The app doesn’t use these tables yet.'
+            : 'Rayfin’s discovered tables (metadata.json) aren’t in the project, so this shows only the tables the app’s entity files describe.'}
+        </span>
+        {onSendToChat &&
+          (usedTables === 0 ? (
+            <button
+              className="btn btn--xs btn--ghost"
+              onClick={() => onSendToChat(`Use the tables in ${selected.label}`, entitiesPrompt(sqlSource), true)}
+            >
+              Use them with Copilot
+            </button>
+          ) : (
+            <button
+              className="btn btn--xs btn--ghost"
+              onClick={() => onSendToChat(`Discover the tables in ${selected.label}`, discoverPrompt(sqlSource), true)}
+            >
+              Discover the tables with Copilot
+            </button>
+          ))}
+      </div>
+    ) : null
+
   return (
     <div className="semantic-view">
       <ViewHead
-        title="Semantic model"
+        title="Fabric data"
         subtitle={
           <>
+            {sources.length === 1 && `${selected.label} · `}
             {tableCount} {tableCount === 1 ? 'table' : 'tables'}
             {relCount > 0 && ` · ${relCount} ${relCount === 1 ? 'relationship' : 'relationships'}`}
+            {discovered && ` · discovered ${discovered}`}
           </>
         }
         legend={
           <div className="model-legend" aria-hidden="true">
-            <span className="model-legend-item">
-              <svg className="semantic-legend-mark" viewBox="0 0 24 14" width="24" height="14">
-                <path d="M2,7 H22 M7,2 V12" />
-              </svg>
-              one
-            </span>
-            <span className="model-legend-item">
-              <svg className="semantic-legend-mark" viewBox="0 0 24 14" width="24" height="14">
-                <path d="M2,7 H22 M22,7 L10,2 M22,7 L10,12" />
-              </svg>
-              many
-            </span>
-            <span className="model-legend-item">
-              <span className="semantic-legend-dash" /> inactive
-            </span>
+            {cardinalityLegend}
+            {sqlSource ? (
+              <>
+                <span className="model-legend-item">
+                  <Codicon name="key" className="semantic-field-ico--pk" /> primary key
+                </span>
+                <span className="model-legend-item">
+                  <Codicon name="link" className="semantic-field-ico--fk" /> foreign key
+                </span>
+              </>
+            ) : (
+              <span className="model-legend-item">
+                <span className="semantic-legend-dash" /> inactive
+              </span>
+            )}
           </div>
         }
       />
+
+      {sourceBar}
 
       <div className="model-toolbar">
         <div className="model-search">
@@ -887,8 +1072,8 @@ export default function SemanticModelView({
           <input
             className="model-search-input"
             value={query}
-            placeholder="Search tables, columns & measures"
-            aria-label="Search tables, columns and measures"
+            placeholder={sqlSource ? 'Search tables & columns' : 'Search tables, columns & measures'}
+            aria-label={sqlSource ? 'Search tables and columns' : 'Search tables, columns and measures'}
             onChange={(e) => setQuery(e.target.value)}
           />
           {query && (
@@ -909,7 +1094,24 @@ export default function SemanticModelView({
           </button>
         )}
 
-        {picker}
+        {canFilter && (
+          <div className="seg semantic-seg" role="group" aria-label="Tables">
+            <button
+              className={`seg-btn${showUsedOnly ? ' seg-btn--active' : ''}`}
+              aria-pressed={showUsedOnly}
+              onClick={() => setUsedOnly(true)}
+            >
+              Used by the app <span className="semantic-seg-note">{usedTables}</span>
+            </button>
+            <button
+              className={`seg-btn${showUsedOnly ? '' : ' seg-btn--active'}`}
+              aria-pressed={!showUsedOnly}
+              onClick={() => setUsedOnly(false)}
+            >
+              All tables <span className="semantic-seg-note">{allTables}</span>
+            </button>
+          </div>
+        )}
 
         <button
           className="model-tool-btn"
@@ -936,14 +1138,30 @@ export default function SemanticModelView({
         <button className="model-tool-btn" onClick={() => fitTo()} title="Fit to view">
           <Codicon name="screen-full" />
         </button>
-        <button
-          className="model-tool-btn"
-          onClick={() => setReloadTick((n) => n + 1)}
-          title="Refresh from Fabric"
-        >
-          <Codicon name="refresh" />
-        </button>
+        {sqlSource ? (
+          sqlSource.metadataFile &&
+          onOpenFile && (
+            <button
+              className="model-tool-btn"
+              onClick={() => onOpenFile(sqlSource.metadataFile!)}
+              title="Open metadata.json"
+              aria-label="Open metadata.json"
+            >
+              <Codicon name="json" />
+            </button>
+          )
+        ) : (
+          <button
+            className="model-tool-btn"
+            onClick={() => setReloadTick((n) => n + 1)}
+            title="Refresh from Fabric"
+          >
+            <Codicon name="refresh" />
+          </button>
+        )}
       </div>
+
+      {notice}
 
       <div
         className="model-viewport"
@@ -1024,7 +1242,7 @@ export default function SemanticModelView({
                     dragging === table.name ? ' semantic-card--dragging' : ''
                   }${highlight === table.name ? ' semantic-card--active' : ''}${
                     table.isHidden ? ' semantic-card--hidden' : ''
-                  }`}
+                  }${table.sql && !table.sql.entity ? ' semantic-card--unused' : ''}`}
                   style={{ left: pos.x, top: pos.y, width: CARD_WIDTH }}
                   onPointerDown={(e) => onCardPointerDown(e, table.name)}
                   onMouseEnter={() => {
@@ -1073,14 +1291,21 @@ export default function SemanticModelView({
                     <>
                       <ul className="semantic-fields">
                         {table.columns.map((col) => {
-                          const chip = columnChip(col.dataType)
+                          const chip = columnChip(col)
+                          const sql = col.sql
                           return (
                             <li
                               key={col.name}
                               data-field={col.name}
-                              className={`semantic-field${col.isHidden ? ' semantic-field--hidden' : ''}`}
+                              className={`semantic-field${col.isHidden ? ' semantic-field--hidden' : ''}${
+                                sql && !sql.mapped ? ' semantic-field--unmapped' : ''
+                              }`}
                               title={
-                                col.expression ? `Calculated: ${col.expression}` : col.dataType
+                                sql
+                                  ? sqlColumnTitle(col)
+                                  : col.expression
+                                    ? `Calculated: ${col.expression}`
+                                    : col.dataType
                               }
                             >
                               <span className="semantic-field-gutter" aria-hidden="true">
@@ -1089,8 +1314,18 @@ export default function SemanticModelView({
                                     name="key"
                                     className="semantic-field-ico semantic-field-ico--pk"
                                   />
+                                ) : sql?.references ? (
+                                  <Codicon
+                                    name="link"
+                                    className="semantic-field-ico semantic-field-ico--fk"
+                                  />
                                 ) : (
                                   <span className="semantic-field-ico" />
+                                )}
+                                {sql && (
+                                  <span
+                                    className={`model-field-req${sql.nullable ? ' model-field-req--opt' : ''}`}
+                                  />
                                 )}
                               </span>
                               <span className="semantic-field-name">{col.name}</span>
@@ -1156,11 +1391,40 @@ export default function SemanticModelView({
                       )}
                     </>
                   )}
+
+                  {table.sql && (
+                    <div className="semantic-card-foot">
+                      {table.sql.entity ? (
+                        <button
+                          className="semantic-entity"
+                          data-no-drag
+                          disabled={!onOpenFile}
+                          title={[`Open ${table.sql.entity.file}`, ...table.sql.entity.grants].join(' · ')}
+                          onClick={() => onOpenFile?.(table.sql!.entity!.file)}
+                        >
+                          <Codicon name="symbol-class" />
+                          <span className="semantic-entity-name">{table.sql.entity.name}</span>
+                        </button>
+                      ) : (
+                        <span className="semantic-foot-desc">Not used by the app</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}
         </div>
       </div>
+
+      {sqlSource && sqlSource.warnings.length > 0 && (
+        <div className="model-warnings">
+          {sqlSource.warnings.map((w, i) => (
+            <div key={i} className="model-warning">
+              {w}
+            </div>
+          ))}
+        </div>
+      )}
 
       {measurePopover && (
         <div className="semantic-popover-scrim" onClick={() => setMeasurePopover(null)}>

@@ -10,7 +10,8 @@ import type {
   DesignRequest,
   DesignViewport
 } from '@shared/design'
-import { loadCopilotModels, pickDesignModel, type DesignModelPick } from '../copilotModels'
+import { loadCopilotModels, resolveDesignModel, type DesignModelPick } from '../copilotModels'
+import type { ModelSelection } from '../modelSelection'
 import { cropItems, thumbnail, type StagedShot } from './capture'
 import type { DeviceId } from './devices'
 import { readFabricatorTheme } from './hostTheme'
@@ -152,7 +153,15 @@ export function locateTargets(items: DesignItem[]): DesignLocateTarget[] {
     })
 }
 
-export function useDesignSession(projectId: string | null, surface: DesignSurface | null): DesignSession {
+/**
+ * Design mode's session. `modelChoice` is the model chosen in the Design bar;
+ * Auto (or null) lets Design pick a fast model itself.
+ */
+export function useDesignSession(
+  projectId: string | null,
+  surface: DesignSurface | null,
+  modelChoice: ModelSelection | null = null
+): DesignSession {
   const [queues, setQueues] = useState<Record<string, DesignItem[]>>({})
   const queuesRef = useRef(queues)
   const [active, setActive] = useState(false)
@@ -195,8 +204,13 @@ export function useDesignSession(projectId: string | null, surface: DesignSurfac
   )
 
   /** The model for Options and Polish, from the (cached, sign-in aware) model list. */
+  const modelChoiceRef = useRef(modelChoice)
+  modelChoiceRef.current = modelChoice
   const designModel = useCallback(
-    (): Promise<DesignModelPick> => loadCopilotModels().then(pickDesignModel).catch(() => ({ vision: false })),
+    (): Promise<DesignModelPick> =>
+      loadCopilotModels()
+        .catch(() => [])
+        .then((models) => resolveDesignModel(models, modelChoiceRef.current)),
     []
   )
 

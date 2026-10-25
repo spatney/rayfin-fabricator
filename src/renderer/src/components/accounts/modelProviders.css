@@ -1,0 +1,139 @@
+/* Accounts → Model providers (your own API keys), under the
+   accounts. The cards are Accounts' own (main.css, which loads after this
+   file), so rules that touch its selectors carry extra specificity. */
+
+.byok {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  scroll-margin-top: 12px;
+}
+
+.byok-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.byok-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.byok-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.acct-ico .brand-logo {
+  width: 18px;
+  height: 18px;
+}
+
+.byok-models {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 12px 10px 54px;
+  border-top: 1px solid var(--border);
+}
+
+.byok-models-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.byok-models-count {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.byok-model-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.byok-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.byok-model-check {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.byok-model-check input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.byok-model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.byok-model-meta {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.btn.byok-more {
+  align-self: flex-start;
+}
+
+.byok-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.byok-link:hover {
+  text-decoration: underline;
+}
+
+.byok-link .codicon[class*='codicon-'] {
+  font-size: 11px;
+}

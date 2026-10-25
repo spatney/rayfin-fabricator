@@ -34,6 +34,8 @@ use crate::services::diagnostics;
 use crate::services::emit::emit_chat_event;
 use crate::services::journal;
 use crate::services::history;
+use crate::services::byok;
+use crate::services::copilot::ModelChoice;
 use crate::services::store;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
@@ -47,12 +49,13 @@ const MAX_ATTEMPTS: u32 = 3;
 /// deploys) can legitimately run well past an hour.
 const TURN_TIMEOUT_MS: u64 = 2 * 60 * 60_000;
 
-/// Guidance prepended to each chat message while the Deploy manually experiment
-/// is on. Fabricator's always-on instructions say it deploys after every turn, so
-/// the exception travels with the message, as the team guidance does.
-const MANUAL_DEPLOY_NOTE: &str = "[Fabricator: the user turned on Deploy manually, so Fabricator doesn't deploy when this turn ends. The changes stay on this computer until the user selects Redeploy. Fabricator's local preview shows frontend changes as you make them, but it uses the deployed backend, so changes to data, permissions or functions work only after a deploy. Still don't deploy yourself. End by saying what to try in the preview and whether it needs Redeploy first.]";
+/// Guidance prepended to each chat message while the user has turned off
+/// "Deploy after each chat turn". Fabricator's always-on instructions say it
+/// deploys after every turn, so the exception travels with the message, as the
+/// team guidance does.
+const MANUAL_DEPLOY_NOTE: &str = "[Fabricator: the user turned off Deploy after each chat turn, so Fabricator doesn't deploy when this turn ends. The changes stay on this computer until the user deploys them. Fabricator's local preview shows frontend changes as you make them, but it uses the deployed backend, so changes to data, permissions or functions work only after a deploy. Still don't deploy yourself. End by saying what to try in the preview and whether it needs a deploy first.]";
 
-/// The text sent to Copilot for a chat message in `project_id`. Deploy manually
+/// The text sent to Copilot for a chat message in `project_id`. Manual deploy
 /// doesn't apply to team apps: their pipeline deploys them.
 fn turn_text(project_id: &str, text: &str, manual_deploy: bool) -> String {
   if manual_deploy && !crate::services::team::is_team_project_id(project_id) {
@@ -242,6 +245,12 @@ struct TurnCtx {
   lagged_events: u64,
   /// True if the event stream closed before a terminal state.
   stream_closed: bool,
+  /// The latest model response had no text and no tool call (a model that
+  /// stopped without doing anything; see `byok::CONTINUE_PROMPT`).
+  ended_empty: bool,
+  /// For a turn on a provider's model (your own key): the provider and model
+  /// names, to put its errors in plain language.
+  provider: Option<(String, String)>,
 }
 
 impl TurnCtx {
@@ -261,6 +270,8 @@ impl TurnCtx {
       response: None,
       lagged_events: 0,
       stream_closed: false,
+      ended_empty: false,
+      provider: None,
     }
   }
 
@@ -346,6 +357,7 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
     "assistant.message" => {
       let id = data.get("messageId").and_then(|v| v.as_str()).unwrap_or("").to_string();
       let content = data.get("content").and_then(|v| v.as_str()).unwrap_or("");
+      ctx.ended_empty = byok::is_empty_response(data);
       let total = content.chars().count();
       let have = *ctx.streamed.get(&id).unwrap_or(&0);
       if total > have {
@@ -472,7 +484,13 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
         .unwrap_or("Copilot reported an error.")
         .to_string();
       if ctx.saw_activity || !is_recoverable_session_error(&msg) {
-        sink(ChatEvent::Error { text: msg.clone() });
+        // A provider's error on the user's own key, in plain language.
+        let shown = ctx
+          .provider
+          .as_ref()
+          .and_then(|(provider, model)| byok::explain(provider, model, &msg))
+          .unwrap_or_else(|| msg.clone());
+        sink(ChatEvent::Error { text: shown });
       }
       ctx.errored = Some(msg);
       return Flow::Stop;
@@ -694,18 +712,39 @@ pub(crate) async fn run_turn(
   // preview` and Fabricator auto-deploys after the turn.
   let fab_tools = crate::services::agent_tools::fabricator_tools(app.clone(), project_id.clone());
 
-  // Open (or resume) this project's persistent SDK session, reconciling model/effort.
+  // Your own API keys: every session gets the provider registry so
+  // a thread can switch between Copilot's models and the user's own, and a turn
+  // on a provider's model first checks it can run, so it never quietly runs on
+  // another model.
+  let byok_registry = state.byok.session_registry();
+  let provider_model = project.model.clone().filter(|m| byok::is_provider_selection(m));
+  let provider = provider_model.as_deref().and_then(byok::describe);
+  let choice = ModelChoice::new(
+    project.model.clone(),
+    project.effort.clone(),
+    project.auto_tier.clone(),
+    project.context_tier.clone(),
+  );
+
+  // Open (or resume) this project's persistent SDK session, reconciling the model choice.
   let open_turn_session = || state.copilot.turn_session(
       &project_id,
       &ctx_info.cwd,
       &ctx_info.session_id,
-      project.model.clone(),
-      project.effort.clone(),
+      choice.clone(),
       Some(plan_handler.clone()),
       Some(user_input_handler.clone()),
       fab_tools.clone(),
+      byok_registry.clone(),
     );
-  let opened = match open_turn_session().await {
+  let first_open = match &provider_model {
+    Some(model) => match state.byok.ensure_ready(model) {
+      Ok(()) => open_turn_session().await,
+      Err(e) => Err(e),
+    },
+    None => open_turn_session().await,
+  };
+  let opened = match first_open {
     Ok(s) => s,
     Err(e) => {
       emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: e.clone() });
@@ -773,13 +812,22 @@ pub(crate) async fn run_turn(
     Closed,
   }
 
-  let mut ctx = TurnCtx::new(full);
+  let new_ctx = || {
+    let mut ctx = TurnCtx::new(full);
+    ctx.provider = provider.clone();
+    ctx
+  };
+  let mut ctx = new_ctx();
   let mut cancelled = false;
   let mut timed_out = false;
   let mut send_error: Option<String> = None;
   let mut attempt: u32 = 1;
   let mut reconnect = false;
   let mut reconnected = false;
+  // Once set, a provider's model stopped mid-turn and every further send asks
+  // it to continue: the user's message was already accepted, so it's never resent.
+  let mut continuation: Option<&str> = None;
+  let mut continues: u32 = 0;
 
   loop {
     if token.is_cancelled() {
@@ -787,7 +835,17 @@ pub(crate) async fn run_turn(
       break;
     }
     if attempt > 1 {
-      ctx = TurnCtx::new(full);
+      if continuation.is_none() {
+        ctx = new_ctx();
+      } else {
+        // Retrying a continuation keeps what the turn already did (its edits,
+        // the reply so far); only the failed attempt's outcome goes, or a
+        // continuation that then succeeds would still report the old error.
+        ctx.errored = None;
+        ctx.saw_result = false;
+        ctx.ended_empty = false;
+        ctx.stream_closed = false;
+      }
       cancelled = false;
       timed_out = false;
     }
@@ -821,10 +879,13 @@ pub(crate) async fn run_turn(
     // relative event order is preserved.
     let mut todos_dirty = false;
 
-    let mut opts = MessageOptions::new(turn_text(&project_id, &text, store::manual_deploy_enabled()));
-    if !attach.is_empty() {
-      opts = opts.with_attachments(attach.clone());
-    }
+    let opts = match continuation {
+      Some(prompt) => MessageOptions::new(prompt.to_string()),
+      None => {
+        let opts = MessageOptions::new(turn_text(&project_id, &text, store::manual_deploy_enabled()));
+        if attach.is_empty() { opts } else { opts.with_attachments(attach.clone()) }
+      }
+    };
     if let Err(e) = session.send(opts).await {
       // An explicit rejection means the message was not accepted. Reopen once,
       // but never replay an ambiguous transport failure or a turn that did work.
@@ -918,6 +979,26 @@ pub(crate) async fn run_turn(
       }
     }
 
+    // A provider's model can end its turn with an empty response, with no reply
+    // and no tool call. Ask it to carry on instead of stopping without a word,
+    // and give up (without the retries below) if it keeps doing it.
+    if provider_model.is_some() && ctx.saw_result && ctx.ended_empty && ctx.errored.is_none() && !cancelled && !timed_out {
+      if continues < byok::MAX_CONTINUES {
+        continues += 1;
+        emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Notice {
+          text: "The model stopped before finishing. Asking it to continue…".into(),
+        });
+        continuation = Some(byok::CONTINUE_PROMPT);
+        ctx.saw_result = false;
+        ctx.ended_empty = false;
+        continue;
+      }
+      let error = byok::STOPPED_EARLY.to_string();
+      emit_chat_event(&app, &project_id, &turn_id, ChatEvent::Error { text: error.clone() });
+      ctx.errored = Some(error);
+      break;
+    }
+
     if !cancelled && !timed_out && !ctx.saw_activity && ctx.lagged_events == 0 && !reconnected
       && ctx.errored.as_deref().is_some_and(is_recoverable_session_error)
     {
@@ -931,13 +1012,16 @@ pub(crate) async fn run_turn(
     }
 
     // Retry only a transient failure that struck before any work happened —
-    // re-sending the same prompt is then side-effect free.
+    // re-sending the same prompt is then side-effect free. A provider error
+    // that retrying can't fix (a rejected key, no credit, a request too big
+    // for the plan) isn't retried.
     let transient = !cancelled
       && !timed_out
       && !ctx.saw_activity
       && ctx.lagged_events == 0
       && attempt < MAX_ATTEMPTS
-      && ctx.errored.as_deref().map(|m| TRANSIENT_RE.is_match(m)).unwrap_or(false);
+      && ctx.errored.as_deref().map(|m| TRANSIENT_RE.is_match(m)).unwrap_or(false)
+      && !(provider_model.is_some() && ctx.errored.as_deref().is_some_and(byok::is_permanent));
     if !transient {
       break;
     }
@@ -1325,19 +1409,31 @@ pub async fn chat_export_plan(app: AppHandle, suggested_name: String, content: S
 
 #[tauri::command]
 pub fn chat_set_options(project_id: String, options: ChatOptions) {
-  let model = options.model.as_deref().map(str::trim).filter(|m| !m.is_empty()).map(|m| m.to_string());
+  let choice = ModelChoice::new(options.model, options.effort, options.auto_tier, options.context_tier);
   store::mutate_project(&project_id, |p| {
-    p.model = model;
-    p.effort = options.effort.clone();
+    p.model = choice.model;
+    p.effort = choice.effort;
+    p.auto_tier = choice.auto_tier;
+    p.context_tier = choice.context_tier;
   });
 }
 
 /// List the Copilot models available to the signed-in user, for the chat model
-/// picker. Returns an `Err` (the renderer then falls back to its static
+/// picker, followed by the models on the user's own keys while that experiment
+/// is on. Returns an `Err` (the renderer then falls back to its static
 /// suggestions) when the engine can't be reached or the user isn't signed in.
 #[tauri::command]
 pub async fn chat_models(state: State<'_, AppState>) -> Result<Vec<CopilotModel>, String> {
-  state.copilot.list_models().await
+  let mut models = state.copilot.list_models().await?;
+  models.extend(state.byok.picker_models());
+  Ok(models)
+}
+
+/// What Auto can optimize for ("Optimized for") on the signed-in account;
+/// `None` when Copilot offers no choice.
+#[tauri::command]
+pub async fn chat_auto_tiers(state: State<'_, AppState>) -> Result<Option<crate::types::AutoTiers>, String> {
+  state.copilot.auto_tiers().await
 }
 
 #[cfg(test)]
@@ -1384,6 +1480,45 @@ mod tests {
     let flow = map_event("session.idle", &json!({}), &mut |_e: ChatEvent| {}, &mut ctx);
     assert!(matches!(flow, Flow::Stop));
     assert!(ctx.saw_result);
+  }
+
+  #[test]
+  fn a_response_with_neither_reply_nor_tool_call_is_an_empty_stop() {
+    // gpt-oss garbled a grep call and the server dropped it: only reasoning came back.
+    let dropped_call = json!({"messageId":"m3","content":"","toolRequests":[],"reasoningText":"Escape dot."});
+    let mut ctx = TurnCtx::new(false);
+    collect(&[
+      ("assistant.message", json!({"messageId":"m1","content":"","toolRequests":[{"name":"grep"}]})),
+      ("assistant.message", dropped_call.clone()),
+      ("session.idle", json!({})),
+    ], &mut ctx);
+    assert!(ctx.ended_empty && ctx.saw_result);
+
+    let mut ctx = TurnCtx::new(false);
+    collect(&[
+      ("assistant.message", dropped_call),
+      ("assistant.message", json!({"messageId":"m4","content":"The cards are flat now.","toolRequests":[]})),
+    ], &mut ctx);
+    assert!(!ctx.ended_empty);
+  }
+
+  #[test]
+  fn provider_errors_on_your_own_key_read_plainly_but_stay_raw_for_diagnostics() {
+    let raw = "429 Request too large for gpt-6.1-sol in organization org-1 on tokens per min (TPM): Limit 30000, Requested 52000.";
+    let mut ctx = TurnCtx::new(false);
+    ctx.saw_activity = true;
+    ctx.provider = Some(("OpenAI".into(), "GPT-6.1 Sol".into()));
+    let events = collect(&[("session.error", json!({ "message": raw }))], &mut ctx);
+    match &events[..] {
+      [ChatEvent::Error { text }] => assert!(text.starts_with("This request is bigger than your OpenAI plan"), "{text}"),
+      _ => panic!("expected one error"),
+    }
+    assert_eq!(ctx.errored.as_deref(), Some(raw));
+    // A Copilot model's error is shown as is.
+    let mut ctx = TurnCtx::new(false);
+    ctx.saw_activity = true;
+    let events = collect(&[("session.error", json!({ "message": raw }))], &mut ctx);
+    assert!(matches!(&events[..], [ChatEvent::Error { text }] if text == raw));
   }
 
   #[test]

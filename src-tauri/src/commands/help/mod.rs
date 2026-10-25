@@ -598,7 +598,11 @@ async fn run_turn(
 
   let session = state
     .copilot
-    .transient_session_with(&cwd.to_string_lossy(), model, None, opts)
+    .transient_session_with(
+      &cwd.to_string_lossy(),
+      crate::services::copilot::ModelChoice::of(model, None),
+      opts,
+    )
     .await?;
   let sub = session.subscribe();
 

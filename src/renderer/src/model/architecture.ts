@@ -443,6 +443,16 @@ export function connectorKind(type: string): ConnectorKind {
   )
 }
 
+/** Connector types whose tables Rayfin discovers into `rayfin/connectors/<name>/metadata.json`. */
+export const SQL_CONNECTOR_TYPES: ReadonlySet<string> = new Set([
+  'fabric-sqldatabase',
+  'fabric-warehouse',
+  'fabric-sqlanalytics'
+])
+
+/** How the Fabric data view names a SQL connector's tables. */
+export const sqlSourceKey = (connectorName: string): string => `sql:${connectorName}`
+
 export interface AudienceKind {
   label: string
   icon: string
@@ -565,8 +575,10 @@ export interface SourceNode {
   functions: string[]
   /** Where it's declared, for "Open" actions. */
   files: string[]
-  /** `workspaceId:itemId` (lowercase) when the Semantic model view can draw it. */
+  /** `workspaceId:itemId` (lowercase) when the Fabric data view can draw the semantic model. */
   semanticKey?: string
+  /** {@link sqlSourceKey} when the Fabric data view can draw its tables. */
+  tablesKey?: string
   issues: Issue[]
 }
 
@@ -618,8 +630,10 @@ export interface AppArchitecture {
     /** Every secret, declared in rayfin.yml or read by the code, by name. */
     secrets: SecretEntry[]
   }
-  /** Semantic models the Semantic model view can draw (fabric.yaml + connectors). */
+  /** Semantic models the Fabric data view can draw (fabric.yaml + connectors). */
   semanticModels: SemanticModelRef[]
+  /** SQL connectors whose tables the Fabric data view draws, in rayfin.yml order. */
+  sqlConnectors: ConnectorConfig[]
 }
 
 /** One function secret: what rayfin.yml says about it and where the code reads it. */
@@ -1066,6 +1080,7 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
     const { identity, issues } = connectorIdentity(c)
     const id = sourceIdFor(c.itemId, `connector:${c.name.toLowerCase()}`)
     const semanticKey = c.type === 'fabric-semanticmodel' ? addSemantic(c.name, c.workspaceId, c.itemId) : undefined
+    const tablesKey = SQL_CONNECTOR_TYPES.has(c.type) ? sqlSourceKey(c.name) : undefined
     const existing = sources.get(id)
     if (existing) {
       existing.connectors.push(c)
@@ -1076,6 +1091,7 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
       existing.issues.push(...issues)
       if (identity === 'app') existing.identity = 'app'
       existing.semanticKey ??= semanticKey
+      existing.tablesKey ??= tablesKey
     } else {
       sources.set(id, {
         id,
@@ -1094,6 +1110,7 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
         functions: [],
         files: ['rayfin/rayfin.yml'],
         semanticKey,
+        tablesKey,
         issues: [...issues]
       })
     }
@@ -1134,7 +1151,8 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
     database,
     functions,
     keys: { used: scan.secretsUsed, declared: config.secrets, hardcoded: scan.hardcoded, secrets },
-    semanticModels
+    semanticModels,
+    sqlConnectors: config.connectors.filter((c) => SQL_CONNECTOR_TYPES.has(c.type))
   }
 }
 

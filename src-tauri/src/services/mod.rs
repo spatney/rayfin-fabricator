@@ -3,6 +3,7 @@
 
 pub mod agent_skills;
 pub mod agent_tools;
+pub mod byok;
 pub mod copilot;
 pub mod crashlog;
 pub mod design_locate;
@@ -26,6 +27,7 @@ pub mod preview;
 pub mod project_layout;
 pub mod project_mutation;
 pub mod redirect_uris;
+pub mod report_migration;
 pub mod semantic_model;
 pub mod store;
 pub mod team;

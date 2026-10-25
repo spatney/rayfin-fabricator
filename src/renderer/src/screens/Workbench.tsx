@@ -61,6 +61,9 @@ import { useAdvisor } from '../advisor/store'
 import { fixOutcomes } from '../advisor/lifecycle'
 import { fixPrompt, isVersionFinding } from '../advisor/prompts'
 import BlueprintTab from '../components/blueprint/BlueprintTab'
+import MigrationCard from '../components/migrate/MigrationCard'
+import MigrateReportScreen, { describePick, type ReportPick } from '../components/migrate/MigrateReportScreen'
+import { useMigration, type MigrationControl } from '../migration/useMigration'
 import { writeCodeTab, type CodeTab } from '../components/codeTab'
 import { useToast } from '../toast'
 import { authErrorMessage } from '../authErrors'
@@ -87,8 +90,15 @@ import {
   type ProjectView
 } from '../components/AppBar'
 import { DeploymentQueue } from '../deploymentQueue'
-import { recentWorkspaces } from '../fabric'
+import { workspaceUses } from '../fabric'
 import { useDesignSession, type DesignSurface } from '../design/useDesignSession'
+import { readStoredSelection, selectionArgs, writeStoredSelection, type ModelSelection } from '../modelSelection'
+import { toProjectName } from '../projectName'
+
+/** Where the Design bar's model is kept. */
+const DESIGN_MODEL_KEY = 'fabricator.design.model'
+/** The model a report migration's turns use, chosen before it starts and kept for the next one. */
+const MIGRATION_MODEL_KEY = 'fabricator.migration.model'
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
@@ -131,6 +141,8 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       questions,
       design,
       advisor,
+      data,
+      migration,
       prompt
     }) => {
       const cutOff = (role === 'assistant' && pending) || interrupted
@@ -158,6 +170,8 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         interrupted: cutOff ? true : undefined,
         design,
         advisor,
+        data,
+        migration,
         prompt
       }
     }
@@ -245,6 +259,10 @@ export default function Workbench({
   const [createMode, setCreateMode] = useState<'create' | 'deploy' | null>(null)
   /** Fullscreen "Open existing… → Clone from GitHub" flow. */
   const [showClone, setShowClone] = useState(false)
+  /** The Migrate a Power BI report picker is showing (experimental). */
+  const [showMigrate, setShowMigrate] = useState(false)
+  /** The report picked for migration, while its new project is being created. */
+  const [migrationPick, setMigrationPick] = useState<ReportPick | null>(null)
   const [opening, setOpening] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   /** Lazy-mount the Advisor view on first visit, then keep it mounted (hidden when
@@ -283,6 +301,8 @@ export default function Workbench({
   const [chatOutbound, setChatOutbound] = useState<(OutboundPrompt & { projectId: string }) | null>(
     null
   )
+  /** The open project's report migration, for turn completions (set below). */
+  const migrationRef = useRef<MigrationControl | null>(null)
   /** Project content view: the build loop (chat + preview) or the code browser. */
   const [viewMode, setViewMode] = useState<ProjectView>('build')
   /** A pending request to open a specific file (and line) in the Code tab. */
@@ -350,7 +370,7 @@ export default function Workbench({
   /** Live local preview: per-project Vite dev-server state. Present while a turn
    *  runs — started at turn start, cleared/stopped at turn end. A team app's
    *  `lingers` after its turn until the pipeline has deployed the saved change,
-   *  and with Deploy manually on, the open app's preview is `kept` running while
+   *  and with manual deploy, the open app's preview is `kept` running while
    *  the app is open. */
   const [devServers, setDevServers] = useState<
     Record<
@@ -432,7 +452,8 @@ export default function Workbench({
     onSettledRef.current?.()
   }, [projects, active, depsReadyId, activeChatLoaded, previewSettledId])
   /** The workspaces your apps use, most recent first; the deploy pickers list them first. */
-  const recentDeployWorkspaces = useMemo(() => recentWorkspaces(projects?.projects ?? []), [projects])
+  const appWorkspaces = useMemo(() => workspaceUses(projects?.projects ?? []), [projects])
+  const recentDeployWorkspaces = useMemo(() => appWorkspaces.map((u) => u.workspace), [appWorkspaces])
   // A share request that hasn't opened yet (the project was still preparing)
   // belongs to the project Help was answering about. Moving to another project
   // drops it, so it can't pop up when you come back later.
@@ -451,9 +472,30 @@ export default function Workbench({
   })
   /** The preview surface Design can run on, reported by the PreviewPane. */
   const [designSurface, setDesignSurface] = useState<DesignSurface | null>(null)
+  /** Accounts opens at this section (Model providers, from a model picker). */
+  const [accountsAt, setAccountsAt] = useState<'providers' | null>(null)
+  const openModelProviders = useCallback((): void => {
+    setAccountsAt('providers')
+    setShowAccounts(true)
+  }, [])
+  useEffect(() => {
+    if (!showAccounts) setAccountsAt(null)
+  }, [showAccounts])
+  /** The Design bar's model, kept on this computer. Auto lets Design pick a fast model. */
+  const [designChoice, setDesignChoiceState] = useState<ModelSelection>(() =>
+    readStoredSelection(DESIGN_MODEL_KEY)
+  )
+  const setDesignChoice = useCallback((next: ModelSelection): void => {
+    setDesignChoiceState(next)
+    writeStoredSelection(DESIGN_MODEL_KEY, next)
+  }, [])
   /** Design mode ("visual chat") for the active project. The queue is shared by
    *  the preview (where changes are made) and the chat composer (where they're sent). */
-  const design = useDesignSession(active?.id ?? null, viewMode === 'build' ? designSurface : null)
+  const design = useDesignSession(
+    active?.id ?? null,
+    viewMode === 'build' ? designSurface : null,
+    designChoice
+  )
 
   const onDevServerError = useCallback((reason: unknown): void => {
     toast.error(authErrorMessage(reason, 'The local preview could not be updated.'), {
@@ -494,7 +536,7 @@ export default function Workbench({
     return () => {
       mountedRef.current = false
       deployQueueRef.current.cancelPending('The workbench closed before this deployment started.')
-      // Nothing else closes a preview Deploy manually kept (or an after-turn
+      // Nothing else closes a preview manual deploy kept (or an after-turn
       // deploy kept on screen) once the workbench is gone.
       for (const [projectId, server] of Object.entries(devServersRef.current)) {
         if (server.kept || server.untilDeployed) void window.api.dev.stop(projectId).catch(() => {})
@@ -536,13 +578,12 @@ export default function Workbench({
 
   /** Team workspaces (experimental): the backend hides them while this is off. */
   const teamEnabled = Boolean(settings?.experiments?.teamWorkspaces)
-  /** Deploy manually (experimental) adds "Deploy after each chat turn" to the
-   *  deployment panel, off to start with: then chat turns don't deploy personal apps. */
-  const deployModeOffered = Boolean(settings?.experiments?.manualDeploy)
-  const manualDeploy = deployModeOffered && settings?.deployMode !== 'auto'
+  /** Chat turns deploy personal apps as they finish unless the user turned off
+   *  "Deploy after each chat turn" in the deployment panel. */
+  const manualDeploy = settings?.deployMode === 'manual'
   const manualDeployRef = useRef(manualDeploy)
   manualDeployRef.current = manualDeploy
-  // Previews Deploy manually kept close when it's turned off; turns start their own.
+  // Previews manual deploy kept close when it's turned off; turns start their own.
   useEffect(() => {
     if (manualDeploy) return
     for (const [projectId, server] of Object.entries(devServersRef.current)) {
@@ -831,6 +872,13 @@ export default function Workbench({
    */
   const requestUserDeploy = useCallback(
     async (projectId: string, workspace?: string): Promise<void> => {
+      // A chat turn holds the project's source until it finishes: a deploy now could only fail.
+      if ((chatsRef.current[projectId] ?? []).some((m) => m.role === 'assistant' && m.pending)) {
+        toast.info('Copilot is still working on this app. Deploy once the turn finishes.', {
+          title: 'Deploy waits for Copilot'
+        })
+        return
+      }
       // Team apps are deployed by their pipeline: save to the working branch instead.
       if (isTeamProject(projectId)) {
         void teamWorkRef.current.afterTurn(projectId, 'Restore an earlier version')
@@ -848,7 +896,7 @@ export default function Workbench({
       }
       void runDeploy(projectId, workspace)
     },
-    [runDeploy, isTeamProject]
+    [runDeploy, isTeamProject, toast]
   )
 
   // Switch the active Fabric deployment, then reflect the new URL/status.
@@ -976,7 +1024,7 @@ export default function Workbench({
       const existing = devServersRef.current[projectId]
       if (existing) {
         // Already starting / running; a team app's lingering preview, or one
-        // Deploy manually kept (or an after-turn deploy did), carries on.
+        // manual deploy kept (or an after-turn deploy did), carries on.
         if (existing.lingerSince || existing.kept || existing.untilDeployed) {
           setDevServers((all) =>
             all[projectId]
@@ -1043,10 +1091,13 @@ export default function Workbench({
     [toast, resolveLocalPort, onDevServerError]
   )
 
-  /** The last app and deployment Deploy manually started a local preview for. */
+  /** The last app and deployment manual deploy started a local preview for. */
   const keptAttemptRef = useRef<string | null>(null)
+  /** Bumped to reload the open app's local preview after a manual-deploy turn
+   *  that changed files (see PreviewPane's `localReload`). */
+  const [localReload, setLocalReload] = useState(0)
   /**
-   * Deploy manually: the deployed app falls behind your code, so the open app's
+   * Manual deploy: the deployed app falls behind your code, so the open app's
    * local preview runs whenever the app is open, not only during turns. One
    * started for another deployment is stopped, and the next run starts it again
    * with that deployment's backend settings.
@@ -1076,8 +1127,8 @@ export default function Workbench({
   )
 
   // After a chat turn, persist the transcript and auto-deploy when the agent left
-  // undeployed changes (unless Deploy manually is on).
-  const handleTurnComplete = useCallback(
+  // undeployed changes (unless the user deploys manually).
+  const afterTurn = useCallback(
     async (projectId: string, result: ChatTurnResult): Promise<void> => {
       previewSkippedRef.current.delete(projectId)
       const prompt = portPromptRef.current
@@ -1089,10 +1140,12 @@ export default function Workbench({
       const deployed = Boolean(projectsRef.current?.projects.find((p) => p.id === projectId)?.lastDeploy?.url)
       const mayDeploy = result.ok && !manual && !isTeamProject(projectId) && deployed
       if (devServersRef.current[projectId] && manual && activeIdRef.current === projectId) {
-        // Deploy manually: the open app's preview stays up while the app is open.
+        // Manual deploy: the open app's preview stays up while the app is open,
+        // and reloads once when the turn changed files.
         setDevServers((all) =>
           all[projectId] ? { ...all, [projectId]: { ...all[projectId], kept: true } } : all
         )
+        if (result.filesModified.length > 0) setLocalReload((n) => n + 1)
       } else if (devServersRef.current[projectId] && mayDeploy) {
         setDevServers((all) =>
           all[projectId] ? { ...all, [projectId]: { ...all[projectId], untilDeployed: true } } : all
@@ -1135,7 +1188,7 @@ export default function Workbench({
         })
         return
       }
-      // Deploy manually: the changes stay on this computer until you redeploy.
+      // Manual deploy: the changes stay on this computer until you deploy them.
       if (manual) return
       // A preview kept for a deploy that doesn't happen (or has ended) closes.
       const release = (): void => {
@@ -1143,7 +1196,7 @@ export default function Workbench({
       }
       try {
         const changed = await window.api.deploy.hasChanges(projectId)
-        // Deploy manually may have been turned on while that was checked.
+        // Deploying after each turn may have been turned off while that was checked.
         if (changed && mountedRef.current && !manualDeployRef.current) void runDeploy(projectId).finally(release)
         else release()
       } catch (reason) {
@@ -1156,6 +1209,20 @@ export default function Workbench({
       }
     },
     [refreshProjects, refreshRayfinVer, runDeploy, stopDevServer, toast, settlePortPrompt, isTeamProject]
+  )
+
+  // A report migration follows every turn: its page turns end here, and the
+  // next page waits until the after-turn work (and its deploy) has started.
+  const handleTurnComplete = useCallback(
+    async (projectId: string, result: ChatTurnResult): Promise<void> => {
+      migrationRef.current?.onTurnComplete(projectId, result.ok)
+      try {
+        await afterTurn(projectId, result)
+      } finally {
+        migrationRef.current?.onTurnSettled(projectId)
+      }
+    },
+    [afterTurn]
   )
 
   // Hydrate persisted chat history for the active project.
@@ -1750,7 +1817,8 @@ export default function Workbench({
     ? JSON.stringify([attention.tools, attention.signIns, attention.error ?? ''])
     : null
   /** The active project's own screen — not the launcher or a fullscreen flow. */
-  const onProjectScreen = Boolean(active) && !showHome && !createMode && !showClone && !teamMap
+  const onProjectScreen =
+    Boolean(active) && !showHome && !createMode && !showClone && !showMigrate && !teamMap
   // The active team app's status, with the run deploying it from the workspace
   // activity until its own status catches up (that's read right after a save).
   const activeTeamStatus = active?.team
@@ -1758,7 +1826,71 @@ export default function Workbench({
     : undefined
   /** Tabs and deploys unlock with the project's dependencies, like the pane below. */
   const projectToolsReady = onProjectScreen && depsReadyId === active?.id
-  // Deploy manually keeps the open app's local preview running (see keepLocalPreview).
+  const migrationEnabled = Boolean(settings?.experiments?.reportMigration)
+  const activeSyncing = Boolean(active?.team && teamWork.syncing(active.id))
+  /** Why a report migration's next turn can't start in the open project yet. */
+  const migrationWaiting = !active
+    ? undefined
+    : active.awaitingFirstDeploy && !active.team
+      ? 'The first page starts once the app is deployed.'
+      : active && deploys[active.id]?.running
+        ? 'Waiting for the deploy to finish.'
+        : activeSyncing
+          ? 'Waiting for the save to GitHub.'
+          : activeChatBusy
+            ? 'Waiting for Copilot to finish.'
+            : !projectToolsReady
+              ? 'Waiting for the app’s dependencies.'
+              : undefined
+  const migration = useMigration({
+    enabled: migrationEnabled,
+    project: active ?? null,
+    canStart: Boolean(active) && viewMode === 'build' && !migrationWaiting,
+    send: (projectId, turn) => {
+      setFocusPane(null)
+      setChatOutbound({
+        id: `migration-${Date.now()}`,
+        projectId,
+        display: turn.display,
+        prompt: turn.prompt,
+        shots: turn.shots,
+        migration: turn.migration
+      })
+    },
+    onError: (message) => toast.error(message, { title: 'Report migration' })
+  })
+  migrationRef.current = migration
+  /** The model a report migration uses, chosen on the New app from Power BI step. */
+  const [migrationModel, setMigrationModelState] = useState<ModelSelection>(() =>
+    readStoredSelection(MIGRATION_MODEL_KEY)
+  )
+  const setMigrationModel = useCallback((next: ModelSelection): void => {
+    setMigrationModelState(next)
+    writeStoredSelection(MIGRATION_MODEL_KEY, next)
+  }, [])
+  /** Start migrating a picked report into the project just created for it. */
+  const startMigration = useCallback(
+    async (projectId: string, pick: ReportPick, model: ModelSelection): Promise<void> => {
+      try {
+        // The project's chat model, so its migration turns use the one chosen.
+        await window.api.chat.setOptions(projectId, selectionArgs(model))
+        void refreshProjects()
+      } catch (reason) {
+        toast.error(authErrorMessage(reason, 'Could not set the migration’s Copilot model.'), {
+          title: 'Report migration'
+        })
+      }
+      try {
+        await window.api.migration.start(projectId, pick.source, pick.pages)
+      } catch (reason) {
+        toast.error(authErrorMessage(reason, 'Could not start migrating the report.'), {
+          title: 'Report migration'
+        })
+      }
+    },
+    [toast, refreshProjects]
+  )
+  // Manual deploy keeps the open app's local preview running (see keepLocalPreview).
   const activeId = active?.id
   const activeTarget = active ? deploymentKey(active) : ''
   const activeDeploying = Boolean(activeId && deploys[activeId]?.running)
@@ -1809,7 +1941,7 @@ export default function Workbench({
       <header className="app-bar">
         <div className="app-bar-row">
           <div className="app-bar-start">
-            {teamMap && !createMode && !showClone ? (
+            {teamMap && !createMode && !showClone && !showMigrate ? (
               <BackToProject
                 name={teamMap.from === 'project' && active ? active.name : 'projects'}
                 title={teamMap.from === 'project' && active ? `Return to ${active.name}` : 'Return to your projects'}
@@ -1823,7 +1955,7 @@ export default function Workbench({
                 onSelect={(p) => void selectProject(p)}
                 onShowAll={goHome}
               />
-            ) : active && showHome && !createMode && !showClone ? (
+            ) : active && showHome && !createMode && !showClone && !showMigrate ? (
               <BackToProject name={active.name} onClick={() => setShowHome(false)} />
             ) : null}
           </div>
@@ -1859,6 +1991,7 @@ export default function Workbench({
               <DeploymentsControl
                 project={active}
                 running={Boolean(deploys[active.id]?.running)}
+                chatBusy={activeChatBusy}
                 deploy={deploys[active.id]}
                 reconciling={reconciling.has(active.id)}
                 pending={pending[active.id]}
@@ -1892,14 +2025,10 @@ export default function Workbench({
                 onManageAccounts={() => setShowAccounts(true)}
                 onSignIn={() => void signIn()}
                 recentWorkspaces={recentDeployWorkspaces}
-                autoDeploy={
-                  deployModeOffered
-                    ? {
-                        on: !manualDeploy,
-                        onChange: (on) => onSettingsChange({ deployMode: on ? 'auto' : 'manual' })
-                      }
-                    : undefined
-                }
+                autoDeploy={{
+                  on: !manualDeploy,
+                  onChange: (on) => onSettingsChange({ deployMode: on ? 'auto' : 'manual' })
+                }}
                 onDiagnose={() => openHelp(DEPLOY_QUESTION)}
                 onWatch={() => {
                   setViewMode('build')
@@ -1942,7 +2071,18 @@ export default function Workbench({
         )}
       </header>
 
-      {showClone ? (
+      {showMigrate ? (
+        <MigrateReportScreen
+          recentWorkspaces={recentDeployWorkspaces}
+          onCancel={() => setShowMigrate(false)}
+          onPicked={(pick) => {
+            setMigrationPick(pick)
+            setShowMigrate(false)
+            setNewAppTeamId(null)
+            setCreateMode('create')
+          }}
+        />
+      ) : showClone ? (
         <CloneFromGitHubScreen
           onCancel={() => setShowClone(false)}
           onCloned={() => {
@@ -1958,8 +2098,12 @@ export default function Workbench({
           onCancel={() => {
             setCreateMode(null)
             setNewAppTeamId(null)
+            setMigrationPick(null)
           }}
-          onCreated={() => void refreshProjects()}
+          onCreated={(result) => {
+            void refreshProjects()
+            if (migrationPick && result.project) void startMigration(result.project.id, migrationPick, migrationModel)
+          }}
           onSignedIn={onAuthChanged}
           teamWorkspaces={teamEnabled ? projects?.teamWorkspaces : undefined}
           initialTeamWorkspaceId={newAppTeamId ?? undefined}
@@ -1969,9 +2113,12 @@ export default function Workbench({
             setShowHome(false)
             setViewMode('build')
             void refreshProjects()
+            if (migrationPick && result.project) void startMigration(result.project.id, migrationPick, migrationModel)
+            setMigrationPick(null)
             if (result.error) toast.error(result.error, { title: 'Not on GitHub yet' })
           }}
           onDeploy={(depName, workspaceId) => {
+            setMigrationPick(null)
             if (!active) {
               setCreateMode(null)
               return
@@ -1989,8 +2136,22 @@ export default function Workbench({
               await requestUserDeploy(projectId, workspaceId)
             })()
           }}
-          onContinueWithoutDeploy={() => setCreateMode(null)}
-          recentWorkspaces={recentDeployWorkspaces}
+          onContinueWithoutDeploy={() => {
+            setCreateMode(null)
+            setMigrationPick(null)
+          }}
+          recentWorkspaces={
+            migrationPick && !migrationPick.source.personal
+              ? [migrationPick.source.workspaceId, ...recentDeployWorkspaces]
+              : recentDeployWorkspaces
+          }
+          source={migrationPick ? { label: 'From Power BI', detail: describePick(migrationPick) } : undefined}
+          initialName={migrationPick ? toProjectName(migrationPick.source.reportName) : undefined}
+          model={
+            migrationPick
+              ? { value: migrationModel, onChange: setMigrationModel, onManageKeys: openModelProviders }
+              : undefined
+          }
         />
       ) : (
         <div className="workbench">
@@ -2053,6 +2214,7 @@ export default function Workbench({
                             project={active}
                             copilotAuth={auth.copilot}
                             onCopilotAuthChanged={onAuthChanged}
+                            recentWorkspaces={appWorkspaces}
                             messages={chats[active.id] ?? []}
                             onChange={(updater) => setMessagesFor(active.id, updater)}
                             onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
@@ -2064,6 +2226,7 @@ export default function Workbench({
                             onAttachmentsConsumed={() => clearShots(active.id)}
                             onClearHistory={() => void window.api.chat.saveHistory(active.id, [])}
                             onOptionsChanged={() => void refreshProjects()}
+                            onManageKeys={openModelProviders}
                             outbound={chatOutbound?.projectId === active.id ? chatOutbound : null}
                             onOutboundConsumed={() => setChatOutbound(null)}
                             onAdvisorRerun={rerunAdvisorFix}
@@ -2090,6 +2253,22 @@ export default function Workbench({
                             onDesignClear={design.clear}
                             buildDesignTurn={design.buildTurn}
                             onDesignSent={design.finishSend}
+                            banner={
+                              migration.state ? (
+                                <MigrationCard
+                                  state={migration.state}
+                                  drawing={migration.drawing}
+                                  chaining={migration.chaining}
+                                  waiting={migrationWaiting}
+                                  onNext={migration.migrateNext}
+                                  onRest={migration.migrateRest}
+                                  onStopRest={migration.stopRest}
+                                  onRetry={migration.retry}
+                                  onSkipImages={migration.skipImages}
+                                  onDismiss={migration.dismiss}
+                                />
+                              ) : undefined
+                            }
                           />
                         </AdvisorFixContext.Provider>
                       </section>
@@ -2128,6 +2307,7 @@ export default function Workbench({
                               : null
                           }
                           manualDeploy={manualDeploy && !active.team}
+                          localReload={localReload}
                           turnRunning={activeChatBusy}
                           watching={watchDeploy === active.id}
                           onWatchChange={(watching) => setWatchDeploy(watching ? active.id : null)}
@@ -2138,6 +2318,11 @@ export default function Workbench({
                           }
                           onPreviewModeChanged={() => void refreshProjects()}
                           design={design}
+                          designModel={{
+                            value: designChoice,
+                            onChange: setDesignChoice,
+                            onManageKeys: openModelProviders
+                          }}
                           designSendBlocked={
                             activeChatBusy
                               ? 'Copilot is working — send when this turn finishes'
@@ -2197,6 +2382,7 @@ export default function Workbench({
                         onFix={fixFindings}
                         onOpenFile={openFileInCode}
                         openRequest={advisorOpen ?? undefined}
+                        onManageKeys={openModelProviders}
                       />
                     </div>
                   )}
@@ -2238,6 +2424,7 @@ export default function Workbench({
                   onNewProject={() => setCreateMode('create')}
                   onOpenExisting={openExisting}
                   onCloneFromGitHub={() => setShowClone(true)}
+                  onMigrateReport={migrationEnabled ? () => setShowMigrate(true) : undefined}
                   onChangeWorkspaceRoot={changeWorkspaceRoot}
                   team={
                     teamEnabled
@@ -2379,6 +2566,10 @@ export default function Workbench({
             setShowSettings(false)
             setShowAccounts(true)
           }}
+          onManageKeys={() => {
+            setShowSettings(false)
+            openModelProviders()
+          }}
           onReviewSetup={() => {
             setShowSettings(false)
             onReviewSetup()
@@ -2390,6 +2581,7 @@ export default function Workbench({
         <AccountsModal
           auth={auth}
           onAuthChanged={onAuthChanged}
+          modelProviders={{ focus: accountsAt === 'providers' }}
           fabric={{
             busy: fabricAuthBusy,
             signingIn,

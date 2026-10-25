@@ -299,6 +299,25 @@ describe('DeploymentsControl chip', () => {
       expect(screen.getByRole('button', { name: 'Deploy changes' })).toBeTruthy()
     })
 
+    it('holds every deploy while Copilot is working on the app', () => {
+      const onRedeploy = vi.fn()
+      const held = 'Copilot is working on this app. Deploys wait until the turn finishes.'
+      const { rerender } = render(control({ onRedeploy, chatBusy: true, pending: { changed: true, files: 2 } }))
+      const changes = screen.getByRole('button', { name: 'Deploy 2 changes' }) as HTMLButtonElement
+      expect(changes.disabled).toBe(true)
+      expect(changes.title).toBe(held)
+      fireEvent.click(changes)
+
+      const failed = { running: false, log: [], result: { ok: false, outcome: 'error' as const, error: 'Busy' } }
+      rerender(control({ onRedeploy, chatBusy: true, deploy: failed }))
+      expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(true)
+      expect(onRedeploy).not.toHaveBeenCalled()
+
+      rerender(control({ onRedeploy, chatBusy: false, deploy: failed }))
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+      expect(onRedeploy).toHaveBeenCalledTimes(1)
+    })
+
     it('says a deploy failed on the chip and offers to try again and find out why', async () => {
       const api = installApi()
       api.deploy.list.mockResolvedValue([{ workspaceName: 'Sales', name: 'Production', workspaceId: 'ws1', active: true }])
@@ -378,7 +397,7 @@ describe('DeploymentsControl chip', () => {
       expect(onShowChanges).toHaveBeenCalledTimes(1)
     })
 
-    it('turns deploying after each chat turn on and off, and says which on the control', () => {
+    it('turns deploying after each chat turn on and off, and says so on the control only when it is off', () => {
       installApi()
       const onChange = vi.fn()
       const { rerender } = render(control({ autoDeploy: { on: false, onChange } }))
@@ -391,9 +410,10 @@ describe('DeploymentsControl chip', () => {
       fireEvent.click(toggle)
       expect(onChange).toHaveBeenCalledWith(true)
 
+      // Auto is the default, so the chip doesn't call it out.
       rerender(control({ autoDeploy: { on: true, onChange } }))
       expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Deploy after each chat turn/ }).checked).toBe(true)
-      const auto = screen.getByRole('button', { name: /^Deployment:\s*Production\s*· Auto$/ })
+      const auto = screen.getByRole('button', { name: /^Deployment:\s*Production$/ })
       expect(auto.title).toContain('Auto deploy is on')
 
       // A failed deploy says so instead.
@@ -406,7 +426,7 @@ describe('DeploymentsControl chip', () => {
       expect(screen.getByRole('button', { name: /^Deployment:\s*Production\s*· Failed$/ })).toBeTruthy()
     })
 
-    it('says nothing about auto deploy without the Deploy manually experiment', () => {
+    it('says nothing about auto deploy without the switch', () => {
       render(control())
       const chip = screen.getByRole('button', { name: /^Deployment:\s*Production$/ })
       expect(chip.title).not.toContain('Auto deploy')

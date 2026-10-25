@@ -5,6 +5,7 @@
 pub mod accounts;
 pub mod advisor;
 pub mod auth;
+pub mod byok;
 pub mod chat;
 pub mod chat_tools;
 pub mod custom_skills;
@@ -17,6 +18,7 @@ pub mod files;
 pub mod git;
 pub mod github;
 pub mod help;
+pub mod migration;
 pub mod misc;
 pub mod projects;
 pub mod projects_impl;

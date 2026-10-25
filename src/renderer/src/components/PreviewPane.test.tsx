@@ -20,6 +20,8 @@ function Harnessed({
   suppressed,
   deploy,
   localPreviewUrl,
+  manualDeploy,
+  localReload,
   onRefreshAuth,
   authBusy,
   onDiagnoseDeploy,
@@ -31,6 +33,8 @@ function Harnessed({
   suppressed: boolean
   deploy?: DeployUiState
   localPreviewUrl?: string | null
+  manualDeploy?: boolean
+  localReload?: number
   onRefreshAuth?: () => void
   authBusy?: boolean
   onDiagnoseDeploy?: () => void
@@ -48,6 +52,8 @@ function Harnessed({
         authBusy={authBusy}
         onDiagnoseDeploy={onDiagnoseDeploy}
         localPreviewUrl={localPreviewUrl}
+        manualDeploy={manualDeploy}
+        localReload={localReload}
         focused={false}
         onToggleFocus={() => {}}
         onSettle={onSettle}
@@ -751,6 +757,36 @@ describe('PreviewPane local preview', () => {
     expect(reveal!.url).toBe(LOCAL)
     // Its address shows straight away, before the page reports where it is.
     expect(screen.getByText('localhost:5173')).toBeTruthy()
+  })
+
+  it('reloads the local preview once, hidden, when a turn that changed files ends', async () => {
+    const project = makeProject('p1')
+    const pane = (localReload: number): JSX.Element => (
+      <Harnessed project={project} suppressed={false} localPreviewUrl={LOCAL} manualDeploy localReload={localReload} />
+    )
+    const { rerender } = render(pane(0))
+    await settle(e)
+    expect(e.api.reload).not.toHaveBeenCalled()
+
+    const mark = e.calls.length
+    rerender(pane(1))
+    await settle(e)
+    expect(e.api.reload).toHaveBeenCalledTimes(1)
+    expect(e.methodsAfter(mark), 'parked while the fresh page loads').toContain('suppress')
+
+    // Rendering again with the same value doesn't reload again.
+    rerender(pane(1))
+    await settle(e)
+    expect(e.api.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the deployed app alone when asked to reload the local preview', async () => {
+    const project = makeProject('p1')
+    const { rerender } = render(<Harnessed project={project} suppressed={false} localReload={0} />)
+    await settle(e)
+    rerender(<Harnessed project={project} suppressed={false} localReload={1} />)
+    await settle(e)
+    expect(e.api.reload).not.toHaveBeenCalled()
   })
 
   it('says whose data a team app’s local preview uses only when it isn’t its own', async () => {

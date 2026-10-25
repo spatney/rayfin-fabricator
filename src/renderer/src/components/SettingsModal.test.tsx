@@ -167,22 +167,27 @@ describe('SettingsModal team workspaces experiment', () => {
   })
 })
 
-describe('SettingsModal deploy manually experiment', () => {
-  it.each([undefined, false, true])('reflects manualDeploy=%s and saves the change', async (manualDeploy) => {
-    installApi()
-    const { onChange } = await renderModal({
-      settings: { theme: 'system', experiments: { manualDeploy }, deployMode: 'auto' }
-    })
+describe('SettingsModal report migration experiment', () => {
+  function migrationCheckbox(): HTMLInputElement {
     fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
-    const checkbox = screen.getByRole<HTMLInputElement>('checkbox', { name: /^Deploy manually/ })
-    expect(checkbox.checked).toBe(manualDeploy === true)
+    const label = screen.getByText('Migrate Power BI reports').closest('label')
+    if (!label) throw new Error('Migrate Power BI reports label not found')
+    return label.querySelector('input[type="checkbox"]') as HTMLInputElement
+  }
+
+  it('is off by default and turns on through the experiment flags', async () => {
+    installApi()
+    const { onChange } = await renderModal()
+    const checkbox = migrationCheckbox()
+    expect(checkbox.checked).toBe(false)
     fireEvent.click(checkbox)
-    // Turning it on starts in Manual, whatever the status bar was last set to.
-    expect(onChange).toHaveBeenCalledWith(
-      manualDeploy
-        ? { experiments: { manualDeploy: false } }
-        : { experiments: { manualDeploy: true }, deployMode: 'manual' }
-    )
+    expect(onChange).toHaveBeenCalledWith({ experiments: { reportMigration: true } })
+  })
+
+  it('reflects the persisted flag', async () => {
+    installApi()
+    await renderModal({ settings: { theme: 'system', experiments: { reportMigration: true } } })
+    expect(migrationCheckbox().checked).toBe(true)
   })
 })
 
@@ -195,6 +200,8 @@ describe('SettingsModal retired controls', () => {
         compatibilityRendering: enabled,
         chatModeSelector: enabled,
         localDevPreview: enabled,
+        manualDeploy: enabled,
+        byok: enabled,
         teamWorkspaces: true
       }
     }
@@ -205,6 +212,8 @@ describe('SettingsModal retired controls', () => {
       'Compatibility rendering',
       'Chat mode selector',
       'Live local preview',
+      'Deploy manually',
+      'Your own API keys',
       'Performance',
       'Ray',
       'Check for updates'
@@ -214,8 +223,18 @@ describe('SettingsModal retired controls', () => {
     expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
     expect(screen.getAllByRole('checkbox')).toHaveLength(3)
     expect(screen.getByText('Team workspaces')).toBeTruthy()
-    expect(screen.getByText('Deploy manually')).toBeTruthy()
+    expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
     expect(screen.getByText('Full diagnostics')).toBeTruthy()
+  })
+})
+
+describe('SettingsModal API keys', () => {
+  it('opens Model providers in Accounts, with no experiment to turn on first', async () => {
+    installApi()
+    const onManageKeys = vi.fn()
+    await renderModal({ onManageKeys })
+    fireEvent.click(screen.getByRole('button', { name: 'Manage API keys' }))
+    expect(onManageKeys).toHaveBeenCalledOnce()
   })
 })
 

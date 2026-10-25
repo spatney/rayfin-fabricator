@@ -1,9 +1,9 @@
 ---
 title: "Blueprint: architecture and data models"
-description: "Use Blueprint to see what your app is made of, what it connects to and which identity each connection uses, plus its Rayfin data model and Fabric semantic models."
+description: "Use Blueprint to see what your app is made of, what it connects to and which identity each connection uses, plus its Rayfin data model and the Fabric data it reads."
 ---
 
-Use **Blueprint** to see how your app is put together. The **Architecture** view shows what the app is made of, what it connects to, and which identity each connection uses. The **Data model** view shows the Rayfin data model, and the **Semantic model** view shows the Fabric semantic models the app uses.
+Use **Blueprint** to see how your app is put together. The **Architecture** view shows what the app is made of, what it connects to, and which identity each connection uses. The **Data model** view shows the Rayfin data model, and the **Fabric data** view shows the Fabric data the app connects to: its semantic models, and the tables of its SQL databases, warehouses and lakehouses.
 
 ![The Architecture view of the Contoso Expenses sample app. People on the left connect to the app in the middle, which lists its app identity and its pieces: Website, Sign-in, Database, File storage, Connectors, Functions and Secrets. Lines run from the Connectors and Functions ports to the semantic models, warehouse, Azure services and web API on the right, grouped by where they live.](/screenshots/blueprint.webp)
 
@@ -11,7 +11,7 @@ Use **Blueprint** to see how your app is put together. The **Architecture** view
 
 1. Open a project.
 2. Select **Blueprint** in the project tabs.
-3. Choose **Architecture**, **Data model** or **Semantic model**. **Semantic model** appears when the app uses a semantic model.
+3. Choose **Architecture**, **Data model** or **Fabric data**. **Fabric data** appears when the app connects to a semantic model, SQL database, warehouse or lakehouse.
 
 Fabricator remembers the view you chose for the project.
 
@@ -83,7 +83,8 @@ Depending on what you select, the details can include:
 - **Use user’s identity** or **Use app identity**, to ask Copilot to change a connector's `auth.type`.
 - **Fix with Copilot**, when a connector's `auth.type` or the functions' `services.functions.auth.type` would stop the app from deploying.
 - **Use app identity** on a web API that Rayfin can also reach with the app identity, so the functions don't need a key for it.
-- **View the model**, which opens a semantic model in the **Semantic model** view.
+- **View the model**, which opens a semantic model in the **Fabric data** view.
+- **View the tables**, which opens a SQL database, warehouse or lakehouse in the **Fabric data** view.
 - **Open in Fabric**, which opens a source or its workspace in the Fabric portal.
 - **Harden access** and **Open the data model** on **Database**.
 
@@ -151,9 +152,13 @@ Those actions stage a prompt in the Build chat composer. New projects start with
 Add Project and Task entities. A project has many tasks. Tasks have a title, due date, status and owner. Restrict access so users only see their own projects and tasks.
 ```
 
+## View the Fabric data the app connects to
+
+The **Fabric data** view draws each source the app reads from Microsoft Fabric: its semantic models, and the tables of its SQL databases, warehouses and lakehouses. When the app connects to more than one, choose a source above the diagram. Each one shows its name and its kind, such as **Warehouse**.
+
 ## View a semantic model
 
-When the app uses semantic models, from `fabric.yaml` or a semantic model connector, the **Semantic model** view reads them live from Fabric and draws a diagram of:
+When the app uses semantic models, from `fabric.yaml` or a semantic model connector, the **Fabric data** view reads them live from Fabric and draws a diagram of:
 
 - Tables.
 - Columns and data types.
@@ -166,27 +171,70 @@ Use **Search tables, columns & measures**, **Collapse** or **Expand**, focus con
 
 Learn about Rayfin semantic model connectors in the [Rayfin semantic models docs](https://rayfin.ai/docs/connectors/semantic-models).
 
-## Connect a Fabric semantic model
+## View the tables of a SQL database, warehouse or lakehouse
 
-You can start connecting a semantic model from the chat composer menu.
+For a SQL database, warehouse or lakehouse connector, the **Fabric data** view draws the source's tables from the app's files, so it doesn't need to sign in to Fabric. Each table card shows:
 
-1. In the Build chat composer, open the add menu.
-2. Select **Connect a semantic model**.
-3. In **Connect a semantic model**, choose a model from the workspace this app deploys to.
-4. Select **Add to chat**.
-5. Send the prepared request to Copilot.
+- Each column and its SQL type, such as `nvarchar(30)` or `decimal(8,2)`.
+- A key on each primary key column, and a link on each foreign key column.
+- A diamond before each column name: filled for a required column, hollow for a column that can be empty. Hover over a column to see its type, the column it references, and whether the database fills it in.
+- The app's entity for the table. Select it to open the entity file in **Code**. A table the app doesn't use says **Not used by the app**.
 
-The dialog lists models in the app's deployment workspace. Models already declared in the project are marked **Connected**.
+Foreign keys appear as lines between the tables, with one and many markers. The header counts the tables and relationships, and says when Rayfin discovered the tables.
 
-If the app is not deployed yet, the dialog says: "Deploy this app to a Fabric workspace first — then you can connect the semantic models in that workspace."
+When the app uses some of the source's tables, the view starts on **Used by the app**, the tables the app has an entity for. Select **All tables** to see every table Rayfin discovered. Use **Search tables & columns**, **Collapse** or **Expand**, focus controls, zoom and fit-to-view to work with the diagram, and **Open metadata.json** to open the discovered tables as a file.
+
+Rayfin discovers a source's tables when the connector is added, and keeps them in `rayfin/connectors/<name>/metadata.json`. Copilot then writes an entity file for each table the app needs. Lakehouses usually don't report keys or relationships, so their tables show neither.
+
+- If the app doesn't use any of the source's tables yet, the view says "The app doesn’t use these tables yet." and offers **Use them with Copilot**.
+- If `metadata.json` is missing, the view draws only the tables the app's entity files describe, and offers **Discover the tables with Copilot**.
+- If there's nothing to draw, the view says "No tables to draw yet" and offers **Discover the tables with Copilot**.
+
+These actions stage a prompt in the Build chat composer. Learn how Copilot turns the discovered tables into entities in the [Rayfin entity generation docs](https://rayfin.ai/docs/connectors/entity-generation).
+
+## Connect Fabric data
+
+Your app can read data that's already in Microsoft Fabric through Rayfin connectors: semantic
+models, warehouses, SQL databases, and lakehouses, which apps read through their SQL analytics
+endpoint and can't change. You pick the data; Copilot connects it.
+
+1. In the Build chat composer, select **+** (**Add images, files or data**), then
+   **Fabric data**.
+2. Choose a kind of data, such as **Warehouse**, or **Browse all Fabric data…**.
+3. In **Add Fabric data**, choose a workspace. **Recent** lists the workspaces your apps
+   deploy to and the ones you connected data from, newest first. Below it are all the other
+   workspaces you can open.
+4. Tick the data you want. You can pick from several workspaces before you add it.
+5. Select **Add to chat**. The data waits in the message box as chips, one for each item,
+   showing its name and workspace.
+6. Say what to build with it, such as "Chart spending by category", or just press **Enter**
+   to connect it. Fabricator tells Copilot how to connect the data when you send, so you
+   don't have to.
+
+![Add Fabric data: recent workspaces first, the Finance analytics workspace open with its semantic models, warehouse, SQL database and lakehouses, three already connected and two picked](/screenshots/connect-data.webp)
+
+![The message box with two Fabric data chips, Ledger and Raw transactions from Finance analytics, above the placeholder "Say what to build with this data, or just press Enter to connect it"](/screenshots/data-chips.webp)
+
+To change the data before you send, select a chip to reopen **Add Fabric data**, or select
+its **×** to remove it. The chips stay on your message in the chat, so you can see what
+each request connected.
+
+Copilot adds each one with `rayfin connector add` and wires it into the app. Data the app
+already connects to is marked **Connected**. The dialog starts in the workspace this app
+deploys to, when it has one, but the app doesn't need to be deployed to connect data.
+
+Fabricator doesn't offer KQL databases: Rayfin 1.36 can't add new KQL database connectors.
+Learn more in the [Rayfin connectors docs](https://rayfin.ai/docs/connectors).
 
 ## Sign in and retry
 
-Listing workspace models uses Fabric authentication. If Fabricator cannot list them silently, the dialog says: "Sign in to Fabric to list this workspace's models. The preview uses a separate sign-in." Select **Sign in & retry**.
+Listing your workspaces and their data uses Fabric authentication. If Fabricator can't list
+them silently, the dialog says: "Sign in to Fabric to see your workspaces and their data."
+Select **Sign in & retry**.
 
 Reading a semantic model schema can also require sign-in:
 
 - **Sign in to Fabric** appears when the Fabric session is missing.
 - **Sign in to Azure** appears when the schema query needs an Azure CLI session.
 
-If the schema cannot be read, the **Semantic model** view shows "Couldn’t read the semantic model" and offers **Try again**. For Fabric deployment and authentication recovery, see [Deploy troubleshooting](/docs/troubleshooting/deploy).
+If the schema cannot be read, the **Fabric data** view shows "Couldn’t read the semantic model" and offers **Try again**. You can still choose the app's other sources above the message. SQL databases, warehouses and lakehouses don't need sign-in, because Fabricator reads their tables from the app's files. For Fabric deployment and authentication recovery, see [Deploy troubleshooting](/docs/troubleshooting/deploy).

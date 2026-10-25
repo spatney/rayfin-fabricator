@@ -1,12 +1,10 @@
 import {
-  Children,
   useCallback,
   useEffect,
   useId,
   useRef,
   useState,
   type FormEvent,
-  type ReactNode,
   type JSX,
 } from 'react'
 import type {
@@ -25,8 +23,10 @@ import { deviceCode, tenantLabel, tenantName, tenantsDiffer } from '../accounts'
 import { openDocs } from '../docsLinks'
 import CopilotHostInput from './CopilotHostInput'
 import { CopilotLogo } from './brand-icons'
-import { CheckIcon, Codicon } from './icons'
+import { Codicon } from './icons'
 import { CopyButton } from './chat/CopyButton'
+import { AccountCard, Foot, Row, errorLine, type CardState } from './accounts/AccountParts'
+import { ModelProviders } from './accounts/ModelProviders'
 import azureSvg from '../assets/brands/azure.svg'
 import fabricSvg from '../assets/brands/fabric.svg'
 
@@ -50,20 +50,14 @@ interface Props {
   /** Re-verify every account; rejects when verification fails. */
   onAuthChanged: () => Promise<void> | void
   fabric: FabricAccountActions
+  /** Show Model providers (your own API keys), scrolled to when `focus`. */
+  modelProviders?: { focus: boolean }
   /** Open setup, e.g. to install the GitHub CLI. */
   onReviewSetup: () => void
   onClose: () => void
 }
 
-type CardState = 'ok' | 'off' | 'checking' | 'error'
 type Card = 'copilot' | 'fabric' | 'az' | 'github' | 'general'
-
-const STATE_LABEL: Record<CardState, string> = {
-  ok: 'Signed in',
-  off: 'Not signed in',
-  checking: 'Checking…',
-  error: 'Needs attention'
-}
 
 /** How long to wait for a GitHub sign-in finished in the terminal. */
 const GITHUB_WAIT_MS = 5 * 60_000
@@ -90,6 +84,7 @@ export default function AccountsModal({
   auth,
   onAuthChanged,
   fabric,
+  modelProviders,
   onReviewSetup,
   onClose
 }: Props): JSX.Element {
@@ -749,6 +744,8 @@ export default function AccountsModal({
               )}
             </Foot>
           </AccountCard>
+
+          {modelProviders && <ModelProviders focus={modelProviders.focus} />}
         </div>
 
         <div className="modal-footer">
@@ -767,107 +764,12 @@ export default function AccountsModal({
   )
 }
 
-/**
- * One service: a top row with its name, what it's for, how it stands, and its
- * one action (Sign in, Add account or Install from setup), then a row per
- * account and any messages.
- */
-function AccountCard({
-  icon,
-  title,
-  purpose,
-  state,
-  action,
-  children
-}: {
-  icon: ReactNode
-  title: string
-  purpose: string
-  state: CardState
-  action?: ReactNode
-  children: ReactNode
-}): JSX.Element {
-  return (
-    <section className={`acct-card acct-card--${state}`} aria-label={title}>
-      <div className="acct-head">
-        <span className="acct-ico" aria-hidden="true">
-          {icon}
-        </span>
-        <h3 className="acct-title">
-          {title}
-          {state === 'ok' ? (
-            <span className="acct-ok" role="img" aria-label={STATE_LABEL.ok} title={STATE_LABEL.ok}>
-              <CheckIcon />
-            </span>
-          ) : (
-            <span className={`acct-chip acct-chip--${state}`}>{STATE_LABEL[state]}</span>
-          )}
-        </h3>
-        <p className="acct-purpose">{purpose}</p>
-        {action ? <div className="acct-head-action">{action}</div> : null}
-      </div>
-      {children}
-    </section>
-  )
-}
-
 function AddButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }): JSX.Element {
   return (
     <button className="btn btn--sm btn--ghost acct-add-btn" disabled={disabled} onClick={onClick}>
       <Codicon name="add" />
       Add account
     </button>
-  )
-}
-
-/** Messages and forms at the end of a card, when there are any. */
-function Foot({ children }: { children: ReactNode }): JSX.Element | null {
-  return Children.toArray(children).length > 0 ? <div className="acct-foot">{children}</div> : null
-}
-
-function errorLine(text?: string): JSX.Element | null {
-  return text ? (
-    <p className="acct-error" role="alert">
-      {text}
-    </p>
-  ) : null
-}
-
-/** One account: who it is, then what you can do with it. */
-function Row({
-  as: Tag = 'div',
-  name,
-  meta,
-  title,
-  badge,
-  badgeTitle,
-  warning,
-  children
-}: {
-  as?: 'div' | 'li'
-  name: string
-  meta?: string
-  title?: string
-  badge?: string
-  /** What the badge means, on hover. */
-  badgeTitle?: string
-  warning?: string
-  children?: ReactNode
-}): JSX.Element {
-  return (
-    <Tag className="acct-row">
-      <span className="acct-row-who" title={title}>
-        <span className="acct-row-name">{name}</span>
-        {meta && <span className="acct-row-meta">{meta}</span>}
-        {badge && (
-          <span className="acct-badge" title={badgeTitle}>
-            {badge}
-          </span>
-        )}
-        {warning && <span className="acct-badge acct-badge--warn">{warning}</span>}
-      </span>
-      {children ? <span className="acct-row-actions">{children}</span> : null}
-    </Tag>
   )
 }
 

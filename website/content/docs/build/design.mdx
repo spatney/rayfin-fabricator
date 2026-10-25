@@ -10,7 +10,7 @@ Design mode lets you point at the running app and describe visual changes. Fabri
 ## Start Design mode
 
 1. Open the **Build** view.
-2. Wait for your app to appear in the preview. On the local preview, at a `localhost` address, Design works only between turns, with the [Deploy manually](/docs/ship/deploy#deploy-manually) experiment on and **Deploy after each chat turn** off.
+2. Wait for your app to appear in the preview. On the local preview, at a `localhost` address, Design works only between turns, with **Deploy after each chat turn** off (see [Deploy manually](/docs/ship/deploy#deploy-manually)).
 3. In the preview toolbar, select **Design**.
 4. Click an element in the app.
 
@@ -69,6 +69,10 @@ While it runs, the card names the model it's asking. Each option appears as soon
 Hover an option to preview it. Click one to keep it. Use **More options** to ask again or **Done** to close the options list.
 
 If the options request fails, use **Try again** or describe the change yourself in the text box.
+
+### Choose the model for Options and Polish
+
+The Design bar has a model picker. Keep **Auto** to let Fabricator pick a fast model from your Copilot plan, or turn **Auto** off and choose a model, including one on your own API key. Your choice applies to **Options** and **Polish** in every project. Fabricator never picks a model on your own key by itself. See [Use your own API keys](/docs/build/your-own-api-keys).
 
 ## Apply a change to similar elements
 

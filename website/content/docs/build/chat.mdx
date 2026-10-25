@@ -13,21 +13,31 @@ Chat is where you describe what you want Fabricator to build. The built-in GitHu
 2. Type in the message box, whose placeholder is `Message Fabricator about <project name>…`.
 3. Press **Enter** or select **Send**.
 
-Use `Shift+Enter` for a new line. If you type `@`, Fabricator opens **Reference a file** so you can point Copilot at a project file. You can also use **Add images, data, or files** to:
+Use `Shift+Enter` for a new line. If you type `@`, Fabricator opens **Reference a file** so you can point Copilot at a project file. The **+** button (**Add images, files or data**) opens a menu with:
 
-- **Add an image**. You can also paste or drop a screenshot into the box.
-- **Connect a semantic model**. This adds Fabric semantic model details to the prompt. See [Blueprint](/docs/build/data-model).
-- **Reference a file**.
+- **Image**. You can also paste or drop a screenshot into the box.
+- **File**, which points Copilot at a project file, like typing `@`.
+- **Fabric data**, which lists the kinds of Fabric data your app can connect to: semantic models, warehouses, SQL databases and lakehouses. What you pick waits in the box as chips and goes with your next message. See [Connect Fabric data](/docs/build/data-model#connect-fabric-data).
+
+![The composer's + menu: Image, File, and Fabric data open beside it, listing Semantic model, Warehouse, SQL database and Lakehouse, and Browse all Fabric data](/screenshots/add-menu.webp)
 
 ## Choose a model and reasoning effort
 
-Open the model pill in the composer to choose the AI model and **Reasoning effort**.
+Open the model pill in the composer to choose the model Copilot uses.
 
-![The model menu opened from the chat composer, listing Auto and other models, with Reasoning effort choices from Auto to Max.](/screenshots/composer-menus.webp)
+![The model picker with Auto off, the model list open, Copilot's models with their makers' logos, and the models on the user's own Anthropic and OpenAI keys under Your API keys](/screenshots/model-picker.webp)
 
-The model menu includes **Auto** as the recommended default. Reasoning effort can be **Auto**, **None**, **Low**, **Med**, **High**, **XHigh**, or **Max**, depending on the selected model. Higher effort can think longer, so use it for harder changes.
+**Auto** is on to start: Copilot picks the model for each request and how long it thinks. When Copilot offers it for your account, **Optimized for** under **Auto** lets you steer that choice.
 
-Fabricator uses the GitHub Copilot account you signed in with. The models shown come from that account's available Copilot models.
+To choose for yourself, turn off **Auto**. The picker then shows:
+
+- **Model**, which opens the list of models. Type in **Search models** to find one. The list starts with the models Copilot suggests, and **More models** shows the rest. **Fast** marks quick, low-cost models.
+- **Effort**, how long the model thinks before it answers, for models that offer a choice, such as **Low**, **Medium**, **High** or **Max**. The model's own default is marked **Default**; for a model without one, **Automatic** lets the model decide. Higher effort can think longer, so use it for harder changes.
+- **Context window**, for models that offer a long one: **Standard** or **Long**, with their sizes.
+
+The pill shows your choice, such as `Claude Opus 5.5 · High`. When you choose another model, Fabricator keeps the effort and context window if the new model offers them.
+
+Fabricator uses the GitHub Copilot account you signed in with. The models shown come from that account's available Copilot models. When you add your own API keys, the list also has models on your own Anthropic, OpenAI, xAI or Google key. See [Use your own API keys](/docs/build/your-own-api-keys).
 
 ## What happens during a turn
 

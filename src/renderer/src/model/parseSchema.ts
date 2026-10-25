@@ -464,6 +464,8 @@ export interface RawClass {
   offset: number
   /** Offset of the first character inside the class body braces. */
   bodyOffset: number
+  /** What comes between the name and the body, e.g. `extends Source({ table: 'orders' })`. */
+  heritage: string
 }
 
 /** Parse the property fields out of a class body starting at `bodyOffset` in its file. */
@@ -554,6 +556,36 @@ function parseFields(body: string, bodyOffset = 0, lines?: LineIndex): ModelFiel
   return fields
 }
 
+/**
+ * The index of the `{` that opens a class body, past a heritage clause whose
+ * arguments or type arguments hold braces of their own, such as a connector
+ * entity's `extends Source({ schema: 'dbo', table: 'orders' })`.
+ */
+function classBodyStart(src: string, i: number): number {
+  const n = src.length
+  let angle = 0
+  while (i < n) {
+    const c = src[i]
+    if (c === '"' || c === "'" || c === '`') {
+      i = skipString(src, i)
+      continue
+    }
+    if (c === '(') {
+      i = skipBalanced(src, i, '(', ')')
+      continue
+    }
+    if (c === '<') angle++
+    else if (c === '>' && src[i - 1] !== '=') angle = Math.max(0, angle - 1)
+    else if (c === '{') {
+      if (angle === 0) return i
+      i = skipBalanced(src, i, '{', '}')
+      continue
+    }
+    i++
+  }
+  return n
+}
+
 /** Scan a (comment-masked) source file for decorated `class` declarations. */
 export function parseClasses(src: string): RawClass[] {
   const classes: RawClass[] = []
@@ -586,8 +618,8 @@ export function parseClasses(src: string): RawClass[] {
     if (word === 'class') {
       const classOffset = i
       const nameRead = readWord(src, skipWs(src, next))
-      let j = nameRead.next
-      while (j < n && src[j] !== '{') j++
+      let j = classBodyStart(src, nameRead.next)
+      const heritage = src.slice(nameRead.next, j).trim()
       let body = ''
       let bodyOffset = j
       if (src[j] === '{') {
@@ -596,7 +628,7 @@ export function parseClasses(src: string): RawClass[] {
         bodyOffset = j + 1
         j = end
       }
-      classes.push({ name: nameRead.word, decorators: pending, body, offset: classOffset, bodyOffset })
+      classes.push({ name: nameRead.word, decorators: pending, body, offset: classOffset, bodyOffset, heritage })
       pending = []
       i = j
       continue
@@ -814,6 +846,38 @@ function inferRelations(entities: ModelEntity[], explicit: ModelRelation[]): Mod
   return relations
 }
 
+/** An `@entity` class as a {@link ModelEntity}. */
+function toEntity(cls: RawClass, file: string, lines: LineIndex): ModelEntity {
+  const { permissions, customName } = parsePermissions(cls.decorators)
+  return {
+    name: cls.name,
+    customName,
+    file,
+    fields: parseFields(cls.body, cls.bodyOffset, lines),
+    permissions,
+    access: classifyAccess(permissions),
+    line: lines.lineAt(cls.offset),
+    decorators: cls.decorators.map((d) => toSourceDecorator(d, lines))
+  }
+}
+
+/** An `@entity` class with the heritage clause it was declared with. */
+export interface DeclaredEntity extends ModelEntity {
+  /** E.g. `extends Source({ schema: 'dbo', table: 'orders', primaryKey: ['id'] })`. */
+  heritage: string
+}
+
+/**
+ * The `@entity` classes declared in one file, such as the entity files Copilot
+ * generates for a SQL connector under `rayfin/connectors/<name>/`.
+ */
+export function parseEntityClasses(src: string, file: string): DeclaredEntity[] {
+  const lines = new LineIndex(src)
+  return parseClasses(maskComments(src))
+    .filter((cls) => cls.decorators.some((d) => d.name === 'entity'))
+    .map((cls) => ({ ...toEntity(cls, file, lines), heritage: cls.heritage }))
+}
+
 /**
  * Parse a project's data model given a file reader. Pure (no `window` access) so
  * it can be unit-tested with an in-memory reader. `rayfin/rayfin.yml` says where
@@ -843,9 +907,8 @@ export async function parseDataModel(read: FileReader): Promise<DataModel> {
     const isEntity = cls.decorators.some((d) => d.name === 'entity')
     if (!isEntity || seen.has(cls.name)) return
     seen.add(cls.name)
-    const { permissions, customName } = parsePermissions(cls.decorators)
-    const fields = parseFields(cls.body, cls.bodyOffset, lines)
-    for (const f of fields) {
+    const entity = toEntity(cls, file, lines)
+    for (const f of entity.fields) {
       if (f.relationTo) {
         explicitRelations.push({
           from: cls.name,
@@ -856,16 +919,7 @@ export async function parseDataModel(read: FileReader): Promise<DataModel> {
         })
       }
     }
-    entities.push({
-      name: cls.name,
-      customName,
-      file,
-      fields,
-      permissions,
-      access: classifyAccess(permissions),
-      line: lines.lineAt(cls.offset),
-      decorators: cls.decorators.map((d) => toSourceDecorator(d, lines))
-    })
+    entities.push(entity)
   }
 
   const order = names.length ? names : inline.map((c) => c.name)

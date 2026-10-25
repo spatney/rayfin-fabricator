@@ -16,6 +16,8 @@ import type { FixOutcome } from '../advisor/lifecycle'
 import { AdvisorFixContext, type AdvisorFixLinks } from './advisor/AdvisorFixSummary'
 import ChatPanel, { reduceChatMessage, type OutboundPrompt, type UIChatMessage } from './ChatPanel'
 import { tryAgainPrompt } from './chat/prompts'
+import { invalidateCopilotModels } from '../copilotModels'
+import { setPendingData } from '../fabricData'
 
 vi.mock('../monaco', () => ({}))
 vi.mock('@monaco-editor/react', () => ({
@@ -1006,6 +1008,40 @@ describe('ChatPanel submit-pause while deploying', () => {
   })
 })
 
+describe('ChatPanel images and the chosen model', () => {
+  it('holds images back from a model on your own key that can’t read them', async () => {
+    const api = (window as unknown as { api: { chat: { listModels: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn> } } }).api
+    api.chat.listModels.mockResolvedValue([
+      {
+        id: 'openai/o3-mini',
+        name: 'o3-mini',
+        supportedReasoningEfforts: ['low', 'medium', 'high'],
+        vision: false,
+        byok: { provider: 'openai', providerName: 'OpenAI', ready: true }
+      }
+    ])
+    invalidateCopilotModels()
+    await act(async () => {
+      render(
+        <ChatPanel
+          project={makeProject('p1', { model: 'openai/o3-mini' })}
+          messages={[]}
+          onChange={() => {}}
+          draft="What does this screen show?"
+          attachments={[{ path: 'C:/tmp/shot.png', thumb: 'data:image/png;base64,AAAA' }]}
+        />
+      )
+    })
+
+    expect(await screen.findByText(/o3-mini can’t read images\. Remove the images/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => {
+      fireEvent.keyDown(screen.getByPlaceholderText(PLACEHOLDER), { key: 'Enter' })
+    })
+    expect(api.chat.send).not.toHaveBeenCalled()
+  })
+})
+
 /**
  * Perf guard (P1): streamed `delta` events must be coalesced. The SDK emits one
  * IPC event per token; applying each individually re-parsed the growing markdown
@@ -1105,6 +1141,112 @@ describe('ChatPanel streamed delta coalescing (P1)', () => {
  * the composer and go out as ONE turn. The transcript shows the note plus a
  * Design card; the structured prompt is hidden but re-sent on reruns.
  */
+describe('ChatPanel Fabric data', () => {
+  afterEach(() => setPendingData('p1', []))
+
+  function DataHarness(): JSX.Element {
+    const [messages, setMessages] = useState<UIChatMessage[]>([])
+    return <ChatPanel project={makeProject('p1')} messages={messages} onChange={(update) => setMessages(update)} draft="" />
+  }
+
+  it('shows picked data as chips and tells only Copilot how to connect it', async () => {
+    const api = installApi()
+    setPendingData('p1', [
+      { workspaceId: 'ws-fin', workspaceName: 'Finance', item: { id: 'm1', name: 'Sales', type: 'SemanticModel' } },
+      { workspaceId: 'ws-ops', workspaceName: 'Ops', item: { id: 'l1', name: 'orders', type: 'Lakehouse' } }
+    ])
+    render(<DataHarness />)
+
+    const tray = screen.getByRole('list', { name: 'Fabric data to connect' })
+    expect(tray.textContent).toContain('SalesFinance')
+    fireEvent.click(screen.getByRole('button', { name: 'Remove orders' }))
+    expect(within(tray).queryByText('orders')).toBeNull()
+
+    const composer = screen.getByPlaceholderText(/Say what to build with this data/) as HTMLTextAreaElement
+    expect(composer.value).toBe('')
+    fireEvent.change(composer, { target: { value: 'Chart sales by region' } })
+    await act(async () => {
+      fireEvent.keyDown(composer, { key: 'Enter' })
+    })
+
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+    const [, , prompt] = api.chat.send.mock.calls[0] as unknown as [string, string, string]
+    expect(prompt).toMatch(/^Chart sales by region\n\n\[Fabricator:/)
+    expect(prompt).toContain('--type fabric-semanticmodel --workspace-id ws-fin --item-id m1')
+    expect(prompt).not.toContain('orders')
+    // The transcript shows the message and its data, not the instructions.
+    const sent = await screen.findByRole('list', { name: 'Fabric data' })
+    expect(sent.textContent).toContain('Sales')
+    expect(screen.getByText('Chart sales by region')).toBeTruthy()
+    expect(screen.queryByText(/rayfin connector add/)).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Fabric data to connect' })).toBeNull()
+  })
+
+  it('sends data on its own with a request to connect it, and Retry sends how to connect it again', async () => {
+    const api = installApi()
+    api.chat.send.mockResolvedValueOnce({ ok: false, error: 'Copilot is busy', filesModified: [], ranDeploy: false })
+    setPendingData('p1', [
+      { workspaceId: 'ws-fin', workspaceName: 'Finance', item: { id: 'm1', name: 'Sales', type: 'SemanticModel' } }
+    ])
+    render(<DataHarness />)
+
+    const composer = screen.getByPlaceholderText(/just press Enter to connect it/)
+    await act(async () => {
+      fireEvent.keyDown(composer, { key: 'Enter' })
+    })
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+    const first = (api.chat.send.mock.calls[0] as unknown as [string, string, string])[2]
+    expect(first).toMatch(/^Connect this data to the app, and tell me what I could build with it\.\n\n\[Fabricator:/)
+    expect(first).toContain('--type fabric-semanticmodel --workspace-id ws-fin --item-id m1')
+    // The message is its chips alone: no empty bubble, and the request stays Copilot's.
+    const sent = await screen.findByRole('list', { name: 'Fabric data' })
+    expect(sent.closest('.turn')?.querySelector('.user-bubble')).toBeNull()
+    expect(screen.queryByText(/Connect this data to the app/)).toBeNull()
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    })
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalledTimes(2))
+    expect((api.chat.send.mock.calls[1] as unknown as [string, string, string])[2]).toBe(first)
+    expect(screen.getAllByRole('list', { name: 'Fabric data' })).toHaveLength(2)
+  })
+
+  it('reopens Add Fabric data from a chip with what is picked, and Update changes the chips', async () => {
+    const api = installApi() as unknown as Record<string, unknown> & { projects: Record<string, unknown> }
+    Object.assign(api, {
+      deploy: { list: vi.fn(async () => []) },
+      fabric: {
+        listWorkspaces: vi.fn(async () => ({
+          ok: true,
+          workspaces: [
+            { id: 'ws-fin', displayName: 'Finance', capacityKind: 'fabric', eligible: true },
+            { id: 'ws-ops', displayName: 'Ops', capacityKind: 'fabric', eligible: true }
+          ]
+        })),
+        listWorkspaceData: vi.fn(async () => ({ ok: true, items: [] })),
+        projectSemanticModels: vi.fn(async () => [])
+      }
+    })
+    api.projects.files = { ...(api.projects.files as object), read: vi.fn(async () => ({ error: 'not found' })) }
+    setPendingData('p1', [
+      { workspaceId: 'ws-fin', workspaceName: 'Finance', item: { id: 'm1', name: 'Sales', type: 'SemanticModel' } },
+      { workspaceId: 'ws-ops', workspaceName: 'Ops', item: { id: 'l1', name: 'orders', type: 'Lakehouse' } }
+    ])
+    render(<DataHarness />)
+
+    const tray = screen.getByRole('list', { name: 'Fabric data to connect' })
+    fireEvent.click(within(tray).getByText('Sales').closest('button')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Add Fabric data' })
+    expect(await within(dialog).findByText('2 picked across workspaces')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Update' }))
+    expect(screen.queryByRole('dialog', { name: 'Add Fabric data' })).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Fabric data to connect' })).toBeNull()
+    expect(screen.getByPlaceholderText(PLACEHOLDER)).toBeTruthy()
+  })
+})
+
 describe('ChatPanel Design changes', () => {
   const ITEM: DesignItem = {
     id: 'i1',

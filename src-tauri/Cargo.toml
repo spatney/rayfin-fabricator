@@ -1,6 +1,6 @@
 [package]
 name = "rayfin-fabricator"
-version = "1.21.0"
+version = "1.23.0"
 description = "Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
 authors = ["Fabricator"]
 license = "MIT"
@@ -58,6 +58,13 @@ chrono = { version = "0.4", features = ["clock"], default-features = false }
 # the Copilot SDK's reqwest already uses in this process, so corporate root CAs are trusted.
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json"] }
 
+# The local relay for a model provider whose API rejects fields the Copilot runtime sends
+# (services/byok/relay.rs). The same hyper stack reqwest already uses.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+
 dirs = "7"
 which = "8"
 trash = "5"
@@ -77,6 +84,7 @@ windows = { version = "0.62", features = [
   "Wdk_System_Threading",
   "Win32_Foundation",
   "Win32_NetworkManagement_IpHelper",
+  "Win32_Security_Credentials",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Memory",
@@ -112,6 +120,9 @@ objc2-web-kit = { version = "0.3", default-features = false, features = [
   "WKWebView",
   "WKSnapshotConfiguration",
 ] }
+# Keychain storage for the user's own model provider API keys (services/byok).
+# Already in the tree through native-tls, so no new crates.
+security-framework = "3"
 
 [profile.release]
 panic = "abort"

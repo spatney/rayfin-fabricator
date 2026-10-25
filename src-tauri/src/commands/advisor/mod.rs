@@ -22,6 +22,7 @@ pub(crate) use evidence::mask_secrets;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -36,7 +37,8 @@ use serde_json::Value;
 use tauri::{AppHandle, State};
 
 use crate::commands::chat_tools;
-use crate::services::copilot::{CopilotManager, SessionOptions};
+use crate::services::byok::{self, ByokManager};
+use crate::services::copilot::{CopilotManager, ModelChoice, SessionOptions};
 use crate::services::emit::emit_advisor_event;
 use crate::services::exec::CancelToken;
 use crate::services::fingerprint::fingerprint;
@@ -644,9 +646,10 @@ fn finalize_review(
 /// Where a one-shot Advisor session runs, and how it can be stopped.
 struct RunCtx<'a> {
   copilot: &'a CopilotManager,
+  /// Your own API keys, for runs on a provider's model.
+  byok: &'a ByokManager,
   root: &'a str,
-  model: Option<String>,
-  effort: Option<String>,
+  choice: ModelChoice,
   token: &'a CancelToken,
 }
 
@@ -660,19 +663,62 @@ fn emitter(app: &AppHandle, project_id: &str) -> Emit {
 /// `on_event` until the turn ends. `Err` means the prompt never started.
 async fn one_shot(
   run: &RunCtx<'_>,
-  opts: SessionOptions,
+  mut opts: SessionOptions,
   prompt: String,
   timeout_ms: u64,
-  on_event: impl FnMut(&str, &Value) -> bool,
+  mut on_event: impl FnMut(&str, &Value) -> bool,
 ) -> Result<DrainEnd, String> {
-  let session = run
-    .copilot
-    .transient_session_with(run.root, run.model.clone(), run.effort.clone(), opts)
-    .await?;
-  let sub = session.subscribe();
-  let end = match session.send(MessageOptions::new(prompt)).await {
-    Ok(_) => Ok(drain(&session, sub, run.token, timeout_ms, on_event).await),
-    Err(e) => Err(e.to_string()),
+  // A provider's model must be able to run, and the session needs the registry
+  // to reach it; otherwise the runtime would quietly use a Copilot model.
+  let provider_model = run.choice.model.clone().filter(|m| byok::is_provider_selection(m));
+  if let Some(model) = &provider_model {
+    run.byok.ensure_ready(model)?;
+    opts.byok = run.byok.session_registry();
+  }
+  let session = run.copilot.transient_session_with(run.root, run.choice.clone(), opts).await?;
+  let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+  // A provider's model can stop with an empty response (no reply, no tool
+  // call): ask it to carry on, within the same time budget. Its errors read plainly.
+  let ended_empty = AtomicBool::new(false);
+  let mut watch = |event_type: &str, data: &Value| {
+    match event_type {
+      "assistant.message" => ended_empty.store(byok::is_empty_response(data), Ordering::Relaxed),
+      "session.error" => {
+        ended_empty.store(false, Ordering::Relaxed);
+        let plain = provider_model.as_deref().and_then(|model| {
+          data.get("message").and_then(Value::as_str).and_then(|raw| byok::explain_for(model, raw))
+        });
+        if let Some(plain) = plain {
+          let mut data = data.clone();
+          data["message"] = Value::String(plain);
+          return on_event(event_type, &data);
+        }
+      }
+      _ => {}
+    }
+    on_event(event_type, data)
+  };
+  let mut message = prompt;
+  let mut continues = 0;
+  let end = loop {
+    let sub = session.subscribe();
+    if let Err(e) = session.send(MessageOptions::new(message)).await {
+      // Only the first send decides whether the prompt started.
+      break if continues == 0 { Err(e.to_string()) } else { Ok(DrainEnd::Finished) };
+    }
+    let left = deadline.saturating_duration_since(Instant::now()).as_millis() as u64;
+    let end = drain(&session, sub, run.token, left, &mut watch).await;
+    let again = provider_model.is_some()
+      && matches!(end, DrainEnd::Finished)
+      && ended_empty.load(Ordering::Relaxed)
+      && continues < byok::MAX_CONTINUES
+      && Instant::now() < deadline;
+    if !again {
+      break Ok(end);
+    }
+    continues += 1;
+    ended_empty.store(false, Ordering::Relaxed);
+    message = byok::CONTINUE_PROMPT.to_string();
   };
   // These sessions are never reused; disconnect so they never accumulate.
   let _ = session.disconnect().await;
@@ -816,9 +862,14 @@ pub async fn advisor_run(
   let emit = emitter(&app, &project_id);
   let run = RunCtx {
     copilot: &state.copilot,
+    byok: &state.byok,
     root: &project.path,
-    model: request.model.clone(),
-    effort: request.effort.clone(),
+    choice: ModelChoice::new(
+      request.model.clone(),
+      request.effort.clone(),
+      request.auto_tier.clone(),
+      request.context_tier.clone(),
+    ),
     token: &token,
   };
   let report = review(&run, &request, emit.clone()).await;
@@ -873,6 +924,8 @@ pub async fn advisor_explain(
   finding: AdvisorFinding,
   model: Option<String>,
   effort: Option<String>,
+  auto_tier: Option<String>,
+  context_tier: Option<String>,
 ) -> Result<String, String> {
   let Some(project) = store::find_project(&project_id) else {
     return Err("Project not found.".into());
@@ -881,7 +934,8 @@ pub async fn advisor_explain(
     return Err("An explanation is already being generated for this project.".into());
   };
   let emit = emitter(&app, &project_id);
-  let run = RunCtx { copilot: &state.copilot, root: &project.path, model, effort, token: &token };
+  let choice = ModelChoice::new(model, effort, auto_tier, context_tier);
+  let run = RunCtx { copilot: &state.copilot, byok: &state.byok, root: &project.path, choice, token: &token };
   let result = explain(&run, &finding, |text, reset| {
     emit(AdvisorEvent::ExplainDelta { explain_id: explain_id.clone(), text, reset });
   })
@@ -910,6 +964,8 @@ pub async fn advisor_verify(
   findings: Vec<AdvisorFinding>,
   model: Option<String>,
   effort: Option<String>,
+  auto_tier: Option<String>,
+  context_tier: Option<String>,
 ) -> Result<Vec<AdvisorVerdict>, String> {
   let Some(project) = store::find_project(&project_id) else {
     return Err("Project not found.".into());
@@ -923,7 +979,8 @@ pub async fn advisor_verify(
   let Some(token) = state.try_begin_verify(&project_id) else {
     return Err("A verification is already running for this project.".into());
   };
-  let run = RunCtx { copilot: &state.copilot, root: &project.path, model, effort, token: &token };
+  let choice = ModelChoice::new(model, effort, auto_tier, context_tier);
+  let run = RunCtx { copilot: &state.copilot, byok: &state.byok, root: &project.path, choice, token: &token };
   let result = verify(&run, &findings, &verify_id, emit.clone()).await;
   state.end_verify(&project_id, &token);
   emit(AdvisorEvent::VerifyDone { verify_id, ok: result.is_ok(), error: result.as_ref().err().cloned() });

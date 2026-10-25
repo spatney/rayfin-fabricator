@@ -1,17 +1,21 @@
 ---
 title: "Settings"
-description: "Every option in Fabricator's Settings: accounts, setup, workspace folder, theme, text size, diagnostics, experiments and the About section."
+description: "Every option in Fabricator's Settings: accounts, API keys, setup, workspace folder, theme, text size, diagnostics, experiments and the About section."
 ---
 
 Open **Settings** to manage your accounts, change how Fabricator looks, where new projects are created, how diagnostics are captured, and whether experimental features are visible.
 
 Settings groups its options into **General**, **Appearance**, **Diagnostics**, **Experiments**, and **About**. Each option shows its name and what it does, with its control on the right.
 
-![The Settings dialog: Accounts, Setup and Workspace folder under General, then Theme, Text size and Ray under Appearance, and Updates.](/screenshots/settings.webp)
+![The Settings dialog: Accounts, API keys, Setup and Workspace folder under General, then Theme and Text size under Appearance, and the start of Diagnostics.](/screenshots/settings.webp)
 
 ## Accounts
 
 **Accounts** lists the services Fabricator signs in to: GitHub Copilot, Microsoft Fabric, the Azure CLI, and GitHub. Select **Manage accounts** to see who you're signed in as, sign in or out, and add or switch between Fabric, Azure CLI and GitHub accounts. See [Manage your accounts](/docs/start/accounts).
+
+## API keys
+
+**API keys** adds models from Anthropic, OpenAI, xAI and Google, on your own API keys, to the model pickers in Build chat, the Advisor and Design. The provider bills you for them, and you still sign in to GitHub Copilot, which runs the conversation. Select **Manage API keys** to add your keys and choose their models in **Accounts → Model providers**. See [Use your own API keys](/docs/build/your-own-api-keys).
 
 ## Theme
 
@@ -80,12 +84,12 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 > [!WARNING]
 > Team workspaces are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
 
-### Deploy manually
+### Migrate Power BI reports
 
-**Deploy manually** stops chat turns from deploying your app. Your changes stay on this computer until you deploy them from the app bar, and the preview shows them from a local Vite server whenever the app is open. While it's on, the deployment panel has a **Deploy after each chat turn** switch, off to start with: turn it on to deploy after each turn again. Team apps aren't affected: they still save after each turn. See [Deploy manually](/docs/ship/deploy#deploy-manually).
+**Migrate Power BI reports** adds **Migrate a Power BI report** to Home. It turns a Power BI report into a new app that reads the report's semantic model live, and Copilot rebuilds the report's pages, visuals and filters one page at a time. This experiment needs the Azure CLI. See [Migrate a Power BI report](/docs/build/migrate-power-bi).
 
 > [!WARNING]
-> Deploy manually is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
+> Migrating Power BI reports is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
 
 ## About
 

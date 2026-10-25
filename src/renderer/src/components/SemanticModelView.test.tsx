@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import SemanticModelView from './SemanticModelView'
 import type { SemanticModelRef } from '../model/fabricConfig'
 import { clearSchemaCache } from '../model/schemaCache'
+import { buildSqlSource, type SqlSourceModel } from '../model/sqlSource'
 import type { SemanticSchemaResult } from '@shared/ipc'
 import { ToastProvider } from '../toast'
 
@@ -215,5 +216,83 @@ describe('SemanticModelView', () => {
     await screen.findByRole('button', { name: 'Sign in to Fabric' })
     expect(fetchSchema).toHaveBeenCalledTimes(3)
     expect(screen.queryByText('Orders')).toBeNull()
+  })
+
+  describe('SQL sources', () => {
+    const clinic = (): SqlSourceModel =>
+      buildSqlSource({
+        connector: { name: 'clinic', type: 'fabric-sqldatabase', operations: ['read'] },
+        metadata: {
+          path: 'rayfin/connectors/clinic/metadata.json',
+          text: JSON.stringify({
+            discoveredAt: '2026-10-25T03:43:58.726Z',
+            schemas: [
+              {
+                schemaName: 'dbo',
+                tables: [
+                  {
+                    tableName: 'visits',
+                    columns: [
+                      { columnName: 'visit_id', dataType: 'int' },
+                      { columnName: 'patient_id', dataType: 'int', isNullable: true }
+                    ],
+                    primaryKeyColumns: ['visit_id'],
+                    foreignKeys: [
+                      {
+                        constraintName: 'FK_visit_patient',
+                        columnName: 'patient_id',
+                        referencedTableSchema: 'dbo',
+                        referencedTableName: 'patients',
+                        referencedColumnName: 'patient_id'
+                      }
+                    ]
+                  },
+                  { tableName: 'patients', columns: [{ columnName: 'patient_id', dataType: 'int' }], primaryKeyColumns: ['patient_id'] },
+                  { tableName: 'wards', columns: [{ columnName: 'ward_id', dataType: 'int' }] }
+                ]
+              }
+            ]
+          })
+        },
+        files: [
+          {
+            path: 'rayfin/connectors/clinic/Visits.ts',
+            text: "@entity()\nexport class Visits extends Source({ schema: 'dbo', table: 'visits', primaryKey: ['visitId'] }) {\n  @int({ column: 'visit_id' }) visitId!: number;\n  @int({ column: 'patient_id', optional: true }) patientId?: number;\n}\n"
+          }
+        ]
+      })
+
+    it('draws the tables the app uses from the project, and all of them on request', async () => {
+      const fetchSchema = installApi(schema())
+      const onOpenFile = vi.fn()
+      render(<SemanticModelView projectId="p1" models={[]} sqlSources={[clinic()]} refreshKey={0} onOpenFile={onOpenFile} />)
+      await screen.findByText('visits')
+      expect(hasCard('patients')).toBe(false)
+      expect(fetchSchema).not.toHaveBeenCalled()
+      expect(within(cardOf('visits')).getByText('patient_id').closest('li')!.getAttribute('title')).toBe(
+        'int, can be empty · references patients.patient_id'
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'All tables 3' }))
+      expect(hasCard('patients')).toBe(true)
+      expect(hasCard('wards')).toBe(true)
+      expect(within(cardOf('wards')).getByText('Not used by the app')).toBeTruthy()
+
+      fireEvent.click(within(cardOf('visits')).getByRole('button', { name: 'Visits' }))
+      expect(onOpenFile).toHaveBeenCalledWith('rayfin/connectors/clinic/Visits.ts')
+    })
+
+    it('keeps the other sources reachable while a semantic model needs sign-in', async () => {
+      installApi({ ...schema(), ok: false, needsLogin: true })
+      render(
+        <ToastProvider>
+          <SemanticModelView projectId="p1" models={[MODEL]} sqlSources={[clinic()]} refreshKey={0} />
+        </ToastProvider>
+      )
+      await screen.findByRole('button', { name: 'Sign in to Fabric' })
+      fireEvent.click(screen.getByRole('button', { name: 'Clinic SQL database' }))
+      await screen.findByText('visits')
+      expect(screen.queryByRole('button', { name: 'Sign in to Fabric' })).toBeNull()
+    })
   })
 })

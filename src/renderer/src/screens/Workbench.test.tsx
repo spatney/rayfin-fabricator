@@ -142,7 +142,7 @@ const project: StudioProject = {
   addedAt: '2026-09-12T00:00:00Z',
   lastDeploy: { url: 'https://project.example.com', status: 'success' }
 }
-const manualSettings: AppSettings = { theme: 'system', experiments: { manualDeploy: true } }
+const manualSettings: AppSettings = { theme: 'system', deployMode: 'manual' }
 
 function installApi(active = false) {
   const state = {
@@ -201,6 +201,14 @@ function installApi(active = false) {
       azure: vi.fn<RayfinStudioApi['accounts']['azure']>().mockResolvedValue({
         azInstalled: true,
         accounts: []
+      })
+    },
+    // Accounts always lists Model providers (your own API keys).
+    byok: {
+      status: vi.fn<RayfinStudioApi['byok']['status']>().mockResolvedValue({
+        supported: true,
+        store: 'Windows Credential Manager',
+        providers: []
       })
     },
     onProcLog: vi.fn<(callback: (event: ProcLogEvent) => void) => () => void>(() => () => {})
@@ -794,7 +802,7 @@ describe('Workbench app bar', () => {
 })
 
 describe('Workbench after-turn deployment', () => {
-  it('keeps every turn local with Deploy manually on, and deploys on Redeploy', async () => {
+  it('keeps every turn local once the user deploys manually, and deploys on Redeploy', async () => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
     render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
@@ -812,7 +820,7 @@ describe('Workbench after-turn deployment', () => {
     expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined)
   })
 
-  it('switches to deploying after each turn from the deployment panel without leaving the experiment', async () => {
+  it('switches back to deploying after each turn from the deployment panel', async () => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
     const props = makeProps({ settings: manualSettings })
@@ -829,21 +837,24 @@ describe('Workbench after-turn deployment', () => {
     expect(api.deploy.run).toHaveBeenCalledTimes(1)
   })
 
-  it('does not deploy when Deploy manually is turned on while changes are checked', async () => {
+  it('deploys after each turn by default, and not once that is turned off while changes are checked', async () => {
     const api = installApi(true)
     const changed = deferred<boolean>()
     api.deploy.hasChanges.mockReturnValueOnce(changed.promise)
     const props = makeProps({ settings: { theme: 'system' } })
     const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
-    expect(deploymentsProps.mock.lastCall?.[0].autoDeploy, 'the experiment is off').toBeUndefined()
+    expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on, 'Auto unless the user chose Manual').toBe(true)
+
+    act(() => deploymentsProps.mock.lastCall?.[0].autoDeploy?.onChange(false))
+    expect(props.onSettingsChange).toHaveBeenCalledWith({ deployMode: 'manual' })
 
     await act(async () => completeTurn())
     rerender(<Workbench {...props} settings={manualSettings} />)
     await act(async () => changed.resolve(true))
     expect(api.deploy.run).not.toHaveBeenCalled()
 
-    // Turning it off deploys after the next turn, not straight away.
+    // Turning it back on deploys after the next turn, not straight away.
     rerender(<Workbench {...props} />)
     expect(api.deploy.run).not.toHaveBeenCalled()
     api.deploy.hasChanges.mockResolvedValue(true)
@@ -1230,6 +1241,18 @@ describe('Workbench live preview ports', () => {
     expect(api.deploy.run).not.toHaveBeenCalled()
   })
 
+  it('leaves the local preview to the after-turn deploy while chat turns deploy', async () => {
+    const { api, dev } = await mount()
+    dev.plan.mockResolvedValue({ port: 5174 })
+    api.deploy.hasChanges.mockResolvedValue(true)
+    const { turn } = await beginTurn()
+    await act(async () => turn)
+
+    await act(async () => completeTurn({ ok: true, filesModified: ['src/App.tsx'], ranDeploy: false }))
+    expect(api.deploy.run).toHaveBeenCalledTimes(1)
+    expect(previewProps.mock.lastCall?.[0].localReload, 'the deploy reloads the app instead').toBe(0)
+  })
+
   it('keeps the local preview on screen through the after-turn redeploy, and closes it when it ends', async () => {
     const { api, dev } = await mount()
     dev.plan.mockResolvedValue({ port: 5174 })
@@ -1264,7 +1287,7 @@ describe('Workbench live preview ports', () => {
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
   })
 
-  /** Deploy manually on, with a free port, so the open app's preview starts. */
+  /** Manual deploy, with a free port, so the open app's preview starts. */
   async function mountManual() {
     const api = installApi(true)
     api.dev.plan.mockResolvedValue({ port: 5174 })
@@ -1274,7 +1297,7 @@ describe('Workbench live preview ports', () => {
     return { api, dev: api.dev, view }
   }
 
-  it.each([true, false])('runs the local preview whenever the app is open with Deploy manually on (turn success: %s)', async (ok) => {
+  it.each([true, false])('runs the local preview whenever the app is open while the user deploys manually (turn success: %s)', async (ok) => {
     const { api, dev } = await mountManual()
     expect(dev.start).toHaveBeenCalledWith(project.id, 5174)
     expect(previewProps.mock.lastCall?.[0].manualDeploy).toBe(true)
@@ -1290,6 +1313,22 @@ describe('Workbench live preview ports', () => {
     expect(api.deploy.run).toHaveBeenCalledTimes(1)
     expect(dev.stop).not.toHaveBeenCalled()
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBe('http://localhost:5174')
+  })
+
+  it('reloads the kept local preview after a turn that changed files, not after one that changed nothing', async () => {
+    await mountManual()
+    const reloads = (): number | undefined => previewProps.mock.lastCall?.[0].localReload
+    expect(reloads()).toBe(0)
+
+    let { turn } = await beginTurn()
+    await act(async () => turn)
+    await act(async () => completeTurn({ ok: true, filesModified: [], ranDeploy: false }))
+    expect(reloads(), 'a turn that only answered').toBe(0)
+
+    ;({ turn } = await beginTurn())
+    await act(async () => turn)
+    await act(async () => completeTurn({ ok: false, error: 'Stopped', filesModified: ['src/App.tsx'], ranDeploy: false }))
+    expect(reloads(), 'a stopped turn that changed files').toBe(1)
   })
 
   it('tells the preview while a turn runs, so Design waits for it on the local preview', async () => {
@@ -1354,9 +1393,9 @@ describe('Workbench live preview ports', () => {
     await waitFor(() => expect(api.dev.start).toHaveBeenCalledWith('p2', 5174))
   })
 
-  it('closes the local preview when Deploy manually is turned off', async () => {
+  it('closes the local preview when deploying after each turn is turned back on', async () => {
     const { dev, view } = await mountManual()
-    view.rerender(<Workbench {...makeProps({ settings: { theme: 'system' } })} />)
+    view.rerender(<Workbench {...makeProps({ settings: { theme: 'system', deployMode: 'auto' } })} />)
     expect(dev.stop).toHaveBeenCalledWith(project.id)
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
   })
@@ -1446,6 +1485,40 @@ describe('Workbench Advisor fixes', () => {
   })
 })
 
+describe('Workbench chat history', () => {
+  it('keeps the Fabric data a message added when it saves the transcript', async () => {
+    const api = installApi(true)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    const data = [{ name: 'Ledger', type: 'SQLDatabase' as const, workspace: 'Finance analytics' }]
+    act(() =>
+      chatProps.mock.lastCall![0].onChange(() => [
+        { id: 'u1', role: 'user', text: 'Chart spending', tools: [], pending: false, data, prompt: 'Chart spending + how to connect' },
+        { id: 'a1', role: 'assistant', text: 'Done.', tools: [], pending: false }
+      ])
+    )
+    await act(async () => completeTurn())
+    const saved = api.chat.saveHistory.mock.lastCall?.[1] as { data?: unknown; prompt?: string }[]
+    expect(saved[0]).toMatchObject({ data, prompt: 'Chart spending + how to connect' })
+  })
+
+  it('keeps the migration chip a message carried when it saves the transcript', async () => {
+    const api = installApi(true)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    const migration = { reportName: 'Sales', foundation: true, page: { index: 0, count: 3, name: 'Overview' } }
+    act(() =>
+      chatProps.mock.lastCall![0].onChange(() => [
+        { id: 'u1', role: 'user', text: 'Migrate “Sales” from Power BI', tools: [], pending: false, migration, prompt: 'Migrate…' },
+        { id: 'a1', role: 'assistant', text: 'Done.', tools: [], pending: false }
+      ])
+    )
+    await act(async () => completeTurn())
+    const saved = api.chat.saveHistory.mock.lastCall?.[1] as { migration?: unknown }[]
+    expect(saved[0]).toMatchObject({ migration })
+  })
+})
+
 describe('Workbench team workspaces', () => {
   const teamProject: StudioProject = {
     ...project,
@@ -1522,9 +1595,9 @@ describe('Workbench team workspaces', () => {
     expect(team.sync).not.toHaveBeenCalled()
   })
 
-  it('still saves after each turn with Deploy manually on', async () => {
+  it('still saves after each turn when the user deploys manually', async () => {
     const { api, team } = installTeamApi()
-    const settings: AppSettings = { theme: 'system', experiments: { teamWorkspaces: true, manualDeploy: true } }
+    const settings: AppSettings = { theme: 'system', experiments: { teamWorkspaces: true }, deployMode: 'manual' }
     render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
 

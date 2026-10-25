@@ -195,7 +195,7 @@ pub async fn chat_suggest(
   };
 
   // A transient, uncached session keeps this out of the project's chat history.
-  let session = match state.copilot.transient_session(&project.path, None, None).await {
+  let session = match state.copilot.transient_session(&project.path, Default::default()).await {
     Ok(s) => s,
     Err(_) => {
       state.end_suggest(&project_id, &token);
