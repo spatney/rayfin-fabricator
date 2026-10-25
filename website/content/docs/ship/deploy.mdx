@@ -114,6 +114,7 @@ To deploy after each turn again, turn **Deploy after each chat turn** back on. Y
 While **Deploy after each chat turn** is off:
 
 - The local preview uses your deployed app's backend. Frontend changes show as Copilot makes them, but changes to data, permissions or functions work only after you deploy them. Fabricator asks Copilot to tell you when a change needs a deploy.
+- When a turn that changed your app ends, the preview reloads once, so it shows the finished app from a fresh start, not only the live updates made while Copilot worked. A turn that changed nothing, such as a question, leaves the page as it is.
 - **Design** works on the local preview between turns, so you can queue visual changes and send them to Copilot without deploying first. It turns off when a turn starts, because Copilot's changes show in the preview as it makes them. The **Fabric** view works on the deployed app, so it's unavailable.
 - The local preview stops when you switch to another app or close Fabricator, and the app you open next gets its own. If you switch your app to another deployment, its local preview starts again with that deployment's settings.
 - If the project has no local Vite installation, there's no local preview. The preview keeps showing the deployed app, without your latest changes, until you deploy them.

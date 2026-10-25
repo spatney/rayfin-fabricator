@@ -21,7 +21,7 @@ function Harnessed({
   deploy,
   localPreviewUrl,
   manualDeploy,
-  turnRunning,
+  localReload,
   onRefreshAuth,
   authBusy,
   onDiagnoseDeploy,
@@ -34,7 +34,7 @@ function Harnessed({
   deploy?: DeployUiState
   localPreviewUrl?: string | null
   manualDeploy?: boolean
-  turnRunning?: boolean
+  localReload?: number
   onRefreshAuth?: () => void
   authBusy?: boolean
   onDiagnoseDeploy?: () => void
@@ -53,7 +53,7 @@ function Harnessed({
         onDiagnoseDeploy={onDiagnoseDeploy}
         localPreviewUrl={localPreviewUrl}
         manualDeploy={manualDeploy}
-        turnRunning={turnRunning}
+        localReload={localReload}
         focused={false}
         onToggleFocus={() => {}}
         onSettle={onSettle}
@@ -759,64 +759,33 @@ describe('PreviewPane local preview', () => {
     expect(screen.getByText('localhost:5173')).toBeTruthy()
   })
 
-  it('reloads the retained local preview after a manual-deploy turn finishes', async () => {
+  it('reloads the local preview once, hidden, when a turn that changed files ends', async () => {
     const project = makeProject('p1')
-    const { rerender } = render(
-      <Harnessed
-        project={project}
-        suppressed={false}
-        localPreviewUrl={LOCAL}
-        manualDeploy
-        turnRunning={false}
-      />
+    const pane = (localReload: number): JSX.Element => (
+      <Harnessed project={project} suppressed={false} localPreviewUrl={LOCAL} manualDeploy localReload={localReload} />
     )
+    const { rerender } = render(pane(0))
     await settle(e)
     expect(e.api.reload).not.toHaveBeenCalled()
 
-    rerender(
-      <Harnessed
-        project={project}
-        suppressed={false}
-        localPreviewUrl={LOCAL}
-        manualDeploy
-        turnRunning
-      />
-    )
+    const mark = e.calls.length
+    rerender(pane(1))
     await settle(e)
-    expect(e.api.reload).not.toHaveBeenCalled()
+    expect(e.api.reload).toHaveBeenCalledTimes(1)
+    expect(e.methodsAfter(mark), 'parked while the fresh page loads').toContain('suppress')
 
-    rerender(
-      <Harnessed
-        project={project}
-        suppressed={false}
-        localPreviewUrl={LOCAL}
-        manualDeploy
-        turnRunning={false}
-      />
-    )
+    // Rendering again with the same value doesn't reload again.
+    rerender(pane(1))
+    await settle(e)
     expect(e.api.reload).toHaveBeenCalledTimes(1)
   })
 
-  it('does not reload a local preview after an auto-deploy turn finishes', async () => {
+  it('leaves the deployed app alone when asked to reload the local preview', async () => {
     const project = makeProject('p1')
-    const { rerender } = render(
-      <Harnessed
-        project={project}
-        suppressed={false}
-        localPreviewUrl={LOCAL}
-        turnRunning
-      />
-    )
+    const { rerender } = render(<Harnessed project={project} suppressed={false} localReload={0} />)
     await settle(e)
-
-    rerender(
-      <Harnessed
-        project={project}
-        suppressed={false}
-        localPreviewUrl={LOCAL}
-        turnRunning={false}
-      />
-    )
+    rerender(<Harnessed project={project} suppressed={false} localReload={1} />)
+    await settle(e)
     expect(e.api.reload).not.toHaveBeenCalled()
   })
 

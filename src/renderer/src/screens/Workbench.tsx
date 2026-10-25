@@ -1072,6 +1072,9 @@ export default function Workbench({
 
   /** The last app and deployment manual deploy started a local preview for. */
   const keptAttemptRef = useRef<string | null>(null)
+  /** Bumped to reload the open app's local preview after a manual-deploy turn
+   *  that changed files (see PreviewPane's `localReload`). */
+  const [localReload, setLocalReload] = useState(0)
   /**
    * Manual deploy: the deployed app falls behind your code, so the open app's
    * local preview runs whenever the app is open, not only during turns. One
@@ -1116,10 +1119,12 @@ export default function Workbench({
       const deployed = Boolean(projectsRef.current?.projects.find((p) => p.id === projectId)?.lastDeploy?.url)
       const mayDeploy = result.ok && !manual && !isTeamProject(projectId) && deployed
       if (devServersRef.current[projectId] && manual && activeIdRef.current === projectId) {
-        // Manual deploy: the open app's preview stays up while the app is open.
+        // Manual deploy: the open app's preview stays up while the app is open,
+        // and reloads once when the turn changed files.
         setDevServers((all) =>
           all[projectId] ? { ...all, [projectId]: { ...all[projectId], kept: true } } : all
         )
+        if (result.filesModified.length > 0) setLocalReload((n) => n + 1)
       } else if (devServersRef.current[projectId] && mayDeploy) {
         setDevServers((all) =>
           all[projectId] ? { ...all, [projectId]: { ...all[projectId], untilDeployed: true } } : all
@@ -2153,6 +2158,7 @@ export default function Workbench({
                               : null
                           }
                           manualDeploy={manualDeploy && !active.team}
+                          localReload={localReload}
                           turnRunning={activeChatBusy}
                           watching={watchDeploy === active.id}
                           onWatchChange={(watching) => setWatchDeploy(watching ? active.id : null)}

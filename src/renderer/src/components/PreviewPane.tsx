@@ -148,9 +148,11 @@ interface Props {
    *  "Local" badge. See {@link RayfinStudioApi.dev}. */
   localPreviewUrl?: string | null
   /** Chat turns don't deploy (the user turned off "Deploy after each chat turn"):
-   *  the local preview runs whenever the app is open, instead of only during turns,
-   *  and reloads when a turn finishes. */
+   *  the local preview runs whenever the app is open, instead of only during turns. */
   manualDeploy?: boolean
+  /** Changes when a chat turn that changed files ends while chat turns don't
+   *  deploy, to reload the local preview once. */
+  localReload?: number
   /** A chat turn is running for this app, so its local preview changes as
    *  Copilot works. */
   turnRunning?: boolean
@@ -270,6 +272,7 @@ export default function PreviewPane({
   onLoadingChange,
   localPreviewUrl,
   manualDeploy = false,
+  localReload = 0,
   turnRunning = false,
   team = false,
   localBackend,
@@ -317,7 +320,7 @@ export default function PreviewPane({
 
   const hostRef = useRef<HTMLDivElement>(null)
   const prevRunningRef = useRef(running)
-  const previousTurnRef = useRef({ projectId: project.id, running: Boolean(turnRunning) })
+  const localReloadRef = useRef(localReload)
   const [displayUrl, setDisplayUrl] = useState(deployedUrl ?? '')
   const [loading, setLoading] = useState(false)
   const [canBack, setCanBack] = useState(false)
@@ -487,19 +490,20 @@ export default function PreviewPane({
     }
   }, [running, deploy?.result, previewUrl, beginTransition])
 
-  // Vite's hot updates do not cover every change (for example, configuration or
-  // entry-point edits). The retained manual-deploy preview therefore gets one
-  // full refresh after Copilot finishes, while auto deploy keeps its existing
-  // stop-and-deploy handoff.
+  // While chat turns don't deploy, the local preview stays up between turns and
+  // only takes Vite's hot updates, which keep the page's state through a turn's
+  // edits and can leave it out of step with the code (state Fast Refresh kept,
+  // module-level caches, an error mid-turn). So after a turn that changed files
+  // it reloads once, hidden like a redeploy's reload, to show the finished app
+  // from a fresh start. Only when the surface holds the local page.
   useEffect(() => {
-    const previous = previousTurnRef.current
-    previousTurnRef.current = { projectId: project.id, running: Boolean(turnRunning) }
-    const finished =
-      previous.projectId === project.id && previous.running && !turnRunning
-    if (finished && manualDeploy && isLocal && previewUrl) {
+    if (localReload === localReloadRef.current) return
+    localReloadRef.current = localReload
+    if (isLocal && previewUrl && (loadedUrlRef.current ?? surfaceShownUrl) === previewUrl) {
+      beginTransition(previewUrl)
       void window.api.preview.reload()
     }
-  }, [project.id, turnRunning, manualDeploy, isLocal, previewUrl])
+  }, [localReload, isLocal, previewUrl, beginTransition])
 
   useEffect(() => {
     if (deployedUrl) setDisplayUrl(deployedUrl)
