@@ -17,6 +17,7 @@
     "build/design",
     "build/code-and-history",
     "build/data-model",
+    "build/migrate-power-bi",
     "build/skills",
     "build/secrets",
     "---Ship---",

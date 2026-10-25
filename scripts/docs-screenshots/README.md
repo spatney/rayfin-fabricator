@@ -20,7 +20,7 @@ Everything here is a maintainer tool. It isn't part of the app or of CI.
 | `scrub.js` | Replaces personal details (names, emails, tenant, workspace and repo names, paths) in a page |
 | `capture-window.ps1` | Captures the app window, including the native preview webview a DevTools screenshot can't see |
 | `optimize.mjs` | Crops, resizes and converts a capture to WebP, and its light twin the same way (uses `sharp` from `website/node_modules`) |
-| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Blueprint, its Data model view with related entities and with loose access, deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments) and captures each in both themes with headless Edge |
+| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Blueprint, its Data model view with related entities and with loose access, deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Migrate a Power BI report, the Migration card) and captures each in both themes with headless Edge |
 
 ## Before you start
 
@@ -154,6 +154,8 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `design`, `design-theme` | live (`design-theme` with `--open` on the Theme button) | `720,40,720,860` |
 | `advisor-finding` | live | `99,191,857,534` |
 | `settings`, `settings-experiments` | harness | `410,40,620,820` |
+| `migrate-report` | harness | `340,12,760,716` |
+| `migration-card` | harness | `0,610,720,290` |
 | `account-menu` | harness | `1040,0,400,272` |
 | `deployments` | harness | `1000,0,440,360` |
 | `share` | live, `--open` on Share, `--close` on Cancel | `400,240,640,420` |

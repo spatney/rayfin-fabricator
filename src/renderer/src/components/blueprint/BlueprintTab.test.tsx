@@ -11,7 +11,8 @@ import { clearFabricInfo } from './fabricInfo'
  * connects to, and who each connection signs in as. These tests feed it a
  * project's files through a mocked `window.api` and protect what people rely on:
  * the identities and whose credentials the app uses, the details panel and its
- * Copilot hand-offs, and moving between the Architecture and Data model views.
+ * Copilot hand-offs, and moving between the Architecture, Data model and Fabric
+ * data views.
  */
 
 const WS = '5d1c2a9e-1b7f-4c3d-9e21-8a64f0c2b7d1'
@@ -70,12 +71,66 @@ export const schema = [Expense, Receipt]
 
 const FUNCTIONS = `udf.func('summarizeReport', async (ctx: RayfinContext<AppSchema, AudienceType.AzureAI>) => 1, [])`
 
+const WAREHOUSE_DIR = 'rayfin/connectors/finance-warehouse'
+const WAREHOUSE_METADATA = JSON.stringify({
+  discoveredAt: '2026-10-20T09:00:00.000Z',
+  schemas: [
+    {
+      schemaName: 'dbo',
+      tables: [
+        {
+          tableName: 'ledger',
+          columns: [
+            { columnName: 'entry_id', dataType: 'int', isNullable: false },
+            { columnName: 'account_id', dataType: 'int', isNullable: false }
+          ],
+          primaryKeyColumns: ['entry_id'],
+          foreignKeys: [
+            {
+              constraintName: 'FK_ledger_account',
+              columnName: 'account_id',
+              referencedTableSchema: 'dbo',
+              referencedTableName: 'accounts',
+              referencedColumnName: 'account_id'
+            }
+          ]
+        },
+        { tableName: 'accounts', columns: [{ columnName: 'account_id', dataType: 'int', isNullable: false }], primaryKeyColumns: ['account_id'] }
+      ]
+    }
+  ]
+})
+const LEDGER = `import { entity, int } from '@microsoft/rayfin-core'
+import { Source } from '@microsoft/rayfin-connectors'
+@entity()
+export class Ledger extends Source({ schema: 'dbo', table: 'ledger', primaryKey: ['entryId'] }) {
+  @int({ column: 'entry_id' }) entryId!: number
+  @int({ column: 'account_id' }) accountId!: number
+}
+`
+
 const TREE: FileNode[] = [
   {
     name: 'rayfin',
     path: 'rayfin',
     type: 'dir',
     children: [
+      {
+        name: 'connectors',
+        path: 'rayfin/connectors',
+        type: 'dir',
+        children: [
+          {
+            name: 'finance-warehouse',
+            path: WAREHOUSE_DIR,
+            type: 'dir',
+            children: [
+              { name: 'Ledger.ts', path: `${WAREHOUSE_DIR}/Ledger.ts`, type: 'file' },
+              { name: 'metadata.json', path: `${WAREHOUSE_DIR}/metadata.json`, type: 'file' }
+            ]
+          }
+        ]
+      },
       {
         name: 'functions',
         path: 'rayfin/functions',
@@ -142,7 +197,9 @@ function installApi(files: Record<string, string>): { openExternal: ReturnType<t
 const FULL_FILES = {
   'rayfin/rayfin.yml': FULL_YML,
   'rayfin/data/schema.ts': SCHEMA,
-  'rayfin/functions/src/function_app.ts': FUNCTIONS
+  'rayfin/functions/src/function_app.ts': FUNCTIONS,
+  [`${WAREHOUSE_DIR}/metadata.json`]: WAREHOUSE_METADATA,
+  [`${WAREHOUSE_DIR}/Ledger.ts`]: LEDGER
 }
 
 function renderTab(
@@ -333,12 +390,40 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
     expect(localStorage.getItem('rayfin.model.view.p1')).toBe('data')
   })
 
-  it('offers to connect data when the app reaches nothing outside, and has no Semantic model view', async () => {
+  it('jumps from a warehouse to its tables in the Fabric data view', async () => {
+    const { onOpenFile } = renderTab()
+    await screen.findByText('Contoso Expenses')
+    // One tab for every source the app connects to: the semantic model and the warehouse.
+    expect(screen.getByRole('tab', { name: /Fabric data/ }).textContent).toContain('2')
+    fireEvent.click(node('Finance warehouse, Warehouse'))
+    const panel = screen.getByRole('complementary', { name: 'Finance warehouse details' })
+    fireEvent.click(within(panel).getByRole('button', { name: 'View the tables' }))
+
+    // The tables the app uses, read from the project: no Fabric query.
+    await screen.findByText('ledger')
+    expect(screen.getByRole('tab', { name: /Fabric data/ }).getAttribute('aria-selected')).toBe('true')
+    expect(localStorage.getItem('rayfin.model.view.p1')).toBe('fabric')
+    expect(screen.getByRole('button', { name: 'Finance warehouse Warehouse' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByText('accounts')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'All tables 2' }))
+    expect(await screen.findByText('accounts')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Ledger' }))
+    expect(onOpenFile).toHaveBeenCalledWith(`${WAREHOUSE_DIR}/Ledger.ts`)
+  })
+
+  it('opens the Fabric data view for a project that remembered the Semantic model view', async () => {
+    localStorage.setItem('rayfin.model.view.p1', 'semantic')
+    renderTab()
+    await screen.findByText('Couldn’t read the semantic model')
+    expect(screen.getByRole('tab', { name: /Fabric data/ }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('offers to connect data when the app reaches nothing outside, and has no Fabric data view', async () => {
     installApi({ 'rayfin/rayfin.yml': SIMPLE_YML, 'rayfin/data/schema.ts': SCHEMA })
     const { onSendToChat } = renderTab({ project: makeProject('p2', { name: 'Team Notes' }) })
     await screen.findByText('No outside data yet')
     expect(screen.queryByText('Signs in as')).toBeNull()
-    expect(screen.queryByRole('tab', { name: /Semantic model/ })).toBeNull()
+    expect(screen.queryByRole('tab', { name: /Fabric data/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Connect data with Copilot' }))
     expect(onSendToChat).toHaveBeenCalledWith('Connect data from Fabric', expect.stringContaining('rayfin connector add'), true)
   })

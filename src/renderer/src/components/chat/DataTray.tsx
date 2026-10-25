@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import type { ChatDataRef } from '@shared/ipc'
+import type { ChatDataRef, ChatMigrationRef } from '@shared/ipc'
 import { kindOfItem, type DataSource } from '@renderer/fabricData'
 import { CloseIcon, Codicon } from '../icons'
 
@@ -64,6 +64,27 @@ export function SentData({ data }: { data: readonly ChatDataRef[] }): JSX.Elemen
           </li>
         )
       })}
+    </ul>
+  )
+}
+
+/** "Page 2 of 5: Regional sales", or "Setup and page 1 of 5: Overview" for the first turn. */
+export function migrationChipLabel(migration: ChatMigrationRef): string {
+  const page = migration.page
+  if (!page) return migration.foundation ? 'Setup' : 'Wrap-up'
+  const where = `page ${page.index + 1} of ${page.count}: ${page.name}`
+  return migration.foundation ? `Setup and ${where}` : where.charAt(0).toUpperCase() + where.slice(1)
+}
+
+/** The report-migration page a sent message asked Copilot to build, as a chip in the transcript. */
+export function SentMigration({ migration }: { migration: ChatMigrationRef }): JSX.Element {
+  return (
+    <ul className="msg-data" aria-label="Power BI migration">
+      <li className="data-chip data-chip--sent" title={`Migrating “${migration.reportName}” from Power BI`}>
+        <Codicon name="graph" className="data-chip-ico" />
+        <span className="data-chip-name">{migration.reportName}</span>
+        <span className="data-chip-ws">{migrationChipLabel(migration)}</span>
+      </li>
     </ul>
   )
 }

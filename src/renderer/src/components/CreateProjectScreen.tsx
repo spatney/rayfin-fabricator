@@ -9,8 +9,11 @@ import type {
   TeamWorkspace
 } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
+import type { ModelSelection } from '../modelSelection'
+import { projectNameProblem } from '../projectName'
 import DeploymentCreateForm, { checkActiveDeployTarget } from './DeploymentCreateForm'
 import { useMascotInstall } from './mascot/stage'
+import { ModelPicker } from './models/ModelPicker'
 
 type Mode = 'create' | 'deploy'
 type Step = 'details' | 'deploy'
@@ -49,6 +52,12 @@ interface Props {
   onTeamCreated?: (result: TeamActionResult) => void
   /** The workspaces your apps use, most recent first; the Deploy step lists them first. */
   recentWorkspaces?: readonly string[]
+  /** Creating an app from something else (a Power BI report): shown in place of the examples. */
+  source?: { label: string; detail: string }
+  /** The project name to start with. */
+  initialName?: string
+  /** The Copilot model the new app's first turns use, chosen here (a report migration's). */
+  model?: { value: ModelSelection; onChange: (next: ModelSelection) => void; onManageKeys?: () => void }
 }
 
 const keyOf = (t: { path?: string; name: string }): string => t.path || t.name
@@ -142,7 +151,10 @@ export default function CreateProjectScreen({
   teamWorkspaces,
   initialTeamWorkspaceId,
   onTeamCreated,
-  recentWorkspaces
+  recentWorkspaces,
+  source,
+  initialName,
+  model
 }: Props): JSX.Element {
   // The native preview webview floats above HTML; suppress it while this covers the body.
   useSuppressPreview()
@@ -158,7 +170,7 @@ export default function CreateProjectScreen({
   )
 
   // ----- Details step -----
-  const [name, setName] = useState('')
+  const [name, setName] = useState(initialName ?? '')
   const [start, setStart] = useState<Start>('scratch')
   const [gallery, setGallery] = useState<CommunityGallery | null>(null)
   const [loadingGallery, setLoadingGallery] = useState(false)
@@ -339,6 +351,8 @@ export default function CreateProjectScreen({
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+  /** The Rayfin CLI would refuse this name: said right away, so Create stays off. */
+  const nameProblem = projectNameProblem(name)
 
   // Is the name free where the project will be saved (the projects folder, or
   // the team workspace)? Checked shortly after typing stops. Only a confirmed
@@ -346,7 +360,7 @@ export default function CreateProjectScreen({
   const checkKey = `${destination}\u0000${name.trim()}`
   const [nameCheck, setNameCheck] = useState<(ProjectNameCheck & { key: string }) | null>(null)
   useEffect(() => {
-    if (!slug || busy || step !== 'details') return
+    if (!slug || nameProblem || busy || step !== 'details') return
     let stale = false
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -363,13 +377,14 @@ export default function CreateProjectScreen({
       stale = true
       window.clearTimeout(timer)
     }
-  }, [checkKey, slug, busy, step])
+  }, [checkKey, slug, nameProblem, busy, step])
   const nameTaken = nameCheck?.key === checkKey && !nameCheck.ok ? (nameCheck.message ?? 'That name is taken.') : null
+  const nameWarning = nameProblem ?? nameTaken
 
   const urlValid = /^(https?:\/\/|git@|git\+)/i.test(url.trim())
   const canCreate =
     Boolean(slug) &&
-    !nameTaken &&
+    !nameWarning &&
     (start === 'scratch' || (customMode ? urlValid : Boolean(selectedEntry)))
 
   // ----- Create progress (cosmetic; completion is driven by `done`) -----
@@ -395,13 +410,17 @@ export default function CreateProjectScreen({
       ? mode === 'create'
         ? 'Deploy your app'
         : 'Create your first deployment'
-      : 'New project'
+      : source
+        ? 'New app from Power BI'
+        : 'New project'
   const sub =
     step === 'deploy'
       ? `Publish ${createdName || 'your app'} to a Fabric workspace to start building with chat.`
       : busy
         ? `Setting up ${name.trim() || 'your app'}…`
-        : 'Give it a name. Next, describe what you want and Copilot builds it.'
+        : source
+          ? 'Name your app. Fabricator reads the report while it creates and deploys the app, then Copilot rebuilds it page by page.'
+          : 'Give it a name. Next, describe what you want and Copilot builds it.'
   const skipLabel = mode === 'deploy' ? 'Maybe later' : 'Continue without deploying →'
 
   return (
@@ -445,12 +464,12 @@ export default function CreateProjectScreen({
                   autoCorrect="off"
                   spellCheck={false}
                   disabled={busy}
-                  aria-invalid={nameTaken ? true : undefined}
+                  aria-invalid={nameWarning ? true : undefined}
                   onChange={(e) => setName(e.target.value)}
                 />
-                {nameTaken ? (
+                {nameWarning ? (
                   <span className="field-hint field-hint--warn" role="alert">
-                    {nameTaken}
+                    {nameWarning}
                   </span>
                 ) : (
                   slug && (
@@ -485,7 +504,31 @@ export default function CreateProjectScreen({
               )}
 
               <div className={`field${busy ? ' create-field-hidden' : ''}`}>
-                {start === 'scratch' ? (
+                {source ? (
+                  <>
+                    <div className="create-source">
+                      <span className="field-label">{source.label}</span>
+                      <span className="create-source-detail">{source.detail}</span>
+                    </div>
+                    {model && (
+                      <div className="create-model">
+                        <span className="field-label">Copilot model</span>
+                        <ModelPicker
+                          value={model.value}
+                          disabled={busy}
+                          onChange={model.onChange}
+                          tiers
+                          placement="down"
+                          onManageKeys={model.onManageKeys}
+                          label="Copilot model"
+                        />
+                        <span className="field-hint">
+                          Copilot rebuilds the report with this model. You can change it in the chat later.
+                        </span>
+                      </div>
+                    )}
+                  </>
+                ) : start === 'scratch' ? (
                   <p className="create-start">
                     Want a head start?{' '}
                     <button

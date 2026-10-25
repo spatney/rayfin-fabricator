@@ -40,8 +40,9 @@ Fabricator can send these custom events:
 | `signin` | `trigger`, currently `startup` or `login`. |
 | `deploy` | `success`, either `true` or `false`. |
 | `team` | `action`, currently `create`, `join`, `publish`, `diagnose`, or `abandon`, plus `success`. |
+| `migration` | `step`: `start`, `extract`, or `page`. `start` adds `pages`, `format`, and `personal`; `extract` adds the outcome of each read (`definition`, `model`, and `export`), `format`, `pages`, `visuals`, and `seconds`; `page` adds `ok`, `index`, and `pages`. |
 
-Team telemetry does not include repository names, workspace names, or app names.
+Team telemetry does not include repository names, workspace names, or app names. Migration telemetry does not include report, workspace, semantic model, or page names.
 
 ## How identifiers are hashed
 
@@ -57,6 +58,7 @@ Fabricator telemetry does not send:
 - App names or app contents.
 - Repository names.
 - Fabric workspace names.
+- Power BI report, semantic model, or page names.
 - Credentials or tokens.
 
 ## Diagnostics stay on your device
@@ -78,6 +80,16 @@ The Advisor's **Run deep review** also uses Copilot in a read-only mode.
 You can choose models from Anthropic, OpenAI, xAI and Google that run on your own API keys. When you use one, Copilot on your computer sends the request and the project context it needs to that provider, under the provider's terms for your account, instead of to a GitHub Copilot model.
 
 Fabricator keeps your keys in Windows Credential Manager, or in your Keychain on macOS. They never go into Fabricator's settings, logs, diagnostics or telemetry. Requests to OpenAI, xAI and Google pass through a relay on your computer that adapts them to what each provider's API accepts; it sends them only to that provider, and keeps nothing on disk. See [Use your own API keys](/docs/build/your-own-api-keys).
+
+## Power BI report migrations
+
+When you migrate a Power BI report, Fabricator reads it from Power BI and Fabric with your Azure CLI sign-in. It saves what Copilot works from in the project, under `.fabricator/migration/`: the report's definition, its semantic model's tables and measures, and an image and the text of each page. The page images and text show the report's data.
+
+- That folder stays on this computer. Fabricator keeps it out of git, so it isn't committed or pushed with the app.
+- Copilot reads the material during the migration's chat turns, and each page's message carries an image of the page. Like other chat content, it goes to GitHub Copilot, or to the provider of a model you chose on your own API key.
+- Copilot keeps data values out of `MIGRATION.md`, the migration notes that are committed with the app.
+
+See [Migrate a Power BI report](/docs/build/migrate-power-bi#where-the-reports-material-lives).
 
 ## Deploys go to your Fabric tenant
 

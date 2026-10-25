@@ -14,7 +14,7 @@
 param(
   [Parameter(Mandatory)] [string] $Checkout,
   [Parameter(Mandatory)] [string] $Out,
-  [string[]] $Shots = @('team-overview', 'team-publish', 'deployments', 'account-menu', 'team-create', 'rayfin-version', 'port-conflict', 'plan', 'skills', 'secrets', 'setup', 'help', 'deploy-progress', 'deploy-error', 'blueprint', 'model-relations', 'model-access', 'model-picker', 'model-providers', 'add-menu', 'connect-data', 'data-chips', 'settings', 'settings-experiments'),
+  [string[]] $Shots = @('team-overview', 'team-publish', 'deployments', 'account-menu', 'team-create', 'rayfin-version', 'port-conflict', 'plan', 'skills', 'secrets', 'setup', 'help', 'deploy-progress', 'deploy-error', 'blueprint', 'model-relations', 'model-access', 'model-picker', 'model-providers', 'add-menu', 'connect-data', 'data-chips', 'settings', 'settings-experiments', 'migrate-report', 'migration-card'),
   [ValidateSet('dark', 'light')] [string[]] $Themes = @('dark', 'light'),
   [int] $Port = 1437,
   [int] $Width = 1440,

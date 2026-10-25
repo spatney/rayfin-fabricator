@@ -303,9 +303,26 @@ impl ScaffoldRequest {
   }
 }
 
+/// Why `name` can't name a project, as the Rayfin CLI's `isValidProjectName`
+/// would refuse it when the project is created: only letters, digits, spaces,
+/// hyphens and underscores, with at least one letter or digit.
+pub(crate) fn project_name_problem(name: &str) -> Option<&'static str> {
+  let name = name.trim();
+  if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c.is_whitespace()) {
+    return Some("Use only letters, numbers, spaces, hyphens and underscores.");
+  }
+  if !name.chars().any(|c| c.is_ascii_alphanumeric()) {
+    return Some("Include at least one letter or number.");
+  }
+  None
+}
+
 /// Whether a new local project named `name` can be created under `root`: its
 /// folder (the same slug [`create_project`] uses) must not exist yet.
 pub(crate) fn check_local_name_in(root: &Path, name: &str) -> ProjectNameCheck {
+  if let Some(problem) = project_name_problem(name) {
+    return ProjectNameCheck { ok: false, message: Some(problem.into()) };
+  }
   let slug = crate::commands::util::slugify(name);
   if slug.is_empty() {
     return ProjectNameCheck { ok: false, message: Some("Use letters or numbers in the name.".into()) };
@@ -330,6 +347,9 @@ pub(crate) fn scaffold_request(input: &CreateProjectInput) -> Result<ScaffoldReq
   let name = input.name.trim().to_string();
   if name.is_empty() {
     return Err("Please enter a project name.".into());
+  }
+  if let Some(problem) = project_name_problem(&name) {
+    return Err(problem.into());
   }
   let template = {
     let t = input.template.trim();
@@ -718,5 +738,25 @@ entries:
     assert_eq!(check_local_name_in(&root, "Trip Planner"), ProjectNameCheck { ok: true, message: None });
     assert!(!check_local_name_in(&root, "!!!").ok);
     let _ = std::fs::remove_dir_all(&root);
+  }
+
+  #[test]
+  fn names_the_rayfin_cli_would_refuse_are_caught_before_creating() {
+    assert_eq!(project_name_problem("Q4 results - v2_final"), None);
+    assert_eq!(
+      project_name_problem("SalesBenchmark (migrated)"),
+      Some("Use only letters, numbers, spaces, hyphens and underscores.")
+    );
+    assert_eq!(project_name_problem("Café"), Some("Use only letters, numbers, spaces, hyphens and underscores."));
+    assert_eq!(project_name_problem(" - _ "), Some("Include at least one letter or number."));
+    let input = CreateProjectInput {
+      name: "SalesBenchmark (migrated)".into(),
+      template: String::new(),
+      template_name: None,
+    };
+    assert_eq!(
+      scaffold_request(&input).err().as_deref(),
+      Some("Use only letters, numbers, spaces, hyphens and underscores.")
+    );
   }
 }

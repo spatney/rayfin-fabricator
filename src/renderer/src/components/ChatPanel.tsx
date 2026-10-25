@@ -9,10 +9,12 @@ import {
   type ClipboardEvent,
   type DragEvent,
   type JSX,
+  type ReactNode,
 } from 'react'
 import {
   type ChatAdvisorSummary,
   type ChatDataRef,
+  type ChatMigrationRef,
   type ChatMode,
   type ChatPlanArtifact,
   type ChatTurnResult,
@@ -78,18 +80,19 @@ function rerunPrompt(user: UIChatMessage): string | null {
 }
 
 /** What a user message carries beyond its text: a Design or Advisor card, the
- *  Fabric data it added, and the prompt reruns re-send. */
+ *  Fabric data it added, the migration page it builds, and the prompt reruns re-send. */
 interface TurnExtra {
   design?: ChatDesignSummary
   advisor?: ChatAdvisorSummary
   data?: ChatDataRef[]
+  migration?: ChatMigrationRef
   storedPrompt?: string
 }
 
 /** A Design or Advisor message's card and prompt, carried to its rerun (without
  *  the captures — those were deleted once the original turn used them). */
 function rerunExtra(user: UIChatMessage): TurnExtra | undefined {
-  if (!user.prompt && !user.design && !user.advisor && !user.data) return undefined
+  if (!user.prompt && !user.design && !user.advisor && !user.data && !user.migration) return undefined
   return {
     design: user.design
       ? {
@@ -103,6 +106,7 @@ function rerunExtra(user: UIChatMessage): TurnExtra | undefined {
       : undefined,
     advisor: user.advisor,
     data: user.data,
+    migration: user.migration,
     storedPrompt: user.prompt
   }
 }
@@ -186,6 +190,8 @@ interface Props {
   onCopilotAuthChanged?: () => Promise<void> | void
   /** The workspaces your apps deploy to, and when (Add Fabric data lists recent ones first). */
   recentWorkspaces?: readonly WorkspaceUse[]
+  /** Shown above the composer, such as a report migration's progress card. */
+  banner?: ReactNode
 }
 
 export default function ChatPanel({
@@ -225,7 +231,8 @@ export default function ChatPanel({
   onDesignSent,
   copilotAuth,
   onCopilotAuthChanged,
-  recentWorkspaces
+  recentWorkspaces,
+  banner
 }: Props): JSX.Element {
   // The composer draft is seeded from — and mirrored back to — the parent so a
   // typed-but-unsent prompt survives this panel unmounting. Switching to the Code
@@ -898,6 +905,7 @@ export default function ChatPanel({
       design: extra?.design,
       advisor: extra?.advisor,
       data: extra?.data,
+      migration: extra?.migration,
       prompt: extra?.storedPrompt
     }
     const assistantMsg: UIChatMessage = {
@@ -1408,9 +1416,12 @@ export default function ChatPanel({
       taRef.current?.focus()
     } else {
       // Keep the full prompt when the bubble shows a short label, so Retry,
-      // Try again, and Resume re-send what Copilot actually received.
-      void dispatch(outbound.display, outbound.prompt, [], undefined, undefined, {
+      // Try again, and Resume re-send what Copilot actually received. A model
+      // that can't read images gets the prompt alone (it names the files).
+      const shots = imageNote ? [] : [...(outbound.shots ?? [])]
+      void dispatch(outbound.display, outbound.prompt, shots, undefined, undefined, {
         advisor: outbound.advisor,
+        migration: outbound.migration,
         storedPrompt: outbound.prompt !== outbound.display ? outbound.prompt : undefined
       })
     }
@@ -1558,6 +1569,7 @@ export default function ChatPanel({
       </div>
 
       <div className={`composer${sending ? ' composer--busy' : ''}`}>
+        {banner}
         {deployLock && (
           <div className="deploy-gate" role="status">
             {deploying ? (

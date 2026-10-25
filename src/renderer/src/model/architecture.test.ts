@@ -327,8 +327,11 @@ describe('buildArchitecture', () => {
     expect(byTitle['Azure AI Foundry'].functions).toEqual(['summarizeReport'])
     expect(byTitle['Fabric SQL & Azure SQL'].functions).toEqual(['syncBudgets'])
 
-    // The Semantic model view gets each model once.
+    // The Fabric data view gets each model once, and the SQL connector's tables.
     expect(arch.semanticModels.map((m) => m.alias)).toEqual(['spend', 'budgets'])
+    expect(arch.sqlConnectors.map((c) => c.name)).toEqual(['finance-warehouse'])
+    expect(byTitle['Finance warehouse'].tablesKey).toBe('sql:finance-warehouse')
+    expect(spend.tablesKey).toBeUndefined()
   })
 
   it('narrows the routes to what a node touches', async () => {

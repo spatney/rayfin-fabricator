@@ -23,6 +23,8 @@ interface Props {
   project: StudioProject
   /** True while a `rayfin up` is streaming for this project. */
   running: boolean
+  /** Copilot is mid-turn in this project, which holds its source: deploys wait for the turn. */
+  chatBusy?: boolean
   /** The project's deploy: its log and start while it runs, and how the last one ended. */
   deploy?: DeployUiState
   /** True while the recorded deployment is being reconciled with on-disk state. */
@@ -122,6 +124,7 @@ function byDeployedAt(a: FabricDeployment, b: FabricDeployment): number {
 export default function DeploymentsControl({
   project,
   running,
+  chatBusy = false,
   deploy,
   reconciling = false,
   pending,
@@ -345,8 +348,12 @@ export default function DeploymentsControl({
     if (!wsResult?.ok) void loadWorkspaces(true)
   }
 
+  /** A chat turn holds the project's source, so a deploy started now could only fail. */
+  const held = chatBusy && !running
+  const heldTitle = 'Copilot is working on this app. Deploys wait until the turn finishes.'
+
   /** What the button beside the state does now. */
-  const action: { label: string; title: string; primary: boolean; disabled?: boolean; run: () => void } =
+  const nextAction: { label: string; title: string; primary: boolean; disabled?: boolean; run: () => void } =
     running
       ? {
           label: percent === null ? 'Deploying…' : `Deploying… ${percent}%`,
@@ -379,6 +386,7 @@ export default function DeploymentsControl({
                 primary: false,
                 run: onRedeploy
               }
+  const action = held ? { ...nextAction, disabled: true, title: heldTitle } : nextAction
 
   const chipState = running
     ? `Deploying to ${name}…`
@@ -730,7 +738,13 @@ export default function DeploymentsControl({
                       )}
                     </span>
                     <div className="dep-actions">
-                      <button type="button" className="btn btn--sm btn--primary" onClick={leave(onRedeploy)}>
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--primary"
+                        disabled={held}
+                        title={held ? heldTitle : undefined}
+                        onClick={leave(onRedeploy)}
+                      >
                         {action.label}
                       </button>
                       {onShowChanges && (
@@ -863,8 +877,8 @@ export default function DeploymentsControl({
                           <button
                             type="button"
                             className="btn btn--xs btn--ghost"
-                            disabled={Boolean(switching) || running}
-                            title={`Preview and deploy to ${d.name || d.workspaceName}`}
+                            disabled={Boolean(switching) || running || held}
+                            title={held ? heldTitle : `Preview and deploy to ${d.name || d.workspaceName}`}
                             onClick={() => void doSwitch(d)}
                           >
                             {switching === key ? 'Switching…' : 'Switch'}
@@ -900,7 +914,13 @@ export default function DeploymentsControl({
               )}
 
               <div className="dep-sec dep-foot">
-                <button type="button" className="dep-new" onClick={startCreate} disabled={running}>
+                <button
+                  type="button"
+                  className="dep-new"
+                  onClick={startCreate}
+                  disabled={running || held}
+                  title={held ? heldTitle : undefined}
+                >
                   <Codicon name="add" />
                   New deployment…
                 </button>

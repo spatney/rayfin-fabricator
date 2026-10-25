@@ -322,6 +322,172 @@ Then write your queries and visuals against that connection.
   validate-headless skill); Fabricator auto-deploys the app after the turn.
 "#;
 
+/// Model-invoked skill for rebuilding a Power BI report as the app, page by
+/// page, from the material Fabricator's report migration saved in the project
+/// (see `services::report_migration`).
+const MIGRATE_REPORT_SKILL: &str = r#"---
+name: migrate-powerbi-report
+description: "Rebuild a Power BI report as this Rayfin app, page by page, from the migration material Fabricator saved under .fabricator/migration/, with Graphein for the visuals. Use when the message asks to migrate a Power BI report or one of its pages, or names a .fabricator/migration folder."
+metadata:
+  author: Fabricator
+  version: 1.1.0
+---
+# Migrate a Power BI report
+
+You are running inside **Fabricator**, rebuilding an existing Power BI report as this Rayfin app.
+The app reads the report's own semantic model **live** through a Rayfin `fabric-semanticmodel`
+connector, so its numbers come from the same measures, with the same row-level security. The goal
+is **faithful**: every page, visual, filter and slicer, in the same arrangement and colors, rebuilt
+with [Graphein](https://github.com/spatney/graphein) visuals.
+
+## The material
+
+Fabricator saved the report under `.fabricator/migration/<report>/` (the message names the
+folder). It's kept out of git because it holds real data: never copy it into the app, commit it, or
+put its values in code or docs.
+
+| File | Use it for |
+| --- | --- |
+| `README.md` | Read it first: the source, the connector command, and every page's visuals with their fields, filters and titles, in reading order |
+| `report.json` | The whole definition, normalized: positions, field roles, aggregations, sorting, top N, filters (readable and raw), slicer selections, buttons, bookmarks |
+| `model.md` | The semantic model: tables, columns, measures with their DAX, relationships |
+| `pages/<page>.png` | What the page looks like. View it: you can read images |
+| `pages/<page>.txt` | The page's text, including the values each visual showed |
+| `theme.json`, `resources/` | The report's colors, and the images it uses, such as logos |
+| `raw/` | The definition as Power BI returned it, for details the rest leaves out |
+
+Work on the page the message names. Open other pages' material only when it matters, such as a
+shared filter or a button that leads there. When a page has no image or text, work from its README
+section and `report.json`.
+
+Your own working files that touch the data go there too, in `checks/` inside the material folder:
+query results you save, rendered chart images, and the scripts that make them. Git ignores that
+folder. Never write them into the app's folders: Fabricator commits those with the app.
+
+## Use the project's own skills
+
+How to add capabilities, connect the model, and write and test DAX is in this project's skills:
+read them rather than guessing, and follow their file layout and conventions. That's `analytics`
+(the connector, the query hook and its workflow), `dax-authoring` and `query-design` (queries,
+filters, several grains), `schema-discovery` and `app-design`. A project without them: use the
+Rayfin docs (`rayfin docs search`). The visuals are the exception: build them with Graphein
+(below). Where those skills say Vega-Lite, `VegaVisual`, `DataGrid` or the `visuals` pack, use
+Graphein instead; their guidance on connectors, DAX and query hooks still applies.
+
+## The first turn: the foundation
+
+1. Turn on the capabilities the `analytics` skill names, except charts (in the Universal App, the
+   `connectors` and `analytics` packs; not the `visuals` pack).
+2. Connect the report's semantic model with the exact `rayfin connector add` command the message
+   gives, install the packages it prints, and prove the connector with one
+   `rayfin connector invoke <alias> executeQuery --file <query>.json` before building on it.
+3. Add Graphein to the frontend package, and save its agent guide next to the material (see
+   **Visuals: Graphein**).
+4. Build the shell: one page (a route or tab) per report page, with the same names in the same
+   order. Hidden drillthrough and tooltip pages become detail views and tooltips, not tabs.
+5. Apply the report-level filters to every query, and put report-wide slicers in a shared filter bar.
+6. Carry the report's colors (`theme.json`, or the page images) into one shared Graphein theme and
+   palette, and the app's own styles, so charts and cards look like the report's.
+7. Start `MIGRATION.md` (below), then migrate the first page.
+
+## Migrating a page
+
+1. Read the page's README section, view its image and read its text.
+2. For each visual, in reading order:
+   - Map it (see the table below).
+   - Write its query with the same fields, aggregations, sorting and top N, and apply **every**
+     filter that reaches it: report, page and visual filters (hidden ones too) and the slicers'
+     saved selections. A missing filter is the most common reason numbers differ.
+   - Run the query with `rayfin connector invoke`, and compare the result with the values and
+     labels in the page text, allowing for rounding and display units such as K and M. Fix the
+     query until they match; if they can't, say why in `MIGRATION.md`.
+   - Keep the report's order: time axes in date order (sort on the date or a period number, never
+     on a month name's text), and categories sorted as the report sorts them.
+   - Build it as a Graphein spec (see the mapping and **Visuals: Graphein**), with the report
+     visual's title.
+3. Keep the report's arrangement on a responsive grid: the same order, relative sizes and grouping.
+   Positions in the README are on the page's canvas (its width and height), so a visual half the
+   page wide spans half the row. Cards across the top stay across the top. Check the page at a
+   typical window width: titles, values and axis labels mustn't overlap or clip.
+4. Slicers become Graphein slicers (`dropdown`, `list`, `search`, `range` or `dateRange`, matching
+   the slicer) wired into the DAX queries of the visuals they filter, starting from the saved
+   selection.
+5. Where the report cross-filters (clicking a bar filters the other visuals on the page, Power BI's
+   default), publish the clicked value as a Graphein selection (`params`) and feed it into the
+   other visuals' DAX filters.
+6. Buttons and bookmarks become navigation or saved filter states; a drillthrough becomes a link to
+   its detail view, filtered by the clicked value. Visuals hidden until a bookmark or button shows
+   them (the README says so) belong to the page: build each view a bookmark shows, as a tab or
+   toggle on the page, and wire the buttons that switch between them.
+
+## Visuals: Graphein
+
+Build every chart, card, table, matrix and slicer with Graphein: one JSON `ChartSpec` per visual,
+rendered by `<Chart spec={…} />` from `@graphein/react` in a sized container.
+
+1. Install it once, in the frontend package: `npm install graphein @graphein/react`, and
+   `npm install --save-dev @graphein/node` for checking charts without a browser.
+2. Graphein's agent guide is the reference for specs. Download the guide for the installed version
+   (`version` in `node_modules/graphein/package.json`) from
+   `https://raw.githubusercontent.com/spatney/graphein/v<version>/docs/agent-guide.md` into the
+   material folder as `graphein-agent-guide.md`, and read it there in later turns. `listChartTypes()`
+   and `starterSpec(type)` from `graphein` give each type's channels and a minimal spec.
+3. The data comes from the DAX queries, as tidy rows: one row per mark. **Measures don't add up**:
+   never aggregate, filter or re-total measure values in the browser, with Graphein transforms,
+   dashboard auto-wiring or a table's `totals`. Selections (slicers, `params`, `useSelection`) go
+   back into the DAX filters and the queries run again; totals come from the model (a total row
+   in the query, or `subtotals`/`grandTotals` only on additive values).
+4. Give every visual the report's look from one shared module: `theme` (light or dark, with the
+   report's accent) and a `palette` of the report's data colors in their order.
+5. Check each spec before you build on it: `validateSpec` (apply `repairSpec` for the safe fixes),
+   then render it with `renderChart(spec, { width, height })` from `@graphein/node` at the
+   visual's size, from a script in the material folder's `checks/`, writing the PNGs there too.
+   Fix what the `report` diagnoses (overlapping or clipped labels, legend overflow, low
+   contrast), and view the PNG beside the page image.
+
+## Mapping
+
+| Power BI visual (`type`) | Becomes in Graphein |
+| --- | --- |
+| `card`, `cardVisual` | `kpi` |
+| `multiRowCard` | A group of `kpi` tiles, or a one-row `table` |
+| `kpi` | `kpi` with its goal in `comparisons` and its trend as a `sparkline` |
+| `gauge` | `gauge`, with the target |
+| `clusteredColumnChart`, `columnChart`, `clusteredBarChart`, `barChart` | `bar` (`series` for several measures or a legend; `orientation: 'horizontal'` for bar charts) |
+| `stackedColumnChart`, `stackedBarChart`, `hundredPercentStackedColumnChart`, `hundredPercentStackedBarChart` | `bar` with `stack: true`; for 100%, compute each share in DAX first |
+| `lineChart`, `areaChart`, `stackedAreaChart` | `line`, or `area` (`stack: true` when stacked) |
+| `lineClusteredColumnComboChart`, `lineStackedColumnComboChart` | `combo`, with the line layers on `axis: 'right'` when the report has a second axis |
+| `ribbonChart` | `bar` with `stack: true` |
+| `waterfallChart`, `funnel`, `scatterChart`, `treemap` | `waterfall`, `funnel`, `scatter`, `treemap` |
+| `pieChart`, `donutChart` | `pie` (`donut: true` for a donut) |
+| `tableEx` | `table` |
+| `pivotTable` | `matrix`, with the report's row and column groups, expansion (`expandDepth`) and totals |
+| `slicer`, `advancedSlicerVisual`, `listSlicer`, `textSlicer` | `dropdown`, `list`, `search`, `range` or `dateRange` |
+| `textbox`, `image`, `shape`, `basicShape`, `actionButton` | Plain elements: text, images from `resources/`, layout and navigation |
+| `map`, `filledMap`, `azureMap`, `shapeMap` | `choropleth` or `bubbleMap` when the data has the regions or coordinates; otherwise a ranked `bar` by location |
+| Custom visuals (`PBI_CV_…`, named in the README) | The closest Graphein type, such as `bullet` for a bullet chart |
+| `scriptVisual`, `pythonVisual`, `qnaVisual`, `decompositionTreeVisual`, `keyDriversVisual`, `aiNarratives`, Power Apps, Power Automate, paginated report visuals | The closest Graphein visual that shows the same data, or a clearly labelled placeholder |
+
+## `MIGRATION.md`
+
+Keep it at the project root and update it every turn. It's committed with the app, so it never
+holds data values:
+
+- The source report and semantic model, by name, with the report's link.
+- For each page: a table of report visual (type and title), what it became, its file, and notes.
+- **Approximations and gaps**: everything that isn't an exact match, and why.
+
+## Rules
+
+- Never invent numbers or hard-code values from the page text: every value comes from a live query.
+- Keep the report's data out of the app's files: before you finish, run `git status`, and move
+  anything that holds data (saved query results, images of pages or charts, exports) into the
+  material folder's `checks/`.
+- Don't change the semantic model or create Fabric items: the app only reads the model.
+- Don't deploy: Fabricator deploys the app when your turn ends. Finish with what changed, which
+  visuals are approximations, and what to compare with the report in the preview.
+"#;
+
 /// Write (or refresh) the injected skill + instruction files under the app data
 /// dir. Best-effort, and it always overwrites so content updates ship with the
 /// app. Runs once per launch: startup does it in the background, and a session
@@ -346,6 +512,10 @@ fn write_all(root: &std::path::Path) -> std::io::Result<()> {
   let connect_dir = root.join("skills").join("connect-semantic-model");
   std::fs::create_dir_all(&connect_dir)?;
   std::fs::write(connect_dir.join("SKILL.md"), CONNECT_MODEL_SKILL)?;
+
+  let migrate_dir = root.join("skills").join("migrate-powerbi-report");
+  std::fs::create_dir_all(&migrate_dir)?;
+  std::fs::write(migrate_dir.join("SKILL.md"), MIGRATE_REPORT_SKILL)?;
 
   let instr_dir = root.join("instructions");
   std::fs::create_dir_all(&instr_dir)?;
@@ -438,6 +608,7 @@ mod tests {
       ("stable-only instructions", STABLE_ONLY_INSTRUCTIONS),
       ("chat style instructions", CHAT_STYLE_INSTRUCTIONS),
       ("connect skill", CONNECT_MODEL_SKILL),
+      ("migrate skill", MIGRATE_REPORT_SKILL),
     ] {
       let lower = text.to_lowercase();
       for phrase in ["then deploy", "deploy and validate", "deploy early"] {
@@ -504,6 +675,37 @@ mod tests {
   }
 
   #[test]
+  fn migrate_skill_guides_faithful_page_by_page_rebuilds() {
+    assert!(MIGRATE_REPORT_SKILL.starts_with("---\n"));
+    assert!(MIGRATE_REPORT_SKILL.contains("name: migrate-powerbi-report"));
+    for marker in [
+      ".fabricator/migration/",
+      "README.md",
+      "report.json",
+      "model.md",
+      "theme.json",
+      "MIGRATION.md",
+      "rayfin connector add",
+      "rayfin connector invoke",
+      "**every**",
+      "saved selections",
+      "holds data values",
+      "Never invent numbers",
+      "Don't deploy",
+    ] {
+      assert!(MIGRATE_REPORT_SKILL.contains(marker), "migrate skill should mention {marker}");
+    }
+    // The mapping table covers the visuals real reports use most, and the ones it can't rebuild.
+    for visual in ["`kpi`", "`pivotTable`", "`slicer`", "`lineClusteredColumnComboChart`", "`funnel`", "`PBI_CV_…`", "`decompositionTreeVisual`"] {
+      assert!(MIGRATE_REPORT_SKILL.contains(visual), "mapping should cover {visual}");
+    }
+    // It defers to the project's own skills for APIs instead of restating them.
+    for skill in ["`analytics`", "`visuals`", "`dax-authoring`", "`query-design`"] {
+      assert!(MIGRATE_REPORT_SKILL.contains(skill), "migrate skill should defer to {skill}");
+    }
+  }
+
+  #[test]
   fn chat_style_instructions_fit_the_work_log_and_answer_layout() {
     assert!(CHAT_STYLE_INSTRUCTIONS.contains("applyTo: '**'"));
     for marker in [
@@ -526,18 +728,21 @@ mod tests {
 
     let skill = tmp.join("skills").join("validate-headless").join("SKILL.md");
     let connect = tmp.join("skills").join("connect-semantic-model").join("SKILL.md");
+    let migrate = tmp.join("skills").join("migrate-powerbi-report").join("SKILL.md");
     let instr = tmp.join("instructions").join("fabricator-validate.instructions.md");
     let deploy = tmp.join("instructions").join("fabricator-deploy.instructions.md");
     let stable = tmp.join("instructions").join("fabricator-stable-only.instructions.md");
     let style = tmp.join("instructions").join("fabricator-chat-style.instructions.md");
     assert!(skill.is_file(), "SKILL.md should exist at {skill:?}");
     assert!(connect.is_file(), "connect SKILL.md should exist at {connect:?}");
+    assert!(migrate.is_file(), "migrate SKILL.md should exist at {migrate:?}");
     assert!(instr.is_file(), "instructions file should exist at {instr:?}");
     assert!(deploy.is_file(), "deploy instructions should exist at {deploy:?}");
     assert!(stable.is_file(), "stable-only instructions should exist at {stable:?}");
     assert!(style.is_file(), "chat-style instructions should exist at {style:?}");
     assert_eq!(std::fs::read_to_string(&skill).unwrap(), VALIDATE_HEADLESS_SKILL);
     assert_eq!(std::fs::read_to_string(&connect).unwrap(), CONNECT_MODEL_SKILL);
+    assert_eq!(std::fs::read_to_string(&migrate).unwrap(), MIGRATE_REPORT_SKILL);
     assert_eq!(std::fs::read_to_string(&deploy).unwrap(), DEPLOY_INSTRUCTIONS);
     assert_eq!(std::fs::read_to_string(&stable).unwrap(), STABLE_ONLY_INSTRUCTIONS);
     assert_eq!(std::fs::read_to_string(&style).unwrap(), CHAT_STYLE_INSTRUCTIONS);

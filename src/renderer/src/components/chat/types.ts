@@ -1,4 +1,4 @@
-import type { ChatAdvisorSummary, ChatMessage } from '@shared/ipc'
+import type { ChatAdvisorSummary, ChatMessage, ChatMigrationRef } from '@shared/ipc'
 
 export interface UIChatMessage extends ChatMessage {
   /** Correlates streamed events to the active assistant bubble (live only). */
@@ -42,4 +42,12 @@ export interface OutboundPrompt {
   design?: boolean
   /** Advisor findings this prompt hands to Copilot, shown as the message's card. */
   advisor?: ChatAdvisorSummary
+  /**
+   * Images sent with the prompt (absolute paths, with thumbnails for the
+   * message), such as a migrated report page. Files outside Fabricator's capture
+   * folder are left in place after the turn.
+   */
+  shots?: ReadonlyArray<{ path: string; thumb: string }>
+  /** The report-migration page this prompt builds, shown as the message's chip. */
+  migration?: ChatMigrationRef
 }
