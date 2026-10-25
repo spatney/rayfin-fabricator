@@ -1,4 +1,4 @@
-import { memo, useMemo, type ReactNode } from 'react'
+import { memo, useMemo, type ReactNode, type JSX } from 'react'
 import { ruleById } from '@shared/advisor/catalog'
 import type { CheckOutcome, CheckTally, CheckView } from '../../advisor/lifecycle'
 import { plainText, plural } from './format'

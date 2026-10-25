@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type JSX } from 'react'
 import Editor from '@monaco-editor/react'
 // Point @monaco-editor/react at the locally-bundled Monaco (offline file:// renderer),
 // same as the Code tab / SkillPreviewModal. Without this the editor hangs on the CDN.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { getCopilotHost, signInToCopilot } from '../copilotAuth'
 import CopilotHostInput from './CopilotHostInput'
 import { openDocs } from '../docsLinks'

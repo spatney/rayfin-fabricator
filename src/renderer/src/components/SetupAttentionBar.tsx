@@ -1,6 +1,8 @@
 import { listText, type SetupAttention } from '../startup'
 import { Codicon } from './icons'
 
+import type { JSX } from 'react'
+
 interface Props {
   attention: SetupAttention
   onManageAccounts: () => void

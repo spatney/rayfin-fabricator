@@ -7,6 +7,8 @@ import { parseNodeId, parsePatch } from './Inspector'
 import { AMYS, sampleMap, sampleResources, sampleRun, sampleWorkspace } from './fixtures'
 import { nodeIds } from './model'
 
+import type { JSX } from 'react'
+
 afterEach(() => {
   cleanup()
   delete (window as unknown as { api?: unknown }).api

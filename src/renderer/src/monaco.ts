@@ -1,10 +1,11 @@
 import * as monaco from 'monaco-editor'
 import { loader } from '@monaco-editor/react'
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
-import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
-import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+// Worker entry points via the package `exports` map ("./*" -> "./esm/vs/*.js").
+import EditorWorker from 'monaco-editor/editor/editor.worker?worker'
+import JsonWorker from 'monaco-editor/languages/features/json/json.worker?worker'
+import CssWorker from 'monaco-editor/languages/features/css/css.worker?worker'
+import HtmlWorker from 'monaco-editor/languages/features/html/html.worker?worker'
+import TsWorker from 'monaco-editor/languages/features/typescript/ts.worker?worker'
 
 // Route Monaco's language services to the Vite-bundled web workers. This app runs
 // offline from a file:// renderer, so the workers must be local — never the CDN.
@@ -71,11 +72,11 @@ monaco.editor.defineTheme('rayfin-light', {
 
 // This is a read-only viewer: turn off TS/JS validation so Monaco doesn't spin up
 // the language worker just to surface diagnostics we never display.
-monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+monaco.typescript.typescriptDefaults.setDiagnosticsOptions({
   noSemanticValidation: true,
   noSyntaxValidation: true
 })
-monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+monaco.typescript.javascriptDefaults.setDiagnosticsOptions({
   noSemanticValidation: true,
   noSyntaxValidation: true
 })

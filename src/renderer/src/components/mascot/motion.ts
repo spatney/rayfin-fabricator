@@ -146,7 +146,8 @@ export function placeBubble(opts: {
         best = {
           x: bx,
           y: Math.min(Math.max(y, bounds.y + 4), bounds.y + bounds.h - bubble.h - 4),
-          tail: Math.min(Math.max(aimX - bx, 16), bubble.w - 16),
+          // Off its rounded corners, so the tail always meets a straight edge.
+          tail: Math.min(Math.max(aimX - bx, 22), bubble.w - 22),
           below: isBelow
         }
       }

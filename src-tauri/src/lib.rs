@@ -9,6 +9,8 @@ mod error;
 mod services;
 mod state;
 mod types;
+#[cfg(test)]
+mod vendor_guard;
 
 use tauri::Manager;
 
@@ -118,24 +120,36 @@ pub fn run() {
       let version = app.package_info().version.to_string();
       services::telemetry::init(telemetry_connection_string(app), version);
 
-      // Materialize Fabricator's product-scoped agent skills/instructions under
-      // app-data so chat sessions can inject them (never written into the repo).
-      services::agent_skills::ensure_materialized();
-
       // Watch for main-thread freezes (Parallels/VM hangs) and record them. The
       // monitor actively probes the main thread, so an idle (event-starved) loop
       // is never mistaken for a hang.
       services::watchdog::start(app.handle().clone());
 
-      // Trim old chat-session diagnostics so the logs directory stays bounded.
-      // Runs once at startup so per-turn capture adds no pruning I/O.
-      services::diagnostics::prune();
+      // The main window starts hidden; the renderer shows it once its first
+      // screen is painted (see `window_reveal`). Should the page never get that
+      // far, show it anyway rather than leave the app invisible. (`get_window`:
+      // with the preview added, it's no longer a single-webview window.)
+      let handle = app.handle().clone();
+      std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        if let Some(window) = handle.get_window("main") {
+          commands::misc::reveal(&window);
+        }
+      });
 
-      // Retired app-data storage nothing reads anymore: the Design Studio
-      // experiment's drafts, receipts and imported assets, and the per-user npm
-      // cache earlier releases seeded from a cache bundled with the app. Remove
-      // them in the background (a no-op once they're gone).
+      // Housekeeping nothing needs during startup runs off the main thread, so
+      // the window and the first commands aren't kept waiting on the disk:
+      //   - materialize Fabricator's product-scoped agent skills/instructions
+      //     under app-data, which chat sessions inject (never into the repo);
+      //   - trim old chat-session diagnostics, so the logs directory stays
+      //     bounded (once per launch, so per-turn capture adds no pruning I/O);
+      //   - remove retired app-data storage nothing reads anymore: the Design
+      //     Studio experiment's drafts, receipts and imported assets, and the
+      //     per-user npm cache earlier releases seeded from a cache bundled with
+      //     the app (a no-op once they're gone).
       std::thread::spawn(|| {
+        services::agent_skills::ensure_materialized();
+        services::diagnostics::prune();
         for (dir, what) in [
           (services::paths::retired_design_studio_dir(), "Design Studio data"),
           (services::paths::retired_npm_cache_dir(), "npm cache"),
@@ -157,6 +171,7 @@ pub fn run() {
       commands::misc::open_external,
       commands::misc::open_logs,
       commands::misc::open_in_editor,
+      commands::misc::window_reveal,
       commands::misc::relaunch,
       // diagnostics
       commands::diagnostics::diagnostics_export,
@@ -168,6 +183,12 @@ pub fn run() {
       // settings
       commands::settings::settings_get,
       commands::settings::settings_set,
+      // your own API keys
+      commands::byok::byok_status,
+      commands::byok::byok_set_key,
+      commands::byok::byok_refresh,
+      commands::byok::byok_remove_key,
+      commands::byok::byok_set_models,
       // doctor
       commands::doctor::doctor_check,
       commands::doctor::doctor_install,
@@ -256,6 +277,7 @@ pub fn run() {
       commands::fabric::fabric_share_app,
       commands::fabric::fabric_directory_search,
       commands::fabric::fabric_list_workspace_models,
+      commands::fabric::fabric_list_workspace_data,
       commands::fabric::fabric_check_deploy_target,
       // projects
       commands::projects::projects_state,
@@ -337,6 +359,7 @@ pub fn run() {
       commands::chat::chat_save_history,
       commands::chat::chat_set_options,
       commands::chat::chat_models,
+      commands::chat::chat_auto_tiers,
       // suggestions
       commands::suggest::chat_suggest,
       commands::suggest::chat_suggest_cancel,
@@ -347,6 +370,7 @@ pub fn run() {
       commands::deploy::deploy_run,
       commands::deploy::deploy_status,
       commands::deploy::deploy_has_changes,
+      commands::deploy::deploy_pending,
       commands::deploy::deploy_list,
       commands::deploy::deploy_switch,
       commands::deploy::deploy_set_name,
@@ -360,6 +384,7 @@ pub fn run() {
             services::dev_server::dev_register_port,
       // preview
       services::preview::preview_show_url,
+      services::preview::preview_preload,
       services::preview::preview_navigate,
       services::preview::preview_set_bounds,
       services::preview::preview_hide,

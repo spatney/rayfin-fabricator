@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react'
+import type { ComponentProps, JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { OverlayProvider, usePreviewSuppressed } from '../overlay'
@@ -19,6 +19,7 @@ function makeProps(overrides: Partial<Props> = {}): Props {
     onSignOut: vi.fn(),
     onRefresh: vi.fn(),
     onManageAccounts: vi.fn(),
+    onOpenSettings: vi.fn(),
     ...overrides
   }
 }
@@ -153,15 +154,32 @@ describe('AccountMenu', () => {
     const manage = item('Manage accounts…')
     const refresh = item('Refresh Fabric authentication')
     const signOut = item('Sign out')
+    const settings = item('Settings')
     expect(document.activeElement).toBe(manage)
     fireEvent.keyDown(manage, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(refresh)
     fireEvent.keyDown(refresh, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(signOut)
     fireEvent.keyDown(signOut, { key: 'ArrowDown' })
+    expect(document.activeElement, 'the separator is skipped').toBe(settings)
+    fireEvent.keyDown(settings, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(manage)
     fireEvent.keyDown(manage, { key: 'End' })
-    expect(document.activeElement).toBe(signOut)
+    expect(document.activeElement).toBe(settings)
+  })
+
+  it('opens Settings from the menu, signed in or out', () => {
+    const props = renderMenu()
+    fireEvent.click(trigger())
+    fireEvent.click(item('Settings'))
+    expect(props.onOpenSettings).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).toBeNull()
+    cleanup()
+
+    const signedOut = renderMenu({ signedIn: false, user: undefined, canRefresh: false })
+    fireEvent.click(screen.getByRole('button', { name: 'Settings and accounts' }))
+    fireEvent.click(item('Settings'))
+    expect(signedOut.onOpenSettings).toHaveBeenCalledTimes(1)
   })
 
   it('hides the native preview only while the menu is open', () => {
@@ -180,7 +198,7 @@ describe('AccountMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign in to Fabric' }))
     expect(props.onSignIn).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole('button', { name: 'More sign-in options' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings and accounts' }))
     expect(screen.getByText('Not signed in to Fabric')).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'Sign out' })).toBeNull()
     fireEvent.click(item('Refresh Fabric authentication'))
@@ -191,7 +209,7 @@ describe('AccountMenu', () => {
     const props = renderMenu({ signedIn: false, user: undefined, canRefresh: false, signingIn: true, busy: true })
     const signIn = screen.getByRole('button', { name: 'Signing in…' }) as HTMLButtonElement
     expect(signIn.disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'More sign-in options' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings and accounts' }))
     expect(screen.queryByRole('menuitem', { name: 'Refresh Fabric authentication' })).toBeNull()
     fireEvent.click(item('Manage accounts…'))
     expect(props.onManageAccounts).toHaveBeenCalledTimes(1)

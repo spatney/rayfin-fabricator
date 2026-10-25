@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react'
+import type { ComponentProps, ReactNode, JSX } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type {
@@ -142,7 +142,7 @@ const project: StudioProject = {
   addedAt: '2026-09-12T00:00:00Z',
   lastDeploy: { url: 'https://project.example.com', status: 'success' }
 }
-const manualSettings: AppSettings = { theme: 'system', experiments: { manualDeploy: true } }
+const manualSettings: AppSettings = { theme: 'system', deployMode: 'manual' }
 
 function installApi(active = false) {
   const state = {
@@ -164,6 +164,7 @@ function installApi(active = false) {
     deploy: {
       reconcile: vi.fn().mockResolvedValue(state),
       hasChanges: vi.fn().mockResolvedValue(false),
+      pending: vi.fn<RayfinStudioApi['deploy']['pending']>().mockResolvedValue({ changed: false, files: 0 }),
       run: vi.fn().mockResolvedValue({ ok: true, outcome: 'success' }),
       switch: vi.fn().mockResolvedValue({ ok: true, outcome: 'success' })
     },
@@ -200,6 +201,14 @@ function installApi(active = false) {
       azure: vi.fn<RayfinStudioApi['accounts']['azure']>().mockResolvedValue({
         azInstalled: true,
         accounts: []
+      })
+    },
+    // Accounts always lists Model providers (your own API keys).
+    byok: {
+      status: vi.fn<RayfinStudioApi['byok']['status']>().mockResolvedValue({
+        supported: true,
+        store: 'Windows Credential Manager',
+        providers: []
       })
     },
     onProcLog: vi.fn<(callback: (event: ProcLogEvent) => void) => () => void>(() => () => {})
@@ -628,8 +637,9 @@ describe('Workbench app bar', () => {
     expect(inBar.getByRole('button', { name: 'Project One — Switch projects' })).toBeTruthy()
     expect(inBar.getByRole('tablist', { name: 'Project views' })).toBeTruthy()
     expect(inBar.getByRole('button', { name: 'Test deploy' })).toBeTruthy()
-    expect(inBar.getByRole('button', { name: 'Settings' })).toBeTruthy()
+    expect(inBar.queryByRole('button', { name: 'Settings' }), 'Settings is in the account menu').toBeNull()
     expect(inBar.getByRole('button', { name: 'Account: dev@example.com' })).toBeTruthy()
+    expect(accountAction('Settings')).toBeTruthy()
   })
 
   it('shows every project from the project menu and returns to the still-open project', async () => {
@@ -784,7 +794,7 @@ describe('Workbench app bar', () => {
 
     expect(screen.queryByRole('button', { name: /^Account/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Sign in to Fabric' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'More sign-in options' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings and accounts' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh Fabric authentication' }))
     expect(screen.getByRole('dialog').textContent).toContain('shared across projects')
     expect(api.auth.refreshRayfin).not.toHaveBeenCalled()
@@ -792,12 +802,12 @@ describe('Workbench app bar', () => {
 })
 
 describe('Workbench after-turn deployment', () => {
-  it('keeps every turn local with Deploy manually on, and deploys on Redeploy', async () => {
+  it('keeps every turn local once the user deploys manually, and deploys on Redeploy', async () => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
     render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
-    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: 'Deploy mode' }).value).toBe('manual')
+    expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on).toBe(false)
 
     await act(async () => completeTurn())
     await act(async () => completeTurn())
@@ -810,37 +820,41 @@ describe('Workbench after-turn deployment', () => {
     expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined)
   })
 
-  it('switches to auto deploy from the status bar without leaving the experiment', async () => {
+  it('switches back to deploying after each turn from the deployment panel', async () => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
     const props = makeProps({ settings: manualSettings })
     const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
+    expect(screen.queryByRole('combobox', { name: /deploy/i }), 'not in the status bar').toBeNull()
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Deploy mode' }), { target: { value: 'auto' } })
+    act(() => deploymentsProps.mock.lastCall?.[0].autoDeploy?.onChange(true))
     expect(props.onSettingsChange).toHaveBeenCalledWith({ deployMode: 'auto' })
     rerender(<Workbench {...props} settings={{ ...manualSettings, deployMode: 'auto' }} />)
-    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: 'Deploy mode' }).value).toBe('auto')
+    expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on).toBe(true)
 
     await act(async () => completeTurn())
     expect(api.deploy.run).toHaveBeenCalledTimes(1)
   })
 
-  it('does not deploy when Deploy manually is turned on while changes are checked', async () => {
+  it('deploys after each turn by default, and not once that is turned off while changes are checked', async () => {
     const api = installApi(true)
     const changed = deferred<boolean>()
     api.deploy.hasChanges.mockReturnValueOnce(changed.promise)
     const props = makeProps({ settings: { theme: 'system' } })
     const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
-    expect(screen.queryByRole('combobox', { name: 'Deploy mode' })).toBeNull()
+    expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on, 'Auto unless the user chose Manual').toBe(true)
+
+    act(() => deploymentsProps.mock.lastCall?.[0].autoDeploy?.onChange(false))
+    expect(props.onSettingsChange).toHaveBeenCalledWith({ deployMode: 'manual' })
 
     await act(async () => completeTurn())
     rerender(<Workbench {...props} settings={manualSettings} />)
     await act(async () => changed.resolve(true))
     expect(api.deploy.run).not.toHaveBeenCalled()
 
-    // Turning it off deploys after the next turn, not straight away.
+    // Turning it back on deploys after the next turn, not straight away.
     rerender(<Workbench {...props} />)
     expect(api.deploy.run).not.toHaveBeenCalled()
     api.deploy.hasChanges.mockResolvedValue(true)
@@ -947,6 +961,35 @@ describe('Workbench after-turn deployment', () => {
 
     expect(api.deploy.run).toHaveBeenCalledTimes(2)
     expect(screen.getByTestId('deploy-state').textContent).toBe('idle')
+  })
+
+  it('tells the deployment control what the next deploy would ship, and checks again after a turn', async () => {
+    const api = installApi(true)
+    api.deploy.pending.mockResolvedValueOnce({ changed: false, files: 0 }).mockResolvedValue({ changed: true, files: 2 })
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(deploymentsProps.mock.lastCall?.[0].pending).toEqual({ changed: false, files: 0 }))
+
+    await act(async () => completeTurn())
+    await waitFor(() => expect(deploymentsProps.mock.lastCall?.[0].pending).toEqual({ changed: true, files: 2 }))
+    expect(api.deploy.pending).toHaveBeenCalledWith(project.id)
+  })
+
+  it('shows a redeploy on the full deploy screen when asked, until it ends', async () => {
+    const api = installApi(true)
+    const deploying = deferred<DeployResult>()
+    api.deploy.run.mockReturnValueOnce(deploying.promise)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    fireEvent.click(screen.getByRole('button', { name: 'Test deploy' }))
+    await waitFor(() => expect(previewProps.mock.lastCall?.[0].deploy?.running).toBe(true))
+    expect(previewProps.mock.lastCall?.[0].deploy?.startedAt).toEqual(expect.any(Number))
+    expect(previewProps.mock.lastCall?.[0].watching).toBe(false)
+
+    act(() => deploymentsProps.mock.lastCall?.[0].onWatch?.())
+    expect(previewProps.mock.lastCall?.[0].watching).toBe(true)
+    await act(async () => deploying.resolve({ ok: true, outcome: 'success' }))
+    expect(previewProps.mock.lastCall?.[0].watching).toBe(false)
   })
 
   it('does not start an auto-deploy after the workbench is unmounted', async () => {
@@ -1184,7 +1227,7 @@ describe('Workbench live preview ports', () => {
     expect(dev.start).toHaveBeenCalledWith(project.id, 5174)
   })
 
-  it.each([true, false])('stops the local preview at turn end (success: %s) before any auto-deploy', async (ok) => {
+  it('stops the local preview at the end of an unsuccessful turn', async () => {
     const { api, dev } = await mount()
     dev.plan.mockResolvedValue({ port: 5174 })
     api.deploy.hasChanges.mockResolvedValue(true)
@@ -1192,18 +1235,47 @@ describe('Workbench live preview ports', () => {
     await act(async () => turn)
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBe('http://localhost:5174')
 
-    await act(async () => completeTurn({
-      ok, filesModified: [], ranDeploy: false, error: ok ? undefined : 'Stopped'
-    }))
+    await act(async () => completeTurn({ ok: false, filesModified: [], ranDeploy: false, error: 'Stopped' }))
     expect(dev.stop).toHaveBeenCalledWith(project.id)
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
-    expect(api.deploy.run).toHaveBeenCalledTimes(ok ? 1 : 0)
-    if (ok) {
-      expect(dev.stop.mock.invocationCallOrder[0]).toBeLessThan(api.deploy.run.mock.invocationCallOrder[0])
-    }
+    expect(api.deploy.run).not.toHaveBeenCalled()
   })
 
-  /** Deploy manually on, with a free port, so the open app's preview starts. */
+  it('keeps the local preview on screen through the after-turn redeploy, and closes it when it ends', async () => {
+    const { api, dev } = await mount()
+    dev.plan.mockResolvedValue({ port: 5174 })
+    api.deploy.hasChanges.mockResolvedValue(true)
+    const deploying = deferred<DeployResult>()
+    api.deploy.run.mockReturnValueOnce(deploying.promise)
+    const { turn } = await beginTurn()
+    await act(async () => turn)
+
+    await act(async () => completeTurn())
+    expect(api.deploy.run).toHaveBeenCalledTimes(1)
+    expect(dev.stop).not.toHaveBeenCalled()
+    expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBe('http://localhost:5174')
+    expect(previewProps.mock.lastCall?.[0].deploy?.running).toBe(true)
+
+    await act(async () => deploying.resolve({ ok: true, outcome: 'success' }))
+    expect(dev.stop).toHaveBeenCalledWith(project.id)
+    const last = previewProps.mock.lastCall?.[0]
+    expect(last?.localPreviewUrl).toBeNull()
+    expect(last?.deploy?.running).toBe(false)
+  })
+
+  it('closes the local preview straight away when a turn leaves nothing to deploy', async () => {
+    const { api, dev } = await mount()
+    dev.plan.mockResolvedValue({ port: 5174 })
+    const { turn } = await beginTurn()
+    await act(async () => turn)
+
+    await act(async () => completeTurn())
+    expect(api.deploy.run).not.toHaveBeenCalled()
+    expect(dev.stop).toHaveBeenCalledWith(project.id)
+    expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
+  })
+
+  /** Manual deploy, with a free port, so the open app's preview starts. */
   async function mountManual() {
     const api = installApi(true)
     api.dev.plan.mockResolvedValue({ port: 5174 })
@@ -1213,7 +1285,7 @@ describe('Workbench live preview ports', () => {
     return { api, dev: api.dev, view }
   }
 
-  it.each([true, false])('runs the local preview whenever the app is open with Deploy manually on (turn success: %s)', async (ok) => {
+  it.each([true, false])('runs the local preview whenever the app is open while the user deploys manually (turn success: %s)', async (ok) => {
     const { api, dev } = await mountManual()
     expect(dev.start).toHaveBeenCalledWith(project.id, 5174)
     expect(previewProps.mock.lastCall?.[0].manualDeploy).toBe(true)
@@ -1293,9 +1365,9 @@ describe('Workbench live preview ports', () => {
     await waitFor(() => expect(api.dev.start).toHaveBeenCalledWith('p2', 5174))
   })
 
-  it('closes the local preview when Deploy manually is turned off', async () => {
+  it('closes the local preview when deploying after each turn is turned back on', async () => {
     const { dev, view } = await mountManual()
-    view.rerender(<Workbench {...makeProps({ settings: { theme: 'system' } })} />)
+    view.rerender(<Workbench {...makeProps({ settings: { theme: 'system', deployMode: 'auto' } })} />)
     expect(dev.stop).toHaveBeenCalledWith(project.id)
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
   })
@@ -1385,6 +1457,24 @@ describe('Workbench Advisor fixes', () => {
   })
 })
 
+describe('Workbench chat history', () => {
+  it('keeps the Fabric data a message added when it saves the transcript', async () => {
+    const api = installApi(true)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    const data = [{ name: 'Ledger', type: 'SQLDatabase' as const, workspace: 'Finance analytics' }]
+    act(() =>
+      chatProps.mock.lastCall![0].onChange(() => [
+        { id: 'u1', role: 'user', text: 'Chart spending', tools: [], pending: false, data, prompt: 'Chart spending + how to connect' },
+        { id: 'a1', role: 'assistant', text: 'Done.', tools: [], pending: false }
+      ])
+    )
+    await act(async () => completeTurn())
+    const saved = api.chat.saveHistory.mock.lastCall?.[1] as { data?: unknown; prompt?: string }[]
+    expect(saved[0]).toMatchObject({ data, prompt: 'Chart spending + how to connect' })
+  })
+})
+
 describe('Workbench team workspaces', () => {
   const teamProject: StudioProject = {
     ...project,
@@ -1461,9 +1551,9 @@ describe('Workbench team workspaces', () => {
     expect(team.sync).not.toHaveBeenCalled()
   })
 
-  it('still saves after each turn with Deploy manually on', async () => {
+  it('still saves after each turn when the user deploys manually', async () => {
     const { api, team } = installTeamApi()
-    const settings: AppSettings = { theme: 'system', experiments: { teamWorkspaces: true, manualDeploy: true } }
+    const settings: AppSettings = { theme: 'system', experiments: { teamWorkspaces: true }, deployMode: 'manual' }
     render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
 
@@ -1471,7 +1561,7 @@ describe('Workbench team workspaces', () => {
 
     expect(team.sync).toHaveBeenCalledWith('t1', '')
     expect(api.deploy.run).not.toHaveBeenCalled()
-    expect(screen.queryByRole('combobox', { name: 'Deploy mode' })).toBeNull()
+    expect(deploymentsProps, 'team apps have no deployment panel, or its switch').not.toHaveBeenCalled()
   })
 
   it('keeps a team local preview while its saved turn waits for the pipeline', async () => {
@@ -1519,5 +1609,79 @@ describe('Workbench team workspaces', () => {
     expect(team.publish).toHaveBeenCalledWith('t1', false)
     expect(api.deploy.run).not.toHaveBeenCalled()
     expect(await screen.findByRole('dialog', { name: 'Publish' })).toBeTruthy()
+  })
+})
+
+describe('Workbench at launch', () => {
+  it('is ready to be seen once its projects load, with none open', async () => {
+    installApi(false)
+    const onSettled = vi.fn()
+    render(<Workbench {...makeProps({ onSettled })} />, { wrapper: Wrapper })
+    await waitFor(() => expect(onSettled).toHaveBeenCalledTimes(1))
+  })
+
+  it('tells the launch screen which project it’s opening, once', async () => {
+    const api = installApi(true)
+    const onOpening = vi.fn()
+    render(<Workbench {...makeProps({ onOpening })} />, { wrapper: Wrapper })
+    await waitFor(() => expect(onOpening).toHaveBeenCalledWith('Project One'))
+    await act(async () => previewProps.mock.lastCall?.[0].onPreviewModeChanged?.())
+    expect(api.projects.state.mock.calls.length).toBeGreaterThan(1)
+    expect(onOpening).toHaveBeenCalledTimes(1)
+  })
+
+  it('tells the launch screen it’s opening Home when no project is open', async () => {
+    installApi(false)
+    const onOpening = vi.fn()
+    render(<Workbench {...makeProps({ onOpening })} />, { wrapper: Wrapper })
+    await waitFor(() => expect(onOpening).toHaveBeenCalledWith(null))
+  })
+
+  it('waits for the open project’s chat and preview before it’s ready to be seen', async () => {
+    const api = installApi(true)
+    const history = deferred<never[]>()
+    api.chat.history.mockReturnValueOnce(history.promise)
+    const onSettled = vi.fn()
+    render(<Workbench {...makeProps({ onSettled })} />, { wrapper: Wrapper })
+    await waitFor(() => expect(previewProps).toHaveBeenCalled())
+    expect(onSettled).not.toHaveBeenCalled()
+
+    act(() => previewProps.mock.lastCall?.[0].onSettle?.())
+    expect(onSettled, 'the chat is still loading').not.toHaveBeenCalled()
+    await act(async () => history.resolve([]))
+    expect(onSettled).toHaveBeenCalledTimes(1)
+  })
+
+  it('checks the accounts again when another project opens, not for the first one', async () => {
+    const api = installApi(true)
+    const props = makeProps()
+    render(<Workbench {...props} />, { wrapper: Wrapper })
+    await waitFor(() => expect(previewProps).toHaveBeenCalled())
+    // The app checks every account as it starts; the first project adds nothing.
+    expect(props.onAuthChanged).not.toHaveBeenCalled()
+
+    const two: StudioProject = { ...project, id: 'p2', name: 'Project Two' }
+    const switched = { workspaceRoot: 'C:\\projects', activeProjectId: two.id, projects: [project, two] }
+    api.projects.state.mockResolvedValue(switched)
+    api.deploy.reconcile.mockResolvedValue(switched)
+    await act(async () => previewProps.mock.lastCall?.[0].onPreviewModeChanged?.())
+    await waitFor(() => expect(props.onAuthChanged).toHaveBeenCalledTimes(1))
+  })
+
+  it('lists the projects once at launch, and again only when team workspaces are turned on or off', async () => {
+    const api = installApi(false)
+    ;(api as unknown as { team: unknown }).team = { onProgress: vi.fn(() => () => {}) }
+    const props = makeProps()
+    const view = render(<Workbench {...props} />, { wrapper: Wrapper })
+    await waitFor(() => expect(api.projects.state).toHaveBeenCalledTimes(1))
+
+    view.rerender(<Workbench {...props} settings={{ theme: 'system' }} />)
+    await act(async () => {})
+    expect(api.projects.state).toHaveBeenCalledTimes(1)
+
+    view.rerender(
+      <Workbench {...props} settings={{ theme: 'system', experiments: { teamWorkspaces: true } }} />
+    )
+    await waitFor(() => expect(api.projects.state).toHaveBeenCalledTimes(2))
   })
 })

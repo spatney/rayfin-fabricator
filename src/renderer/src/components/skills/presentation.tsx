@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, JSX } from 'react'
 import type { SkillInfo } from '@shared/ipc'
 import { AccessibilityIcon, Codicon } from '../icons'
 

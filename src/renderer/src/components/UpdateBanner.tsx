@@ -1,5 +1,7 @@
 import { useUpdates } from '../update'
 
+import type { JSX } from 'react'
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
@@ -27,7 +29,7 @@ export default function UpdateBanner(): JSX.Element | null {
       ? Math.min(100, Math.round((progress.downloaded / progress.total) * 100))
       : null
 
-  let title = ''
+  let title: string
   let meta: string | null = null
   if (status === 'downloading') {
     title = `Downloading update${info ? ` ${info.version}` : ''}…`

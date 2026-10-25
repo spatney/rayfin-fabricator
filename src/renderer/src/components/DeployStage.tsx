@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react'
 import {
   MARK_BRACKET_RX,
   MARK_BRACKETS,
@@ -8,8 +8,8 @@ import {
   MarkGradient
 } from './FabricatorMark'
 import { Codicon } from './icons'
-import { deployRuns, readDeployProgress, type DeployTopic } from '../deployProgress'
-import { useMascot } from './mascot/context'
+import type { DeployTopic } from '../deployProgress'
+import { clockLabel, forgetDeployMeter, readDeployMeter } from '../deployMeter'
 import { isRaySentAway, useRayOnScreen } from './mascot/stage'
 import { RayPerch } from './mascot/RayPerch'
 import type { RayMood } from './mascot/Ray'
@@ -29,8 +29,8 @@ import {
  * deployProgress.ts), with the CLI's own words for the step in progress. The
  * raw output is one click away under View logs.
  *
- * With Ray turned off (Settings → Appearance) or sent away, the Fabricator mark
- * builds itself in his place. Flat throughout: solid fills, no glow or shadow.
+ * With Ray sent away, the Fabricator mark builds itself in his place. Flat
+ * throughout: solid fills, no glow or shadow.
  */
 
 const RAY_SIZE = 168
@@ -49,7 +49,7 @@ const READING: ReadonlySet<DeployTopic> = new Set(['data', 'storage', 'connector
 /** Where he sticks to the point instead of sharing facts. */
 const NO_FACTS: ReadonlySet<DeployTopic> = new Set(['signin', 'retry', 'live'])
 
-/** Per-brick fly-in offset + stagger for the self-building mark (Ray turned off). */
+/** Per-brick fly-in offset + stagger for the self-building mark (Ray sent away). */
 const BUILD: Record<string, { tx: number; ty: number; d: number }> = {
   'tile--topbar': { tx: 0, ty: -22, d: 0 },
   'tile--stem': { tx: -22, ty: 0, d: 0.08 },
@@ -204,21 +204,32 @@ function DeployRay({
 export default function DeployStage({
   log,
   name,
-  firstDeploy = false
+  firstDeploy = false,
+  startedAt: startedAtProp,
+  meterKey,
+  onBack
 }: {
   log: string[]
   name?: string
   /** The app has never been deployed, so this is its first trip to Fabric. */
   firstDeploy?: boolean
+  /** When the deploy started (`Date.now()`), so the screen is right when it opens mid-deploy. */
+  startedAt?: number
+  /** Shares the bar with the deploy's other progress (see deployMeter); otherwise it's this screen's own. */
+  meterKey?: string
+  /** Go back to the app while the deploy carries on beside it. */
+  onBack?: () => void
 }): JSX.Element {
   const appName = name?.trim() ?? ''
-  const mascot = useMascot()
   const [sentAway] = useState(isRaySentAway)
-  const withRay = mascot && !sentAway
+  const withRay = !sentAway
   useRayOnScreen(withRay)
 
   const [now, setNow] = useState(() => Date.now())
-  const [startedAt] = useState(now)
+  const [ownStart] = useState(now)
+  const startedAt = startedAtProp ?? ownStart
+  const ownKey = useId()
+  const key = meterKey ?? ownKey
   const [showLog, setShowLog] = useState(false)
   const logRef = useRef<HTMLPreElement>(null)
 
@@ -227,56 +238,28 @@ export default function DeployStage({
     return () => window.clearInterval(id)
   }, [])
 
+  // A screen's own meter goes with it; a shared one belongs to the deploy.
+  useEffect(() => (meterKey ? undefined : () => forgetDeployMeter(ownKey)), [meterKey, ownKey])
+
   useEffect(() => {
     if (showLog && logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [log, showLog])
 
-  // An older CLI's progress is partly read off the clock, from when the CLI
-  // started in the latest run: a sign-in retry starts a new one, and installing
-  // packages doesn't count.
-  const runs = useMemo(() => deployRuns(log), [log])
-  const [cli, setCli] = useState<{ runs: number; at: number | null }>({ runs, at: startedAt })
-  const cliSec = cli.runs === runs && cli.at !== null ? Math.max(0, now - cli.at) / 1000 : 0
-  const progress = readDeployProgress(log, cliSec)
-  const installing = progress.current.id === 'packages'
-  if (cli.runs !== runs || (installing ? cli.at !== null : cli.at === null)) {
-    setCli({ runs, at: installing ? null : Date.now() })
-  }
-
-  // When the current step began, and how many steps have gone by.
-  const [step, setStep] = useState({ id: progress.current.id, at: startedAt, count: 0 })
-  if (step.id !== progress.current.id) {
-    setStep({ id: progress.current.id, at: Date.now(), count: step.count + 1 })
-  }
-
-  // The bar: where the step began, easing toward where the next one would, and
-  // never back. The CLI's own percentage wins when it gives one.
-  const span = progress.next - progress.at
-  const inStepSec = Math.max(0, now - step.at) / 1000
-  const tau = progress.topic === 'build' || progress.topic === 'upload' ? 16 : 6
-  const target = progress.live
-    ? 1
-    : progress.percent !== null
-      ? progress.at + (span * progress.percent) / 100
-      : progress.at + span * 0.85 * (1 - Math.exp(-inStepSec / tau))
-  const high = useRef({ runs, value: 0 })
-  const bar = Math.max(high.current.runs === runs ? high.current.value : 0, target)
-  useEffect(() => {
-    high.current = { runs, value: bar }
-  }, [runs, bar])
+  const meter = readDeployMeter(key, log, startedAt, Math.max(now, startedAt))
+  const progress = meter.progress
+  const bar = meter.fraction
 
   const [hop, setHop] = useState(0)
   const lastHop = useRef(0)
   useEffect(() => {
-    if (step.count === 0 || progress.live) return
+    if (meter.changes === 0 || progress.live) return
     const at = Date.now()
     if (at - lastHop.current < HOP_GAP_MS) return
     lastHop.current = at
     setHop((n) => n + 1)
-  }, [step.count, progress.live])
+  }, [meter.changes, progress.live])
 
-  const elapsed = Math.floor((now - startedAt) / 1000)
-  const elapsedLabel = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
+  const elapsedLabel = clockLabel(meter.elapsed)
 
   const lastLine = useMemo(() => {
     // Scan the joined log by line, not by entry: a coalesced proc:log event can
@@ -359,9 +342,16 @@ export default function DeployStage({
           <span className="dstage-ticker-text">{lastLine || 'Starting the deploy…'}</span>
           <span className="dstage-ticker-cursor" aria-hidden="true" />
         </div>
-        <button className="dstage-logbtn" type="button" onClick={() => setShowLog((s) => !s)}>
-          {showLog ? 'Hide logs' : 'View logs'}
-        </button>
+        <div className="dstage-foot-actions">
+          {onBack && (
+            <button className="dstage-logbtn" type="button" onClick={onBack}>
+              Back to your app
+            </button>
+          )}
+          <button className="dstage-logbtn" type="button" onClick={() => setShowLog((s) => !s)}>
+            {showLog ? 'Hide logs' : 'View logs'}
+          </button>
+        </div>
       </div>
 
       {showLog && (

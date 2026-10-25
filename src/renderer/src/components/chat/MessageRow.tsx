@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo, type JSX } from 'react'
 import { DesignSummary, designShotIndexes } from '../../design/DesignSummary'
 import { AdvisorFixSummary } from '../advisor/AdvisorFixSummary'
 import { MentionText } from '../MentionText'
@@ -7,6 +7,7 @@ import { Codicon, ImageIcon } from '../icons'
 import { AgentStatus } from './AgentStatus'
 import { AgentQuestionBlock, AssistantBody } from './AssistantBody'
 import { CopyButton } from './CopyButton'
+import { SentData } from './DataTray'
 import { formatClock, formatFullDate } from './format'
 import { TurnFooter } from './TurnFooter'
 import type { UIChatMessage } from './types'
@@ -43,6 +44,7 @@ function UserMessage({
             {m.attachments} screenshot{m.attachments > 1 ? 's' : ''}
           </div>
         ) : null}
+        {m.data && m.data.length > 0 && <SentData data={m.data} />}
         {hasText && !m.advisor && (
           <div className="msg-text user-bubble">
             <MentionText text={m.text} onOpen={onOpenMention} />

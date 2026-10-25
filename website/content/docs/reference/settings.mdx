@@ -1,17 +1,21 @@
 ---
 title: "Settings"
-description: "Every option in Fabricator's Settings: accounts, theme, text size, Ray, workspace folder, updates, setup, diagnostics and experiments."
+description: "Every option in Fabricator's Settings: accounts, API keys, setup, workspace folder, theme, text size, diagnostics, experiments and the About section."
 ---
 
 Open **Settings** to manage your accounts, change how Fabricator looks, where new projects are created, how diagnostics are captured, and whether experimental features are visible.
 
-Settings groups its options into **General**, **Appearance**, **Updates & help**, **Diagnostics**, and **Experiments**. Each option shows its name and what it does, with its control on the right.
+Settings groups its options into **General**, **Appearance**, **Diagnostics**, **Experiments**, and **About**. Each option shows its name and what it does, with its control on the right.
 
-![The Settings dialog: Accounts, Setup and Workspace folder under General, then Theme, Text size and Ray under Appearance, and Updates.](/screenshots/settings.webp)
+![The Settings dialog: Accounts, API keys, Setup and Workspace folder under General, then Theme and Text size under Appearance, and the start of Diagnostics.](/screenshots/settings.webp)
 
 ## Accounts
 
 **Accounts** lists the services Fabricator signs in to: GitHub Copilot, Microsoft Fabric, the Azure CLI, and GitHub. Select **Manage accounts** to see who you're signed in as, sign in or out, and add or switch between Fabric, Azure CLI and GitHub accounts. See [Manage your accounts](/docs/start/accounts).
+
+## API keys
+
+**API keys** adds models from Anthropic, OpenAI, xAI and Google, on your own API keys, to the model pickers in Build chat, the Advisor and Design. The provider bills you for them, and you still sign in to GitHub Copilot, which runs the conversation. Select **Manage API keys** to add your keys and choose their models in **Accounts → Model providers**. See [Use your own API keys](/docs/build/your-own-api-keys).
 
 ## Theme
 
@@ -33,21 +37,6 @@ Use this when Fabricator is hard to read on a large or high-DPI monitor. The set
 
 The status bar has an **Interface zoom** menu with the same values as **Text size**. Changing it updates the same setting and also scales the design tools.
 
-## Ray
-
-**Ray** turns Fabricator's stingray mascot on or off. It is on by default.
-
-Ray keeps you company while an app installs its packages: when you create a project, clone one, or open one whose packages are missing. He shares facts about Rayfin and tips for Fabricator, and greets you in Help. The first time Fabricator starts on a computer, he's on the loading screen too, telling you in his own words how it's going, and he talks you through every deploy. With Ray off, the loading and deploy screens show the Fabricator logo instead.
-
-While Ray is on screen, you can:
-
-- Select him to pet him.
-- Drag him somewhere else.
-- Select a speech bubble to hear the next fact.
-- Point at him and select the **×** next to him to send him away until you restart Fabricator.
-
-If your computer is set to reduce motion, Ray stays in one place and his speech appears without animation.
-
 ## Workspace folder
 
 **Workspace folder** shows where Fabricator creates new projects. The default is a `RayfinProjects` folder in your home directory.
@@ -61,12 +50,6 @@ Select **Change…** to pick a different folder. This changes where new projects
 > We send your sign-in domain and a hashed email so we can see how the product is used. Your email, code, and apps stay on this device.
 
 Telemetry is only active when a build includes a telemetry connection string. See [Privacy and telemetry](/docs/reference/privacy).
-
-## Updates
-
-**Updates** shows the installed Fabricator version and lets you check manually.
-
-Select **Check for updates** to ask GitHub Releases for the latest signed updater manifest. While it runs, the button changes to **Checking…**. If an update is ready, Fabricator downloads it and asks you to restart from the update banner.
 
 ## Setup
 
@@ -101,19 +84,21 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 > [!WARNING]
 > Team workspaces are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
 
-### Deploy manually
+## About
 
-**Deploy manually** stops chat turns from deploying your app. Your changes stay on this computer until you select **Redeploy**, and the preview shows them from a local Vite server whenever the app is open. While it's on, the status bar switches between **Manual deploy** and **Auto deploy**. Team apps aren't affected: they still save after each turn. See [Deploy manually](/docs/ship/deploy#deploy-manually).
+**About** is the last section in Settings. It shows the installed Fabricator version and the Tauri, WebView2, and Copilot CLI versions it runs with. When the Copilot CLI has updated itself past the version that came with Fabricator, both are shown, for example `1.0.98 (bundled 1.0.96)`.
 
-> [!WARNING]
-> Deploy manually is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
-
-## Version footer
-
-The Settings footer shows the versions Fabricator is using:
+Select **Copy** to copy the versions for a bug report, one per line:
 
 ```text
-Fabricator <version> · Tauri <version> · WebView2 <version> · Copilot CLI <version>
+Fabricator <version>
+Tauri <version>
+WebView2 <version>
+Copilot CLI <version>
 ```
 
 The exact Tauri, WebView2, and Copilot CLI values depend on the build and your computer.
+
+**Help** has **Documentation** and **Troubleshooting**, which open these docs in your browser.
+
+You don't need to check for updates yourself. Fabricator checks when it starts, every 4 hours while it's open, and as soon as your connection comes back after a check failed. See [Updates](/docs/start/install#updates).

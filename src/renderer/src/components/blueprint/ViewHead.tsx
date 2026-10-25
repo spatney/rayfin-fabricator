@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, type ReactNode, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 
 /**

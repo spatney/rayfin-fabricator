@@ -5,7 +5,8 @@ use serde::Deserialize;
 use crate::services::store;
 use crate::types::{AppSettings, ExperimentFlags};
 
-#[tauri::command]
+/// Off the main thread, like every read the app makes while it starts.
+#[tauri::command(async)]
 pub fn settings_get() -> AppSettings {
   store::get_settings()
 }
@@ -22,8 +23,6 @@ pub struct SettingsPatch {
   #[serde(default)]
   full_diagnostics: Option<bool>,
   #[serde(default)]
-  mascot: Option<bool>,
-  #[serde(default)]
   deploy_mode: Option<String>,
 }
 
@@ -34,7 +33,6 @@ pub fn settings_set(patch: SettingsPatch) -> AppSettings {
     patch.ui_scale,
     patch.experiments,
     patch.full_diagnostics,
-    patch.mascot,
     patch.deploy_mode,
   )
 }

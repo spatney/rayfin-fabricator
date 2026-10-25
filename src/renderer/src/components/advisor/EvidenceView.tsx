@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, type JSX } from 'react'
 import { highlightLines, langFromPath } from '../../syntax'
 
 /**

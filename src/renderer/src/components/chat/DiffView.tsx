@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useState, type JSX } from 'react'
 import { highlightLines, langFromPath } from '../../syntax'
 import { Codicon } from '../icons'
 import { parseUnifiedDiff, type DiffFile, type DiffHunk, type DiffLine } from './diff'

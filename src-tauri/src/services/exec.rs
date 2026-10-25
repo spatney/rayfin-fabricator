@@ -11,14 +11,16 @@
 //! bundled binary (see [`crate::services::copilot`]); only `login` and the
 //! version probe still spawn it, by absolute path via [`run_program`].
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Mutex, Notify};
 
@@ -273,6 +275,385 @@ pub fn project_rayfin_cli_installed(project_dir: &Path) -> bool {
       .any(|entry| cli_dir.join("scripts").join(entry).is_file())
 }
 
+/// Deeper than any real npm tree; stops a folder that loops back on itself
+/// from being walked forever.
+const MAX_PACKAGE_NESTING: usize = 12;
+
+/// npm's record of the packages its last install placed on disk. npm writes
+/// `node_modules/.package-lock.json` when an install finishes.
+#[derive(Deserialize)]
+struct InstalledPackages {
+  #[serde(default)]
+  packages: HashMap<String, serde::de::IgnoredAny>,
+}
+
+/// The project's installed packages that can't load, as locations like
+/// `node_modules/commander` or `node_modules/a/node_modules/@scope/b`:
+///
+/// - package folders without a `package.json`. npm creates every package's
+///   folder before it unpacks any of them, so an install stopped part way (a
+///   timeout, a closed app) leaves empty folders behind, and a sync or
+///   antivirus tool that deletes files can do the same. Node reports these as
+///   "Cannot find package '<folder>\index.js'".
+/// - packages npm recorded installing whose folder is gone, which Node reports
+///   as "Cannot find package '<name>'".
+///
+/// `npm install` repairs both: it unpacks a package again when its folder has
+/// no manifest, and adds a missing one back.
+fn incomplete_packages(project_dir: &Path) -> Vec<String> {
+  let mut found = Vec::new();
+  collect_packages(&project_dir.join("node_modules"), "node_modules", 0, &mut found);
+  let mut incomplete: BTreeSet<String> =
+    found.iter().filter(|(_, complete)| !complete).map(|(location, _)| location.clone()).collect();
+  let present: HashSet<&str> =
+    found.iter().filter(|(_, complete)| *complete).map(|(location, _)| location.as_str()).collect();
+  for location in recorded_packages(project_dir) {
+    // The walk doesn't reach every recorded location (a workspace keeps its
+    // own node_modules), so check the rest directly.
+    if !present.contains(location.as_str()) && !project_dir.join(&location).join("package.json").is_file() {
+      incomplete.insert(location);
+    }
+  }
+  incomplete.into_iter().collect()
+}
+
+/// [`incomplete_packages`] off the async runtime, since it walks the whole tree.
+async fn find_incomplete_packages(project_dir: &Path) -> Vec<String> {
+  let dir = project_dir.to_path_buf();
+  tokio::task::spawn_blocking(move || incomplete_packages(&dir))
+    .await
+    .unwrap_or_default()
+}
+
+/// How long a project's incomplete packages must go untouched before
+/// [`ensure_project_dependencies`] repairs them, how often it looks again, and
+/// how long it waits at most.
+const QUIET_FOR: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 30 });
+const QUIET_CHECK: Duration = Duration::from_secs(2);
+const QUIET_LIMIT: Duration = Duration::from_secs(300);
+
+/// The package folders Fabricator marked for reinstall itself, and when.
+/// Removing a `package.json` changes its folder, which mustn't read as an
+/// install at work; a change after that still does.
+static MARKED_FOR_REINSTALL: Lazy<std::sync::Mutex<HashMap<PathBuf, SystemTime>>> =
+  Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
+
+/// Leeway for a file system that rounds its times (FAT keeps two seconds).
+const MARK_LEEWAY: Duration = Duration::from_secs(2);
+
+/// The project's incomplete packages once nothing has touched them for
+/// [`QUIET_FOR`]. An install that's running (Copilot's, or one in a terminal)
+/// creates every package folder first and fills them as it goes, writing each
+/// `package.json` near the end, and a second npm working in the same tree would
+/// undo its work. The leftovers of an install that stopped are quiet already.
+async fn quiet_incomplete_packages(project_dir: &Path, on_data: Option<&OnData>) -> Result<Vec<String>, String> {
+  let started = tokio::time::Instant::now();
+  let mut announced = false;
+  loop {
+    let dir = project_dir.to_path_buf();
+    let (incomplete, untouched) = tokio::task::spawn_blocking(move || {
+      let incomplete = incomplete_packages(&dir);
+      let untouched = untouched_for(&dir, &incomplete);
+      (incomplete, untouched)
+    })
+    .await
+    .unwrap_or_default();
+    if incomplete.is_empty() || untouched >= QUIET_FOR {
+      return Ok(incomplete);
+    }
+    if started.elapsed() >= QUIET_LIMIT {
+      return Err("Another package install is still running in this project. Try again when it finishes.".to_string());
+    }
+    if !announced {
+      announced = true;
+      if let Some(on) = on_data {
+        on(Stream::System, "Waiting for changes to this project's packages to finish...\n");
+      }
+    }
+    tokio::time::sleep(QUIET_CHECK.min(QUIET_FOR - untouched)).await;
+  }
+}
+
+/// How long it's been since anything changed in the folders of the
+/// `incomplete` packages, or, for one that's gone, in the folder that held it.
+fn untouched_for(project_dir: &Path, incomplete: &[String]) -> Duration {
+  let marked = MARKED_FOR_REINSTALL.lock().map(|marked| marked.clone()).unwrap_or_default();
+  let mut budget = 20_000;
+  let newest = incomplete
+    .iter()
+    .filter_map(|location| {
+      let dir = project_dir.join(location);
+      let changed = if dir.is_dir() {
+        last_change_within(&dir, &mut budget)
+      } else {
+        dir.parent().and_then(last_change)
+      };
+      match (changed, marked.get(&dir)) {
+        (Some(changed), Some(&at)) if changed <= at + MARK_LEEWAY => None,
+        _ => changed,
+      }
+    })
+    .max();
+  // A time in the future is a skewed clock, not activity.
+  newest
+    .and_then(|time| SystemTime::now().duration_since(time).ok())
+    .unwrap_or(Duration::MAX)
+}
+
+/// When `path` was last written or created.
+fn last_change(path: &Path) -> Option<SystemTime> {
+  let meta = std::fs::symlink_metadata(path).ok()?;
+  meta.modified().ok().max(meta.created().ok())
+}
+
+/// The latest [`last_change`] of `dir` and everything in it, looking at no
+/// more than `budget` entries and without following links.
+fn last_change_within(dir: &Path, budget: &mut usize) -> Option<SystemTime> {
+  let mut newest = last_change(dir);
+  let Ok(entries) = std::fs::read_dir(dir) else {
+    return newest;
+  };
+  for entry in entries.flatten() {
+    if *budget == 0 {
+      break;
+    }
+    *budget -= 1;
+    let path = entry.path();
+    let changed = match entry.file_type() {
+      Ok(kind) if kind.is_dir() => last_change_within(&path, budget),
+      _ => last_change(&path),
+    };
+    newest = newest.max(changed);
+  }
+  newest
+}
+
+/// Add each package folder in the `node_modules` folder `dir` (at `location`
+/// in the project) to `found`, with whether it has a `package.json`, then the
+/// packages nested in it.
+fn collect_packages(dir: &Path, location: &str, depth: usize, found: &mut Vec<(String, bool)>) {
+  if depth > MAX_PACKAGE_NESTING {
+    return;
+  }
+  for (name, path, linked) in package_folders(dir) {
+    if name.starts_with('@') {
+      for (scoped, path, linked) in package_folders(&path) {
+        collect_package(&path, &format!("{location}/{name}/{scoped}"), linked, depth, found);
+      }
+    } else {
+      collect_package(&path, &format!("{location}/{name}"), linked, depth, found);
+    }
+  }
+}
+
+fn collect_package(dir: &Path, location: &str, linked: bool, depth: usize, found: &mut Vec<(String, bool)>) {
+  found.push((location.to_string(), dir.join("package.json").is_file()));
+  // A linked package (an npm workspace) keeps its dependencies with its source.
+  if !linked {
+    collect_packages(&dir.join("node_modules"), &format!("{location}/node_modules"), depth + 1, found);
+  }
+}
+
+/// The folders in `dir` that can hold a package or a scope, with whether each
+/// is a link. Names starting with `.` never do: they're npm's own (`.bin`),
+/// tool caches (`.vite`, `.cache`) or folders an interrupted npm install set
+/// aside (`.name-1a2b3c4d`).
+fn package_folders(dir: &Path) -> Vec<(String, PathBuf, bool)> {
+  let Ok(entries) = std::fs::read_dir(dir) else {
+    return Vec::new();
+  };
+  entries
+    .flatten()
+    .filter_map(|entry| {
+      let name = entry.file_name().into_string().ok()?;
+      let file_type = entry.file_type().ok()?;
+      let path = entry.path();
+      let linked = file_type.is_symlink();
+      let folder = file_type.is_dir() || (linked && path.is_dir());
+      (folder && !name.starts_with('.')).then_some((name, path, linked))
+    })
+    .collect()
+}
+
+/// The package locations npm recorded at the end of its last install.
+fn recorded_packages(project_dir: &Path) -> Vec<String> {
+  let record = project_dir.join("node_modules").join(".package-lock.json");
+  let Some(installed) = std::fs::read_to_string(record)
+    .ok()
+    .and_then(|text| serde_json::from_str::<InstalledPackages>(&text).ok())
+  else {
+    return Vec::new();
+  };
+  installed
+    .packages
+    .into_keys()
+    .filter(|location| is_installed_location(location))
+    .collect()
+}
+
+/// Whether an npm lockfile location, like `node_modules/x` or
+/// `packages/app/node_modules/@s/x`, is a package installed inside the project,
+/// rather than the project itself, a workspace's source folder or a path that
+/// leaves the project.
+fn is_installed_location(location: &str) -> bool {
+  let parts: Vec<&str> = location.split('/').collect();
+  parts.len() >= 2
+    && parts[..parts.len() - 1].contains(&"node_modules")
+    && parts
+      .iter()
+      .all(|part| !part.is_empty() && *part != "." && *part != ".." && !part.contains(['\\', ':']))
+}
+
+/// Package locations as names for a message, like `commander, @azure/msal-node
+/// and 3 more`.
+fn package_names(locations: &[String]) -> String {
+  const SHOWN: usize = 4;
+  let mut names = locations
+    .iter()
+    .take(SHOWN)
+    .map(|location| location.strip_prefix("node_modules/").unwrap_or(location))
+    .collect::<Vec<_>>()
+    .join(", ");
+  if locations.len() > SHOWN {
+    names.push_str(&format!(" and {} more", locations.len() - SHOWN));
+  }
+  names
+}
+
+/// Node's report of a module it couldn't load: what it looked for, then the
+/// file that asked for it (`imported from <file>` for an ES module, the first
+/// `Require stack` entry for CommonJS).
+static MODULE_NOT_FOUND_RE: Lazy<Regex> = Lazy::new(|| {
+  Regex::new(concat!(
+    r"Cannot find (?:package|module) '([^'\r\n]+)'",
+    r"(?: imported from ([^\r\n]+)|[^\r\n]*\r?\n[ \t]*Require stack:[ \t]*\r?\n[ \t]*- ([^\r\n]+))?",
+  ))
+  .unwrap()
+});
+
+/// When `output` shows Node failing to load a file of a package installed in
+/// `project_dir`, mark each such package incomplete, so the next
+/// [`ensure_project_dependencies`] reinstalls it. Returns their locations.
+///
+/// A package folder without a `package.json` is already incomplete. One that
+/// lost other files (to a sync or antivirus tool, say) still looks installed,
+/// and `npm install` would leave it as it is; removing its `package.json` makes
+/// npm unpack it again. A package missing outright, which Node names rather
+/// than a file in it, is for [`incomplete_packages`] to find.
+fn invalidate_unloadable_packages(project_dir: &Path, output: &str) -> Vec<String> {
+  let mut marked = BTreeSet::new();
+  for caps in MODULE_NOT_FOUND_RE.captures_iter(output) {
+    let importer = caps.get(2).or_else(|| caps.get(3)).map(|m| m.as_str());
+    // A file the project's own code asked for is that code's mistake, not the install's.
+    if importer.is_some_and(|importer| installed_package_of(project_dir, &reported_path(importer)).is_none()) {
+      continue;
+    }
+    let Some(file) = unloadable_file(&caps[1], importer) else {
+      continue;
+    };
+    let Some((dir, location)) = installed_package_of(project_dir, &file) else {
+      continue;
+    };
+    // Never reach through a link: behind a linked package (an npm workspace, a
+    // `file:` dependency or `npm link`) is the user's own source, which npm
+    // can't put back.
+    if !installed_in_place(project_dir, &location) {
+      continue;
+    }
+    let manifest = dir.join("package.json");
+    if manifest.is_file() {
+      if let Err(error) = std::fs::remove_file(&manifest) {
+        log::warn!("Couldn't mark {location} for reinstall: {error}");
+        continue;
+      }
+      if let Ok(mut marks) = MARKED_FOR_REINSTALL.lock() {
+        marks.insert(dir, SystemTime::now());
+      }
+    }
+    marked.insert(location);
+  }
+  marked.into_iter().collect()
+}
+
+/// Whether every folder from the project's `node_modules` down to the package
+/// at `location` is a real folder, not a link.
+fn installed_in_place(project_dir: &Path, location: &str) -> bool {
+  let mut path = project_dir.to_path_buf();
+  location.split('/').all(|part| {
+    path.push(part);
+    std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_dir())
+  })
+}
+
+/// The file Node couldn't load: the path it reported, or a relative import
+/// resolved against the file that made it. `None` for a package name.
+fn unloadable_file(specifier: &str, importer: Option<&str>) -> Option<PathBuf> {
+  let path = reported_path(specifier);
+  if path.is_absolute() {
+    return Some(path);
+  }
+  let relative = ["./", "../", ".\\", "..\\"].iter().any(|start| specifier.starts_with(start));
+  if !relative {
+    return None;
+  }
+  Some(reported_path(importer?).parent()?.join(specifier))
+}
+
+/// A path as Node printed it, without the `\\?\` prefix Windows paths can carry.
+fn reported_path(text: &str) -> PathBuf {
+  let text = text.trim();
+  let unprefixed = text
+    .strip_prefix(r"\\?\")
+    .filter(|rest| rest.as_bytes().get(1) == Some(&b':'));
+  PathBuf::from(unprefixed.unwrap_or(text))
+}
+
+/// The package installed in `project_dir`'s `node_modules` that `file` belongs
+/// to: its folder and its location, like `node_modules/@scope/name`.
+fn installed_package_of(project_dir: &Path, file: &Path) -> Option<(PathBuf, String)> {
+  // Node prints real paths: try the project's too (no 8.3 names or links).
+  let inside = parts_within(project_dir, file).or_else(|| {
+    let real = std::fs::canonicalize(project_dir).ok()?;
+    parts_within(&reported_path(&real.to_string_lossy()), file)
+  })?;
+  if inside.first().map(String::as_str) != Some("node_modules") {
+    return None;
+  }
+  // The innermost node_modules folder holds the package.
+  let at = inside.iter().rposition(|part| part == "node_modules")?;
+  let name_parts = if inside.get(at + 1)?.starts_with('@') { 2 } else { 1 };
+  let package = inside.get(..at + 1 + name_parts)?;
+  if package.iter().any(|part| part.starts_with('.')) {
+    return None;
+  }
+  let location = package.join("/");
+  Some((project_dir.join(&location), location))
+}
+
+/// The names in `path` after `dir`, with `.` and `..` resolved, or `None` when
+/// `path` isn't inside `dir`. Node may print a path in another case than the
+/// project's (`c:` for `C:`).
+fn parts_within(dir: &Path, path: &Path) -> Option<Vec<String>> {
+  let mut parts = path.components();
+  for expected in dir.components() {
+    if !parts.next()?.as_os_str().eq_ignore_ascii_case(expected.as_os_str()) {
+      return None;
+    }
+  }
+  let mut inside = Vec::new();
+  for part in parts {
+    match part {
+      Component::Normal(name) => inside.push(name.to_str()?.to_string()),
+      Component::CurDir => {}
+      Component::ParentDir => {
+        inside.pop()?;
+      }
+      _ => return None,
+    }
+  }
+  Some(inside)
+}
+
 /// Whether a dependency install can use the faster, deterministic `npm ci` (a
 /// committed lockfile and no `node_modules` yet, as in a fresh clone) instead of
 /// `npm install`. `npm ci` skips dependency resolution and installs exactly the
@@ -307,13 +688,17 @@ async fn run_npm_install(project_dir: &Path, subcommand: &str, on_data: Option<O
   .await
 }
 
-/// Install a Rayfin project's dependencies when its local CLI is absent.
+/// Install a Rayfin project's dependencies when its local CLI is absent or its
+/// packages are incomplete.
 ///
 /// A cloned project normally has no `node_modules`; relying on a global CLI in
-/// that case hides the problem until another local package is needed. This makes
-/// the project's pinned CLI the source of truth and is a no-op once it is ready.
+/// that case hides the problem until another local package is needed. An
+/// install that stopped part way is just as broken while the CLI's own files
+/// look ready: its commands fail with "Cannot find package" until npm fills in
+/// the rest. This makes the project's pinned CLI the source of truth and is a
+/// no-op once it is ready.
 pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnData>) -> Result<(), String> {
-  if project_rayfin_cli_installed(project_dir) {
+  if project_rayfin_cli_installed(project_dir) && find_incomplete_packages(project_dir).await.is_empty() {
     return Ok(());
   }
 
@@ -326,7 +711,8 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
   };
   let _install_guard = install_lock.lock().await;
   // Another request may have completed the install while this one waited.
-  if project_rayfin_cli_installed(project_dir) {
+  let incomplete = quiet_incomplete_packages(project_dir, on_data.as_ref()).await?;
+  if incomplete.is_empty() && project_rayfin_cli_installed(project_dir) {
     return Ok(());
   }
 
@@ -334,8 +720,21 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
     return Err("This Rayfin project has no package.json, so its dependencies cannot be installed.".to_string());
   }
 
-  if let Some(on) = &on_data {
-    on(Stream::System, "Project dependencies are missing; installing them with npm...\n");
+  if incomplete.is_empty() {
+    if let Some(on) = &on_data {
+      on(Stream::System, "Project dependencies are missing; installing them with npm...\n");
+    }
+  } else {
+    log::warn!("Reinstalling incomplete packages in {}: {}", project_dir.display(), incomplete.join(", "));
+    if let Some(on) = &on_data {
+      on(
+        Stream::System,
+        &format!(
+          "Project dependencies are missing or incomplete ({}); reinstalling them with npm...\n",
+          package_names(&incomplete)
+        ),
+      );
+    }
   }
 
   // A lockfile and no `node_modules` (a fresh clone) → `npm ci` is fastest and
@@ -391,6 +790,13 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
       "npm install completed, but @microsoft/rayfin-cli is still missing. Check this project's package.json."
         .to_string(),
     );
+  }
+  let still_incomplete = find_incomplete_packages(project_dir).await;
+  if !still_incomplete.is_empty() {
+    return Err(format!(
+      "npm install completed, but some packages are still incomplete ({}). Close Fabricator, delete this project's node_modules folder, then open the project again.",
+      package_names(&still_incomplete)
+    ));
   }
   Ok(())
 }
@@ -475,12 +881,34 @@ pub async fn run_program(program: PathBuf, args: &[&str], opts: RunOptions) -> R
 /// `cwd` to `project_dir` when the caller didn't set one — otherwise commands like
 /// `up list` / `up status` exit with "Not inside a Rayfin project" and report no
 /// deployments even when the project is deployed.
+///
+/// When the CLI fails because a package it loads is incomplete, that package is
+/// marked for the next dependency check to reinstall (see
+/// [`invalidate_unloadable_packages`]).
 pub async fn run_project_rayfin(project_dir: &Path, args: &[&str], mut opts: RunOptions) -> RunResult {
   let (program, prefix) = project_rayfin(project_dir);
   if opts.cwd.is_none() {
     opts.cwd = Some(project_dir.to_path_buf());
   }
-  spawn_and_run(Resolved { program, prefix, not_found: false }, args, opts).await
+  let on_data = opts.on_data.clone();
+  let result = spawn_and_run(Resolved { program, prefix, not_found: false }, args, opts).await;
+  if !result.ok {
+    let output = format!("{}\n{}", result.stderr, result.stdout);
+    let incomplete = invalidate_unloadable_packages(project_dir, &output);
+    if !incomplete.is_empty() {
+      log::warn!("The Rayfin CLI couldn't load packages in {}: {}", project_dir.display(), incomplete.join(", "));
+      if let Some(on) = on_data {
+        on(
+          Stream::System,
+          &format!(
+            "\nSome of this project's packages didn't install completely ({}). Fabricator reinstalls them the next time you deploy, sign in to Fabric or open the project.\n",
+            package_names(&incomplete)
+          ),
+        );
+      }
+    }
+  }
+  result
 }
 
 async fn spawn_and_run(resolved: Resolved, args: &[&str], opts: RunOptions) -> RunResult {
@@ -512,6 +940,9 @@ async fn spawn_and_run(resolved: Resolved, args: &[&str], opts: RunOptions) -> R
   cmd.stdin(if opts.stdin.is_some() { Stdio::piped() } else { Stdio::null() });
   cmd.stdout(Stdio::piped());
   cmd.stderr(Stdio::piped());
+  // A caller that stops waiting (an outer timeout, a `select!`, or a Copilot tool call
+  // the SDK cancels by dropping its future) must not leave the child running.
+  cmd.kill_on_drop(true);
   #[cfg(windows)]
   {
     // CREATE_NO_WINDOW — don't flash a console for child processes.
@@ -632,6 +1063,24 @@ mod tests {
   use super::*;
 
   #[tokio::test]
+  async fn a_run_its_caller_stops_awaiting_kills_the_child() {
+    if which::which("node").is_err() {
+      return;
+    }
+    let marker = std::env::temp_dir().join(format!("exec-dropped-{}", uuid::Uuid::new_v4()));
+    let marker_arg = marker.to_string_lossy().into_owned();
+    let script = "setTimeout(() => require('fs').writeFileSync(process.argv[1], 'still running'), 1000)";
+    let args = ["-e", script, &marker_arg];
+    let pending = run("node", &args, RunOptions::timeout(30_000));
+    // Dropping the future is what the Copilot SDK does when it cancels a tool call.
+    assert!(tokio::time::timeout(Duration::from_millis(300), pending).await.is_err());
+    tokio::time::sleep(Duration::from_millis(2_000)).await;
+    let survived = marker.exists();
+    let _ = std::fs::remove_file(&marker);
+    assert!(!survived, "the child kept running after its caller stopped waiting");
+  }
+
+  #[tokio::test]
   async fn stdin_reaches_the_child_but_not_its_arguments() {
     if which::which("node").is_err() {
       return;
@@ -703,6 +1152,237 @@ mod tests {
     std::fs::create_dir_all(command.parent().unwrap()).unwrap();
     std::fs::write(&command, "// cli").unwrap();
     assert!(project_rayfin_cli_installed(&dir));
+
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  fn temp_project(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("rayfin-{name}-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+  }
+
+  /// Install a package (just its `package.json`) at each location in `dir`.
+  fn install_packages(dir: &Path, locations: &[&str]) {
+    for location in locations {
+      std::fs::create_dir_all(dir.join(location)).unwrap();
+      std::fs::write(dir.join(location).join("package.json"), "{}").unwrap();
+    }
+  }
+
+  #[test]
+  fn incomplete_packages_finds_what_an_interrupted_install_left_behind() {
+    let dir = temp_project("incomplete");
+    assert!(incomplete_packages(&dir).is_empty(), "nothing is installed yet");
+
+    let packages = [
+      "node_modules/commander",
+      "node_modules/jsonwebtoken",
+      "node_modules/@azure/msal-node",
+      "node_modules/inquirer",
+      "node_modules/inquirer/node_modules/rxjs",
+      "packages/app/node_modules/lodash",
+    ];
+    install_packages(&dir, &packages);
+    let mut record = serde_json::json!({ "": {}, "packages/app": {} });
+    for location in packages {
+      record[location] = serde_json::json!({});
+    }
+    let node_modules = dir.join("node_modules");
+    std::fs::write(node_modules.join(".package-lock.json"), serde_json::json!({ "packages": record }).to_string()).unwrap();
+    // npm's own folders, tool caches, a folder an interrupted install set aside
+    // and an empty scope aren't packages.
+    for folder in [".bin", ".vite/deps", ".commander-1a2b3c4d", "@types"] {
+      std::fs::create_dir_all(node_modules.join(folder)).unwrap();
+    }
+    assert!(incomplete_packages(&dir).is_empty());
+
+    // Emptied package folders, at the top, in a scope and nested, and a
+    // recorded package that's gone.
+    std::fs::remove_file(node_modules.join("commander").join("package.json")).unwrap();
+    std::fs::remove_file(node_modules.join("@azure").join("msal-node").join("package.json")).unwrap();
+    std::fs::write(node_modules.join("@azure").join("msal-node").join("index.mjs"), "").unwrap();
+    std::fs::remove_file(node_modules.join("inquirer").join("node_modules").join("rxjs").join("package.json")).unwrap();
+    std::fs::remove_dir_all(node_modules.join("jsonwebtoken")).unwrap();
+    assert_eq!(
+      incomplete_packages(&dir),
+      [
+        "node_modules/@azure/msal-node",
+        "node_modules/commander",
+        "node_modules/inquirer/node_modules/rxjs",
+        "node_modules/jsonwebtoken",
+      ]
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[tokio::test]
+  async fn a_half_installed_project_is_not_ready() {
+    let dir = temp_project("half-installed");
+    let cli = local_rayfin_cli_dir(&dir);
+    for file in ["package.json", "dist/auth/index.js", "scripts/main.js"] {
+      std::fs::create_dir_all(cli.join(file).parent().unwrap()).unwrap();
+      std::fs::write(cli.join(file), "{}").unwrap();
+    }
+    install_packages(&dir, &["node_modules/commander"]);
+    assert!(ensure_project_dependencies(&dir, None).await.is_ok());
+
+    // An install that's still unpacking is left to finish.
+    let manifest = dir.join("node_modules").join("commander").join("package.json");
+    std::fs::remove_file(&manifest).unwrap();
+    let unpacking = {
+      let manifest = manifest.clone();
+      tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        std::fs::write(manifest, "{}").unwrap();
+      })
+    };
+    assert!(ensure_project_dependencies(&dir, None).await.is_ok());
+    unpacking.await.unwrap();
+
+    // One that stopped part way leaves the CLI's own files looking ready, but a
+    // package it loads is empty, so ensure installs (and stops: this fixture has
+    // no package.json).
+    std::fs::remove_file(&manifest).unwrap();
+    assert!(project_rayfin_cli_installed(&dir));
+    let error = ensure_project_dependencies(&dir, None).await.unwrap_err();
+    assert!(error.contains("no package.json"), "{error}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[test]
+  fn node_load_failures_mark_only_this_projects_packages() {
+    let dir = temp_project("unloadable");
+    let other = temp_project("unloadable-other");
+    install_packages(
+      &dir,
+      &["node_modules/inquirer", "node_modules/@azure/msal-node", "node_modules/a", "node_modules/a/node_modules/b"],
+    );
+    install_packages(&other, &["node_modules/inquirer"]);
+    let node_modules = dir.join("node_modules");
+    let list = node_modules.join("inquirer").join("lib").join("prompts").join("list.js");
+
+    // A package Node names rather than a file in it is missing outright, a file
+    // the project's own code asks for is that code's mistake, and another
+    // folder's packages aren't this project's to repair.
+    let untouched = format!(
+      "Cannot find package 'rxjs' imported from {}\nCannot find module '{}' imported from {}\nCannot find module '{}' imported from {}",
+      list.display(),
+      node_modules.join("inquirer").join("missing.js").display(),
+      dir.join("scripts").join("build.mjs").display(),
+      other.join("node_modules").join("inquirer").join("index.js").display(),
+      list.display(),
+    );
+    assert!(invalidate_unloadable_packages(&dir, &untouched).is_empty());
+    assert!(other.join("node_modules").join("inquirer").join("package.json").is_file());
+    assert!(incomplete_packages(&dir).is_empty());
+
+    // An ES module reports the file's path, in whatever case it was typed.
+    let esm = format!(
+      "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '{}' imported from {}",
+      node_modules.join("@azure").join("msal-node").join("dist").join("client.mjs").display().to_string().to_lowercase(),
+      node_modules.join("@azure").join("msal-node").join("dist").join("index.mjs").display(),
+    );
+    assert_eq!(invalidate_unloadable_packages(&dir, &esm), ["node_modules/@azure/msal-node"]);
+    // CommonJS reports a relative path and the module that required it.
+    let cjs = format!(
+      "Error: Cannot find module './prompts/list'\nRequire stack:\n- {}\n- {}",
+      node_modules.join("inquirer").join("lib").join("inquirer.js").display(),
+      node_modules.join("a").join("node_modules").join("b").join("index.js").display(),
+    );
+    assert_eq!(invalidate_unloadable_packages(&dir, &cjs), ["node_modules/inquirer"]);
+    let nested = format!(
+      "Cannot find package '{}' imported from {}",
+      node_modules.join("a").join("node_modules").join("b").join("index.js").display(),
+      node_modules.join("a").join("index.js").display(),
+    );
+    assert_eq!(invalidate_unloadable_packages(&dir, &nested), ["node_modules/a/node_modules/b"]);
+    assert_eq!(
+      incomplete_packages(&dir),
+      ["node_modules/@azure/msal-node", "node_modules/a/node_modules/b", "node_modules/inquirer"]
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&other);
+  }
+
+  /// Link `link` to the folder `target` the way npm links a workspace: a
+  /// junction on Windows, a symlink elsewhere.
+  fn link_folder(target: &Path, link: &Path) {
+    #[cfg(windows)]
+    let linked = std::process::Command::new("cmd")
+      .args(["/C", "mklink", "/J"])
+      .arg(link)
+      .arg(target)
+      .output()
+      .is_ok_and(|out| out.status.success());
+    #[cfg(unix)]
+    let linked = std::os::unix::fs::symlink(target, link).is_ok();
+    assert!(linked, "couldn't link {}", link.display());
+  }
+
+  #[test]
+  fn node_load_failures_never_reach_through_a_linked_package() {
+    // Behind a workspace's link in node_modules is the project's own source.
+    let dir = temp_project("linked");
+    install_packages(&dir, &["packages/shared"]);
+    let link = dir.join("node_modules").join("@rayfin-app").join("shared");
+    std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+    link_folder(&dir.join("packages").join("shared"), &link);
+    assert!(incomplete_packages(&dir).is_empty());
+
+    let unbuilt = format!(
+      "Cannot find module '{}' imported from {}",
+      link.join("dist").join("index.js").display(),
+      dir.join("node_modules").join("@microsoft").join("rayfin-cli").join("dist").join("index.js").display(),
+    );
+    assert!(invalidate_unloadable_packages(&dir, &unbuilt).is_empty());
+    assert!(dir.join("packages").join("shared").join("package.json").is_file());
+
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[tokio::test]
+  async fn a_cli_that_cannot_load_a_package_marks_it_for_reinstall() {
+    if which::which("node").is_err() {
+      return;
+    }
+    let dir = temp_project("cli-unloadable");
+    let cli = local_rayfin_cli_dir(&dir);
+    std::fs::create_dir_all(cli.join("scripts")).unwrap();
+    std::fs::write(cli.join("package.json"), r#"{"name":"@microsoft/rayfin-cli","type":"module"}"#).unwrap();
+    std::fs::write(cli.join("scripts").join("main.js"), "await import('commander')").unwrap();
+    // commander looks installed, but lost a file its entry point imports.
+    let commander = dir.join("node_modules").join("commander");
+    std::fs::create_dir_all(&commander).unwrap();
+    std::fs::write(commander.join("package.json"), r#"{"name":"commander","type":"module","main":"index.js"}"#).unwrap();
+    std::fs::write(commander.join("index.js"), "import './lib/command.js'").unwrap();
+    assert!(incomplete_packages(&dir).is_empty());
+
+    let log = Arc::new(std::sync::Mutex::new(String::new()));
+    let capture = log.clone();
+    let on_data: OnData = Arc::new(move |_: Stream, chunk: &str| capture.lock().unwrap().push_str(chunk));
+    let res = run_project_rayfin(
+      &dir,
+      &["up"],
+      RunOptions { on_data: Some(on_data), timeout_ms: Some(30_000), ..Default::default() },
+    )
+    .await;
+    assert!(!res.ok);
+    assert!(res.stderr.contains("Cannot find module"), "{}", res.stderr);
+    assert_eq!(incomplete_packages(&dir), ["node_modules/commander"]);
+    assert!(log.lock().unwrap().contains("Fabricator reinstalls them"), "{}", log.lock().unwrap());
+
+    // Marking it isn't mistaken for an install at work, so the retry the note
+    // suggests repairs at once (and stops: this fixture has no package.json).
+    log.lock().unwrap().clear();
+    let capture = log.clone();
+    let on_data: OnData = Arc::new(move |_: Stream, chunk: &str| capture.lock().unwrap().push_str(chunk));
+    let error = ensure_project_dependencies(&dir, Some(on_data)).await.unwrap_err();
+    assert!(error.contains("no package.json"), "{error}");
+    assert!(!log.lock().unwrap().contains("Waiting"), "{}", log.lock().unwrap());
 
     let _ = std::fs::remove_dir_all(&dir);
   }

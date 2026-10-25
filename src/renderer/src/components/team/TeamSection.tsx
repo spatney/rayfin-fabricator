@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import type { StudioProject, TeamInvitation, TeamReviewRequest, TeamWorkspace } from '@shared/ipc'
 import AbandonSetupModal from './AbandonSetupModal'
 import CreateTeamWorkspaceModal from './CreateTeamWorkspaceModal'

@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useState, type JSX } from 'react'
 import Markdown from '../Markdown'
 import { ChevronRightIcon } from '../icons'
 import { formatTurnDuration } from './format'

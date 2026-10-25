@@ -251,8 +251,9 @@ const EXPECTED: DeployStepId[] = ['connect', 'workspace', 'item', 'settings', 'b
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
 /** Fabricator's own first line of a deploy (commands/deploy.rs). A sign-in retry runs it again. */
 const RUN_START = /^Deploying .+ to Fabric…$/
-/** Fabricator installing a project's missing packages before the CLI can run. */
-const PACKAGES = /^Project dependencies are missing/i
+/** Fabricator installing a project's missing (or repairing its incomplete) packages before the CLI
+ *  can run, or waiting for another install in the project to finish first. */
+const PACKAGES = /^(?:Project dependencies are missing|Waiting for changes to this project's packages)/i
 /** `[rayfin] <phase>: <message>`, sometimes ending in a percentage. */
 const PROGRESS = /^\[rayfin\]\s+([a-z][\w-]*):\s*(.*?)\s*(?:\((\d{1,3})%\))?$/i
 /** An older CLI's timed step, e.g. `[rayfin] TypeScript compilation successful... done (368ms)`. */

@@ -451,7 +451,7 @@ describe('useDesignSession — sending', () => {
     expect(shots).toBe(2)
     expect(api.preview.design.setEnabled.mock.calls[0][0]).toBe(true)
     expect(api.preview.design.setEnabled.mock.calls[0][3]).toMatchObject({ items: [expect.objectContaining({ id: 'i1' })], intro: false })
-    expect(api.preview.design.setEnabled.mock.calls.at(-1)).toEqual([false])
+    expect(api.preview.design.setEnabled.mock.calls.slice(-1)[0]).toEqual([false])
     expect(result.current.active).toBe(false)
   })
 

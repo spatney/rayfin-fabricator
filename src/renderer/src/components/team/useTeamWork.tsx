@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import type { StudioProject, TeamActionResult, TeamProgressEvent, TeamSessionStatus } from '@shared/ipc'
 import ConfirmModal from '../ConfirmModal'
 import { StepList, teamError, type StepRow } from './common'

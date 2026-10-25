@@ -247,6 +247,43 @@ impl WorkspaceModelsResult {
   }
 }
 
+/// One item in a workspace that a Rayfin connector can read, for the "Add
+/// Fabric data" picker (`mode:"listWorkspaceData"`).
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorkspaceDataItem {
+  pub id: String,
+  pub name: String,
+  /// Fabric's item type: `SemanticModel`, `Warehouse`, `SQLDatabase` or `Lakehouse`.
+  #[serde(rename = "type")]
+  pub item_type: String,
+  pub description: Option<String>,
+}
+
+/// The helper's `listWorkspaceData` reply, with the shared ok/needs-login/error envelope.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorkspaceDataResult {
+  pub ok: bool,
+  pub needs_login: bool,
+  pub needs_az: bool,
+  pub error: Option<String>,
+  pub items: Vec<WorkspaceDataItem>,
+}
+
+impl WorkspaceDataResult {
+  fn failure(error: String) -> Self {
+    let (needs_login, needs_az) = fabric_auth::failure_flags(&error);
+    WorkspaceDataResult {
+      ok: false,
+      needs_login,
+      needs_az,
+      error: Some(error),
+      ..Default::default()
+    }
+  }
+}
+
 /// Write the embedded helper to the app data dir and return its path.
 ///
 /// The helper source is a compile-time constant, so we only need to materialize
@@ -382,6 +419,22 @@ pub async fn list_workspace_models(workspace_id: &str) -> WorkspaceModelsResult 
   }
 }
 
+/// List the items in `workspace_id` that a Rayfin connector can read (semantic
+/// models, warehouses, SQL databases and lakehouses), with the silent Fabric
+/// token (the helper's `listWorkspaceData` mode). Any workspace the user can open
+/// works. Never panics — a failure returns an `ok:false` [`WorkspaceDataResult`]
+/// with login classification.
+pub async fn list_workspace_data(workspace_id: &str) -> WorkspaceDataResult {
+  let request = serde_json::json!({
+    "mode": "listWorkspaceData",
+    "workspaceId": workspace_id,
+  });
+  match invoke_helper(&request).await {
+    Ok(result) => result,
+    Err(detail) => WorkspaceDataResult::failure(detail),
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -404,6 +457,23 @@ mod tests {
       ),
       Err(_) => { /* node unavailable; parsing covered by `node --selftest` in dev */ }
     }
+  }
+
+  /// The helper's `listWorkspaceData` reply keeps each item's Fabric type, and a
+  /// sign-in failure comes back as `needsLogin`.
+  #[test]
+  fn workspace_data_reply_deserializes() {
+    let json = r#"{"ok":true,"items":[{"id":"l1","name":"orders","type":"Lakehouse","description":"Raw orders"},{"id":"m1","name":"Sales","type":"SemanticModel"}]}"#;
+    let parsed: WorkspaceDataResult = serde_json::from_str(json).unwrap();
+    assert!(parsed.ok && !parsed.needs_login);
+    assert_eq!(
+      parsed.items[0],
+      WorkspaceDataItem { id: "l1".into(), name: "orders".into(), item_type: "Lakehouse".into(), description: Some("Raw orders".into()) }
+    );
+    assert_eq!(serde_json::to_value(&parsed.items[1]).unwrap()["type"], "SemanticModel");
+    let failed: WorkspaceDataResult =
+      serde_json::from_str(r#"{"ok":false,"needsLogin":true,"error":"Sign in to Fabric."}"#).unwrap();
+    assert!(!failed.ok && failed.needs_login && failed.items.is_empty());
   }
 
   /// The helper's `schema` reply must round-trip into [`SemanticSchemaResult`]

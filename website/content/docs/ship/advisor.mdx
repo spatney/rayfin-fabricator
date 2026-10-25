@@ -49,6 +49,8 @@ Select **Run deep review** to have Copilot review the app against rules that nee
 
 Deep reviews use Copilot requests. They run in a separate read-only session: Copilot can read the project and fetch rayfin.ai documentation, but Fabricator denies file edits, shell commands, deployment commands, non-read-only tools, and `.env` file reads.
 
+To choose the model for deep reviews, explanations and **Verify**, open the model pill in the Advisor bar. It works like the [chat's model picker](/docs/build/chat#choose-a-model-and-reasoning-effort), and Fabricator remembers your choice on this computer. You can also choose a model on [your own API key](/docs/build/your-own-api-keys).
+
 While the review runs, the summary shows live progress such as what Copilot is reading. Findings appear as soon as Copilot confirms them.
 
 > [!NOTE]
@@ -75,6 +77,8 @@ Use file chips to open the flagged code in the **Code** tab.
 ## Fix findings with Copilot
 
 Select **Fix with Copilot** on one finding, or use a summary action such as **Fix selected (1)** or **Fix 2 with Copilot**. Fabricator sends the finding details to the Build chat as an Advisor fix card.
+
+These actions also apply to note-level findings under **Suggestions**. Suggestions do not lower your health score.
 
 Copilot receives the issue, location, suggested fix, relevant code excerpt, and Rayfin guidance links. It is instructed not to run `rayfin up`; Fabricator handles redeploys.
 

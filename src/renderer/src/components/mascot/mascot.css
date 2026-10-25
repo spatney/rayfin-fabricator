@@ -337,41 +337,85 @@
 
 /* ----------------------------- speech bubble ----------------------------- */
 
+/* Ray's voice: one solid fill and a hairline edge, both tinted with the accent
+   the way your own messages are in chat, so it reads as his and stands apart
+   from the cards it floats over. It pops out of his mouth: it grows from the
+   tip of its tail. Whoever places it sets `translate` (the frame loop, every
+   frame) and --tail-x, from its left edge. */
 .mascot-bubble {
+  --bubble-fill: color-mix(in srgb, var(--accent) 10%, var(--bg-elev));
+  --bubble-edge: color-mix(in srgb, var(--accent) 36%, var(--border));
   position: absolute;
   top: 0;
   left: 0;
-  max-width: 252px;
-  padding: 9px 12px 10px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-elev);
+  max-width: 260px;
+  padding: 9px 13px 10px;
+  border: 1px solid var(--bubble-edge);
+  border-radius: 14px;
+  background: var(--bubble-fill);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
-  cursor: pointer;
+  cursor: default;
   pointer-events: auto;
-  transform: translate3d(-9999px, 0, 0);
+  translate: -9999px 0;
+  transform-origin: var(--tail-x, 50%) calc(100% + 10px);
   user-select: none;
-  will-change: transform;
+  will-change: translate;
+  animation: mascotBubbleIn 0.3s cubic-bezier(0.3, 1.45, 0.55, 1);
+}
+
+[data-theme='light'] .mascot-bubble {
+  --bubble-fill: color-mix(in srgb, var(--accent) 5%, var(--bg-elev));
+  --bubble-edge: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+.mascot-bubble.is-below {
+  transform-origin: var(--tail-x, 50%) -10px;
+}
+
+.mascot-bubble.is-clickable {
+  cursor: pointer;
+}
+
+.mascot-bubble.is-clickable:hover {
+  --bubble-edge: color-mix(in srgb, var(--accent) 64%, var(--border));
 }
 
 .mascot-bubble-text {
   display: block;
-  animation: mascotPop 0.18s ease-out both;
+}
+
+.mascot-bubble.is-balanced .mascot-bubble-text {
+  text-wrap: balance;
 }
 
 .mascot-bubble-ghost {
   color: transparent;
 }
 
+/* What kind of line it is, in the colour of its kind. */
+.mascot-bubble--rayfin {
+  --bubble-kind: var(--accent);
+}
+
+.mascot-bubble--tip {
+  --bubble-kind: var(--accent-2);
+}
+
+.mascot-bubble--ray {
+  --bubble-kind: var(--ok);
+}
+
 .mascot-bubble-label {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: fit-content;
   margin-bottom: 3px;
-  color: var(--text-faint);
+  color: color-mix(in srgb, var(--bubble-kind, var(--accent)) 70%, var(--text));
   font-size: 10.5px;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -380,36 +424,46 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--bubble-kind, var(--accent));
   content: '';
 }
 
-.mascot-bubble--tip .mascot-bubble-label::before {
-  background: var(--accent-2);
-}
-
-.mascot-bubble--ray .mascot-bubble-label::before {
-  background: var(--ok);
-}
-
-/* A flat tail: a square turned 45° that carries the bubble's two borders. */
+/* The tail, in the bubble's own fill and edge (see SpeechBubble). Its base
+   sits 1px inside the bubble, centred on --tail-x; it points down, and turns
+   about that base to point anywhere else. */
 .mascot-bubble-tail {
   position: absolute;
-  bottom: -6px;
+  top: calc(100% - 1px);
   left: var(--tail-x, 50%);
-  width: 10px;
-  height: 10px;
-  margin-left: -5px;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elev);
-  transform: rotate(45deg);
+  width: 22px;
+  height: 13px;
+  margin-left: -11px;
+  overflow: visible;
+  transform-origin: 50% 0;
 }
 
 .mascot-bubble.is-below .mascot-bubble-tail {
-  top: -6px;
-  bottom: auto;
-  transform: rotate(225deg);
+  top: 1px;
+  rotate: 180deg;
+}
+
+.mascot-bubble-tail-fill {
+  fill: var(--bubble-fill);
+}
+
+.mascot-bubble-tail-edge {
+  fill: none;
+  stroke: var(--bubble-edge);
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes mascotBubbleIn {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
 }
 
 @keyframes mascotPop {
@@ -442,12 +496,15 @@
 .ray-perch-bubble .mascot-bubble {
   position: relative;
   max-width: calc(var(--perch-bubble-w, 320px) - 20px);
-  padding: 10px 14px 11px;
+  padding: 10px 15px 11px;
+  border-radius: 16px;
   font-size: 14px;
   text-align: center;
-  text-wrap: balance;
-  cursor: default;
-  transform: none;
+  translate: none;
+}
+
+.ray-perch-bubble .mascot-bubble-label {
+  margin-inline: auto;
 }
 
 .ray-perch-ray {
@@ -654,7 +711,7 @@
   .ray-mouth--talk,
   .ray.is-waving .ray-half--r,
   .mascot-roamer-bob,
-  .mascot-bubble-text,
+  .mascot-bubble,
   .ray-perch-ray,
   .ray-perch-bob {
     animation: none;

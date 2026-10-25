@@ -33,6 +33,8 @@ pub struct AppState {
   help_cancel: Mutex<Option<CancelToken>>,
   /// Shared Copilot SDK client + per-thread session cache.
   pub copilot: CopilotManager,
+  /// Your own API keys: saved keys and their models.
+  pub byok: crate::services::byok::ByokManager,
   /// Bridges Plan-mode `exit_plan_mode` requests to the renderer's approval UI.
   pub plan: Arc<PlanGate>,
   /// Per-project lease shared by source-writing chat turns and deployments.

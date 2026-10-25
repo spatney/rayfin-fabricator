@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type JSX } from 'react'
 import type { ChatPlanQuestion, ChatSegment } from '@shared/ipc'
 import Markdown from '../Markdown'
 import PlanQuestionCard from '../PlanQuestionCard'

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react'
 import type { Point } from './motion'
 
 export type ParticleKind = 'bubble' | 'heart' | 'confetti' | 'zzz'

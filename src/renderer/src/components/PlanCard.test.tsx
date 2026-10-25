@@ -4,6 +4,8 @@ import type { ChatPlanArtifact } from '@shared/ipc'
 import { OverlayProvider, usePreviewSuppressed } from '../overlay'
 import PlanCard, { alternatePlanActions, primaryPlanAction, type PlanCardProps } from './PlanCard'
 
+import type { JSX } from 'react'
+
 // Monaco doesn't run under jsdom — swap the editor for a plain textarea and stub the
 // local Monaco bootstrap side-effect, same as CustomSkillModal.test.tsx.
 vi.mock('../monaco', () => ({}))

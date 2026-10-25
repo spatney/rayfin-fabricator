@@ -8,6 +8,8 @@ import TeamDeployCard from './TeamDeployCard'
 import CreateTeamWorkspaceModal from './CreateTeamWorkspaceModal'
 import { conflictPrompt } from './useTeamWork'
 
+import type { JSX } from 'react'
+
 afterEach(() => {
   cleanup()
   delete (window as unknown as { api?: unknown }).api

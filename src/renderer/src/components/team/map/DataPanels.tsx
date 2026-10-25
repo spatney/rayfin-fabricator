@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import type { CSSProperties, JSX } from 'react'
 import type { TeamMap } from '@shared/ipc'
 import { Codicon } from '../../icons'
 import { ChangeLine, SourceIcon, resourceSummary, sourceApps, usedBy } from './DataNodes'

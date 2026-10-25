@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { useRef, type ReactNode } from 'react'
+import { useRef, type ReactNode, type JSX } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   MascotProvider,
@@ -26,8 +26,8 @@ const ray = (): HTMLElement | null =>
   screen.queryByRole('button', { name: /Ray, the Fabricator stingray/ })
 const said = (): string => document.querySelector('.mascot-bubble')?.textContent ?? ''
 
-function stage(children: ReactNode, enabled = true): JSX.Element {
-  return <MascotProvider enabled={enabled}>{children}</MascotProvider>
+function stage(children: ReactNode): JSX.Element {
+  return <MascotProvider>{children}</MascotProvider>
 }
 
 const wait = (ms: number): void =>
@@ -132,12 +132,6 @@ describe('Ray during installs', () => {
 
     view.rerender(stage(<Install status="idle" />))
     view.rerender(stage(<Install status="running" />))
-    wait(5000)
-    expect(ray()).toBeNull()
-  })
-
-  it('never appears when turned off in Settings', () => {
-    render(stage(<Install status="running" />, false))
     wait(5000)
     expect(ray()).toBeNull()
   })

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { StudioProject, TeamMapRun, TeamSessionStatus } from '@shared/ipc'
 import { useSuppressPreview } from '../../overlay'
 import { appRunsKey } from './appRun'

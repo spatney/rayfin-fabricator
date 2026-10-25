@@ -99,6 +99,7 @@ Fabricator doesn't keep credentials itself; each tool keeps its own.
 - **Microsoft Fabric**: the Rayfin CLI keeps one signed-in account per config folder, `~/.rayfin` by default. Fabricator gives each Fabric account added after the first its own folder under the app data folder, and points every Rayfin CLI and helper process it starts at the account in use with `RAYFIN_CONFIG_DIR`. Sign-in, sign-out and sign-in checks run the project's pinned Rayfin CLI outside the project folder, because the CLI reads the project's `rayfin.yml` at startup. The project's Fabric environment overrides in `rayfin/.env` still apply.
 - **Azure CLI**: the Azure CLI keeps every account you sign in to. Fabricator lists them with `az account list`, switches with `az account set`, signs one out with `az logout --username`, and signs in with `az login --allow-no-subscriptions`, so accounts without an Azure subscription work.
 - **GitHub**: the GitHub CLI keeps every account you sign in to. **Add account** runs `gh auth login` in a terminal and then switches back to your default account.
+- **Your own API keys**: Fabricator keeps each provider's key in Windows Credential Manager or the macOS Keychain, after checking it against the provider's model list. Each Copilot session gets the keys and your chosen models as its own model providers, every time it starts or resumes, so a conversation can switch between Copilot's models and yours. Requests to OpenAI, xAI and Google go through a relay on `127.0.0.1`. It leaves out a reasoning effort the chosen model doesn't take (the runtime asks for one by default), and adapts Google's requests to Gemini's OpenAI-compatible API: it removes request and message fields Gemini rejects, sends back the thought signatures Gemini adds to its tool calls, moves images out of tool results, and numbers the tool calls in Gemini's replies.
 
 When you open Fabricator after setup has passed, it shows your work at once and checks tools and accounts in the background. Each check runs separately, so a slow one, such as Fabric's, doesn't delay the others.
 
@@ -111,6 +112,7 @@ Fabricator and the tools it runs can contact these services:
 - GitHub for update checks, release downloads, cloning repositories, issue reporting, and team workspace repositories.
 - The npm registry when creating a project from the Rayfin CLI's template or installing project dependencies.
 - Azure and GitHub APIs for team workspace setup and **Diagnose with Copilot** when the **Team workspaces** experiment is enabled.
+- Anthropic, OpenAI, xAI and Google, when you add your own API keys: to check a key and list its models, and for chat, Advisor and Design requests on a model you chose from them.
 
 ## What the Advisor can read
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type JSX } from 'react'
 import Editor from '@monaco-editor/react'
 // Point @monaco-editor/react at the locally-bundled Monaco (this app runs offline
 // from a file:// renderer). Without this side-effect the editor tries to fetch

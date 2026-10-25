@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type JSX } from 'react'
 import type { TeamJoinOptions, TeamProblem, TeamWorkspace } from '@shared/ipc'
 import { useSuppressPreview } from '../../overlay'
 import { useModalFocus } from '../../modalFocus'

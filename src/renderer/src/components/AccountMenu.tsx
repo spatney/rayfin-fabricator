@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode, type JSX } from 'react'
 import { useSuppressPreview } from '../overlay'
 import { moveMenuFocus } from '../menuFocus'
 import { Codicon, ReloadIcon, SignOutIcon } from './icons'
@@ -33,16 +33,19 @@ interface Props {
   onRefresh: () => void
   /** Open the Accounts dialog: every account Fabricator uses. */
   onManageAccounts: () => void
+  /** Open Settings. */
+  onOpenSettings: () => void
 }
 
 const ITEM = '[role="menuitem"]'
 
 /**
- * The app bar's account control. Signed in to Fabric, it's the user's avatar and
- * opens a menu with the account actions (manage every account, refresh
- * credentials, sign out). Signed out, "Sign in to Fabric" stays one click away,
- * with the rest behind its caret. While the launch check runs it's a neutral
- * placeholder rather than a premature sign-in prompt.
+ * The app bar's account control, which also holds Settings. Signed in to
+ * Fabric, it's the user's avatar and opens a menu with the account actions
+ * (manage every account, refresh credentials, sign out) and Settings. Signed
+ * out, "Sign in to Fabric" stays one click away, with the rest behind its caret.
+ * While the launch check runs it's a neutral placeholder rather than a premature
+ * sign-in prompt.
  */
 export default function AccountMenu({
   signedIn,
@@ -57,7 +60,8 @@ export default function AccountMenu({
   onSignIn,
   onSignOut,
   onRefresh,
-  onManageAccounts
+  onManageAccounts,
+  onOpenSettings
 }: Props): JSX.Element {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -159,8 +163,8 @@ export default function AccountMenu({
             aria-haspopup="menu"
             aria-expanded={isOpen}
             aria-controls={isOpen ? menuId : undefined}
-            aria-label="More sign-in options"
-            title="More sign-in options"
+            aria-label="Settings and accounts"
+            title="Settings and accounts"
             onClick={() => setOpen((o) => !o)}
           >
             <Codicon name="chevron-down" />
@@ -213,6 +217,16 @@ export default function AccountMenu({
                 {signingOut ? 'Signing out…' : 'Sign out'}
               </MenuItem>
             )}
+            {/* The rest is about the account; Settings is the app's. */}
+            <div className="account-sep" role="separator" />
+            <MenuItem
+              disabled={false}
+              onClick={() => pick(onOpenSettings)}
+              icon={<Codicon name="settings-gear" />}
+              title="Theme, text size, experiments and more"
+            >
+              Settings
+            </MenuItem>
           </div>
         </div>
       )}

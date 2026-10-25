@@ -1,6 +1,8 @@
 import type { StudioProject } from '@shared/ipc'
 import type { AppIdentityInfo, Identity } from '../../model/architecture'
 
+import type { JSX } from 'react'
+
 export const IDENTITY_LABEL: Record<Identity, string> = { user: 'User’s identity', app: 'App identity', key: 'A key' }
 
 /** What a part's connections use to sign in, as its port says it. */

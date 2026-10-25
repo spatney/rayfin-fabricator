@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, type JSX } from 'react'
 import type { ChatAdvisorFix, ChatAdvisorSummary } from '@shared/ipc'
 import { categoryById, normalizeSeverity, severityLabel } from '@shared/advisor/catalog'
 import type { FixOutcome } from '../../advisor/lifecycle'

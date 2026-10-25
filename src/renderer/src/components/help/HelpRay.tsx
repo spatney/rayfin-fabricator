@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { Ray, RAY_VIEWBOX, type RayMood } from '../mascot/Ray'
 import { Particles, useParticles } from '../mascot/Particles'
 import { useReducedMotion } from '../mascot/context'

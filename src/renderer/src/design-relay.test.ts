@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -154,7 +155,7 @@ describe('design controller v6 — app frame', () => {
   })
 
   it('says hello to the top frame, then runs the controller when the relay enables it', () => {
-    const packets = (): Packet[] => posted.mock.calls.map((c) => c[0] as Packet)
+    const packets = (): Packet[] => posted.mock.calls.map((c: unknown[]) => c[0] as Packet)
     expect(packets().some((p) => p.ns === NS && p.evt === 'hello')).toBe(true)
     frame.dispatchEvent(new MessageEvent('message', {
       origin: PORTAL, source: frame.top,
@@ -164,7 +165,7 @@ describe('design controller v6 — app frame', () => {
     const state = packets().filter((p) => p.evt === 'state').pop()!
     expect(state).toMatchObject({ status: { enabled: true, sessionId: 's1' }, snapshot: { items: [] } })
     // State only goes back to the relay's origin.
-    expect(posted.mock.calls.filter((c) => (c[0] as Packet).evt === 'state').every((c) => c[1] === PORTAL)).toBe(true)
+    expect(posted.mock.calls.filter((c: unknown[]) => (c[0] as Packet).evt === 'state').every((c: unknown[]) => c[1] === PORTAL)).toBe(true)
   })
 
   it('ignores commands that do not come from the top frame', () => {
@@ -179,7 +180,7 @@ describe('design controller v6 — app frame', () => {
       frame.dispatchEvent(new MessageEvent('message', { origin, source: frame.top, data: { ns: NS, cmd: 'enable', options: { sessionId: 'x', items: [] } } }))
       frame.dispatchEvent(new MessageEvent('message', { origin, source: frame.top, data: { ns: NS, cmd: 'command', command: { op: 'collectPage', requestId: 'r' } } }))
       expect(iframe.contentDocument!.getElementById(HOST_ID)).toBeNull()
-      expect(posted.mock.calls.some((c) => (c[0] as Packet).evt === 'state')).toBe(false)
+      expect(posted.mock.calls.some((c: unknown[]) => (c[0] as Packet).evt === 'state')).toBe(false)
     }
   )
 

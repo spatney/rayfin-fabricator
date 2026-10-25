@@ -11,6 +11,8 @@ import {
   type SourceItem
 } from './resources'
 
+import type { JSX } from 'react'
+
 function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`
 }

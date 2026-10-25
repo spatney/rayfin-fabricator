@@ -1,4 +1,4 @@
-import type { SelectHTMLAttributes } from 'react'
+import type { SelectHTMLAttributes, JSX } from 'react'
 import { Codicon } from './icons'
 
 /**

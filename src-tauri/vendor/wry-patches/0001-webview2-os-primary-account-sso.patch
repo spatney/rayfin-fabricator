@@ -1,0 +1,34 @@
+Fabricator local patch for wry: WebView2 device-compliance SSO
+
+Turns on the WebView2 environment option AllowSingleSignOnUsingOSPrimaryAccount so
+the embedded preview presents the device's Microsoft Entra identity (Primary Refresh
+Token / device certificate). Deployed apps behind a Conditional Access "require
+compliant/managed device" policy then sign in inside the preview instead of failing
+with "You can't get there from here". Upstream wry builds the environment options but
+exposes no setter for this one, and it is an environment option, not a browser
+argument, so it can't be passed through Tauri.
+
+Where: src/webview2/mod.rs, InnerWebView::create_environment, right after
+options.set_are_browser_extensions_enabled(...).
+Docs: docs/VENDORED-WRY-PATCH.md
+
+diff --git a/src/webview2/mod.rs b/src/webview2/mod.rs
+--- a/src/webview2/mod.rs
++++ b/src/webview2/mod.rs
+@@ -327,6 +327,16 @@ impl InnerWebView {
+       options.set_additional_browser_arguments(additional_browser_args);
+       options.set_are_browser_extensions_enabled(pl_attrs.browser_extensions_enabled);
+ 
++      // [rayfin-desktop local patch: webview2-sso] Share the OS primary
++      // (Entra-joined) account with this WebView2 environment. This surfaces the
++      // device-bound Primary Refresh Token / device certificate to Microsoft Entra
++      // ID, so deployed apps gated by a Conditional Access "require
++      // compliant/managed device" policy can sign in inside the embedded preview
++      // instead of failing with "You can't get there from here". Upstream wry
++      // leaves this `false` and exposes no setter, hence the vendored patch (see
++      // docs/VENDORED-WRY-PATCH.md and src-tauri/vendor/wry-patches).
++      options.set_allow_single_sign_on_using_os_primary_account(true);
++
+       // Get user's system language
+       let lcid = GetUserDefaultUILanguage();
+       let mut lang = [0; MAX_LOCALE_NAME as usize];

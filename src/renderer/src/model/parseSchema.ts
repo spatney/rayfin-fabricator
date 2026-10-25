@@ -415,7 +415,9 @@ function buildField(raw: RawField, lines?: LineIndex): ModelField {
     if (scalar) {
       field.type = scalar
       field.decorator = deco.name
-      if (deco.name === 'uuid') field.primaryKey = true
+      // Rayfin's primary key is always the field named `id`; any other `@uuid()` field,
+      // such as a declared `tag_id` foreign key, is an ordinary column.
+      if (deco.name === 'uuid' && raw.name === 'id') field.primaryKey = true
       if (boolOption(deco.args, 'optional')) {
         field.optional = true
         field.optionFlag = true

@@ -30,7 +30,7 @@ function focusable(root: HTMLElement): HTMLElement[] {
  *
  * Escape-to-close stays each modal's own concern; this only manages focus.
  */
-export function useModalFocus<T extends HTMLElement = HTMLDivElement>(): RefObject<T> {
+export function useModalFocus<T extends HTMLElement = HTMLDivElement>(): RefObject<T | null> {
   const ref = useRef<T>(null)
   // Capture the trigger during the first render — before the dialog's own
   // `autoFocus` runs in commit — so we can hand focus back to it on close.

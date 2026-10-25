@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from 'react'
 import type { SecretEnvironment, SecretInfo, SecretsState, StudioProject } from '@shared/ipc'
 import { relativeTime } from './advisor/format'
 import { Codicon } from './icons'

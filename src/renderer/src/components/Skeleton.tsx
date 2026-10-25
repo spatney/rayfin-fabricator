@@ -1,3 +1,4 @@
+import type { JSX } from 'react'
 /**
  * A lightweight loading placeholder: a few softly pulsing bars that echo the
  * shape of the content about to arrive (list rows). Prefer this over a bare

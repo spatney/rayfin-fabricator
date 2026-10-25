@@ -1,9 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import DeployFailedNotice, { deployTrouble, type DeployFailedNoticeProps } from './DeployFailedNotice'
-import { MascotContext } from './mascot/context'
+import { isRaySentAway } from './mascot/stage'
 
-function show(props: Partial<DeployFailedNoticeProps> = {}, mascot = true): DeployFailedNoticeProps {
+vi.mock('./mascot/stage', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./mascot/stage')>()),
+  isRaySentAway: vi.fn(() => false)
+}))
+
+function show(props: Partial<DeployFailedNoticeProps> = {}): DeployFailedNoticeProps {
   const all: DeployFailedNoticeProps = {
     outcome: 'error',
     log: ['[rayfin] settings: Applying runtime settings\n', '❌ Deployment failed: 400 Bad Request\n'],
@@ -13,11 +18,7 @@ function show(props: Partial<DeployFailedNoticeProps> = {}, mascot = true): Depl
     onDismiss: vi.fn(),
     ...props
   }
-  render(
-    <MascotContext.Provider value={mascot}>
-      <DeployFailedNotice {...all} />
-    </MascotContext.Provider>
-  )
+  render(<DeployFailedNotice {...all} />)
   return all
 }
 
@@ -39,6 +40,7 @@ afterEach(() => {
   cleanup()
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  vi.mocked(isRaySentAway).mockReturnValue(false)
 })
 
 describe('what a failed deploy offers', () => {
@@ -63,8 +65,9 @@ describe('what a failed deploy offers', () => {
     expect(screen.queryByRole('button', { name: 'Refresh Fabric authentication' })).toBeNull()
   })
 
-  it('says the same thing plainly with Ray turned off', () => {
-    const props = show({}, false)
+  it('says the same thing plainly once Ray was sent away', () => {
+    vi.mocked(isRaySentAway).mockReturnValue(true)
+    const props = show()
     expect(screen.getByRole('alert').textContent).toBe('The deploy didn’t finish. Help can find out why.')
     expect(screen.queryByRole('button', { name: /Ray/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Find out why' }))

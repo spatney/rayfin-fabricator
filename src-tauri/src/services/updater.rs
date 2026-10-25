@@ -102,3 +102,56 @@ pub async fn install(app: &AppHandle, state: &UpdaterState) -> AppResult<()> {
   #[allow(unreachable_code)]
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use tauri_plugin_updater::{Config, RemoteRelease};
+
+  /// The manifest `release.yml` publishes as `latest.json` (step "Generate and upload
+  /// updater manifest"), copied from v1.16.1 with shorter notes and placeholder
+  /// signatures. Installed apps parse it with whatever updater plugin they shipped, so
+  /// its shape must keep working across plugin upgrades.
+  const LATEST_JSON: &str = r###"{
+  "version": "1.16.1",
+  "notes": "## Half-finished installs repair themselves\r\n\r\nFabricator now checks that all of a project's packages are installed.\r",
+  "pub_date": "2026-10-12T06:55:33Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "windows-signature",
+      "url": "https://github.com/spatney/rayfin-fabricator/releases/download/v1.16.1/Rayfin.Fabricator_1.16.1_x64-setup.exe"
+    },
+    "darwin-aarch64": {
+      "signature": "macos-signature",
+      "url": "https://github.com/spatney/rayfin-fabricator/releases/download/v1.16.1/Rayfin.Fabricator.app.tar.gz"
+    }
+  }
+}"###;
+
+  #[test]
+  fn the_published_update_manifest_resolves_both_platforms() {
+    let release: RemoteRelease = serde_json::from_str(LATEST_JSON).unwrap();
+    assert_eq!(release.version.to_string(), "1.16.1");
+    assert!(release.notes.as_deref().unwrap().starts_with("## Half-finished"));
+    assert!(release.pub_date.is_some());
+
+    let windows = release.download_url("windows-x86_64").unwrap();
+    assert!(windows.as_str().ends_with("_x64-setup.exe"));
+    assert_eq!(release.signature("windows-x86_64").unwrap(), "windows-signature");
+    let macos = release.download_url("darwin-aarch64").unwrap();
+    assert!(macos.as_str().ends_with(".app.tar.gz"));
+    assert_eq!(release.signature("darwin-aarch64").unwrap(), "macos-signature");
+    assert!(release.download_url("linux-x86_64").is_err());
+  }
+
+  #[test]
+  fn the_app_updater_config_parses() {
+    let conf: serde_json::Value = serde_json::from_str(include_str!("../../tauri.conf.json")).unwrap();
+    let config: Config = serde_json::from_value(conf["plugins"]["updater"].clone()).unwrap();
+    let endpoints: Vec<&str> = config.endpoints.iter().map(|url| url.as_str()).collect();
+    assert_eq!(
+      endpoints,
+      ["https://github.com/spatney/rayfin-fabricator/releases/latest/download/latest.json"]
+    );
+    assert!(!config.pubkey.is_empty());
+  }
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type JSX } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { StudioProject } from '@shared/ipc'
@@ -24,7 +24,10 @@ function Harnessed({
   turnRunning,
   onRefreshAuth,
   authBusy,
-  onDiagnoseDeploy
+  onDiagnoseDeploy,
+  onSettle,
+  watching,
+  onWatchChange
 }: {
   project: StudioProject
   suppressed: boolean
@@ -35,6 +38,9 @@ function Harnessed({
   onRefreshAuth?: () => void
   authBusy?: boolean
   onDiagnoseDeploy?: () => void
+  onSettle?: () => void
+  watching?: boolean
+  onWatchChange?: (watching: boolean) => void
 }): JSX.Element {
   return (
     <OverlayProvider>
@@ -50,6 +56,10 @@ function Harnessed({
         turnRunning={turnRunning}
         focused={false}
         onToggleFocus={() => {}}
+        onSettle={onSettle}
+        watching={watching}
+        onWatchChange={onWatchChange}
+        deploymentName="Production"
       />
     </OverlayProvider>
   )
@@ -348,6 +358,108 @@ describe('PreviewPane visibility', () => {
     expect(reveal!.bounds.width).toBeGreaterThan(0)
   })
 
+  // The launch screen covers a pane that has never been on screen. There's no
+  // frame to keep, so the page loads off-screen under the cover and is stilled
+  // there, and the cover lifts onto a finished page rather than a blank one.
+  // The cover is up first and the pane mounts under it, as at launch.
+  function Covered({ pane, covered = true, project = makeProject('p1'), onSettle }: {
+    pane: boolean
+    covered?: boolean
+    project?: StudioProject
+    onSettle?: () => void
+  }): JSX.Element {
+    return (
+      <OverlayProvider>
+        {covered && <SuppressPreview />}
+        {pane && (
+          <PreviewPane
+            project={project}
+            deploy={undefined}
+            focused={false}
+            onToggleFocus={() => {}}
+            onSettle={onSettle}
+          />
+        )}
+      </OverlayProvider>
+    )
+  }
+
+  async function mountCovered(onSettle?: () => void): Promise<ReturnType<typeof render>> {
+    const view = render(<Covered pane={false} onSettle={onSettle} />)
+    await settle(e)
+    view.rerender(<Covered pane onSettle={onSettle} />)
+    await settle(e)
+    return view
+  }
+
+  it('loads off-screen under a cover it was never shown before, then stills it', async () => {
+    const onSettle = vi.fn()
+    await mountCovered(onSettle)
+
+    expect(e.api.preload).toHaveBeenCalledTimes(1)
+    const [url, bounds] = e.api.preload.mock.calls[0] as [string, { width: number; height: number }]
+    expect(url).toBe('https://p1.example.app/')
+    expect(bounds.width).toBeGreaterThan(0)
+    expect(e.api.showUrl).not.toHaveBeenCalled()
+    expect(e.api.capture, 'nothing to capture before the page loads').not.toHaveBeenCalled()
+    expect(onSettle).not.toHaveBeenCalled()
+
+    act(() => e.emitNav({ url: 'https://p1.example.app/', loading: true }))
+    act(() => e.emitNav({ url: 'https://p1.example.app/', loading: false }))
+    await settle(e)
+
+    expect(e.api.capture).toHaveBeenCalled()
+    expect(e.api.preload).toHaveBeenCalledTimes(1)
+    expect(e.api.showUrl, 'still covered').not.toHaveBeenCalled()
+    expect(onSettle).toHaveBeenCalledTimes(1)
+  })
+
+  it('reveals the page it loaded under a cover once the cover lifts', async () => {
+    const view = await mountCovered()
+    act(() => e.emitNav({ loading: true }))
+    act(() => e.emitNav({ loading: false }))
+    await settle(e)
+    const mark = e.calls.length
+
+    view.rerender(<Covered pane covered={false} />)
+    await settle(e)
+
+    const reveal = lastShowUrl(e)
+    expect(reveal!.index).toBeGreaterThanOrEqual(mark)
+    expect(reveal!.url).toBe('https://p1.example.app/')
+    expect(e.methodsAfter(mark)).not.toContain('preload')
+  })
+
+  it('keeps a page still loading behind its placeholder when the cover lifts first', async () => {
+    const view = await mountCovered()
+    act(() => e.emitNav({ loading: true }))
+    view.rerender(<Covered pane covered={false} />)
+    await settle(e)
+    expect(e.api.showUrl, 'never revealed mid-load').not.toHaveBeenCalled()
+
+    act(() => e.emitNav({ loading: false }))
+    await settle(e)
+    expect(lastShowUrl(e)?.url).toBe('https://p1.example.app/')
+  })
+
+  it('settles at once with nothing to load, and once the live page is on screen', async () => {
+    const nothing = vi.fn()
+    const covered = render(<Covered pane={false} />)
+    await settle(e)
+    covered.rerender(
+      <Covered pane project={makeProject('p1', { lastDeploy: undefined })} onSettle={nothing} />
+    )
+    await settle(e)
+    expect(nothing).toHaveBeenCalledTimes(1)
+    expect(e.api.preload).not.toHaveBeenCalled()
+    covered.unmount()
+
+    const live = vi.fn()
+    render(<Harnessed project={makeProject('p2')} suppressed={false} onSettle={live} />)
+    await settle(e)
+    expect(live).toHaveBeenCalledTimes(1)
+  })
+
   // Reproduces the reported regression: switching projects via the Home launcher
   // leaves the preview blank. Home opens (suppressed + the pane goes display:none
   // so the host is 0×0), the active project is swapped WHILE still suppressed,
@@ -474,6 +586,32 @@ describe('PreviewPane visibility', () => {
     expect(reveal!.bounds.width).toBeGreaterThan(0)
   })
 
+  // "Finished" can arrive a frame or two before the parked page has painted; a
+  // reveal in that gap shows the previous project's frame for a moment.
+  it('gives a page that just finished loading a moment to paint before revealing it', async () => {
+    const first = render(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+    first.unmount()
+    render(<Harnessed project={makeProject('p2')} suppressed={false} />)
+    await settle(e) // long past the minimum "Loading…" beat
+    const mark = e.calls.length
+
+    await act(async () => {
+      e.emitNav({ url: 'https://p2.example.app/', loading: true })
+    })
+    await act(async () => {
+      e.emitNav({ url: 'https://p2.example.app/', loading: false })
+    })
+    await act(async () => {
+      e.advanceTimers(150)
+      e.flushRaf(2)
+    })
+    expect(e.methodsAfter(mark), 'p1 may still be on the surface').not.toContain('showUrl')
+
+    await settle(e)
+    expect(lastShowUrl(e)?.url).toBe('https://p2.example.app/')
+  })
+
   it('hides and shows no webview for an undeployed project', async () => {
     render(
       <Harnessed project={makeProject('p1', { lastDeploy: undefined })} suppressed={false} />
@@ -537,10 +675,11 @@ describe('PreviewPane status label', () => {
     )
   }
 
-  it('says Live for a solo app, and names which deployment a team app shows', async () => {
-    const { rerender } = render(pane())
+  it('has no status for a solo app (the app bar shows its deployment), and names which deployment a team app shows', async () => {
+    const { rerender, container } = render(pane())
     await settle(e)
-    expect(screen.getByText('Live')).toBeTruthy()
+    expect(container.querySelector('.preview-status')).toBeNull()
+    expect(screen.queryByText('Live')).toBeNull()
 
     rerender(pane({ team: true, teamView: 'preview' }))
     expect(screen.getByText('My preview')).toBeTruthy()
@@ -597,7 +736,8 @@ describe('PreviewPane local preview', () => {
     expect(reveal, 'the local preview was never revealed').not.toBeNull()
     expect(reveal!.index).toBeGreaterThanOrEqual(mark)
     expect(reveal!.url).toBe(LOCAL)
-    expect(screen.getByText('Local')).toBeTruthy()
+    expect(screen.getByText('localhost:5173')).toBeTruthy()
+    expect(screen.queryByText('Local'), 'the address says it is local').toBeNull()
   })
 
   it('shows the local dev server even for a never-deployed project', async () => {
@@ -615,7 +755,8 @@ describe('PreviewPane local preview', () => {
     const reveal = lastShowUrl(e)
     expect(reveal, 'the local preview should show without a deployment').not.toBeNull()
     expect(reveal!.url).toBe(LOCAL)
-    expect(screen.getByText('Local')).toBeTruthy()
+    // Its address shows straight away, before the page reports where it is.
+    expect(screen.getByText('localhost:5173')).toBeTruthy()
   })
 
   it('reloads the retained local preview after a manual-deploy turn finishes', async () => {
@@ -679,23 +820,163 @@ describe('PreviewPane local preview', () => {
     expect(e.api.reload).not.toHaveBeenCalled()
   })
 
-  it('lets a running deploy override the local preview (DeployStage wins)', async () => {
+  it('says whose data a team app’s local preview uses only when it isn’t its own', async () => {
+    const props = {
+      project: makeProject('p1'),
+      deploy: undefined,
+      focused: false,
+      onToggleFocus: () => {},
+      localPreviewUrl: LOCAL,
+      team: true
+    }
+    const { rerender } = render(
+      <OverlayProvider>
+        <PreviewPane {...props} localBackend="production" />
+      </OverlayProvider>
+    )
+    await settle(e)
+    expect(screen.getByText('Published data').className).toContain('preview-local-badge--warn')
+
+    rerender(
+      <OverlayProvider>
+        <PreviewPane {...props} localBackend="none" />
+      </OverlayProvider>
+    )
+    expect(screen.getByText('No data yet')).toBeTruthy()
+
+    rerender(
+      <OverlayProvider>
+        <PreviewPane {...props} localBackend="preview" />
+      </OverlayProvider>
+    )
+    expect(screen.queryByText('Published data')).toBeNull()
+    expect(screen.queryByText('No data yet')).toBeNull()
+    expect(screen.getByText('localhost:5173')).toBeTruthy()
+  })
+
+  it('keeps the local preview on screen through a redeploy, under a strip saying how it goes', async () => {
     render(
       <Harnessed
         project={makeProject('p1')}
         suppressed={false}
-        deploy={{ running: true, log: [] }}
+        deploy={{ running: true, log: ['Deploying Project p1 to Fabric…\n'], startedAt: Date.now() }}
         localPreviewUrl={LOCAL}
       />
     )
     await settle(e)
 
-    // The deploy stage takes the surface; the local URL is never shown, and no
-    // "Local" badge appears while deploying.
+    expect(screen.getByText('Deploying to Production')).toBeTruthy()
+    expect(screen.queryByText(/Fabricating/i), 'the deploy screen waits to be asked for').toBeNull()
+    expect(screen.getByText('localhost:5173')).toBeTruthy()
+    expect(lastShowUrl(e)?.url).toBe(LOCAL)
+  })
+
+  it('shows a redeploy on the deploy screen to watch it, and goes back to the app', async () => {
+    const onWatchChange = vi.fn()
+    const deploy: DeployUiState = { running: true, log: [], startedAt: Date.now() }
+    const { rerender } = render(
+      <Harnessed project={makeProject('p1')} suppressed={false} deploy={deploy} onWatchChange={onWatchChange} />
+    )
+    await settle(e)
+    fireEvent.click(screen.getByRole('button', { name: 'Watch' }))
+    expect(onWatchChange).toHaveBeenCalledWith(true)
+
+    const mark = e.calls.length
+    rerender(
+      <Harnessed project={makeProject('p1')} suppressed={false} deploy={deploy} watching onWatchChange={onWatchChange} />
+    )
+    await settle(e)
     expect(screen.getByText(/Fabricating/i)).toBeTruthy()
+    expect(e.methodsAfter(mark)).toContain('hide')
+    fireEvent.click(screen.getByRole('button', { name: 'Back to your app' }))
+    expect(onWatchChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('takes the stage for a first deploy, with nothing to go back to', async () => {
+    render(
+      <Harnessed
+        project={makeProject('p1', { lastDeploy: undefined })}
+        suppressed={false}
+        deploy={{ running: true, log: [], startedAt: Date.now() }}
+        localPreviewUrl={LOCAL}
+        onWatchChange={() => {}}
+      />
+    )
+    await settle(e)
+
+    // The deploy screen takes the surface; the local URL is never shown.
+    expect(screen.getByText(/Fabricating/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Back to your app' })).toBeNull()
     expect(screen.queryByText('Local')).toBeNull()
     const shownLocal = e.calls.some((c) => c.method === 'showUrl' && c.args[0] === LOCAL)
-    expect(shownLocal, 'the local URL must not be shown while a deploy is running').toBe(false)
+    expect(shownLocal, 'the local URL must not be shown under the deploy screen').toBe(false)
+  })
+
+  it('loads the deployed app when a redeploy watched on the deploy screen ends and its local preview closes', async () => {
+    const project = makeProject('p1')
+    const deploy: DeployUiState = { running: true, log: [], startedAt: Date.now() }
+    const { rerender } = render(
+      <Harnessed project={project} suppressed={false} deploy={deploy} localPreviewUrl={LOCAL} />
+    )
+    await settle(e)
+    await act(async () => {
+      e.emitNav({ url: LOCAL, loading: false })
+    })
+    await settle(e)
+
+    // Watched on the deploy screen: the surface is hidden, still holding the local page.
+    rerender(<Harnessed project={project} suppressed={false} deploy={deploy} localPreviewUrl={LOCAL} watching />)
+    await settle(e)
+    const mark = e.calls.length
+
+    rerender(
+      <Harnessed
+        project={project}
+        suppressed={false}
+        deploy={{ running: false, log: [], result: { ok: true, outcome: 'success' } }}
+        localPreviewUrl={null}
+      />
+    )
+    await settle(e)
+
+    expect(e.methodsAfter(mark), 'the stopped local page is not reloaded').not.toContain('reload')
+    const nav = e.calls.slice(mark).find((c) => c.method === 'navigate')
+    expect(nav?.args[0]).toBe('https://p1.example.app/')
+  })
+
+  it('loads the deployed app, without reloading the closed local preview, when a redeploy ends', async () => {
+    const project = makeProject('p1')
+    const { rerender } = render(
+      <Harnessed
+        project={project}
+        suppressed={false}
+        deploy={{ running: true, log: [], startedAt: Date.now() }}
+        localPreviewUrl={LOCAL}
+      />
+    )
+    await settle(e)
+    await act(async () => {
+      e.emitNav({ url: LOCAL, loading: false })
+    })
+    await settle(e)
+    const mark = e.calls.length
+
+    // The deploy succeeds and the local preview kept through it closes with it.
+    rerender(
+      <Harnessed
+        project={project}
+        suppressed={false}
+        deploy={{ running: false, log: [], result: { ok: true, outcome: 'success' } }}
+        localPreviewUrl={null}
+      />
+    )
+    await settle(e)
+
+    const after = e.methodsAfter(mark)
+    expect(after, 'the stopped local page is not reloaded').not.toContain('reload')
+    const nav = e.calls.slice(mark).find((c) => c.method === 'navigate')
+    expect(nav?.args[0]).toBe('https://p1.example.app/')
+    expect(screen.queryByText('Deploying to Production')).toBeNull()
   })
 
   it('returns to the deployed app when the dev server stops (turn ends)', async () => {
@@ -833,7 +1114,7 @@ describe('PreviewPane design mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
     await settle(e)
     expect(screen.queryByRole('toolbar', { name: 'Design tools' })).toBeNull()
-    expect(e.calls.filter((c) => c.method === 'design.setEnabled').at(-1)!.args).toEqual([false])
+    expect(e.calls.filter((c) => c.method === 'design.setEnabled').slice(-1)[0].args).toEqual([false])
     expect(onSend).not.toHaveBeenCalled()
   })
 
@@ -885,7 +1166,7 @@ describe('PreviewPane design mode', () => {
     rerender(<DesignHarnessed project={project} deploy={{ running: true, log: [] }} />)
     await settle(e)
     expect(screen.queryByRole('toolbar', { name: 'Design tools' })).toBeNull()
-    expect(e.calls.filter((c) => c.method === 'design.setEnabled').at(-1)!.args).toEqual([false])
+    expect(e.calls.filter((c) => c.method === 'design.setEnabled').slice(-1)[0].args).toEqual([false])
   })
 
   it('keeps Design off during a temporary auto-deploy local preview', async () => {
@@ -928,7 +1209,7 @@ describe('PreviewPane design mode', () => {
     rerender(<DesignHarnessed {...props} deploy={{ running: true, log: [] }} />)
     await settle(e)
     expect(screen.queryByRole('toolbar', { name: 'Design tools' })).toBeNull()
-    expect(e.calls.filter((c) => c.method === 'design.setEnabled').at(-1)!.args).toEqual([false])
+    expect(e.calls.filter((c) => c.method === 'design.setEnabled').slice(-1)[0].args).toEqual([false])
   })
 
   it('ends local Design when a turn starts and offers it again once the turn finishes', async () => {
@@ -947,7 +1228,7 @@ describe('PreviewPane design mode', () => {
     rerender(<DesignHarnessed {...props} turnRunning />)
     await settle(e)
     expect(screen.queryByRole('toolbar', { name: 'Design tools' })).toBeNull()
-    expect(e.calls.filter((c) => c.method === 'design.setEnabled').at(-1)!.args).toEqual([false])
+    expect(e.calls.filter((c) => c.method === 'design.setEnabled').slice(-1)[0].args).toEqual([false])
     const designBtn = screen.getByRole<HTMLButtonElement>('button', { name: /^design/i })
     expect(designBtn.disabled).toBe(true)
     expect(designBtn.title).toContain('once this turn finishes')

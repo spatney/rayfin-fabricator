@@ -34,3 +34,25 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     </ErrorBoundary>
   </React.StrictMode>
 )
+
+/** `rgb(r, g, b)` as `#rrggbb`, or undefined for anything else. */
+function hexColor(css: string): string | undefined {
+  const match = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(css)
+  if (!match) return undefined
+  return `#${match
+    .slice(1, 4)
+    .map((n) => Number(n).toString(16).padStart(2, '0'))
+    .join('')}`
+}
+
+// The window starts hidden, so a launch never shows it empty. Show it once the
+// first screen has rendered, giving the page a frame or two to paint it (a
+// hidden window may never run animation frames, hence the timer as well).
+let revealed = false
+function reveal(): void {
+  if (revealed) return
+  revealed = true
+  void api.revealWindow(hexColor(getComputedStyle(document.body).backgroundColor)).catch(() => {})
+}
+requestAnimationFrame(() => requestAnimationFrame(reveal))
+window.setTimeout(reveal, 120)

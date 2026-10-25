@@ -26,7 +26,8 @@ async fn pick_folder_dialog(app: &AppHandle) -> Option<String> {
     .map(|p| p.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+/// Runs off the main thread: it checks every project's folder on disk.
+#[tauri::command(async)]
 pub fn projects_state() -> ProjectsState {
   annotate_state(store::get_state())
 }

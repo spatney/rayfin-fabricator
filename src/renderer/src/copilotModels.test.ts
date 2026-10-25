@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CopilotModel } from '@shared/ipc'
-import { invalidateCopilotModels, isFastModel, loadCopilotModels, pickDesignModel } from './copilotModels'
+import {
+  invalidateCopilotModels,
+  isFastModel,
+  loadCopilotModels,
+  pickDesignModel,
+  resolveDesignModel
+} from './copilotModels'
 
 const listModels = vi.fn<() => Promise<CopilotModel[]>>()
 const model = (id: string): CopilotModel => ({ id, name: id, supportedReasoningEfforts: [] })
@@ -89,5 +95,22 @@ describe('fast models', () => {
   it('never picks a powerful or high-cost model, and falls back to names without tiers', () => {
     expect(pickDesignModel(CATALOG.filter((m) => m.category === 'powerful'))).toEqual({ vision: false })
     expect(pickDesignModel([model('claude-sonnet-4.5'), model('gpt-5-mini')])).toEqual({ id: 'gpt-5-mini', name: 'gpt-5-mini', effort: undefined, vision: false })
+  })
+
+  it('never picks a model on the user’s own key by itself, but uses one chosen in the Design bar', () => {
+    const own: CopilotModel = {
+      ...entry('google/gemini-3.5-flash-lite', 'lightweight', 'low'),
+      name: 'Gemini 3.5 Flash Lite',
+      vision: true,
+      byok: { provider: 'google', providerName: 'Google', ready: true }
+    }
+    expect(pickDesignModel([own])).toEqual({ vision: false })
+    expect(resolveDesignModel([own, ...CATALOG], null)).toMatchObject({ id: 'claude-haiku-5.5' })
+    expect(resolveDesignModel([own, ...CATALOG], { model: own.id, effort: 'medium' })).toEqual({
+      id: own.id,
+      name: 'Gemini 3.5 Flash Lite',
+      effort: 'medium',
+      vision: true
+    })
   })
 })

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useId, useState } from 'react'
+import { lazy, Suspense, useEffect, useId, useState, type JSX } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChatPlanArtifact, ChatPlanTodo } from '@shared/ipc'
 import { planActionLabel } from '../chatPlan'

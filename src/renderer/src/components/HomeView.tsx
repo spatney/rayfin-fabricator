@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties, type JSX } from 'react'
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
 import { FabricatorMark } from './FabricatorMark'
 import { AddIcon, BranchIcon, FolderIcon, GearIcon } from './icons'

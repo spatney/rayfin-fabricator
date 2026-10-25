@@ -417,7 +417,7 @@ async fn analyze(
   token: &CancelToken,
   emit: &Emit,
 ) -> Result<(Answer, DrainEnd), String> {
-  let session = copilot.transient_session_with(root, None, None, opts).await?;
+  let session = copilot.transient_session_with(root, Default::default(), opts).await?;
   let sub = session.subscribe();
   let mut answer = Answer::default();
   let end = match session.send(MessageOptions::new(prompt)).await {

@@ -8,9 +8,9 @@ import {
   useRef,
   useState,
   type ReactNode,
-  type RefObject
+  type RefObject,
+  type JSX,
 } from 'react'
-import { MascotContext, useMascot } from './context'
 import { MascotRoamer, type VisitPhase } from './Roamer'
 import type { Occasion } from './lines'
 
@@ -70,7 +70,6 @@ export function isRaySentAway(): boolean {
  * While a screen shows him itself ({@link useRayOnScreen}), he stays off the stage.
  */
 function MascotStage({ children }: { children: ReactNode }): JSX.Element {
-  const enabled = useMascot()
   const sessions = useRef(new Map<string, Session>()).current
   const holds = useRef(new Set<string>()).current
   const [visit, setVisit] = useState<Visit | null>(null)
@@ -180,11 +179,6 @@ function MascotStage({ children }: { children: ReactNode }): JSX.Element {
     [engage, holds, running, sessions, settle, toPhase]
   )
 
-  // Turned off in Settings: he leaves at once, mid-sentence or not.
-  useEffect(() => {
-    if (!enabled) setVisit(null)
-  }, [enabled])
-
   const getBounds = useCallback(
     (): DOMRect | null => boundsRef.current?.current?.getBoundingClientRect() ?? null,
     []
@@ -207,7 +201,7 @@ function MascotStage({ children }: { children: ReactNode }): JSX.Element {
   return (
     <StageContext.Provider value={api}>
       {children}
-      {enabled && visit && (
+      {visit && (
         <MascotRoamer
           key={visit.id}
           occasion={visit.occasion}
@@ -222,22 +216,9 @@ function MascotStage({ children }: { children: ReactNode }): JSX.Element {
   )
 }
 
-/**
- * Whether Ray may appear (Settings → Appearance → Ray), and the stage he
- * appears on. Wrap the app in this once.
- */
-export function MascotProvider({
-  enabled,
-  children
-}: {
-  enabled: boolean
-  children: ReactNode
-}): JSX.Element {
-  return (
-    <MascotContext.Provider value={enabled}>
-      <MascotStage>{children}</MascotStage>
-    </MascotContext.Provider>
-  )
+/** The stage Ray appears on. Wrap the app in this once. */
+export function MascotProvider({ children }: { children: ReactNode }): JSX.Element {
+  return <MascotStage>{children}</MascotStage>
 }
 
 /**

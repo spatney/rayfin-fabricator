@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { ChatToolCall } from '@shared/ipc'
 import type { DerivedAdvisor } from '../../advisor/lifecycle'
 import type { NormalizedSnapshot } from '../../advisor/legacy'

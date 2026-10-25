@@ -52,7 +52,7 @@ describe('choosing what to save', () => {
     const many = Array.from({ length: 40 }, (_, i) => exchange({ id: `ask-${i}` }))
     const saved = toSaved(many)
     expect(saved.length).toBeLessThanOrEqual(20)
-    expect(saved.at(-1)?.id).toBe('ask-39')
+    expect(saved.slice(-1)[0]?.id).toBe('ask-39')
   })
 })
 

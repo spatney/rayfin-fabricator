@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -474,7 +475,9 @@ describe('design controller v6 — charts, options, theme, polish, capture', () 
   })
 
   it('explains what is happening while options take a while, and can cancel', () => {
-    vi.useFakeTimers()
+    // Fake timers and Date only: animation frames stay manual (raf()), as the controller's
+    // frame loop is what refreshes the elapsed labels.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] })
     try {
       const el = add('<div class="p-4">Box</div>')
       d.enable('direct', null, { sessionId: 's', items: [] })
@@ -512,7 +515,9 @@ describe('design controller v6 — charts, options, theme, polish, capture', () 
   })
 
   it('shows elapsed time and slow-run hints while a Polish review runs', () => {
-    vi.useFakeTimers()
+    // Fake timers and Date only: animation frames stay manual (raf()), as the controller's
+    // frame loop is what refreshes the elapsed labels.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] })
     try {
       d.enable('direct', null, { sessionId: 's', items: [] })
       d.command({ op: 'setBusy', message: 'Asking GPT-5 mini to review this page…' })
@@ -811,7 +816,10 @@ describe('design controller v6 — the app’s own design system', () => {
     expect(sys.text).toEqual([['200', '12px'], ['300', '14px'], ['400', '16px'], ['500', '20px']])
     expect(sys.spacing).toEqual([['200', '8px'], ['300', '12px'], ['400', '16px'], ['500', '20px']])
     expect(sys.radius).toContainEqual(['4xl', '24px'])
-    expect(sys.fonts).toEqual([['base', 'Manrope, sans-serif']])
+    // jsdom drops the space after the comma in custom-property values; browsers keep it.
+    expect(sys.fonts?.map(([name, value]) => [name, value.replace(/,\s*/g, ', ')])).toEqual([
+      ['base', 'Manrope, sans-serif']
+    ])
     expect(sys.dark).toBe(true)
     d.__test.openCard(tile)
     button(card(), /Options/).click()

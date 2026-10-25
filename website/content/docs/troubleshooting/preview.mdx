@@ -13,7 +13,7 @@ Fabricator shows either the deployed app or, during a chat turn, a local Vite pr
 
 1. Select **Reload** in the preview toolbar.
 2. Select **Focus** to hide chat, then **Exit focus** to return. This forces the preview bounds to be recalculated.
-3. If the preview is local and the turn is still running, wait for the turn to finish. The normal deployed preview returns after the turn and deploy. With [Deploy manually](/docs/ship/deploy#deploy-manually) set to **Manual deploy**, the preview stays local while the app is open.
+3. If the preview is local and the turn is still running, wait for the turn to finish. The normal deployed preview returns after the turn and deploy. With **Deploy after each chat turn** off (see [Deploy manually](/docs/ship/deploy#deploy-manually)), the preview stays local while the app is open.
 4. If the app is deployed but the preview is blank, select **Redeploy**.
 5. If a local preview log says "Local preview didn't become ready in time." or "Timed out waiting for Vite to start.", retry the chat turn after dependencies finish installing.
 6. If the same project repeatedly hangs while opening preview, restart Fabricator.
@@ -40,12 +40,12 @@ If Fabricator cannot identify or stop the process, [Report a problem](/docs/trou
 
 The preview is live, but it does not include the changes Copilot just made.
 
-During a turn, the local preview shows frontend edits from Vite. After a successful turn, Fabricator checks for undeployed changes and runs **Redeploy** automatically. Failed or cancelled turns, deploy failures, and change-check errors can leave the preview on the previous deployment. With [Deploy manually](/docs/ship/deploy#deploy-manually) set to **Manual deploy**, nothing deploys after a turn, so the deployed app stays on the previous version until you select **Redeploy**.
+During a turn, the local preview shows frontend edits from Vite. After a successful turn, Fabricator checks for undeployed changes and redeploys automatically. Failed or cancelled turns, deploy failures, and change-check errors can leave the preview on the previous deployment. With **Deploy after each chat turn** off (see [Deploy manually](/docs/ship/deploy#deploy-manually)), nothing deploys after a turn, so the deployed app stays on the previous version until you deploy from the app bar, for example with **Deploy 3 changes**.
 
 1. Select **Reload** in the preview toolbar.
-2. Check whether the preview badge says **Local**. If it does, wait for the current turn to finish.
-3. If the deploy status says **Deploy failed**, select **Find out why** above the preview and fix the deploy first. See [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
-4. Select **Redeploy** to publish the current project files.
+2. Check whether the preview's address starts with `localhost`. If it does, the preview is local: wait for the current turn to finish.
+3. If the deployment control in the app bar says **Failed**, select **Find out why** above the preview and fix the deploy first. See [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
+4. In the app bar, select the deploy button, such as **Deploy 3 changes** or **Redeploy**, to publish the current project files.
 5. If Code or History says the live app is showing an earlier version, use the offered publish action or **Redeploy**.
 
 If the preview remains stale after a successful deploy, [Report a problem](/docs/troubleshooting/report-a-problem).
@@ -70,7 +70,7 @@ The local preview shows the app's sign-in page with a message that starts with "
 
 Universal Apps sign in to the local preview with the Fabric account Fabricator deploys with. Fabric has to accept that account for this app, and the rest of the message says why it didn't.
 
-1. If the message says "External Entra exchange is not enabled.", check that `rayfin/rayfin.yml` sets `externalEntraExchange: true` under `services.auth.fabric`. Then select **Redeploy** so the setting reaches Fabric.
+1. If the message says "External Entra exchange is not enabled.", check that `rayfin/rayfin.yml` sets `externalEntraExchange: true` under `services.auth.fabric`. Then deploy from the app bar so the setting reaches Fabric.
 2. If it says "Could not sign you in automatically for local development." or "Entra authentication failed.", open the account menu and select **Refresh Fabric authentication**. Then select **Reload** in the preview.
 3. If it says "Item Execute permission is required.", your Fabric account can't open this app. Use an account that has access to the app's workspace.
 4. To keep working in the meantime, select the app's sign-in button and complete the sign-in popup.

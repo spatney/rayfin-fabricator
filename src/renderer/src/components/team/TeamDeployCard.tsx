@@ -2,6 +2,8 @@ import type { TeamRunStatus } from '@shared/ipc'
 import { elapsed, friendlyStep, runProgress, useNow, waitingForRunner, waitingStep } from './runProgress'
 import './team.css'
 
+import type { JSX } from 'react'
+
 /** What a deploy is doing, in words: its title, current step, and how far along it is. */
 export function describeRun(
   run: TeamRunStatus,

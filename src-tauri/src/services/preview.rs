@@ -33,22 +33,19 @@ const PREVIEW_LABEL: &str = "preview";
 /// Renderer event carrying preview navigation state (matches `IpcChannels.previewNav`).
 const PREVIEW_NAV: &str = "preview:nav";
 /// Renderer event asking the UI to surface the preview at a URL on the agent's
-/// behalf (matches `IpcChannels.previewAgent`). Used by the Fabricator
-/// validation tools so a host-driven navigation/screenshot can reveal the
-/// preview pane even when another tab is focused. Only used to *surface* the
-/// preview on non-Windows; on Windows the agent captures silently off-screen and
-/// never asks the UI to change the user's view (see [`agent_capture`]).
+/// behalf (matches `IpcChannels.previewAgent`). Nothing emits it at the moment:
+/// the agent only captures a preview that is already visible.
 #[cfg_attr(windows, allow(dead_code))]
 const PREVIEW_AGENT: &str = "preview:agent";
 
-/// Far-off-screen origin (logical px) used to park the preview for a *silent*
-/// agent capture: the surface is moved here — well outside any monitor — and made
-/// visible *there*, so WebView2 keeps rendering it (and `CapturePreview`
-/// completes) while it stays invisible to the user. See [`agent_capture`].
+/// Far-off-screen origin (logical px) where the preview is parked while it is
+/// hidden ([`preview_hide`]) or suppressed under an HTML overlay
+/// ([`preview_suppress`]): well outside any monitor, so it can't cover anything
+/// even while WebView2 keeps it shown.
 #[cfg(windows)]
 const OFFSCREEN_COORD: f64 = 20_000.0;
 
-/// Viewport (logical px) used for a silent off-screen capture.
+/// Viewport (logical px) of the preview while it is parked for a durable hide.
 #[cfg(windows)]
 const OFFSCREEN_SIZE: (f64, f64) = (1280.0, 800.0);
 
@@ -293,11 +290,11 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
     .on_new_window(move |u, features| on_new_window(&popup_app, &u, features));
 
   // The preview shares the default WebView2 user-data folder with the main window,
-  // so it MUST use the same browser arguments. Both inherit them from the vendored
-  // wry default (which disables native-window occlusion so the agent can capture the
-  // preview off-screen / while minimized — see vendor/wry/src/webview2/mod.rs and
-  // `agent_capture`). Do NOT set per-webview `additional_browser_args` here: a
-  // mismatch makes WebView2 fail creation with ERROR_INVALID_STATE (0x8007139F).
+  // so it MUST use the same environment options. Both take wry's default browser
+  // arguments, and the device-SSO option comes from the vendored wry
+  // (docs/VENDORED-WRY-PATCH.md), so they match. Do NOT set per-webview
+  // `additional_browser_args` here: a mismatch makes WebView2 fail creation with
+  // ERROR_INVALID_STATE (0x8007139F).
   window
     .add_child(builder, rect.position, rect.size)
     .map_err(|e| AppError::Msg(format!("failed to create preview webview: {e}")))?;
@@ -455,6 +452,73 @@ pub async fn preview_show_url(
   Ok(())
 }
 
+/// Load `url` into the preview without putting it on screen, so the page has
+/// painted by the time the renderer reveals it with [`preview_show_url`] (then a
+/// pure move). The renderer uses this for a first load that starts while
+/// something covers the preview, such as the launch screen. Creates the child
+/// webview when there is none yet, and otherwise navigates it when `url` changed.
+///
+/// On Windows the surface is parked off-screen at `bounds`' size and stays shown,
+/// so it keeps rendering (as in [`preview_suppress`]). Elsewhere there is no
+/// off-screen park, so it is hidden instead.
+#[tauri::command]
+pub async fn preview_preload(
+  app: AppHandle,
+  state: State<'_, PreviewState>,
+  url: String,
+  bounds: PreviewBounds,
+) -> AppResult<()> {
+  let parsed: Url = url
+    .parse()
+    .map_err(|e| AppError::Msg(format!("invalid preview url {url:?}: {e}")))?;
+  #[cfg(windows)]
+  let parked = bounds.parked();
+  #[cfg(not(windows))]
+  let parked = bounds;
+
+  // Claim creation atomically, as in `preview_show_url`.
+  let need_build = {
+    let mut inner = state.inner.lock().unwrap();
+    if inner.created {
+      false
+    } else {
+      inner.created = true;
+      true
+    }
+  };
+  if need_build {
+    if let Err(e) = build(&app, parsed, parked) {
+      state.inner.lock().unwrap().created = false;
+      return Err(e);
+    }
+    state.inner.lock().unwrap().reset_to(&url);
+  } else if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    let needs_nav = {
+      let inner = state.inner.lock().unwrap();
+      inner.commanded.as_deref() != Some(url.as_str())
+    };
+    if needs_nav {
+      wv.navigate(parsed).map_err(|e| AppError::Msg(e.to_string()))?;
+      state.inner.lock().unwrap().reset_to(&url);
+    }
+  }
+
+  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
+    wv.set_bounds(parked.to_rect()?).map_err(|e| AppError::Msg(e.to_string()))?;
+    #[cfg(windows)]
+    {
+      wv.show().map_err(|e| AppError::Msg(e.to_string()))?;
+      state.inner.lock().unwrap().visible = true;
+    }
+    #[cfg(not(windows))]
+    {
+      wv.hide().map_err(|e| AppError::Msg(e.to_string()))?;
+      state.inner.lock().unwrap().visible = false;
+    }
+  }
+  Ok(())
+}
+
 /// Navigate the preview to `url` (recording it as the new commanded root and
 /// resetting history) and reposition to `bounds`, **without** changing the
 /// webview's visibility.
@@ -529,8 +593,8 @@ pub fn preview_hide(app: AppHandle) -> AppResult<()> {
 ///
 /// Unlike [`preview_hide`], this does not toggle WebView2 visibility off. On
 /// Windows it parks the surface far off-screen — **at the same size as its host**
-/// — while keeping it shown, so it keeps compositing live content (the same trick
-/// the silent agent capture uses; see [`offscreen_bounds`]). Keeping the size
+/// — while keeping it shown, so it keeps compositing live content (see
+/// [`OFFSCREEN_COORD`]). Keeping the size
 /// unchanged means the reveal (a [`preview_show_url`] `set_bounds` back to the
 /// host rect) is a pure *move*, not a resize: WebView2 doesn't relayout/repaint,
 /// so the composited frame reappears instantly with no blank repaint-on-show
@@ -847,11 +911,9 @@ async fn capture_now(app: &AppHandle) -> AppResult<Vec<u8>> {
   out
 }
 
-/// Capture the current preview content as raw PNG bytes for the **renderer's own**
+/// Capture the current preview content as raw PNG bytes for the renderer's
 /// annotate/capture flow ([`preview_capture`]). Refuses (soft failure) unless the
-/// surface is currently shown to the user, since the renderer only ever captures a
-/// visible preview. The Fabricator agent uses [`agent_capture`] instead, which can
-/// capture silently while the preview is hidden.
+/// surface is currently shown to the user.
 pub(crate) async fn capture_preview_bytes(app: &AppHandle) -> AppResult<Vec<u8>> {
   if app.get_webview(PREVIEW_LABEL).is_none() {
     return Err(AppError::Msg("preview is not open".into()));
@@ -866,9 +928,8 @@ pub(crate) async fn capture_preview_bytes(app: &AppHandle) -> AppResult<Vec<u8>>
   capture_now(app).await
 }
 
-/// Bounds used to park the preview far off-screen for a silent capture: a
-/// realistic desktop viewport positioned well outside any monitor, so the surface
-/// keeps rendering (and `CapturePreview` works) while staying invisible.
+/// Bounds used to park the preview far off-screen before a durable hide
+/// ([`preview_hide`]), so it can't cover anything even if the OS ignores `hide()`.
 #[cfg(windows)]
 fn offscreen_bounds() -> PreviewBounds {
   PreviewBounds {
@@ -904,24 +965,13 @@ const CAPTURE_PUMP_DEADLINE: Duration = Duration::from_secs(5);
 #[cfg(windows)]
 fn capture_png(platform: &tauri::webview::PlatformWebview) -> Result<Vec<u8>, String> {
   use std::sync::mpsc;
-  use std::time::Instant;
 
   use webview2_com::CapturePreviewCompletedHandler;
   use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG;
-  use windows::Win32::Foundation::HGLOBAL;
-  use windows::Win32::System::Com::StructuredStorage::{CreateStreamOnHGlobal, GetHGlobalFromStream};
-  use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
-  use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE,
-  };
 
   let core = unsafe { platform.controller().CoreWebView2() }
     .map_err(|e| format!("CoreWebView2(): {e}"))?;
-
-  // An auto-growing in-memory stream; its HGLOBAL is freed when the last
-  // reference (`stream`) drops, after we have copied the bytes out below.
-  let stream = unsafe { CreateStreamOnHGlobal(HGLOBAL(std::ptr::null_mut()), true) }
-    .map_err(|e| format!("CreateStreamOnHGlobal: {e}"))?;
+  let stream = win_capture::memory_stream()?;
 
   // Kick off the capture and signal completion over a channel, then pump the UI
   // message loop ourselves until it fires — bounded by `CAPTURE_PUMP_DEADLINE` so
@@ -936,46 +986,111 @@ fn capture_png(platform: &tauri::webview::PlatformWebview) -> Result<Vec<u8>, St
       .CapturePreview(COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, &stream, &handler)
       .map_err(|e| format!("CapturePreview: {e}"))?;
   }
-
-  let deadline = Instant::now() + CAPTURE_PUMP_DEADLINE;
-  loop {
-    match rx.try_recv() {
-      Ok(result) => {
-        result.map_err(|e| format!("CapturePreview: {e}"))?;
-        break;
-      }
-      Err(mpsc::TryRecvError::Disconnected) => {
-        return Err("preview capture handler dropped".into());
-      }
-      Err(mpsc::TryRecvError::Empty) => {}
-    }
-    if Instant::now() >= deadline {
-      return Err("preview capture timed out".into());
-    }
-    // Drain any pending messages (delivers WebView2's completion), then yield
-    // briefly so we don't spin the CPU while waiting.
-    unsafe {
-      let mut msg = MSG::default();
-      while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
-        let _ = TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-      }
-    }
-    std::thread::sleep(Duration::from_millis(5));
-  }
+  win_capture::pump_until(&rx, CAPTURE_PUMP_DEADLINE)?.map_err(|e| format!("CapturePreview: {e}"))?;
 
   // The PNG now lives in the stream's backing HGLOBAL — copy it into a Vec.
-  unsafe {
-    let hglobal =
-      GetHGlobalFromStream(&stream).map_err(|e| format!("GetHGlobalFromStream: {e}"))?;
-    let size = GlobalSize(hglobal);
-    let ptr = GlobalLock(hglobal) as *const u8;
-    if ptr.is_null() {
-      return Err("GlobalLock returned null".into());
+  win_capture::stream_bytes(&stream)
+}
+
+/// The Win32 plumbing around `CapturePreview`, kept apart from the WebView2 call so
+/// it can be tested without a live webview.
+#[cfg(windows)]
+mod win_capture {
+  use std::sync::mpsc;
+  use std::time::{Duration, Instant};
+
+  use windows::Win32::Foundation::HGLOBAL;
+  use windows::Win32::System::Com::IStream;
+  use windows::Win32::System::Com::StructuredStorage::{CreateStreamOnHGlobal, GetHGlobalFromStream};
+  use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+  use windows::Win32::UI::WindowsAndMessaging::{
+    DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE,
+  };
+
+  /// An auto-growing in-memory stream; its HGLOBAL is freed when the last
+  /// reference drops, after the bytes have been copied out.
+  pub(super) fn memory_stream() -> Result<IStream, String> {
+    unsafe { CreateStreamOnHGlobal(HGLOBAL(std::ptr::null_mut()), true) }
+      .map_err(|e| format!("CreateStreamOnHGlobal: {e}"))
+  }
+
+  /// Pump this thread's message loop until `done` yields a value, or fail once
+  /// `timeout` passes or its sender is dropped.
+  pub(super) fn pump_until<T>(done: &mpsc::Receiver<T>, timeout: Duration) -> Result<T, String> {
+    let deadline = Instant::now() + timeout;
+    loop {
+      match done.try_recv() {
+        Ok(value) => return Ok(value),
+        Err(mpsc::TryRecvError::Disconnected) => return Err("preview capture handler dropped".into()),
+        Err(mpsc::TryRecvError::Empty) => {}
+      }
+      if Instant::now() >= deadline {
+        return Err("preview capture timed out".into());
+      }
+      // Drain any pending messages (delivers WebView2's completion), then yield
+      // briefly so we don't spin the CPU while waiting.
+      unsafe {
+        let mut msg = MSG::default();
+        while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+          let _ = TranslateMessage(&msg);
+          DispatchMessageW(&msg);
+        }
+      }
+      std::thread::sleep(Duration::from_millis(5));
     }
-    let bytes = std::slice::from_raw_parts(ptr, size).to_vec();
-    let _ = GlobalUnlock(hglobal);
-    Ok(bytes)
+  }
+
+  /// Copy out the bytes held in `stream`'s backing HGLOBAL. The block can be a few
+  /// bytes larger than what was written, which PNG decoders ignore.
+  pub(super) fn stream_bytes(stream: &IStream) -> Result<Vec<u8>, String> {
+    unsafe {
+      let hglobal = GetHGlobalFromStream(stream).map_err(|e| format!("GetHGlobalFromStream: {e}"))?;
+      let size = GlobalSize(hglobal);
+      let ptr = GlobalLock(hglobal) as *const u8;
+      if ptr.is_null() {
+        return Err("GlobalLock returned null".into());
+      }
+      let bytes = std::slice::from_raw_parts(ptr, size).to_vec();
+      let _ = GlobalUnlock(hglobal);
+      Ok(bytes)
+    }
+  }
+
+  #[cfg(test)]
+  mod tests {
+    use super::*;
+
+    #[test]
+    fn copies_what_was_written_to_the_memory_stream() {
+      let stream = memory_stream().unwrap();
+      let png = b"\x89PNG\r\n\x1a\nfabricator";
+      let mut written = 0u32;
+      unsafe { stream.Write(png.as_ptr().cast(), png.len() as u32, Some(&mut written)) }
+        .ok()
+        .unwrap();
+      assert_eq!(written as usize, png.len());
+      assert!(stream_bytes(&stream).unwrap().starts_with(png));
+    }
+
+    #[test]
+    fn the_pump_returns_a_completion_that_arrives_while_it_waits() {
+      let (tx, rx) = mpsc::channel();
+      std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(30));
+        let _ = tx.send(42);
+      });
+      assert_eq!(pump_until(&rx, Duration::from_secs(5)), Ok(42));
+    }
+
+    #[test]
+    fn the_pump_gives_up_instead_of_hanging() {
+      let (tx, rx) = mpsc::channel::<()>();
+      let started = Instant::now();
+      assert_eq!(pump_until(&rx, Duration::from_millis(50)), Err("preview capture timed out".into()));
+      assert!(started.elapsed() < Duration::from_secs(2));
+      drop(tx);
+      assert_eq!(pump_until(&rx, Duration::from_secs(5)), Err("preview capture handler dropped".into()));
+    }
   }
 }
 

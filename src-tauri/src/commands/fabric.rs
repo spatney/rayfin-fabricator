@@ -971,6 +971,16 @@ pub async fn fabric_list_workspace_models(
   crate::services::semantic_model::list_workspace_models(&workspace_id).await
 }
 
+/// List the data in a workspace that the app can connect to through a Rayfin
+/// connector — the "Add Fabric data" picker. Any workspace the signed-in user
+/// can open, not only the app's own. Never throws.
+#[tauri::command]
+pub async fn fabric_list_workspace_data(
+  workspace_id: String,
+) -> crate::services::semantic_model::WorkspaceDataResult {
+  crate::services::semantic_model::list_workspace_data(&workspace_id).await
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

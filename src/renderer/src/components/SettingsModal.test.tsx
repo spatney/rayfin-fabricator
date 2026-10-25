@@ -1,15 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { AppSettings } from '@shared/ipc'
-
-// SettingsModal reads update status from an UpdateProvider-backed context and
-// starts an auto-check on mount. Stub the module so the modal renders in
-// isolation without the updater machinery (and without needing the provider).
-vi.mock('../update', () => ({
-  useUpdates: () => ({ status: 'idle', info: null, checkNow: vi.fn() }),
-  UpdateProvider: ({ children }: { children?: unknown }) => children
-}))
-
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import type { AppSettings, AppVersions } from '@shared/ipc'
 import SettingsModal from './SettingsModal'
 
 /** Install the minimal `window.api` surface SettingsModal touches. */
@@ -176,25 +167,6 @@ describe('SettingsModal team workspaces experiment', () => {
   })
 })
 
-describe('SettingsModal deploy manually experiment', () => {
-  it.each([undefined, false, true])('reflects manualDeploy=%s and saves the change', async (manualDeploy) => {
-    installApi()
-    const { onChange } = await renderModal({
-      settings: { theme: 'system', experiments: { manualDeploy }, deployMode: 'auto' }
-    })
-    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
-    const checkbox = screen.getByRole<HTMLInputElement>('checkbox', { name: /^Deploy manually/ })
-    expect(checkbox.checked).toBe(manualDeploy === true)
-    fireEvent.click(checkbox)
-    // Turning it on starts in Manual, whatever the status bar was last set to.
-    expect(onChange).toHaveBeenCalledWith(
-      manualDeploy
-        ? { experiments: { manualDeploy: false } }
-        : { experiments: { manualDeploy: true }, deployMode: 'manual' }
-    )
-  })
-})
-
 describe('SettingsModal retired controls', () => {
   it.each([false, true])('does not show retired controls with legacy flags set to %s', async (enabled) => {
     installApi()
@@ -204,42 +176,80 @@ describe('SettingsModal retired controls', () => {
         compatibilityRendering: enabled,
         chatModeSelector: enabled,
         localDevPreview: enabled,
+        manualDeploy: enabled,
+        byok: enabled,
         teamWorkspaces: true
       }
     }
     await renderModal({ settings: legacySettings })
     fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
 
-    for (const label of ['Compatibility rendering', 'Chat mode selector', 'Live local preview', 'Performance']) {
+    for (const label of [
+      'Compatibility rendering',
+      'Chat mode selector',
+      'Live local preview',
+      'Deploy manually',
+      'Your own API keys',
+      'Performance',
+      'Ray',
+      'Check for updates'
+    ]) {
       expect(screen.queryByText(label)).toBeNull()
     }
     expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-    expect(screen.getAllByRole('checkbox')).toHaveLength(4)
-    expect(screen.getByText('Ray')).toBeTruthy()
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
     expect(screen.getByText('Team workspaces')).toBeTruthy()
-    expect(screen.getByText('Deploy manually')).toBeTruthy()
     expect(screen.getByText('Full diagnostics')).toBeTruthy()
   })
 })
 
-describe('SettingsModal Ray', () => {
-  function rayCheckbox(): HTMLInputElement {
-    const label = screen.getByText('Ray').closest('label')
-    if (!label) throw new Error('Ray label not found')
-    return label.querySelector('input[type="checkbox"]') as HTMLInputElement
-  }
-
-  it('shows Ray unless he was turned off, and saves turning him off', async () => {
+describe('SettingsModal API keys', () => {
+  it('opens Model providers in Accounts, with no experiment to turn on first', async () => {
     installApi()
-    const { onChange } = await renderModal()
-    expect(rayCheckbox().checked).toBe(true)
-    fireEvent.click(rayCheckbox())
-    expect(onChange).toHaveBeenCalledWith({ mascot: false })
+    const onManageKeys = vi.fn()
+    await renderModal({ onManageKeys })
+    fireEvent.click(screen.getByRole('button', { name: 'Manage API keys' }))
+    expect(onManageKeys).toHaveBeenCalledOnce()
+  })
+})
+
+describe('SettingsModal About', () => {
+  const versions: AppVersions = {
+    app: '1.18.0',
+    tauri: '2.12.3',
+    webview2: '155.0.4283.45',
+    copilot: '1.0.98',
+    copilotBundled: '1.0.96'
+  }
+  const originalClipboard = (navigator as unknown as { clipboard?: unknown }).clipboard
+
+  afterEach(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: originalClipboard, configurable: true })
   })
 
-  it('reflects Ray being turned off', async () => {
+  it('lists the versions and copies them for a bug report', async () => {
     installApi()
-    await renderModal({ settings: { theme: 'system', mascot: false } })
-    expect(rayCheckbox().checked).toBe(false)
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await renderModal({ versions })
+    const about = screen.getByRole('region', { name: 'About' })
+    expect(within(about).getByText('Version 1.18.0')).toBeTruthy()
+    expect(within(about).getByText('1.0.98 (bundled 1.0.96)')).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(within(about).getByRole('button', { name: 'Copy version info' }))
+    })
+    expect(writeText).toHaveBeenCalledWith(
+      'Fabricator 1.18.0\nTauri 2.12.3\nWebView2 155.0.4283.45\nCopilot CLI 1.0.98 (bundled 1.0.96)'
+    )
+    expect(within(about).getByText('Copied')).toBeTruthy()
+  })
+
+  it('lists no versions until they load', async () => {
+    installApi()
+    await renderModal()
+    const about = screen.getByRole('region', { name: 'About' })
+    expect(within(about).queryByRole('button', { name: 'Copy version info' })).toBeNull()
+    expect(within(about).getByRole('button', { name: 'Documentation' })).toBeTruthy()
   })
 })

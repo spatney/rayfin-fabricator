@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState, type JSX } from 'react'
 import type {
   FabricCapacity,
   TeamActionResult,

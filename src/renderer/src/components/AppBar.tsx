@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type JSX } from 'react'
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
 import type { DerivedAdvisor } from '../advisor/lifecycle'
 import { useSuppressPreview } from '../overlay'
@@ -23,7 +23,7 @@ const SWITCH_LIMIT = 6
 const ITEM = '[role="menuitem"]'
 
 /** A project's initial on its own hue, the same as on Home's project list. */
-function ProjectMark({ name, className }: { name: string; className: string }): JSX.Element {
+export function ProjectMark({ name, className }: { name: string; className: string }): JSX.Element {
   return (
     <span className={className} aria-hidden="true" style={{ '--hue': hueOf(name) } as CSSProperties}>
       {name.trim()[0]?.toUpperCase() ?? '?'}

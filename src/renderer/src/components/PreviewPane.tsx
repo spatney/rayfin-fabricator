@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type {
   DeployResult,
   DevServerResult,
@@ -12,6 +12,8 @@ import { measurePreviewBounds, watchPreviewPixelRatio } from '../previewBounds'
 import { DEVICES, deviceHostWidth, type DeviceId } from '../design/devices'
 import { readFabricatorTheme } from '../design/hostTheme'
 import type { DesignSession, DesignSurface } from '../design/useDesignSession'
+import type { ModelSelection } from '../modelSelection'
+import { ModelPicker } from './models/ModelPicker'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -27,6 +29,7 @@ import {
   PhoneIcon
 } from './icons'
 import DeployStage from './DeployStage'
+import DeployStrip from './DeployStrip'
 import DeployFailedNotice from './DeployFailedNotice'
 import TeamDeployCard from './team/TeamDeployCard'
 import TeamRunStrip from './team/TeamRunStrip'
@@ -35,6 +38,10 @@ export interface DeployUiState {
   running: boolean
   log: string[]
   result?: DeployResult
+  /** When the running (or last) deploy started (`Date.now()`). */
+  startedAt?: number
+  /** The workspace a deploy was sent to explicitly (a new deployment); absent for a redeploy. */
+  workspace?: string
 }
 
 /**
@@ -69,6 +76,10 @@ const FADE_MS = 260
  *  transition to the reveal), so a fast switch doesn't blink it in and out. */
 const MIN_LOADING_MS = 400
 
+/** How long a freshly loaded page gets to paint, off-screen, before it's
+ *  revealed (see revealSeq). */
+const PAINT_SETTLE_MS = 180
+
 /** The URL the singleton native preview surface was last revealed at. Tracked at
  *  MODULE scope because the surface persists (parked, still rendering) across
  *  PreviewPane unmounts — a Build→Code/Model/Advisor tab switch unmounts the pane
@@ -81,10 +92,16 @@ const MIN_LOADING_MS = 400
  *      shows and the previous project's frame never flashes. */
 let surfaceShownUrl: string | null = null
 
+/** The URL a never-revealed surface was last loaded with off-screen (see
+ *  `preview.preload`), so a cover that is still up doesn't start that load again
+ *  — a fresh mount included, since the surface outlives the pane. */
+let surfacePreloadedUrl: string | null = null
+
 /** Test-only: clear the module-scoped surface tracking so each test starts as a
  *  fresh app with no preview surface shown. */
 export function __resetPreviewSurfaceState(): void {
   surfaceShownUrl = null
+  surfacePreloadedUrl = null
 }
 
 interface Props {
@@ -105,13 +122,19 @@ interface Props {
   /** Design mode ("visual chat"). The session lives in the Workbench, which
    *  shares its queue with the chat composer. */
   design?: DesignSession
+  /** The Design bar's model picker. Auto lets Design pick a fast model itself. */
+  designModel?: {
+    value: ModelSelection
+    onChange: (next: ModelSelection) => void
+    onManageKeys: () => void
+  }
   /** Why sending the queued design changes is blocked right now (a turn is
    *  running, the first deploy is pending…), or null when it can go. */
   designSendBlocked?: string | null
   /** Send the queued design changes to chat (the composer text is the note). */
   onDesignSend?: () => void
   /** Report the surface Design can run on — the deployed app, directly or
-   *  embedded in Fabric, or the local preview Deploy manually keeps between
+   *  embedded in Fabric, or the local preview manual deploy keeps between
    *  turns — or null while it can't (deploying, loading, local mid-turn). */
   onDesignSurface?: (surface: DesignSurface | null) => void
   /** Report the project-load overlay state so the parent can render a centered
@@ -124,8 +147,9 @@ interface Props {
    *  running), the preview surface shows this instead of the deployed app, with a
    *  "Local" badge. See {@link RayfinStudioApi.dev}. */
   localPreviewUrl?: string | null
-  /** Deploy manually (experimental): the local preview runs whenever the app is
-   *  open, instead of only during turns, and reloads when a turn finishes. */
+  /** Chat turns don't deploy (the user turned off "Deploy after each chat turn"):
+   *  the local preview runs whenever the app is open, instead of only during turns,
+   *  and reloads when a turn finishes. */
   manualDeploy?: boolean
   /** A chat turn is running for this app, so its local preview changes as
    *  Copilot works. */
@@ -141,12 +165,26 @@ interface Props {
   teamView?: 'preview' | 'production'
   /** Team apps: open the workspace overview. */
   onOpenTeamMap?: () => void
+  /**
+   * A redeploy runs beside the app: the preview stays, under a strip saying what
+   * the deploy is doing. True while the user chose to watch it on the full deploy
+   * screen instead (the first deploy always shows there: there's no app yet).
+   */
+  watching?: boolean
+  /** Switch between the full deploy screen and the strip during a redeploy. */
+  onWatchChange?: (watching: boolean) => void
+  /** The deployment a deploy goes to, e.g. "Production", for the strip. */
+  deploymentName?: string
+  /** Called once, when the pane first has something to look at: nothing to
+   *  load, the live page on screen, or — while something covers the pane — a
+   *  still of the loaded page ready behind it. The launch screen waits on it. */
+  onSettle?: () => void
 }
 
-/** What the status says once the deployed app is up: solo apps have one
- *  deployment, so it's simply Live; team apps name the one they show. */
-function liveLabel(team: boolean, teamView: Props['teamView']): string {
-  if (!team) return 'Live'
+/** What a team app's preview status says once its deployment is up: which one
+ *  the preview shows. (A solo app's deployment state is on the app bar's
+ *  deployment control, so its preview has no status.) */
+function liveLabel(teamView: Props['teamView']): string {
   return teamView === 'production' ? 'Published' : 'My preview'
 }
 
@@ -177,6 +215,15 @@ function prettyUrl(url: string): string {
     return new URL(url).host || url
   } catch {
     return url
+  }
+}
+
+/** Both URLs are on the same origin (scheme, host and port). */
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin
+  } catch {
+    return false
   }
 }
 
@@ -216,6 +263,7 @@ export default function PreviewPane({
   onToggleFocus,
   onPreviewModeChanged,
   design,
+  designModel,
   designSendBlocked = null,
   onDesignSend,
   onDesignSurface,
@@ -227,11 +275,19 @@ export default function PreviewPane({
   localBackend,
   teamRun,
   teamView,
-  onOpenTeamMap
+  onOpenTeamMap,
+  watching = false,
+  onWatchChange,
+  deploymentName,
+  onSettle
 }: Props): JSX.Element {
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
   const deployedUrl = project.lastDeploy?.url
+  // A redeploy runs beside the app, which stays on screen (and usable) under a
+  // strip; the first deploy has no app to show yet, so it takes the stage, as
+  // does a redeploy the user chose to watch.
+  const beside = running && Boolean(deployedUrl) && !watching
   // The deployed item can also be viewed embedded in the Fabric portal shell
   // (`…/groups/{workspace}/appbackends/{item}`). The CLI hands us that deep link
   // as `lastDeploy.portalUrl`; a toolbar toggle switches the webview between the
@@ -305,6 +361,16 @@ export default function PreviewPane({
   // minimum "Loading…" beat (see MIN_LOADING_MS) and not blink the overlay away.
   const transitionStartRef = useRef(0)
 
+  // Report the first moment there's something to look at (see Props.onSettle).
+  const onSettleRef = useRef(onSettle)
+  onSettleRef.current = onSettle
+  const settledRef = useRef(false)
+  const markSettled = useCallback((): void => {
+    if (settledRef.current) return
+    settledRef.current = true
+    onSettleRef.current?.()
+  }, [])
+
   const clearWatchdog = useCallback((): void => {
     if (watchdogRef.current !== null) {
       window.clearTimeout(watchdogRef.current)
@@ -321,9 +387,16 @@ export default function PreviewPane({
     const token = revealTokenRef.current
     // Keep the "Loading <project>…" overlay up for a minimum beat so a fast switch
     // doesn't blink it in and out — a deliberate loading moment reads smoother.
-    const elapsed = performance.now() - transitionStartRef.current
-    if (elapsed < MIN_LOADING_MS) {
-      await new Promise<void>((r) => window.setTimeout(r, MIN_LOADING_MS - elapsed))
+    // And reveal no sooner than a moment after the load finished: "finished"
+    // can arrive a frame or two before the parked page paints, and a reveal in
+    // that gap flashes the page it showed before (the previous project).
+    const finishedAt = performance.now()
+    const wait = Math.max(
+      transitionStartRef.current + MIN_LOADING_MS,
+      finishedAt + PAINT_SETTLE_MS
+    ) - finishedAt
+    if (wait > 0) {
+      await new Promise<void>((r) => window.setTimeout(r, wait))
       if (token !== revealTokenRef.current) return
     }
     // Reveal the live webview (positioning effect) and fade the loading overlay out
@@ -380,10 +453,11 @@ export default function PreviewPane({
   const deployedPreviewUrl = previewMode === 'fabric' && fabricUrl ? fabricUrl : deployedUrl
   // Live local preview: while a Vite dev server is running for this
   // project, the surface shows its localhost URL instead of the deployed app. A
-  // running deploy still wins (DeployStage).
-  const isLocal = Boolean(localPreviewUrl) && !running
+  // deploy on the full deploy screen still wins (DeployStage); one running beside
+  // the app leaves it on screen.
+  const isLocal = Boolean(localPreviewUrl) && (!running || beside)
   const previewUrl = isLocal ? (localPreviewUrl ?? undefined) : deployedPreviewUrl
-  const showWebview = !running && Boolean(previewUrl)
+  const showWebview = (!running || beside) && Boolean(previewUrl)
 
   // Re-init from the persisted project on project switch (don't carry a prior
   // project's Fabric view over) and whenever the persisted mode changes underneath
@@ -398,12 +472,18 @@ export default function PreviewPane({
   // After a successful (re)deploy the URL is usually unchanged but the server
   // code changed, so force a reload — hidden behind the spinner so the previous
   // build never flashes. Revealed once the fresh page finishes loading (onNavState).
+  // Only when the surface holds that page: a deploy can end on another one than
+  // it ran over (the local preview kept through it closes with it, maybe while
+  // its deploy screen was up). That page's own load shows the new version, and
+  // reloading the old one would only race it.
   useEffect(() => {
     const wasRunning = prevRunningRef.current
     prevRunningRef.current = running
     if (wasRunning && !running && deploy?.result?.ok && previewUrl) {
-      beginTransition(previewUrl)
-      void window.api.preview.reload()
+      if ((loadedUrlRef.current ?? surfaceShownUrl) === previewUrl) {
+        beginTransition(previewUrl)
+        void window.api.preview.reload()
+      }
     }
   }, [running, deploy?.result, previewUrl, beginTransition])
 
@@ -478,7 +558,7 @@ export default function PreviewPane({
     if (!visible || !host || !previewUrl) {
       setNativeShown(false)
       // An HTML overlay covering a live preview suppresses the native webview,
-      // which paints above ALL HTML and would otherwise cover the overlay. Two
+      // which paints above ALL HTML and would otherwise cover the overlay. Three
       // cases, handled differently (only while the preview is otherwise STABLE —
       // during a load `transitioningRef` we skip this and use the transition park
       // further below, so we never capture/park mid-navigation):
@@ -489,12 +569,28 @@ export default function PreviewPane({
       //   • PARTIAL overlay (dropdown/menu/modal over the visible preview): SNAPSHOT
       //     the live frame FIRST and paint it as a backstop, THEN park — so the
       //     overlay floats over a still preview and the pane never flashes bare.
+      //   • A cover over a pane that has never been on screen (the launch screen):
+      //     there's no frame to keep yet, so LOAD the page off-screen first; once
+      //     it has loaded, it's stilled like a partial overlay's.
       if (suppressed && showWebview && previewUrl && !transitioningRef.current) {
         const hostBounds = measureHost()
         if (!hostBounds) {
           void window.api.preview.suppress(
             lastBoundsRef.current ?? { x: 0, y: 0, width: 1, height: 1 }
           )
+          return
+        }
+        // Nothing has been on screen yet and the cover sits over a laid-out pane
+        // (the launch screen): load the page off-screen now, behind the loading
+        // placeholder, so it has painted by the time the cover lifts. When the
+        // load finishes under the cover, this branch runs again and stills it.
+        if (surfaceShownUrl === null && surfacePreloadedUrl !== previewUrl) {
+          surfacePreloadedUrl = previewUrl
+          beginTransition(previewUrl)
+          void window.api.preview.preload(previewUrl, hostBounds).catch(() => {
+            // Couldn't load it off-screen; the reveal loads it on screen instead.
+            endTransition()
+          })
           return
         }
         let cancelled = false
@@ -519,6 +615,7 @@ export default function PreviewPane({
             if (cancelled) return
             setFrozen(frame)
           }
+          markSettled()
           // Park only AFTER the still has painted (double rAF ⇒ past a paint) so the
           // overlay floats over the still, never a bare host. Skip if the overlay
           // closed mid-capture (the visible branch already re-showed the webview).
@@ -572,11 +669,13 @@ export default function PreviewPane({
         if (!cancelled) {
           setSurfaceError(null)
           setNativeShown(true)
+          markSettled()
         }
       }).catch((reason: unknown) => {
         if (!cancelled) {
           setNativeShown(false)
           setSurfaceError(reason instanceof Error ? reason.message : String(reason))
+          markSettled()
         }
       })
     }
@@ -703,7 +802,22 @@ export default function PreviewPane({
       if (raf !== 0) cancelAnimationFrame(raf)
       if (clearFrozenTimer !== 0) window.clearTimeout(clearFrozenTimer)
     }
-  }, [deployedUrl, previewUrl, showWebview, suppressed, transitioning, measureHost])
+  }, [
+    deployedUrl,
+    previewUrl,
+    showWebview,
+    suppressed,
+    transitioning,
+    measureHost,
+    beginTransition,
+    endTransition,
+    markSettled
+  ])
+
+  // Nothing to load (not deployed yet, or a deploy is running) is settled too.
+  useEffect(() => {
+    if (!showWebview) markSettled()
+  }, [showWebview, markSettled])
 
   // The positioning effect hides the webview whenever a dependency change makes it
   // not-visible (and its rAF loop hides it when the host collapses to 0×0). On the
@@ -756,16 +870,21 @@ export default function PreviewPane({
   const goForward = useCallback((): void => {
     void window.api.preview.forward()
   }, [])
+  // The address the toolbar shows. A local preview's says so (localhost) from
+  // the start, before its page reports where it is.
+  const shownUrl =
+    isLocal && localPreviewUrl && !sameOrigin(displayUrl, localPreviewUrl)
+      ? localPreviewUrl
+      : displayUrl || deployedUrl || ''
   const openExternal = (): void => {
-    const u = displayUrl || deployedUrl
-    if (u) void window.api.openExternal(u)
+    if (shownUrl) void window.api.openExternal(shownUrl)
   }
 
   // ── Design mode ("visual chat") ───────────────────────────────────────────
   // The session (queue, polling, AI requests, capture) lives in the Workbench so
   // the chat composer can show and send the queue; this pane reports the surface
   // Design can run on — the deployed app, direct or embedded in Fabric, or the
-  // local preview Deploy manually keeps between turns — and renders the design
+  // local preview manual deploy keeps between turns — and renders the design
   // toolbar + device width. See `useDesignSession` and the injected
   // `design_agent.js`.
   const designActive = Boolean(design?.active)
@@ -776,10 +895,10 @@ export default function PreviewPane({
   const designAppUrl = isLocal ? previewUrl : deployedUrl
   const designSurface = useMemo<DesignSurface | null>(
     () =>
-      showWebview && !transitioning && (!isLocal || localDesign) && previewUrl && designAppUrl
+      showWebview && !running && !transitioning && (!isLocal || localDesign) && previewUrl && designAppUrl
         ? { url: previewUrl, embedded, appUrl: designAppUrl }
         : null,
-    [showWebview, transitioning, isLocal, localDesign, previewUrl, designAppUrl, embedded]
+    [showWebview, running, transitioning, isLocal, localDesign, previewUrl, designAppUrl, embedded]
   )
   useEffect(() => {
     onDesignSurface?.(designSurface)
@@ -797,17 +916,16 @@ export default function PreviewPane({
         : status === 'error'
           ? 'err'
           : 'idle'
-  const live = liveLabel(team, teamView)
+  const live = liveLabel(teamView)
   const statusText = teamDeploying
     ? status === 'success'
       ? `${live} · updating`
       : 'Deploying…'
     : statusLabel(running, status, live)
-  const statusTitle = team
-    ? teamView === 'production'
+  const statusTitle =
+    teamView === 'production'
       ? 'Showing the published app — what everyone sees. Switch in the team menu.'
       : 'Showing your own preview of your changes. Switch to the published app in the team menu.'
-    : undefined
 
   return (
     <div className="preview">
@@ -842,43 +960,47 @@ export default function PreviewPane({
               <ReloadIcon />
             </button>
           </div>
-          <span className={`preview-status preview-status--${dotClass}`} title={statusTitle}>
-            <span className="preview-dot" />
-            <span className="preview-status-label">{statusText}</span>
-          </span>
-          {isLocal && (
-            <span
-              className={`preview-local-badge${team && localBackend === 'production' ? ' preview-local-badge--warn' : ''}`}
-              title={
-                team
-                  ? `Live local preview at ${localPreviewUrl}: Copilot's changes show here as it makes them. ${
-                      localBackend === 'production'
-                        ? "It uses the published app's data until your own preview is deployed, so changes you make in it are real."
-                        : localBackend === 'none'
-                          ? 'Nothing is deployed yet, so it runs without data.'
-                          : "It uses your preview's data."
-                    } It stays until the team pipeline has deployed your latest change.`
-                  : manualDeploy
-                    ? `Live local preview — your app is running from a local Vite dev server at ${localPreviewUrl}. With Deploy manually on, it shows your latest changes whenever the app is open.`
-                    : `Live local preview — your app is running from a local Vite dev server at ${localPreviewUrl} for this turn`
-              }
-            >
-              {team
-                ? localBackend === 'production'
-                  ? 'Local · published data'
-                  : localBackend === 'none'
-                    ? 'Local · no data yet'
-                    : 'Local'
-                : 'Local'}
+          {team && (
+            <span className={`preview-status preview-status--${dotClass}`} title={statusTitle}>
+              <span className="preview-dot" />
+              <span className="preview-status-label">{statusText}</span>
             </span>
           )}
-          {(displayUrl || deployedUrl) && (
+          {/* The address says when the preview is local (localhost); a team app's
+              local preview also says whose data it uses when that's not its own. */}
+          {isLocal && team && (localBackend === 'production' || localBackend === 'none') && (
+            <span
+              className={`preview-local-badge${localBackend === 'production' ? ' preview-local-badge--warn' : ''}`}
+              title={
+                localBackend === 'production'
+                  ? "It uses the published app's data until your own preview is deployed, so changes you make in it are real."
+                  : 'Nothing is deployed yet, so it runs without data.'
+              }
+            >
+              {localBackend === 'production' ? 'Published data' : 'No data yet'}
+            </span>
+          )}
+          {shownUrl && (
             <button
               className="preview-url"
-              title={displayUrl || deployedUrl}
+              title={
+                isLocal
+                  ? team
+                    ? `Your app, running on this computer at ${localPreviewUrl}: Copilot's changes show here as it makes them. ${
+                        localBackend === 'production'
+                          ? "It uses the published app's data until your own preview is deployed, so changes you make in it are real."
+                          : localBackend === 'none'
+                            ? 'Nothing is deployed yet, so it runs without data.'
+                            : "It uses your preview's data."
+                      } It stays until the team pipeline has deployed your latest change. Click to open it in your browser.`
+                    : manualDeploy
+                      ? `Your app, running on this computer at ${localPreviewUrl}. While chat turns don't deploy, it shows your latest changes whenever the app is open. Click to open it in your browser.`
+                      : `Your app, running on this computer at ${localPreviewUrl} while Copilot works, so its changes show as it makes them. Click to open it in your browser.`
+                  : shownUrl
+              }
               onClick={openExternal}
             >
-              {prettyUrl(displayUrl || deployedUrl || '')}
+              {prettyUrl(shownUrl)}
             </button>
           )}
         </div>
@@ -897,7 +1019,7 @@ export default function PreviewPane({
                   .setPreviewMode(project.id, next)
                   .then(() => onPreviewModeChanged?.())
               }}
-              disabled={!showWebview || !fabricUrl || transitioning || isLocal || designActive}
+              disabled={!showWebview || !fabricUrl || transitioning || isLocal || designActive || running}
               title={
                 !fabricUrl
                   ? 'The Fabric portal view is unavailable for this deployment'
@@ -952,6 +1074,17 @@ export default function PreviewPane({
               : 'Click anything in your app to change it'}
           </span>
           <div className="design-bar-actions">
+            {designModel && (
+              <ModelPicker
+                value={designModel.value}
+                disabled={false}
+                onChange={designModel.onChange}
+                placement="down"
+                onManageKeys={designModel.onManageKeys}
+                autoHint="Fabricator picks a fast model for Options and Polish."
+                label="Design model"
+              />
+            )}
             <div className="seg seg--toolbar" role="group" aria-label="Preview width">
               {DEVICES.map((d) => {
                 const Glyph = DEVICE_ICONS[d.id]
@@ -1020,6 +1153,16 @@ export default function PreviewPane({
 
       {teamDeploying && teamRun && showWebview && <TeamRunStrip run={teamRun} onOpenMap={onOpenTeamMap} />}
 
+      {beside && (
+        <DeployStrip
+          meterKey={project.id}
+          log={deploy?.log ?? []}
+          startedAt={deploy?.startedAt}
+          target={deploymentName}
+          onWatch={() => onWatchChange?.(true)}
+        />
+      )}
+
       {surfaceError && <div className="preview-error-banner" role="alert">{surfaceError}</div>}
 
       {status === 'error' && !running && !needsWorkspace && !failureDismissed && (
@@ -1036,11 +1179,14 @@ export default function PreviewPane({
       )}
 
       <div className="preview-body">
-        {running ? (
+        {running && !beside ? (
           <DeployStage
             log={deploy?.log ?? []}
             name={project.name}
-            firstDeploy={!project.lastDeploy?.url}
+            firstDeploy={!deployedUrl}
+            startedAt={deploy?.startedAt}
+            meterKey={project.id}
+            onBack={deployedUrl && onWatchChange ? () => onWatchChange(false) : undefined}
           />
         ) : showWebview ? (
           <div className="preview-canvas">

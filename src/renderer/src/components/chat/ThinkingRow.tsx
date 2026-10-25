@@ -1,4 +1,4 @@
-import { memo, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import type { ChatSegment } from '@shared/ipc'
 import Markdown from '../Markdown'
 import { ChevronRightIcon } from '../icons'

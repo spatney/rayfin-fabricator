@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type PointerEvent as ReactPointerEvent
+  type PointerEvent as ReactPointerEvent,
+  type JSX,
 } from 'react'
 import type { StudioProject, TeamMap, TeamMapApp, TeamMapCopy, TeamMapRun, TeamWorkspace } from '@shared/ipc'
 import { useSuppressPreview } from '../../../overlay'

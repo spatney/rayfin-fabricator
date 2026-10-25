@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type JSX } from 'react'
 import type { TeamManifest, TeamMap, TeamMapRun } from '@shared/ipc'
 import { Codicon } from '../../icons'
 import TeamDiagnosisModal from '../diagnosis/TeamDiagnosisModal'

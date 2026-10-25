@@ -1,4 +1,4 @@
-import { useMemo, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useMemo, useRef, type KeyboardEvent, type ReactNode, type JSX } from 'react'
 import type { AdvisorResolved } from '@shared/ipc'
 import { categoryById, normalizeSeverity, severityLabel } from '@shared/advisor/catalog'
 import type { FindingItem, FindingStatus } from '../../advisor/lifecycle'

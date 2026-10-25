@@ -129,7 +129,7 @@ one that matches the reader's theme, and `npm run check:docs` fails when a light
 missing. The alt text describes what the image shows for someone who can't see it:
 
 ```md
-![The deployments panel listing the active Development deployment, with a New deployment link](/screenshots/deployments.webp)
+![The deployment panel for the Development deployment, with its address, workspace and account, Deploy after each chat turn, and New deployment](/screenshots/deployments.webp)
 ```
 
 When a page needs a screenshot that doesn't exist yet, mark the spot with an MDX comment on
@@ -152,7 +152,11 @@ in `.md`.
 | `chat-working` | Chat during a turn, with the live work log | `/docs/build/chat`, `/docs/start/first-app` |
 | `chat-done` | A finished turn with the "Worked for …" summary and changed-file chips | `/docs/build/chat` |
 | `chat-diff` | The diff for one changed file, opened from its chip | `/docs/build/chat` |
-| `composer-menus` | The chat composer with the model and reasoning menu open | `/docs/build/chat` |
+| `model-picker` | The chat composer's model picker with **Auto** off and the model list open, including **Your API keys** (sample data) | `/docs/build/chat`, `/docs/build/your-own-api-keys` |
+| `model-providers` | **Accounts → Model providers** with an Anthropic key saved and an OpenAI key being added (sample data) | `/docs/build/your-own-api-keys` |
+| `add-menu` | The chat composer's **+** menu with **Fabric data** open beside it, listing the kinds of data (sample data) | `/docs/build/chat` |
+| `connect-data` | **Add Fabric data** on the Finance analytics workspace: recent workspaces first, three items already connected and two picked (sample data) | `/docs/build/data-model` |
+| `data-chips` | The chat composer with the two items picked in `connect-data` waiting as chips for the next message (sample data) | `/docs/build/data-model` |
 | `plan` | A proposed plan waiting for approval | `/docs/build/chat` |
 | `preview-toolbar` | The preview toolbar above the running app | `/docs/build/preview` |
 | `design` | Design mode with an element selected and its change card open | `/docs/build/design` |
@@ -161,16 +165,18 @@ in `.md`.
 | `history` | The History tab with a version selected | `/docs/build/code-and-history` |
 | `blueprint` | Blueprint's Architecture view of the sample app (sample data) | `/docs/build/data-model` |
 | `model` | Blueprint's Data model view with the entity diagram | `/docs/build/data-model` |
+| `model-relations` | Blueprint's Data model view with four related entities and a join entity (sample data) | `/docs/build/data-model` |
+| `model-access` | The same Data model view with one entity left without a permission decorator: its amber access dot and **Harden** (sample data) | `/docs/build/data-model` |
 | `skills` | The Skills view | `/docs/build/skills` |
 | `secrets` | The Secrets view with a secret selected | `/docs/build/secrets` |
-| `deployments` | The deployments panel | `/docs/ship/deploy` |
+| `deployments` | The deployment panel, open on the sample app's deployment, with **Deploy after each chat turn** on (sample data) | `/docs/ship/deploy` |
 | `share` | The share dialog | `/docs/ship/share` |
 | `advisor` | The Advisor: grade, check strip, summary and issues | `/docs/ship/advisor` |
 | `advisor-finding` | An open Advisor issue with its fix actions | `/docs/ship/advisor` |
 | `rayfin-version` | The Rayfin version control with an update available | `/docs/ship/rayfin-versions` |
-| `settings` | The Settings dialog | `/docs/reference/settings` |
-| `settings-experiments` | Settings' Experiments section with **Team workspaces** | `/docs/team` |
-| `account-menu` | The account menu with **Refresh Fabric authentication** | `/docs/start/tour`, `/docs/troubleshooting/deploy` |
+| `settings` | The Settings dialog: General (with **API keys**), Appearance and the start of Diagnostics (sample data) | `/docs/reference/settings` |
+| `settings-experiments` | Settings' Experiments section with **Team workspaces** (sample data) | `/docs/team` |
+| `account-menu` | The account menu with **Refresh Fabric authentication** and **Settings** (sample data) | `/docs/start/tour`, `/docs/troubleshooting/deploy` |
 | `deploy-error` | Ray above the preview after a failed deploy, offering **Find out why** and **View logs** (sample data) | `/docs/troubleshooting/deploy` |
 | `port-conflict` | The dialog shown when the preview's port is in use | `/docs/troubleshooting/preview` |
 | `team-home` | Home's team workspaces section | `/docs/team` |

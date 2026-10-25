@@ -5,7 +5,8 @@ import {
   useId,
   useMemo,
   useState,
-  type ReactNode
+  type ReactNode,
+  type JSX,
 } from 'react'
 
 /**

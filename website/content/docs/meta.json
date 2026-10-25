@@ -11,6 +11,7 @@
     "---Build---",
     "build/projects",
     "build/chat",
+    "build/your-own-api-keys",
     "build/prompt-ideas",
     "build/preview",
     "build/design",

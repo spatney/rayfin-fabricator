@@ -440,6 +440,15 @@ mod tests {
   }
 
   #[test]
+  fn reads_the_persistent_path_from_the_real_registry() {
+    // The other tests inject registry reads; this one goes through RegGetValueW itself,
+    // so a `windows` crate upgrade that changes the binding shows up here.
+    let path = registry_value(Scope::Machine, "Path").expect("every Windows install has a machine PATH");
+    assert!(path.to_ascii_lowercase().contains("system32"), "{path}");
+    assert_eq!(registry_value(Scope::User, "FabricatorTestMissingVariable"), None);
+  }
+
+  #[test]
   fn discovers_scoop_and_pnpm_shims_missing_from_the_gui_path() {
     let fixture = Fixture::new();
     let inherited = fixture.directory("inherited");

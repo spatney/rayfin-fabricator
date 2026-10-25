@@ -11,7 +11,7 @@
  * `--ray-lx` / `--ray-ly` (-1…1) aim his eyes, and `--ray-steer` swings his
  * tail.
  */
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties, type JSX } from 'react'
 import './mascot.css'
 
 export type RayMood =

@@ -73,6 +73,12 @@ The Advisor's **Run deep review** also uses Copilot in a read-only mode.
 
 **Diagnose with Copilot** for team workspaces also uses Copilot in a read-only mode. It sends what failed, the IDs and names of the workspace's repository, deploy identities, tenant, and Fabric workspaces, your sign-in names, and the results of read-only checks, including the end of a failed pipeline log. Values that look like secrets or tokens are masked. Select **Details sent to Copilot** to see what was sent.
 
+## Your own API keys
+
+You can choose models from Anthropic, OpenAI, xAI and Google that run on your own API keys. When you use one, Copilot on your computer sends the request and the project context it needs to that provider, under the provider's terms for your account, instead of to a GitHub Copilot model.
+
+Fabricator keeps your keys in Windows Credential Manager, or in your Keychain on macOS. They never go into Fabricator's settings, logs, diagnostics or telemetry. Requests to OpenAI, xAI and Google pass through a relay on your computer that adapts them to what each provider's API accepts; it sends them only to that provider, and keeps nothing on disk. See [Use your own API keys](/docs/build/your-own-api-keys).
+
 ## Deploys go to your Fabric tenant
 
 When you deploy, Fabricator runs the project-pinned Rayfin CLI. The app and its platform configuration are sent to the Microsoft Fabric workspace you choose. Fabric sign-in and deployment are handled by Rayfin and Microsoft Fabric.

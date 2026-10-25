@@ -209,6 +209,26 @@ export function splashGreeting(firstTime: boolean): string {
 }
 
 /**
+ * Ray's hello when Fabricator opens straight into your work. Short: the app is
+ * ready a moment later. Now and then it goes by the time of day.
+ */
+export function launchGreeting(now: Date = new Date(), random: () => number = Math.random): string {
+  const hour = now.getHours()
+  const timely =
+    hour >= 5 && hour < 12
+      ? 'Morning! Welcome back.'
+      : hour >= 17 && hour < 22
+        ? 'Evening! Welcome back.'
+        : hour >= 22 || hour < 5
+          ? 'Up late? Welcome back.'
+          : null
+  return pickLine(
+    ['Welcome back!', 'Hey, welcome back!', 'Welcome back! Let’s build.', ...(timely ? [timely] : [])],
+    random
+  )
+}
+
+/**
  * What Ray says while Fabricator starts: a wink at each step, not its details.
  * When a step takes a while, he moves on to its next line.
  */

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import type { SkillInfo } from '@shared/ipc'
 import { openDocs } from '../../docsLinks'
 import Markdown from '../Markdown'

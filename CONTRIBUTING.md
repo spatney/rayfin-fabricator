@@ -6,7 +6,7 @@ Repository: https://github.com/spatney/rayfin-fabricator
 
 ## What this project is
 
-Fabricator is a desktop app for Windows and macOS (Apple Silicon) for building "Rayfin apps" via chat. It uses Tauri v2 with a Rust backend and a React 18 + TypeScript renderer built with Vite. It wraps the GitHub Copilot CLI for authoring and the Rayfin CLI (`rayfin up`) for deployment to Microsoft Fabric.
+Fabricator is a desktop app for Windows and macOS (Apple Silicon) for building "Rayfin apps" via chat. It uses Tauri v2 with a Rust backend and a React 19 + TypeScript renderer built with Vite. It wraps the GitHub Copilot CLI for authoring and the Rayfin CLI (`rayfin up`) for deployment to Microsoft Fabric.
 
 You author locally. Fabricator automatically manages a local Vite frontend preview during chat turns when the project has Vite installed, using the existing Fabric backend. Deployment and backend validation still target Microsoft Fabric; projects without local Vite keep the deployed preview.
 
@@ -15,7 +15,7 @@ You author locally. Fabricator automatically manages a local Vite frontend previ
 | Requirement | Notes |
 | --- | --- |
 | Windows 10/11 or macOS | Windows uses the WebView2 runtime; macOS uses the system WebKit. macOS builds target Apple Silicon (arm64). |
-| Node.js 20+ and npm | For the renderer and build scripts. |
+| Node.js 24 LTS and npm | For the renderer and build scripts. Node 22.13+ also works; CI uses 24. |
 | Rust stable | Windows: the MSVC toolchain. macOS: the default toolchain plus the Xcode command-line tools. |
 | Tauri prerequisites | For local desktop development and packaging. |
 | Git | Used for local project history. |
@@ -67,8 +67,9 @@ rayfin-fabricator/
 ├─ src-tauri/                 Rust Tauri backend, IPC commands, services, resources, packaging
 │  ├─ src/commands/           IPC handlers: advisor, auth, chat, deploy, design, doctor, fabric, files, git, projects, settings, team, …
 │  ├─ src/services/           exec, preview, store, telemetry, history, crashlog, emit, paths, team, …
-│  └─ vendor/wry/             Vendored wry: WebView2 device-compliance SSO patch + macOS preview-positioning fix
-├─ src/renderer/              React 18 + TypeScript UI built with Vite
+│  ├─ vendor/wry/             Vendored wry: upstream crate + the patches in vendor/wry-patches
+│  └─ vendor/wry-patches/     WebView2 device-compliance SSO + macOS preview-positioning fix
+├─ src/renderer/              React 19 + TypeScript UI built with Vite
 │  ├─ screens/                SetupScreen onboarding and Workbench shell
 │  └─ components/             ChatPanel, PreviewPane, CodeViewer, DeploymentsControl, AdvisorView, GitControl, SettingsModal, …
 ├─ src/shared/ipc.ts          Shared TypeScript IPC types
@@ -76,8 +77,9 @@ rayfin-fabricator/
 ├─ src/shared/docs-links.json Docs pages the app links to (checked by the docs build)
 ├─ website/                   Documentation site (Next.js + Fumadocs), published to GitHub Pages
 ├─ scripts/docs-screenshots/  Tooling that captures the docs site's screenshots
-├─ scripts/intro-video/       The landing page's intro video: Remotion scenes with Ray and ElevenLabs audio
+├─ scripts/videos/            Videos hosted by Ray: the landing page's intro and the Learn Rayfin with Ray lessons (Remotion + ElevenLabs)
 ├─ scripts/design-bench/      Times Design mode's AI options per Copilot model, to order the models Design picks
+├─ scripts/wry/               Re-vendors wry from crates.io and applies the local patches
 ├─ docs/                      Maintainer deployment notes and the vendored wry patch write-up
 ├─ analytics/                 Application Insights KQL queries and notes
 ├─ resources/                 Runtime resources, including telemetry configuration placeholders
@@ -86,7 +88,7 @@ rayfin-fabricator/
 └─ logo.png                   Project logo
 ```
 
-The vendored `wry` patch is documented in [`docs/VENDORED-WRY-PATCH.md`](./docs/VENDORED-WRY-PATCH.md). It enables WebView2 device-compliance SSO so the embedded preview can sign in to Entra Conditional Access "compliant device" apps.
+The vendored `wry` patches are documented in [`docs/VENDORED-WRY-PATCH.md`](./docs/VENDORED-WRY-PATCH.md). They enable WebView2 device-compliance SSO, so the embedded preview can sign in to Entra Conditional Access "compliant device" apps, and keep the macOS preview below its toolbar.
 
 ## Architecture
 
@@ -95,7 +97,7 @@ flowchart TD
   User["Developer"]
 
   subgraph Desktop["Fabricator desktop app"]
-    Renderer["React 18 + TypeScript renderer<br/>Vite UI"]
+    Renderer["React 19 + TypeScript renderer<br/>Vite UI"]
     Core["Tauri v2 Rust core<br/>IPC commands + services"]
     Editor["Monaco code editor"]
     Model["Data model view<br/>entities + access"]
@@ -156,7 +158,7 @@ npm run check:docs   # content lint
 - Update the docs in the same pull request when you change behavior, setup, UI labels, or messages users see.
 - The app links to specific docs pages and headings through `src/shared/docs-links.json`. `npm run verify:app-links` (run by the docs workflow after a build) fails if one of them disappears, so rename a linked page or heading together with that file.
 - Screenshots live in `website/public/screenshots/`, captured once per theme: `<id>.webp` in the dark theme and `<id>.light.webp` in the light one. Refresh them with the tooling in [`scripts/docs-screenshots/`](./scripts/docs-screenshots/README.md), which runs an isolated copy of the app and removes personal details.
-- The landing page's intro video, hosted by Ray, comes in a dark and a light cut generated by [`scripts/intro-video/`](./scripts/intro-video/README.md). Render and publish both again after UI changes that show up in it.
+- The landing page's intro video, hosted by Ray, comes in a dark and a light cut generated by [`scripts/videos/`](./scripts/videos/README.md). Render and publish both again after UI changes that show up in it. The same studio makes the Learn Rayfin with Ray lessons for YouTube.
 
 ## Coding conventions
 
@@ -174,9 +176,9 @@ npm run check:docs   # content lint
 - Include screenshots or notes for UI changes.
 - Update the docs site (`website/content/docs/`) when behavior, setup, or release steps change.
 
-## Vendored wry patch
+## Vendored wry patches
 
-The vendored `wry` crate includes a one-line WebView2 device-compliance SSO patch. If Tauri is upgraded and brings in a new `wry`, the patch must be re-applied. See `docs/VENDORED-WRY-PATCH.md` before changing Tauri or `wry`.
+`src-tauri/vendor/wry` is the upstream `wry` crate plus the patches in `src-tauri/vendor/wry-patches` (WebView2 device-compliance SSO and the macOS preview position). When a Tauri upgrade moves the `wry` version, `cargo test` fails until you re-vendor it with `node scripts/wry/vendor-wry.mjs update <version>`. Change vendored files only through a patch: CI runs `npm run vendor:wry -- verify`. See `docs/VENDORED-WRY-PATCH.md` before changing Tauri or `wry`.
 
 ## Releases
 

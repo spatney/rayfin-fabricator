@@ -7,7 +7,7 @@ const clamp1 = (v: number): number => Math.min(1, Math.max(-1, v))
  * Aim Ray's eyes at the pointer, wherever it is in the window. Sets `--ray-lx`
  * and `--ray-ly` on `ref`, which must contain his drawing.
  */
-export function useRayGaze(ref: RefObject<HTMLElement>): void {
+export function useRayGaze(ref: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const onMove = (e: PointerEvent): void => {
       const el = ref.current

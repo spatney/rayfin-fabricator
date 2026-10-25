@@ -1,0 +1,4 @@
+# Vendored third-party crates stay byte-identical to their upstream release (LF line
+# endings), so the local patches in src-tauri/vendor/wry-patches apply cleanly and
+# `node scripts/wry/vendor-wry.mjs --verify` can compare files exactly on every OS.
+src-tauri/vendor/** -text

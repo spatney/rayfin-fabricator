@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type JSX } from 'react'
 import type { StudioProject } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useMascotInstall } from './mascot/stage'
@@ -17,6 +17,10 @@ type Readiness =
   | { projectId: string; state: 'checking' }
   | { projectId: string; state: 'ready' }
   | { projectId: string; state: 'error'; error: string }
+
+/** A check usually takes a moment; only one that's still going after this shows
+ *  its card, so opening a project doesn't flash it. */
+export const PREPARING_CARD_DELAY_MS = 450
 
 function errorMessage(error: unknown): string {
   return error instanceof Error && error.message
@@ -43,6 +47,15 @@ export default function ProjectDependencyGuard({
   const ready = readiness.projectId === project.id && readiness.state === 'ready'
   const error =
     readiness.projectId === project.id && readiness.state === 'error' ? readiness.error : null
+  const checking = !ready && error === null
+
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    setSlow(false)
+    if (!checking) return
+    const timer = window.setTimeout(() => setSlow(true), PREPARING_CARD_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [checking, project.id, attempt])
 
   // The guard replaces the preview while dependencies install, so hide the native
   // webview that otherwise paints above every DOM element.
@@ -104,40 +117,42 @@ export default function ProjectDependencyGuard({
       role={failed ? 'alert' : 'status'}
       aria-label={failed ? `Could not prepare ${project.name}` : `Preparing ${project.name}`}
     >
-      <div
-        data-mascot-avoid=""
-        className={`project-dependency-guard-card${
-          failed ? ' project-dependency-guard-card--error' : ''
-        }`}
-      >
-        {failed ? (
-          <>
-            <h2 className="project-dependency-guard-title">
-              Couldn't install project dependencies
-            </h2>
-            <p className="project-dependency-guard-error">{error}</p>
-            <div className="project-dependency-guard-actions">
-              <button
-                className="btn btn--sm btn--primary"
-                onClick={() => setAttempt((value) => value + 1)}
-              >
-                Retry installation
-              </button>
-              <button className="btn btn--sm btn--ghost" onClick={onSwitchProjects}>
-                Switch projects
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <span className="project-dependency-guard-spinner" aria-hidden />
-            <h2 className="project-dependency-guard-title">Preparing {project.name}</h2>
-            <p className="project-dependency-guard-copy">
-              Checking the project's Rayfin CLI and installing missing dependencies...
-            </p>
-          </>
-        )}
-      </div>
+      {(failed || slow) && (
+        <div
+          data-mascot-avoid=""
+          className={`project-dependency-guard-card${
+            failed ? ' project-dependency-guard-card--error' : ''
+          }`}
+        >
+          {failed ? (
+            <>
+              <h2 className="project-dependency-guard-title">
+                Couldn't install project dependencies
+              </h2>
+              <p className="project-dependency-guard-error">{error}</p>
+              <div className="project-dependency-guard-actions">
+                <button
+                  className="btn btn--sm btn--primary"
+                  onClick={() => setAttempt((value) => value + 1)}
+                >
+                  Retry installation
+                </button>
+                <button className="btn btn--sm btn--ghost" onClick={onSwitchProjects}>
+                  Switch projects
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="project-dependency-guard-spinner" aria-hidden />
+              <h2 className="project-dependency-guard-title">Preparing {project.name}</h2>
+              <p className="project-dependency-guard-copy">
+                Checking the project's Rayfin CLI and installing missing dependencies...
+              </p>
+            </>
+          )}
+        </div>
+      )}
     </section>
   )
 }

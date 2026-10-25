@@ -2,6 +2,8 @@ import type { StudioProject } from '@shared/ipc'
 import { Codicon } from './icons'
 import { fabricWorkspaceUrl } from '../fabric'
 
+import type { JSX } from 'react'
+
 /**
  * Footer status-bar item for a deployed project's Fabric workspace. Shows the
  * workspace name and, when the project's workspace id is a GUID, links out to the

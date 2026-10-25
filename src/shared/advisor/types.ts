@@ -220,6 +220,10 @@ export interface AdvisorQuickRef {
 export interface AdvisorRunRequest {
   model?: string
   effort?: string
+  /** With Auto, what it optimizes for. */
+  autoTier?: string
+  /** With a model that offers several, its context window. */
+  contextTier?: string
   facts: AdvisorFacts
   quick: AdvisorQuickRef[]
   /** Open findings from the last deep review, re-checked rather than rediscovered. */

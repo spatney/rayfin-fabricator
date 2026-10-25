@@ -4,7 +4,8 @@ import {
   useState,
   type CSSProperties,
   type FormEvent,
-  type ReactNode
+  type ReactNode,
+  type JSX,
 } from 'react'
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'

@@ -9,7 +9,9 @@ Use this page for the first-run setup screen and account problems. Fabricator ve
 
 You see **Getting your environment ready**, a tool row such as **Node.js**, **npm**, **Git**, **Azure CLI**, or **GitHub CLI (gh)** is not **Installed**, or the row has a **Re-check** button. A failed version check can say a tool "was found, but its version check failed".
 
-Fabricator needs Node.js 20 or newer, npm, Git, and Azure CLI. **GitHub CLI (gh)** is optional repository tooling. It is separate from the bundled GitHub Copilot engine, so installing Copilot with pnpm does not satisfy the **GitHub CLI (gh)** check.
+Fabricator needs Node.js 22.12 or newer, npm, Git, and Azure CLI. **GitHub CLI (gh)** is optional repository tooling. It is separate from the bundled GitHub Copilot engine, so installing Copilot with pnpm does not satisfy the **GitHub CLI (gh)** check.
+
+A row that says **Needs updating** found an older version than Fabricator supports, for example "Version 20.10.0 — Fabricator needs 22.12 or newer". On macOS, when an older Node.js comes first on your PATH, such as the default version of a version manager like nvm, Fabricator uses a newer Node.js it finds further along your PATH, such as one installed by Homebrew. The **Node.js** row then shows that newer version.
 
 1. If Fabricator offers **Install** or **Install all**, use it.
 2. If setup says **Almost there.** and shows **Restart now**, select **Restart now**. Installed tools are often not visible to the running app until restart.
@@ -57,10 +59,11 @@ If the notice returns immediately after sign-in, [Report a problem](/docs/troubl
 The Azure CLI can be signed in to several accounts and uses one of them at a time. Its accounts are shared with your terminal and are separate from Fabric/Rayfin credentials and the preview browser.
 
 1. Open **Accounts**: select your account avatar in the app bar, then select **Manage accounts…**.
-2. If the account you need is under **Other Azure accounts**, select **Use** next to it.
-3. Otherwise, under **Azure CLI**, select **Add account**. In **Organization (optional)**, enter the organization you need, such as `contoso.onmicrosoft.com`, select **Continue**, and complete the browser sign-in.
-4. To remove an account you don't need, select **Sign out** next to it.
-5. If you also need a different Fabric account for deploying, change it under **Microsoft Fabric** the same way. See [Manage your accounts](/docs/start/accounts).
+2. If **Accounts** warns that Fabric and the Azure CLI are in different organizations, select the button in the warning. It switches the Azure CLI to Fabric's organization.
+3. Otherwise, if the account you need is listed under **Azure CLI**, select **Use** next to it.
+4. If it isn't listed, under **Azure CLI**, select **Add account**. In **Organization (optional)**, enter the organization you need, such as `contoso.onmicrosoft.com`, select **Continue**, and complete the browser sign-in.
+5. To remove an account you don't need, select **Sign out** next to it.
+6. If you also need a different Fabric account for deploying, change it under **Microsoft Fabric** the same way. See [Manage your accounts](/docs/start/accounts).
 
 If Azure still reports the wrong account, [Report a problem](/docs/troubleshooting/report-a-problem).
 
@@ -76,6 +79,6 @@ Fabricator runs the project's Rayfin CLI with `rayfin login --select` outside th
 4. If the sign-in button returns with an error, copy the exact message.
 5. In the project folder, run `npx rayfin login` only to reveal the full Rayfin CLI error. Return to Fabricator after sign-in succeeds.
 6. In Fabricator, open the account menu and choose **Refresh Fabric authentication**. The dialog runs `rayfin logout`, then `rayfin login`, and verifies the credential. It does not clear Copilot, Azure CLI, or preview-browser sessions.
-7. After a successful refresh, select **Redeploy**. Fabricator does not redeploy automatically after a credential refresh.
+7. After a successful refresh, deploy again from the app bar, where the button says **Try again** after a failed deploy. Fabricator does not redeploy automatically after a credential refresh.
 
 If you are using a client tenant, confirm that your account can access the target Fabric workspace and capacity. If sign-in still does nothing, [Report a problem](/docs/troubleshooting/report-a-problem) with diagnostics.

@@ -67,6 +67,32 @@ describe('readSchemaTypeNames', () => {
   })
 })
 
+describe('parseDataModel primary keys', () => {
+  it('marks only the id field, not a declared uuid foreign key', async () => {
+    const files: Record<string, string> = {
+      'rayfin/data/schema.ts':
+        "import { Tag } from './Tag.js';\nimport { TodoTag } from './TodoTag.js';\nexport const schema = [Tag, TodoTag];\n",
+      'rayfin/data/Tag.ts': TODO.replace('class Todo', 'class Tag'),
+      'rayfin/data/TodoTag.ts': [
+        "import { entity, authenticated, uuid, one } from '@microsoft/rayfin-core';",
+        "import { Tag } from './Tag.js';",
+        '@entity()',
+        "@authenticated('*')",
+        'export class TodoTag {',
+        '  @uuid() id!: string;',
+        '  @uuid() tag_id!: string;',
+        '  @one(() => Tag) tag!: Tag;',
+        '}',
+        ''
+      ].join('\n')
+    }
+    const model = await parseDataModel(async (p) => files[p] ?? null)
+    const fields = model.entities.find((e) => e.name === 'TodoTag')!.fields
+    expect(fields.filter((f) => f.primaryKey).map((f) => f.name)).toEqual(['id'])
+    expect(fields.find((f) => f.name === 'tag_id')).toMatchObject({ type: 'uuid', fkTo: 'Tag' })
+  })
+})
+
 describe('parseDataModel layouts', () => {
   const read = (files: Record<string, string>) => async (p: string) => files[p] ?? null
 

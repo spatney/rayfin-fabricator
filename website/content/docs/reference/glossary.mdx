@@ -51,6 +51,10 @@ A preview mode where you select elements in the app, describe visual changes, an
 
 A Rayfin app hosted in Microsoft Fabric. In Fabric, the deployed app is represented by Fabric items in a workspace. See [Deploy to Fabric](/docs/ship/deploy).
 
+## Fabric brokered auth
+
+How Rayfin apps sign people in: Fabric signs them in with the Microsoft Entra account they use for Fabric. The app needs no identity provider to run and no app registration of its own in Microsoft Entra ID, so there's nothing for a tenant admin to approve. Rayfin's docs also call it Fabric SSO. See [Blueprint](/docs/build/data-model#how-people-sign-in) and [Rayfin's auth docs](https://rayfin.ai/docs/auth).
+
 ## Fabric workspace
 
 A Microsoft Fabric container for app items, data, semantic models, and other Fabric resources. See [Deploy to Fabric](/docs/ship/deploy).
@@ -65,7 +69,7 @@ GitHub's `gh` command-line tool. Fabricator uses it for cloning and team workspa
 
 ## Microsoft Entra ID
 
-Microsoft's identity platform. Team workspace deploy identities are service principals in Microsoft Entra ID. See [Team prerequisites](/docs/team/prerequisites).
+Microsoft's identity platform. People sign in to Rayfin apps with their Microsoft Entra account, through [Fabric brokered auth](/docs/reference/glossary#fabric-brokered-auth). Team workspace deploy identities are service principals in Microsoft Entra ID. See [Team prerequisites](/docs/team/prerequisites).
 
 ## Microsoft Fabric
 

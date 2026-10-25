@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { Codicon } from '../icons'
 import { Ray, RAY_EYES, RAY_MOUTH, RAY_VIEWBOX, type RayMood } from './Ray'
 import { SpeechBubble, TYPE_MS } from './SpeechBubble'
@@ -601,7 +601,7 @@ export function MascotRoamer({
         avoid: s.avoid,
         aimX: m.x + W / 2
       })
-      bubble.style.transform = `translate3d(${place.x.toFixed(1)}px, ${place.y.toFixed(1)}px, 0)`
+      bubble.style.translate = `${place.x.toFixed(1)}px ${place.y.toFixed(1)}px`
       bubble.style.setProperty('--tail-x', `${place.tail.toFixed(1)}px`)
       bubble.classList.toggle('is-below', place.below)
     }

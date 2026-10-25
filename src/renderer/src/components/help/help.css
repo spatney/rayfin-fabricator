@@ -615,10 +615,10 @@
 
 /* ----------------------------- welcome ----------------------------- */
 
-/* The empty state is a two-column introduction. The host — Ray, or the
-   Fabricator mark when he's turned off — sits on the left. Everything he says
-   (the greeting, the starter questions, the version) shares one text edge on
-   the right, so the page reads as a single aligned column. */
+/* The empty state is a two-column introduction. Ray, the host, sits on the
+   left. Everything he says (the greeting, the starter questions, the version)
+   shares one text edge on the right, so the page reads as a single aligned
+   column. */
 .help-welcome {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -627,20 +627,11 @@
   padding: 40px 0 8px;
 }
 
+/* His wingtip, not his drawing's padding, lines up with the column's edge. */
 .help-hello-host {
   position: relative;
-  animation: helpRise 0.26s ease both;
-}
-
-/* His wingtip, not his drawing's padding, lines up with the column's edge. */
-.help-welcome--ray .help-hello-host {
   margin: -9px 0 0 -6px;
-}
-
-.help-hello-host .brand-mark {
-  display: block;
-  width: 32px;
-  height: 32px;
+  animation: helpRise 0.26s ease both;
 }
 
 .help-hello-text {

@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type ReactNode
+  type JSX,
 } from 'react'
 import type {
   AuthStatus,
@@ -19,12 +19,14 @@ import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { getCopilotHost, signInToCopilot, signOutOfCopilot } from '../copilotAuth'
 import { authErrorMessage } from '../authErrors'
-import { deviceCode, tenantLabel, tenantsDiffer } from '../accounts'
+import { deviceCode, tenantLabel, tenantName, tenantsDiffer } from '../accounts'
 import { openDocs } from '../docsLinks'
 import CopilotHostInput from './CopilotHostInput'
 import { CopilotLogo } from './brand-icons'
-import { CheckIcon, Codicon } from './icons'
+import { Codicon } from './icons'
 import { CopyButton } from './chat/CopyButton'
+import { AccountCard, Foot, Row, errorLine, type CardState } from './accounts/AccountParts'
+import { ModelProviders } from './accounts/ModelProviders'
 import azureSvg from '../assets/brands/azure.svg'
 import fabricSvg from '../assets/brands/fabric.svg'
 
@@ -48,20 +50,14 @@ interface Props {
   /** Re-verify every account; rejects when verification fails. */
   onAuthChanged: () => Promise<void> | void
   fabric: FabricAccountActions
+  /** Show Model providers (your own API keys), scrolled to when `focus`. */
+  modelProviders?: { focus: boolean }
   /** Open setup, e.g. to install the GitHub CLI. */
   onReviewSetup: () => void
   onClose: () => void
 }
 
-type CardState = 'ok' | 'off' | 'checking' | 'error'
 type Card = 'copilot' | 'fabric' | 'az' | 'github' | 'general'
-
-const STATE_LABEL: Record<CardState, string> = {
-  ok: 'Signed in',
-  off: 'Not signed in',
-  checking: 'Checking…',
-  error: 'Needs attention'
-}
 
 /** How long to wait for a GitHub sign-in finished in the terminal. */
 const GITHUB_WAIT_MS = 5 * 60_000
@@ -88,6 +84,7 @@ export default function AccountsModal({
   auth,
   onAuthChanged,
   fabric,
+  modelProviders,
   onReviewSetup,
   onClose
 }: Props): JSX.Element {
@@ -109,6 +106,8 @@ export default function AccountsModal({
   const [waitingForGithub, setWaitingForGithub] = useState(false)
   /** The account row asking to confirm its sign-out, e.g. `github:octo`. */
   const [confirming, setConfirming] = useState<string | null>(null)
+  /** The service whose Add account form is open, and an organization to fill in. */
+  const [adding, setAdding] = useState<{ service: 'fabric' | 'az'; tenant?: string } | null>(null)
   const pollRef = useRef<number | null>(null)
 
   const busy = action !== null
@@ -364,11 +363,32 @@ export default function AccountsModal({
         : github.accounts.some((a) => a.signedIn)
           ? 'ok'
           : 'off'
-  const fabricTenant = tenantLabel(rayfin.tenant, az)
-  const azureTenant = az.tenantName ?? tenantLabel(az.tenant)
-  const fabricBusy = busy || fabric.busy
   const otherFabric = (fabricAccounts?.accounts ?? []).filter((a) => !a.active)
   const otherAzure = (azureAccounts?.accounts ?? []).filter((a) => !a.active)
+  // Any Azure CLI account in a tenant knows its name, so Fabric's tenant can be
+  // named even when the Azure CLI is using another one.
+  const known = [az, ...(azureAccounts?.accounts ?? [])]
+  const fabricTenant = tenantLabel(rayfin.tenant, ...known)
+  const azureTenant = az.tenantName ?? tenantLabel(az.tenant, ...known)
+  const mismatch = tenantsDiffer(auth)
+  const fabricTenantId = rayfin.tenant?.trim().toLowerCase()
+  /** An Azure CLI account in Fabric's organization, to switch to in one click. */
+  const matchingAzure = mismatch
+    ? otherAzure.find((a) => a.tenant.trim().toLowerCase() === fabricTenantId)
+    : undefined
+  const fabricOrg = tenantName(rayfin.tenant, ...known)
+  const fabricBusy = busy || fabric.busy
+  const azMissing = Boolean(azureAccounts && !azureAccounts.azInstalled)
+  const ghMissing = Boolean(github && !github.ghInstalled)
+  const fabricNote = [
+    fabric.signingIn ? 'Finish signing in in the browser window that opened.' : '',
+    fabricAccounts?.sharedTokenStore &&
+    (fabricAccounts.accounts.length > 1 || otherFabric.length > 0)
+      ? 'On this Mac, signing out of one Fabric account signs all of them out until you sign in again.'
+      : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -398,11 +418,40 @@ export default function AccountsModal({
             </div>
           )}
 
-          {tenantsDiffer(auth) && (
-            <div className="alert alert--warn" role="note">
-              Microsoft Fabric is signed in to <strong>{fabricTenant}</strong>, but the Azure CLI is
-              signed in to <strong>{azureTenant}</strong>. Sharing and connecting data look up
-              people and data through the Azure CLI, so use the same organization for both.
+          {mismatch && (
+            <div className="acct-warn" role="note">
+              <Codicon name="warning" className="acct-warn-ico" />
+              <div className="acct-warn-text">
+                <p className="acct-warn-title">
+                  Fabric and the Azure CLI are in different organizations
+                </p>
+                <p>
+                  Fabric uses <strong>{fabricTenant}</strong> and the Azure CLI uses{' '}
+                  <strong>{azureTenant}</strong>. Sharing an app and connecting data look people
+                  up through the Azure CLI, so use one organization for both.
+                </p>
+                {matchingAzure ? (
+                  <button
+                    className="btn btn--sm"
+                    disabled={busy}
+                    onClick={() => void azureUse(matchingAzure.user, matchingAzure.subscription)}
+                  >
+                    {action === `az:use:${matchingAzure.user}`
+                      ? 'Switching…'
+                      : `Use ${matchingAzure.user} in the Azure CLI`}
+                  </button>
+                ) : (
+                  !azMissing && (
+                    <button
+                      className="btn btn--sm"
+                      disabled={busy}
+                      onClick={() => setAdding({ service: 'az', tenant: rayfin.tenant })}
+                    >
+                      Sign in to {fabricOrg ?? 'Fabric’s organization'} in the Azure CLI
+                    </button>
+                  )
+                )}
+              </div>
             </div>
           )}
 
@@ -411,44 +460,40 @@ export default function AccountsModal({
             title="GitHub Copilot"
             purpose="Writes and edits your app’s code."
             state={copilotState}
-          >
-            {copilot.signedIn ? (
-              <Identity
-                primary={copilot.user ?? 'Signed in'}
-                secondary={copilot.host?.replace(/^https:\/\//, '')}
-              />
-            ) : (
+            action={
+              !copilot.signedIn &&
               copilotState !== 'checking' && (
-                <CopilotHostInput value={host} disabled={busy} onChange={setHost} />
-              )
-            )}
-            <CardError text={errors.copilot ?? (copilot.signedIn ? undefined : copilot.error)} />
-            {action === 'copilot:in' && <SignInProgress log={log} service="GitHub" />}
-            <div className="acct-actions">
-              {copilot.signedIn ? (
-                <button
-                  className="btn btn--sm"
-                  disabled={busy}
-                  aria-label="Sign out of GitHub Copilot"
-                  onClick={() => void copilotOut()}
-                >
-                  {action === 'copilot:out' ? 'Signing out…' : 'Sign out'}
-                </button>
-              ) : (
                 <button
                   className="btn btn--sm btn--primary"
-                  disabled={busy || copilotState === 'checking'}
+                  disabled={busy}
                   aria-label="Sign in to GitHub Copilot"
                   onClick={() => void copilotIn()}
                 >
                   {action === 'copilot:in' ? 'Waiting for GitHub…' : 'Sign in'}
                 </button>
+              )
+            }
+          >
+            {copilot.signedIn && (
+              <Row name={copilot.user ?? 'Signed in'} meta={copilot.host?.replace(/^https:\/\//, '')}>
+                <button
+                  className="btn btn--xs btn--ghost acct-quiet"
+                  disabled={busy}
+                  aria-label="Sign out of GitHub Copilot"
+                  title="To use a different GitHub account, sign out, then sign in with that account."
+                  onClick={() => void copilotOut()}
+                >
+                  {action === 'copilot:out' ? 'Signing out…' : 'Sign out'}
+                </button>
+              </Row>
+            )}
+            <Foot>
+              {!copilot.signedIn && copilotState !== 'checking' && (
+                <CopilotHostInput value={host} disabled={busy} onChange={setHost} />
               )}
-            </div>
-            <p className="acct-hint">
-              To use a different GitHub account for Copilot, sign out, then sign in with that
-              account.
-            </p>
+              {action === 'copilot:in' && <SignInProgress log={log} service="GitHub" />}
+              {errorLine(errors.copilot ?? (copilot.signedIn ? undefined : copilot.error))}
+            </Foot>
           </AccountCard>
 
           <AccountCard
@@ -456,55 +501,57 @@ export default function AccountsModal({
             title="Microsoft Fabric"
             purpose="Deploys, hosts, and shares your apps."
             state={fabricState}
+            action={
+              rayfin.signedIn
+                ? adding?.service !== 'fabric' && (
+                    <AddButton disabled={fabricBusy} onClick={() => setAdding({ service: 'fabric' })} />
+                  )
+                : fabricState !== 'checking' && (
+                    <button
+                      className="btn btn--sm btn--primary"
+                      disabled={fabricBusy}
+                      aria-label="Sign in to Microsoft Fabric"
+                      onClick={fabric.onSignIn}
+                    >
+                      {fabric.signingIn ? 'Signing in…' : 'Sign in'}
+                    </button>
+                  )
+            }
           >
             {rayfin.signedIn && (
-              <Identity
-                primary={rayfin.user ?? 'Signed in'}
-                secondary={fabricTenant}
+              <Row
+                name={rayfin.user ?? 'Signed in'}
+                meta={fabricTenant}
                 title={rayfin.tenant}
                 badge="In use"
-              />
-            )}
-            <CardError text={errors.fabric ?? (rayfin.signedIn ? undefined : rayfin.error)} />
-            <div className="acct-actions">
-              {rayfin.signedIn ? (
-                <>
-                  {fabric.canRefresh && (
-                    <button
-                      className="btn btn--sm"
-                      disabled={fabricBusy}
-                      onClick={fabric.onRefresh}
-                    >
-                      Refresh sign-in
-                    </button>
-                  )}
+                badgeTitle="Deploying, workspace lists, sharing, and secrets use this account."
+              >
+                {fabric.canRefresh && (
                   <button
-                    className="btn btn--sm"
+                    className="btn btn--xs btn--ghost"
                     disabled={fabricBusy}
-                    aria-label="Sign out of Microsoft Fabric"
-                    onClick={fabric.onSignOut}
+                    onClick={fabric.onRefresh}
                   >
-                    {fabric.signingOut ? 'Signing out…' : 'Sign out'}
+                    Refresh sign-in
                   </button>
-                </>
-              ) : (
+                )}
                 <button
-                  className="btn btn--sm btn--primary"
-                  disabled={fabricBusy || fabricState === 'checking'}
-                  aria-label="Sign in to Microsoft Fabric"
-                  onClick={fabric.onSignIn}
+                  className="btn btn--xs btn--ghost acct-quiet"
+                  disabled={fabricBusy}
+                  aria-label="Sign out of Microsoft Fabric"
+                  onClick={fabric.onSignOut}
                 >
-                  {fabric.signingIn ? 'Signing in…' : 'Sign in'}
+                  {fabric.signingOut ? 'Signing out…' : 'Sign out'}
                 </button>
-              )}
-            </div>
+              </Row>
+            )}
             {otherFabric.length > 0 && (
-              <AccountList label="Other Fabric accounts">
+              <ul className="acct-list" aria-label="Other Fabric accounts">
                 {otherFabric.map((account) => (
                   <AccountRow
                     key={account.id}
                     name={account.user}
-                    meta={tenantLabel(account.tenant, az)}
+                    meta={tenantLabel(account.tenant, ...known)}
                     title={account.tenant}
                     busy={fabricBusy}
                     using={action === `fabric:use:${account.id}`}
@@ -516,57 +563,74 @@ export default function AccountsModal({
                     onSignOut={() => void fabricSignOut(account.id)}
                   />
                 ))}
-              </AccountList>
+              </ul>
             )}
-            {action === 'fabric:add' && <SignInProgress log={log} service="Microsoft" />}
-            <AddAccount
-              label="Add a Fabric account"
-              busy={fabricBusy}
-              running={action === 'fabric:add'}
-              onSubmit={fabricAdd}
-            />
-            <p className="acct-hint">
-              {fabric.signingIn
-                ? 'Finish signing in in the browser window that opened.'
-                : 'Deploying, workspace lists, sharing, and secrets use the account in use.'}
-              {fabricAccounts?.sharedTokenStore &&
-              (fabricAccounts.accounts.length > 1 || otherFabric.length > 0)
-                ? ' On this Mac, signing out of one Fabric account signs all of them out until you sign in again.'
-                : ''}
-            </p>
+            <Foot>
+              {errorLine(errors.fabric ?? (rayfin.signedIn ? undefined : rayfin.error))}
+              {action === 'fabric:add' && <SignInProgress log={log} service="Microsoft" />}
+              {adding?.service === 'fabric' && (
+                <AddAccountForm
+                  label="Add a Fabric account"
+                  busy={fabricBusy}
+                  running={action === 'fabric:add'}
+                  onSubmit={async (tenant) => {
+                    if (await fabricAdd(tenant)) setAdding(null)
+                  }}
+                  onCancel={() => setAdding(null)}
+                />
+              )}
+              {fabricNote ? <p className="acct-note">{fabricNote}</p> : null}
+            </Foot>
           </AccountCard>
 
           <AccountCard
             icon={<img className="brand-glyph" src={azureSvg} alt="" />}
             title="Azure CLI"
-            purpose="Finds people when you share an app, connects Fabric data, and sets up team workspaces."
+            purpose="Finds people when you share an app, connects Fabric data, and sets up team workspaces. Shared with your terminal."
             state={azureState}
+            action={
+              azMissing ? (
+                <button className="btn btn--sm" disabled={busy} onClick={onReviewSetup}>
+                  Install from setup
+                </button>
+              ) : (
+                adding?.service !== 'az' &&
+                azureState !== 'checking' &&
+                (az.signedIn || otherAzure.length > 0 ? (
+                  <AddButton disabled={busy} onClick={() => setAdding({ service: 'az' })} />
+                ) : (
+                  <button
+                    className="btn btn--sm btn--primary"
+                    disabled={busy}
+                    aria-label="Sign in to the Azure CLI"
+                    onClick={() => setAdding({ service: 'az' })}
+                  >
+                    Sign in
+                  </button>
+                ))
+              )
+            }
           >
             {az.signedIn && (
-              <Identity
-                primary={az.user ?? 'Signed in'}
-                secondary={azureTenant}
+              <Row
+                name={az.user ?? 'Signed in'}
+                meta={azureTenant}
                 title={az.tenant}
                 badge="In use"
-              />
-            )}
-            <CardError
-              text={errors.az ?? (az.signedIn ? undefined : az.error) ?? azureAccounts?.error}
-            />
-            {az.signedIn && (
-              <div className="acct-actions">
+                badgeTitle="The Azure CLI uses this account now."
+              >
                 <button
-                  className="btn btn--sm"
+                  className="btn btn--xs btn--ghost acct-quiet"
                   disabled={busy}
                   aria-label="Sign out of the Azure CLI"
                   onClick={() => void azureSignOut(az.user)}
                 >
                   {action === `az:out:${az.user ?? ''}` ? 'Signing out…' : 'Sign out'}
                 </button>
-              </div>
+              </Row>
             )}
             {otherAzure.length > 0 && (
-              <AccountList label="Other Azure accounts">
+              <ul className="acct-list" aria-label="Other Azure accounts">
                 {otherAzure.map((account) => (
                   <AccountRow
                     key={`${account.user}|${account.tenant}`}
@@ -583,105 +647,105 @@ export default function AccountsModal({
                     onSignOut={() => void azureSignOut(account.user)}
                   />
                 ))}
-              </AccountList>
+              </ul>
             )}
-            {action === 'az:in' && <SignInProgress log={log} service="Microsoft" />}
-            {azureAccounts && !azureAccounts.azInstalled ? (
-              <div className="acct-actions">
-                <button className="btn btn--sm" disabled={busy} onClick={onReviewSetup}>
-                  Install from setup
-                </button>
-              </div>
-            ) : (
-              <AddAccount
-                label="Add an Azure CLI account"
-                firstLabel={az.signedIn || otherAzure.length > 0 ? undefined : 'Sign in'}
-                busy={busy || azureState === 'checking'}
-                running={action === 'az:in'}
-                onSubmit={azureAdd}
-              />
-            )}
-            <p className="acct-hint">The Azure CLI’s accounts are shared with your terminal.</p>
+            <Foot>
+              {errorLine(
+                errors.az ?? (az.signedIn ? undefined : az.error) ?? azureAccounts?.error
+              )}
+              {action === 'az:in' && <SignInProgress log={log} service="Microsoft" />}
+              {adding?.service === 'az' && (
+                <AddAccountForm
+                  key={adding.tenant ?? ''}
+                  label="Add an Azure CLI account"
+                  defaultTenant={adding.tenant}
+                  busy={busy}
+                  running={action === 'az:in'}
+                  onSubmit={async (tenant) => {
+                    if (await azureAdd(tenant)) setAdding(null)
+                  }}
+                  onCancel={() => setAdding(null)}
+                />
+              )}
+            </Foot>
           </AccountCard>
 
           <AccountCard
-            icon={<Codicon name="github" className="acct-github-ico" />}
+            icon={<Codicon name="github" />}
             title="GitHub"
-            purpose="Clones repositories and runs team workspaces. Optional."
+            purpose="Clones repositories and runs team workspaces. Optional, and shared with your terminal."
             state={githubState}
+            action={
+              ghMissing ? (
+                <button className="btn btn--sm" disabled={busy} onClick={onReviewSetup}>
+                  Install from setup
+                </button>
+              ) : (
+                github &&
+                !waitingForGithub &&
+                (github.accounts.length > 0 ? (
+                  <AddButton disabled={busy} onClick={() => void githubAdd()} />
+                ) : (
+                  <button
+                    className="btn btn--sm"
+                    disabled={busy}
+                    aria-label="Sign in to GitHub"
+                    onClick={() => void githubAdd()}
+                  >
+                    Sign in
+                  </button>
+                ))
+              )
+            }
           >
-            {github && !github.ghInstalled ? (
-              <>
-                <p className="acct-hint">
+            {github && !ghMissing && github.accounts.length > 0 && (
+              <ul className="acct-list" aria-label="GitHub accounts">
+                {github.accounts.map((account) => (
+                  <AccountRow
+                    key={account.login}
+                    name={account.login}
+                    badge={account.active ? 'Default' : undefined}
+                    badgeTitle="Clone from GitHub and your terminal use this account. Team workspaces remember their own."
+                    warning={account.signedIn ? undefined : 'Sign-in expired'}
+                    useLabel="Make default"
+                    canUse={!account.active && account.signedIn}
+                    signOutTitle="Also signs the GitHub CLI out in your terminal."
+                    busy={busy}
+                    using={action === `github:use:${account.login}`}
+                    signingOut={action === `github:out:${account.login}`}
+                    confirming={confirming === `github:${account.login}`}
+                    onUse={() => void githubSwitch(account.login)}
+                    onAskSignOut={() => setConfirming(`github:${account.login}`)}
+                    onCancelSignOut={() => setConfirming(null)}
+                    onSignOut={() => void githubSignOut(account.login)}
+                  />
+                ))}
+              </ul>
+            )}
+            <Foot>
+              {ghMissing && (
+                <p className="acct-note">
                   The GitHub CLI isn’t installed. You only need it to clone repositories or use team
                   workspaces.
                 </p>
-                <div className="acct-actions">
-                  <button className="btn btn--sm" disabled={busy} onClick={onReviewSetup}>
-                    Install from setup
+              )}
+              {errorLine(errors.github ?? github?.error)}
+              {waitingForGithub && (
+                <div className="acct-progress" role="status">
+                  <span className="ws-spinner" aria-hidden="true" />
+                  <span>
+                    Finish signing in in the terminal window that opened. Your default account stays
+                    the same.
+                  </span>
+                  <button className="btn btn--xs btn--ghost" onClick={stopWaiting}>
+                    Stop waiting
                   </button>
                 </div>
-              </>
-            ) : (
-              github && (
-                <>
-                  {github.accounts.length > 0 ? (
-                    <AccountList label="GitHub accounts">
-                      {github.accounts.map((account) => (
-                        <AccountRow
-                          key={account.login}
-                          name={account.login}
-                          badge={account.active ? 'Default' : undefined}
-                          warning={account.signedIn ? undefined : 'Sign-in expired'}
-                          useLabel="Make default"
-                          canUse={!account.active && account.signedIn}
-                          busy={busy}
-                          using={action === `github:use:${account.login}`}
-                          signingOut={action === `github:out:${account.login}`}
-                          confirming={confirming === `github:${account.login}`}
-                          onUse={() => void githubSwitch(account.login)}
-                          onAskSignOut={() => setConfirming(`github:${account.login}`)}
-                          onCancelSignOut={() => setConfirming(null)}
-                          onSignOut={() => void githubSignOut(account.login)}
-                        />
-                      ))}
-                    </AccountList>
-                  ) : (
-                    !github.error && (
-                      <p className="acct-hint">Not signed in to any GitHub account.</p>
-                    )
-                  )}
-                  <CardError text={errors.github ?? github.error} />
-                  {waitingForGithub && (
-                    <div className="acct-progress" role="status">
-                      <span className="ws-spinner" aria-hidden="true" />
-                      <span>
-                        Finish signing in in the terminal window that opened. Your default account
-                        stays the same.
-                      </span>
-                      <button className="btn btn--xs btn--ghost" onClick={stopWaiting}>
-                        Stop waiting
-                      </button>
-                    </div>
-                  )}
-                  <div className="acct-actions">
-                    <button
-                      className="btn btn--sm"
-                      disabled={busy}
-                      onClick={() => void githubAdd()}
-                    >
-                      {github.accounts.length > 0 ? 'Add account' : 'Sign in'}
-                    </button>
-                  </div>
-                  <p className="acct-hint">
-                    Clone from GitHub and your terminal use the default account; team workspaces
-                    remember their own. Signing out here also signs the GitHub CLI out in your
-                    terminal.
-                  </p>
-                </>
-              )
-            )}
+              )}
+            </Foot>
           </AccountCard>
+
+          {modelProviders && <ModelProviders focus={modelProviders.focus} />}
         </div>
 
         <div className="modal-footer">
@@ -700,73 +764,12 @@ export default function AccountsModal({
   )
 }
 
-function AccountCard({
-  icon,
-  title,
-  purpose,
-  state,
-  children
-}: {
-  icon: ReactNode
-  title: string
-  purpose: string
-  state: CardState
-  children: ReactNode
-}): JSX.Element {
+function AddButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }): JSX.Element {
   return (
-    <section className={`acct-card acct-card--${state}`} aria-label={title}>
-      <span className="auth-ico acct-card-ico">{icon}</span>
-      <div className="acct-card-main">
-        <div className="acct-card-head">
-          <h3 className="acct-card-title">{title}</h3>
-          <span className={`acct-chip acct-chip--${state}`}>
-            {state === 'ok' && <CheckIcon className="acct-chip-ico" />}
-            {STATE_LABEL[state]}
-          </span>
-        </div>
-        <p className="acct-card-purpose">{purpose}</p>
-        {children}
-      </div>
-    </section>
-  )
-}
-
-function Identity({
-  primary,
-  secondary,
-  title,
-  badge
-}: {
-  primary: string
-  secondary?: string
-  title?: string
-  badge?: string
-}): JSX.Element {
-  return (
-    <div className="acct-id" title={title}>
-      <span className="acct-id-primary">{primary}</span>
-      {secondary && <span className="acct-id-secondary">{secondary}</span>}
-      {badge && <span className="acct-badge">{badge}</span>}
-    </div>
-  )
-}
-
-function CardError({ text }: { text?: string }): JSX.Element | null {
-  return text ? (
-    <p className="acct-error" role="alert">
-      {text}
-    </p>
-  ) : null
-}
-
-function AccountList({ label, children }: { label: string; children: ReactNode }): JSX.Element {
-  return (
-    <div className="acct-list-wrap">
-      <span className="acct-list-label">{label}</span>
-      <ul className="acct-list" aria-label={label}>
-        {children}
-      </ul>
-    </div>
+    <button className="btn btn--sm btn--ghost acct-add-btn" disabled={disabled} onClick={onClick}>
+      <Codicon name="add" />
+      Add account
+    </button>
   )
 }
 
@@ -776,9 +779,11 @@ function AccountRow({
   meta,
   title,
   badge,
+  badgeTitle,
   warning,
   useLabel = 'Use',
   canUse = true,
+  signOutTitle,
   busy,
   using,
   signingOut,
@@ -792,9 +797,11 @@ function AccountRow({
   meta?: string
   title?: string
   badge?: string
+  badgeTitle?: string
   warning?: string
   useLabel?: string
   canUse?: boolean
+  signOutTitle?: string
   busy: boolean
   using: boolean
   signingOut: boolean
@@ -805,48 +812,49 @@ function AccountRow({
   onSignOut: () => void
 }): JSX.Element {
   return (
-    <li className="acct-row">
-      <span className="acct-row-name" title={title}>
-        {name}
-        {meta && <span className="acct-row-meta"> · {meta}</span>}
-      </span>
-      {badge && <span className="acct-badge">{badge}</span>}
-      {warning && <span className="acct-badge acct-badge--warn">{warning}</span>}
-      <span className="acct-row-actions">
-        {confirming ? (
-          <>
-            <span className="acct-confirm">Sign out of {name}?</span>
-            <button className="btn btn--xs btn--danger" disabled={busy} onClick={onSignOut}>
-              Sign out
-            </button>
-            <button className="btn btn--xs btn--ghost" onClick={onCancelSignOut}>
-              Cancel
-            </button>
-          </>
-        ) : (
-          <>
-            {canUse && (
-              <button
-                className="btn btn--xs btn--ghost"
-                disabled={busy}
-                aria-label={`${useLabel}: ${name}`}
-                onClick={onUse}
-              >
-                {using ? 'Switching…' : useLabel}
-              </button>
-            )}
+    <Row
+      as="li"
+      name={name}
+      meta={meta}
+      title={title}
+      badge={badge}
+      badgeTitle={badgeTitle}
+      warning={warning}
+    >
+      {confirming ? (
+        <>
+          <span className="acct-confirm">Sign out of {name}?</span>
+          <button className="btn btn--xs btn--danger" disabled={busy} onClick={onSignOut}>
+            Sign out
+          </button>
+          <button className="btn btn--xs btn--ghost" onClick={onCancelSignOut}>
+            Cancel
+          </button>
+        </>
+      ) : (
+        <>
+          {canUse && (
             <button
               className="btn btn--xs btn--ghost"
               disabled={busy}
-              aria-label={`Sign out of ${name}`}
-              onClick={onAskSignOut}
+              aria-label={`${useLabel}: ${name}`}
+              onClick={onUse}
             >
-              {signingOut ? 'Signing out…' : 'Sign out'}
+              {using ? 'Switching…' : useLabel}
             </button>
-          </>
-        )}
-      </span>
-    </li>
+          )}
+          <button
+            className="btn btn--xs btn--ghost acct-quiet"
+            disabled={busy}
+            aria-label={`Sign out of ${name}`}
+            title={signOutTitle}
+            onClick={onAskSignOut}
+          >
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+        </>
+      )}
+    </Row>
   )
 }
 
@@ -854,41 +862,29 @@ function AccountRow({
  * Sign in to one more account. The organization is optional: leave it empty for
  * the account's own, or name one it's a guest in.
  */
-function AddAccount({
+function AddAccountForm({
   label,
-  firstLabel,
+  defaultTenant,
   busy,
   running,
-  onSubmit
+  onSubmit,
+  onCancel
 }: {
   /** Names the form, e.g. "Add a Fabric account". */
   label: string
-  /** Shown instead of "Add account" when there's no account yet. */
-  firstLabel?: string
+  /** The organization to start with, e.g. Fabric's when the Azure CLI should match it. */
+  defaultTenant?: string
   busy: boolean
   running: boolean
-  onSubmit: (tenant?: string) => Promise<boolean>
+  onSubmit: (tenant?: string) => Promise<void>
+  onCancel: () => void
 }): JSX.Element {
-  const [open, setOpen] = useState(false)
-  const [tenant, setTenant] = useState('')
+  const [tenant, setTenant] = useState(defaultTenant ?? '')
   const inputId = useId()
-
-  if (!open) {
-    return (
-      <div className="acct-actions">
-        <button className="btn btn--sm" disabled={busy} onClick={() => setOpen(true)}>
-          {firstLabel ?? 'Add account'}
-        </button>
-      </div>
-    )
-  }
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
-    if (await onSubmit(tenant.trim() || undefined)) {
-      setOpen(false)
-      setTenant('')
-    }
+    await onSubmit(tenant.trim() || undefined)
   }
 
   return (
@@ -903,6 +899,7 @@ function AddAccount({
         autoCapitalize="none"
         autoComplete="off"
         spellCheck={false}
+        autoFocus
         value={tenant}
         placeholder="contoso.onmicrosoft.com or a tenant ID"
         disabled={running}
@@ -911,16 +908,11 @@ function AddAccount({
       <span className="field-hint">
         Leave it empty to use your account’s own organization, or enter one you’re a guest in.
       </span>
-      <div className="acct-actions">
+      <div className="acct-add-actions">
         <button type="submit" className="btn btn--sm btn--primary" disabled={busy}>
           {running ? 'Waiting for Microsoft…' : 'Continue'}
         </button>
-        <button
-          type="button"
-          className="btn btn--sm btn--ghost"
-          disabled={running}
-          onClick={() => setOpen(false)}
-        >
+        <button type="button" className="btn btn--sm btn--ghost" disabled={running} onClick={onCancel}>
           Cancel
         </button>
       </div>

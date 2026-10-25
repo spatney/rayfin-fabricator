@@ -18,12 +18,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -41,21 +41,57 @@ jobs:
       - name: Build renderer
         run: npm run build:renderer
 
+      - name: Check renderer build
+        run: npm run check:build
+
+      - name: Check vendored wry
+        # src-tauri/vendor/wry must be the upstream crate plus src-tauri/vendor/wry-patches.
+        run: npm run vendor:wry -- verify
+
   cargo-check:
     name: Cargo check
     runs-on: windows-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Node for helper regressions
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cargo check
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Test backend and CLI helpers
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+
+  cargo-check-macos:
+    name: Cargo check (macOS)
+    # The macOS-only code (the vendored wry's WKWebView patch, preview capture, objc2
+    # bindings) otherwise only compiles in the release workflow.
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node for helper regressions
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

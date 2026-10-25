@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { HelpAnswer, HelpEventEnvelope, HelpGrounding } from '@shared/ipc'
 import { HelpView } from './HelpView'
 import { ToastProvider } from '../../toast'
-import { MascotContext } from '../mascot/context'
 
 /** Push a streamed event to the subscriber the view registered. */
 let emit: (envelope: HelpEventEnvelope) => void = () => {}
@@ -125,19 +124,6 @@ describe('opening Help', () => {
     setup()
     expect(await screen.findByRole('button', { name: /Ray, the Fabricator stingray/ })).toBeTruthy()
     expect(screen.getByRole('heading', { name: /I’m Ray\.$/ })).toBeTruthy()
-  })
-
-  it('keeps the same page, hosted by the mark, when Ray is turned off', async () => {
-    render(
-      <ToastProvider>
-        <MascotContext.Provider value={false}>
-          <HelpView onClose={vi.fn()} onAction={vi.fn()} onReportIssue={vi.fn()} />
-        </MascotContext.Provider>
-      </ToastProvider>
-    )
-    expect(await screen.findByRole('heading', { name: 'fabricator help' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Ray/ })).toBeNull()
-    expect(screen.getByText('Why did my last deploy fail?')).toBeTruthy()
   })
 })
 
@@ -364,7 +350,7 @@ describe('keeping the conversation', () => {
 
     await screen.findByText(/Because no workspace is selected/)
     await waitFor(() => expect(saveHistory).toHaveBeenCalled())
-    const saved = saveHistory.mock.calls.at(-1)?.[0] as Array<{ question: string }> | undefined
+    const saved = saveHistory.mock.calls.slice(-1)[0]?.[0] as Array<{ question: string }> | undefined
     expect(saved?.[0].question).toBe('what broke?')
   })
 

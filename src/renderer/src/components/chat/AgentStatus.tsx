@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { Codicon } from '../icons'
 import { isHiddenTool, phaseLabel } from './toolPresentation'
 import type { UIChatMessage } from './types'

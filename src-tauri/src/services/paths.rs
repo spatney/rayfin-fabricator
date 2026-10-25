@@ -169,6 +169,25 @@ mod tests {
   use super::*;
   use std::ffi::OsStr;
 
+  // Existing installs keep their projects, settings and chats under these folders, so
+  // a dependency upgrade (such as the `dirs` crate) must never move them.
+  #[cfg(windows)]
+  #[test]
+  fn user_data_stays_in_roaming_app_data_on_windows() {
+    let app_data = PathBuf::from(std::env::var_os("APPDATA").expect("APPDATA is set"));
+    assert_eq!(data_base(), app_data);
+    let profile = PathBuf::from(std::env::var_os("USERPROFILE").expect("USERPROFILE is set"));
+    assert_eq!(home_dir(), profile);
+  }
+
+  #[cfg(target_os = "macos")]
+  #[test]
+  fn user_data_stays_in_application_support_on_macos() {
+    let home = PathBuf::from(std::env::var_os("HOME").expect("HOME is set"));
+    assert_eq!(home_dir(), home);
+    assert_eq!(data_base(), home.join("Library").join("Application Support"));
+  }
+
   #[test]
   fn debug_data_dir_requires_an_absolute_nonempty_path() {
     for invalid in ["", " ", ".", "..", "relative-data"] {

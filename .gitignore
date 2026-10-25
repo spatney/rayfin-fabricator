@@ -25,3 +25,6 @@ src-tauri/tauri.signing.conf.json
 
 # Raw docs screenshot captures: may contain unscrubbed personal details
 scripts/docs-screenshots/shots/
+
+# Personal drafts, such as social media posts (kept out of this repo)
+drafts/

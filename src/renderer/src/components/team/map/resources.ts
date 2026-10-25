@@ -84,7 +84,7 @@ function parseConnectors(block: unknown): ConnectorInfo[] {
 /** Read one copy of an app's config files (project-relative path → text). */
 export async function parseAppConfig(files: Record<string, string>): Promise<AppConfig> {
   const text = files['rayfin/rayfin.yml'] ?? files['rayfin/rayfin.yaml']
-  let yml: Obj = {}
+  let yml: Obj
   try {
     yml = asObj(parseYaml(text ?? '')) ?? {}
   } catch {

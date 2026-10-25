@@ -14,6 +14,12 @@ describe('tenantLabel', () => {
     expect(tenantLabel('  ')).toBeUndefined()
     expect(tenantLabel(undefined)).toBeUndefined()
   })
+
+  it('names it from any Azure CLI account in that tenant, not only the one in use', () => {
+    const az = { signedIn: true, tenant: CONTOSO, tenantName: 'Contoso' }
+    const accounts = [{ tenant: FABRIKAM.toUpperCase(), tenantName: 'Fabrikam' }]
+    expect(tenantLabel(FABRIKAM, az, ...accounts)).toBe('Fabrikam')
+  })
 })
 
 describe('tenantsDiffer', () => {

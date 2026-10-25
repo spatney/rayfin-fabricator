@@ -109,7 +109,8 @@ static COUNTER: Counter = Counter::new();
 static WEBVIEW_STATE: Lazy<RwLock<HashMap<String, WebViewState>>> = Lazy::new(Default::default);
 
 struct WebViewState {
-  pub protocol_ptrs: Vec<Rc<dyn Fn(crate::WebViewId, Request<Vec<u8>>, RequestAsyncResponder)>>,
+  pub protocol_ptrs:
+    Vec<Rc<dyn Fn(crate::WebViewId, Request<Vec<u8>>, RequestAsyncResponder) + Send + Sync>>,
 }
 
 unsafe impl Send for WebViewState {}
@@ -340,7 +341,8 @@ impl InnerWebView {
         data_store.setValue_forKey(Some(&proxies), ns_string!("proxyConfigurations"));
       }
 
-      // NOTE: Private API — `allowsPictureInPictureMediaPlayback` is a private KVC key on WKPreferences.
+      // NOTE: Private API on macOS — `allowsPictureInPictureMediaPlayback` is a private KVC key on WKPreferences.
+      // On iOS it's public <https://developer.apple.com/documentation/webkit/wkwebviewconfiguration/allowspictureinpicturemediaplayback>
       _preference.setValue_forKey(
         Some(&_yes),
         ns_string!("allowsPictureInPictureMediaPlayback"),
@@ -364,28 +366,26 @@ impl InnerWebView {
         config.setMediaTypesRequiringUserActionForPlayback(WKAudiovisualMediaTypes::None);
       }
 
-      #[cfg(feature = "transparent")]
+      let version = util::operating_system_version();
+
       if attributes.transparent || attributes.background_color.is_some() {
         let no = NSNumber::numberWithBool(false);
-        #[cfg(target_os = "macos")]
-        {
-          let version = util::operating_system_version();
-          if version.0 > 10 || (version.0 == 10 && version.1 >= 14) {
-            // NOTE: Private API — `drawsBackground`.
-            // Available: macOS 10.14+ (no public doc).
-            config.setValue_forKey(Some(&no), ns_string!("drawsBackground"));
-          }
-        }
-        #[cfg(target_os = "ios")]
-        {
-          // NOTE: Private API — `drawsBackground`.
-          config.setValue_forKey(Some(&no), ns_string!("drawsBackground"));
-        }
+        // TODO: Check if this property exists or is used on iOS
+        config.setValue_forKey(Some(&no), ns_string!("drawsBackground"));
       }
 
-      #[cfg(feature = "fullscreen")]
-      // NOTE: Private API — `fullScreenEnabled` is a private KVC key on WKPreferences.
-      _preference.setValue_forKey(Some(&_yes), ns_string!("fullScreenEnabled"));
+      if (cfg!(target_os = "macos") && (version.0 > 12 || (version.0 == 12 && version.1 >= 3)))
+        || (cfg!(target_os = "ios") && (version.0 > 15 || (version.0 == 15 && version.1 >= 4)))
+      {
+        // NOTE: Public API alternative for private config fullScreenEnabled (see below)
+        // Only available on macOS 12.3+ and iOS 15.4+
+        _preference.setElementFullscreenEnabled(true);
+      } else {
+        // NOTE: Private API — `fullScreenEnabled` is a private KVC key on WKPreferences.
+        // This is the private API alternative to setElementFullscreenEnabled above that also works on older macOS/iOS versions.
+        // TODO: Remove this for Tauri v3?
+        _preference.setValue_forKey(Some(&_yes), ns_string!("fullScreenEnabled"));
+      }
 
       #[cfg(target_os = "macos")]
       let webview = {
@@ -449,24 +449,24 @@ impl InnerWebView {
         let frame = ns_view.frame();
         let webview: Retained<WryWebView> =
           objc2::msg_send![super(webview), initWithFrame: frame, configuration: &**config];
-        if let Some((red, green, blue, alpha)) = attributes.background_color {
-          // This is required first since the webview color is applied too late.
-          webview.setOpaque(false);
-
-          let color = objc2_ui_kit::UIColor::colorWithRed_green_blue_alpha(
+        // Without a background color the webview stays opaque and white, flashing before the
+        // page paints, so fall back to the system background to follow the current appearance.
+        let color = if let Some((red, green, blue, alpha)) = attributes.background_color {
+          objc2_ui_kit::UIColor::colorWithRed_green_blue_alpha(
             red as f64 / 255.0,
             green as f64 / 255.0,
             blue as f64 / 255.0,
             alpha as f64 / 255.0,
-          );
-
-          if !is_child {
-            ns_view.setBackgroundColor(Some(&color));
-          }
-          // This has to be monitored as it may clash with isOpaque = true.
-          // The webview background color may also applied too late so actually not that useful.
-          webview.setBackgroundColor(Some(&color));
+          )
+        } else {
+          objc2_ui_kit::UIColor::systemBackgroundColor()
+        };
+        // setOpaque must come first since the color is applied too late on its own.
+        webview.setOpaque(false);
+        if !is_child {
+          ns_view.setBackgroundColor(Some(&color));
         }
+        webview.setBackgroundColor(Some(&color));
         webview
       };
 
@@ -538,15 +538,15 @@ impl InnerWebView {
       if attributes.devtools {
         // <https://developer.apple.com/documentation/webkit/wkwebview/isinspectable>
         // Available: macOS 13.3+, iOS 16.4+
+        // Enables debugging via Safari's Web Inspector, NOT via in-webview devtools.
         let has_inspectable_property: bool =
           NSObject::respondsToSelector(&webview, objc2::sel!(setInspectable:));
         if has_inspectable_property {
           webview.setInspectable(true);
         }
         // NOTE: Private API — `developerExtrasEnabled` is a private KVC key on WKPreferences.
-        // this cannot be on an `else` statement, it does not work on macOS :(
-        let dev = ns_string!("developerExtrasEnabled");
-        _preference.setValue_forKey(Some(&_yes), dev);
+        // This enables the in-webview devtools
+        _preference.setValue_forKey(Some(&_yes), ns_string!("developerExtrasEnabled"));
       }
 
       // Message handler
@@ -596,8 +596,11 @@ impl InnerWebView {
       let proto_navigation_policy_delegate = ProtocolObject::from_ref(&*navigation_policy_delegate);
       webview.setNavigationDelegate(Some(proto_navigation_policy_delegate));
 
-      let ui_delegate: Retained<WryWebViewUIDelegate> =
-        WryWebViewUIDelegate::new(mtm, attributes.new_window_req_handler);
+      let ui_delegate: Retained<WryWebViewUIDelegate> = WryWebViewUIDelegate::new(
+        mtm,
+        attributes.new_window_req_handler,
+        attributes.permission_handler,
+      );
       let proto_ui_delegate = ProtocolObject::from_ref(&*ui_delegate);
       webview.setUIDelegate(Some(proto_ui_delegate));
 
@@ -633,13 +636,13 @@ impl InnerWebView {
         parent_view: None,
       };
 
-      // Initialize scripts
-      w.init(
-r#"Object.defineProperty(window, 'ipc', {
-  value: Object.freeze({postMessage: function(s) {window.webkit.messageHandlers.ipc.postMessage(s);}})
-});"#,
-      true
-      );
+      if w.ipc_handler_delegate.is_some() {
+        // Initialize scripts
+        w.init(
+          r#"Object.defineProperty(window, 'ipc', { value: Object.freeze({ postMessage: function(s) { window.webkit.messageHandlers.ipc.postMessage(s) } }) });"#,
+          true,
+        );
+      }
       for init_script in attributes.initialization_scripts {
         w.init(&init_script.script, init_script.for_main_frame_only);
       }
@@ -808,6 +811,24 @@ r#"Object.defineProperty(window, 'ipc', {
     Ok(())
   }
 
+  pub fn go_forward(&self) -> Result<()> {
+    unsafe { self.webview.goForward() };
+    Ok(())
+  }
+
+  pub fn go_back(&self) -> Result<()> {
+    unsafe { self.webview.goBack() };
+    Ok(())
+  }
+
+  pub fn can_go_forward(&self) -> Result<bool> {
+    Ok(unsafe { self.webview.canGoForward() })
+  }
+
+  pub fn can_go_back(&self) -> Result<bool> {
+    Ok(unsafe { self.webview.canGoBack() })
+  }
+
   pub fn clear_all_browsing_data(&self) -> Result<()> {
     unsafe {
       let config = self.webview.configuration();
@@ -960,7 +981,7 @@ r#"Object.defineProperty(window, 'ipc', {
       self.webview.setBackgroundColor(Some(&color));
     }
 
-    #[cfg(all(target_os = "macos", feature = "transparent"))]
+    #[cfg(target_os = "macos")]
     unsafe {
       let (red, green, blue, alpha) = _background_color;
 
@@ -1018,6 +1039,7 @@ r#"Object.defineProperty(window, 'ipc', {
       unsafe {
         let parent_view = self.webview.superview().unwrap();
         let mut origin = window_position(&parent_view, x, y, height);
+        // [rayfin-desktop local patch: macos-titlebar-inset]
         // The window uses a full-size content view, so the parent content view
         // extends up under the native title bar. The main webview lays its web
         // content out *below* the title bar (via safe-area insets), so the
@@ -1026,7 +1048,15 @@ r#"Object.defineProperty(window, 'ipc', {
         // inset, so without this correction it lands `title_bar_inset` points too
         // high — covering the toolbar. Shift it down to align with the web content.
         // In fullscreen there is no title bar, the inset is 0, and this is a no-op.
-        if let Some(win) = self.webview.window() {
+        // The main webview is a child too (Tauri's multiwebview mode), which Tauri
+        // resizes to fill the window on every resize. It keeps its full frame and
+        // safe-area insets: shifted, its page's bottom would hang below the window.
+        let parent_size = parent_view.frame().size;
+        let fills_window = x == 0
+          && y == 0
+          && width >= parent_size.width - 1.0
+          && height >= parent_size.height - 1.0;
+        if let Some(win) = self.webview.window().filter(|_| !fills_window) {
           let cl = win.contentLayoutRect();
           let title_bar_inset =
             parent_view.frame().size.height - (cl.origin.y + cl.size.height);
@@ -1364,7 +1394,7 @@ r#"Object.defineProperty(window, 'ipc', {
 
 pub fn url_from_webview(webview: &WKWebView) -> Result<String> {
   let url_obj = unsafe { webview.URL().unwrap() };
-  let absolute_url = unsafe { url_obj.absoluteString().unwrap() };
+  let absolute_url = url_obj.absoluteString().unwrap();
 
   let bytes = {
     let bytes: *const c_char = absolute_url.UTF8String();

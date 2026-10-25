@@ -3,8 +3,10 @@
 //!
 //! Uses the project's pinned Rayfin CLI (the `npx rayfin` equivalent) via
 //! [`exec::run_project_rayfin`]. `rayfin up` runs in human mode (streamed to the
-//! UI on the `deploy:run` channel) and the canonical URL is read back from
-//! `rayfin up status --json`. Preview URL priority: hostingUrl → apiUrl → portalUrl.
+//! UI on the `deploy:run` channel) and the canonical URL is read back from the
+//! deployment registry it keeps (`rayfin/.deployments.json`), or from
+//! `rayfin up status --json` when that can't say. Preview URL priority:
+//! hostingUrl → apiUrl → portalUrl.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -18,7 +20,9 @@ use crate::commands::auth::get_cached_identity;
 use crate::commands::util::{annotate_state, now_iso};
 use crate::services::exec::{self, OnData, RunOptions, RunResult, Stream};
 use crate::services::{crashlog, emit, fabric_auth, git, journal, store, telemetry, version_history};
-use crate::types::{DeployInfo, DeployResult, DeployStatus, FabricDeployment, ProjectsState, StudioProject};
+use crate::types::{
+  DeployInfo, DeployResult, DeployStatus, FabricDeployment, PendingChanges, ProjectsState, StudioProject,
+};
 
 const DEPLOY_TIMEOUT_MS: u64 = 20 * 60_000;
 const SETTINGS_PUSH_TIMEOUT_MS: u64 = 10 * 60_000;
@@ -159,6 +163,16 @@ struct RawDeployment {
   deployed_at: Option<String>,
 }
 
+/// The friendly name Fabricator keeps for a deployment, by workspace id, then by
+/// the (sanitized) workspace name Rayfin records it under.
+fn friendly_name(
+  names: &std::collections::HashMap<String, String>,
+  workspace_id: Option<&str>,
+  workspace_name: Option<&str>,
+) -> Option<String> {
+  workspace_id.and_then(|id| names.get(id)).or_else(|| workspace_name.and_then(|n| names.get(n))).cloned()
+}
+
 /// Parse `rayfin up list --json`, distinguishing "no parseable array" (`None`)
 /// from a successfully parsed list that may be empty (`Some(vec)`). The last line
 /// that parses as an array wins. Reconcile uses the `None` vs `Some` distinction
@@ -173,12 +187,7 @@ fn parse_deploy_list_opt(
         list
           .into_iter()
           .map(|d| {
-            let name = d
-              .workspace_id
-              .as_ref()
-              .and_then(|id| names.get(id))
-              .or_else(|| d.workspace_name.as_ref().and_then(|n| names.get(n)))
-              .cloned();
+            let name = friendly_name(names, d.workspace_id.as_deref(), d.workspace_name.as_deref());
             FabricDeployment {
               workspace_name: d.workspace_name.unwrap_or_else(|| "(unknown)".to_string()),
               name,
@@ -201,6 +210,100 @@ fn parse_deploy_list_opt(
 #[cfg(test)]
 fn parse_deploy_list(stdout: &str, names: &std::collections::HashMap<String, String>) -> Vec<FabricDeployment> {
   parse_deploy_list_opt(stdout, names).unwrap_or_default()
+}
+
+/* ------------------------- the deployment registry ------------------------- */
+
+/// One deployment in `rayfin/.deployments.json`, the registry `rayfin up` keeps.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct RegistryEntry {
+  fabric_item_id: Option<String>,
+  fabric_api_url: Option<String>,
+  fabric_workspace_id: Option<String>,
+  hosting_url: Option<String>,
+  /// The app in the Fabric portal: what `rayfin up status` reports as `fabricPortalUrl`.
+  fabric_deep_link: Option<String>,
+  deployed_at: Option<String>,
+}
+
+/// A deployment the registry records, under its (sanitized) workspace name.
+struct Recorded {
+  workspace: String,
+  active: bool,
+  entry: RegistryEntry,
+}
+
+fn filled(value: Option<String>) -> Option<String> {
+  value.filter(|v| !v.trim().is_empty())
+}
+
+/// Read a project's deployments the way `rayfin up list` does, which is a plain
+/// read of `rayfin/.deployments.json`, without starting the CLI: that takes a few
+/// seconds (far more on a cold start), and the deployments panel and every
+/// project open ask. Entries without an item and a workspace are the placeholders
+/// `rayfin init` leaves, and are skipped, as the CLI skips them. `None` when
+/// there's no registry or it can't be read: callers then ask the CLI, which also
+/// knows older projects' records.
+fn read_registry(dir: &Path) -> Option<Vec<Recorded>> {
+  let text = std::fs::read_to_string(dir.join("rayfin").join(".deployments.json")).ok()?;
+  let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+  let all = json.get("deployments")?.as_object()?;
+  let active = json.get("active").and_then(serde_json::Value::as_str);
+  Some(
+    all
+      .iter()
+      .filter_map(|(workspace, value)| {
+        let entry = serde_json::from_value::<RegistryEntry>(value.clone()).ok()?;
+        let recorded = filled(entry.fabric_item_id.clone()).is_some() && filled(entry.fabric_workspace_id.clone()).is_some();
+        recorded.then(|| Recorded { active: active == Some(workspace.as_str()), workspace: workspace.clone(), entry })
+      })
+      .collect(),
+  )
+}
+
+/// The registry's deployments, as `rayfin up list --json` reports them.
+fn registry_deployments(dir: &Path, names: &std::collections::HashMap<String, String>) -> Option<Vec<FabricDeployment>> {
+  let list = read_registry(dir)?;
+  Some(
+    list
+      .into_iter()
+      .map(|r| FabricDeployment {
+        name: friendly_name(names, r.entry.fabric_workspace_id.as_deref(), Some(&r.workspace)),
+        workspace_name: r.workspace,
+        active: r.active,
+        workspace_id: r.entry.fabric_workspace_id,
+        item_id: r.entry.fabric_item_id,
+        api_url: filled(r.entry.fabric_api_url),
+        hosting_url: filled(r.entry.hosting_url),
+        deployed_at: r.entry.deployed_at,
+      })
+      .collect(),
+  )
+}
+
+/// Where the active deployment lives.
+struct ActiveDeployment {
+  workspace_id: Option<String>,
+  workspace_name: String,
+  hosting: Option<String>,
+  api: Option<String>,
+  portal: Option<String>,
+}
+
+/// The active deployment as the registry records it: the addresses
+/// `rayfin up status --json` reports, without its network checks (about 6 s).
+/// `Some(None)` when the registry has no active deployment; `None` when there's
+/// no registry to read.
+fn registry_active(dir: &Path) -> Option<Option<ActiveDeployment>> {
+  let list = read_registry(dir)?;
+  Some(list.into_iter().find(|r| r.active).map(|r| ActiveDeployment {
+    workspace_id: r.entry.fabric_workspace_id,
+    workspace_name: r.workspace,
+    hosting: filled(r.entry.hosting_url),
+    api: filled(r.entry.fabric_api_url),
+    portal: filled(r.entry.fabric_deep_link),
+  }))
 }
 
 /// Apply a patch to the project's deploy record (explicit field clears honored).
@@ -279,6 +382,61 @@ async fn has_changes_since_deploy(dir: &str, deployed_commit: Option<&str>) -> R
       error_text(&diff, &diff.stdout, "git diff failed.")
     )),
   }
+}
+
+/// The paths a `git status --porcelain=v1 -z` listing is about: NUL-separated,
+/// never quoted, with a rename or copy's original path after its new one (skipped).
+fn porcelain_paths(stdout: &str) -> Vec<String> {
+  let mut paths = Vec::new();
+  let mut records = stdout.split('\0').filter(|record| !record.is_empty());
+  while let Some(record) = records.next() {
+    let (Some(status), Some(path)) = (record.get(..2), record.get(3..)) else {
+      continue;
+    };
+    if status.contains('R') || status.contains('C') {
+      records.next();
+    }
+    if !path.is_empty() {
+      paths.push(path.to_string());
+    }
+  }
+  paths
+}
+
+/// What a deploy would ship: every file that differs from the deployed version,
+/// edited, staged, new or removed, committed or not. Without a known deployed
+/// version something always would (as [`has_changes_since_deploy`] says), but
+/// how much isn't known. Both listings are NUL-separated, so a path is spelled
+/// the same in each (porcelain output quotes unusual names otherwise).
+async fn pending_since_deploy(dir: &str, deployed_commit: Option<&str>) -> Result<PendingChanges, String> {
+  let status = git::run(
+    &["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none"],
+    git_opts(dir, 30_000),
+  )
+  .await;
+  if !status.ok {
+    return Err(format!(
+      "Could not check for undeployed changes. {}",
+      error_text(&status, &status.stdout, "git status failed.")
+    ));
+  }
+  let mut files: std::collections::BTreeSet<String> = porcelain_paths(&status.stdout).into_iter().collect();
+  let Some(commit) = deployed_commit.map(str::trim).filter(|s| !s.is_empty()) else {
+    return Ok(PendingChanges { changed: true, files: None });
+  };
+  let diff = git::run(
+    &["diff", "--name-only", "-z", "--no-ext-diff", "--ignore-submodules=none", commit, "HEAD", "--"],
+    git_opts(dir, 30_000),
+  )
+  .await;
+  if !diff.ok {
+    return Err(format!(
+      "Could not compare the project with its last deployment. {}",
+      error_text(&diff, &diff.stdout, "git diff failed.")
+    ));
+  }
+  files.extend(diff.stdout.split('\0').filter(|path| !path.is_empty()).map(String::from));
+  Ok(PendingChanges { changed: !files.is_empty(), files: Some(files.len() as u32) })
 }
 
 /// Read the persisted deployment status for a project directory.
@@ -616,12 +774,25 @@ async fn run_deploy_inner(
     };
   }
 
-  // Success — resolve the canonical URL from status, enrich with scraped hostingUrl.
+  // Success: the registry `rayfin up` just wrote has the addresses. `rayfin up
+  // status` (about 6 s more) is only asked when it doesn't, or when it records
+  // another workspace than the one this deploy targeted.
   let hosting = scrape_hosting_url(&captured_text);
-  let status = status_for(&project.path).await;
-  let api = status.api_url.clone();
-  let portal = status.portal_url.clone();
-  let url = pick_preview_url(hosting.as_deref(), api.as_deref(), portal.as_deref());
+  let recorded = registry_active(Path::new(&project.path)).flatten().filter(|active| {
+    active.api.is_some()
+      && workspace_target
+        .as_deref()
+        .filter(|target| GUID_RE.is_match(target))
+        .is_none_or(|target| active.workspace_id.as_deref().is_some_and(|id| id.eq_ignore_ascii_case(target)))
+  });
+  let (api, portal, recorded_hosting) = match recorded {
+    Some(active) => (active.api, active.portal, active.hosting),
+    None => {
+      let status = status_for(&project.path).await;
+      (status.api_url, status.portal_url, None)
+    }
+  };
+  let url = pick_preview_url(hosting.as_deref().or(recorded_hosting.as_deref()), api.as_deref(), portal.as_deref());
 
   {
     let (url, api, portal) = (url.clone(), api.clone(), portal.clone());
@@ -704,8 +875,29 @@ pub async fn deploy_has_changes(project_id: String) -> Result<bool, String> {
   has_changes_since_deploy(&project.path, commit).await
 }
 
+/// What the next deploy would ship, for the app bar: whether anything differs
+/// from the deployed version and, when that version is known, how many files.
+/// Read-only: unlike `deploy_has_changes`, it never starts version history.
+#[tauri::command]
+pub async fn deploy_pending(project_id: String) -> Result<PendingChanges, String> {
+  let project = store::find_project(&project_id).ok_or_else(|| "Project not found.".to_string())?;
+  if crate::services::team::is_team_project(&project) {
+    return Ok(PendingChanges { changed: false, files: Some(0) });
+  }
+  let commit = project.last_deploy.as_ref().and_then(|d| d.commit.as_deref());
+  pending_since_deploy(&project.path, commit).await
+}
+
 #[tauri::command]
 pub async fn deploy_list(project_id: String) -> Vec<FabricDeployment> {
+  if let Some(project) = store::find_project(&project_id) {
+    if !crate::services::team::is_team_project(&project) {
+      let names = project.deployment_names.clone().unwrap_or_default();
+      if let Some(list) = registry_deployments(Path::new(&project.path), &names) {
+        return list;
+      }
+    }
+  }
   deploy_list_checked(&project_id).await.unwrap_or_default()
 }
 
@@ -759,29 +951,41 @@ pub async fn deploy_reconcile(project_id: String) -> ProjectsState {
   }
 
   let names = project.deployment_names.clone().unwrap_or_default();
-  let res = exec::run_project_rayfin(
-    Path::new(&project.path),
-    &["up", "list", "--json"],
-    RunOptions::timeout(60_000),
-  )
-  .await;
-
-  // A failed or unparseable query is inconclusive (e.g. not signed in, CLI error,
-  // offline) — leave recorded state as-is rather than wiping a real deployment.
-  if res.not_found || !res.ok {
-    return annotate_state(store::get_state());
-  }
-  let Some(list) = parse_deploy_list_opt(&res.stdout, &names) else {
-    return annotate_state(store::get_state());
+  let dir = Path::new(&project.path);
+  // The registry `rayfin up` keeps is the truth, read straight from disk. Only
+  // without one is the CLI asked (its list, then status for the portal link).
+  let active = match registry_active(dir) {
+    Some(active) => active,
+    None => {
+      let res = exec::run_project_rayfin(dir, &["up", "list", "--json"], RunOptions::timeout(60_000)).await;
+      // A failed or unparseable query is inconclusive (e.g. a CLI error) — leave
+      // recorded state as-is rather than wiping a real deployment.
+      if res.not_found || !res.ok {
+        return annotate_state(store::get_state());
+      }
+      let Some(list) = parse_deploy_list_opt(&res.stdout, &names) else {
+        return annotate_state(store::get_state());
+      };
+      match list.into_iter().find(|d| d.active) {
+        Some(dep) => {
+          let status = status_for(&project.path).await;
+          Some(ActiveDeployment {
+            workspace_id: dep.workspace_id,
+            workspace_name: dep.workspace_name,
+            hosting: dep.hosting_url,
+            api: dep.api_url.or(status.api_url),
+            portal: status.portal_url,
+          })
+        }
+        None => None,
+      }
+    }
   };
 
-  match list.into_iter().find(|d| d.active) {
+  match active {
     Some(dep) => {
-      // Enrich with the Fabric portal URL (and api fallback) from status.
-      let status = status_for(&project.path).await;
-      let api = dep.api_url.clone().or(status.api_url);
-      let portal = status.portal_url;
-      let url = pick_preview_url(dep.hosting_url.as_deref(), api.as_deref(), portal.as_deref());
+      let url = pick_preview_url(dep.hosting.as_deref(), dep.api.as_deref(), dep.portal.as_deref());
+      let (api, portal) = (dep.api, dep.portal);
       let ws_name = match dep.workspace_name.as_str() {
         "" | "(unknown)" => None,
         other => Some(other.to_string()),
@@ -885,11 +1089,16 @@ pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String
     };
   }
 
-  let status = status_for(&project.path).await;
-  let deployed = status.deployed;
-  let api = status.api_url.clone();
-  let portal = status.portal_url.clone();
-  let url = pick_preview_url(None, api.as_deref(), portal.as_deref());
+  // `rayfin up switch` updated the registry; `rayfin up status` (about 6 s more)
+  // is only asked when the registry can't say.
+  let (deployed, hosting, api, portal) = match registry_active(Path::new(&project.path)) {
+    Some(Some(active)) => (active.api.is_some(), active.hosting, active.api, active.portal),
+    _ => {
+      let status = status_for(&project.path).await;
+      (status.deployed, None, status.api_url, status.portal_url)
+    }
+  };
+  let url = pick_preview_url(hosting.as_deref(), api.as_deref(), portal.as_deref());
 
   {
     let w = workspace.clone();
@@ -1267,6 +1476,133 @@ mod tests {
   fn last_lines_takes_tail() {
     assert_eq!(last_lines("a\nb\nc\nd", 2), "c d");
     assert_eq!(last_lines("only", 3), "only");
+  }
+
+  /// A project folder with `rayfin/.deployments.json` holding `registry`.
+  struct RegistryDir(PathBuf);
+
+  impl RegistryDir {
+    fn new(registry: Option<&str>) -> Self {
+      let dir = std::env::temp_dir().join(format!("fabricator-registry-{}", uuid::Uuid::new_v4()));
+      std::fs::create_dir_all(dir.join("rayfin")).unwrap();
+      if let Some(text) = registry {
+        std::fs::write(dir.join("rayfin").join(".deployments.json"), text).unwrap();
+      }
+      Self(dir)
+    }
+  }
+
+  impl Drop for RegistryDir {
+    fn drop(&mut self) {
+      let _ = std::fs::remove_dir_all(&self.0);
+    }
+  }
+
+  const REGISTRY: &str = r#"{
+    "deployments": {
+      "sales-prod": {
+        "fabricItemId": "item-1",
+        "fabricApiUrl": "https://api/1",
+        "fabricWorkspaceId": "WS-1",
+        "hostingUrl": "https://sales.example.app",
+        "fabricDeepLink": "https://app.fabric.microsoft.com/groups/WS-1/appbackends/item-1",
+        "deployedAt": "2026-10-07T15:46:28.982Z"
+      },
+      "sales-dev": {
+        "fabricItemId": "item-2",
+        "fabricApiUrl": "https://api/2",
+        "fabricWorkspaceId": "ws-2"
+      },
+      "seeded": { "fabricWorkspaceId": "ws-3", "fabricItemId": "" },
+      "odd": "not a record"
+    },
+    "active": "sales-prod"
+  }"#;
+
+  #[test]
+  fn the_registry_lists_deployments_as_rayfin_up_list_does() {
+    let dir = RegistryDir::new(Some(REGISTRY));
+    let mut names = HashMap::new();
+    names.insert("WS-1".to_string(), "Prod".to_string());
+    names.insert("sales-dev".to_string(), "Dev".to_string());
+    let mut list = registry_deployments(&dir.0, &names).expect("a readable registry");
+    list.sort_by(|a, b| a.workspace_name.cmp(&b.workspace_name));
+    // `rayfin init`'s placeholder and the malformed entry are skipped, as the CLI does.
+    assert_eq!(list.iter().map(|d| d.workspace_name.as_str()).collect::<Vec<_>>(), ["sales-dev", "sales-prod"]);
+    let (dev, prod) = (&list[0], &list[1]);
+    assert!(prod.active && !dev.active);
+    assert_eq!(prod.name.as_deref(), Some("Prod"), "named by workspace id");
+    assert_eq!(dev.name.as_deref(), Some("Dev"), "or by the workspace name it's recorded under");
+    assert_eq!(prod.hosting_url.as_deref(), Some("https://sales.example.app"));
+    assert_eq!(prod.deployed_at.as_deref(), Some("2026-10-07T15:46:28.982Z"));
+    assert_eq!(dev.hosting_url, None);
+
+    let active = registry_active(&dir.0).flatten().expect("an active deployment");
+    assert_eq!(active.workspace_name, "sales-prod");
+    assert_eq!(active.workspace_id.as_deref(), Some("WS-1"));
+    assert_eq!(active.api.as_deref(), Some("https://api/1"));
+    assert_eq!(
+      active.portal.as_deref(),
+      Some("https://app.fabric.microsoft.com/groups/WS-1/appbackends/item-1"),
+      "the deep link is what `rayfin up status` reports as the portal URL"
+    );
+  }
+
+  #[test]
+  fn without_a_readable_registry_the_cli_is_asked() {
+    assert!(read_registry(&RegistryDir::new(None).0).is_none(), "no registry: older projects keep theirs elsewhere");
+    assert!(read_registry(&RegistryDir::new(Some("{ not json")).0).is_none());
+    assert!(read_registry(&RegistryDir::new(Some(r#"{"active":"x"}"#)).0).is_none());
+    // A registry that records nothing active is an answer, not a failure.
+    let none_active = RegistryDir::new(Some(r#"{"deployments":{"a":{"fabricItemId":"i","fabricWorkspaceId":"w"}}}"#));
+    assert!(matches!(registry_active(&none_active.0), Some(None)));
+    let empty = RegistryDir::new(Some(r#"{"deployments":{},"active":"gone"}"#));
+    assert!(registry_deployments(&empty.0, &HashMap::new()).unwrap().is_empty());
+  }
+
+  #[test]
+  fn porcelain_listings_name_the_files_they_are_about() {
+    let listing = " M src/app.ts\0?? new file.ts\0R  new.ts\0old.ts\0 D gone.ts\0";
+    assert_eq!(porcelain_paths(listing), ["src/app.ts", "new file.ts", "new.ts", "gone.ts"]);
+    assert!(porcelain_paths("").is_empty());
+  }
+
+  #[tokio::test]
+  async fn pending_changes_count_every_file_that_differs_from_the_deployed_version() {
+    let repo = TestRepo::new();
+    repo.write("app.ts", "export const version = 1;\n");
+    repo.write("style sheet.css", "body {}\n");
+    let deployed = repo.commit();
+    let none = pending_since_deploy(repo.dir(), Some(&deployed)).await.unwrap();
+    assert_eq!(none, PendingChanges { changed: false, files: Some(0) });
+
+    // A committed edit, an uncommitted edit to the same file, and a new file.
+    repo.write("app.ts", "export const version = 2;\n");
+    repo.commit();
+    repo.write("app.ts", "export const version = 3;\n");
+    repo.write("new.ts", "export {};\n");
+    let some = pending_since_deploy(repo.dir(), Some(&deployed)).await.unwrap();
+    assert_eq!(some, PendingChanges { changed: true, files: Some(2) });
+
+    // A name git would quote counts once, committed and edited again.
+    repo.write("style sheet.css", "body { margin: 0 }\n");
+    repo.commit();
+    repo.write("style sheet.css", "body { margin: 1px }\n");
+    let spaced = pending_since_deploy(repo.dir(), Some(&deployed)).await.unwrap();
+    assert_eq!(spaced, PendingChanges { changed: true, files: Some(3) });
+
+    // Put back as deployed: nothing to ship, though there are new commits.
+    repo.write("app.ts", "export const version = 1;\n");
+    repo.write("style sheet.css", "body {}\n");
+    std::fs::remove_file(repo.0.join("new.ts")).unwrap();
+    repo.commit();
+    let restored = pending_since_deploy(repo.dir(), Some(&deployed)).await.unwrap();
+    assert_eq!(restored, PendingChanges { changed: false, files: Some(0) });
+
+    // No known deployed version: a deploy would ship, but how much isn't known.
+    let unknown = pending_since_deploy(repo.dir(), None).await.unwrap();
+    assert_eq!(unknown, PendingChanges { changed: true, files: None });
+    assert!(pending_since_deploy(repo.dir(), Some("missing-deployed-commit")).await.is_err());
   }
 
   #[test]

@@ -6,7 +6,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent
+  type MouseEvent as ReactMouseEvent,
+  type JSX,
 } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
@@ -19,6 +20,7 @@ import {
   type ChatTurnResult,
   type DeployResult,
   type DevServerResult,
+  type PendingChanges,
   type PortConflict,
   type ProjectsState,
   type RayfinVersionInfo,
@@ -59,7 +61,7 @@ import { useAdvisor } from '../advisor/store'
 import { fixOutcomes } from '../advisor/lifecycle'
 import { fixPrompt, isVersionFinding } from '../advisor/prompts'
 import BlueprintTab from '../components/blueprint/BlueprintTab'
-import { writeCodeTab } from '../components/codeTab'
+import { writeCodeTab, type CodeTab } from '../components/codeTab'
 import { useToast } from '../toast'
 import { authErrorMessage } from '../authErrors'
 import { reportIssue as runReportIssue } from './reportIssue'
@@ -85,8 +87,12 @@ import {
   type ProjectView
 } from '../components/AppBar'
 import { DeploymentQueue } from '../deploymentQueue'
-import { recentWorkspaces } from '../fabric'
+import { workspaceUses } from '../fabric'
 import { useDesignSession, type DesignSurface } from '../design/useDesignSession'
+import { readStoredSelection, writeStoredSelection, type ModelSelection } from '../modelSelection'
+
+/** Where the Design bar's model is kept. */
+const DESIGN_MODEL_KEY = 'fabricator.design.model'
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
@@ -129,6 +135,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       questions,
       design,
       advisor,
+      data,
       prompt
     }) => {
       const cutOff = (role === 'assistant' && pending) || interrupted
@@ -156,6 +163,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         interrupted: cutOff ? true : undefined,
         design,
         advisor,
+        data,
         prompt
       }
     }
@@ -183,6 +191,13 @@ interface Props {
   onAuthChanged: () => Promise<void> | void
   settings: AppSettings | null
   onSettingsChange: (patch: Partial<AppSettings>) => void
+  /** Called once, when the workbench is ready to be seen: its projects loaded
+   *  and, with one open, that project's packages checked, its chat loaded and
+   *  its preview showing something. The launch screen waits on it. */
+  onSettled?: () => void
+  /** Called once, when the projects first load: the open project's name, or
+   *  null for Home. The launch screen says where it's headed. */
+  onOpening?: (projectName: string | null) => void
 }
 
 export default function Workbench({
@@ -191,7 +206,9 @@ export default function Workbench({
   onReviewSetup,
   onAuthChanged,
   settings,
-  onSettingsChange
+  onSettingsChange,
+  onSettled,
+  onOpening
 }: Props): JSX.Element {
   const toast = useToast()
   const [versions, setVersions] = useState<AppVersions | null>(null)
@@ -276,6 +293,23 @@ export default function Workbench({
   const [viewMode, setViewMode] = useState<ProjectView>('build')
   /** A pending request to open a specific file (and line) in the Code tab. */
   const [codeOpen, setCodeOpen] = useState<{ path: string; line?: number; nonce: number } | null>(null)
+  /** A pending request to show one of the Code tab's views (History, from the deployment panel). */
+  const [codeTab, setCodeTab] = useState<{ tab: CodeTab; nonce: number } | null>(null)
+  /** What each project's next deploy would ship, for the deployment control. */
+  const [pending, setPending] = useState<Record<string, PendingChanges | null>>({})
+  /** The project whose running redeploy is on the full deploy screen rather than beside the app. */
+  const [watchDeploy, setWatchDeploy] = useState<string | null>(null)
+  /** New deployments being created, by project: the workspace and the name to show while they deploy. */
+  const [newTargets, setNewTargets] = useState<Record<string, { workspace: string; label: string }>>({})
+  const nameNewTarget = useCallback((projectId: string, workspace: string, label: string): void => {
+    const name = label.trim()
+    setNewTargets((all) => {
+      const next = { ...all }
+      if (name) next[projectId] = { workspace, label: name }
+      else delete next[projectId]
+      return next
+    })
+  }, [])
   /** A pending request to show a specific finding in the Advisor tab. */
   const [advisorOpen, setAdvisorOpen] = useState<{ id: string; nonce: number } | null>(null)
   /** Build-view focus: expand a single pane to fill the area (null = split). */
@@ -322,7 +356,7 @@ export default function Workbench({
   /** Live local preview: per-project Vite dev-server state. Present while a turn
    *  runs — started at turn start, cleared/stopped at turn end. A team app's
    *  `lingers` after its turn until the pipeline has deployed the saved change,
-   *  and with Deploy manually on, the open app's preview is `kept` running while
+   *  and with manual deploy, the open app's preview is `kept` running while
    *  the app is open. */
   const [devServers, setDevServers] = useState<
     Record<
@@ -333,6 +367,8 @@ export default function Workbench({
         backend?: DevServerResult['backend']
         lingerSince?: number
         kept?: boolean
+        /** Kept on screen through the after-turn deploy (beside it), and closed when it ends. */
+        untilDeployed?: boolean
         /** The deployment it took its backend settings from (see deploymentKey). */
         target?: string
       }
@@ -379,8 +415,31 @@ export default function Workbench({
   projectsRef.current = projects
   /** The currently active project (or null). Declared early — effects depend on it. */
   const active = projects?.projects.find((p) => p.id === projects.activeProjectId) ?? null
+  /** The project whose preview first had something to show (see onSettled). */
+  const [previewSettledId, setPreviewSettledId] = useState<string | null>(null)
+  const onSettledRef = useRef(onSettled)
+  onSettledRef.current = onSettled
+  const settledRef = useRef(false)
+  const activeChatLoaded = Boolean(active && chats[active.id] !== undefined)
+  const onOpeningRef = useRef(onOpening)
+  onOpeningRef.current = onOpening
+  const openingToldRef = useRef(false)
+  useEffect(() => {
+    if (openingToldRef.current || !projects) return
+    openingToldRef.current = true
+    onOpeningRef.current?.(active?.name ?? null)
+  }, [projects, active])
+  useEffect(() => {
+    if (settledRef.current || !projects) return
+    if (active && !(depsReadyId === active.id && activeChatLoaded && previewSettledId === active.id)) {
+      return
+    }
+    settledRef.current = true
+    onSettledRef.current?.()
+  }, [projects, active, depsReadyId, activeChatLoaded, previewSettledId])
   /** The workspaces your apps use, most recent first; the deploy pickers list them first. */
-  const recentDeployWorkspaces = useMemo(() => recentWorkspaces(projects?.projects ?? []), [projects])
+  const appWorkspaces = useMemo(() => workspaceUses(projects?.projects ?? []), [projects])
+  const recentDeployWorkspaces = useMemo(() => appWorkspaces.map((u) => u.workspace), [appWorkspaces])
   // A share request that hasn't opened yet (the project was still preparing)
   // belongs to the project Help was answering about. Moving to another project
   // drops it, so it can't pop up when you come back later.
@@ -399,9 +458,30 @@ export default function Workbench({
   })
   /** The preview surface Design can run on, reported by the PreviewPane. */
   const [designSurface, setDesignSurface] = useState<DesignSurface | null>(null)
+  /** Accounts opens at this section (Model providers, from a model picker). */
+  const [accountsAt, setAccountsAt] = useState<'providers' | null>(null)
+  const openModelProviders = useCallback((): void => {
+    setAccountsAt('providers')
+    setShowAccounts(true)
+  }, [])
+  useEffect(() => {
+    if (!showAccounts) setAccountsAt(null)
+  }, [showAccounts])
+  /** The Design bar's model, kept on this computer. Auto lets Design pick a fast model. */
+  const [designChoice, setDesignChoiceState] = useState<ModelSelection>(() =>
+    readStoredSelection(DESIGN_MODEL_KEY)
+  )
+  const setDesignChoice = useCallback((next: ModelSelection): void => {
+    setDesignChoiceState(next)
+    writeStoredSelection(DESIGN_MODEL_KEY, next)
+  }, [])
   /** Design mode ("visual chat") for the active project. The queue is shared by
    *  the preview (where changes are made) and the chat composer (where they're sent). */
-  const design = useDesignSession(active?.id ?? null, viewMode === 'build' ? designSurface : null)
+  const design = useDesignSession(
+    active?.id ?? null,
+    viewMode === 'build' ? designSurface : null,
+    designChoice
+  )
 
   const onDevServerError = useCallback((reason: unknown): void => {
     toast.error(authErrorMessage(reason, 'The local preview could not be updated.'), {
@@ -442,9 +522,10 @@ export default function Workbench({
     return () => {
       mountedRef.current = false
       deployQueueRef.current.cancelPending('The workbench closed before this deployment started.')
-      // Nothing else closes a preview Deploy manually kept once the workbench is gone.
+      // Nothing else closes a preview manual deploy kept (or an after-turn
+      // deploy kept on screen) once the workbench is gone.
       for (const [projectId, server] of Object.entries(devServersRef.current)) {
-        if (server.kept) void window.api.dev.stop(projectId).catch(() => {})
+        if (server.kept || server.untilDeployed) void window.api.dev.stop(projectId).catch(() => {})
       }
     }
   }, [])
@@ -483,13 +564,12 @@ export default function Workbench({
 
   /** Team workspaces (experimental): the backend hides them while this is off. */
   const teamEnabled = Boolean(settings?.experiments?.teamWorkspaces)
-  /** Deploy manually (experimental) adds a deploy-mode switch to the status bar:
-   *  Manual (the default) or Auto. In Manual, chat turns don't deploy personal apps. */
-  const deployModeOffered = Boolean(settings?.experiments?.manualDeploy)
-  const manualDeploy = deployModeOffered && settings?.deployMode !== 'auto'
+  /** Chat turns deploy personal apps as they finish unless the user turned off
+   *  "Deploy after each chat turn" in the deployment panel. */
+  const manualDeploy = settings?.deployMode === 'manual'
   const manualDeployRef = useRef(manualDeploy)
   manualDeployRef.current = manualDeploy
-  // Previews Deploy manually kept close when it's turned off; turns start their own.
+  // Previews manual deploy kept close when it's turned off; turns start their own.
   useEffect(() => {
     if (manualDeploy) return
     for (const [projectId, server] of Object.entries(devServersRef.current)) {
@@ -546,10 +626,11 @@ export default function Workbench({
   // saved and the pipeline deploys it. It ends once your preview has that
   // change (or the deploy finished with an error), when there's nothing to
   // deploy, when you leave the app, or after 20 minutes. A preview Deploy
-  // manually kept ends when you leave the app.
+  // manually kept ends when you leave the app, as does one kept on screen
+  // through an after-turn deploy.
   useEffect(() => {
     for (const [projectId, server] of Object.entries(devServers)) {
-      if (server.kept && projectId !== active?.id) stopDevServer(projectId)
+      if ((server.kept || server.untilDeployed) && projectId !== active?.id) stopDevServer(projectId)
       if (!server.lingerSince) continue
       const status = teamWork.status(projectId)
       const head = status?.pr?.headSha
@@ -564,9 +645,14 @@ export default function Workbench({
   }, [devServers, teamWork, active?.id, stopDevServer])
 
   // Showing or hiding team workspaces changes which projects the backend lists.
+  // The first value seen is the one the projects were just loaded with.
+  const listedTeamRef = useRef<boolean | null>(null)
   useEffect(() => {
-    void refreshProjects()
-  }, [teamEnabled, refreshProjects])
+    if (!settings) return
+    const listed = listedTeamRef.current
+    listedTeamRef.current = teamEnabled
+    if (listed !== null && listed !== teamEnabled) void refreshProjects()
+  }, [settings, teamEnabled, refreshProjects])
 
   /** Leaving a team app with unpublished changes: they're safe, but not live. */
   const remindUnpublished = useCallback((): void => {
@@ -676,7 +762,7 @@ export default function Workbench({
         return { ok: false, outcome: 'error', error }
       }
       deployingIdRef.current = projectId
-      setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [] } }))
+      setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [], startedAt: Date.now(), workspace } }))
       let result: DeployResult = { ok: false, outcome: 'error' }
       const request = (): Promise<DeployResult> => window.api.deploy.run(projectId, workspace)
       try {
@@ -717,9 +803,20 @@ export default function Workbench({
           // Don't open more sign-in flows for deploys queued behind a failed login.
           deployQueueRef.current.cancelPending('Sign in to Fabric before retrying this deployment.')
         }
+        // A local preview kept on screen through this deploy closes with it, in
+        // the same render, so the deployed app (now with the changes) replaces it.
+        if (devServersRef.current[projectId]?.untilDeployed) stopDevServer(projectId)
         setDeploys((all) => {
           const cur = all[projectId] ?? { running: false, log: [] }
           return { ...all, [projectId]: { ...cur, running: false, result } }
+        })
+        setWatchDeploy((watching) => (watching === projectId ? null : watching))
+        // A new deployment, once deployed, is named by the project's records.
+        setNewTargets((all) => {
+          if (!all[projectId] || all[projectId].workspace !== workspace) return all
+          const next = { ...all }
+          delete next[projectId]
+          return next
         })
         // Deploys are long and the user may be on another tab, so still surface
         // failures wherever they are. Success needs no toast — it's already
@@ -745,7 +842,7 @@ export default function Workbench({
         if (mountedRef.current) void refreshRayfinVer(projectId)
       }
     },
-    [refreshProjects, refreshRayfinVer, toast, onAuthChanged, refreshAuthWithFeedback]
+    [refreshProjects, refreshRayfinVer, toast, onAuthChanged, refreshAuthWithFeedback, stopDevServer]
   )
   const runDeploy = useCallback(
     (projectId: string, workspace?: string): Promise<DeployResult> =>
@@ -906,11 +1003,14 @@ export default function Workbench({
       const existing = devServersRef.current[projectId]
       if (existing) {
         // Already starting / running; a team app's lingering preview, or one
-        // Deploy manually kept, carries on.
-        if (existing.lingerSince || existing.kept) {
+        // manual deploy kept (or an after-turn deploy did), carries on.
+        if (existing.lingerSince || existing.kept || existing.untilDeployed) {
           setDevServers((all) =>
             all[projectId]
-              ? { ...all, [projectId]: { ...all[projectId], lingerSince: undefined, kept: undefined } }
+              ? {
+                  ...all,
+                  [projectId]: { ...all[projectId], lingerSince: undefined, kept: undefined, untilDeployed: undefined }
+                }
               : all
           )
         }
@@ -970,10 +1070,10 @@ export default function Workbench({
     [toast, resolveLocalPort, onDevServerError]
   )
 
-  /** The last app and deployment Deploy manually started a local preview for. */
+  /** The last app and deployment manual deploy started a local preview for. */
   const keptAttemptRef = useRef<string | null>(null)
   /**
-   * Deploy manually: the deployed app falls behind your code, so the open app's
+   * Manual deploy: the deployed app falls behind your code, so the open app's
    * local preview runs whenever the app is open, not only during turns. One
    * started for another deployment is stopped, and the next run starts it again
    * with that deployment's backend settings.
@@ -1003,21 +1103,29 @@ export default function Workbench({
   )
 
   // After a chat turn, persist the transcript and auto-deploy when the agent left
-  // undeployed changes (unless Deploy manually is on).
+  // undeployed changes (unless the user deploys manually).
   const handleTurnComplete = useCallback(
     async (projectId: string, result: ChatTurnResult): Promise<void> => {
       previewSkippedRef.current.delete(projectId)
       const prompt = portPromptRef.current
       if (prompt?.projectId === projectId && prompt.context === 'plan' && !prompt.busy) settlePortPrompt(null)
       const manual = manualDeployRef.current && !isTeamProject(projectId)
+      // An after-turn deploy may follow. A redeploy runs beside the app, so the
+      // local preview, which already shows this turn's changes, stays on screen
+      // until the deploy ends (see executeDeploy). A first deploy takes the stage.
+      const deployed = Boolean(projectsRef.current?.projects.find((p) => p.id === projectId)?.lastDeploy?.url)
+      const mayDeploy = result.ok && !manual && !isTeamProject(projectId) && deployed
       if (devServersRef.current[projectId] && manual && activeIdRef.current === projectId) {
-        // Deploy manually: the open app's preview stays up while the app is open.
+        // Manual deploy: the open app's preview stays up while the app is open.
         setDevServers((all) =>
           all[projectId] ? { ...all, [projectId]: { ...all[projectId], kept: true } } : all
         )
+      } else if (devServersRef.current[projectId] && mayDeploy) {
+        setDevServers((all) =>
+          all[projectId] ? { ...all, [projectId]: { ...all[projectId], untilDeployed: true } } : all
+        )
       } else if (devServersRef.current[projectId] && !(result.ok && isTeamProject(projectId))) {
-        // Stop the live local preview first, so the surface returns to the
-        // deployed app and the after-turn deploy can take the stage (DeployStage).
+        // Stop the live local preview, so the surface returns to the deployed app.
         // (A team app keeps its preview while its change is saved and deployed.)
         stopDevServer(projectId)
       }
@@ -1054,13 +1162,19 @@ export default function Workbench({
         })
         return
       }
-      // Deploy manually: the changes stay on this computer until you redeploy.
+      // Manual deploy: the changes stay on this computer until you deploy them.
       if (manual) return
+      // A preview kept for a deploy that doesn't happen (or has ended) closes.
+      const release = (): void => {
+        if (devServersRef.current[projectId]?.untilDeployed) stopDevServer(projectId)
+      }
       try {
         const changed = await window.api.deploy.hasChanges(projectId)
-        // Deploy manually may have been turned on while that was checked.
-        if (changed && mountedRef.current && !manualDeployRef.current) void runDeploy(projectId)
+        // Deploying after each turn may have been turned off while that was checked.
+        if (changed && mountedRef.current && !manualDeployRef.current) void runDeploy(projectId).finally(release)
+        else release()
       } catch (reason) {
+        release()
         if (!mountedRef.current) return
         toast.error(
           `${authErrorMessage(reason, 'Could not check for undeployed changes.')} Use Redeploy to publish your changes.`,
@@ -1192,6 +1306,33 @@ export default function Workbench({
     setViewMode('code')
   }, [])
 
+  // Open the Code tab on History, where what changed since the deployed version
+  // shows (from the deployment panel's "See what changed").
+  const openHistoryInCode = useCallback((): void => {
+    const id = activeIdRef.current
+    if (!id) return
+    writeCodeTab(id, 'history')
+    setCodeOpen(null)
+    setCodeTab({ tab: 'history', nonce: Date.now() })
+    setViewMode('code')
+  }, [])
+
+  // A view request only applies while the Code tab is showing.
+  useEffect(() => {
+    if (viewMode !== 'code') setCodeTab(null)
+  }, [viewMode])
+
+  /** Check what the next deploy of `projectId` would ship (for the deployment control). */
+  const refreshPending = useCallback(async (projectId: string): Promise<void> => {
+    let next: PendingChanges | null = null
+    try {
+      next = await window.api.deploy.pending(projectId)
+    } catch {
+      // Unknown: the control just offers Redeploy.
+    }
+    if (mountedRef.current) setPending((all) => ({ ...all, [projectId]: next }))
+  }, [])
+
   // Open a file referenced by an @-mention chip in chat (in the Code tab).
   const openMention = useCallback(
     (ref: string): void => {
@@ -1225,10 +1366,18 @@ export default function Workbench({
     void refreshRayfinVer(id)
   }, [projects?.activeProjectId, refreshRayfinVer])
 
+  // Fabric sign-in goes through the open project's Rayfin CLI, so check it again
+  // when another project opens. Not for the launch's first project: the app is
+  // checking every account as it starts.
+  const authProjectRef = useRef<string | null | undefined>(undefined)
   useEffect(() => {
-    if (!active?.id) return
+    if (!projects) return
+    const id = active?.id ?? null
+    const previous = authProjectRef.current
+    authProjectRef.current = id
+    if (previous === undefined || !id || id === previous) return
     void refreshAuthWithFeedback()
-  }, [active?.id, refreshAuthWithFeedback])
+  }, [projects, active?.id, refreshAuthWithFeedback])
 
   // Attribute recorded errors to the project the user is working in, so Help
   // can answer "why did *my* deploy fail?" without every call site passing an id.
@@ -1636,7 +1785,7 @@ export default function Workbench({
     : undefined
   /** Tabs and deploys unlock with the project's dependencies, like the pane below. */
   const projectToolsReady = onProjectScreen && depsReadyId === active?.id
-  // Deploy manually keeps the open app's local preview running (see keepLocalPreview).
+  // Manual deploy keeps the open app's local preview running (see keepLocalPreview).
   const activeId = active?.id
   const activeTarget = active ? deploymentKey(active) : ''
   const activeDeploying = Boolean(activeId && deploys[activeId]?.running)
@@ -1653,6 +1802,34 @@ export default function Workbench({
     if (activeDeploying || isTurnRunning(activeId)) return
     void keepLocalPreview(activeId, activeTarget)
   }, [keepLocal, activeId, activeTarget, activeDeploying, activePreviewTarget, isTurnRunning, keepLocalPreview])
+
+  // What the open app's next deploy would ship, for the deployment control:
+  // checked on opening it, after anything that can change the code or what's
+  // deployed (turns, deploys, restores bump gitRefresh), and on coming back to
+  // the window (the code may have been edited elsewhere).
+  const activeSolo = Boolean(active && !active.team)
+  const activeDeployedCommit = active?.lastDeploy?.commit
+  useEffect(() => {
+    if (!activeId || !activeSolo || activeDeploying) return
+    void refreshPending(activeId)
+  }, [activeId, activeSolo, activeDeploying, activeDeployedCommit, gitRefresh, refreshPending])
+  useEffect(() => {
+    if (!activeId || !activeSolo) return
+    const onFocus = (): void => void refreshPending(activeId)
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [activeId, activeSolo, refreshPending])
+  /** The open app's deployment, by its friendly name ("Production") when it has one. */
+  const activeDeploymentName = active
+    ? (active.workspace ? active.deploymentNames?.[active.workspace] : undefined) || active.workspaceName || undefined
+    : undefined
+  // A deploy creating a new deployment is named for it, not the active one, while it runs.
+  const activeRun = activeId ? deploys[activeId] : undefined
+  const activeNewTarget = activeId ? newTargets[activeId] : undefined
+  const deployingTo =
+    activeRun?.running && activeRun.workspace && activeNewTarget?.workspace === activeRun.workspace
+      ? activeNewTarget.label
+      : undefined
 
   return (
     <div className="app-shell">
@@ -1709,11 +1886,15 @@ export default function Workbench({
               <DeploymentsControl
                 project={active}
                 running={Boolean(deploys[active.id]?.running)}
+                deploy={deploys[active.id]}
                 reconciling={reconciling.has(active.id)}
+                pending={pending[active.id]}
+                deployingTo={deployingTo}
                 shareRequest={shareRequest}
                 onShareRequestHandled={onShareRequestHandled}
-                onCreate={(name, workspaceId) => {
+                onCreate={(name, workspaceId, workspaceName) => {
                   setViewMode('build')
+                  nameNewTarget(active.id, workspaceId, name.trim() || workspaceName || '')
                   void (async () => {
                     try {
                       await window.api.deploy.setName(active.id, workspaceId, name)
@@ -1736,19 +1917,23 @@ export default function Workbench({
                     : undefined
                 }
                 onManageAccounts={() => setShowAccounts(true)}
+                onSignIn={() => void signIn()}
                 recentWorkspaces={recentDeployWorkspaces}
+                autoDeploy={{
+                  on: !manualDeploy,
+                  onChange: (on) => onSettingsChange({ deployMode: on ? 'auto' : 'manual' })
+                }}
+                onDiagnose={() => openHelp(DEPLOY_QUESTION)}
+                onWatch={() => {
+                  setViewMode('build')
+                  setFocusPane((f) => (f === 'chat' ? null : f))
+                  setWatchDeploy(active.id)
+                }}
+                onShowChanges={openHistoryInCode}
+                onOpen={() => void refreshPending(active.id)}
               />
             )}
             <div className="app-bar-global">
-              <button
-                type="button"
-                className="app-bar-icon"
-                onClick={() => setShowSettings(true)}
-                title="Settings"
-                aria-label="Settings"
-              >
-                <Codicon name="settings-gear" />
-              </button>
               <AccountMenu
                 signedIn={auth.rayfin.signedIn}
                 user={auth.rayfin.user}
@@ -1765,6 +1950,7 @@ export default function Workbench({
                   if (active) openAuthRefresh(active)
                 }}
                 onManageAccounts={() => setShowAccounts(true)}
+                onOpenSettings={() => setShowSettings(true)}
               />
             </div>
           </div>
@@ -1816,6 +2002,7 @@ export default function Workbench({
             const projectId = active.id
             setCreateMode(null)
             setViewMode('build')
+            nameNewTarget(projectId, workspaceId, depName)
             void (async () => {
               try {
                 await window.api.deploy.setName(projectId, workspaceId, depName)
@@ -1851,6 +2038,7 @@ export default function Workbench({
                         }}
                         onSendToChat={sendHistoryToChat}
                         openRequest={codeOpen ?? undefined}
+                        tabRequest={codeTab ?? undefined}
                         onSkillsChanged={() => setGitRefresh((n) => n + 1)}
                         onSecretsChanged={() => setGitRefresh((n) => n + 1)}
                       />
@@ -1888,6 +2076,7 @@ export default function Workbench({
                             project={active}
                             copilotAuth={auth.copilot}
                             onCopilotAuthChanged={onAuthChanged}
+                            recentWorkspaces={appWorkspaces}
                             messages={chats[active.id] ?? []}
                             onChange={(updater) => setMessagesFor(active.id, updater)}
                             onTurnComplete={(result) => void handleTurnComplete(active.id, result)}
@@ -1899,6 +2088,7 @@ export default function Workbench({
                             onAttachmentsConsumed={() => clearShots(active.id)}
                             onClearHistory={() => void window.api.chat.saveHistory(active.id, [])}
                             onOptionsChanged={() => void refreshProjects()}
+                            onManageKeys={openModelProviders}
                             outbound={chatOutbound?.projectId === active.id ? chatOutbound : null}
                             onOutboundConsumed={() => setChatOutbound(null)}
                             onAdvisorRerun={rerunAdvisorFix}
@@ -1964,12 +2154,20 @@ export default function Workbench({
                           }
                           manualDeploy={manualDeploy && !active.team}
                           turnRunning={activeChatBusy}
+                          watching={watchDeploy === active.id}
+                          onWatchChange={(watching) => setWatchDeploy(watching ? active.id : null)}
+                          deploymentName={deployingTo ?? activeDeploymentName}
                           focused={focusPane === 'preview'}
                           onToggleFocus={() =>
                             setFocusPane((f) => (f === 'preview' ? null : 'preview'))
                           }
                           onPreviewModeChanged={() => void refreshProjects()}
                           design={design}
+                          designModel={{
+                            value: designChoice,
+                            onChange: setDesignChoice,
+                            onManageKeys: openModelProviders
+                          }}
                           designSendBlocked={
                             activeChatBusy
                               ? 'Copilot is working — send when this turn finishes'
@@ -1993,6 +2191,7 @@ export default function Workbench({
                           }}
                           onDesignSurface={setDesignSurface}
                           onLoadingChange={setPreviewLoading}
+                          onSettle={() => setPreviewSettledId(active.id)}
                         />
                         {previewLoading && (
                           <div
@@ -2028,6 +2227,7 @@ export default function Workbench({
                         onFix={fixFindings}
                         onOpenFile={openFileInCode}
                         openRequest={advisorOpen ?? undefined}
+                        onManageKeys={openModelProviders}
                       />
                     </div>
                   )}
@@ -2118,19 +2318,6 @@ export default function Workbench({
             )}
             <RayfinVersionControl info={rayfinVer} onUpdate={requestRayfinUpdate} />
             {(active.workspaceName || active.workspace) && <WorkspaceStatus project={active} />}
-            {deployModeOffered && !active.team && (
-              <StatusMenu
-                value={manualDeploy ? 'manual' : 'auto'}
-                onChange={(e) =>
-                  onSettingsChange({ deployMode: e.target.value === 'auto' ? 'auto' : 'manual' })
-                }
-                title="When chat changes deploy. Manual keeps them on this computer until you select Redeploy; Auto deploys after each chat turn."
-                aria-label="Deploy mode"
-              >
-                <option value="manual">Manual deploy</option>
-                <option value="auto">Auto deploy</option>
-              </StatusMenu>
-            )}
           </span>
         )}
         <span className="statusbar-spacer" />
@@ -2223,6 +2410,10 @@ export default function Workbench({
             setShowSettings(false)
             setShowAccounts(true)
           }}
+          onManageKeys={() => {
+            setShowSettings(false)
+            openModelProviders()
+          }}
           onReviewSetup={() => {
             setShowSettings(false)
             onReviewSetup()
@@ -2234,6 +2425,7 @@ export default function Workbench({
         <AccountsModal
           auth={auth}
           onAuthChanged={onAuthChanged}
+          modelProviders={{ focus: accountsAt === 'providers' }}
           fabric={{
             busy: fabricAuthBusy,
             signingIn,

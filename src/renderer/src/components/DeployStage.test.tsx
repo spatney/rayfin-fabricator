@@ -1,9 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import DeployStage from './DeployStage'
-import { MascotContext } from './mascot/context'
+import { isRaySentAway } from './mascot/stage'
 
-afterEach(cleanup)
+vi.mock('./mascot/stage', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./mascot/stage')>()),
+  isRaySentAway: vi.fn(() => false)
+}))
+
+afterEach(() => {
+  cleanup()
+  vi.mocked(isRaySentAway).mockReturnValue(false)
+})
 
 const RUN = [
   'Deploying Boo to Fabric…\n',
@@ -18,17 +26,14 @@ const RUN = [
 const said = (): string => document.querySelector('.mascot-bubble')?.textContent ?? ''
 
 describe('the deploy screen', () => {
-  it('is Ray’s, unless he was turned off', () => {
+  it('is Ray’s, unless he was sent away', () => {
     render(<DeployStage log={RUN.slice(0, 1)} name="Boo" firstDeploy />)
     expect(screen.getByRole('button', { name: /Ray, the Fabricator stingray/ })).toBeTruthy()
     expect(said()).toBe('Boo’s first trip to Fabric! I’ll swim it over.')
     cleanup()
 
-    const { container } = render(
-      <MascotContext.Provider value={false}>
-        <DeployStage log={RUN.slice(0, 1)} name="Boo" />
-      </MascotContext.Provider>
-    )
+    vi.mocked(isRaySentAway).mockReturnValue(true)
+    const { container } = render(<DeployStage log={RUN.slice(0, 1)} name="Boo" />)
     expect(screen.queryByRole('button', { name: /Ray/ })).toBeNull()
     expect(container.querySelector('.dstage-logo')).not.toBeNull()
   })

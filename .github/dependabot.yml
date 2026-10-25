@@ -1,0 +1,65 @@
+# Dependabot keeps routine updates flowing between the bi-weekly dependency reviews
+# (.github/prompts/dependency-upgrade.prompt.md). Coordinated upgrades stay manual:
+# wry is vendored with local patches (docs/VENDORED-WRY-PATCH.md), so the crates that
+# must match it are ignored below. A Tauri update that moves the wry version Tauri pins
+# fails `cargo test --lib vendor_guard` in CI until someone re-vendors wry; that's
+# intended.
+#
+# Each dependency joins the first group it matches, so the named groups come before
+# the catch-all ones.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+
+  # Root package.json only; website/ and scripts/videos/ are separate projects.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      tauri:
+        patterns: ['@tauri-apps/*']
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
+      vite-vitest:
+        patterns: ['vite', '@vitejs/*', 'vitest', 'jsdom']
+      eslint-typescript:
+        patterns: ['eslint', '@eslint/*', 'typescript-eslint', 'typescript', 'globals']
+      monaco:
+        patterns: ['monaco-editor', '@monaco-editor/*']
+      minor-and-patch:
+        update-types: ['minor', 'patch']
+    ignore:
+      # @types/node follows the Node major CI runs on (24), not the newest release.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    groups:
+      tauri:
+        patterns: ['tauri', 'tauri-*']
+      # Its patch releases change behavior and the bundled Copilot CLI version.
+      copilot-sdk:
+        patterns: ['github-copilot-sdk']
+      minor-and-patch:
+        update-types: ['minor', 'patch']
+    ignore:
+      # These must match the vendored wry and move only with a Tauri bump + re-vendor.
+      - dependency-name: wry
+      - dependency-name: tao
+      - dependency-name: webview2-com
+      - dependency-name: windows
+      - dependency-name: windows-core
+      - dependency-name: objc2
+      - dependency-name: 'objc2-*'
+      - dependency-name: block2

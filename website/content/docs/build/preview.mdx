@@ -11,12 +11,12 @@ The preview pane shows your Rayfin app while you build. During a Copilot turn, F
 
 Fabricator uses two preview sources:
 
-1. **Local** appears while Copilot is working, when the project has Vite installed under `node_modules`. Fabricator starts the project's own local Vite server directly. It does not require an `npm run dev` script.
-2. **Live** appears when the deployed app is loaded. After a successful turn, Fabricator redeploys eligible changes and reloads the deployed preview.
+1. The local preview, at a `localhost` address, appears while Copilot is working, when the project has Vite installed under `node_modules`. Fabricator starts the project's own local Vite server directly. It does not require an `npm run dev` script.
+2. The deployed app shows the rest of the time. After a successful turn, Fabricator redeploys eligible changes and reloads the deployed preview. Its state, such as live, deploying or failed, is on the deployment control in the app bar.
 
 The local preview uses the existing Fabric deployment's `VITE_*` configuration. It does not start a local Fabric backend. If the project has no local Vite installation, Fabricator keeps showing the deployed preview instead.
 
-With the [Deploy manually](/docs/ship/deploy#deploy-manually) experiment set to **Manual deploy**, the local preview runs whenever the app is open, not only during a turn.
+With **Deploy after each chat turn** off (see [Deploy manually](/docs/ship/deploy#deploy-manually)), the local preview runs whenever the app is open, not only during a turn.
 
 Team app previews are handled by the team pipeline and local preview behavior. See [Work on a team app](/docs/team/work-on-an-app).
 
@@ -25,10 +25,10 @@ Team app previews are handled by the team pipeline and local preview behavior. S
 The preview toolbar gives you browser-like controls and Fabricator-specific tools:
 
 - **Back**, **Forward** and **Reload** navigate the preview history.
-- The status label shows **Live**, **Local**, **Deploying…**, **Deploy failed** or **Not deployed**. For a team app it names the deployment you're looking at instead of **Live**: **My preview** or **Published**.
-- The URL button opens the current preview URL in your default browser.
+- The address shows what the preview is showing: your deployed app's, or `localhost` for the local preview. Select it to open the page in your default browser.
+- For a team app, a status label names the deployment you're looking at, **My preview** or **Published**, and says **Deploying…** while the pipeline updates it. Its local preview is marked **Published data** while it uses the published app's data, and **No data yet** before anything is deployed.
 - **Fabric** switches between the direct app view and the app embedded in the Fabric portal shell, when the deployment has a portal link. If the Fabric shell is unavailable, the button is disabled.
-- **Design** opens Design mode. On the local preview, it's available only between turns, with **Manual deploy** selected.
+- **Design** opens Design mode. On the local preview, it's available only between turns, with **Deploy after each chat turn** off. While a deploy runs, it waits until the deploy ends.
 - **Focus** hides the chat and gives the preview more room. **Exit focus** shows the chat again.
 
 When Design mode is on, the extra preview-width buttons are **Desktop**, **Tablet** and **Phone**. **Desktop** fills the pane, **Tablet** previews at 820 CSS pixels, and **Phone** previews at 390 CSS pixels.

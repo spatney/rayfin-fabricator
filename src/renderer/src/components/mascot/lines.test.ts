@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { FactDeck, RAYFIN_FACTS, buildDeck, greeting } from './lines'
+import { FactDeck, RAYFIN_FACTS, buildDeck, greeting, launchGreeting } from './lines'
 
 /** A repeatable stand-in for Math.random. */
 function seeded(seed: number): () => number {
@@ -46,5 +46,22 @@ describe('what Ray says', () => {
   it('introduces himself only the first time', () => {
     expect(greeting('create', true).text).toMatch(/^Hi, I’m Ray!/)
     expect(greeting('create', false, seeded(2)).text).not.toMatch(/I’m Ray/)
+  })
+
+  it('says a short welcome back at launch, now and then by the time of day', () => {
+    const at = (hour: number): Date => new Date(2026, 9, 14, hour, 30)
+    const all = (hour: number): Set<string> =>
+      new Set(Array.from({ length: 8 }, (_, i) => launchGreeting(at(hour), () => (i + 0.5) / 8)))
+    expect(all(9)).toContain('Morning! Welcome back.')
+    expect(all(19)).toContain('Evening! Welcome back.')
+    expect(all(2)).toContain('Up late? Welcome back.')
+    expect([...all(14)].some((line) => /Morning|Evening|late/.test(line))).toBe(false)
+    for (const hour of [2, 9, 14, 19]) {
+      for (const line of all(hour)) {
+        expect(line).toMatch(/welcome back/i)
+        // It types out in about half a second, while he swims up.
+        expect(line.length).toBeLessThanOrEqual(26)
+      }
+    }
   })
 })

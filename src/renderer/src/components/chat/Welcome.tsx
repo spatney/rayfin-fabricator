@@ -2,6 +2,8 @@ import type { Suggestion } from '@shared/ipc'
 import { FabricatorMark } from '../FabricatorMark'
 import { Codicon } from '../icons'
 
+import type { JSX } from 'react'
+
 /** The empty chat: a warm hello, idea cards grounded in the app, and a few tips. */
 export function Welcome({
   projectName,

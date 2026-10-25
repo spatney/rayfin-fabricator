@@ -196,9 +196,8 @@ code {
   --bar-h: 30px;
   --bar-radius: 8px;
   --bar-font: 12.5px;
-  /* Icons beside a label, alone on a button, and menu carets. */
+  /* Icons beside a label, and menu carets. */
   --bar-ico: 14px;
-  --bar-ico-lg: 16px;
   --bar-caret: 12px;
   padding: 6px 12px;
   background: var(--bg-elev);
@@ -235,8 +234,8 @@ code {
   justify-content: center;
 }
 
-/* App-wide controls (Settings, account), set off from the project's own by a
-   hairline when there are any. */
+/* App-wide controls (the account menu, which holds Settings), set off from the
+   project's own by a hairline when there are any. */
 .app-bar-global {
   display: flex;
   align-items: center;
@@ -253,36 +252,6 @@ code {
   height: 18px;
   margin-right: 6px;
   background: var(--border);
-}
-
-/* Icon-only bar buttons (Settings, Workspace overview): quiet until hovered. */
-.app-bar-icon {
-  position: relative;
-  flex: none;
-  display: inline-grid;
-  place-items: center;
-  width: var(--bar-h);
-  height: var(--bar-h);
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--bar-radius);
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  transition:
-    color 0.12s ease,
-    background 0.12s ease,
-    border-color 0.12s ease;
-}
-
-.app-bar-icon:hover {
-  color: var(--text);
-  background: var(--bg-elev-2);
-  border-color: var(--border);
-}
-
-.app-bar-icon .codicon[class*='codicon-'] {
-  font-size: var(--bar-ico-lg);
 }
 
 /* The project's identity is the switcher: initial + name + caret, opening a menu
@@ -870,9 +839,8 @@ code {
   background: var(--bg-elev-2);
 }
 
-/* The bar's menus (interface zoom, and the deploy mode while Deploy manually is
-   on): a native select with its arrow swapped for the bar's chevron, sized to
-   the chosen option so the chevron sits right after it. */
+/* The bar's menus (interface zoom): a native select with its arrow swapped for
+   the bar's chevron, sized to the chosen option so the chevron sits right after it. */
 .statusbar-menu {
   position: relative;
   display: inline-flex;
@@ -1210,61 +1178,37 @@ code {
   height: 15px;
 }
 
-/* Splash — a slick "the logo builds itself" startup screen. */
+/* Between the account's actions and the app's (Settings). */
+.account-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+/* Splash: the startup screen (SplashScreen.tsx). One lockup in every form: Ray,
+   the "Fabricator" wordmark building itself, and a plain status line under it.
+   Flat like the rest of Ray: a bordered bubble, hairline ripples, solid dots,
+   no halo or gradients. */
 .splash {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 34px;
+  gap: 30px;
   color: var(--text-dim);
 }
-
-.splash-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 26px;
-}
-
-.splash-stage {
-  position: relative;
-  width: 200px;
-  height: 198px;
-  display: grid;
-  place-items: center;
-}
-
-/* Soft halo that blooms in behind the assembled mark. */
-.splash-stage::before {
-  content: '';
-  position: absolute;
-  inset: -28%;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--accent-soft), transparent 70%);
-  opacity: 0;
-  animation: splash-glow-in 1s ease 0.9s both;
-  pointer-events: none;
-}
-
-.splash-logo {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-/* Ray's splash: he says hello and tells you how startup is going. Flat like the
-   rest of Ray: a bordered bubble, solid dots, no halo or gradients. */
-.splash--ray {
-  gap: 26px;
+/* Room in Ray's bubble for his longest line, so nothing moves as he talks. */
+.splash .ray-perch {
+  --perch-bubble-w: 340px;
+  --perch-bubble-h: 64px;
 }
 .splash-brand {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
 }
 /* The logotype: the mark stands in for the F, as tall as the capitals and on
    the baseline, with the "a" tucked under its top bar the way a typeset F
@@ -1272,9 +1216,11 @@ code {
    build, then the letters rise in one after another. Flat: solid letters, and
    the only colour is the mark's. */
 .splash-word--mark {
-  font-size: 32px;
+  font-size: 46px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  line-height: 1;
+  color: var(--text);
 }
 .splash-word-f {
   display: inline-block;
@@ -1293,28 +1239,6 @@ code {
 .splash-word-letter {
   display: inline-block;
   animation: splash-letter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-/* Loading: three tiles in the mark's colours light up in turn. */
-.splash-tiles {
-  display: flex;
-  gap: 6px;
-  animation: splash-rise 0.6s ease 1.15s both;
-}
-.splash-tiles i {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-  background: #1183dd;
-  opacity: 0.3;
-  animation: splash-tile 1.2s ease-in-out infinite;
-}
-.splash-tiles i:nth-child(2) {
-  background: #15a4d3;
-  animation-delay: 0.15s;
-}
-.splash-tiles i:nth-child(3) {
-  background: #41c795;
-  animation-delay: 0.3s;
 }
 @keyframes splash-f-tile {
   from {
@@ -1336,15 +1260,80 @@ code {
     transform: none;
   }
 }
-@keyframes splash-tile {
+
+/* The plain line under the wordmark: where the app is headed, with the
+   project's initial on its own hue as the app bar then shows it, or how a first
+   launch's checks are going. Its height is kept, so nothing moves when it
+   appears. */
+.splash-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  font-size: 13.5px;
+  color: var(--text-faint);
+}
+.splash-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  animation: splash-status-in 360ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.splash-status b {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+@keyframes splash-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+/* Still going: three dots in the mark's colours light up in turn. */
+.splash-dots {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: -3px;
+}
+.splash-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: #1183dd;
+  opacity: 0.25;
+  animation: splash-dot 1.2s ease-in-out infinite;
+}
+.splash-dots i:nth-child(2) {
+  background: #15a4d3;
+  animation-delay: 0.15s;
+}
+.splash-dots i:nth-child(3) {
+  background: #41c795;
+  animation-delay: 0.3s;
+}
+@keyframes splash-dot {
   0%,
   80%,
   100% {
-    opacity: 0.3;
+    opacity: 0.25;
   }
   40% {
     opacity: 1;
   }
+}
+
+/* At launch Ray swims in a frame at a time (LaunchRay), so his usual rise is
+   off, and the water he stirs is drawn behind everything on the screen. The
+   line under the wordmark waits until he has passed it. */
+.splash--launch .ray-perch-ray {
+  animation: none;
+  will-change: transform, opacity;
+}
+.splash--launch .splash-status-line {
+  animation-delay: 0.6s;
+}
+.splash-water {
+  z-index: -1;
 }
 
 /* Each tile glides smoothly into place from a small offset — orderly, not bouncy. */
@@ -1400,135 +1389,110 @@ code {
     transform: translate(0, 0) scale(1);
   }
 }
-@keyframes splash-glow-in {
-  from {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
 
-/* A highlight that periodically sweeps across the finished mark (clipped to its shape). */
-.splash-sheen {
-  opacity: 0;
-  animation: splash-sheen 3s ease-in-out 1.5s infinite;
-}
-@keyframes splash-sheen {
-  0% {
-    opacity: 0;
-    transform: translateX(-200px);
-  }
-  6% {
-    opacity: 1;
-  }
-  28% {
-    opacity: 1;
-  }
-  34% {
-    opacity: 0;
-    transform: translateX(560px);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(560px);
-  }
-}
-
-.splash-wordmark {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  text-align: center;
-  opacity: 0;
-  animation: splash-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.95s both;
-}
-.splash-word {
-  font-size: 23px;
-  font-weight: 650;
-  letter-spacing: 0.2px;
-  color: var(--text);
-}
-.splash-sub {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.2px;
-  color: var(--text-dim);
-}
-@keyframes splash-rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* Slim indeterminate progress bar. */
-.splash-progress {
-  position: relative;
-  width: 212px;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--bg-elev-3);
-  overflow: hidden;
-  opacity: 0;
-  animation: splash-rise 0.6s ease 1.2s both;
-}
-.splash-progress > span {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 40%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  transform: translateX(-100%);
-  animation: splash-progress 1.3s ease-in-out 1.3s infinite;
-}
-@keyframes splash-progress {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(250%);
-  }
-}
-
-/* Respect users who prefer less motion: Ray or the finished mark, still; no animation. */
+/* Respect users who prefer less motion: Ray and the finished wordmark, still. */
 @media (prefers-reduced-motion: reduce) {
   .tile,
-  .splash-sheen,
-  .splash-stage::before,
   .splash-word-f rect,
   .splash-word-letter,
-  .splash-tiles,
-  .splash-tiles i,
-  .splash-wordmark,
-  .splash-progress,
-  .splash-progress > span {
+  .splash-status-line,
+  .splash-dots i {
     animation: none !important;
   }
-  .splash-tiles i {
+  .splash-dots i {
     opacity: 0.6;
   }
   .tile {
     opacity: 1 !important;
     transform: none !important;
   }
-  .splash-wordmark {
-    opacity: 1 !important;
+}
+
+/* The launch screen: it covers the app while it loads, then fades away to show
+   it. Ray's words and the wordmark drift up and out first (at launch Ray darts
+   off on his own), then the canvas clears. Flat: a solid canvas the colour of
+   the app's, no shadow. Under modals (50) and the update banner, over
+   everything else. The fade's total length is LAUNCH_FADE_MS in App.tsx. */
+.launch-curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--bg);
+}
+.launch-curtain--leaving {
+  pointer-events: none;
+  animation: launch-curtain-out 340ms cubic-bezier(0.4, 0, 0.2, 1) 110ms both;
+}
+.launch-curtain--leaving .splash-brand,
+.launch-curtain--leaving .ray-perch-bubble,
+.launch-curtain--leaving .splash:not(.splash--launch) .ray-perch-ray {
+  animation: launch-lift-out 280ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+@keyframes launch-curtain-out {
+  to {
+    opacity: 0;
   }
-  .splash-stage::before {
-    opacity: 1;
+}
+@keyframes launch-lift-out {
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
   }
-  .splash-progress {
-    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launch-curtain--leaving {
+    animation-duration: 150ms;
+    animation-delay: 0s;
+  }
+  .launch-curtain--leaving .splash-brand,
+  .launch-curtain--leaving .ray-perch-bubble,
+  .launch-curtain--leaving .splash .ray-perch-ray {
+    animation: none;
+  }
+}
+
+/* Screens arrive with a short fade instead of snapping in. Nothing here keeps
+   its animation once it's done (no fill), so no screen is left a stacking
+   context, and anything that holds the native preview only fades: the preview
+   is placed from the layout, which a transform would shift. */
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.home,
+.create-screen,
+.setup,
+.project-dependency-guard-card {
+  animation: screen-in 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+.app-shell,
+.panes {
+  animation: fade-in 220ms ease-out;
+}
+.project-tabs,
+.dep-control,
+.team-control {
+  animation: fade-in 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home,
+  .create-screen,
+  .setup,
+  .project-dependency-guard-card,
+  .app-shell,
+  .panes,
+  .project-tabs,
+  .dep-control,
+  .team-control {
+    animation: none;
   }
 }
 
@@ -5526,7 +5490,7 @@ code {
   }
 }
 
-/* With Ray turned off: the self-building mark. */
+/* With Ray sent away: the self-building mark. */
 .dstage-mark {
   width: clamp(112px, 26vh, 164px);
   aspect-ratio: 428 / 424;
@@ -5769,7 +5733,81 @@ code {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
+.dstage-foot-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .dstage-fulllog {
+  max-height: 168px;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+/* A redeploy beside the app: a slim strip above the preview (the app stays on
+   screen), the same shape as the team app's pipeline strip. */
+.deploy-strip-wrap {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+.deploy-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.deploy-strip .ws-spinner.deploy-strip-spin {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+.deploy-strip-text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.deploy-strip-text strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.deploy-strip-step {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+}
+.deploy-strip-bar {
+  flex: 1;
+  min-width: 48px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bg-elev-3);
+}
+.deploy-strip-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.6s ease;
+}
+.deploy-strip-time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+.deploy-strip .btn {
+  flex: none;
+}
+.deploy-strip-log {
   max-height: 168px;
   margin: 0;
   border: 0;
@@ -5789,7 +5827,8 @@ code {
     opacity: 1;
     transform: none;
   }
-  .dstage-bar > span {
+  .dstage-bar > span,
+  .deploy-strip-bar > span {
     transition: none;
   }
   .dstage-current {
@@ -5903,16 +5942,14 @@ button.deploy-trouble-ray:focus-visible {
   max-width: 400px;
   padding: 8px 12px 9px;
   font-size: 13px;
-  cursor: default;
-  transform: none;
+  translate: none;
+  transform-origin: -10px 50%;
 }
 
 .deploy-trouble-bubble .mascot-bubble-tail {
-  top: calc(50% - 5px);
-  bottom: auto;
-  left: -6px;
-  margin-left: 0;
-  transform: rotate(135deg);
+  top: 50%;
+  left: 1px;
+  rotate: 90deg;
 }
 
 .deploy-trouble-text {
@@ -6072,17 +6109,25 @@ button.deploy-trouble-ray:focus-visible {
   white-space: nowrap;
 }
 
-/* ── Deployments control (app bar): active chip + Deploy button + popover ── */
+/* ── Deployments control (app bar): the deployment's state, the one thing to do
+   about it, and a panel of its details. Flat: status is a small dot and words. */
 .dep-control {
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
 }
-/* The chip names the current deployment; the cloud says what it is (the
-   "Deployment:" prefix stays for screen readers only). */
-.dep-select .codicon.dep-chip-ico {
-  font-size: var(--bar-ico, 14px);
+.dep-seg {
+  position: relative;
+}
+/* The chip names the deployment, with its state as a dot (the "Deployment:"
+   prefix stays for screen readers only). */
+.seg--toolbar .dep-select {
+  gap: 7px;
+  padding: 0 9px 0 11px;
+}
+.seg--toolbar .dep-select.is-open {
+  background: var(--bg-elev-3);
 }
 .dep-chip-label {
   max-width: 150px;
@@ -6091,6 +6136,11 @@ button.deploy-trouble-ray:focus-visible {
   white-space: nowrap;
   color: var(--text);
 }
+.dep-chip-note {
+  margin-left: -2px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
 .dep-select .codicon.dep-chip-caret {
   margin-left: -1px;
   font-size: var(--bar-caret, 12px);
@@ -6098,133 +6148,51 @@ button.deploy-trouble-ray:focus-visible {
 }
 .dep-deploy {
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.dep-pop {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  left: auto;
-  z-index: 30;
-  width: 340px;
-  max-width: min(340px, calc(100vw - 32px));
-  padding: 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow-lg);
-}
-.dep-pop-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.dep-pop-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-dim);
-}
-.dep-empty {
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-dim);
-  padding: 4px 2px;
-}
-.dep-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 290px;
-  overflow-y: auto;
-}
-.dep-item {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 9px 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.dep-item--active {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
-}
-.dep-item-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.dep-item-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+.seg--toolbar .dep-deploy--busy {
   color: var(--text);
 }
-.dep-item-name-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* A running deploy's progress, along the bottom of the control. */
+.dep-progress {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  pointer-events: none;
 }
-.dep-item-edit {
-  font-size: 11px;
-  color: var(--text-dim);
-  opacity: 0;
-  transition: opacity 0.12s ease;
+.dep-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.6s ease;
 }
-.dep-item-name:hover .dep-item-edit {
-  opacity: 1;
-}
-.dep-rename {
-  height: 26px;
-  font-size: 13px;
-  font-weight: 600;
-  flex: 1;
-}
-.dep-badge {
+.dep-dot {
   flex: none;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
-  border-radius: 999px;
-  padding: 1px 8px;
+  box-sizing: border-box;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
 }
-.dep-item-sub {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.dep-dot--ok {
+  background: var(--ok);
 }
-.dep-item-ws {
-  font-size: 11.5px;
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.dep-dot--err {
+  background: var(--danger);
 }
-.dep-item-url {
-  font-size: 11px;
-  color: var(--text-dim);
-  opacity: 0.8;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.dep-dot--none {
+  background: transparent;
+  border: 1.5px solid var(--text-faint);
+}
+.dep-dot--busy {
+  width: 11px;
+  height: 11px;
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--accent);
+  animation: ws-spin 0.8s linear infinite;
 }
 .dep-share-btn .codicon[class*='codicon-'] {
   font-size: var(--bar-ico, 14px);
@@ -6236,20 +6204,300 @@ button.deploy-trouble-ray:focus-visible {
   color: var(--text);
   cursor: progress;
 }
+
+/* The panel: one deployment's details, in sections divided by hairlines, like
+   the team app's menu. */
+.dep-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 30;
+  width: 352px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+.dep-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.dep-sec + .dep-sec {
+  border-top: 1px solid var(--border);
+}
+.dep-pop-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.dep-sec-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.dep-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+}
+.dep-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+}
+.dep-rename {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.dep-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.dep-running {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.dep-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bg-elev-3);
+}
+.dep-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.6s ease;
+}
+.dep-step {
+  font-size: 12.5px;
+  color: var(--text);
+}
+.dep-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 2px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.dep-callout-text {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.dep-callout-text strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.dep-callout-detail {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+.dep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* Facts: a label column, then the value and its actions. */
+.dep-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 10px;
+}
+.dep-facts dt {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.dep-facts dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.dep-val,
+.dep-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dep-url {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+.dep-dim {
+  color: var(--text-dim);
+}
+.dep-link-btn {
+  flex: none;
+  margin-left: 6px;
+  font-size: 12px;
+}
+/* Small icon actions (copy, open, rename): quiet until hovered. */
+.dep-ico {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.dep-ico:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border-color: var(--border);
+}
+.dep-ico .codicon[class*='codicon-'] {
+  font-size: 13px;
+}
+.dep-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.dep-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 0;
+}
+.dep-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.dep-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dep-row-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+/* A row's rename stays out of the way until the row is hovered or focused. */
+.dep-row-edit {
+  opacity: 0;
+}
+.dep-row:hover .dep-row-edit,
+.dep-row-edit:focus-visible {
+  opacity: 1;
+}
+/* A setting in the panel: its words on the left, a switch on the right. */
+.dep-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  cursor: pointer;
+}
+.dep-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dep-toggle-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+.dep-toggle-hint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.dep-foot {
+  padding: 6px 8px;
+}
 .dep-new {
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--accent);
+  font-size: 12.5px;
+  color: var(--text-dim);
   background: transparent;
   border: none;
+  border-radius: 6px;
   cursor: pointer;
-  padding: 2px 0;
+}
+.dep-new:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+.dep-new .codicon[class*='codicon-'] {
+  font-size: 14px;
 }
 .dep-new:disabled {
   opacity: 0.5;
   cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dep-dot--busy {
+    animation: none;
+  }
+  .dep-progress > span,
+  .dep-bar > span {
+    transition: none;
+  }
 }
 
 /* ── App bar responsive tiers ─────────────────────────────────────────────────
@@ -7866,108 +8114,6 @@ button.deploy-trouble-ray:focus-visible {
   color: var(--danger);
 }
 
-/* Connect semantic model modal */
-.connect-modal {
-  max-width: 480px;
-}
-.connect-sub {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--text-dim);
-}
-.connect-sub strong {
-  color: var(--text);
-  font-weight: 600;
-}
-.connect-state {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-dim);
-  padding: 10px 2px;
-}
-.connect-state--empty {
-  display: block;
-  line-height: 1.5;
-}
-.connect-filter {
-  width: 100%;
-}
-.connect-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-height: 260px;
-  overflow-y: auto;
-}
-.connect-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
-  text-align: left;
-  font: inherit;
-  color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  cursor: pointer;
-}
-.connect-item:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-.connect-item--sel {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.connect-item--done {
-  opacity: 0.7;
-  cursor: default;
-}
-.connect-item > .codicon {
-  font-size: 15px;
-  color: var(--text-dim);
-  flex: none;
-}
-.connect-item-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-.connect-item-name {
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.connect-item-meta {
-  font-size: 11px;
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.connect-item-check {
-  color: var(--accent);
-  flex: none;
-}
-.connect-badge {
-  flex: none;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 16%, transparent);
-  border-radius: 5px;
-  padding: 1px 7px;
-}
-
 /* Settings modal — grouped like the Accounts dialog: a quiet heading over a card
    of rows, each row a setting's name and explanation with its control at the
    end. Controls sit raised on the card (--set-raised). */
@@ -8122,29 +8268,35 @@ button.deploy-trouble-ray:focus-visible {
   transform: translateX(16px);
   background: #fff;
 }
-.settings-beta {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  vertical-align: middle;
+/* About: the app's mark, name and version, over the parts it runs on. */
+.set-about {
+  column-gap: 12px;
 }
-.settings-footer {
-  justify-content: space-between;
-  align-items: center;
+/* Name and version are short, so Copy can stay beside them in a narrow window. */
+.set-about .set-item-text {
+  flex-basis: 120px;
 }
-.settings-version {
-  font-size: 11px;
+.set-about-mark {
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+.set-versions {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 24px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.set-versions dt {
   color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.set-versions dd {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .field {
@@ -8182,14 +8334,6 @@ button.deploy-trouble-ray:focus-visible {
 .set-expander-head:focus-visible {
   outline: 2px solid var(--accent-ring);
   outline-offset: -2px;
-}
-.set-expander-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.set-expander-title .settings-beta {
-  margin-left: 0;
 }
 .set-expander-head .codicon.set-expander-caret {
   flex: none;
@@ -11919,19 +12063,16 @@ select.ws-input:disabled {
   font-size: 12px;
 }
 
-.alert--warn {
-  color: var(--text);
-  background: color-mix(in srgb, var(--pending) 12%, var(--bg-elev));
-  border: 1px solid color-mix(in srgb, var(--pending) 45%, var(--border));
-}
-
-/* The Accounts dialog */
+/* The Accounts dialog: a card per service, built like Settings' cards. The top
+   row names the service and holds its one action (Sign in, Add account or
+   Install from setup); a row per account follows, with that account's own
+   actions; messages and forms close the card. Rows line up under the name. */
 .accounts-modal {
-  max-width: 620px;
+  max-width: 660px;
 }
 
 .accounts-body {
-  gap: 12px;
+  gap: 10px;
 }
 
 .accounts-help {
@@ -11942,128 +12083,273 @@ select.ws-input:disabled {
   margin: 0;
 }
 
+/* Fabric and the Azure CLI in different organizations: what's off, why it
+   matters, and the fix, in one click when the Azure CLI has the account. */
+.acct-warn {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--pending) 35%, var(--border));
+  background: color-mix(in srgb, var(--pending) 8%, var(--bg-elev-2));
+}
+
+[data-theme='light'] .acct-warn {
+  background: color-mix(in srgb, var(--pending) 9%, var(--bg-elev));
+}
+
+.acct-warn .codicon.acct-warn-ico {
+  flex: none;
+  margin-top: 1px;
+  font-size: 15px;
+  color: var(--pending);
+}
+
+.acct-warn-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.acct-warn-text p {
+  margin: 0;
+}
+
+.acct-warn-text strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.acct-warn-text .acct-warn-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.acct-warn-text .btn {
+  margin-top: 5px;
+}
+
 .acct-card {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 14px;
-  padding: 14px;
+  display: flex;
+  flex-direction: column;
   border-radius: var(--radius);
   border: 1px solid var(--border-soft);
   background: var(--bg-elev-2);
-}
-
-.acct-card--ok {
-  border-color: color-mix(in srgb, var(--ok) 30%, var(--border));
 }
 
 .acct-card--error {
   border-color: color-mix(in srgb, var(--pending) 40%, var(--border));
 }
 
-/* The accounts dialog used to borrow the setup screen's `.auth-ico` box. The
-   setup screen dropped its icon boxes in the flat redesign, so this owns the
-   treatment it actually wants rather than depending on another screen's. */
-.acct-card-ico {
-  flex: none;
-  width: 38px;
-  height: 38px;
+.acct-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'ico title action'
+    'ico purpose action';
+  column-gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+}
+
+.acct-ico {
+  grid-area: ico;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg-elev-3);
   border: 1px solid var(--border);
   color: var(--text);
 }
 
-.acct-card-ico .codicon {
-  font-size: 20px;
-}
-
-.acct-card-ico .brand-glyph {
-  width: 23px;
-  height: 23px;
+.acct-ico > svg,
+.acct-ico .brand-glyph {
+  width: 18px;
+  height: 18px;
   object-fit: contain;
   display: block;
 }
 
-.acct-card-main {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+.acct-ico .codicon {
+  font-size: 18px;
 }
 
-.acct-card-head {
+.acct-title {
+  grid-area: title;
+  margin: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.acct-card-title {
-  margin: 0;
-  font-size: 14px;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13.5px;
   font-weight: 650;
+  line-height: 1.35;
   color: var(--text);
 }
 
-.acct-card-purpose {
-  margin: -4px 0 0;
-  font-size: 12.5px;
-  line-height: 1.45;
+.acct-purpose {
+  grid-area: purpose;
+  margin: 1px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--text-dim);
+  text-wrap: pretty;
+}
+
+.acct-head-action {
+  grid-area: action;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+/* Add account is the card's own action: quieter than the per-account buttons. */
+.btn.acct-add-btn {
+  gap: 4px;
+  padding: 0 8px;
+  color: var(--accent);
+  border-color: transparent;
+  background: transparent;
+}
+
+.btn.acct-add-btn:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--accent-soft);
+}
+
+.acct-add-btn .codicon {
+  font-size: 13px;
+}
+
+/* Signed in is a quiet check beside the name; anything else says what's up. */
+.acct-ok {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+}
+
+.acct-ok svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 3;
 }
 
 .acct-chip {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
+  padding: 1px 8px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-dim);
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
-}
-
-.acct-chip--ok {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 32%, var(--border));
-  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
 .acct-chip--error {
   color: var(--pending);
-  border-color: color-mix(in srgb, var(--pending) 40%, var(--border));
-  background: color-mix(in srgb, var(--pending) 10%, transparent);
+  background: color-mix(in srgb, var(--pending) 14%, transparent);
 }
 
-.acct-chip-ico {
-  width: 12px;
-  height: 12px;
-  stroke-width: 2.6;
+.acct-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.acct-id {
+.acct-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 40px;
+  padding: 6px 12px 6px 54px;
+  border-top: 1px solid var(--border);
+}
+
+.acct-row-who {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 10px;
-  min-width: 0;
+  gap: 2px 8px;
 }
 
-.acct-id-primary {
+.acct-row-name {
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
   overflow-wrap: anywhere;
 }
 
-.acct-id-secondary {
+.acct-row-meta {
   font-size: 12px;
   color: var(--text-dim);
+}
+
+.acct-row-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.acct-row-actions .btn--xs {
+  align-self: center;
+}
+
+/* Sign out is each row's quiet action, so the one you'd pick stands out. */
+.btn.acct-quiet {
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.btn.acct-quiet:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.acct-badge {
+  align-self: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.acct-badge--warn {
+  color: var(--pending);
+  background: color-mix(in srgb, var(--pending) 14%, transparent);
+}
+
+.acct-confirm {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.acct-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px 54px;
+  border-top: 1px solid var(--border);
 }
 
 .acct-error {
@@ -12074,13 +12360,7 @@ select.ws-input:disabled {
   overflow-wrap: anywhere;
 }
 
-.acct-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.acct-hint {
+.acct-note {
   margin: 0;
   font-size: 12px;
   line-height: 1.45;
@@ -12140,89 +12420,16 @@ select.ws-input:disabled {
   color: var(--text-dim);
 }
 
-.acct-github-ico {
-  font-size: 20px;
-}
-
-.acct-list-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.acct-list-label {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-dim);
-}
-
-.acct-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.acct-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  border: 1px solid var(--border-soft);
-  background: var(--bg-elev);
-}
-
-.acct-row-name {
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
-.acct-row-meta {
-  font-weight: 400;
-  color: var(--text-dim);
-}
-
-.acct-row-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .acct-add {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 11px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
 }
 
-.acct-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 1px 7px;
-  border-radius: 999px;
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.acct-badge--warn {
-  color: var(--pending);
-  background: color-mix(in srgb, var(--pending) 14%, transparent);
-}
-
-.acct-confirm {
-  font-size: 12px;
-  color: var(--text);
+.acct-add-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

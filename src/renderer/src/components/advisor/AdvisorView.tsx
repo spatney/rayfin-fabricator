@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type JSX } from 'react'
 import type { AdvisorCategoryId, AdvisorFinding, StudioProject } from '@shared/ipc'
-import { CATALOG, categoryById, normalizeSeverity } from '@shared/advisor/catalog'
+import { CATALOG, categoryById } from '@shared/advisor/catalog'
 import type { FindingItem } from '../../advisor/lifecycle'
 import type { AdvisorController } from '../../advisor/store'
 import type { MarkdownLinks } from '../Markdown'
-import { ModelMenu } from '../chat/ComposerMenus'
+import { ModelPicker } from '../models/ModelPicker'
 import { Codicon } from '../icons'
 import { AreasPanel } from './AreasPanel'
 import { FindingDetail } from './FindingDetail'
@@ -24,6 +24,8 @@ interface Props {
   onOpenFile: (path: string, line?: number) => void
   /** Show this finding (e.g. from a fix card in the Build chat); a new nonce re-opens it. */
   openRequest?: { id: string; nonce: number }
+  /** Open Accounts at Model providers (your own API keys). */
+  onManageKeys?: () => void
 }
 
 function matchesQuery(item: FindingItem, q: string): boolean {
@@ -34,18 +36,14 @@ function matchesQuery(item: FindingItem, q: string): boolean {
 }
 
 function isActionable(item: FindingItem): boolean {
-  return (
-    normalizeSeverity(item.finding.severity) !== 'note' &&
-    item.status !== 'fixing' &&
-    item.status !== 'checking'
-  )
+  return item.status !== 'fixing' && item.status !== 'checking'
 }
 
 /**
  * The Advisor tab: a health summary (grade, a strip of every check, live
  * review progress) over an issues inbox whose rows open in place, beside the
  * checks for each area. Quick checks run automatically; the Copilot deep review
- * runs on demand and streams findings in. Issues can be fixed with Copilot (one,
+ * runs on demand and streams findings in. Findings can be fixed with Copilot (one,
  * selected, or all), explained, verified after a fix, or dismissed.
  */
 export default function AdvisorView({
@@ -54,7 +52,8 @@ export default function AdvisorView({
   chatBusy,
   onFix,
   onOpenFile,
-  openRequest
+  openRequest,
+  onManageKeys
 }: Props): JSX.Element {
   const [tab, setTab] = useState<IssueTab>('open')
   const [query, setQuery] = useState('')
@@ -255,11 +254,14 @@ export default function AdvisorView({
           <Codicon name="refresh" className={advisor.quickRunning ? 'icon-spin' : ''} />
         </button>
         <div className="adv-bar-model">
-          <ModelMenu
-            model={advisor.model}
-            effort={advisor.effort}
+          <ModelPicker
+            value={advisor.selection}
             disabled={review.running}
-            onChange={advisor.setModel}
+            onChange={advisor.setSelection}
+            tiers
+            placement="down"
+            onManageKeys={onManageKeys}
+            label="Advisor model"
           />
         </div>
         {review.running ? (

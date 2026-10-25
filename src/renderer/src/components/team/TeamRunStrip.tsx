@@ -2,6 +2,8 @@ import type { TeamRunStatus } from '@shared/ipc'
 import { elapsed, friendlyStep, runProgress, useNow, waitingStep } from './runProgress'
 import './team.css'
 
+import type { JSX } from 'react'
+
 interface Props {
   run: TeamRunStatus
   /** Open the workspace overview, where every deployment in progress shows. */

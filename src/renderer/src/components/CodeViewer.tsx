@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import type { FileContent, FileNode, StudioProject } from '@shared/ipc'
 import { monacoLanguage } from '../monaco'
 import { Codicon, EditorIcon } from './icons'
-import { readCodeTab, writeCodeTab } from './codeTab'
+import { readCodeTab, writeCodeTab, type CodeTab } from './codeTab'
 import HistoryView from './HistoryView'
 import SecretsView from './SecretsView'
 import SkillsView from './SkillsView'
@@ -18,6 +18,8 @@ interface Props {
   onSendToChat?: (display: string, prompt: string) => void
   /** Open a specific project file (and optionally reveal a line), e.g. from the Model or Advisor tab. */
   openRequest?: { path: string; line?: number; nonce: number }
+  /** Switch to one of the views, e.g. History from the deployment panel's "See what changed". */
+  tabRequest?: { tab: CodeTab; nonce: number }
   /** Called after a skill is toggled in the Skills sub-view (parent refreshes). */
   onSkillsChanged?: () => void
   /** Called after a secret is added or deleted in the Secrets sub-view (parent refreshes). */
@@ -383,6 +385,7 @@ export default function CodeViewer({
   onRequestDeploy,
   onSendToChat,
   openRequest,
+  tabRequest,
   onSkillsChanged,
   onSecretsChanged
 }: Props): JSX.Element {
@@ -406,6 +409,10 @@ export default function CodeViewer({
   useEffect(() => {
     if (openRequest?.path) setTabState({ projectId: project.id, tab: 'files' })
   }, [openRequest?.nonce, openRequest?.path, project.id])
+
+  useEffect(() => {
+    if (tabRequest) setTabState({ projectId: project.id, tab: tabRequest.tab })
+  }, [tabRequest?.nonce, tabRequest?.tab, project.id])
 
   const openInEditor = useCallback(async (): Promise<void> => {
     try {

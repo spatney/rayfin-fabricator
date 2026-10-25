@@ -3,6 +3,7 @@
 
 pub mod agent_skills;
 pub mod agent_tools;
+pub mod byok;
 pub mod copilot;
 pub mod crashlog;
 pub mod design_locate;

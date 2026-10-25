@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, type JSX } from 'react'
 
 // A file/mockup reference token: "@" followed by a run of non-space, non-"@"
 // characters, anchored at start-of-string or after whitespace. This mirrors the

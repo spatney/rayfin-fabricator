@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type JSX } from 'react'
 import type { TeamEnvStatus, TeamGhAccount, TeamProblem, TeamProgressEvent } from '@shared/ipc'
 import { openDocs } from '../../docsLinks'
 import './team.css'

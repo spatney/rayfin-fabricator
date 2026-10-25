@@ -1,6 +1,6 @@
 ---
 title: "Tour the workbench"
-description: "Find Home, project tabs, chat, preview, code, model, Advisor, accounts, settings and the status bar."
+description: "Find Home, project tabs, chat, preview, code, model, Advisor, accounts, settings, the status bar and Ray."
 ---
 
 Fabricator has two main places: Home, where you choose a project, and the project workbench, where you build, inspect, preview, and deploy one app.
@@ -34,12 +34,11 @@ The center of the app bar has project tabs:
 
 The right side can include deployment controls:
 
-- The deployment control, marked with a cloud icon, shows the active deployment's name or **Not deployed**.
-- **Deploy** creates the first deployment.
-- **Redeploy** publishes to the active deployment again.
+- The deployment control shows the deployment's name, or **Not deployed**, with a dot for its state. Select it for the deployment's details. See [Work with multiple deployments](/docs/ship/deploy#work-with-multiple-deployments).
+- The button next to it deploys. **Deploy** creates the first deployment, **Redeploy** publishes to the active deployment again, and a label such as **Deploy 3 changes** says what's waiting. See [Redeploy changes](/docs/ship/deploy#redeploy-changes).
 - **Share** opens sharing for the active deployment.
 
-The app bar also has **Settings** and the account menu, set apart from the project's controls.
+The app bar also has the account menu, set apart from the project's controls. It holds **Settings** too.
 
 ## Build view
 
@@ -57,11 +56,11 @@ The preview toolbar includes **Reload**, a URL button, **Fabric**, **Design**, a
 
 ## Account menu and Settings
 
-![The account menu opened from the avatar in the top-right corner, showing the signed-in Fabric account with Refresh Fabric authentication and Sign out.](/screenshots/account-menu.webp)
+![The account menu opened from the avatar in the top-right corner, showing the signed-in Fabric account with Manage accounts, Refresh Fabric authentication, Sign out and Settings.](/screenshots/account-menu.webp)
 
-When you are signed in to Fabric, the account menu shows your account initials, and opening it shows your account and its organization. It has **Manage accounts…**, which opens **Accounts** for every account Fabricator uses, plus **Refresh Fabric authentication** and **Sign out**. When you are not signed in, it shows **Sign in to Fabric**, with **Manage accounts…** behind the arrow next to it. See [Manage your accounts](/docs/start/accounts).
+When you are signed in to Fabric, the account menu shows your account initials, and opening it shows your account and its organization. It has **Manage accounts…**, which opens **Accounts** for every account Fabricator uses, plus **Refresh Fabric authentication**, **Sign out** and **Settings**. When you are not signed in, it shows **Sign in to Fabric**, with **Manage accounts…** and **Settings** behind the arrow next to it. See [Manage your accounts](/docs/start/accounts).
 
-Open **Settings** from the gear button. Settings groups its options into **General** (**Accounts**, **Setup**, and **Workspace folder**), **Appearance** (**Theme**, **Text size**, and **Ray**), **Updates & help**, **Diagnostics** (including **Usage stats**), and experiments such as **Team workspaces**.
+Open **Settings** from the account menu. Settings groups its options into **General** (**Accounts**, **API keys**, **Setup**, and **Workspace folder**), **Appearance** (**Theme** and **Text size**), **Diagnostics** (including **Usage stats**), experiments such as **Team workspaces**, and **About** (the versions Fabricator runs on, and links to these docs).
 
 ## Status bar
 
@@ -70,7 +69,19 @@ The footer shows project and app status:
 - Git status for local projects, or team workspace and branch for team apps.
 - The project's Rayfin version, when a newer Rayfin release is available. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
 - The active Fabric workspace, when known.
-- **Manual deploy** or **Auto deploy** for local projects, while the **Deploy manually** experiment is on. See [Deploy manually](/docs/ship/deploy#deploy-manually).
 - Interface zoom.
 - Fabricator app version, such as `v1.7.2`.
 - **Help**, which opens the Help assistant. It answers questions about what went wrong, and writes up a bug report when the problem is Fabricator's fault.
+
+## Ray
+
+Ray is Fabricator's stingray. He keeps you company while an app installs its packages: when you create a project, clone one, or open one whose packages are missing. He shares facts about Rayfin and tips for Fabricator, and greets you in Help. The first time Fabricator starts on a computer, he's on the loading screen too, telling you in his own words how it's going. After that, he welcomes you back each time Fabricator opens, and he talks you through an app's first deploy, and any deploy you choose to watch.
+
+While Ray is on screen, you can:
+
+- Select him to pet him.
+- Drag him somewhere else.
+- Select a speech bubble to hear the next fact.
+- Point at him and select the **×** next to him to send him away. Until you restart Fabricator, he only appears in Help.
+
+If your computer is set to reduce motion, Ray stays in one place and his speech appears without animation.

@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from 'react'
 import type { CustomSkillActionResult, SkillInfo, StudioProject } from '@shared/ipc'
 import { Codicon } from './icons'
 import Skeleton from './Skeleton'

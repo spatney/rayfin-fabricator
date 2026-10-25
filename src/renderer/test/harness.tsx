@@ -69,6 +69,7 @@ function makeApi(calls: PreviewCall[], getCaptureResult: () => string) {
     hide: vi.fn(rec('hide')),
     suppress: vi.fn(rec('suppress')),
     showUrl: vi.fn(rec('showUrl')),
+    preload: vi.fn(rec('preload')),
     navigate: vi.fn(rec('navigate')),
     setBounds: vi.fn(rec('setBounds')),
     reload: vi.fn(rec('reload')),

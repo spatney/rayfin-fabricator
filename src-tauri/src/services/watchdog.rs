@@ -246,3 +246,14 @@ pub fn start(app: AppHandle) {
     })
     .ok();
 }
+
+#[cfg(test)]
+mod tests {
+  #[cfg(windows)]
+  #[test]
+  fn reports_the_process_working_set_on_windows() {
+    // Goes through K32GetProcessMemoryInfo, so a `windows` crate upgrade that changes
+    // the binding fails here instead of silently dropping `rss=` from hang logs.
+    assert!(super::current_rss_mb().is_some_and(|mb| mb > 0));
+  }
+}

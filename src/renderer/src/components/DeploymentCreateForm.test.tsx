@@ -27,6 +27,24 @@ afterEach(() => {
 })
 
 describe('DeploymentCreateForm Fabric reauth', () => {
+  it('asks you to sign in without showing why the list needed it as an error', () => {
+    render(
+      <DeploymentCreateForm
+        wsResult={{
+          ok: false,
+          needsLogin: true,
+          error: 'Silent token acquisition failed and interactive login was not allowed'
+        }}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('button', { name: 'Sign in to Fabric' })).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText(/Silent token acquisition/)).toBeNull()
+  })
+
   it('signs in and reloads workspaces when Fabric login is needed', async () => {
     const loginRayfin = vi.fn(() => Promise.resolve({ ok: true, exitCode: 0 }))
     const onReload = vi.fn()

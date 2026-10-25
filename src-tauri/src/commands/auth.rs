@@ -590,6 +590,14 @@ pub async fn auth_login_rayfin(app: AppHandle, tenant: Option<String>, project_i
 
 pub(crate) async fn login_rayfin(project_dir: Option<&Path>, tenant: Option<String>, on_data: OnData) -> ProcResult {
   on_data(exec::Stream::Stdout, "Starting Fabric / Rayfin sign-in…\n");
+  // Sign-in runs the project's CLI, which can't load from a missing or
+  // half-finished install.
+  if let Some(dir) = project_dir {
+    if let Err(error) = exec::ensure_project_dependencies(dir, Some(on_data.clone())).await {
+      on_data(exec::Stream::Stderr, &format!("{error}\n"));
+      return auth_failure("fabric-login", None, error);
+    }
+  }
   let mut args: Vec<String> = vec!["login".into(), "--select".into()];
   let tenant_label = tenant
     .as_ref()
@@ -755,6 +763,7 @@ mod tests {
       let cli = fixture.0.join("node_modules").join("@microsoft").join("rayfin-cli");
       std::fs::create_dir_all(cli.join("scripts")).unwrap();
       std::fs::create_dir_all(cli.join("dist").join("auth")).unwrap();
+      std::fs::write(cli.join("package.json"), r#"{"name":"@microsoft/rayfin-cli"}"#).unwrap();
       std::fs::write(cli.join("dist").join("auth").join("index.js"), "").unwrap();
       std::fs::write(cli.join("scripts").join("main.js"), r#"
 const fs = require('node:fs');

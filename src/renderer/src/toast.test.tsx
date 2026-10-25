@@ -3,6 +3,8 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import type { ErrorReport } from '@shared/ipc'
 import { ToastProvider, useToast, type ToastApi } from './toast'
 
+import type { JSX } from 'react'
+
 const record = vi.fn<(report: ErrorReport) => Promise<void>>(() => Promise.resolve())
 
 let api: ToastApi

@@ -1,6 +1,6 @@
 [package]
 name = "rayfin-fabricator"
-version = "1.16.0"
+version = "1.22.0"
 description = "Fabricator — a desktop app for building Rayfin apps via chat, wrapping the GitHub Copilot CLI and the Rayfin CLI."
 authors = ["Fabricator"]
 license = "MIT"
@@ -17,17 +17,17 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
 # `devtools` enables the WebView2/WebKit web inspector (and `Webview::open_devtools`)
 # in RELEASE builds too, not just debug — the preview toolbar exposes a button that
 # opens it so users can inspect their deployed app's DOM/console/network.
-tauri = { version = "2", features = ["unstable", "devtools"] }
-tauri-plugin-log = "2"
-tauri-plugin-dialog = "2"
-tauri-plugin-opener = "2"
-tauri-plugin-updater = "2"
+tauri = { version = "2.12", features = ["unstable", "devtools"] }
+tauri-plugin-log = "2.10"
+tauri-plugin-dialog = "2.8"
+tauri-plugin-opener = "2.7"
+tauri-plugin-updater = "2.13"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -44,43 +44,54 @@ async-trait = "0.1"
 # %LOCALAPPDATA%\github-copilot-sdk\cli\<ver>\copilot.exe at runtime, so the app is
 # self-contained (no separate install). Build requires network; cache via
 # BUNDLED_CLI_CACHE_DIR in CI.
-github-copilot-sdk = "1.0.7"
+github-copilot-sdk = "1.0.20"
 
 uuid = { version = "1", features = ["v4"] }
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 base64 = "0.22"
 regex = "1"
 once_cell = "1"
 chrono = { version = "0.4", features = ["clock"], default-features = false }
 
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# native-tls: the OS TLS stack and trust store (SChannel / Security.framework), the same one
+# the Copilot SDK's reqwest already uses in this process, so corporate root CAs are trusted.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json"] }
 
-dirs = "5"
-which = "7"
+# The local relay for a model provider whose API rejects fields the Copilot runtime sends
+# (services/byok/relay.rs). The same hyper stack reqwest already uses.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+
+dirs = "7"
+which = "8"
 trash = "5"
 thiserror = "2"
 anyhow = "1"
 
 # Extract user-uploaded custom-skill `.zip` bundles (see commands/custom_skills.rs).
 # `enclosed_name()` is used on entries to guard against zip-slip path traversal.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 # Windows-only: capture the native WebView2 preview to a PNG (ICoreWebView2::CapturePreview).
 # webview2-com / windows versions are pinned to what the vendored wry (and tauri) resolve to,
 # so Cargo unifies them rather than pulling a second copy. See services/preview.rs.
 [target.'cfg(windows)'.dependencies]
-webview2-com = "0.38"
-windows = { version = "0.61", features = [
+webview2-com = "0.39"
+windows = { version = "0.62", features = [
   "Wdk_System_Threading",
   "Win32_Foundation",
   "Win32_NetworkManagement_IpHelper",
+  "Win32_Security_Credentials",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Memory",
   "Win32_System_ProcessStatus",
   "Win32_System_Registry",
   "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 # macOS-only: capture the native WKWebView preview to a PNG via
@@ -109,6 +120,9 @@ objc2-web-kit = { version = "0.3", default-features = false, features = [
   "WKWebView",
   "WKSnapshotConfiguration",
 ] }
+# Keychain storage for the user's own model provider API keys (services/byok).
+# Already in the tree through native-tls, so no new crates.
+security-framework = "3"
 
 [profile.release]
 panic = "abort"
@@ -117,21 +131,15 @@ lto = true
 opt-level = "s"
 strip = true
 
-# Vendored copy of wry 0.55.1 with two local changes (see
-# vendor/wry/src/webview2/mod.rs):
-#   1. Enables the WebView2 `AllowSingleSignOnUsingOSPrimaryAccount` environment
-#      option so the embedded preview can present the device's Entra identity
-#      (PRT / device certificate) to Azure AD — deployed apps behind a Conditional
-#      Access "require compliant/managed device" policy then sign in inside the
-#      preview instead of failing with "You can't get there from here".
-#   2. Adds `CalculateNativeWinOcclusion` to the default disabled browser features
-#      so WebView2 keeps rendering when the window is minimized/occluded, letting
-#      the Fabricator agent screenshot the preview off-screen / while minimized.
-# Both live in the shared default/environment so the main window and the preview
-# keep identical options (WebView2 rejects mismatched options on a shared user-data
-# folder, failing with ERROR_INVALID_STATE / 0x8007139F). Upstream wry exposes no
-# setter for (1), so it must be patched here. When bumping Tauri (which pins wry),
-# re-vendor the matching wry version and re-apply both changes, or drop a change if
-# upstream supports it. Full notes + upgrade steps: docs/VENDORED-WRY-PATCH.md.
+# Vendored copy of wry (the exact version Tauri pins) plus Fabricator's local patches in
+# vendor/wry-patches:
+#   0001  WebView2 device-compliance SSO: turns on the `AllowSingleSignOnUsingOSPrimaryAccount`
+#         environment option so the preview can sign in to apps behind a Conditional Access
+#         "require compliant/managed device" policy. Upstream wry exposes no setter for it.
+#   0002  macOS child webview title-bar inset: keeps the preview from covering its toolbar.
+# The override only applies while vendor/wry has exactly the version Tauri asks for. After a
+# Tauri bump that moves wry, Cargo just warns and builds the unpatched registry crate, so
+# src/vendor_guard.rs fails `cargo test` until you re-vendor with
+# `node scripts/wry/vendor-wry.mjs update <version>`. Full notes: docs/VENDORED-WRY-PATCH.md.
 [patch.crates-io]
 wry = { path = "vendor/wry" }

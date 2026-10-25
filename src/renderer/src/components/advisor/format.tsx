@@ -1,6 +1,8 @@
 import type { AdvisorCategoryId } from '@shared/ipc'
 import { AccessibilityIcon, Codicon } from '../icons'
 
+import type { JSX } from 'react'
+
 const GLYPHS: Record<AdvisorCategoryId, string> = {
   access: 'shield',
   policy: 'key',

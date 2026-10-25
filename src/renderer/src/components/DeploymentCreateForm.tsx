@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { Codicon } from './icons'
 import { authErrorMessage } from '../authErrors'
 import type {
@@ -364,7 +364,11 @@ export default function DeploymentCreateForm({
               onChange={(e) => setNewWsName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void submitNewWs()
-                else if (e.key === 'Escape') setCreatingWs(false)
+                else if (e.key === 'Escape') {
+                  // Escape leaves this inline form, not the panel around it.
+                  e.stopPropagation()
+                  setCreatingWs(false)
+                }
               }}
             />
             {loadingCaps ? (
@@ -601,8 +605,10 @@ export default function DeploymentCreateForm({
                 >
                   {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
                 </button>
-                {(signInErr || wsResult?.error) && (
-                  <p className="ws-empty-err" role="alert">{signInErr || wsResult?.error}</p>
+                {/* Needing to sign in is expected, on a first launch or after a session
+                    expires, so why the list needed it isn't shown. A failed sign-in is. */}
+                {signInErr && (
+                  <p className="ws-empty-err" role="alert">{signInErr}</p>
                 )}
               </>
             ) : (

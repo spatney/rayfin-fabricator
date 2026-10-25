@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { SecretInfo } from '@shared/ipc'
 import { openDocs } from '../../docsLinks'
 import { relativeTime } from '../advisor/format'

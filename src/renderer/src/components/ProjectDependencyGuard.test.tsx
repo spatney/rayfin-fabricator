@@ -1,9 +1,9 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { StudioProject } from '@shared/ipc'
 import { OverlayProvider } from '../overlay'
 import { MascotProvider, resetMascotForTests } from './mascot/stage'
-import ProjectDependencyGuard from './ProjectDependencyGuard'
+import ProjectDependencyGuard, { PREPARING_CARD_DELAY_MS } from './ProjectDependencyGuard'
 
 function makeProject(): StudioProject {
   return {
@@ -28,7 +28,9 @@ function installApi(ensureDependencies: ReturnType<typeof vi.fn>): void {
   }
 }
 
-function renderGuard(onSwitchProjects = vi.fn(), onReadyChange?: ReturnType<typeof vi.fn>): void {
+type ReadyChange = (projectId: string, ready: boolean) => void
+
+function renderGuard(onSwitchProjects = vi.fn(), onReadyChange?: Mock<ReadyChange>): void {
   render(
     <OverlayProvider>
       <ProjectDependencyGuard
@@ -88,7 +90,7 @@ describe('ProjectDependencyGuard', () => {
   it('reports readiness so chrome outside the guard can follow the same gate', async () => {
     const preparation = deferred<{ ok: boolean }>()
     installApi(vi.fn(() => preparation.promise))
-    const onReadyChange = vi.fn()
+    const onReadyChange = vi.fn<ReadyChange>()
 
     renderGuard(vi.fn(), onReadyChange)
 
@@ -107,13 +109,41 @@ describe('ProjectDependencyGuard', () => {
 
   it('never reports a failed install as ready', async () => {
     installApi(vi.fn().mockResolvedValue({ ok: false, error: 'npm install failed (exit code 1).' }))
-    const onReadyChange = vi.fn()
+    const onReadyChange = vi.fn<ReadyChange>()
 
     renderGuard(vi.fn(), onReadyChange)
 
     expect(await screen.findByRole('alert', { name: 'Could not prepare Cloned app' })).toBeTruthy()
     expect(onReadyChange).not.toHaveBeenCalledWith('project-1', true)
     expect(onReadyChange).toHaveBeenLastCalledWith('project-1', false)
+  })
+
+  it('shows its card only for a check that takes a while, so a quick one never flashes it', async () => {
+    vi.useFakeTimers()
+    try {
+      const preparation = deferred<{ ok: boolean }>()
+      installApi(vi.fn(() => preparation.promise))
+      renderGuard()
+      const card = (): HTMLElement | null => screen.queryByText('Preparing Cloned app')
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PREPARING_CARD_DELAY_MS - 1)
+      })
+      expect(screen.getByRole('status', { name: 'Preparing Cloned app' })).toBeTruthy()
+      expect(card()).toBeNull()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(card()).not.toBeNull()
+
+      await act(async () => {
+        preparation.resolve({ ok: true })
+      })
+      expect(screen.getByText('Project tools are ready')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -139,7 +169,7 @@ describe('ProjectDependencyGuard with Ray', () => {
 
     render(
       <OverlayProvider>
-        <MascotProvider enabled>
+        <MascotProvider>
           <ProjectDependencyGuard project={makeProject()} onSwitchProjects={vi.fn()} hidden={false}>
             <p>Project tools are ready</p>
           </ProjectDependencyGuard>

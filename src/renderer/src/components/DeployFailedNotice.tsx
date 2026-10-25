@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { DeployOutcome } from '@shared/ipc'
 import { Codicon } from './icons'
 import { Ray, RAY_VIEWBOX, type RayMood } from './mascot/Ray'
 import { SpeechBubble, TYPE_MS } from './mascot/SpeechBubble'
-import { useMascot, useReducedMotion } from './mascot/context'
+import { useReducedMotion } from './mascot/context'
 import { useRayGaze } from './mascot/gaze'
 import { isRaySentAway, useRayOnScreen } from './mascot/stage'
 import { DEPLOY_TROUBLE_LINES, type DeployTrouble } from './mascot/lines'
@@ -17,8 +17,7 @@ import { DEPLOY_TROUBLE_LINES, type DeployTrouble } from './mascot/lines'
  * It sits in the layout rather than over the preview: the preview is a native
  * surface, and nothing on the page can be drawn on top of it.
  *
- * With Ray turned off (Settings → Appearance) or sent away, it says the same
- * thing plainly.
+ * With Ray sent away, it says the same thing plainly.
  */
 
 /** Ray's width, in px. */
@@ -67,9 +66,8 @@ export default function DeployFailedNotice({
   authBusy = false,
   onDismiss
 }: DeployFailedNoticeProps): JSX.Element {
-  const mascot = useMascot()
   const [sentAway] = useState(isRaySentAway)
-  const withRay = mascot && !sentAway
+  const withRay = !sentAway
   useRayOnScreen(withRay)
   const reduced = useReducedMotion()
 
@@ -159,7 +157,14 @@ export default function DeployFailedNotice({
           {withRay ? (
             <>
               <div className="deploy-trouble-bubble">
-                {arrived && <SpeechBubble line={{ kind: 'chat', text: line }} typing={!reduced} />}
+                {arrived && (
+                  // Beside him in the pane, which can resize while he talks: no balancing.
+                  <SpeechBubble
+                    line={{ kind: 'chat', text: line }}
+                    typing={!reduced}
+                    balance={false}
+                  />
+                )}
               </div>
               <span className="sr-only" role="alert">
                 {line}

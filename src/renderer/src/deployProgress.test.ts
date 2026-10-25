@@ -157,6 +157,23 @@ describe('reading any deploy', () => {
     const started = readDeployProgress([...installing, '👀 Found Rayfin project root: C:\\boo\n'], 0)
     expect(labels(started, 'done')).toEqual(['Installing packages'])
     expect(started.current.label).toBe('Connecting to Fabric')
+
+    const repairing = readDeployProgress(
+      [
+        'Deploying Boo to Fabric…\n',
+        'Project dependencies are missing or incomplete (commander); reinstalling them with npm...\n'
+      ],
+      5
+    )
+    expect(repairing.current.label).toBe('Installing packages')
+
+    // Waiting for another install to finish isn't an older CLI building.
+    const waiting = readDeployProgress(
+      ['Deploying Boo to Fabric…\n', "Waiting for changes to this project's packages to finish...\n"],
+      60
+    )
+    expect(waiting.current.label).toBe('Installing packages')
+    expect(waiting.reading).toBe('pending')
   })
 
   it('starts over when a sign-in retry runs the deploy again', () => {

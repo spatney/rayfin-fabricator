@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode, type JSX } from 'react'
 import type {
   TeamDiff,
   TeamDiffFile,

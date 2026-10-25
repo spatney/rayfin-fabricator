@@ -8,7 +8,7 @@
  * Geometry is sampled from the original logo (428×424) and exported so the animated
  * SplashScreen build-up can reuse the exact same tiles/brackets and gradient.
  */
-import { useId } from 'react'
+import { useId, type JSX } from 'react'
 
 export const MARK_VIEWBOX = '0 0 428 424'
 export const MARK_TILE_RX = 16

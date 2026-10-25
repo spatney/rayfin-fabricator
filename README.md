@@ -46,9 +46,10 @@ Rayfin is Microsoft's **Backend-as-a-Service for the agentic era**. You define y
 
 1. **[Chat to build.](https://spatney.github.io/rayfin-fabricator/docs/build/chat)** Describe what you want in plain English. The built-in GitHub Copilot agent writes and edits the project files for you, and git quietly snapshots every change so you can diff and roll back.
 2. **[See it as it's built.](https://spatney.github.io/rayfin-fabricator/docs/build/preview)** Watch the app in a live inline preview, point at anything in it with [Design mode](https://spatney.github.io/rayfin-fabricator/docs/build/design) to change it, and browse every file, its history and the data model.
-3. **[Deploy with a click.](https://spatney.github.io/rayfin-fabricator/docs/ship/deploy)** Fabricator runs `rayfin up` for you, redeploys after each successful chat turn, and lets you [share the app](https://spatney.github.io/rayfin-fabricator/docs/ship/share) with people in your tenant.
+3. **[Deploy with a click.](https://spatney.github.io/rayfin-fabricator/docs/ship/deploy)** Fabricator runs `rayfin up` for you, redeploys after each successful chat turn (or [when you choose](https://spatney.github.io/rayfin-fabricator/docs/ship/deploy#deploy-manually)), and lets you [share the app](https://spatney.github.io/rayfin-fabricator/docs/ship/share) with people in your tenant.
 4. **[Harden it.](https://spatney.github.io/rayfin-fabricator/docs/ship/advisor)** The Advisor grades your app's health with instant checks and an on-demand, read-only Copilot review, and every finding comes with a one-click fix.
 5. **[Build with your team](https://spatney.github.io/rayfin-fabricator/docs/team)** *(experimental)*. Team workspaces keep your team's apps in a private GitHub repository, give everyone a personal preview, and publish to Fabric through a pipeline.
+6. **[Use your own API keys](https://spatney.github.io/rayfin-fabricator/docs/build/your-own-api-keys)**. Add Claude, GPT, Grok and Gemini models on your own Anthropic, OpenAI, xAI or Google key to the model pickers, next to your Copilot models, in chat, the Advisor and Design.
 
 ## Download
 
@@ -78,7 +79,7 @@ The site's source is in [`website/`](./website); every page has an **Edit this p
 
 ## Build from source
 
-You'll need Windows 10/11 or macOS, Node.js 20+, Rust stable (MSVC on Windows; Xcode command-line tools on macOS), the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/), and Git.
+You'll need Windows 10/11 or macOS, Node.js 24 LTS (22.13+ also works), Rust stable (MSVC on Windows; Xcode command-line tools on macOS), the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/), and Git.
 
 ```bash
 git clone https://github.com/spatney/rayfin-fabricator.git

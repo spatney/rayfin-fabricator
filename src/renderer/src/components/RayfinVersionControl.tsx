@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import type { RayfinVersionInfo } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 

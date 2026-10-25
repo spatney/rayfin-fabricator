@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type {
   ChatToolCall,
   HelpAction,
@@ -11,7 +11,6 @@ import type {
 import { HELP_STOPPED } from '@shared/ipc'
 import Markdown from '../Markdown'
 import { Codicon } from '../icons'
-import { FabricatorMark } from '../FabricatorMark'
 import { useSuppressPreview } from '../../overlay'
 import { useToast } from '../../toast'
 import { openDocs } from '../../docsLinks'
@@ -21,7 +20,6 @@ import { HelpWorkLog } from './HelpWorkLog'
 import { HelpRayAvatar, HelpRayThinking, TypedLine } from './HelpRay'
 import { PROMPTS, Spinner } from './parts'
 import { describeWhen, fromSaved, toSaved } from './history'
-import { useMascot } from '../mascot/context'
 import { helpGreeting } from '../mascot/lines'
 import './help.css'
 
@@ -536,16 +534,15 @@ function Welcome({
   appVersion?: string
   onPick: (text: string) => void
 }): JSX.Element {
-  const mascot = useMascot()
   const greeting = useMemo(() => helpGreeting(), [])
   return (
-    <div className={`help-welcome${mascot ? ' help-welcome--ray' : ''}`}>
+    <div className="help-welcome">
       <div className="help-hello-host">
-        {mascot ? <HelpRayAvatar /> : <FabricatorMark className="brand-mark" />}
+        <HelpRayAvatar />
       </div>
       <div className="help-hello-text">
         <h2 className="help-hello-title">
-          {mascot ? <TypedLine text={greeting} /> : 'fabricator help'}
+          <TypedLine text={greeting} />
         </h2>
         <p className="help-hello-lead">
           Ask about anything that isn&apos;t working. I can read what this machine has been
@@ -578,7 +575,6 @@ function ExchangeView({
 }): JSX.Element {
   const { status } = exchange
   const working = status === 'thinking' || status === 'streaming'
-  const mascot = useMascot()
 
   return (
     <article className="help-x">
@@ -603,16 +599,7 @@ function ExchangeView({
 
       {exchange.tools.length > 0 && <HelpWorkLog tools={exchange.tools} working={working} />}
 
-      {status === 'thinking' &&
-        !exchange.answer &&
-        (mascot ? (
-          <HelpRayThinking />
-        ) : (
-          <p className="help-thinking">
-            <Spinner />
-            <span>looking through your logs</span>
-          </p>
-        ))}
+      {status === 'thinking' && !exchange.answer && <HelpRayThinking />}
 
       {exchange.answer && (
         <div className={`help-a ${status === 'streaming' ? 'is-streaming' : ''}`}>

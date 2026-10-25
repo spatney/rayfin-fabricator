@@ -7,7 +7,7 @@ Use this page when Fabricator cannot publish your app to Microsoft Fabric or the
 
 ## A deploy failed
 
-You see **Deploy failed** in the preview status or a deploy toast, and Ray swims in above the preview to say "That deploy didn’t make it to Fabric. Want me to find out why?" With Ray turned off, the notice says "The deploy didn’t finish. Help can find out why." A build failure's log can say "❌ Deployment failed: Static build command failed. Fix the build errors and re-run, or use 'rayfin up staticapp deploy --skip-build' to deploy existing content."
+You see a **Deploy failed** toast, the deployment control in the app bar says **Failed**, and Ray swims in above the preview to say "That deploy didn’t make it to Fabric. Want me to find out why?" If you've sent Ray away, the notice says "The deploy didn’t finish. Help can find out why." A build failure's log can say "❌ Deployment failed: Static build command failed. Fix the build errors and re-run, or use 'rayfin up staticapp deploy --skip-build' to deploy existing content."
 
 ![Ray above the preview after a failed deploy, saying the deploy didn't make it to Fabric, with Find out why and View logs beside him.](/screenshots/deploy-error.webp)
 
@@ -16,10 +16,10 @@ Fabricator runs the project's pinned Rayfin CLI with `rayfin up -y --force`. The
 1. Select **Find out why**, or select Ray. Help opens and asks "Why did my last deploy fail?" for you. It reads the end of the deploy's log, explains the cause in plain language, and offers the fix as a button when there is one.
 2. To read the log yourself, select **View logs**. Read the first real error near the end. Ignore a final generic "Deploy failed" line if a more specific line appears above it. The `Details:` line under the error usually says why, such as "Details: The PostgreSQLDatabase feature is not enabled."
 3. If the log says the project has no workspace or asks for a workspace, choose a deployment workspace and deploy again.
-4. If the log mentions authentication, expired credentials, a token-cache lock, `HTTP 401`, or `unauthorized`, use **Refresh Fabric authentication**, then select **Redeploy**.
+4. If the log mentions authentication, expired credentials, a token-cache lock, `HTTP 401`, or `unauthorized`, use **Refresh Fabric authentication**, then select **Try again** in the app bar.
 5. If the log mentions a build or TypeScript error, ask Copilot to fix that error, then deploy again.
-6. If the log says "Environment variable '…' referenced in rayfin.yml (…) is not defined.", your app's `rayfin/rayfin.yml` uses a setting that isn't set on this computer. Add that variable to the project's `rayfin/.env`, then select **Redeploy**.
-7. If the log mentions Fabric capacity, permissions, a workspace conflict, or a Fabric API failure, fix that Fabric workspace issue and select **Redeploy**.
+6. If the log says "Environment variable '…' referenced in rayfin.yml (…) is not defined.", your app's `rayfin/rayfin.yml` uses a setting that isn't set on this computer. Add that variable to the project's `rayfin/.env`, then select **Try again**.
+7. If the log mentions Fabric capacity, permissions, a workspace conflict, or a Fabric API failure, fix that Fabric workspace issue and select **Try again**.
 8. If the log mentions destructive data-model changes, note that Fabricator already runs deploy with `--force`; the failure is coming from the CLI or Fabric after that forced deploy attempt.
 
 To put the notice away, select the **×** beside it. It comes back if the next deploy fails.
@@ -28,15 +28,15 @@ If the log is unclear, [Report a problem](/docs/troubleshooting/report-a-problem
 
 ## Automatic redeploy stopped
 
-After a successful chat turn, the app no longer redeploys automatically and you have to select **Redeploy**.
+After a successful chat turn, the app no longer redeploys automatically and you have to deploy from the app bar.
 
 Fabricator auto-deploys only after a successful, non-team chat turn when it can confirm there are changes since the last deployed revision. It does not auto-deploy failed or cancelled turns. If the last deployed revision is unknown, the next successful turn deploys once to establish a baseline. If the change check fails, Fabricator shows "Auto-deploy check failed" and tells you to use **Redeploy**.
 
 1. Confirm the chat turn finished successfully. Failed, stopped, or cancelled turns do not auto-deploy.
 2. Look for a toast saying "Auto-deploy check failed" or "Could not check for undeployed changes." If you see it, select **Redeploy**.
-3. If you switched deployments or workspaces, select **Redeploy** once to establish the deployed revision for that target.
+3. If you switched deployments or workspaces, deploy once from the app bar, where the button says **Deploy changes**, to establish the deployed revision for that target.
 4. If a deploy is already running, wait for it to finish before sending another turn.
-5. If manual **Redeploy** works but automatic redeploy keeps stopping, keep using **Redeploy** as a workaround and [Report a problem](/docs/troubleshooting/report-a-problem).
+5. If deploying from the app bar works but automatic redeploy keeps stopping, keep deploying from the app bar as a workaround and [Report a problem](/docs/troubleshooting/report-a-problem).
 
 This is an open reliability issue for some long sessions.
 
@@ -44,7 +44,7 @@ This is an open reliability issue for some long sessions.
 
 A deploy repeatedly fails even though setup shows you signed in, or the notice above the preview says Fabric wants you to sign in again and offers **Refresh Fabric authentication**.
 
-![The account menu opened from the avatar in the top-right corner, showing the signed-in Fabric account with Refresh Fabric authentication and Sign out.](/screenshots/account-menu.webp)
+![The account menu opened from the avatar in the top-right corner, showing the signed-in Fabric account with Manage accounts, Refresh Fabric authentication, Sign out and Settings.](/screenshots/account-menu.webp)
 
 Fabricator deploys with the Rayfin CLI credentials for the project. **Refresh Fabric authentication** runs the selected project's `rayfin logout`, then `rayfin login`, and verifies the refreshed credential against Fabric. It does not clear Copilot, Azure CLI, or preview-browser sessions.
 
@@ -52,7 +52,7 @@ Fabricator deploys with the Rayfin CLI credentials for the project. **Refresh Fa
 2. In the dialog, select **Clear credentials and sign in**.
 3. Complete the browser sign-in.
 4. Wait for Fabricator to show that authentication is verified.
-5. Select **Redeploy**. Authentication refresh does not redeploy automatically.
+5. Select **Try again** in the app bar. Authentication refresh does not redeploy automatically.
 
 If refresh fails, update the app's Rayfin packages to Rayfin 1.35.1 or newer from the Rayfin version control, then try again. If it still fails, [Report a problem](/docs/troubleshooting/report-a-problem).
 
@@ -80,7 +80,7 @@ Rayfin apps deploy to a Fabric workspace backed by an eligible Fabric capacity. 
 2. If the capacity is paused or unavailable, resume it in Fabric or choose another workspace.
 3. Confirm your account can deploy to the workspace.
 4. If you are in a client tenant, make sure you completed Fabric sign-in for that tenant.
-5. Select **Redeploy**.
+5. Select **Try again** in the app bar.
 
 If you cannot see the right workspace or capacity, contact your Fabric administrator or [Report a problem](/docs/troubleshooting/report-a-problem) with the deploy log.
 
@@ -92,7 +92,7 @@ Current Fabricator versions use the Rayfin CLI pinned in each project, and refre
 
 1. Update to the latest Fabricator version.
 2. Open the project and let dependency installation finish.
-3. Select **Redeploy**.
+3. Select **Try again** in the app bar.
 4. If npm still reports missing or unresolved packages, repair project dependencies with `npm ci` when `package-lock.json` exists, or `npm install` otherwise.
 5. Do not install a global Rayfin CLI as the primary fix; Fabricator deploys through the project-pinned CLI.
 

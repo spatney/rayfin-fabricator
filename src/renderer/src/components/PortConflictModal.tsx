@@ -2,6 +2,8 @@ import type { PortConflict } from '@shared/ipc'
 import ConfirmModal from './ConfirmModal'
 import { openDocs } from '../docsLinks'
 
+import type { JSX } from 'react'
+
 /** `plan`: a turn is already running, so nothing can be pushed to Fabric yet. */
 export type PortPromptContext = 'turn' | 'plan'
 

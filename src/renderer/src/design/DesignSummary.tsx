@@ -2,6 +2,8 @@ import type { ChatDesignSummary, DesignItemKind } from '@shared/design'
 import { DesignIcon, PaletteIcon, SparkleIcon } from '../components/icons'
 import './design.css'
 
+import type { JSX } from 'react'
+
 function KindIcon({ kind }: { kind: DesignItemKind }): JSX.Element {
   if (kind === 'theme') return <PaletteIcon className="design-card-kind" />
   if (kind === 'suggestion') return <SparkleIcon className="design-card-kind" />

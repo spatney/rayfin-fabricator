@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, type JSX } from 'react'
 import type { TeamRunner, TeamRunnerInfo } from '@shared/ipc'
 
 export type RunnerKind = 'hosted' | 'group' | 'labels'

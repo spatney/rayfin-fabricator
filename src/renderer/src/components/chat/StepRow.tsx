@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useState, type JSX } from 'react'
 import type { ChatToolCall } from '@shared/ipc'
 import { langFromPath } from '../../syntax'
 import { ChevronRightIcon, Codicon } from '../icons'

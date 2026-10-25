@@ -142,10 +142,59 @@ describe('AccountsModal', () => {
     expect(screen.queryByRole('note')).toBeNull()
   })
 
-  it('warns when Fabric and the Azure CLI use different organizations', () => {
-    installApi()
+  it('offers one way to sign in to each service before any account is signed in', async () => {
+    const { api } = installApi()
+    api.accounts.fabric.mockResolvedValue({ accounts: [], sharedTokenStore: false })
+    api.accounts.azure.mockResolvedValue({ azInstalled: true, accounts: [] })
+    api.github.accounts.mockResolvedValue({ ghInstalled: true, accounts: [] })
+    renderModal({
+      auth: { copilot: { signedIn: false }, rayfin: { signedIn: false }, az: { signedIn: false } }
+    })
+    await within(card('GitHub')).findByRole('button', { name: 'Sign in to GitHub' })
+    expect(screen.getByRole('button', { name: 'Sign in to GitHub Copilot' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in to Microsoft Fabric' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Add account' })).toBeNull()
+
+    const azure = card('Azure CLI')
+    fireEvent.click(within(azure).getByRole('button', { name: 'Sign in to the Azure CLI' }))
+    fireEvent.click(within(azure).getByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(api.auth.loginAz).toHaveBeenCalledWith(undefined))
+  })
+
+  it('warns when Fabric and the Azure CLI use different organizations, and switches it to match', async () => {
+    const { api } = installApi()
     renderModal({ auth: { ...auth, rayfin: { ...auth.rayfin, tenant: FABRIKAM } } })
-    expect(screen.getByRole('note').textContent).toContain('use the same organization for both')
+    const note = screen.getByRole('note')
+    expect(note.textContent).toContain('use one organization for both')
+    fireEvent.click(
+      await within(note).findByRole('button', { name: 'Use alice@fabrikam.com in the Azure CLI' })
+    )
+    await waitFor(() =>
+      expect(api.accounts.useAzure).toHaveBeenCalledWith(
+        'alice@fabrikam.com',
+        '22222222-2222-2222-2222-222222222222'
+      )
+    )
+    // Fabric's organization is named by the Azure CLI account in it.
+    expect(note.textContent).toContain('Fabric uses Fabrikam and the Azure CLI uses Contoso')
+  })
+
+  it('offers to sign the Azure CLI in to Fabric’s organization when it has no account there', async () => {
+    const { api } = installApi()
+    const elsewhere = 'bbbbbbbb-0000-0000-0000-000000000000'
+    renderModal({ auth: { ...auth, rayfin: { ...auth.rayfin, tenant: elsewhere } } })
+    await waitFor(() => expect(api.accounts.azure).toHaveBeenCalled())
+    fireEvent.click(
+      within(screen.getByRole('note')).getByRole('button', {
+        name: 'Sign in to Fabric’s organization in the Azure CLI'
+      })
+    )
+    const form = within(card('Azure CLI')).getByRole('form', { name: 'Add an Azure CLI account' })
+    expect((within(form).getByLabelText('Organization (optional)') as HTMLInputElement).value).toBe(
+      elsewhere
+    )
+    fireEvent.click(within(form).getByRole('button', { name: 'Continue' }))
+    await waitFor(() => expect(api.auth.loginAz).toHaveBeenCalledWith(elsewhere))
   })
 
   it('switches to, adds, and signs out of other Fabric accounts', async () => {

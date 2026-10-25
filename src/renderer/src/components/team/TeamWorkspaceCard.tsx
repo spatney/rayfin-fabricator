@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react'
 import type { TeamMap, TeamMapApp, TeamMapRun, TeamWorkspace } from '@shared/ipc'
 import { AddIcon, ChevronRightIcon } from '../icons'
 import { copyHealth, isActive, publishedHealth, type Health } from './map/model'

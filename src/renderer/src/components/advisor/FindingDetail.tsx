@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { normalizeSeverity, ruleById } from '@shared/advisor/catalog'
 import type { AdvisorDismissReason } from '@shared/ipc'
 import type { FindingItem } from '../../advisor/lifecycle'
@@ -168,7 +168,7 @@ export function FindingDetail({
   useEffect(() => setShowExplain(Boolean(explain)), [f.id])
   const generating = explain?.status === 'loading' || explain?.status === 'streaming'
   const docs = [...(f.docsUrl ? [{ title: 'Cited guidance', url: f.docsUrl }] : []), ...(rule?.docs ?? [])]
-  const fixable = sev !== 'note' && item.status !== 'dismissed' && item.status !== 'muted'
+  const fixable = item.status !== 'dismissed' && item.status !== 'muted'
   const canVerify = ai && (item.status === 'applied' || item.status === 'still' || item.status === 'open')
 
   const toggleExplain = (): void => {

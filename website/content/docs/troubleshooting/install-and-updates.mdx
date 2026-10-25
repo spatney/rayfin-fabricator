@@ -42,14 +42,14 @@ If the app still will not open, [Report a problem](/docs/troubleshooting/report-
 
 ## An update won't install or keeps prompting
 
-You may see **Update available**, a `Fabricator <version> is ready to install.` prompt, an `Update <version> is ready to install` banner, a `Downloading update <version>…` banner, "Installing update…", or "Couldn’t check for updates. Try again later."
+You may see **Update available**, a `Fabricator <version> is ready to install.` prompt, an `Update <version> is ready to install` banner, a `Downloading update <version>…` banner, or "Installing update…".
 
-Fabricator checks GitHub Releases on startup and from **Settings → Updates → Check for updates**. It downloads a signed update in the background, then offers **Update now** or **Later**. Choosing **Later** keeps the app open and leaves the banner available with **Restart & update**.
+Fabricator checks GitHub Releases when it starts, every 4 hours while it's open, and as soon as your connection comes back after a check failed. It downloads a signed update in the background. An update found at startup offers **Update now** or **Later**. Choosing **Later** keeps the app open and leaves the banner available with **Restart & update**. An update found while you work goes straight to the banner.
 
 1. If you see **Update available**, select **Update now**. Fabricator restarts to apply the update.
 2. If you chose **Later**, use the update banner and select **Restart & update** when you are ready.
-3. If **Settings → Updates → Check for updates** says "Couldn’t check for updates. Try again later.", check your network and try again.
-4. If the banner stays on `Downloading update <version>…` or "Installing update…" for a long time, restart Fabricator and run **Settings → Updates → Check for updates** again.
+3. If no update shows up when you expect one, check your network. Fabricator checks again once your connection is back. To check right away, restart Fabricator.
+4. If the banner stays on `Downloading update <version>…` or "Installing update…" for a long time, restart Fabricator. It checks for the update again when it starts.
 5. If your installed build predates auto-update support, install the latest release manually once from [GitHub Releases](https://github.com/spatney/rayfin-fabricator/releases/latest). After that, in-app updates work.
 6. If you see "A required update must be installed to continue.", leave Fabricator open until it restarts. If it fails, install the latest release manually.
 

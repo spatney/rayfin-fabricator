@@ -17,6 +17,10 @@ use crate::services::emit::proc_streamer;
 use crate::services::exec::{self, OnData, RunOptions, Stream};
 use crate::types::{DoctorReport, InstallResult, ToolStatus};
 
+/// The oldest Node.js Fabricator supports. The Vite that runs a project's local
+/// preview (7 and 8) needs 20.19+ or 22.12+, and Node 20 is past end of life.
+pub(crate) const MIN_NODE_VERSION: &str = "22.12";
+
 struct SystemPkg {
   winget: Option<&'static str>,
   brew: Option<&'static str>,
@@ -48,8 +52,8 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
         winget: Some("OpenJS.NodeJS.LTS"),
         brew: Some("node"),
       }),
-      min_version: Some("20"),
-      install_hint: "Install Node.js 20 or newer (includes npm).",
+      min_version: Some(MIN_NODE_VERSION),
+      install_hint: "Install Node.js 22.12 or newer (includes npm).",
       install_url: Some("https://nodejs.org/en/download"),
     },
     ToolDef {
@@ -162,7 +166,7 @@ fn version_tuple(v: &str) -> Option<(u64, u64, u64)> {
 
 /// True when `version` is present and meets or exceeds `min` (both
 /// `major.minor[.patch]`). An unparseable/absent version never satisfies a floor.
-fn meets_min_version(version: Option<&str>, min: &str) -> bool {
+pub(crate) fn meets_min_version(version: Option<&str>, min: &str) -> bool {
   match (version.and_then(version_tuple), version_tuple(min)) {
     (Some(v), Some(m)) => v >= m,
     _ => false,
@@ -600,14 +604,17 @@ mod tests {
   }
 
   #[test]
-  fn node_requires_20() {
-    // The project-local Rayfin CLI / SDK packages require Node >=20; flag an older
-    // Node so the doctor upgrades it (and relaunches) before anything else.
+  fn node_must_run_the_vite_in_rayfin_apps() {
+    // Vite 7 crashes on Node 20.10 before the local preview is ready, and Node 20
+    // is past end of life: flag it so setup offers the upgrade (and relaunch).
     let node = tool_by_id("node").expect("node tool def");
-    assert_eq!(node.min_version, Some("20"));
-    assert!(!meets_min_version(Some("18.20.4"), node.min_version.unwrap()));
-    assert!(meets_min_version(Some("20.11.0"), node.min_version.unwrap()));
-    assert!(meets_min_version(Some("22.14.0"), node.min_version.unwrap()));
+    let min = node.min_version.expect("a minimum Node version");
+    for old in ["18.20.4", "20.10.0", "20.19.5", "22.11.0"] {
+      assert!(!meets_min_version(Some(old), min), "{old}");
+    }
+    for supported in ["22.12.0", "24.17.0"] {
+      assert!(meets_min_version(Some(supported), min), "{supported}");
+    }
   }
 
   #[test]

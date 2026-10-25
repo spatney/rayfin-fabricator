@@ -3,7 +3,7 @@ title: "Set up and sign in"
 description: "Use Fabricator setup the first time you open it: check tools, sign in to GitHub Copilot and the Azure CLI, and enter the app."
 ---
 
-Setup prepares your computer for Fabricator the first time you open it. It has three steps: connect GitHub Copilot, install the tools, and sign in to Microsoft. Work down the page, then choose **Enter Fabricator**. If everything is already in place, Fabricator skips setup and opens straight to Home. After that, Fabricator opens straight to your work.
+Setup prepares your computer for Fabricator the first time you open it. It has three steps: connect GitHub Copilot, install the tools, and sign in to Microsoft. Work down the page, then choose **Enter Fabricator**. If everything is already in place, Fabricator skips setup and opens straight to Home. After that, Fabricator opens on your work after a short welcome.
 
 ![The setup screen with all three steps complete — GitHub Copilot connected, all five tools installed, Microsoft signed in — and a "You're all set" block offering Enter Fabricator.](/screenshots/setup.webp)
 
@@ -23,7 +23,7 @@ Fabricator uses a few free tools behind the scenes, and can install them for you
 
 | Tool | Required | Minimum | What it is used for |
 | --- | --- | --- | --- |
-| Node.js | Yes | 20 | Runs your app on this computer while you build it. |
+| Node.js | Yes | 22.12 | Runs your app on this computer while you build it. |
 | npm | Yes | Any installed version | Fetches the building blocks your app is made from. |
 | Git | Yes | Any installed version | Keeps a history of your app so you can always go back. |
 | Azure CLI | Yes | Any installed version | Signs you in to Microsoft so your app can be published. |
@@ -73,7 +73,9 @@ When required tools are installed and both setup accounts are verified, a **You'
 
 ## Later launches
 
-Once setup has passed, Fabricator opens straight to your work and checks your tools and accounts in the background. Until the check finishes, the account control in the app bar shows a spinner instead of **Sign in to Fabric**.
+Once setup has passed, Fabricator skips setup. Each launch shows a short welcome screen while your work loads behind it: Ray swims in and welcomes you back, and the line under the Fabricator logo names the project that's opening. The welcome fades away once your project is ready, usually within a second or two, and you're back where you left off.
+
+Meanwhile, Fabricator checks your tools and accounts in the background. Until the check finishes, the account control in the app bar shows a spinner instead of **Sign in to Fabric**.
 
 If the check finds a problem, a bar under the app bar says what it is, for example "Not signed in to GitHub Copilot." Select **Manage accounts** to sign in, or **Review setup** to fix a missing tool. The bar doesn't stop you working; close it with its ✕ button.
 

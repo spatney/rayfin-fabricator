@@ -2,6 +2,8 @@ import type { TeamMapRun } from '@shared/ipc'
 import { activeDeploys } from './useTeamActivity'
 import './team.css'
 
+import type { JSX } from 'react'
+
 interface Props {
   /** The workspace pipeline's recent runs. */
   runs: TeamMapRun[]

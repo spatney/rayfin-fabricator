@@ -1044,6 +1044,27 @@ export interface WorkspaceModelsResult {
   error?: string
 }
 
+/** Fabric item types a Rayfin connector reads. */
+export type FabricDataItemType = 'SemanticModel' | 'Warehouse' | 'SQLDatabase' | 'Lakehouse'
+
+/** One item in a workspace the app can connect to, for the "Add Fabric data" picker. */
+export interface WorkspaceDataItem {
+  id: string
+  name: string
+  type: FabricDataItemType
+  description?: string
+}
+
+/** Outcome of listing the data in a workspace (never throws). */
+export interface WorkspaceDataResult {
+  ok: boolean
+  items: WorkspaceDataItem[]
+  /** True when there was no cached Fabric session (Rayfin re-login needed). */
+  needsLogin?: boolean
+  needsAz?: boolean
+  error?: string
+}
+
 /** One table in a semantic model's schema (a node in the Model-tab diagram). */
 export interface SemanticTable {
   name?: string
@@ -1257,6 +1278,14 @@ export interface DeployStatus {
   portalUrl?: string
 }
 
+/** What the next deploy would ship (`deploy.pending`). */
+export interface PendingChanges {
+  /** Something differs from the deployed version (or there's no known one). */
+  changed: boolean
+  /** How many files differ, when the deployed version is known. */
+  files?: number
+}
+
 /**
  * Result of starting a project's Vite dev server for the live local preview.
  * `outcome` is `running` (started, or already up), `unsupported`
@@ -1408,10 +1437,12 @@ export interface ChatPlanArtifact {
 /**
  * A Copilot model available to the signed-in user, as reported by the engine
  * (`models.list`). Drives the chat model picker so the choices match each user's
- * plan/policy instead of a hard-coded list.
+ * plan/policy instead of a hard-coded list. The list also holds the models the
+ * user chose on their own provider keys (Your own API keys).
  */
 export interface CopilotModel {
-  /** Selection id passed to the engine as the model (e.g. "claude-sonnet-4.5"). */
+  /** Selection id passed to the engine as the model (e.g. "claude-sonnet-4.5",
+   *  or "anthropic/claude-sonnet-5-5" for a model on the user's own key). */
   id: string
   /** Human-friendly display name. */
   name: string
@@ -1425,6 +1456,53 @@ export interface CopilotModel {
   priceCategory?: 'low' | 'medium' | 'high' | 'very_high'
   /** The model accepts image input (screenshots). */
   vision?: boolean
+  /** Who makes the model, for its logo: "Anthropic", "OpenAI", "Google"… */
+  vendor?: string
+  /** Context windows to choose from, when the model offers more than one. */
+  contextTiers?: ContextTierOption[]
+  /** Set for a model that runs on the user's own API key. */
+  byok?: ByokModelMeta
+}
+
+/** A model's context window: its standard one, or a long one some models offer. */
+export type ContextTier = 'default' | 'long_context'
+
+/** One context window a model offers, with its size. */
+export interface ContextTierOption {
+  tier: ContextTier
+  /** Total tokens in the window (prompt plus output). */
+  tokens: number
+}
+
+/** How a model on the user's own API key shows in the model picker. */
+export interface ByokModelMeta {
+  /** Provider id: "anthropic", "openai", "xai" or "google". */
+  provider: string
+  /** Provider name, e.g. "Anthropic". */
+  providerName: string
+  /** Its key is saved, so it can be chosen. */
+  ready: boolean
+  /** Why it can't be chosen. */
+  note?: string
+}
+
+/** What Auto can optimize for ("Optimized for"), as Copilot offers it to the account. */
+export interface AutoTiers {
+  /** The tier Auto uses when none is chosen. */
+  defaultTier: string
+  tiers: AutoTierOption[]
+}
+
+/** One Auto routing preference, e.g. Balance. */
+export interface AutoTierOption {
+  /** Copilot's id for it ("balance"), sent back unchanged. */
+  id: string
+  name: string
+  description: string
+  /** The account can choose it. */
+  enabled: boolean
+  /** Why it can't be chosen, in Copilot's words. */
+  note?: string
 }
 
 /** Preview pane view selection: the direct app URL, or the app embedded in the
@@ -1477,6 +1555,10 @@ export interface StudioProject {
   model?: string
   /** Copilot reasoning effort for this project's chat (`--effort`). */
   effort?: ReasoningEffort
+  /** With Auto, what it optimizes for (an {@link AutoTierOption} id); undefined = Copilot's default. */
+  autoTier?: string
+  /** With a model that offers several, its context window; undefined = the standard one. */
+  contextTier?: ContextTier
   /**
    * Preview pane view selection. `'fabric'` shows the app embedded in the Fabric
    * portal shell ({@link DeployInfo.portalUrl}); absent / `'direct'` shows the
@@ -1520,16 +1602,82 @@ export interface AppSettings {
    */
   fullDiagnostics?: boolean
   /**
-   * Show Ray, Fabricator's stingray mascot, while apps install and in Help.
-   * On unless turned off (an unset value means on).
-   */
-  mascot?: boolean
-  /**
-   * With the Deploy manually experiment on, the status bar's deploy mode:
-   * 'manual' (the default) keeps chat changes local until Redeploy, 'auto'
-   * deploys after each turn as usual. Ignored while the experiment is off.
+   * How chat turns deploy personal apps, set by the deployment panel's "Deploy
+   * after each chat turn" switch: 'auto' (the default, also when unset) deploys
+   * as each turn finishes; 'manual' keeps chat changes on this computer until the
+   * user deploys them. Team apps aren't affected.
    */
   deployMode?: 'auto' | 'manual'
+  /**
+   * Your own API keys: each provider's models and which of them the model
+   * pickers show. Never holds a key (those live in the OS credential store).
+   */
+  byok?: ByokSettings
+}
+
+/** Saved state of Your own API keys, by provider id. */
+export interface ByokSettings {
+  providers?: Record<string, ByokProviderSettings>
+}
+
+/** One provider: the models its API listed for the key, and the ones shown in the pickers. */
+export interface ByokProviderSettings {
+  models: ByokModelInfo[]
+  /** Provider model ids shown in the model pickers. */
+  enabled: string[]
+  /** When the key was last checked (ISO 8601). */
+  checkedAt?: string
+}
+
+/** A model a provider offers to the user's key. */
+export interface ByokModelInfo {
+  /** The provider's model id (e.g. "claude-sonnet-5-5"). */
+  id: string
+  name: string
+  /** Total context window in tokens. */
+  contextWindow: number
+  maxPrompt?: number
+  maxOutput: number
+  vision: boolean
+  efforts: ReasoningEffort[]
+  defaultEffort?: ReasoningEffort
+  /** The same model in Copilot's catalog, whose agent setup the session uses. */
+  copilotId?: string
+  adaptiveThinking?: string
+  /** The provider is retiring it. */
+  deprecated: boolean
+  /** Suggested when the key is added. */
+  recommended: boolean
+  /** Seconds since the epoch the provider published it. */
+  created: number
+}
+
+/** One provider in Accounts → Model providers. */
+export interface ByokProviderStatus {
+  id: string
+  name: string
+  /** What its models are, e.g. "Claude models". */
+  description: string
+  /** Where to create a key. */
+  keyUrl: string
+  /** How keys start, for the input's placeholder (e.g. "sk-ant-"). */
+  keyPrefix: string
+  hasKey: boolean
+  models: ByokModelInfo[]
+  /** Model ids shown in the model pickers. */
+  enabled: string[]
+  checkedAt?: string
+  /** Why the last check failed, in plain language. */
+  error?: string
+}
+
+/** Everything Accounts → Model providers shows. */
+export interface ByokStatus {
+  /** Keys can be stored on this operating system. */
+  supported: boolean
+  /** Where keys are kept, e.g. "Windows Credential Manager". */
+  store: string
+  providers: ByokProviderStatus[]
 }
 
 /** Opt-in experimental feature flags (Settings → Experiments). */
@@ -1541,12 +1689,6 @@ export interface ExperimentFlags {
    * team workspaces without deleting anything.
    */
   teamWorkspaces?: boolean
-  /**
-   * Deploy manually: chat turns don't deploy. Changes stay on this computer,
-   * with the live local preview kept between turns, until the user selects
-   * Redeploy. Team apps aren't affected: they still save after each turn.
-   */
-  manualDeploy?: boolean
 }
 
 export interface CreateProjectInput {
@@ -2170,12 +2312,24 @@ export interface AdvisorEventEnvelope {
   event: AdvisorEvent
 }
 
-/** Per-project chat configuration (model + reasoning effort). */
+/** Per-project chat configuration (model, reasoning effort and tiers). */
 export interface ChatOptions {
   /** Copilot model id (`--model`); 'auto' or undefined lets Copilot pick. */
   model?: string
   /** Reasoning effort (`--effort`). */
   effort?: ReasoningEffort
+  /** With Auto, what it optimizes for. */
+  autoTier?: string
+  /** With a model that offers several, its context window. */
+  contextTier?: ContextTier
+}
+
+/** The model a one-off Advisor run uses (Explain, Verify). */
+export interface AdvisorModelChoice {
+  model?: string
+  effort?: string
+  autoTier?: string
+  contextTier?: string
 }
 
 /** Extras for one Design Options request. */
@@ -2254,12 +2408,21 @@ export interface ChatMessage {
   design?: ChatDesignSummary
   /** The Advisor findings a (user) message handed to Copilot, shown as a card in the transcript. */
   advisor?: ChatAdvisorSummary
+  /** The Fabric data a (user) message asked Copilot to connect, shown as chips in the transcript. */
+  data?: ChatDataRef[]
   /**
    * The prompt Copilot received when it differs from `text` (a Design turn's
    * structured changes, or a hand-off's full instructions); re-sent by Retry /
    * Try again / Resume.
    */
   prompt?: string
+}
+
+/** Fabric data a message carried, as its chip shows it. */
+export interface ChatDataRef {
+  name: string
+  type: FabricDataItemType
+  workspace: string
 }
 
 /* ------------------------------------------------------------------ *
@@ -2581,6 +2744,7 @@ export const IpcChannels = {
   deployRun: 'deploy:run',
   deployStatus: 'deploy:status',
   deployHasChanges: 'deploy:hasChanges',
+  deployPending: 'deploy:pending',
   deployList: 'deploy:list',
   deploySwitch: 'deploy:switch',
   deploySetName: 'deploy:setName',
@@ -2651,6 +2815,12 @@ export interface RayfinStudioApi {
   openInEditor: (id: string) => Promise<OpenInEditorResult>
   /** Restart the app (used to pick up newly installed Node/Git on PATH). */
   relaunch: () => Promise<void>
+  /**
+   * Show the main window. It starts hidden, and the renderer calls this once its
+   * first screen is on the page so a launch never shows an empty window.
+   * `background` (`#rrggbb`) is that screen's colour. Later calls do nothing.
+   */
+  revealWindow: (background?: string) => Promise<void>
 
   /** In-app auto-update (Tauri updater, backed by GitHub Releases). */
   updates: {
@@ -2796,6 +2966,13 @@ export interface RayfinStudioApi {
      * `needsLogin` when the Fabric session has lapsed.
      */
     listWorkspaceModels: (workspaceId: string) => Promise<WorkspaceModelsResult>
+    /**
+     * List the data in a Fabric workspace that the app can connect to through a
+     * Rayfin connector (semantic models, warehouses, SQL databases, lakehouses) —
+     * the "Add Fabric data" picker. Any workspace the user can open. Never
+     * throws; reports `needsLogin` when the Fabric session has lapsed.
+     */
+    listWorkspaceData: (workspaceId: string) => Promise<WorkspaceDataResult>
     /**
      * Before the active project's first deploy into a workspace, look for a
      * same-named app there that the deploy would replace. Never throws.
@@ -3045,8 +3222,7 @@ export interface RayfinStudioApi {
       projectId: string,
       explainId: string,
       finding: AdvisorFinding,
-      model?: string,
-      effort?: string
+      choice?: AdvisorModelChoice
     ) => Promise<string>
     /** Cancel the in-flight inline explanation for a project. Resolves true if one was running. */
     explainCancel: (projectId: string) => Promise<boolean>
@@ -3059,8 +3235,7 @@ export interface RayfinStudioApi {
       projectId: string,
       verifyId: string,
       findings: AdvisorFinding[],
-      model?: string,
-      effort?: string
+      choice?: AdvisorModelChoice
     ) => Promise<AdvisorVerdict[]>
     /** Cancel the in-flight verification for a project. Resolves true if one was running. */
     verifyCancel: (projectId: string) => Promise<boolean>
@@ -3116,10 +3291,15 @@ export interface RayfinStudioApi {
     history: (projectId: string) => Promise<ChatMessage[]>
     /** Persist the conversation history for a project (empty array clears it). */
     saveHistory: (projectId: string, messages: ChatMessage[]) => Promise<void>
-    /** Set the model / reasoning effort used for this project's chat. */
+    /** Set the model, reasoning effort and tiers used for this project's chat. */
     setOptions: (projectId: string, options: ChatOptions) => Promise<void>
     /** List the Copilot models available to the signed-in user (for the picker). */
     listModels: () => Promise<CopilotModel[]>
+    /**
+     * What Auto can optimize for on the signed-in account (Efficiency, Balance,
+     * Intelligence…), or null when Copilot offers no choice.
+     */
+    autoTiers: () => Promise<AutoTiers | null>
     /**
      * Generate (or return cached) Copilot starter suggestions for a project's
      * empty Build chat, grounded in the app's code. `ok: false` means the
@@ -3153,7 +3333,12 @@ export interface RayfinStudioApi {
      * An unknown deployment baseline also needs a deploy; Git failures reject.
      */
     hasChanges: (projectId: string) => Promise<boolean>
-    /** List the Fabric deployments recorded for this project (`rayfin up list`). */
+    /**
+     * What the next deploy would ship: whether anything differs from the deployed
+     * version and, when that version is known, how many files. Read-only.
+     */
+    pending: (projectId: string) => Promise<PendingChanges>
+    /** List the Fabric deployments recorded for this project (its `rayfin/.deployments.json`, as `rayfin up list` reports it). */
     list: (projectId: string) => Promise<FabricDeployment[]>
     /**
      * Switch the active Fabric deployment (`rayfin up switch`). `workspace` is a
@@ -3253,6 +3438,23 @@ export interface RayfinStudioApi {
   }
 
   /**
+   * Your own API keys: Accounts → Model providers. A key only ever
+   * goes to the backend, to be checked and kept in the OS credential store;
+   * nothing returns one.
+   */
+  byok: {
+    status: () => Promise<ByokStatus>
+    /** Check a key with the provider, then save it and the models it can use. */
+    setKey: (provider: string, key: string) => Promise<ByokProviderStatus>
+    /** Check the saved key again and update its models. */
+    refresh: (provider: string) => Promise<ByokProviderStatus>
+    /** Delete the saved key and forget the provider's models. */
+    removeKey: (provider: string) => Promise<ByokProviderStatus>
+    /** Choose which of a provider's models the model pickers show. */
+    setModels: (provider: string, models: string[]) => Promise<ByokProviderStatus>
+  }
+
+  /**
    * Embedded preview pane, backed by a single native WebView2 child webview that
    * floats above the React layout. The renderer owns *where* it sits (it reports
    * the host element's bounds) and *when* it is visible (it must hide the webview
@@ -3265,6 +3467,14 @@ export interface RayfinStudioApi {
      * first call; afterwards navigates (when `url` changed) and repositions.
      */
     showUrl: (url: string, bounds: PreviewBounds) => Promise<void>
+    /**
+     * Load `url` without showing it, so the page has painted by the time
+     * {@link showUrl} reveals it at the same size (a pure move). For a first load
+     * that starts while something covers the preview, such as the launch screen.
+     * Creates the webview when there is none; otherwise navigates it when `url`
+     * changed. Navigation state arrives through {@link onNavState} as usual.
+     */
+    preload: (url: string, bounds: PreviewBounds) => Promise<void>
     /**
      * Navigate the preview to `url` and reposition to `bounds`, **without**
      * changing visibility. Used to load a switch/redeploy/Fabric-toggle target

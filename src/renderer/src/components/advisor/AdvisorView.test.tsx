@@ -8,6 +8,7 @@ import { normalizeSnapshot } from '../../advisor/legacy'
 import { deriveAdvisor, emptyState } from '../../advisor/lifecycle'
 import type { AdvisorController } from '../../advisor/store'
 import { GOOD_PROJECT, snapshotOf, versionInfo } from '../../advisor/testFixtures'
+import { AUTO_SELECTION } from '../../modelSelection'
 import AdvisorView from './AdvisorView'
 
 const project: StudioProject = {
@@ -87,9 +88,8 @@ function controller(
     review,
     derived,
     state,
-    model: '',
-    effort: '',
-    setModel: vi.fn(),
+    selection: AUTO_SELECTION,
+    setSelection: vi.fn(),
     refreshQuick: vi.fn(),
     startReview: vi.fn(async () => {}),
     cancelReview: vi.fn(),
@@ -135,6 +135,13 @@ const BROKEN = {
   )
 }
 
+const WITH_SUGGESTION = {
+  'rayfin/data/Todo.ts': TODO.replace('entity, authenticated,', 'entity, role,').replace(
+    "@authenticated('*', {",
+    "@role('authenticated', '*', {"
+  )
+}
+
 function areas(): HTMLElement {
   return screen.getByRole('region', { name: 'Checks by area' })
 }
@@ -169,6 +176,18 @@ describe('AdvisorView', () => {
     expect(screen.queryByRole('article')).toBeNull()
   })
 
+  it('fixes a suggestion opened from an area without lowering the health score', async () => {
+    const quick = await quickFor(WITH_SUGGESTION)
+    const { onFix } = renderView(controller(quick))
+    expect(screen.getByRole('img', { name: /Health grade A, score 100/ })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Looking good' })).toBeTruthy()
+    fireEvent.click(within(areas()).getByRole('button', { name: /Data policies/ }))
+    fireEvent.click(within(areas()).getByRole('button', { name: /View suggestion/ }))
+    const detail = screen.getByRole('article', { name: 'Use the @authenticated / @anonymous shorthand' })
+    fireEvent.click(within(detail).getByRole('button', { name: /Fix with Copilot/ }))
+    expect(onFix).toHaveBeenCalledExactlyOnceWith(quick.findings)
+  })
+
   it('fixes a selection, or everything open, from the header', async () => {
     const { onFix } = renderView(controller(await quickFor(BROKEN)))
     expect(screen.getByRole('button', { name: /Fix 2 with Copilot/ })).toBeTruthy()
@@ -177,10 +196,29 @@ describe('AdvisorView', () => {
     expect(onFix).toHaveBeenCalledWith([expect.objectContaining({ ruleId: 'policy/owner-field-without-policy' })])
   })
 
+  it('includes suggestions in selected and all-open fixes', async () => {
+    const quick = await quickFor(WITH_SUGGESTION)
+    const { onFix } = renderView(controller(quick, {}, [aiFinding]))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Select “Use the @authenticated/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fix selected (1)' }))
+    expect(onFix).toHaveBeenNthCalledWith(1, quick.findings)
+    fireEvent.click(screen.getByRole('button', { name: 'Fix 2 with Copilot' }))
+    expect(onFix).toHaveBeenNthCalledWith(2, [aiFinding, ...quick.findings])
+  })
+
   it('pauses fixes while the Build chat is busy', async () => {
-    renderView(controller(await quickFor(BROKEN)), true)
+    const { onFix } = renderView(controller(await quickFor(WITH_SUGGESTION), {}, [aiFinding]), true)
     expect((screen.getByRole('button', { name: /Fix 2 with Copilot/ }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/Fix is paused until it finishes/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Use the @authenticated/ }))
+    const fix = screen.getByRole<HTMLButtonElement>('button', { name: 'Fix with Copilot' })
+    expect(fix.disabled).toBe(true)
+    fireEvent.click(fix)
+    fireEvent.click(screen.getByRole('checkbox', { name: /Select “Use the @authenticated/ }))
+    const fixSelected = screen.getByRole<HTMLButtonElement>('button', { name: 'Fix selected (1)' })
+    expect(fixSelected.disabled).toBe(true)
+    fireEvent.click(fixSelected)
+    expect(onFix).not.toHaveBeenCalled()
   })
 
   it('opens the issue a chat fix card asks for, or the list it moved to', async () => {
@@ -347,4 +385,3 @@ describe('AdvisorView', () => {
     expect(screen.getByRole('button', { name: /Per-user data isn't restricted/ })).toBeTruthy()
   })
 })
-

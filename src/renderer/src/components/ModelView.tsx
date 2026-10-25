@@ -5,7 +5,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent
+  type PointerEvent as ReactPointerEvent,
+  type JSX,
 } from 'react'
 import type { StudioProject } from '@shared/ipc'
 import {

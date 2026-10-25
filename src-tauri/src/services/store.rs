@@ -10,7 +10,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::paths;
-use crate::types::{AppSettings, ExperimentFlags, ProjectsState, StudioProject, TeamWorkspace};
+use crate::types::{
+  AppSettings, ByokProviderSettings, ByokSettings, ExperimentFlags, ProjectsState, StudioProject, TeamWorkspace,
+};
 
 struct Cache {
   state: ProjectsState,
@@ -34,7 +36,6 @@ fn default_state() -> ProjectsState {
 fn default_flags() -> ExperimentFlags {
   ExperimentFlags {
     team_workspaces: Some(false),
-    manual_deploy: Some(false),
   }
 }
 
@@ -44,8 +45,8 @@ fn default_settings() -> AppSettings {
     ui_scale: Some(1.0),
     experiments: Some(default_flags()),
     full_diagnostics: Some(false),
-    mascot: Some(true),
     deploy_mode: None,
+    byok: None,
   }
 }
 
@@ -59,8 +60,44 @@ struct RawStore {
   projects: Vec<StudioProject>,
   #[serde(default)]
   team_workspaces: Vec<TeamWorkspace>,
+  /// Read as JSON first, so settings from older versions can be carried over
+  /// (see [`migrate_settings`]) before they're typed.
   #[serde(default)]
-  settings: Option<AppSettings>,
+  settings: Option<Value>,
+}
+
+/// Carry settings saved by an older version over to this one. Deploying after
+/// each chat turn used to be the only mode unless the Deploy manually experiment
+/// was on, and that experiment started in Manual. It's now the deployment
+/// panel's switch, Auto unless the user turned it off, so its retired flag is
+/// read once: with it on, the user keeps the Manual they chose; with it off, a
+/// leftover "manual" from it goes back to Auto. Without the flag (settings from
+/// this version), nothing changes. Retired flags are then dropped as unknown.
+fn migrate_settings(mut settings: Value) -> Value {
+  let Some(experiment_on) = settings.pointer("/experiments/manualDeploy").and_then(Value::as_bool) else {
+    return settings;
+  };
+  if let Some(map) = settings.as_object_mut() {
+    match (experiment_on, map.get("deployMode").and_then(Value::as_str)) {
+      (true, None) => {
+        map.insert("deployMode".into(), "manual".into());
+      }
+      (false, Some("manual")) => {
+        map.remove("deployMode");
+      }
+      _ => {}
+    }
+  }
+  settings
+}
+
+/// The saved settings, carried over from an older version when need be. Settings
+/// that can't be read fall back to the defaults without losing the projects.
+fn settings_from(saved: Option<Value>) -> AppSettings {
+  saved
+    .map(migrate_settings)
+    .and_then(|settings| serde_json::from_value(settings).ok())
+    .unwrap_or_else(default_settings)
 }
 
 fn load() -> Cache {
@@ -74,7 +111,7 @@ fn load() -> Cache {
         state.active_project_id = parsed.active_project_id;
         state.projects = parsed.projects;
         state.team_workspaces = parsed.team_workspaces;
-        let settings = parsed.settings.unwrap_or_else(default_settings);
+        let settings = settings_from(parsed.settings);
         Cache { state, settings }
       }
       Err(_) => Cache {
@@ -133,7 +170,6 @@ pub fn set_settings(
   ui_scale: Option<f64>,
   experiments: Option<ExperimentFlags>,
   full_diagnostics: Option<bool>,
-  mascot: Option<bool>,
   deploy_mode: Option<String>,
 ) -> AppSettings {
   with_cache(|c| {
@@ -145,9 +181,6 @@ pub fn set_settings(
     }
     if let Some(v) = full_diagnostics {
       c.settings.full_diagnostics = Some(v);
-    }
-    if let Some(v) = mascot {
-      c.settings.mascot = Some(v);
     }
     if let Some(mode) = deploy_mode.filter(|m| m == "auto" || m == "manual") {
       c.settings.deploy_mode = Some(mode);
@@ -163,7 +196,27 @@ pub fn set_settings(
 fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: ExperimentFlags) {
   let current = experiments.get_or_insert_with(default_flags);
   if let Some(v) = patch.team_workspaces { current.team_workspaces = Some(v); }
-  if let Some(v) = patch.manual_deploy { current.manual_deploy = Some(v); }
+}
+
+/// Each provider's models and the ones shown in the model pickers.
+pub fn byok_settings() -> ByokSettings {
+  with_cache(|c| c.settings.byok.clone().unwrap_or_default())
+}
+
+/// Replace one provider's settings (or, with `None`, forget the provider).
+pub fn set_byok_provider(provider: &str, value: Option<ByokProviderSettings>) {
+  with_cache(|c| {
+    let byok = c.settings.byok.get_or_insert_with(Default::default);
+    match value {
+      Some(v) => {
+        byok.providers.insert(provider.to_string(), v);
+      }
+      None => {
+        byok.providers.remove(provider);
+      }
+    }
+    persist(c);
+  })
 }
 
 /// True when the Team workspaces experiment is on.
@@ -177,11 +230,10 @@ pub fn team_workspaces_enabled() -> bool {
   })
 }
 
-/// True when chat turns don't deploy: the Deploy manually experiment is on and
-/// the status bar's deploy mode isn't Auto.
+/// True when chat turns don't deploy: the user turned off the deployment
+/// panel's "Deploy after each chat turn". Auto is the default.
 fn is_manual_deploy(settings: &AppSettings) -> bool {
-  settings.experiments.as_ref().and_then(|e| e.manual_deploy).unwrap_or(false)
-    && settings.deploy_mode.as_deref() != Some("auto")
+  settings.deploy_mode.as_deref() == Some("manual")
 }
 
 /// True when chat turns don't deploy (see [`is_manual_deploy`]).
@@ -345,31 +397,44 @@ mod tests {
   }
 
   #[test]
-  fn manual_deploy_flag_defaults_off_and_merges_alone() {
-    assert_eq!(default_settings().experiments.unwrap().manual_deploy, Some(false));
-    let mut flags: Option<ExperimentFlags> = Some(serde_json::from_value(serde_json::json!({
-      "teamWorkspaces":true
-    })).unwrap());
-    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"manualDeploy":true})).unwrap());
+  fn chat_turns_deploy_unless_the_user_chose_manual() {
+    let settings = |value: serde_json::Value| -> AppSettings { serde_json::from_value(value).unwrap() };
+    assert!(!is_manual_deploy(&default_settings()));
+    assert!(!is_manual_deploy(&settings(serde_json::json!({}))));
+    assert!(!is_manual_deploy(&settings(serde_json::json!({"deployMode":"auto"}))));
+    assert!(is_manual_deploy(&settings(serde_json::json!({"deployMode":"manual"}))));
+  }
+
+  #[test]
+  fn the_retired_deploy_manually_flag_carries_the_users_choice_over() {
+    let mode = |saved: serde_json::Value| settings_from(Some(saved)).deploy_mode;
+    // The experiment was on: Manual stays, including when it was Manual only by
+    // starting that way, unless the user had switched to Auto.
+    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":true}})).as_deref(), Some("manual"));
+    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":true},"deployMode":"manual"})).as_deref(), Some("manual"));
+    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":true},"deployMode":"auto"})).as_deref(), Some("auto"));
+    // It was turned off: the "manual" it started with is left over, not chosen.
+    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":false},"deployMode":"manual"})), None);
+    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":false}})), None);
+    // Settings from this version: Manual is the user's choice.
+    assert_eq!(mode(serde_json::json!({"deployMode":"manual"})).as_deref(), Some("manual"));
+    assert_eq!(mode(serde_json::json!({"experiments":{"teamWorkspaces":true}})), None);
+
+    // The flag is gone once the settings are saved again, so it's read only once.
+    let carried = settings_from(Some(serde_json::json!({
+      "theme":"dark","experiments":{"manualDeploy":true,"teamWorkspaces":true}
+    })));
     assert_eq!(
-      serde_json::to_value(flags.unwrap()).unwrap(),
-      serde_json::json!({"teamWorkspaces":true, "manualDeploy":true})
+      serde_json::to_value(carried).unwrap(),
+      serde_json::json!({"theme":"dark","experiments":{"teamWorkspaces":true},"deployMode":"manual"})
     );
   }
 
   #[test]
-  fn turns_stay_local_only_with_the_experiment_on_and_the_mode_not_auto() {
-    let settings = |value: serde_json::Value| -> AppSettings { serde_json::from_value(value).unwrap() };
-    assert!(!is_manual_deploy(&default_settings()));
-    assert!(!is_manual_deploy(&settings(serde_json::json!({"deployMode":"manual"}))));
-    let on = serde_json::json!({"experiments":{"manualDeploy":true}});
-    assert!(is_manual_deploy(&settings(on.clone())));
-    let mut manual = on.clone();
-    manual["deployMode"] = "manual".into();
-    assert!(is_manual_deploy(&settings(manual)));
-    let mut auto = on;
-    auto["deployMode"] = "auto".into();
-    assert!(!is_manual_deploy(&settings(auto)));
+  fn unreadable_settings_fall_back_to_the_defaults() {
+    let settings = settings_from(Some(serde_json::json!({"theme":5})));
+    assert_eq!(settings.theme, "system");
+    assert!(settings_from(None).deploy_mode.is_none());
   }
 
   #[test]
@@ -394,6 +459,8 @@ mod tests {
           "chatModeSelector":enabled,
           "localDevPreview":enabled,
           "designStudio":enabled,
+          "manualDeploy":enabled,
+          "byok":enabled,
           "teamWorkspaces":true
         }
       })).unwrap();

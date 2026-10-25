@@ -7,23 +7,34 @@ import {
   type KeyboardEvent,
   type ChangeEvent,
   type ClipboardEvent,
-  type DragEvent
+  type DragEvent,
+  type JSX,
 } from 'react'
 import {
   type ChatAdvisorSummary,
+  type ChatDataRef,
   type ChatMode,
   type ChatPlanArtifact,
   type ChatTurnResult,
   type CopilotAuthStatus,
-  type ReasoningEffort,
   type StudioProject
 } from '@shared/ipc'
 import { isCopilotAuthError } from '../copilotAuth'
+import type { WorkspaceUse } from '../fabric'
+import {
+  dataTurnPrompt,
+  pendingData,
+  setPendingData,
+  toDataRef,
+  type DataKind,
+  type DataSource
+} from '../fabricData'
+import { DataTray } from './chat/DataTray'
 import CopilotSignInNotice from './CopilotSignInNotice'
 import type { PendingShot } from './PreviewPane'
 import { splitMentions } from './MentionText'
 import { ExpandIcon, CollapseIcon, CloseIcon, StopIcon, ImageIcon, Codicon } from './icons'
-import ConnectModelModal from './ConnectModelModal'
+import ConnectDataModal from './ConnectDataModal'
 import ConfirmModal from './ConfirmModal'
 import { MarkdownLinksContext, type MarkdownLinks } from './Markdown'
 import {
@@ -35,7 +46,10 @@ import {
 import type { OutboundPrompt, UIChatMessage } from './chat/types'
 import { suggestionsFor, useGeneratedSuggestions } from './chat/suggestions'
 import { SendIcon } from './chat/icons'
-import { AddMenu, ModelMenu } from './chat/ComposerMenus'
+import { AddMenu } from './chat/ComposerMenus'
+import { ModelPicker } from './models/ModelPicker'
+import { selectionArgs, selectionOf, type ModelSelection } from '../modelSelection'
+import { useCopilotModels } from '../copilotModels'
 import { Welcome } from './chat/Welcome'
 import { uid } from './chat/format'
 import { readAsDataUrl, toPngAndThumb } from './chat/images'
@@ -63,18 +77,19 @@ function rerunPrompt(user: UIChatMessage): string | null {
   return user.text
 }
 
-/** What a user message carries beyond its text: a Design or Advisor card, and
- *  the prompt reruns re-send. */
+/** What a user message carries beyond its text: a Design or Advisor card, the
+ *  Fabric data it added, and the prompt reruns re-send. */
 interface TurnExtra {
   design?: ChatDesignSummary
   advisor?: ChatAdvisorSummary
+  data?: ChatDataRef[]
   storedPrompt?: string
 }
 
 /** A Design or Advisor message's card and prompt, carried to its rerun (without
  *  the captures — those were deleted once the original turn used them). */
 function rerunExtra(user: UIChatMessage): TurnExtra | undefined {
-  if (!user.prompt && !user.design && !user.advisor) return undefined
+  if (!user.prompt && !user.design && !user.advisor && !user.data) return undefined
   return {
     design: user.design
       ? {
@@ -87,6 +102,7 @@ function rerunExtra(user: UIChatMessage): TurnExtra | undefined {
         }
       : undefined,
     advisor: user.advisor,
+    data: user.data,
     storedPrompt: user.prompt
   }
 }
@@ -117,6 +133,8 @@ interface Props {
   onClearHistory?: () => void
   /** Called after the model / effort options change (parent refreshes project). */
   onOptionsChanged?: () => void
+  /** Open Accounts at Model providers (your own API keys). */
+  onManageKeys?: () => void
   /** A prompt to send on behalf of the user (e.g. the Rayfin upgrade hand-off). */
   outbound?: OutboundPrompt | null
   /** Called once an outbound prompt has been consumed so the parent can clear it
@@ -166,6 +184,8 @@ interface Props {
   onDesignSent?: (turn: DesignTurn) => void
   copilotAuth?: CopilotAuthStatus
   onCopilotAuthChanged?: () => Promise<void> | void
+  /** The workspaces your apps deploy to, and when (Add Fabric data lists recent ones first). */
+  recentWorkspaces?: readonly WorkspaceUse[]
 }
 
 export default function ChatPanel({
@@ -181,6 +201,7 @@ export default function ChatPanel({
   onAttachmentsConsumed,
   onClearHistory,
   onOptionsChanged,
+  onManageKeys,
   outbound,
   onOutboundConsumed,
   onAdvisorRerun,
@@ -203,7 +224,8 @@ export default function ChatPanel({
   buildDesignTurn,
   onDesignSent,
   copilotAuth,
-  onCopilotAuthChanged
+  onCopilotAuthChanged,
+  recentWorkspaces
 }: Props): JSX.Element {
   // The composer draft is seeded from — and mirrored back to — the parent so a
   // typed-but-unsent prompt survives this panel unmounting. Switching to the Code
@@ -246,8 +268,12 @@ export default function ChatPanel({
   useEffect(() => {
     setSending((s) => (s === hasLiveTurn ? s : hasLiveTurn))
   }, [hasLiveTurn])
-  const [model, setModel] = useState(project.model ?? '')
-  const [effort, setEffort] = useState<ReasoningEffort | ''>(project.effort ?? '')
+  const [selection, setSelection] = useState<ModelSelection>(() => selectionOf(project))
+  // A model on the user's own key that can't read images can't take attachments.
+  const { models } = useCopilotModels(Boolean(selection.model))
+  const chosenModel = models.find((m) => m.id === selection.model)
+  const imageNote = chosenModel?.byok && !chosenModel.vision ? `${chosenModel.name} can’t read images` : undefined
+  const imagesBlocked = Boolean(imageNote) && (attachments?.length ?? 0) > 0
   const [planBusyId, setPlanBusyId] = useState<string | null>(null)
   const [confirmNewChat, setConfirmNewChat] = useState(false)
   const onChangeRef = useRef(onChange)
@@ -322,7 +348,14 @@ export default function ChatPanel({
   const revealRaf = useRef<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [attaching, setAttaching] = useState(false)
-  const [connectOpen, setConnectOpen] = useState(false)
+  /** The Add Fabric data picker, open on one kind of data or on every kind. */
+  const [connect, setConnect] = useState<{ kind?: DataKind } | null>(null)
+  /** Fabric data waiting to go out with the next message, shown as chips. */
+  const [dataChips, setDataChipsState] = useState<DataSource[]>(() => pendingData(project.id))
+  const setDataChips = (next: DataSource[]): void => {
+    setPendingData(project.id, next)
+    setDataChipsState(next)
+  }
 
   // Keep the caret in view inside the composer's single scrollport
   // (`.composer-input-sizer`). The textarea is sized to its full content height so
@@ -418,15 +451,11 @@ export default function ChatPanel({
   } = useGeneratedSuggestions(project.id, messages.length === 0)
   const suggestions = generatedSuggestions ?? fallbackSuggestions
 
-  // Persist a model / effort change (the picker already drops an effort the new
-  // model can't use).
-  function saveOptions(nextModel: string, nextEffort: ReasoningEffort | ''): void {
-    setModel(nextModel)
-    setEffort(nextEffort)
-    void window.api.chat.setOptions(project.id, {
-      model: nextModel.trim() || undefined,
-      effort: nextEffort || undefined
-    })
+  // Persist a model choice (the picker already drops an effort or window the
+  // new model can't use).
+  function saveOptions(next: ModelSelection): void {
+    setSelection(next)
+    void window.api.chat.setOptions(project.id, selectionArgs(next))
     onOptionsChanged?.()
   }
 
@@ -657,7 +686,7 @@ export default function ChatPanel({
   const submitBlocked = deploying && blockSubmitWhileDeploying
 
   async function send(): Promise<void> {
-    if (deployLock) return
+    if (deployLock || imagesBlocked) return
     const text = input.trim()
     const shots = attachments ?? []
     // Mid-turn: interrupt the running reply with this message (conversation
@@ -721,6 +750,19 @@ export default function ChatPanel({
     // Queued Design changes go out as one turn; the typed text is their note.
     if (designItems.length > 0 && buildDesignTurn) {
       await sendDesign(text, shots)
+      return
+    }
+    // Fabric data goes out with the message as chips; Copilot gets how to connect it.
+    if (dataChips.length > 0) {
+      const sources = dataChips
+      const prompt = dataTurnPrompt(text, sources)
+      setInput('')
+      setDataChips([])
+      onAttachmentsConsumed?.()
+      await dispatch(text, prompt, shots, undefined, undefined, {
+        data: sources.map(toDataRef),
+        storedPrompt: prompt
+      })
       return
     }
     if (!text && shots.length === 0) return
@@ -855,6 +897,7 @@ export default function ChatPanel({
       attachmentThumbs: shots.length ? shots.map((s) => s.thumb) : undefined,
       design: extra?.design,
       advisor: extra?.advisor,
+      data: extra?.data,
       prompt: extra?.storedPrompt
     }
     const assistantMsg: UIChatMessage = {
@@ -1192,7 +1235,7 @@ export default function ChatPanel({
     taRef.current?.focus()
   }
 
-  /** Insert an "@" at the caret and open the file picker (the "+" menu's "Reference a file"). */
+  /** Insert an "@" at the caret and open the file picker (the "+" menu's "File"). */
   function insertMention(): void {
     const caret = taRef.current?.selectionStart ?? input.length
     const before = input.slice(0, caret)
@@ -1594,6 +1637,11 @@ export default function ChatPanel({
             onFocus={onDesignFocus}
             onClear={onDesignClear}
           />
+          <DataTray
+            sources={dataChips}
+            onOpen={() => setConnect({})}
+            onRemove={(id) => setDataChips(dataChips.filter((s) => s.item.id !== id))}
+          />
           {((attachments?.length ?? 0) > 0 || attaching) && (
             <div className="chat-attachments">
               {(attachments ?? []).map((a) => (
@@ -1617,6 +1665,12 @@ export default function ChatPanel({
               )}
             </div>
           )}
+          {imageNote && (attachments?.length ?? 0) > 0 && (
+            <p className="chat-attachments-note" role="note">
+              <Codicon name="warning" />
+              {imageNote}. Remove the images, or choose a model that can.
+            </p>
+          )}
           <div className="composer-input-sizer" ref={sizerRef} data-replicated-value={input}>
             <div className="composer-highlight" ref={highlightRef} aria-hidden="true">
               {splitMentions(input, knownFiles).map((p, i) =>
@@ -1638,7 +1692,9 @@ export default function ChatPanel({
                   ? 'Deploy your app to start chatting…'
                   : designItems.length > 0
                     ? 'Add a note for these changes (optional) — or just press Enter to send them'
-                    : `Message Fabricator about ${project.name}…`
+                    : dataChips.length > 0
+                      ? 'Say what to build with this data, or just press Enter to connect it'
+                      : `Message Fabricator about ${project.name}…`
               }
               value={input}
               rows={1}
@@ -1655,11 +1711,18 @@ export default function ChatPanel({
               <AddMenu
                 locked={deployLock}
                 attaching={attaching}
+                imageNote={imageNote}
                 onImage={() => fileRef.current?.click()}
-                onConnectModel={() => setConnectOpen(true)}
+                onConnectData={(kind) => setConnect({ kind })}
                 onReferenceFile={insertMention}
               />
-              <ModelMenu model={model} effort={effort} disabled={sending} onChange={saveOptions} />
+              <ModelPicker
+                value={selection}
+                disabled={sending}
+                onChange={saveOptions}
+                tiers
+                onManageKeys={onManageKeys}
+              />
             </div>
             <div className="composer-right">
               <span className="composer-hint" aria-hidden="true">
@@ -1691,7 +1754,13 @@ export default function ChatPanel({
               ) : (
                 <span
                   style={{ display: 'contents' }}
-                  title={submitBlocked ? submitBlockedTitle : undefined}
+                  title={
+                    submitBlocked
+                      ? submitBlockedTitle
+                      : imagesBlocked
+                        ? `${imageNote}. Remove the images, or choose a model that can.`
+                        : undefined
+                  }
                 >
                   <button
                     type="button"
@@ -1701,14 +1770,20 @@ export default function ChatPanel({
                       deployLock ||
                       submitBlocked ||
                       designSending ||
-                      (!input.trim() && (attachments?.length ?? 0) === 0 && designItems.length === 0)
+                      imagesBlocked ||
+                      (!input.trim() &&
+                        (attachments?.length ?? 0) === 0 &&
+                        designItems.length === 0 &&
+                        dataChips.length === 0)
                     }
                     title={
-                      submitBlocked
+                      submitBlocked || imagesBlocked
                         ? undefined
                         : designItems.length > 0
                           ? `Send ${designItems.length} design change${designItems.length === 1 ? '' : 's'} (Enter)`
-                          : 'Send (Enter)'
+                          : dataChips.length > 0
+                            ? `Send, and connect ${dataChips.length === 1 ? 'this data' : `these ${dataChips.length} data sources`} (Enter)`
+                            : 'Send (Enter)'
                     }
                     aria-label="Send"
                   >
@@ -1721,14 +1796,18 @@ export default function ChatPanel({
         </div>
       </div>
 
-      {connectOpen && (
-        <ConnectModelModal
+      {connect && (
+        <ConnectDataModal
           project={project}
-          onClose={() => setConnectOpen(false)}
+          kind={connect.kind}
+          appWorkspaces={recentWorkspaces}
+          picked={dataChips}
+          onClose={() => setConnect(null)}
           onSignedIn={onCopilotAuthChanged}
-          onConnect={(prompt) =>
-            setInput((prev) => (prev.trim() ? `${prev}\n\n${prompt}` : prompt))
-          }
+          onAdd={(sources) => {
+            setDataChips(sources)
+            taRef.current?.focus()
+          }}
         />
       )}
       {confirmNewChat && (

@@ -5,6 +5,7 @@
 pub mod accounts;
 pub mod advisor;
 pub mod auth;
+pub mod byok;
 pub mod chat;
 pub mod chat_tools;
 pub mod custom_skills;

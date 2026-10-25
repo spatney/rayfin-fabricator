@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { useState } from 'react'
+import { useState, type JSX } from 'react'
 import type { TeamEnvStatus, TeamGhAccount, TeamWorkspace } from '@shared/ipc'
 import { GithubAccountField } from './common'
 import JoinTeamWorkspaceModal from './JoinTeamWorkspaceModal'

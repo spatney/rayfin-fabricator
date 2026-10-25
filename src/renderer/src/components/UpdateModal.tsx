@@ -1,6 +1,8 @@
 import { useUpdates } from '../update'
 import ConfirmModal from './ConfirmModal'
 
+import type { JSX } from 'react'
+
 /**
  * Centered, dismissible prompt for the optional startup update. Shown once an
  * automatic check has downloaded a ready-to-install release (`useUpdates().modalOpen`).

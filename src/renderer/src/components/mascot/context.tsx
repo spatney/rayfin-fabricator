@@ -1,15 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-
-/**
- * Whether Ray may appear. On unless Settings → Appearance → Ray is turned
- * off, so anything rendered outside the provider (tests, previews) gets him.
- * Provided by `MascotProvider` in ./stage.
- */
-export const MascotContext = createContext(true)
-
-export function useMascot(): boolean {
-  return useContext(MascotContext)
-}
+import { useEffect, useState } from 'react'
 
 function reducedQuery(): MediaQueryList | null {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function'

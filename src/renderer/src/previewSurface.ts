@@ -2,7 +2,15 @@ import type { RayfinStudioApi } from '@shared/ipc'
 
 type PreviewMutations = Pick<
   RayfinStudioApi['preview'],
-  'showUrl' | 'navigate' | 'setBounds' | 'hide' | 'suppress' | 'reload' | 'back' | 'forward'
+  | 'showUrl'
+  | 'preload'
+  | 'navigate'
+  | 'setBounds'
+  | 'hide'
+  | 'suppress'
+  | 'reload'
+  | 'back'
+  | 'forward'
 >
 
 /**
@@ -21,8 +29,9 @@ export function serializePreviewMutations(api: PreviewMutations): PreviewMutatio
     const settled = result.catch((error: unknown) => {
       console.error('Native preview command failed', error)
     })
-    // Only showUrl is an async Rust command. Do not hold live resize/hide
-    // commands behind delayed IPC replies once creation/show has completed.
+    // Only showUrl and preload are async Rust commands (they may create the
+    // child). Do not hold live resize/hide commands behind delayed IPC replies
+    // once creation/show has completed.
     if (showing) {
       pendingShow = settled
       void settled.then(() => {
@@ -33,6 +42,7 @@ export function serializePreviewMutations(api: PreviewMutations): PreviewMutatio
   }
   return {
     showUrl: (url, bounds) => enqueue(() => api.showUrl(url, bounds), true),
+    preload: (url, bounds) => enqueue(() => api.preload(url, bounds), true),
     navigate: (url, bounds) => enqueue(() => api.navigate(url, bounds)),
     setBounds: (bounds) => enqueue(() => api.setBounds(bounds)),
     hide: () => enqueue(() => api.hide()),

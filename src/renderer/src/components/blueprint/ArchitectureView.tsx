@@ -7,7 +7,8 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent
+  type PointerEvent as ReactPointerEvent,
+  type JSX,
 } from 'react'
 import type { StudioProject } from '@shared/ipc'
 import {
@@ -544,7 +545,9 @@ export default function ArchitectureView({
 
   const appWho = appIdentityName(appIdentity, Boolean(project.lastDeploy?.url))
   let stagger = 0
-  const enter = (): CSSProperties => ({ '--i': stagger++ }) as CSSProperties
+  const enter = (): CSSProperties => (({
+    '--i': stagger++
+  }) as CSSProperties)
 
   return (
     <div className="bp-arch">

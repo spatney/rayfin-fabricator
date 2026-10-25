@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import type { GitRemoteStatus, GitStatus } from '../../../shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { Codicon } from './icons'

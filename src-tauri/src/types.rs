@@ -637,6 +637,17 @@ pub struct FabricDeployment {
   pub deployed_at: Option<String>,
 }
 
+/// What a deploy would ship right now (`deploy_pending`).
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingChanges {
+  /// Something differs from the deployed version (or there's no known one).
+  pub changed: bool,
+  /// How many files differ, when the deployed version is known.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub files: Option<u32>,
+}
+
 /* ----------------------------- projects ----------------------------- */
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -668,6 +679,14 @@ pub struct StudioProject {
   pub model: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub effort: Option<String>,
+  /// With Auto: what Copilot's routing optimizes for (`"efficiency"`,
+  /// `"balance"` or `"intelligence"`).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub auto_tier: Option<String>,
+  /// With a model that offers several: its context window (`"default"` or
+  /// `"long_context"`).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub context_tier: Option<String>,
   /// Preview pane view selection: `"fabric"` shows the app embedded in the Fabric
   /// portal shell (`last_deploy.portal_url`); absent / `"direct"` shows the app
   /// URL directly. Persisted so the Fabricator agent's screenshot/navigate tools
@@ -708,11 +727,6 @@ pub struct ExperimentFlags {
   /// default); turning it off hides team workspaces without deleting anything.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub team_workspaces: Option<bool>,
-  /// Deploy manually: chat turns don't deploy. Changes stay on this machine,
-  /// with the live local preview kept between turns, until the user redeploys.
-  /// Team projects aren't affected. Opt-in (off by default).
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub manual_deploy: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -731,14 +745,78 @@ pub struct AppSettings {
   /// Settings → Diagnostics.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub full_diagnostics: Option<bool>,
-  /// Show Ray, the stingray mascot, while apps install and in Help. On unless
-  /// turned off; an unset value means on.
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub mascot: Option<bool>,
-  /// With the Deploy manually experiment on, the status bar's deploy mode:
-  /// "manual" (the default) or "auto". Ignored while the experiment is off.
+  /// How chat turns deploy personal apps, set by the deployment panel's
+  /// "Deploy after each chat turn" switch: "auto" (the default, also when unset)
+  /// deploys as each turn finishes; "manual" keeps the changes on this machine,
+  /// with the live local preview kept between turns, until the user deploys.
+  /// Team projects aren't affected.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub deploy_mode: Option<String>,
+  /// Your own API keys: each provider's models and which of them the model
+  /// pickers show. Never holds a key (those live in the OS credential store).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub byok: Option<ByokSettings>,
+}
+
+/// Persisted state of Your own API keys, by provider id
+/// (`"anthropic"`, `"openai"`, `"xai"`, `"google"`). Keys are never stored here.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ByokSettings {
+  #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+  pub providers: std::collections::BTreeMap<String, ByokProviderSettings>,
+}
+
+/// One provider: the models its API listed for the user's key the last time
+/// it was checked, and the ones the user chose to show in the model pickers.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ByokProviderSettings {
+  #[serde(default)]
+  pub models: Vec<ByokModelInfo>,
+  /// Provider model ids shown in the model pickers.
+  #[serde(default)]
+  pub enabled: Vec<String>,
+  /// When the key was last checked against the provider (RFC 3339).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub checked_at: Option<String>,
+}
+
+/// A model a provider offers to the user's key, with what a Copilot session
+/// needs to know about it. Resolved when the key is checked: the provider's own
+/// figures first, then Copilot's twin of the model, then family defaults.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ByokModelInfo {
+  /// The provider's model id, sent on the wire (e.g. `"claude-sonnet-5-5"`).
+  pub id: String,
+  pub name: String,
+  /// Total context window in tokens.
+  pub context_window: u32,
+  /// Most input tokens, when the provider says (else derived from the window).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub max_prompt: Option<u32>,
+  /// Most output tokens the model can produce.
+  pub max_output: u32,
+  pub vision: bool,
+  /// Reasoning efforts it accepts, in Fabricator's vocabulary.
+  pub efforts: Vec<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub default_effort: Option<String>,
+  /// The same model in Copilot's catalog, whose agent configuration (tools,
+  /// prompts, reasoning behavior) the session uses.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub copilot_id: Option<String>,
+  /// Anthropic adaptive thinking: `"unsupported"`, `"optional"`, `"required"`
+  /// or `"adaptive_only"`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub adaptive_thinking: Option<String>,
+  /// The provider is retiring it.
+  pub deprecated: bool,
+  /// Suggested when the key is added.
+  pub recommended: bool,
+  /// Seconds since the epoch the provider published it (for newest-first order).
+  pub created: i64,
 }
 
 fn default_theme() -> String {
@@ -2353,6 +2431,10 @@ pub struct ChatOptions {
   pub model: Option<String>,
   #[serde(default)]
   pub effort: Option<String>,
+  #[serde(default)]
+  pub auto_tier: Option<String>,
+  #[serde(default)]
+  pub context_tier: Option<String>,
 }
 
 /// A Copilot model available to the signed-in user, surfaced in the chat model
@@ -2377,6 +2459,98 @@ pub struct CopilotModel {
   pub price_category: Option<String>,
   /// The model accepts image input (screenshots).
   pub vision: bool,
+  /// Who makes the model, for its logo: `"Anthropic"`, `"OpenAI"`, `"Google"`…
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub vendor: Option<String>,
+  /// Context windows to choose from, when the model offers more than one.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub context_tiers: Vec<ContextTierOption>,
+  /// Set for models that run on the user's own API key (experiment).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub byok: Option<ByokModelMeta>,
+}
+
+/// One context window a model offers (`"default"` or `"long_context"`).
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextTierOption {
+  pub tier: String,
+  /// Total tokens in the window (prompt budget plus output).
+  pub tokens: u64,
+}
+
+/// What Auto can optimize for ("Optimized for"), as Copilot offers it to the
+/// signed-in account.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoTiers {
+  /// The tier Auto uses when none is chosen.
+  pub default_tier: String,
+  pub tiers: Vec<AutoTierOption>,
+}
+
+/// One Auto routing preference, e.g. Balance.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoTierOption {
+  /// Copilot's id for it, sent back unchanged (`"balance"`).
+  pub id: String,
+  pub name: String,
+  pub description: String,
+  /// The account can choose it.
+  pub enabled: bool,
+  /// Why it can't be chosen, in Copilot's words.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub note: Option<String>,
+}
+
+/// How a model on the user's own key appears in the model picker.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ByokModelMeta {
+  /// Provider id: `"anthropic"`, `"openai"`, `"xai"` or `"google"`.
+  pub provider: String,
+  /// Provider name, e.g. `"Anthropic"`.
+  pub provider_name: String,
+  /// Its key is saved, so it can be selected.
+  pub ready: bool,
+  /// Why it can't be selected.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub note: Option<String>,
+}
+
+/// One provider in Accounts → Model providers.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ByokProviderStatus {
+  pub id: String,
+  pub name: String,
+  /// What its models are, e.g. "Claude models".
+  pub description: String,
+  /// Where to create a key.
+  pub key_url: String,
+  /// How keys start, for the input's placeholder (e.g. `"sk-ant-"`).
+  pub key_prefix: String,
+  pub has_key: bool,
+  pub models: Vec<ByokModelInfo>,
+  /// Model ids shown in the model pickers.
+  pub enabled: Vec<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub checked_at: Option<String>,
+  /// Why the last check failed, in plain language.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// Everything Accounts → Model providers shows.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ByokStatus {
+  /// Keys can be stored on this operating system.
+  pub supported: bool,
+  /// Where keys are kept, e.g. "Windows Credential Manager".
+  pub store: String,
+  pub providers: Vec<ByokProviderStatus>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -2431,6 +2605,11 @@ pub struct ChatMessage {
   /// is dropped when the renderer persists history.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub advisor: Option<serde_json::Value>,
+  /// The Fabric data a user message asked Copilot to connect (`ChatDataRef[]`),
+  /// rendered as chips in the transcript. Opaque to Rust; must round-trip or it
+  /// is dropped when the renderer persists history.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub data: Option<serde_json::Value>,
   /// The prompt Copilot received when it differs from `text` (a Design turn's
   /// structured changes, or a hand-off's full instructions); re-sent by Retry /
   /// Try again / Resume.
@@ -2838,6 +3017,10 @@ pub struct AdvisorRunRequest {
   pub model: Option<String>,
   #[serde(default)]
   pub effort: Option<String>,
+  #[serde(default)]
+  pub auto_tier: Option<String>,
+  #[serde(default)]
+  pub context_tier: Option<String>,
   #[serde(default)]
   pub facts: AdvisorFacts,
   #[serde(default)]
@@ -3292,6 +3475,7 @@ mod tests {
       created_at: None,
       design: None,
       advisor: None,
+      data: None,
       prompt: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
@@ -3330,6 +3514,7 @@ mod tests {
       created_at: None,
       design: None,
       advisor: None,
+      data: None,
       prompt: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
@@ -3366,6 +3551,23 @@ mod tests {
     assert!(json.get("design").is_none());
     assert!(json.get("advisor").is_none());
     assert!(json.get("prompt").is_none());
+  }
+
+  #[test]
+  fn chat_message_round_trips_the_fabric_data_it_carried() {
+    let raw = serde_json::json!({
+      "id": "u1",
+      "role": "user",
+      "text": "Chart sales by region",
+      "data": [{ "name": "Sales", "type": "SemanticModel", "workspace": "Finance" }],
+      "prompt": "Chart sales by region\n\n[Fabricator: connect this Fabric data to the app as Rayfin connectors, then use it for the request above.]"
+    });
+    let msg: ChatMessage = serde_json::from_value(raw.clone()).unwrap();
+    let back = serde_json::to_value(&msg).unwrap();
+    assert_eq!(back["data"], raw["data"]);
+    assert_eq!(back["prompt"], raw["prompt"]);
+    let plain: ChatMessage = serde_json::from_str(r#"{"id":"m1","role":"user","text":"hi"}"#).unwrap();
+    assert!(serde_json::to_value(&plain).unwrap().get("data").is_none());
   }
 
   #[test]

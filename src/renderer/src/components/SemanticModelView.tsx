@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent
+  type PointerEvent as ReactPointerEvent,
+  type JSX,
 } from 'react'
 import type { SemanticMeasure } from '@shared/ipc'
 import { computeLayout, type LayoutEdge, type LayoutNode } from '../model/layout'

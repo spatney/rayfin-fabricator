@@ -33,12 +33,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Set up Rust
@@ -51,7 +51,7 @@ jobs:
           workspaces: src-tauri
 
       - name: Cache bundled Copilot CLI archive
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           # The Copilot SDK's build.rs downloads the platform CLI archive and
           # embeds it into the binary. Persist that download across runs so we
@@ -191,7 +191,7 @@ jobs:
 
       - name: Upload installer artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.os }}
           path: ${{ matrix.artifacts }}
@@ -206,7 +206,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: dist-*
           merge-multiple: true
@@ -216,7 +216,7 @@ jobs:
         run: ls -R dist
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: false
           fail_on_unmatched_files: false

@@ -1,4 +1,4 @@
-import type { HTMLAttributes, SVGProps } from 'react'
+import type { HTMLAttributes, SVGProps, JSX } from 'react'
 
 /**
  * Small, monochrome line icons shared across the app's control clusters

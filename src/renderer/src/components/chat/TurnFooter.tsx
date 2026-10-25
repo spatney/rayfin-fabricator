@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type JSX } from 'react'
 import { ClockIcon, Codicon, ReloadIcon } from '../icons'
 import { CopyButton } from './CopyButton'
 import { DiffView } from './DiffView'

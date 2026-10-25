@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useState, type JSX } from 'react'
 import type { ChatPlanQuestion } from '@shared/ipc'
 import { Codicon } from './icons'
 

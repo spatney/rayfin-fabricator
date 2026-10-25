@@ -22,6 +22,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::commands::screenshot;
+use crate::services::byok;
+use crate::services::copilot::ModelChoice;
 use crate::services::design_locate::{self, LocateResult, LocateTarget};
 use crate::services::emit::DESIGN_VARIATION;
 use crate::services::store;
@@ -254,6 +256,8 @@ fn design_session_options(cwd: &str) -> crate::services::copilot::SessionOptions
 struct GenState {
     assistant: String,
     streamed: HashMap<String, usize>,
+    /// The session's error message, when it reported one.
+    error: Option<String>,
 }
 
 /// Feed one Copilot server event in. Returns `true` at a terminal state.
@@ -279,7 +283,11 @@ fn map_event(event_type: &str, data: &Value, st: &mut GenState) -> bool {
                 st.streamed.insert(id, total);
             }
         }
-        "session.error" | "session.idle" => return true,
+        "session.error" => {
+            st.error = data.get("message").and_then(|v| v.as_str()).map(str::to_string);
+            return true;
+        }
+        "session.idle" => return true,
         _ => {}
     }
     false
@@ -287,7 +295,8 @@ fn map_event(event_type: &str, data: &Value, st: &mut GenState) -> bool {
 
 /// Run `prompt` once on a transient, read-only session rooted at `cwd` and
 /// return the assistant's full reply. Never touches the project's chat.
-/// `on_text` sees the reply so far each time it grows.
+/// `on_text` sees the reply so far each time it grows. A model on the user's
+/// own key must be able to run first, and its errors come back in plain language.
 async fn run_transient(
     state: &AppState,
     cwd: &str,
@@ -297,9 +306,15 @@ async fn run_transient(
     attachments: &[PathBuf],
     mut on_text: Option<&mut (dyn FnMut(&str) + Send)>,
 ) -> Result<String, String> {
+    let mut options = design_session_options(cwd);
+    let provider_model = model.clone().filter(|m| byok::is_provider_selection(m));
+    if let Some(m) = &provider_model {
+        state.byok.ensure_ready(m)?;
+        options.byok = state.byok.session_registry();
+    }
     let session = state
         .copilot
-        .transient_session_with(cwd, model, effort, design_session_options(cwd))
+        .transient_session_with(cwd, ModelChoice::of(model, effort), options)
         .await
         .map_err(|_| "Couldn't reach the model.".to_string())?;
 
@@ -345,6 +360,11 @@ async fn run_transient(
     let _ = session.disconnect().await;
     if !sent {
         return Err("Couldn't send the request to the model.".into());
+    }
+    if st.assistant.trim().is_empty() {
+        if let (Some(model), Some(raw)) = (&provider_model, &st.error) {
+            return Err(byok::explain_for(model, raw).unwrap_or_else(|| raw.clone()));
+        }
     }
     Ok(st.assistant)
 }

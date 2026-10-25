@@ -26,11 +26,13 @@ fn agent_root() -> PathBuf {
 
 /// Directory passed to `with_skill_directories` (holds `<skill>/SKILL.md`).
 pub fn skills_dir() -> PathBuf {
+  ensure_materialized();
   agent_root().join("skills")
 }
 
 /// Directory passed to `with_instruction_directories` (holds `*.instructions.md`).
 pub fn instructions_dir() -> PathBuf {
+  ensure_materialized();
   agent_root().join("instructions")
 }
 
@@ -321,12 +323,16 @@ Then write your queries and visuals against that connection.
 "#;
 
 /// Write (or refresh) the injected skill + instruction files under the app data
-/// dir. Idempotent and best-effort: always overwrites so content updates ship
-/// with the app. Call once at startup, before any session opens.
+/// dir. Best-effort, and it always overwrites so content updates ship with the
+/// app. Runs once per launch: startup does it in the background, and a session
+/// that asks for the directories before that has finished waits for the files.
 pub fn ensure_materialized() {
-  if let Err(e) = write_all(&agent_root()) {
-    log::warn!("failed to materialize Fabricator agent guidance: {e}");
-  }
+  static MATERIALIZED: std::sync::Once = std::sync::Once::new();
+  MATERIALIZED.call_once(|| {
+    if let Err(e) = write_all(&agent_root()) {
+      log::warn!("failed to materialize Fabricator agent guidance: {e}");
+    }
+  });
 }
 
 /// Materialize the skill + instruction tree under `root` (`<root>/skills/...` and

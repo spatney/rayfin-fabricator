@@ -20,7 +20,7 @@ Everything here is a maintainer tool. It isn't part of the app or of CI.
 | `scrub.js` | Replaces personal details (names, emails, tenant, workspace and repo names, paths) in a page |
 | `capture-window.ps1` | Captures the app window, including the native preview webview a DevTools screenshot can't see |
 | `optimize.mjs` | Crops, resizes and converts a capture to WebP, and its light twin the same way (uses `sharp` from `website/node_modules`) |
-| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Blueprint, deploy screen, failed deploy) and captures each in both themes with headless Edge |
+| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Blueprint, its Data model view with related entities and with loose access, deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments) and captures each in both themes with headless Edge |
 
 ## Before you start
 
@@ -146,14 +146,19 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `preview-toolbar` | live, from the `workbench` capture | `720,40,720,300` |
 | `chat-done` | live, window 1440×1060 | `0,40,720,882` |
 | `chat-diff` | live | `0,40,720,860` |
-| `composer-menus` | live | `0,343,720,520` |
+| `model-picker` | harness | `0,355,720,545` |
+| `model-providers` | harness | `390,200,660,590` |
+| `add-menu` | harness | `0,630,520,270` |
+| `connect-data` | harness | `300,140,840,620` |
+| `data-chips` | harness | `0,740,720,160` |
 | `design`, `design-theme` | live (`design-theme` with `--open` on the Theme button) | `720,40,720,860` |
 | `advisor-finding` | live | `99,191,857,534` |
-| `settings`, `settings-experiments` | live (`settings` with `--settings-theme`) | `410,40,620,820` |
-| `account-menu` | live, `--open`/`--close` on the avatar | `1040,0,400,228` |
-| `deployments` | live, `--open`/`--close` on the deployment control | `640,0,800,330` |
+| `settings`, `settings-experiments` | harness | `410,40,620,820` |
+| `account-menu` | harness | `1040,0,400,272` |
+| `deployments` | harness | `1000,0,440,360` |
 | `share` | live, `--open` on Share, `--close` on Cancel | `400,240,640,420` |
 | `team-overview`, `skills`, `secrets`, `blueprint` | harness | none |
+| `model-relations`, `model-access` | harness | `0,0,1440,770` |
 | `setup`, `help` | harness, shorter window (picked by the script) | none |
 | `team-create` | harness | `405,100,630,700` |
 | `team-publish` | harness | `1030,0,410,500` |

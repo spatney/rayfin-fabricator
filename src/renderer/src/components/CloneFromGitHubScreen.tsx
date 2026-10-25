@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { GithubRepo, GithubStatus, InstallResult } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { authErrorMessage } from '../authErrors'

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import { Codicon } from '../icons'
 import { useToast } from '../../toast'
 import { reportThrown } from '../../errorReport'

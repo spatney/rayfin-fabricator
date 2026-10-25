@@ -631,6 +631,40 @@ export async function runListWorkspaceModels(token, req) {
   return { ok: true, models }
 }
 
+// The Fabric item types a Rayfin connector reads (`rayfin connector types`
+// lists them as each type's discoverable item type): semantic models,
+// warehouses, SQL databases, and lakehouses (through their SQL analytics endpoint).
+export const DATA_ITEM_TYPES = ['SemanticModel', 'Warehouse', 'SQLDatabase', 'Lakehouse']
+
+// The Fabric REST endpoint listing a workspace's items. Pure — covered by --selftest.
+function workspaceItemsUrl(workspaceId) {
+  return `${FABRIC_RESOURCE}/v1/workspaces/${String(workspaceId || '').trim()}/items`
+}
+
+// The items a Rayfin connector can read, by name. Pure — covered by --selftest.
+export function dataItems(items) {
+  return (items || [])
+    .filter((d) => d && d.id && DATA_ITEM_TYPES.includes(d.type))
+    .map((d) => ({
+      id: String(d.id),
+      name: String(d.displayName || d.name || d.id),
+      type: d.type,
+      ...(d.description ? { description: String(d.description) } : {}),
+    }))
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+}
+
+// List the data in a workspace that the app can connect to, for the "Add Fabric
+// data" picker: every item of a type a Rayfin connector reads. Any workspace the
+// signed-in user can open works, not only the one the app deploys to.
+export async function runListWorkspaceData(token, req) {
+  const wsId = String(req.workspaceId || req.workspace || '').trim()
+  if (!new RegExp('^' + GUID + '$').test(wsId)) return { ok: false, error: 'A workspace id is required.' }
+  const fabric = makeApi(await token(), FABRIC_RESOURCE) // default scopes → Fabric token
+  const items = await fetchAllPages(fabric, workspaceItemsUrl(wsId), { label: 'Fabric items request' })
+  return { ok: true, items: dataItems(items) }
+}
+
 // ── Entry ─────────────────────────────────────────────────────────────────--
 // Pure-function self-test for parseTarget + schema normalization — no
 // auth/network. Run with `node semantic_model_helper.mjs --selftest`. Exits
@@ -697,6 +731,22 @@ function selftest() {
   // Workspace semantic-models endpoint (Fabric REST).
   assert(workspaceModelsUrl('ea3779f7-4d16-4fbc-87ba-f501e2a6fdee') === 'https://api.fabric.microsoft.com/v1/workspaces/ea3779f7-4d16-4fbc-87ba-f501e2a6fdee/semanticModels', 'workspace models url')
 
+  // Workspace data: the items a Rayfin connector reads, by name; the rest (a
+  // lakehouse's own SQL endpoint, reports, notebooks) left out.
+  assert(workspaceItemsUrl('ea3779f7-4d16-4fbc-87ba-f501e2a6fdee') === 'https://api.fabric.microsoft.com/v1/workspaces/ea3779f7-4d16-4fbc-87ba-f501e2a6fdee/items', 'workspace items url')
+  const data = dataItems([
+    { id: 'r1', type: 'Report', displayName: 'Sales report' },
+    { id: 'l1', type: 'Lakehouse', displayName: 'orders', description: 'Raw orders' },
+    { id: 'e1', type: 'SQLEndpoint', displayName: 'orders' },
+    { id: 'w1', type: 'Warehouse', displayName: 'Inventory' },
+    { id: 'm1', type: 'SemanticModel', displayName: 'Sales' },
+    { id: 'd1', type: 'SQLDatabase', displayName: 'crm' },
+    { id: 'k1', type: 'KQLDatabase', displayName: 'telemetry' },
+    { type: 'Warehouse', displayName: 'no id' },
+  ])
+  assert(JSON.stringify(data.map((d) => d.id)) === '["d1","w1","l1","m1"]', 'data items by name: ' + JSON.stringify(data))
+  assert(data[2].type === 'Lakehouse' && data[2].description === 'Raw orders' && data[0].description === undefined, 'data item fields')
+
   if (failed) { process.stderr.write(`${failed} selftest assertion(s) failed\n`); process.exit(1) }
   process.stderr.write('semantic-model selftest ok\n')
   process.exit(0)
@@ -718,6 +768,7 @@ async function main() {
     req.mode === 'search' ? await runSearch(token, req)
     : req.mode === 'schema' ? await runSchema(token, req)
     : req.mode === 'listWorkspaceModels' ? await runListWorkspaceModels(token, req)
+    : req.mode === 'listWorkspaceData' ? await runListWorkspaceData(token, req)
     : await runLocate(token, req)
   return result
 }

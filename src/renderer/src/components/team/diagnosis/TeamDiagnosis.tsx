@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { TeamDiagnosisCheck } from '@shared/ipc'
 import Markdown from '../../Markdown'
 import { Codicon } from '../../icons'

@@ -9,6 +9,7 @@ const bounds: PreviewBounds = { x: 100, y: 80, width: 900, height: 600, pixelRat
 function nativeApi() {
   return {
     showUrl: vi.fn<Preview['showUrl']>(async () => {}),
+    preload: vi.fn<Preview['preload']>(async () => {}),
     navigate: vi.fn<Preview['navigate']>(async () => {}),
     setBounds: vi.fn<Preview['setBounds']>(async () => {}),
     hide: vi.fn<Preview['hide']>(async () => {}),

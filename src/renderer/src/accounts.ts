@@ -1,16 +1,34 @@
-import type { AuthStatus, AzAuthStatus } from '@shared/ipc'
+import type { AuthStatus } from '@shared/ipc'
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** Something that knows a tenant's directory name, e.g. an Azure CLI account. */
+interface KnownTenant {
+  tenant?: string
+  tenantName?: string
+}
+
+/** A Microsoft Entra tenant's directory name, from any account that knows it. */
+export function tenantName(
+  tenant: string | undefined,
+  ...known: Array<KnownTenant | undefined>
+): string | undefined {
+  const id = tenant?.trim().toLowerCase()
+  if (!id) return undefined
+  return known.find((k) => k?.tenantName && k.tenant?.trim().toLowerCase() === id)?.tenantName
+}
+
 /**
- * A readable name for a Microsoft Entra tenant: the Azure CLI's directory name
- * when it's signed in to the same tenant, otherwise a shortened id.
+ * A readable name for a Microsoft Entra tenant: its directory name when an
+ * Azure CLI account in it knows it, otherwise a shortened id.
  */
-export function tenantLabel(tenant: string | undefined, az?: AzAuthStatus): string | undefined {
+export function tenantLabel(
+  tenant: string | undefined,
+  ...known: Array<KnownTenant | undefined>
+): string | undefined {
   const id = tenant?.trim()
   if (!id) return undefined
-  if (az?.tenantName && az.tenant?.trim().toLowerCase() === id.toLowerCase()) return az.tenantName
-  return GUID.test(id) ? `Tenant ${id.slice(0, 8)}…` : id
+  return tenantName(id, ...known) ?? (GUID.test(id) ? `Tenant ${id.slice(0, 8)}…` : id)
 }
 
 /** Fabric and the Azure CLI are both signed in, to different tenants. */

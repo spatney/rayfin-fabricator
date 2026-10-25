@@ -3,6 +3,8 @@ import { CloseIcon, DesignIcon, PaletteIcon, SparkleIcon } from '../components/i
 import { itemSummary, itemTitle } from './prompt'
 import './design.css'
 
+import type { JSX } from 'react'
+
 function KindIcon({ item }: { item: DesignItem }): JSX.Element {
   if (item.kind === 'theme') return <PaletteIcon className="design-chip-ico" />
   if (item.kind === 'suggestion') return <SparkleIcon className="design-chip-ico" />

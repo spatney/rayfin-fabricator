@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type JSX } from 'react'
 import type { ChatPlanArtifact, ChatPlanPhase, ChatPlanTodo, ChatPlanTodoStatus } from '@shared/ipc'
 import { completedPlanTodos, planActionLabel, planProgress } from '../chatPlan'
 import Markdown from './Markdown'

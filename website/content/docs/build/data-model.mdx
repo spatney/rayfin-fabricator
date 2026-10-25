@@ -56,6 +56,16 @@ The **Website** piece shows when people can load the app's pages, set by `assetA
 - **Pages load before sign-in** (`public`): anyone with the link can download the page files, the app's HTML, JavaScript and CSS. The app's data still needs sign-in, and its access rules still apply.
 - **Page access not set**: choose `protected` or `public` before deploying.
 
+## How people sign in
+
+The **Sign-in** piece shows how people sign in to the app. **Microsoft Entra ID, through Fabric** means the app uses Fabric brokered auth, which Rayfin's docs also call Fabric SSO:
+
+- People sign in with the Microsoft Entra account they already use for Fabric.
+- Sign-in is part of the app, so there's no identity provider to run.
+- The app needs no app registration of its own in Microsoft Entra ID, so there's nothing for a tenant admin to approve.
+
+Select **Sign-in** to see its **Provider**, whether it accepts **Entra tokens from other apps**, and its **Sign-in addresses**. If the piece says **Off**, the app can't tell people apart. Learn more in the [Rayfin auth docs](https://rayfin.ai/docs/auth).
+
 ## Secrets
 
 The **Secrets** piece lists the secrets the app's functions use: the ones declared in `rayfin/rayfin.yml` and the ones its code reads. Select it to see what each secret is for, which functions read it, and whether the deployed app has a value for it: **Set**, **No value** or **Not in rayfin.yml**. Values are never shown.
@@ -84,14 +94,17 @@ These actions send a prompt to the Build chat. Fabricator doesn't deploy from th
 The **Data model** view parses the Rayfin schema and draws an entity-relationship diagram. Each entity card shows:
 
 - The entity name.
-- Fields and their parsed types, such as `uuid`, `text`, `date`, `bool`, `decimal`, relation-to-one or relation-to-many.
-- Primary-key and relationship indicators.
+- Each field and its type: `uuid`, `text`, `email`, `int`, `decimal`, `bool`, `date`, or `enum` for a `@set()` field. A relationship field shows the entity it points to, such as `Category`, with `[]` after it when it holds many, such as `Task[]`.
+- A key on the primary key, and a link on a field that references another entity.
+- A diamond before each field name: filled for a required field, hollow for an optional field and for the primary key, and in the accent color for a unique field. Hover over it to see **Required** or **Optional**.
 - Access grants, including role names and whether a grant has a row-level **policy**.
 - An access dot. The legend labels access as **Row-scoped**, **Any signed-in** or **Public**.
 
-Relationships appear as lines between entity cards. Hover an entity to highlight its related entities.
+Relationships appear as lines between entity cards, and the header counts the entities and relationships, such as **4 entities · 3 relationships**. Hover an entity to highlight its related entities.
 
 ![The Data model view showing the Expense entity as a card with its fields and types, an authenticated access tag with a policy, and Open and Focus buttons.](/screenshots/model.webp)
+
+![The Data model view with four entities: Expense, whose report field links to Report, whose expenses field shows Expense with brackets, and an ExpenseTag join entity linked to both Expense and Tag. The header reads 4 entities · 3 relationships.](/screenshots/model-relations.webp)
 
 Learn the Rayfin modeling concepts in the [Rayfin data modeling docs](https://rayfin.ai/docs/data/modeling).
 
@@ -115,6 +128,8 @@ Each entity card also has:
 ## Harden loose access
 
 Fabricator flags loose access on entities that are public, authenticated-only, default or mixed. Those cards show **Harden**.
+
+![The Data model view with four entities. Expense, ExpenseTag and Tag have green access dots and an authenticated grant with a policy. Report has an amber dot, says no explicit roles, and offers Harden beside Open and Focus.](/screenshots/model-access.webp)
 
 Select **Harden** to send a ready prompt to Copilot asking it to tighten the entity's access control with Rayfin decorators and row-level policy. Fabricator does not deploy from that prompt directly; the normal chat turn and redeploy flow applies.
 
@@ -151,23 +166,45 @@ Use **Search tables, columns & measures**, **Collapse** or **Expand**, focus con
 
 Learn about Rayfin semantic model connectors in the [Rayfin semantic models docs](https://rayfin.ai/docs/connectors/semantic-models).
 
-## Connect a Fabric semantic model
+## Connect Fabric data
 
-You can start connecting a semantic model from the chat composer menu.
+Your app can read data that's already in Microsoft Fabric through Rayfin connectors: semantic
+models, warehouses, SQL databases, and lakehouses, which apps read through their SQL analytics
+endpoint and can't change. You pick the data; Copilot connects it.
 
-1. In the Build chat composer, open the add menu.
-2. Select **Connect a semantic model**.
-3. In **Connect a semantic model**, choose a model from the workspace this app deploys to.
-4. Select **Add to chat**.
-5. Send the prepared request to Copilot.
+1. In the Build chat composer, select **+** (**Add images, files or data**), then
+   **Fabric data**.
+2. Choose a kind of data, such as **Warehouse**, or **Browse all Fabric data…**.
+3. In **Add Fabric data**, choose a workspace. **Recent** lists the workspaces your apps
+   deploy to and the ones you connected data from, newest first. Below it are all the other
+   workspaces you can open.
+4. Tick the data you want. You can pick from several workspaces before you add it.
+5. Select **Add to chat**. The data waits in the message box as chips, one for each item,
+   showing its name and workspace.
+6. Say what to build with it, such as "Chart spending by category", or just press **Enter**
+   to connect it. Fabricator tells Copilot how to connect the data when you send, so you
+   don't have to.
 
-The dialog lists models in the app's deployment workspace. Models already declared in the project are marked **Connected**.
+![Add Fabric data: recent workspaces first, the Finance analytics workspace open with its semantic models, warehouse, SQL database and lakehouses, three already connected and two picked](/screenshots/connect-data.webp)
 
-If the app is not deployed yet, the dialog says: "Deploy this app to a Fabric workspace first — then you can connect the semantic models in that workspace."
+![The message box with two Fabric data chips, Ledger and Raw transactions from Finance analytics, above the placeholder "Say what to build with this data, or just press Enter to connect it"](/screenshots/data-chips.webp)
+
+To change the data before you send, select a chip to reopen **Add Fabric data**, or select
+its **×** to remove it. The chips stay on your message in the chat, so you can see what
+each request connected.
+
+Copilot adds each one with `rayfin connector add` and wires it into the app. Data the app
+already connects to is marked **Connected**. The dialog starts in the workspace this app
+deploys to, when it has one, but the app doesn't need to be deployed to connect data.
+
+Fabricator doesn't offer KQL databases: Rayfin 1.36 can't add new KQL database connectors.
+Learn more in the [Rayfin connectors docs](https://rayfin.ai/docs/connectors).
 
 ## Sign in and retry
 
-Listing workspace models uses Fabric authentication. If Fabricator cannot list them silently, the dialog says: "Sign in to Fabric to list this workspace's models. The preview uses a separate sign-in." Select **Sign in & retry**.
+Listing your workspaces and their data uses Fabric authentication. If Fabricator can't list
+them silently, the dialog says: "Sign in to Fabric to see your workspaces and their data."
+Select **Sign in & retry**.
 
 Reading a semantic model schema can also require sign-in:
 

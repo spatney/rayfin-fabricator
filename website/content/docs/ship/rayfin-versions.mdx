@@ -52,7 +52,7 @@ If you move an app into a team workspace, update older apps first with **Update 
 
 ## If dependencies are missing
 
-When you open a project, Fabricator checks the project's Rayfin CLI and installs missing dependencies before enabling the project tools. While it works, you see a `Preparing <project name>` status and "Checking the project's Rayfin CLI and installing missing dependencies..."
+When you open a project, Fabricator checks that the project's Rayfin CLI and the rest of its packages are fully installed, and installs any that are missing or incomplete before enabling the project tools. The check usually takes a moment. If it takes longer, you see a `Preparing <project name>` status and "Checking the project's Rayfin CLI and installing missing dependencies..." It checks again before it deploys or signs in to Fabric.
 
 If installation fails, Fabricator shows **Couldn't install project dependencies** with **Retry installation** and **Switch projects**.
 

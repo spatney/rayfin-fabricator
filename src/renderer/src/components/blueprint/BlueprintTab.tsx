@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react'
 import type { FileNode, StudioProject, TeamManifest } from '@shared/ipc'
 import { emptyDataModel, parseProjectDataModel, type DataModel } from '../../model/parseSchema'
 import { loadProjectFabricConfig } from '../../model/fabricConfig'
@@ -60,7 +60,7 @@ async function readFunctionSources(
   projectId: string,
   functionsPath: string
 ): Promise<{ path: string; text: string }[]> {
-  let tree: FileNode[] = []
+  let tree: FileNode[]
   try {
     tree = await window.api.projects.files.tree(projectId)
   } catch {

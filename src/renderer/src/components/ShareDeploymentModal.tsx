@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react'
 import type {
   FabricDeployment,
   FabricDirectoryPerson,

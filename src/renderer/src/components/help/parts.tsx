@@ -1,5 +1,7 @@
 import { Codicon } from '../icons'
 
+import type { JSX } from 'react'
+
 /** What Help is asked when a failed deploy's **Find out why** opens it. */
 export const DEPLOY_QUESTION = 'Why did my last deploy fail?'
 

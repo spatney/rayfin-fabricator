@@ -6,7 +6,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode
+  type ReactNode,
+  type JSX,
 } from 'react'
 import { inferArea, reportError, reportEvent } from './errorReport'
 

@@ -7,7 +7,7 @@ Deploying publishes the app in your current project to Microsoft Fabric. Fabrica
 
 Rayfin apps deploy as Fabric apps in a Fabric workspace. For Rayfin's platform details, see [Deploy Fabric apps](https://rayfin.ai/docs/deploy/fabric-apps). Deployment uses your Fabric capacity; see [Rayfin pricing and capacity notes](https://rayfin.ai/docs/deploy/pricing).
 
-![The deployments panel listing the active Development deployment with its workspace, region, capacity and app address, and a New deployment link.](/screenshots/deployments.webp)
+![The deployment panel for the Development deployment: deployed 2 hours ago, with a green dot for live, its app address, its workspace with region and capacity, the Fabric account that deploys, Deploy after each chat turn turned on, and New deployment.](/screenshots/deployments.webp)
 
 ## Sign in to Fabric
 
@@ -19,7 +19,7 @@ Fabricator uses the Rayfin CLI credentials for Fabric deployment. You can sign i
 
 The deployments picker also prompts you when Fabricator needs Fabric credentials to list workspaces. If credentials expire, it may show "Sign in to Microsoft Fabric to list your workspaces."
 
-You can stay signed in to more than one Fabric account, for example one per organization, and choose which one deploys. The **Deployments** panel names the account that deploys, such as "Deploys as alice@contoso.com · Contoso". Select **Change** to switch accounts. See [Manage your accounts](/docs/start/accounts).
+You can stay signed in to more than one Fabric account, for example one per organization, and choose which one deploys. The deployment panel names the account that deploys under **Account**, such as "alice@contoso.com · Contoso". Select **Change** to switch accounts. See [Manage your accounts](/docs/start/accounts).
 
 ## Deploy for the first time
 
@@ -49,7 +49,11 @@ If it finds one, you see a warning that deploying there would replace that app. 
 
 ## What happens during deploy
 
-While a deploy runs, the preview shows the deploy screen. Ray talks you through it, and below him a list shows the steps the deploy has been through, the one in progress, and the steps still to come.
+The first time an app deploys, the preview shows the deploy screen. Ray talks you through it, and below him a list shows the steps the deploy has been through, the one in progress, and the steps still to come.
+
+When the app is already deployed, it stays in the preview while the deploy runs, so you can keep looking at it. A strip above the preview shows the deployment it's going to, the step in progress, a progress bar and how long the deploy has taken. Select **Watch** to follow the deploy on the deploy screen, and **Back to your app** to return. Select **Logs** to see the deploy's output. **Design** and the **Fabric** view wait until the deploy ends. When the new version is live, the preview reloads.
+
+The deployment control in the app bar shows the deploy's progress too, so you can follow it from the Code, Blueprint and Advisor tabs.
 
 With Rayfin CLI 1.35 or newer, the steps come from the CLI's own progress reports, and the step in progress shows the CLI's words for what it's doing. A typical deploy goes through:
 
@@ -65,7 +69,7 @@ Some deploys have other steps, such as **Installing packages** when the project'
 
 Projects on Rayfin CLI 1.34 or older show **Connecting to Fabric**, **Preparing deployment**, **Building your app**, **Packaging assets**, **Uploading to Fabric** and **Going live** instead. To get the detailed steps, update the project's Rayfin. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
 
-If Fabric asks you to sign in again, the deploy waits for you to finish in your browser. With Ray turned off in **Settings → Appearance**, the Fabricator logo takes his place.
+If Fabric asks you to sign in again, the deploy waits for you to finish in your browser. If you've [sent Ray away](/docs/start/tour#ray), the Fabricator logo takes his place.
 
 ![The deploy screen: Ray says "Building your app. Fins crossed!" above a list of steps. Five are checked off, Building and uploading your app is in progress with the CLI's words "Deploying static content" under it, and Going live is still to come.](/screenshots/deploy-progress.webp)
 
@@ -73,15 +77,24 @@ During the deploy you can select **View logs** in the deploy screen. If the depl
 
 ## Redeploy changes
 
-After the first successful deployment, the primary button changes to **Redeploy**. Select it to run `rayfin up` again for the active deployment.
+After the first successful deployment, the deployment control in the app bar names the deployment, with its state as a dot: green while it's live, red after a deploy that didn't finish. The button beside it says what a deploy would do now:
+
+| Button | When it shows |
+| --- | --- |
+| **Redeploy** | Everything is deployed. The button is quiet, and selecting it runs `rayfin up` again for the active deployment. |
+| **Deploy 3 changes** | Files changed since the app was last deployed; the number counts them. When Fabricator can't tell which version is deployed, it says **Deploy changes**. |
+| **Try again** | The last deploy didn't finish, and the deployment control says **Failed**. Open it to see what went wrong, and select **Find out why** to ask Help. |
+| **Deploying…** | A deploy is running, with how far it has got. Select it to see the step in progress. |
 
 Fabricator also redeploys automatically after a successful Copilot turn when the project has undeployed changes. This includes edits that Copilot already committed to the project's git history. It does not redeploy when:
 
 - the Copilot turn failed or was cancelled,
-- the [Deploy manually](/docs/ship/deploy#deploy-manually) experiment is set to **Manual deploy**,
+- you turned off **Deploy after each chat turn** (see [Deploy manually](/docs/ship/deploy#deploy-manually)),
 - there are no content changes since the last deployed revision,
 - a team workspace pipeline owns the app's deployment,
 - Fabricator cannot check whether changes are undeployed.
+
+While an automatic redeploy runs, the preview keeps showing what it showed during the turn: the local preview with your changes, when the turn had one. When the deploy ends, the preview shows your deployed app.
 
 If change detection fails, Fabricator shows "Could not check for undeployed changes." followed by "Use Redeploy to publish your changes." Use **Redeploy** to publish explicitly.
 
@@ -89,48 +102,47 @@ When Fabricator switches to another deployment or cannot identify the deployed g
 
 ## Deploy manually
 
-> [!WARNING]
-> Deploy manually is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
+Fabricator deploys your app after each chat turn. To make several changes in chat before you deploy, turn that off: your changes then stay on this computer until you deploy them. Because the deployed app falls behind your code, the preview shows your app from a local Vite server whenever the app is open, not only while Copilot is working.
 
-Turn on **Deploy manually** to make several changes in chat before you deploy. Chat turns no longer deploy your app: your changes stay on this computer until you select **Redeploy**. Because the deployed app falls behind your code, the preview shows your app from a local Vite server whenever the app is open, not only while Copilot is working.
+1. In the app bar, select the deployment control, which shows the deployment's name.
+2. Turn off **Deploy after each chat turn**. The deployment control now says **Manual** after the deployment's name, for example **Prod · Manual**.
+3. Keep chatting. The preview shows your app running on this computer, at a `localhost` address. Changes show there as Copilot makes them, and the button in the app bar counts them, for example **Deploy 3 changes**.
+4. When you're ready, select that button. Your local app stays in the preview while the deploy runs.
 
-1. Open **Settings**, then expand **Experiments**.
-2. Turn on **Deploy manually**.
-3. Open your app. The status bar shows **Manual deploy**, and the preview shows your local app, marked **Local**.
-4. Keep chatting. Changes show in the preview as Copilot makes them.
-5. When you're ready, select **Redeploy** in the app bar. The preview shows the deploy's progress, then your local app again.
+To deploy after each turn again, turn **Deploy after each chat turn** back on. Your choice applies to all your apps, and Fabricator remembers it.
 
-To go back to deploying after each turn for a while, choose **Auto deploy** in the status bar, and **Manual deploy** to switch back. The experiment stays on, so the switch stays in the status bar. Turning **Deploy manually** on again starts you in **Manual deploy**.
+While **Deploy after each chat turn** is off:
 
-While the status bar shows **Manual deploy**:
-
-- The local preview uses your deployed app's backend. Frontend changes show as Copilot makes them, but changes to data, permissions or functions work only after you select **Redeploy**. Fabricator asks Copilot to tell you when a change needs a deploy.
+- The local preview uses your deployed app's backend. Frontend changes show as Copilot makes them, but changes to data, permissions or functions work only after you deploy them. Fabricator asks Copilot to tell you when a change needs a deploy.
 - **Design** works on the local preview between turns, so you can queue visual changes and send them to Copilot without deploying first. It turns off when a turn starts, because Copilot's changes show in the preview as it makes them. The **Fabric** view works on the deployed app, so it's unavailable.
 - The local preview stops when you switch to another app or close Fabricator, and the app you open next gets its own. If you switch your app to another deployment, its local preview starts again with that deployment's settings.
-- If the project has no local Vite installation, there's no local preview. The preview keeps showing the deployed app, without your latest changes, until you select **Redeploy**.
+- If the project has no local Vite installation, there's no local preview. The preview keeps showing the deployed app, without your latest changes, until you deploy them.
 - Team apps aren't affected. They still save to GitHub after each turn, and the team pipeline deploys your preview.
 
-Switching to **Auto deploy**, or turning **Deploy manually** off, closes the local preview and doesn't deploy anything. Your changes are still on this computer: the next successful chat turn deploys them, or you can select **Redeploy**.
+Turning **Deploy after each chat turn** back on closes the local preview and doesn't deploy anything. Your changes are still on this computer: the next successful chat turn deploys them, or you can deploy them from the app bar.
 
 ## Work with multiple deployments
 
-In the app bar, select the deployment control, marked with a cloud icon, to open **Deployments**. From there you can:
+In the app bar, select the deployment control, which shows the deployment's name, to open its panel. The panel opens straight away and doesn't sign you in to Fabric. It shows:
 
-- see the active deployment,
-- see which Fabric account deploys, and select **Change** to use another,
-- select **+ New deployment** to deploy the same project to another workspace,
-- select **Switch** on another recorded deployment,
-- rename a deployment by selecting its name,
-- select **Refresh deployments** to reload the list,
-- select **Share** after a deployment exists.
+- the deployment's name and state, as a dot and words, for example "Deployed 2 h ago". Select the pencil, **Rename this deployment**, to rename it.
+- what's waiting to deploy, with **See what changed**, which opens **History** in the Code tab,
+- **App**, the app's address. Select **Copy link** to copy it, or **Open in your browser**.
+- **Workspace**, the Fabric workspace, with its region and capacity. Select **Open the workspace in Fabric** to open it in the Fabric portal. The region and capacity show once you're signed in to Fabric.
+- **Account**, the Fabric account that deploys. Select **Change** to use another, or **Sign in** when you're signed out.
+- **Other deployments**, the project's other recorded deployments. Select **Switch** on one to make it the active deployment: the preview shows it, and deploys go to it. Point at a deployment to rename it.
+- **Deploy after each chat turn**, on to start with. Turn it off to keep chat changes on this computer until you deploy them. See [Deploy manually](/docs/ship/deploy#deploy-manually).
+- **New deployment…**, to deploy the same project to another workspace.
 
-Switching uses Rayfin's recorded deployments for the project. Each deployment points to a Fabric workspace and may show its workspace region and capacity SKU.
+**Share** is next to the deployment control once the app has a deployment. See [Share your app](/docs/ship/share).
+
+Switching uses Rayfin's recorded deployments for the project. Each deployment points to a Fabric workspace.
 
 Fabricator does not show a per-deployment delete action in this panel.
 
 ## Refresh Fabric authentication
 
-If deployment repeatedly fails even though you recently signed in, use **Refresh Fabric authentication** from the account menu. When a deploy fails because Fabric wants you to sign in again, the notice above the preview offers it too. Fabricator runs the selected project's `rayfin logout`, then `rayfin login`, verifies the new Fabric credential, and does not redeploy automatically. After it succeeds, select **Redeploy**.
+If deployment repeatedly fails even though you recently signed in, use **Refresh Fabric authentication** from the account menu. When a deploy fails because Fabric wants you to sign in again, the notice above the preview offers it too. Fabricator runs the selected project's `rayfin logout`, then `rayfin login`, verifies the new Fabric credential, and does not redeploy automatically. After it succeeds, deploy again from the app bar.
 
 See [setup and sign-in troubleshooting](/docs/troubleshooting/setup-and-sign-in) and [deploy troubleshooting](/docs/troubleshooting/deploy) for recovery steps.
 

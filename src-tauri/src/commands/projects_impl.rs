@@ -218,6 +218,8 @@ pub(crate) fn register_project(dir: &Path, display_name: Option<&str>) -> Studio
     awaiting_first_deploy: None,
     model: None,
     effort: None,
+    auto_tier: None,
+    context_tier: None,
     preview_mode: None,
     fabric_preview_defaulted: None,
     team: None,

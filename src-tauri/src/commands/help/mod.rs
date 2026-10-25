@@ -598,7 +598,11 @@ async fn run_turn(
 
   let session = state
     .copilot
-    .transient_session_with(&cwd.to_string_lossy(), model, None, opts)
+    .transient_session_with(
+      &cwd.to_string_lossy(),
+      crate::services::copilot::ModelChoice::of(model, None),
+      opts,
+    )
     .await?;
   let sub = session.subscribe();
 
@@ -702,12 +706,22 @@ fn compose(ctx: &HelpContext, question: &str, attachments: &[String], history: &
 mod tests {
   use super::*;
 
+  /// The fixtures are written as Windows paths; elsewhere `C:\a\b` becomes `/a/b`, so
+  /// the policy's path checks mean the same on every OS the tests run on.
+  fn native(path: &str) -> String {
+    if cfg!(windows) {
+      path.to_string()
+    } else {
+      path.trim_start_matches("C:").replace('\\', "/")
+    }
+  }
+
   fn roots() -> Vec<PathBuf> {
-    vec![PathBuf::from("C:\\data\\logs"), PathBuf::from("C:\\cache\\source")]
+    vec![PathBuf::from(native("C:\\data\\logs")), PathBuf::from(native("C:\\cache\\source"))]
   }
 
   fn policy() -> HelpPolicy {
-    HelpPolicy { roots: roots(), cwd: PathBuf::from("C:\\cache") }
+    HelpPolicy { roots: roots(), cwd: PathBuf::from(native("C:\\cache")) }
   }
 
   fn ctx() -> HelpContext {
@@ -737,7 +751,7 @@ mod tests {
   }
 
   fn read_request(path: &str) -> PermissionRequestData {
-    request("read", "path", path)
+    request("read", "path", &native(path))
   }
 
   fn url_request(url: &str) -> PermissionRequestData {
@@ -866,7 +880,7 @@ mod tests {
       extra: serde_json::json!({
         "permissionRequest": {
           "kind": "read",
-          "path": "C:\\data\\logs\\errors.jsonl",
+          "path": native("C:\\data\\logs\\errors.jsonl"),
           "requestSandboxBypass": true
         }
       }),

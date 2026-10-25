@@ -1,5 +1,7 @@
 import type { ToolKind } from './toolPresentation'
 
+import type { JSX } from 'react'
+
 /** Distinct line icon per tool kind, so the activity feed is scannable at a glance. */
 export function ToolKindIcon({
   kind,

@@ -1,12 +1,12 @@
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode, type JSX } from 'react'
 import type { AppSettings, AppVersions, ThemePreference } from '@shared/ipc'
 import { applyTheme, applyUiScale, UI_SCALES } from '../theme'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
-import { useUpdates } from '../update'
 import { formatCopilotCli } from '../copilotVersion'
 import { openDocs } from '../docsLinks'
 import { Codicon } from './icons'
+import { FabricatorMark } from './FabricatorMark'
 
 interface Props {
   settings: AppSettings
@@ -16,6 +16,8 @@ interface Props {
   onClose: () => void
   /** Open the Accounts dialog. */
   onManageAccounts?: () => void
+  /** Open the Accounts dialog at Model providers (your own API keys). */
+  onManageKeys?: () => void
   /** Leave for the setup screen to re-check tools and sign-ins. */
   onReviewSetup?: () => void
 }
@@ -89,17 +91,78 @@ function ToggleRow({
   )
 }
 
+/** Fabricator's version and the parts it runs on, with a copy for bug reports. */
+function VersionInfo({ versions }: { versions: AppVersions }): JSX.Element {
+  const [copied, setCopied] = useState(false)
+  const timer = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (timer.current != null) window.clearTimeout(timer.current)
+    },
+    []
+  )
+
+  const parts: Array<[name: string, version: string]> = [
+    ['Tauri', versions.tauri],
+    ['WebView2', versions.webview2],
+    ['Copilot CLI', formatCopilotCli(versions)]
+  ]
+
+  async function copy(): Promise<void> {
+    const text = [`Fabricator ${versions.app}`, ...parts.map(([name, v]) => `${name} ${v}`)]
+    try {
+      await navigator.clipboard.writeText(text.join('\n'))
+      setCopied(true)
+      if (timer.current != null) window.clearTimeout(timer.current)
+      timer.current = window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* clipboard unavailable — ignore */
+    }
+  }
+
+  return (
+    <>
+      <div className="set-item set-about">
+        <FabricatorMark className="set-about-mark" />
+        <div className="set-item-text">
+          <span className="set-item-title">Fabricator</span>
+          <span className="set-item-desc">Version {versions.app}</span>
+        </div>
+        <div className="set-item-control">
+          <button
+            type="button"
+            className="btn btn--sm"
+            title="Copy version info"
+            aria-label="Copy version info"
+            onClick={() => void copy()}
+          >
+            <Codicon name={copied ? 'check' : 'copy'} />
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+      </div>
+      <dl className="set-item set-versions">
+        {parts.map(([name, version]) => (
+          <Fragment key={name}>
+            <dt>{name}</dt>
+            <dd>{version}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </>
+  )
+}
+
 export default function SettingsModal({
   settings,
   versions,
   onChange,
   onClose,
   onManageAccounts,
+  onManageKeys,
   onReviewSetup
 }: Props): JSX.Element {
   useSuppressPreview()
-  const { status: updateStatus, info: updateInfo, checkNow } = useUpdates()
-  const [checkedUpdates, setCheckedUpdates] = useState(false)
   const [showExperiments, setShowExperiments] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null)
@@ -152,21 +215,6 @@ export default function SettingsModal({
     }
   }
 
-  const updateBusy =
-    updateStatus === 'checking' || updateStatus === 'downloading' || updateStatus === 'installing'
-  let updateMsg: string
-  if (updateStatus === 'checking') updateMsg = 'Checking for updates…'
-  else if (updateStatus === 'downloading') updateMsg = 'Downloading the latest update…'
-  else if (updateStatus === 'ready')
-    updateMsg = `Update ${updateInfo?.version ?? ''} is ready — restart from the banner.`.replace(
-      '  ',
-      ' '
-    )
-  else if (updateStatus === 'installing') updateMsg = 'Installing update…'
-  else if (updateStatus === 'error') updateMsg = 'Couldn’t check for updates. Try again later.'
-  else if (checkedUpdates) updateMsg = 'You’re up to date.'
-  else updateMsg = versions ? `You’re on version ${versions.app}.` : ''
-
   return (
     <>
       <div className="modal-backdrop" onClick={onClose}>
@@ -198,6 +246,16 @@ export default function SettingsModal({
                 >
                   <button type="button" className="btn btn--sm" onClick={onManageAccounts}>
                     Manage accounts
+                  </button>
+                </Item>
+              )}
+              {onManageKeys && (
+                <Item
+                  title="API keys"
+                  desc="Use models from Anthropic, OpenAI, xAI and Google with your own API keys, next to your Copilot models. The provider bills you for them."
+                >
+                  <button type="button" className="btn btn--sm" onClick={onManageKeys}>
+                    Manage API keys
                   </button>
                 </Item>
               )}
@@ -257,45 +315,6 @@ export default function SettingsModal({
                   ))}
                 </div>
               </Item>
-              <ToggleRow
-                label="Ray"
-                hint="Fabricator’s stingray keeps you company while apps install, shares Rayfin facts, and greets you in Help."
-                checked={settings.mascot !== false}
-                onChange={(v) => onChange({ mascot: v })}
-              />
-            </Section>
-
-            <Section title="Updates & help">
-              <Item title="Updates" desc={updateMsg || undefined}>
-                <button
-                  type="button"
-                  className="btn btn--sm"
-                  disabled={updateBusy}
-                  onClick={() => {
-                    setCheckedUpdates(true)
-                    void checkNow()
-                  }}
-                >
-                  {updateBusy ? 'Checking…' : 'Check for updates'}
-                </button>
-              </Item>
-              <Item
-                title="Help"
-                desc="Guides for every part of Fabricator, and fixes for common problems."
-              >
-                <button type="button" className="btn btn--sm" onClick={() => openDocs('home')}>
-                  Documentation
-                  <Codicon name="link-external" className="set-ext" />
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--sm"
-                  onClick={() => openDocs('troubleshooting')}
-                >
-                  Troubleshooting
-                  <Codicon name="link-external" className="set-ext" />
-                </button>
-              </Item>
             </Section>
 
             <Section title="Diagnostics">
@@ -345,8 +364,8 @@ export default function SettingsModal({
                   onClick={() => setShowExperiments((s) => !s)}
                 >
                   <span className="set-item-text">
-                    <span className="set-item-title set-expander-title" id={experimentsTitleId}>
-                      Experiments <span className="settings-beta">Beta</span>
+                    <span className="set-item-title" id={experimentsTitleId}>
+                      Experiments
                     </span>
                     <span className="set-item-desc" id={experimentsDescId}>
                       These features are experimental and off by default. They may be unstable,
@@ -363,30 +382,34 @@ export default function SettingsModal({
                       checked={Boolean(settings.experiments?.teamWorkspaces)}
                       onChange={(v) => onChange({ experiments: { teamWorkspaces: v } })}
                     />
-                    <ToggleRow
-                      label="Deploy manually"
-                      hint="Chat turns don’t deploy your app; select Redeploy when you’re ready. The preview always shows your latest changes, running on this computer. Switch between Manual and Auto deploy in the status bar. Team apps still save after each turn."
-                      checked={Boolean(settings.experiments?.manualDeploy)}
-                      onChange={(v) =>
-                        onChange(
-                          v
-                            ? { experiments: { manualDeploy: true }, deployMode: 'manual' }
-                            : { experiments: { manualDeploy: false } }
-                        )
-                      }
-                    />
                   </div>
                 )}
               </div>
             </section>
+
+            <Section title="About">
+              {versions && <VersionInfo versions={versions} />}
+              <Item
+                title="Help"
+                desc="Guides for every part of Fabricator, and fixes for common problems."
+              >
+                <button type="button" className="btn btn--sm" onClick={() => openDocs('home')}>
+                  Documentation
+                  <Codicon name="link-external" className="set-ext" />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  onClick={() => openDocs('troubleshooting')}
+                >
+                  Troubleshooting
+                  <Codicon name="link-external" className="set-ext" />
+                </button>
+              </Item>
+            </Section>
           </div>
 
-          <div className="modal-footer settings-footer">
-            <span className="settings-version">
-              {versions
-                ? `Fabricator ${versions.app} · Tauri ${versions.tauri} · WebView2 ${versions.webview2} · Copilot CLI ${formatCopilotCli(versions)}`
-                : ''}
-            </span>
+          <div className="modal-footer">
             <button className="btn btn--primary" onClick={onClose}>
               Done
             </button>

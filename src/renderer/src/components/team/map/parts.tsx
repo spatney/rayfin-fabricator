@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties, type JSX } from 'react'
 import type { TeamRunStep } from '@shared/ipc'
 import { elapsed, friendlyStep, runProgress } from '../runProgress'
 import type { Deploying, Health } from './model'

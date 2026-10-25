@@ -1,0 +1,385 @@
+/* Model picker, after GitHub Copilot's: a small menu (Auto, or the chosen
+   model's Model / Effort / Context window) with lists that open beside it.
+   Flat: solid surfaces and 1px borders, like the composer's other menus.
+   Component CSS loads before codicon.css and main.css, so rules that touch
+   their selectors (.codicon, .switch) carry the extra specificity to win. */
+
+.model-picker .mp-pill {
+  max-width: 260px;
+}
+
+.mp-pill .brand-logo.mp-pill-logo {
+  width: 14px;
+  height: 14px;
+}
+
+.mp-pill .codicon[class*='codicon-'].mp-pill-key {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.mp-pill .codicon[class*='codicon-'].mp-pill-warn {
+  flex: none;
+  font-size: 13px;
+  color: var(--pending);
+}
+
+/* Drawn at the document root (fixed, placed beside the trigger), so it can
+   reach over the chat and preview panes, which are containers. */
+.mp-pop {
+  position: fixed;
+  z-index: 45;
+  display: flex;
+  gap: 6px;
+}
+
+.mp-pop--up {
+  align-items: flex-end;
+}
+
+.mp-pop--down {
+  align-items: flex-start;
+}
+
+.mp-pop--right {
+  flex-direction: row;
+}
+
+.mp-pop--left {
+  flex-direction: row-reverse;
+}
+
+.mp-panel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: var(--mp-max-h, 520px);
+  padding: 6px;
+  background: var(--bg-elev-3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  animation: mpIn 0.12s ease both;
+}
+
+@keyframes mpIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.mp-main {
+  width: 268px;
+  overflow-y: auto;
+}
+
+.mp-fly {
+  width: 300px;
+}
+
+.mp-fly--effort,
+.mp-fly--context {
+  width: 284px;
+}
+
+.mp-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.3;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mp-item:hover:not(:disabled),
+.mp-item:focus-visible,
+.mp-item.is-open {
+  outline: none;
+  background: var(--bg-elev-2);
+}
+
+.mp-item:disabled {
+  cursor: default;
+}
+
+.mp-item:disabled .mp-item-label,
+.mp-item:disabled .mp-logo,
+.mp-item:disabled .mp-tag {
+  opacity: 0.55;
+}
+
+.mp-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mp-item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.mp-item-desc {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+
+.mp-auto .mp-item-label {
+  font-weight: 600;
+}
+
+.mp-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mp-heading {
+  padding: 8px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.mp-sep {
+  flex: none;
+  height: 1px;
+  margin: 4px;
+  background: var(--border);
+}
+
+.mp-sub .mp-item-label {
+  flex: none;
+}
+
+.mp-sub-value {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+.mp-sub-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mp-item .codicon[class*='codicon-'].mp-caret {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.mp-item .codicon[class*='codicon-'].mp-check {
+  flex: none;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.mp-item .codicon[class*='codicon-'].mp-check--off {
+  visibility: hidden;
+}
+
+.mp-item .brand-logo.mp-logo,
+.mp-item .codicon[class*='codicon-'].mp-logo {
+  width: 16px;
+  height: 16px;
+}
+
+.mp-item .codicon[class*='codicon-'].mp-logo {
+  font-size: 14px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.mp-item .codicon[class*='codicon-'].mp-warn {
+  color: var(--pending);
+}
+
+.mp-quiet {
+  color: var(--text-dim);
+}
+
+.mp-quiet:hover:not(:disabled),
+.mp-quiet:focus-visible {
+  color: var(--text);
+}
+
+.mp-more .mp-item-label {
+  flex: 1;
+  color: var(--text-dim);
+}
+
+.mp-count {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.mp-badge {
+  flex: none;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-radius: 999px;
+}
+
+.mp-badge--inline {
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+.mp-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 104px;
+  overflow: hidden;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text-faint);
+}
+
+.mp-tag .codicon[class*='codicon-'] {
+  font-size: 11px;
+}
+
+.mp-note {
+  margin: 6px 10px 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+
+.mp-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.mp-search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  margin-bottom: 4px;
+  padding: 0 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.mp-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.mp-search .codicon[class*='codicon-'].mp-search-icon {
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.mp-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: none;
+  border: 0;
+  outline: none;
+}
+
+.mp-list {
+  min-height: 0;
+  max-height: min(420px, calc(var(--mp-max-h, 520px) - 56px));
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overscroll-behavior: contain;
+}
+
+.mp-fly-items {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Auto's switch: the app's switch, a size smaller. */
+.mp-auto .switch.switch--sm {
+  width: 30px;
+  height: 18px;
+}
+
+.mp-auto .switch.switch--sm .switch-knob {
+  width: 12px;
+  height: 12px;
+}
+
+.mp-auto .switch.switch--sm.switch--on .switch-knob {
+  transform: translateX(12px);
+}
+
+/* Brand logos (model makers and providers): a 16px box the artwork fits in. */
+.brand-logo {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text);
+}
+
+.brand-logo > img,
+.brand-logo > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.brand-logo > svg.brand-logo-mark--wide {
+  height: auto;
+}
+
+.brand-logo .codicon[class*='codicon-'] {
+  font-size: 14px;
+  color: var(--text-dim);
+}

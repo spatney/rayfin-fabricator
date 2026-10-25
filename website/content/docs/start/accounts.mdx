@@ -26,9 +26,11 @@ Changes apply to every project on this computer. Select **Re-check** to verify e
 | **Azure CLI** | Finds people when you share an app, connects Fabric data, and sets up team workspaces. | Yes |
 | **GitHub** | Clones repositories and runs team workspaces. It's optional and uses the GitHub CLI. | Yes |
 
-Each account shows a status: **Signed in**, **Not signed in**, **Checking…** or **Needs attention**. **Needs attention** means Fabricator couldn't verify the sign-in; the message under the account says why.
+**Accounts** also has **Model providers**, where you add API keys for Anthropic, OpenAI, xAI and Google. See [Use your own API keys](/docs/build/your-own-api-keys).
 
-If Fabric and the Azure CLI are signed in to different organizations, **Accounts** warns you. Sharing and connecting data look up people and data through the Azure CLI, so use the same organization for both.
+A check mark next to a service's name means you're signed in. Otherwise the service says **Not signed in**, **Checking…** or **Needs attention**. **Needs attention** means Fabricator couldn't verify the sign-in; the message in that service's card says why.
+
+If Fabric and the Azure CLI are signed in to different organizations, **Accounts** warns you: sharing an app and connecting data look people up through the Azure CLI, so use one organization for both. The warning offers the fix. If the Azure CLI already has an account in Fabric's organization, select `Use <account> in the Azure CLI`. Otherwise select `Sign in to <organization> in the Azure CLI`, which opens **Add account** for the Azure CLI with Fabric's organization filled in.
 
 ## Use more than one Fabric account
 
@@ -42,7 +44,7 @@ To add a Fabric account:
 
 The account you added is in use as soon as you're signed in.
 
-To switch accounts, find the account under **Other Fabric accounts** and select **Use**. To sign out of an account you aren't using, select **Sign out** next to it, then select **Sign out** again to confirm. To sign out of the account in use, select **Sign out** under it. Fabricator then uses another signed-in Fabric account, if you have one.
+To switch accounts, select **Use** next to the account. To sign out of an account you aren't using, select **Sign out** next to it, then select **Sign out** again to confirm. To sign out of the account in use, select **Sign out** next to it. Fabricator then uses another signed-in Fabric account, if you have one.
 
 The first Fabric account you sign in to is the Rayfin CLI's own sign-in, so `rayfin` in a terminal uses it too. Fabricator keeps the accounts you add after it to itself.
 
@@ -51,14 +53,14 @@ The first Fabric account you sign in to is the Rayfin CLI's own sign-in, so `ray
 
 ## See which account deploys
 
-In the app bar, select the deployment control, marked with a cloud icon. Below **Deployments**, a line names the account that deploys, for example "Deploys as alice@contoso.com · Contoso". Select **Change** to open **Accounts**.
+In the app bar, select the deployment control. Under **Account**, its panel names the account that deploys, for example "alice@contoso.com · Contoso". Select **Change** to open **Accounts**.
 
 ## Use more than one Azure CLI account
 
 The Azure CLI can stay signed in to several accounts, for example the same person in two organizations. The account marked **In use** is the one the Azure CLI uses now.
 
 - To add an account, under **Azure CLI**, select **Add account**. Optionally enter an organization, select **Continue**, and finish signing in in your browser. The account you added becomes the one in use.
-- To switch accounts, select **Use** next to an account under **Other Azure accounts**.
+- To switch accounts, select **Use** next to the account.
 - To sign out of an account, select **Sign out** next to it. Your other Azure CLI accounts stay signed in.
 
 The Azure CLI's accounts are shared with your terminal, so these changes apply there too.

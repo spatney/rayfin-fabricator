@@ -38,14 +38,11 @@ On first launch, Fabricator opens setup. Setup checks local tools, then asks you
 
 ## Updates
 
-Fabricator checks GitHub Releases for signed updater artifacts when the app starts. If a newer signed release exists, Fabricator downloads it in the background. When the update is ready, it shows **Update available** with **Update now** and **Later**.
+Fabricator checks GitHub Releases for signed updater artifacts when the app starts, every 4 hours while it's open, and as soon as your internet connection comes back after a check failed. If a newer signed release exists, Fabricator downloads it in the background. To check right away, restart Fabricator.
 
-If you choose **Later**, Fabricator opens normally and keeps the ready-update banner visible. While an update is downloading or ready to install, the banner can show a `Downloading update <version>…` status, an `Update <version> is ready to install` status, **Later**, and **Restart & update**. Installing an update restarts Fabricator.
+When the check at startup finds an update, Fabricator shows **Update available** with **Update now** and **Later**. If you choose **Later**, Fabricator opens normally and keeps the ready-update banner visible. An update found while you work goes straight to the banner.
 
-To check manually:
-
-1. Open **Settings** from the app bar.
-2. In **Updates**, choose **Check for updates**.
+While an update is downloading or ready to install, the banner can show a `Downloading update <version>…` status, an `Update <version> is ready to install` status, **Later**, and **Restart & update**. Installing an update restarts Fabricator. Selecting **Later** on the banner puts the update off until Fabricator starts again.
 
 A required-update screen exists in the app, but the normal startup check is optional.
 

@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, type JSX } from 'react'
 import { highlightCode } from '../../syntax'
 
 const NUM_LINE = /^(\s*)(\d+)\.\s?(.*)$/

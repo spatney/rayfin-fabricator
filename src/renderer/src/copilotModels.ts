@@ -1,10 +1,13 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import type { CopilotModel, ReasoningEffort } from '@shared/ipc'
+import type { AutoTiers, CopilotModel, ReasoningEffort } from '@shared/ipc'
 
 // Module-level cache so the per-user model list is fetched once and shared across
 // every ChatPanel instance, rather than re-queried on each open.
 let modelsCache: CopilotModel[] | null = null
 let modelsPromise: Promise<CopilotModel[]> | null = null
+// What Auto can optimize for: account-bound like the models, so cleared with them.
+let tiersCache: { value: AutoTiers | null } | null = null
+let tiersPromise: Promise<AutoTiers | null> | null = null
 let generation = 0
 const listeners = new Set<() => void>()
 const subscribe = (listener: () => void): (() => void) => {
@@ -13,10 +16,13 @@ const subscribe = (listener: () => void): (() => void) => {
 }
 const snapshot = (): number => generation
 
+/** Forget the models (and Auto's options), e.g. after a sign-in change or new API keys. */
 export function invalidateCopilotModels(): void {
   generation += 1
   modelsCache = null
   modelsPromise = null
+  tiersCache = null
+  tiersPromise = null
   listeners.forEach((listener) => listener())
 }
 
@@ -68,6 +74,54 @@ export function useCopilotModels(enabled: boolean): { models: CopilotModel[]; lo
     }
   }, [enabled, revision])
   return { models, loading }
+}
+
+function loadAutoTiers(): Promise<AutoTiers | null> {
+  if (tiersCache) return Promise.resolve(tiersCache.value)
+  if (!tiersPromise) {
+    const current = generation
+    tiersPromise = new Promise<AutoTiers | null>((resolve) => resolve(window.api.chat.autoTiers()))
+      .then((value) => {
+        if (current === generation) tiersCache = { value }
+        return value
+      })
+      .catch((err) => {
+        if (current === generation) tiersPromise = null
+        throw err
+      })
+  }
+  return tiersPromise
+}
+
+/** What Auto can optimize for on this account, once `enabled`; null while
+ *  unknown, or when Copilot offers no choice. */
+export function useAutoTiers(enabled: boolean): AutoTiers | null {
+  const revision = useSyncExternalStore(subscribe, snapshot)
+  const [tiers, setTiers] = useState<AutoTiers | null>(tiersCache?.value ?? null)
+  useEffect(() => {
+    if (tiersCache) {
+      setTiers(tiersCache.value)
+      return
+    }
+    setTiers(null)
+    if (!enabled) return
+    let cancelled = false
+    loadAutoTiers()
+      .then((value) => {
+        if (!cancelled) setTiers(value)
+      })
+      .catch((error) => console.warn('Could not load Auto’s options', error))
+    return () => {
+      cancelled = true
+    }
+  }, [enabled, revision])
+  return tiers
+}
+
+/** A model on the user's own API key: its selection id names the provider
+ *  (`anthropic/claude-sonnet-5-5`); Copilot's ids never contain a slash. */
+export function isProviderModelId(id: string | undefined): boolean {
+  return Boolean(id?.includes('/'))
 }
 
 /** Name tokens that mark a small/fast model when Copilot doesn't report a tier. */
@@ -128,12 +182,17 @@ function newerFirst(a: CopilotModel, b: CopilotModel): number {
  * Pick the model for Design's Options and Polish: the fastest benchmarked model
  * the account has, else a newer lightweight model that can be told to think
  * less, else another cheap lightweight model, else a low-cost versatile one.
- * Powerful and high-cost models are never picked automatically; with no
- * candidate the id is left undefined (Copilot's default).
+ * Powerful and high-cost models, and models on the user's own API keys, are
+ * never picked automatically; with no candidate the id is left undefined
+ * (Copilot's default).
  */
 export function pickDesignModel(models: CopilotModel[]): DesignModelPick {
   const usable = models.filter(
-    (m) => m.category !== 'powerful' && m.priceCategory !== 'high' && m.priceCategory !== 'very_high'
+    (m) =>
+      !m.byok &&
+      m.category !== 'powerful' &&
+      m.priceCategory !== 'high' &&
+      m.priceCategory !== 'very_high'
   )
   const light = (m: CopilotModel): boolean => m.category === 'lightweight' || (!m.category && isFastModel(m))
   const lowEffort = (m: CopilotModel): boolean => m.supportedReasoningEfforts.includes('low')
@@ -150,5 +209,24 @@ export function pickDesignModel(models: CopilotModel[]): DesignModelPick {
     name: pick.name,
     effort: lowEffort(pick) ? 'low' : undefined,
     vision: pick.vision === true
+  }
+}
+
+/**
+ * The model Design uses: the one chosen in the Design bar (Your own API keys
+ * experiment), else its automatic pick. A chosen model the list doesn't have is
+ * still asked for by id, so the run says why it can't use it.
+ */
+export function resolveDesignModel(
+  models: CopilotModel[],
+  choice?: { model: string; effort: ReasoningEffort | '' } | null
+): DesignModelPick {
+  if (!choice?.model) return pickDesignModel(models)
+  const chosen = models.find((m) => m.id === choice.model)
+  return {
+    id: choice.model,
+    name: chosen?.name,
+    effort: choice.effort || undefined,
+    vision: chosen?.vision === true
   }
 }

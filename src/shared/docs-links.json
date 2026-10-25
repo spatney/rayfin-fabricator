@@ -10,6 +10,7 @@
     "deployFailed": "/docs/troubleshooting/deploy#a-deploy-failed",
     "skills": "/docs/build/skills",
     "secrets": "/docs/build/secrets",
+    "apiKeys": "/docs/build/your-own-api-keys",
     "teamAdmins": "/docs/team/administrators"
   }
 }
