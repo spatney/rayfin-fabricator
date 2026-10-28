@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Exchange } from './HelpView'
+import type { Exchange } from './conversation'
 import { describeWhen, fromSaved, toSaved } from './history'
 
 function exchange(over: Partial<Exchange> = {}): Exchange {

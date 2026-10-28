@@ -10,7 +10,7 @@ import {
   type JSX,
 } from 'react'
 import type { StudioProject, TeamMap, TeamMapApp, TeamMapCopy, TeamMapRun, TeamWorkspace } from '@shared/ipc'
-import { useSuppressPreview } from '../../../overlay'
+import { topLayerOpen, useSuppressPreview } from '../../../overlay'
 import { Codicon } from '../../icons'
 import { teamError } from '../common'
 import { timeAgo, useNow } from '../runProgress'
@@ -318,11 +318,12 @@ export default function TeamMapView({
   }, [])
 
   // Esc closes the details first, then the overview. Capture runs this before a
-  // dialog's own Esc handler can remove it, so a dialog on top keeps its Esc.
+  // dialog's own Esc handler can remove it, so a dialog (or Search, or Help) on
+  // top keeps its Esc.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
-      if (document.querySelector('.modal-backdrop')) return
+      if (topLayerOpen() || document.querySelector('.help')) return
       if (selection) setSelection(null)
       else onClose()
     }

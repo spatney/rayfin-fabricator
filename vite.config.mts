@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { docsIndexPlugin } from './scripts/docs-index.mjs'
 
 // Vite config for the React renderer, built/served for the Tauri shell.
 // The renderer source lives under src/renderer (entry: src/renderer/index.html →
@@ -12,7 +13,8 @@ export default defineConfig({
   // Tauri serves assets from a custom protocol; relative asset URLs keep them
   // resolvable both in `tauri dev` and in the packaged app.
   base: './',
-  plugins: [react()],
+  // Search reads the documentation from `virtual:docs-index`, built from website/.
+  plugins: [react(), docsIndexPlugin()],
   resolve: {
     alias: {
       '@renderer': resolve(import.meta.dirname, 'src/renderer/src'),

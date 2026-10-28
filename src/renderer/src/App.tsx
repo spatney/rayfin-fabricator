@@ -8,6 +8,7 @@ import ForcedUpdateScreen from './components/ForcedUpdateScreen'
 import SplashScreen from './components/SplashScreen'
 import LaunchCurtain from './components/LaunchCurtain'
 import { MascotProvider } from './components/mascot/stage'
+import { HelpConversationProvider } from './components/help/HelpConversation'
 import { applyUiScale, watchTheme } from './theme'
 import { useUpdates } from './update'
 import { useToast } from './toast'
@@ -405,19 +406,21 @@ function App(): JSX.Element {
 
   return (
     <MascotProvider>
-      <UpdateBanner />
-      <UpdateModal />
-      {screen}
-      {curtain !== 'gone' && (
-        <LaunchCurtain leaving={curtain === 'lifting'}>
-          <SplashScreen
-            stage={stage}
-            launch={returning}
-            opening={opening}
-            leaving={curtain === 'lifting'}
-          />
-        </LaunchCurtain>
-      )}
+      <HelpConversationProvider>
+        <UpdateBanner />
+        <UpdateModal />
+        {screen}
+        {curtain !== 'gone' && (
+          <LaunchCurtain leaving={curtain === 'lifting'}>
+            <SplashScreen
+              stage={stage}
+              launch={returning}
+              opening={opening}
+              leaving={curtain === 'lifting'}
+            />
+          </LaunchCurtain>
+        )}
+      </HelpConversationProvider>
     </MascotProvider>
   )
 }

@@ -254,6 +254,52 @@ code {
   background: var(--border);
 }
 
+/* Search (Ctrl+K), flat like the rest of the bar. */
+.app-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--bar-h);
+  padding: 0 5px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--bar-radius);
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--bar-font);
+  cursor: pointer;
+}
+
+.app-search:hover {
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+
+.app-search .app-search-ico {
+  font-size: var(--bar-ico);
+}
+
+.app-search-keys {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.app-search-keys kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elev);
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 10.5px;
+  line-height: 1;
+}
+
 /* The project's identity is the switcher: initial + name + caret, opening a menu
    of recent projects. */
 .project-switch {
@@ -6506,7 +6552,8 @@ button.deploy-trouble-ray:focus-visible {
    project name simply truncates; below ~700px the tabs wrap to a second row. */
 @container appbar (max-width: 1000px) {
   .app-bar .dep-share-label,
-  .app-bar .team-map-btn-label {
+  .app-bar .team-map-btn-label,
+  .app-bar .app-search-label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -6520,6 +6567,9 @@ button.deploy-trouble-ray:focus-visible {
     width: 30px;
     padding: 0;
   }
+  .app-bar .app-search {
+    padding: 0 5px 0 8px;
+  }
   .app-bar .dep-chip-label {
     max-width: 110px;
   }
@@ -6529,6 +6579,14 @@ button.deploy-trouble-ray:focus-visible {
 @container appbar (max-width: 860px) {
   .app-bar .project-tab {
     padding: 0 10px;
+  }
+  .app-bar .app-search {
+    justify-content: center;
+    width: 30px;
+    padding: 0;
+  }
+  .app-bar .app-search-keys {
+    display: none;
   }
 }
 

@@ -1,6 +1,15 @@
 import type { ComponentProps, ReactNode, JSX } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within
+} from '@testing-library/react'
 import type {
   AdvisorFinding,
   AppSettings,
@@ -22,6 +31,7 @@ import type ChatPanel from '../components/ChatPanel'
 import type AdvisorView from '../components/advisor/AdvisorView'
 import type DeploymentsControl from '../components/DeploymentsControl'
 import type { HelpView } from '../components/help/HelpView'
+import type Spotlight from '../components/spotlight/Spotlight'
 import type { AdvisorFixLinks } from '../components/advisor/AdvisorFixSummary'
 import type { DerivedAdvisor } from '../advisor/lifecycle'
 import Workbench from './Workbench'
@@ -33,6 +43,7 @@ const deploymentsProps = vi.hoisted(() =>
   vi.fn<(props: ComponentProps<typeof DeploymentsControl>) => void>()
 )
 const helpProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof HelpView>) => void>())
+const searchProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof Spotlight>) => void>())
 /** The Advisor state the mocked `useAdvisor` reports, and what the chat's fix cards see. */
 const advisorMock = vi.hoisted(() => ({
   derived: { badge: null, items: [], open: [], resolved: [] } as Pick<
@@ -96,6 +107,12 @@ vi.mock('../components/help/HelpView', () => ({
   HelpView: (props: ComponentProps<typeof HelpView>) => {
     helpProps(props)
     return <div role="dialog" aria-label="Help" />
+  }
+}))
+vi.mock('../components/spotlight/Spotlight', () => ({
+  default: (props: ComponentProps<typeof Spotlight>) => {
+    searchProps(props)
+    return <div role="dialog" aria-label="Search" />
   }
 }))
 vi.mock('../components/PreviewPane', () => ({
@@ -269,6 +286,7 @@ beforeEach(() => {
   advisorProps.mockClear()
   deploymentsProps.mockClear()
   helpProps.mockClear()
+  searchProps.mockClear()
   advisorMock.derived = { badge: null, items: [], open: [], resolved: [] }
   advisorMock.handOff.mockClear()
   advisorMock.links = null
@@ -1727,5 +1745,68 @@ describe('Workbench at launch', () => {
       <Workbench {...props} settings={{ theme: 'system', experiments: { teamWorkspaces: true } }} />
     )
     await waitFor(() => expect(api.projects.state).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('Workbench search', () => {
+  const search = (): ComponentProps<typeof Spotlight> => {
+    const props = searchProps.mock.lastCall?.[0]
+    if (!props) throw new Error('Search is not open')
+    return props
+  }
+
+  it('opens Search with Ctrl+K or from the app bar, and leaves Ctrl+K to Search once open', async () => {
+    installApi(true)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(screen.getByRole('dialog', { name: 'Search' })).toBeTruthy()
+    // Inside Search, Ctrl+K lists the chosen result's actions; it doesn't close Search.
+    const event = createEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent(window, event)
+    expect(event.defaultPrevented).toBe(false)
+    expect(screen.getByRole('dialog', { name: 'Search' })).toBeTruthy()
+
+    act(() => search().onClose())
+    expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    expect(screen.getByRole('dialog', { name: 'Search' })).toBeTruthy()
+  })
+
+  it('leaves Ctrl+K alone while Help is open', async () => {
+    installApi(true)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    fireEvent.keyDown(window, { key: 'j', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(screen.getByRole('dialog', { name: 'Help' })).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull()
+  })
+
+  it('runs what the app’s own controls do, such as showing every project', async () => {
+    installApi(true)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    const home = search().items.find((item) => item.id === 'action:home')
+    expect(search().items.some((item) => item.id === 'project:p1')).toBe(true)
+    act(() => home!.run())
+    expect(screen.getByTestId('home')).toBeTruthy()
+  })
+
+  it('carries a conversation started in Search on in Help', async () => {
+    installApi(true)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(search().help.context).toMatchObject({ projectId: 'p1', surface: 'project' })
+
+    act(() => search().help.onOpen())
+    expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull()
+    expect(screen.getByRole('dialog', { name: 'Help' })).toBeTruthy()
+    expect(helpProps.mock.lastCall![0].continuing).toBe(true)
   })
 })

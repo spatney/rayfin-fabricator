@@ -145,6 +145,7 @@ in `.md`.
 | `workbench` | Build view: a finished chat turn and the running sample app in the preview | `/docs`, `/docs/start/tour`, `/docs/start/first-app`, landing page |
 | `setup` | Setup screen with all three steps complete and the `You're all set` block | `/docs/start/setup` |
 | `help` | The Help assistant answering a failed deploy, with its action button and citation | `/docs/troubleshooting/help` |
+| `search` | Search with "deploy" typed, over the workbench: one ranked list of actions and docs, Use "deploy" with…, and the action bar (sample data) | `/docs/start/search` |
 | `home` | Home with the project actions and recent projects | `/docs/start/tour`, `/docs/build/projects` |
 | `new-project` | New project screen with a name entered | `/docs/start/first-app`, `/docs/build/projects` |
 | `first-deploy` | The Deploy your app step of a new project | `/docs/start/first-app`, `/docs/ship/deploy` |

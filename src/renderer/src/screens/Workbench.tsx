@@ -73,7 +73,10 @@ import { openDocs } from '../docsLinks'
 import { HelpView } from '../components/help/HelpView'
 import HelpUnavailableModal from '../components/help/HelpUnavailableModal'
 import { DEPLOY_QUESTION } from '../components/help/parts'
-import { setErrorProject } from '../errorReport'
+import Spotlight from '../components/spotlight/Spotlight'
+import { workbenchSearch } from '../components/spotlight/workbenchSearch'
+import { isMac, modKey, shortcut } from '../platform'
+import { errorMessage, setErrorProject } from '../errorReport'
 import { accountFacts, workbenchFacts } from '../helpFacts'
 import type { HelpAction, HelpIssueDraft } from '@shared/ipc'
 import { Codicon } from '../components/icons'
@@ -97,6 +100,13 @@ import { toProjectName } from '../projectName'
 
 /** Where the Design bar's model is kept. */
 const DESIGN_MODEL_KEY = 'fabricator.design.model'
+/** Help's offered steps that open a browser or a folder rather than a place in the app. */
+const HELP_ACTIONS_ELSEWHERE = new Set<HelpAction['id']>([
+  'open-docs',
+  'open-logs',
+  'export-diagnostics',
+  'report-issue'
+])
 /** The model a report migration's turns use, chosen before it starts and kept for the next one. */
 const MIGRATION_MODEL_KEY = 'fabricator.migration.model'
 
@@ -243,6 +253,10 @@ export default function Workbench({
   const [helpQuestion, setHelpQuestion] = useState<string | null>(null)
   /** The static fallback shown when the assistant can't run. */
   const [showHelpOffline, setShowHelpOffline] = useState(false)
+  /** Search (Ctrl/Cmd+K): projects, actions, docs and files, and Help answering inline. */
+  const [showSearch, setShowSearch] = useState(false)
+  /** Help was opened from Search, to carry on the conversation started there. */
+  const [helpContinues, setHelpContinues] = useState(false)
   /**
    * Help's share action, waiting for DeploymentsControl to open the dialog for
    * this project. Cleared as soon as the control acts on it, so returning to
@@ -1357,6 +1371,16 @@ export default function Workbench({
     setViewMode('code')
   }, [])
 
+  // Open the Code tab on one of its views (from Search).
+  const showCodeTab = useCallback((tab: CodeTab): void => {
+    const id = activeIdRef.current
+    if (!id) return
+    writeCodeTab(id, tab)
+    setCodeOpen(null)
+    setCodeTab({ tab, nonce: Date.now() })
+    setViewMode('code')
+  }, [])
+
   // A view request only applies while the Code tab is showing.
   useEffect(() => {
     if (viewMode !== 'code') setCodeTab(null)
@@ -1436,6 +1460,21 @@ export default function Workbench({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Ctrl+K (Cmd+K on macOS) opens Search from anywhere it can open. It listens in
+  // the capture phase, so an editor or text box can't keep the shortcut. Once Search
+  // is open, Ctrl+K is its own: it lists what the chosen result can do.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const chord = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey
+      if (!chord || event.key.toLowerCase() !== 'k' || event.isComposing) return
+      if (!event.repeat && !openSearchRef.current()) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
   // Reflect the active project in the OS window title so users running one
@@ -1701,9 +1740,11 @@ export default function Workbench({
   // `question` is asked straight away, as when a failed deploy offers to find
   // out why.
   function openHelp(question?: string): void {
+    setShowSearch(false)
     if (!auth.copilot.signedIn && !auth.copilot.checking) setShowHelpOffline(true)
     else {
       setHelpQuestion(question ?? null)
+      setHelpContinues(false)
       setShowHelp(true)
     }
   }
@@ -1715,6 +1756,32 @@ export default function Workbench({
   }
   const toggleHelpRef = useRef(toggleHelp)
   toggleHelpRef.current = toggleHelp
+
+  /** Search opens over the workbench, but not over a dialog, Help or a full-screen flow. */
+  const searchBlocked = Boolean(createMode || showClone || showMigrate || signingOut)
+  function openSearch(): boolean {
+    if (
+      showSearch ||
+      searchBlocked ||
+      showHelp ||
+      showHelpOffline ||
+      document.querySelector('.modal-backdrop')
+    ) {
+      return false
+    }
+    setShowSearch(true)
+    return true
+  }
+  const openSearchRef = useRef(openSearch)
+  openSearchRef.current = openSearch
+
+  // Carry on Search's conversation in the full-screen Help, even mid-answer.
+  function openHelpFromSearch(): void {
+    setShowSearch(false)
+    setHelpQuestion(null)
+    setHelpContinues(true)
+    setShowHelp(true)
+  }
 
   // Run an action the Help assistant offered. Each one maps to something the
   // user could already do from the UI, so Help is a shortcut, never a new
@@ -1936,6 +2003,166 @@ export default function Workbench({
       ? activeNewTarget.label
       : undefined
 
+  /** What is true right now, for Help: accounts, tools, and the open project. */
+  const helpFacts = [
+    ...accountFacts(auth),
+    ...workbenchFacts(active, {
+      projectCount: projects?.projects.length,
+      team: Boolean(active?.team),
+      onHome: showHome,
+      previewUrl:
+        active && devServers[active.id]?.status === 'running'
+          ? (devServers[active.id]?.url ?? null)
+          : null,
+      deploying: Boolean(active && deploys[active.id]?.running),
+      deployFailed: Boolean(active && lastDeployFailed(active, deploys[active.id]))
+    })
+  ]
+  const helpSurface = showHome || !active ? 'home' : 'project'
+
+  // Search's results run what the app's own controls do. Moving to a part of the
+  // open project leaves Home or a workspace overview for it.
+  function renderSearch(): JSX.Element {
+    const toProject = (): void => {
+      setShowHome(false)
+      setTeamMap(null)
+    }
+    const toolsReady = Boolean(active && depsReadyId === active.id)
+    const search = workbenchSearch({
+      project: active,
+      projects: projects?.projects ?? [],
+      teamWorkspaces: teamEnabled ? (projects?.teamWorkspaces ?? []) : [],
+      toolsReady,
+      onProjectScreen,
+      onHome: (showHome || !active) && !teamMap,
+      view: viewMode,
+      deployed: Boolean(active && (active.lastDeploy?.url || active.workspace)),
+      deploying: activeDeploying,
+      chatBusy: activeChatBusy,
+      pending: active ? (pending[active.id] ?? undefined) : undefined,
+      autoDeploy: !manualDeploy,
+      migrationEnabled,
+      teamWorkspaceName: activeTeamWorkspace?.name,
+      theme: settings?.theme ?? 'system',
+      uiScale: settings?.uiScale ?? 1,
+      fabricSignedIn: auth.rayfin.signedIn,
+      modKey: modKey(),
+      deployFailed: Boolean(active && lastDeployFailed(active, deploys[active.id])),
+      advisorIssues: advisor.derived.badge?.count ?? 0,
+      do: {
+        openProject: (project) => {
+          setTeamMap(null)
+          void selectProject(project)
+        },
+        manage: setManagingProject,
+        openInEditor: (project) => {
+          window.api.openInEditor(project.id).then(
+            (res) => {
+              if (!res.opened) {
+                toast.info('VS Code isn’t installed, so we opened the project folder instead.')
+              }
+            },
+            (reason) => toast.error(errorMessage(reason, 'Fabricator couldn’t open VS Code.'))
+          )
+        },
+        openWorkspace: (workspace) =>
+          openTeamMap(workspace.id, active && !showHome && !teamMap ? 'project' : 'home'),
+        showView: (view) => {
+          toProject()
+          setViewMode(view)
+        },
+        showCodeTab: (tab) => {
+          toProject()
+          showCodeTab(tab)
+        },
+        goHome: () => {
+          setTeamMap(null)
+          goHome()
+        },
+        newProject: () => {
+          setNewAppTeamId(null)
+          setCreateMode('create')
+        },
+        openFolder: () => void openExisting(),
+        cloneFromGitHub: () => setShowClone(true),
+        migrateReport: () => setShowMigrate(true),
+        manageProject: () => {
+          if (active) setManagingProject(active)
+        },
+        openOverview: () => {
+          if (active?.team) openTeamMap(active.team.workspaceId, 'project', active.team.folder)
+        },
+        deploy: () => {
+          if (!active) return
+          toProject()
+          setViewMode('build')
+          void requestUserDeploy(active.id)
+        },
+        share: () => {
+          if (!active || active.team) return
+          toProject()
+          setShareRequest({ projectId: active.id, nonce: Date.now() })
+        },
+        setAutoDeploy: (on) => onSettingsChange({ deployMode: on ? 'auto' : 'manual' }),
+        setTheme: (theme) => onSettingsChange({ theme }),
+        setUiScale: (scale) => {
+          applyUiScale(scale)
+          onSettingsChange({ uiScale: scale })
+        },
+        openSettings: () => setShowSettings(true),
+        openAccounts: () => setShowAccounts(true),
+        openApiKeys: openModelProviders,
+        refreshFabricAuth: () => {
+          if (active) openAuthRefresh(active)
+        },
+        signInToFabric: () => void signIn(),
+        openSetup: onReviewSetup,
+        openHelp: () => openHelp(),
+        openDocs: () => openDocs('home'),
+        reportIssue: () => void reportIssue(),
+        exportDiagnostics: () => void exportDiagnostics(),
+        openLogs: () => void window.api.openLogs()
+      }
+    })
+    return (
+      <Spotlight
+        onClose={() => setShowSearch(false)}
+        {...search}
+        files={
+          active && toolsReady
+            ? {
+                projectId: active.id,
+                projectName: active.name,
+                load: () => window.api.projects.files.tree(active.id),
+                open: (path) => {
+                  toProject()
+                  openFileInCode(path)
+                }
+              }
+            : undefined
+        }
+        openUrl={(url) => void window.api.openExternal(url)}
+        notify={(message, kind = 'success') => toast.show(kind, message)}
+        help={{
+          available: auth.copilot.signedIn || Boolean(auth.copilot.checking),
+          context: { projectId: active?.id, facts: helpFacts, surface: helpSurface },
+          onUnavailable: () => setShowHelpOffline(true),
+          onOpen: openHelpFromSearch,
+          onAction: (action) => {
+            // As in Help: steps that open a browser or a folder leave Search open.
+            if (!HELP_ACTIONS_ELSEWHERE.has(action.id)) setShowSearch(false)
+            runHelpAction(action)
+          },
+          onReportIssue: (issue) => {
+            setShowSearch(false)
+            reportHelpIssue(issue)
+          }
+        }}
+        modKey={modKey()}
+      />
+    )
+  }
+
   return (
     <div className="app-shell">
       <header className="app-bar">
@@ -2040,6 +2267,23 @@ export default function Workbench({
               />
             )}
             <div className="app-bar-global">
+              {!searchBlocked && (
+                <button
+                  type="button"
+                  className="app-search"
+                  onClick={() => setShowSearch(true)}
+                  aria-label="Search"
+                  aria-keyshortcuts={isMac() ? 'Meta+K' : 'Control+K'}
+                  title={`Search projects, actions and docs, or ask Help (${shortcut('K')})`}
+                >
+                  <Codicon name="search" className="app-search-ico" />
+                  <span className="app-search-label">Search</span>
+                  <span className="app-search-keys" aria-hidden="true">
+                    <kbd>{modKey()}</kbd>
+                    <kbd>K</kbd>
+                  </span>
+                </button>
+              )}
               <AccountMenu
                 signedIn={auth.rayfin.signedIn}
                 user={auth.rayfin.user}
@@ -2536,25 +2780,15 @@ export default function Workbench({
           projectName={active?.name}
           appVersion={versions?.app}
           initialQuestion={helpQuestion ?? undefined}
-          facts={[
-            ...accountFacts(auth),
-            ...workbenchFacts(active, {
-              projectCount: projects?.projects.length,
-              team: Boolean(active?.team),
-              onHome: showHome,
-              previewUrl:
-                active && devServers[active.id]?.status === 'running'
-                  ? (devServers[active.id]?.url ?? null)
-                  : null,
-              deploying: Boolean(active && deploys[active.id]?.running),
-              deployFailed: Boolean(active && lastDeployFailed(active, deploys[active.id]))
-            })
-          ]}
-          surface={showHome || !active ? 'home' : 'project'}
+          continuing={helpContinues}
+          facts={helpFacts}
+          surface={helpSurface}
           onAction={runHelpAction}
           onReportIssue={reportHelpIssue}
         />
       )}
+
+      {showSearch && renderSearch()}
 
       {showSettings && settings && (
         <SettingsModal

@@ -7,15 +7,18 @@ on:
     branches: [master]
     paths:
       - 'website/**'
-      # The site reads the app version from it, and the app links into the docs.
+      # The site reads the app version from it, and the app links into the docs
+      # (docs-links.json, and Search's index of every page and heading).
       - 'package.json'
       - 'src/shared/docs-links.json'
+      - 'scripts/docs-index.*'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'website/**'
       - 'package.json'
       - 'src/shared/docs-links.json'
+      - 'scripts/docs-index.*'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 

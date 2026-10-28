@@ -8,6 +8,7 @@
     "start/accounts",
     "start/first-app",
     "start/tour",
+    "start/search",
     "---Build---",
     "build/projects",
     "build/chat",

@@ -95,3 +95,15 @@ export function SuppressPreview(): null {
   useSuppressPreview(true)
   return null
 }
+
+/**
+ * Layers that own Escape while they're open: dialogs and Search. A view beneath
+ * them that closes on Escape checks this first, so one key press never closes
+ * two things.
+ */
+const TOP_LAYERS = '.modal-backdrop, .spotlight'
+
+/** True while a dialog or Search is open over the views. */
+export function topLayerOpen(): boolean {
+  return document.querySelector(TOP_LAYERS) !== null
+}

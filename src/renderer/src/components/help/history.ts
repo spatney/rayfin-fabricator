@@ -8,7 +8,7 @@
 // is dropped (it is bulky and only interesting live), and a turn that never
 // produced an answer is dropped entirely — a question with no reply is noise
 // to come back to.
-import type { Exchange } from './HelpView'
+import type { Exchange } from './conversation'
 
 /** Exchanges kept on disk. Older ones fall off the top. */
 const MAX_SAVED = 20

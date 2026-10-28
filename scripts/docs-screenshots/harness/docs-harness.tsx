@@ -63,9 +63,14 @@ import { DataTray } from './components/chat/DataTray'
 import ConnectDataModal from './components/ConnectDataModal'
 import MigrateReportScreen from './components/migrate/MigrateReportScreen'
 import MigrationCard from './components/migrate/MigrationCard'
+import Spotlight from './components/spotlight/Spotlight'
+import { workbenchSearch } from './components/spotlight/workbenchSearch'
 import type { DataSource } from './fabricData'
 import type { ModelSelection } from './modelSelection'
 import './components/chat/chat.css'
+// Search floats over the app: the workbench screenshot is the app behind it.
+import workbenchDark from '../../../website/public/screenshots/workbench.webp'
+import workbenchLight from '../../../website/public/screenshots/workbench.light.webp'
 
 const ok = <T,>(value: T) => (): Promise<T> => Promise.resolve(value)
 
@@ -1052,6 +1057,66 @@ const rayfinUpdate: RayfinVersionInfo = {
 const noop = (): void => {}
 const noopAsync = (): Promise<void> => Promise.resolve()
 
+/** Search over the sample app, with "deploy" typed: the top hit, the docs, actions and Help. */
+function SearchShot(): JSX.Element {
+  const light = new URLSearchParams(location.search).get('theme') === 'light'
+  const expenses = {
+    id: 'p2',
+    name: 'Contoso Expenses',
+    path: 'C:\\Users\\avery\\RayfinProjects\\contoso-expenses',
+    addedAt: '',
+    workspace: APPS_WS,
+    lastDeploy: { url: EXPENSES_URL, status: 'success' }
+  } as StudioProject
+  const search = workbenchSearch({
+    project: expenses,
+    projects: [expenses],
+    teamWorkspaces: [],
+    toolsReady: true,
+    onProjectScreen: true,
+    onHome: false,
+    view: 'build',
+    deployed: true,
+    deploying: false,
+    chatBusy: false,
+    pending: { changed: true, files: 3 },
+    autoDeploy: true,
+    migrationEnabled: false,
+    theme: light ? 'light' : 'dark',
+    uiScale: 1,
+    fabricSignedIn: true,
+    modKey: 'Ctrl',
+    deployFailed: false,
+    advisorIssues: 0,
+    do: new Proxy({} as never, { get: () => noop })
+  })
+  return (
+    <>
+      <img
+        src={light ? workbenchLight : workbenchDark}
+        alt=""
+        style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+      />
+      <TypeInto placeholder="Search for projects, actions and docs…" text="deploy">
+        <Spotlight
+          onClose={noop}
+          {...search}
+          openUrl={noop}
+          help={{
+            available: true,
+            context: {},
+            onUnavailable: noop,
+            onOpen: noop,
+            onAction: noop,
+            onReportIssue: noop
+          }}
+          modKey="Ctrl"
+        />
+      </TypeInto>
+    </>
+  )
+}
+
 const plan: ChatPlanArtifact = {
   id: 'plan-contoso-approvals',
   phase: 'review',
@@ -1730,6 +1795,8 @@ function Shot({ id }: { id: string | null }): JSX.Element {
       )
     case 'help':
       return <HelpView onClose={noop} onAction={noop} onReportIssue={noop} appVersion="1.11.0" />
+    case 'search':
+      return <SearchShot />
     case 'deploy-progress':
       return <Deploying />
     case 'deploy-error':

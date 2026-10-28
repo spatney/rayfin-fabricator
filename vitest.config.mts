@@ -1,12 +1,13 @@
 import { resolve } from 'path'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
+import { docsIndexPlugin } from './scripts/docs-index.mjs'
 
 // Renderer unit/integration tests (jsdom). Kept separate from vite.config.mts
 // (whose `root` is src/renderer, tuned for the app build) so test discovery and
 // aliases are unambiguous. Run with `npm test`.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), docsIndexPlugin()],
   resolve: {
     alias: {
       '@renderer': resolve(import.meta.dirname, 'src/renderer/src'),

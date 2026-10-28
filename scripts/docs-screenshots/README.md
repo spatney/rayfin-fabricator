@@ -20,7 +20,7 @@ Everything here is a maintainer tool. It isn't part of the app or of CI.
 | `scrub.js` | Replaces personal details (names, emails, tenant, workspace and repo names, paths) in a page |
 | `capture-window.ps1` | Captures the app window, including the native preview webview a DevTools screenshot can't see |
 | `optimize.mjs` | Crops, resizes and converts a capture to WebP, and its light twin the same way (uses `sharp` from `website/node_modules`) |
-| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Blueprint, its Data model view with related entities and with loose access, deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Migrate a Power BI report, the Migration card) and captures each in both themes with headless Edge |
+| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Search, Blueprint, its Data model view with related entities and with loose access, deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Migrate a Power BI report, the Migration card) and captures each in both themes with headless Edge |
 
 ## Before you start
 
@@ -162,6 +162,7 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `team-overview`, `skills`, `secrets`, `blueprint` | harness | none |
 | `model-relations`, `model-access` | harness | `0,0,1440,770` |
 | `setup`, `help` | harness, shorter window (picked by the script) | none |
+| `search` | harness, over the `workbench` screenshot | `225,90,990,546` |
 | `team-create` | harness | `405,100,630,700` |
 | `team-publish` | harness | `1030,0,410,500` |
 | `rayfin-version` | harness | `0,600,340,300` |

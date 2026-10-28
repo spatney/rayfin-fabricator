@@ -1,0 +1,750 @@
+/* Search (Ctrl+K), laid out like a launcher such as Raycast: a search bar, one list
+ * with each result's kind at its end, and an action bar that says what Enter does
+ * beside "Actions", which lists the rest. It keeps Fabricator's own colours and its
+ * flat surfaces: solid fills, 1px borders, no blur or glow.
+ *
+ * Component styles load before codicon.css and main.css, so codicon sizes here
+ * name `.codicon[class*='codicon-']` to outrank codicon.css's own rule.
+ */
+
+.spotlight {
+  --sl-sel: color-mix(in srgb, var(--text) 8%, transparent);
+  --sl-fill: color-mix(in srgb, var(--text) 9%, transparent);
+  --sl-key: color-mix(in srgb, var(--text) 10%, transparent);
+  --sl-foot: color-mix(in srgb, var(--bg) 50%, var(--bg-elev));
+  --sl-pop: var(--bg-elev-2);
+  --sl-scrim: rgb(5 7 12 / 0.42);
+  --sl-tint-bg: 0.17;
+  --sl-tint-l: 70%;
+  /* The list keeps one height, so the window never jumps as you type. `zoom`
+     multiplies vh, so the viewport share is divided back out. */
+  --sl-list-h: clamp(176px, calc(86vh / var(--ui-scale, 1) - 220px), 376px);
+
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: calc(14vh / var(--ui-scale, 1)) 24px 24px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+[data-theme='light'] .spotlight {
+  --sl-sel: color-mix(in srgb, var(--text) 6.5%, transparent);
+  --sl-fill: color-mix(in srgb, var(--text) 6%, transparent);
+  --sl-key: color-mix(in srgb, var(--text) 7%, transparent);
+  --sl-foot: var(--bg-elev-3);
+  --sl-pop: var(--bg-elev);
+  --sl-scrim: rgb(16 22 34 / 0.18);
+  --sl-tint-bg: 0.13;
+  --sl-tint-l: 38%;
+}
+
+.sl-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--sl-scrim);
+  animation: slFade 0.12s ease both;
+}
+
+.sl-window {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(750px, 100%);
+  overflow: hidden;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  container: sl / inline-size;
+  animation: slIn 0.14s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+/* Focus rests on the window only after a click on the answer; it needs no ring. */
+.sl-window:focus,
+.sl-window:focus-visible {
+  outline: none;
+}
+
+/* ----------------------------- search bar ----------------------------- */
+
+/* Typed text starts where the results' icons do. */
+.sl-bar {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 10px 0 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sl-back {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--sl-fill);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.sl-back:hover {
+  background: var(--sl-key);
+  color: var(--text);
+}
+
+.sl-back .codicon[class*='codicon-'] {
+  font-size: 14px;
+}
+
+.sl-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 17px;
+  caret-color: var(--accent);
+}
+
+.sl-input::placeholder {
+  color: var(--text-faint);
+}
+
+.sl-input:focus,
+.sl-input:focus-visible {
+  outline: none;
+}
+
+/* "Ask Help  Tab", where a launcher offers its AI. */
+.sl-askhint {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 6px 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sl-askhint:hover {
+  background: var(--sl-sel);
+  color: var(--text-dim);
+}
+
+/* Something is on its way: a short line sweeps along the bar's edge. */
+.sl-progress {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.sl-progress::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  content: '';
+  animation: slSweep 1.1s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* ----------------------------- list ----------------------------- */
+
+.sl-main {
+  position: relative;
+  flex: none;
+  height: var(--sl-list-h);
+}
+
+.sl-list {
+  height: 100%;
+  padding: 2px 8px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding: 34px 0 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.sl-label {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 7px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sl-label-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sl-label-count {
+  flex: none;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A result: icon, title, a dimmer word about it, and at the end what it is. The
+   title keeps its room; the subtitle gives way first. */
+.sl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sl-row.is-selected {
+  background: var(--sl-sel);
+}
+
+.sl-row-text {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sl-row-title {
+  flex: none;
+  max-width: 72%;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+}
+
+.sl-row-title mark {
+  background: none;
+  color: inherit;
+  font-weight: 600;
+}
+
+.sl-row-sub {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+}
+
+.sl-row-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  margin-left: 8px;
+  color: var(--text-faint);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.sl-hint--live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+}
+
+/* The project that's open: a small dot, as the app shows state elsewhere. */
+.sl-dot {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+/* ----------------------------- icons ----------------------------- */
+
+.sl-ico {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--sl-fill);
+  color: var(--text-dim);
+}
+
+.sl-ico .codicon[class*='codicon-'] {
+  font-size: 14px;
+}
+
+/* Each kind of thing on its own hue: soft fill, stronger glyph. */
+.sl-ico--hue {
+  background: hsl(var(--hue) 62% 52% / var(--sl-tint-bg));
+  color: hsl(var(--hue) 68% var(--sl-tint-l));
+}
+
+/* A project's initial on its own hue, as on Home and in the app bar. */
+.sl-ico--mark {
+  --hue: 205;
+  background: hsl(var(--hue) 55% 50% / 0.15);
+  color: hsl(var(--hue) 65% 68%);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+[data-theme='light'] .sl-ico--mark {
+  background: hsl(var(--hue) 55% 50% / 0.13);
+  color: hsl(var(--hue) 55% 34%);
+}
+
+/* Ray, for asking Help, needs no tile. */
+.sl-ico--ray {
+  background: none;
+}
+
+.sl-ico--ray .ray {
+  width: 25px;
+  height: 21px;
+}
+
+.sl-ico--sm {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+.sl-ico--sm .codicon[class*='codicon-'] {
+  font-size: 12px;
+}
+
+.sl-ico--sm.sl-ico--mark {
+  font-size: 10px;
+}
+
+.sl-ico--sm.sl-ico--ray .ray {
+  width: 21px;
+  height: 17px;
+}
+
+/* ----------------------------- keycaps ----------------------------- */
+
+.sl-keys {
+  display: inline-flex;
+  flex: none;
+  gap: 3px;
+}
+
+.sl-keys kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--sl-key);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* ----------------------------- empty ----------------------------- */
+
+.sl-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.sl-empty .codicon[class*='codicon-'] {
+  margin-bottom: 6px;
+  font-size: 26px;
+  opacity: 0.7;
+}
+
+.sl-empty-title {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.sl-empty-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+/* ----------------------------- action bar ----------------------------- */
+
+.sl-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 6px 0 16px;
+  border-top: 1px solid var(--border);
+  background: var(--sl-foot);
+}
+
+.sl-nav {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.sl-nav .sl-nav-mark {
+  width: 17px;
+  height: 17px;
+}
+
+.sl-nav-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sl-nav-status {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.sl-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-dim);
+  animation: slFade 0.12s ease both;
+}
+
+.sl-notice .codicon[class*='codicon-'] {
+  color: var(--ok);
+  font-size: 14px;
+}
+
+.sl-act {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 4px 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sl-act--primary {
+  color: var(--text);
+}
+
+.sl-act:hover:not(:disabled),
+.sl-act.is-open {
+  background: var(--sl-sel);
+}
+
+.sl-act:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sl-act-sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
+  background: var(--border);
+}
+
+/* ----------------------------- actions panel ----------------------------- */
+
+.sl-actions {
+  position: absolute;
+  right: 8px;
+  bottom: 47px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: min(330px, calc(100% - 16px));
+  max-height: calc(100% - 112px);
+  overflow: hidden;
+  background: var(--sl-pop);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  animation: slPop 0.12s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+.sl-actions-title {
+  flex: none;
+  padding: 10px 14px 5px;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sl-actions-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 6px 6px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.sl-actions-sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--border);
+}
+
+.sl-actions-label {
+  padding: 4px 8px 3px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.sl-aitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 13.5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sl-aitem.is-selected {
+  background: var(--sl-sel);
+}
+
+.sl-aitem-ico {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-dim);
+}
+
+.sl-aitem-ico .codicon[class*='codicon-'] {
+  font-size: 15px;
+}
+
+.sl-aitem-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sl-actions-empty {
+  margin: 0;
+  padding: 12px 8px;
+  color: var(--text-faint);
+  font-size: 13px;
+  text-align: center;
+}
+
+.sl-actions-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 40px;
+  padding: 0 14px;
+  border-top: 1px solid var(--border);
+}
+
+.sl-actions-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  caret-color: var(--accent);
+}
+
+.sl-actions-input::placeholder {
+  color: var(--text-faint);
+}
+
+.sl-actions-input:focus,
+.sl-actions-input:focus-visible {
+  outline: none;
+}
+
+/* ----------------------------- Help's answer ----------------------------- */
+
+.sl-answer {
+  height: 100%;
+  padding: 16px 22px 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* The question, as a heading over its answer. */
+.sl-q {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Help's own answer, without the transcript's gutter. */
+.sl-answer .help-a,
+.sl-answer .help-thinking,
+.sl-answer .help-meta,
+.sl-answer .help-stopped {
+  padding-left: 0;
+}
+
+.sl-answer .help-log,
+.sl-answer .help-actions,
+.sl-answer .help-cites,
+.sl-answer .help-issue,
+.sl-answer .help-err {
+  margin-left: 0;
+}
+
+.sl-answer .help-a {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ----------------------------- motion ----------------------------- */
+
+@keyframes slIn {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+@keyframes slPop {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes slFade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes slSweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sl-scrim,
+  .sl-window,
+  .sl-actions,
+  .sl-notice {
+    animation: none;
+  }
+
+  /* A still line instead of a sweeping one. */
+  .sl-progress::before {
+    width: 100%;
+    background: var(--accent);
+    opacity: 0.5;
+    animation: none;
+  }
+}
+
+/* High contrast replaces fills, so selections keep an outline. */
+@media (forced-colors: active) {
+  .sl-row.is-selected,
+  .sl-aitem.is-selected {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* A narrow window keeps titles and keys, and drops what's only nice to have. */
+@container sl (max-width: 560px) {
+  .sl-kind,
+  .sl-askhint-label {
+    display: none;
+  }
+}
