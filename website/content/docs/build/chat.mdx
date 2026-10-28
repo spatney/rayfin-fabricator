@@ -1,5 +1,5 @@
 ---
-title: "Chat with Copilot"
+title: 'Chat with Copilot'
 description: "Use Fabricator's built-in GitHub Copilot agent to change your app, review its work log and diffs, steer a turn, and recover sign-in."
 ---
 
@@ -91,6 +91,26 @@ Plans can appear when Copilot proposes one. A plan card can show structured step
 
 Use **Review full plan** to open the full plan. You can **Request changes**, edit the plan when editing is available, or approve one of the offered actions. **Autopilot** means Copilot continues through the approved plan more autonomously.
 
+## Slash commands and agent modes
+
+Start an idle chat message with a slash command to choose how Copilot handles it:
+
+- `/plan <prompt>` sends your message in **Plan** mode to create an implementation plan before coding.
+- `/autopilot <prompt>` sends your message in **Autopilot** mode with an objective.
+- `/agent <prompt>` sends your message in the default interactive agent mode.
+
+Submitting any of these commands also selects that mode for later messages you type in the composer. To choose a mode without sending a message, submit `/plan`, `/autopilot`, or `/agent` without a prompt.
+
+### Select a command and check the mode
+
+1. Type `/` at the start of the message box to open **Slash commands**.
+2. Use **Arrow Up** or **Arrow Down** to highlight a command, then press **Enter** or **Tab** to insert it. You can also select it with the mouse. **Escape** closes the menu without changing your draft.
+3. Add your prompt, then press **Enter** or select **Send**. For a bare command, press **Enter** again after inserting it.
+
+The badge above the message box shows **Mode: Plan** or **Mode: Autopilot** after submission. Interactive agent mode has no badge. While your draft starts with `/`, the badge is hidden so it does not conflict with the command you are typing. Clearing the draft restores the current mode badge.
+
+Select **×** on the badge or submit `/agent` to return to interactive mode. The composer mode applies to new typed messages; Design changes and automatic Advisor or Rayfin upgrade hand-offs keep their existing behavior. Messages sent while Copilot is working steer the current turn instead of starting a new mode.
+
 ## Design and Advisor cards in chat
 
 Design changes queued from the preview appear as a Design card instead of raw instructions. See [Design mode](/docs/build/design).
@@ -106,4 +126,3 @@ For team apps, Fabricator saves the change to the working branch and the team pi
 ## If Copilot asks you to sign in again
 
 If credentials expire, chat shows **Copilot needs your attention** and **Sign in to Copilot**. Complete the browser or device-code sign-in, then retry your message. For recovery steps, see [Copilot asks you to sign in again](/docs/troubleshooting/setup-and-sign-in#copilot-asks-you-to-sign-in-again).
-
