@@ -226,6 +226,9 @@ export const api: RayfinStudioApi = {
     remove: (id: string, deleteFiles?: boolean) => invoke('projects_remove', { id, deleteFiles }),
     git: {
       status: (id: string) => invoke('projects_git_status', { id }),
+      branches: (id: string) => invoke('projects_git_branches', { id }),
+      switchBranch: (id: string, refName: string) =>
+        invoke('projects_git_switch_branch', { id, refName }),
       commit: (id: string, message: string) => invoke('projects_git_commit', { id, message }),
       log: (id: string) => invoke('projects_git_log', { id }),
       changes: (id: string, ref: string) => invoke('projects_git_changes', { id, ref }),

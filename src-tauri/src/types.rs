@@ -1984,6 +1984,15 @@ pub struct GitStatus {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct GitBranch {
+  pub ref_name: String,
+  pub name: String,
+  pub remote: bool,
+  pub current: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct GitCommitResult {
   pub ok: bool,
   #[serde(skip_serializing_if = "Option::is_none")]

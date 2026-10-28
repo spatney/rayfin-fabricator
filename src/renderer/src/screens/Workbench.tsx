@@ -2711,8 +2711,10 @@ export default function Workbench({
               </span>
             ) : (
               <GitControl
+                key={active.id}
                 projectId={active.id}
                 refreshKey={gitRefresh}
+                switchDisabled={activeChatBusy || activeDeploying}
                 onSynced={() => setGitRefresh((n) => n + 1)}
               />
             )}

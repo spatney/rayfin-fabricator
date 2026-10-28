@@ -39,13 +39,25 @@ If the `code` command is not available, Fabricator opens the project folder in t
 
 ## Use the git status pill
 
-The project header can show a git pill with the branch and the number of uncommitted changes. When the repository has a remote, it can also show changes to get or push.
+The bottom-left status bar can show a git pill with the branch and the number of uncommitted changes. When the repository has a remote, it can also show changes to get or push.
 
 Open the pill to use:
 
 - **Get latest** for remote changes waiting to be pulled.
 - **Push** for local commits ready to push.
 - **Commit all** after entering a **Commit message**.
+
+### Switch branches
+
+1. In the bottom-left status bar, select the current branch name, even when the repository is clean.
+2. Under **Switch branch**, use **Filter branches** to find a branch.
+3. Select a local branch, or a remote branch to create a local branch that tracks it.
+
+This works with existing Git repositories, including Azure DevOps repos. Fabricator lists local branches and known remote branches; its normal remote fetch refreshes that list when credentials are available.
+
+Switching affects the **entire repository**, even if you opened only a subfolder. Commit or stash all staged, unstaged and untracked changes first, including files outside the open project. Fabricator does not force a checkout, discard changes or stash them automatically. It also blocks switching to a branch that does not contain the project folder.
+
+Wait for any active chat or deployment to finish before switching. After switching, Fabricator refreshes the branch, files and history. Switching does not deploy the selected branch; deploy when you are ready to update the live app.
 
 For team apps, Fabricator saves changes through the team workflow instead of using these local push and pull actions.
 

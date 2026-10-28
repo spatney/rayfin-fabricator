@@ -308,6 +308,8 @@ pub fn run() {
       commands::projects::projects_set_preview_mode,
       commands::projects::projects_remove,
       commands::projects::projects_git_status,
+      commands::projects::projects_git_branches,
+      commands::projects::projects_git_switch_branch,
       commands::projects::projects_git_commit,
       commands::projects::projects_git_log,
       commands::projects::projects_git_changes,

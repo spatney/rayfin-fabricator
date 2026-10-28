@@ -7,6 +7,18 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }))
 
 beforeEach(() => vi.clearAllMocks())
 
+describe('Git branch IPC', () => {
+  it('routes branch listing and switching with the project ID and full ref', async () => {
+    await api.projects.git.branches('nested-project')
+    expect(invoke).toHaveBeenLastCalledWith('projects_git_branches', { id: 'nested-project' })
+    await api.projects.git.switchBranch('nested-project', 'refs/remotes/ado/feature')
+    expect(invoke).toHaveBeenLastCalledWith('projects_git_switch_branch', {
+      id: 'nested-project',
+      refName: 'refs/remotes/ado/feature'
+    })
+  })
+})
+
 describe('authentication IPC', () => {
   it('forwards the selected Copilot host and preserves the default invocation', async () => {
     await api.auth.loginCopilot('https://company.ghe.com')

@@ -8,7 +8,7 @@ use crate::commands::util::{annotate_state, with_missing};
 use crate::services::store;
 use crate::state::AppState;
 use crate::types::{
-  CommunityGalleryResult, CreateProjectInput, FileContent, FileNode, GitChange, GitCommitResult,
+  CommunityGalleryResult, CreateProjectInput, FileContent, FileNode, GitBranch, GitChange, GitCommitResult,
   GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus, GitSyncResult,
   ProjectActionResult, ProjectNameCheck, ProjectsState, RevertResult,
 };
@@ -186,6 +186,16 @@ pub async fn projects_remove(
 #[tauri::command]
 pub async fn projects_git_status(id: String) -> GitStatus {
   crate::commands::git::git_status(id).await
+}
+
+#[tauri::command]
+pub async fn projects_git_branches(id: String) -> Result<Vec<GitBranch>, String> {
+  crate::commands::git::git_branches(id).await
+}
+
+#[tauri::command]
+pub async fn projects_git_switch_branch(id: String, ref_name: String) -> Result<GitStatus, String> {
+  crate::commands::git::git_switch_branch(id, ref_name).await
 }
 
 #[tauri::command]

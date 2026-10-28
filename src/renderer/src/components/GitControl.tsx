@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
-import type { GitRemoteStatus, GitStatus } from '../../../shared/ipc'
+import type { GitBranch, GitRemoteStatus, GitStatus } from '../../../shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { Codicon } from './icons'
 
@@ -7,8 +7,9 @@ interface Props {
   projectId: string
   /** Bumped by the parent when the working tree likely changed (deploy/turn). */
   refreshKey: number
-  /** Called after a successful pull/push so the parent can refresh the app. */
+  /** Called after a successful commit, sync, or branch switch. */
   onSynced?: () => void
+  switchDisabled?: boolean
 }
 
 /** How often we re-fetch the remote to keep ahead/behind fresh (ms). */
@@ -18,9 +19,9 @@ const FETCH_PERIOD_MS = 3 * 60 * 1000
  * Compact git status pill for the project header: shows the branch, the number of
  * uncommitted changes, and — when the repo has a remote — how many changes are
  * waiting to be pulled (behind) or pushed (ahead). The popover stages-all + commits
- * and offers "Get latest changes" (pull) / "Push your changes" (push).
+ * and offers branch switching, pull, and push.
  */
-export default function GitControl({ projectId, refreshKey, onSynced }: Props): JSX.Element | null {
+export default function GitControl({ projectId, refreshKey, onSynced, switchDisabled = false }: Props): JSX.Element | null {
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [remote, setRemote] = useState<GitRemoteStatus | null>(null)
   const [open, setOpen] = useState(false)
@@ -28,7 +29,12 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
   const [busy, setBusy] = useState(false)
   const [syncing, setSyncing] = useState<'pull' | 'push' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [branches, setBranches] = useState<GitBranch[]>([])
+  const [loadingBranches, setLoadingBranches] = useState(false)
+  const [branchQuery, setBranchQuery] = useState('')
+  const [switching, setSwitching] = useState<string | null>(null)
   const fetchingRef = useRef(false)
+  const branchGeneration = useRef(0)
 
   const refresh = useCallback(async (): Promise<void> => {
     setStatus(await window.api.projects.git.status(projectId))
@@ -39,12 +45,30 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
   const loadRemote = useCallback(async (): Promise<void> => {
     if (fetchingRef.current) return
     fetchingRef.current = true
+    const generation = branchGeneration.current
     try {
-      setRemote(await window.api.projects.git.remoteStatus(projectId))
+      const next = await window.api.projects.git.remoteStatus(projectId)
+      if (generation === branchGeneration.current) setRemote(next)
     } finally {
       fetchingRef.current = false
     }
   }, [projectId])
+
+  const loadBranches = useCallback(async (): Promise<void> => {
+    setLoadingBranches(true)
+    try {
+      setBranches(await window.api.projects.git.branches(projectId))
+    } catch (reason) {
+      setError(String(reason))
+    } finally {
+      setLoadingBranches(false)
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    if (!open) return
+    void loadBranches()
+  }, [open, loadBranches, remote])
 
   useEffect(() => {
     void refresh()
@@ -78,14 +102,34 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
   const behind = remote?.behind ?? 0
   const ahead = remote?.ahead ?? 0
   const canPush = ahead > 0 && Boolean(remote?.hasUpstream)
-  const actionable = dirty || behind > 0 || canPush
+  const working = busy || syncing !== null || switching !== null
 
   // The popover is HTML; the live preview is a native webview that paints above
   // all HTML, so it must be hidden (frozen to a still frame) while the popover
   // is open — otherwise the popover renders behind the preview.
-  useSuppressPreview(open && actionable)
+  useSuppressPreview(open)
 
   if (!status || !status.isRepo) return null
+
+  async function switchBranch(branch: GitBranch): Promise<void> {
+    if (working || switchDisabled || branch.current) return
+    setSwitching(branch.refName)
+    setError(null)
+    branchGeneration.current += 1
+    try {
+      const next = await window.api.projects.git.switchBranch(projectId, branch.refName)
+      setStatus(next)
+      setRemote(null)
+      setMessage('')
+      onSynced?.()
+      setRemote(await window.api.projects.git.divergence(projectId))
+      setOpen(false)
+    } catch (reason) {
+      setError(String(reason))
+    } finally {
+      setSwitching(null)
+    }
+  }
 
   async function commit(): Promise<void> {
     const msg = message.trim()
@@ -148,14 +192,21 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
   const countLabel = dirty ? `${status.changedCount} uncommitted` : 'clean'
 
   return (
-    <div className="git-control" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="git-control"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') setOpen(false)
+      }}
+    >
       <button
-        className={`chip git-chip${dirty ? ' git-chip--dirty' : ' git-chip--clean'}${actionable ? ' git-chip--actionable' : ''}`}
-        title={status.branch ? `Branch: ${status.branch}` : 'git'}
+        className={`chip git-chip git-chip--actionable${dirty ? ' git-chip--dirty' : ' git-chip--clean'}`}
+        title={status.branch ? `Branch: ${status.branch} — switch branches and manage changes` : 'Switch branches and manage changes'}
+        aria-expanded={open}
         onClick={() => {
           void refresh()
           void loadRemote()
-          if (actionable) setOpen((o) => !o)
+          setOpen((o) => !o)
         }}
       >
         <Codicon name="git-branch" className="statusbar-ico" />
@@ -180,8 +231,43 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
         )}
       </button>
 
-      {open && actionable && (
+      {open && (
         <div className="git-popover">
+          <div className="git-popover-title">Switch branch</div>
+          <input
+            className="git-msg-input"
+            aria-label="Filter branches"
+            placeholder="Filter branches"
+            value={branchQuery}
+            onChange={(e) => setBranchQuery(e.target.value)}
+          />
+          <div className="git-sync-sub">
+            Switches the entire repository. Commit or stash all changes first.
+          </div>
+          {switchDisabled && <div className="git-sync-sub">Wait for the current chat or deployment to finish.</div>}
+          {loadingBranches && <div className="git-sync-sub" role="status">Loading branches...</div>}
+          <div className="git-branch-list" aria-label="Repository branches">
+            {branches
+              .filter((branch) => branch.name.toLowerCase().includes(branchQuery.toLowerCase()))
+              .map((branch) => (
+                <button
+                  key={branch.refName}
+                  className="git-branch-option"
+                  disabled={working || switchDisabled || branch.current}
+                  title={branch.refName}
+                  onClick={() => void switchBranch(branch)}
+                >
+                  <span>{branch.name}</span>{' '}
+                  <span className="git-sync-sub">
+                    {switching === branch.refName ? 'Switching...' : branch.current ? 'Current' : branch.remote ? 'Remote' : 'Local'}
+                  </span>
+                </button>
+              ))}
+          </div>
+          {!loadingBranches && !branches.some((branch) => branch.name.toLowerCase().includes(branchQuery.toLowerCase())) && (
+            <div className="git-sync-sub">No matching branches.</div>
+          )}
+          {(dirty || behind > 0 || canPush) && <div className="git-popover-divider" />}
           {behind > 0 && (
             <div className="git-sync-row">
               <div className="git-sync-text">
@@ -192,7 +278,7 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
               </div>
               <button
                 className="btn btn--xs btn--primary"
-                disabled={syncing !== null || busy}
+                disabled={working}
                 onClick={() => void pull()}
               >
                 {syncing === 'pull' ? 'Getting…' : 'Get latest'}
@@ -210,7 +296,7 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
               </div>
               <button
                 className="btn btn--xs btn--ghost"
-                disabled={syncing !== null || busy}
+                disabled={working}
                 onClick={() => void push()}
               >
                 {syncing === 'push' ? 'Pushing…' : 'Push'}
@@ -232,7 +318,7 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
                 value={message}
                 autoFocus
                 spellCheck={false}
-                disabled={busy || syncing !== null}
+                disabled={working}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void commit()
@@ -242,7 +328,8 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
             </>
           )}
 
-          {error && <div className="git-error">{error}</div>}
+          {error && <div className="git-error" role="alert">{error}</div>}
+          {remote?.fetchError && <div className="git-error" role="alert">{remote.fetchError}</div>}
 
           {dirty && (
             <div className="git-popover-actions">
@@ -251,7 +338,7 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
               </button>
               <button
                 className="btn btn--xs btn--primary"
-                disabled={busy || syncing !== null || !message.trim()}
+                disabled={working || !message.trim()}
                 onClick={() => void commit()}
               >
                 {busy ? 'Committing…' : 'Commit all'}

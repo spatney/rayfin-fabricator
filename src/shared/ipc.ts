@@ -1752,6 +1752,14 @@ export interface GitStatus {
   noCommits?: boolean
 }
 
+export interface GitBranch {
+  /** Full ref, used to select an unambiguous local or remote-tracking branch. */
+  refName: string
+  name: string
+  remote: boolean
+  current: boolean
+}
+
 export interface GitCommitResult {
   ok: boolean
   error?: string
@@ -2879,6 +2887,8 @@ export const IpcChannels = {
   projectsSetWorkspace: 'projects:setWorkspace',
   projectsRemove: 'projects:remove',
   projectsGitStatus: 'projects:gitStatus',
+  projectsGitBranches: 'projects:gitBranches',
+  projectsGitSwitchBranch: 'projects:gitSwitchBranch',
   projectsGitCommit: 'projects:gitCommit',
   projectsGitLog: 'projects:gitLog',
   projectsGitChanges: 'projects:gitChanges',
@@ -3237,6 +3247,10 @@ export interface RayfinStudioApi {
     git: {
       /** Snapshot of the project's git working tree (branch + change count). */
       status: (id: string) => Promise<GitStatus>
+      /** Local and known remote-tracking branches in the containing repository. */
+      branches: (id: string) => Promise<GitBranch[]>
+      /** Switch branches only when the entire repository is clean; never force or stash. */
+      switchBranch: (id: string, refName: string) => Promise<GitStatus>
       /** Stage everything and commit; resolves with the post-commit status. */
       commit: (id: string, message: string) => Promise<GitCommitResult>
       /** The project's commit timeline + uncommitted-change count (History view). */

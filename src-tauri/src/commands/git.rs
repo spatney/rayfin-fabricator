@@ -1,6 +1,6 @@
-//! Git status/commit + read-only history/diffs for the History view. Ported from
-//! `src/main/services/git.ts` and the git helpers in `projects.ts`. Everything is
-//! read-only except commit/revert, and sandboxed to the project directory.
+//! Git status, commits, branch switching, sync, and history/diffs.
+//! Branch switching and sync affect the containing repository, including when
+//! the project is a subfolder.
 
 use std::path::{Path, PathBuf};
 
@@ -12,7 +12,7 @@ use crate::services::exec::RunOptions;
 use crate::services::git::run;
 use crate::services::store::find_project;
 use crate::types::{
-  GitChange, GitCommitResult, GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus,
+  GitBranch, GitChange, GitCommitResult, GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus,
   GitSyncResult, RevertResult,
 };
 
@@ -114,6 +114,101 @@ pub async fn git_status(id: String) -> GitStatus {
     changed_count: parsed.changed_count,
     no_commits: if parsed.no_commits { Some(true) } else { None },
   }
+}
+
+/* -------------------------------- branches -------------------------------- */
+
+fn git_error(result: &Git, fallback: &str) -> String {
+  let message = format!("{}\n{}", result.stderr, result.stdout);
+  if message.trim().is_empty() { fallback.to_string() } else { message.trim().to_string() }
+}
+
+async fn branches_in(cwd: &str) -> Result<Vec<GitBranch>, String> {
+  let result = git(cwd, &[
+    "for-each-ref", "--sort=refname", "--format=%(refname)%00%(symref)%00%(HEAD)",
+    "refs/heads/", "refs/remotes/",
+  ]).await;
+  if !result.ok {
+    return Err(git_error(&result, "Could not list branches."));
+  }
+  Ok(result.stdout.lines().filter_map(|line| {
+    let mut fields = line.split('\0');
+    let ref_name = fields.next()?;
+    let symbolic = fields.next()?;
+    let current = fields.next()? == "*";
+    if !symbolic.is_empty() {
+      return None;
+    }
+    let (name, remote) = if let Some(name) = ref_name.strip_prefix("refs/heads/") {
+      (name, false)
+    } else {
+      (ref_name.strip_prefix("refs/remotes/")?, true)
+    };
+    Some(GitBranch { ref_name: ref_name.into(), name: name.into(), remote, current })
+  }).collect())
+}
+
+pub async fn git_branches(id: String) -> Result<Vec<GitBranch>, String> {
+  let project = find_project(&id).ok_or("Project folder not found.")?;
+  branches_in(&project.path).await
+}
+
+async fn switch_branch_in(cwd: &str, ref_name: &str) -> Result<(), String> {
+  let branch = branches_in(cwd).await?.into_iter().find(|b| b.ref_name == ref_name)
+    .ok_or("That branch no longer exists. Reopen the branch picker and try again.")?;
+  if branch.current {
+    return Ok(());
+  }
+  // Porcelain v1 includes the whole repository, even from a project subfolder.
+  let status = git(cwd, &["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"]).await;
+  if !status.ok {
+    return Err(git_error(&status, "Could not check the repository for uncommitted changes."));
+  }
+  if !status.stdout.trim().is_empty() {
+    return Err("Commit or stash all changes in this repository before switching branches, including changes outside this project folder.".into());
+  }
+
+  let prefix = git(cwd, &["rev-parse", "--show-prefix"]).await;
+  if !prefix.ok {
+    return Err(git_error(&prefix, "Could not locate the project in its repository."));
+  }
+  let relative = prefix.stdout.trim().trim_end_matches('/');
+  if !relative.is_empty() {
+    let target = format!("{ref_name}:{relative}");
+    let folder = git(cwd, &["cat-file", "-t", &target]).await;
+    if !folder.ok || folder.stdout.trim() != "tree" {
+      return Err("This project folder does not exist on that branch. Switch to a branch that contains this project.".into());
+    }
+  }
+
+  let result = if branch.remote {
+    // Ask Git for the configured remote rather than assuming it is named origin.
+    let remotes = git(cwd, &["remote"]).await;
+    if !remotes.ok {
+      return Err(git_error(&remotes, "Could not list repository remotes."));
+    }
+    let remote = remotes.stdout.lines()
+      .filter(|r| branch.name.starts_with(&format!("{r}/")))
+      .max_by_key(|r| r.len())
+      .ok_or("The remote for that branch is no longer configured.")?;
+    let local = &branch.name[remote.len() + 1..];
+    git(cwd, &["switch", "--track", "--create", local, &branch.ref_name]).await
+  } else {
+    git(cwd, &["switch", "--no-guess", "--", &branch.name]).await
+  };
+  if !result.ok {
+    return Err(git_error(&result, "Could not switch branches."));
+  }
+  Ok(())
+}
+
+pub async fn git_switch_branch(id: String, ref_name: String) -> Result<GitStatus, String> {
+  let project = find_project(&id).ok_or("Project folder not found.")?;
+  if project.team.is_some() {
+    return Err("Team apps use a managed working branch. Use the team workflow instead.".into());
+  }
+  switch_branch_in(&project.path, &ref_name).await?;
+  Ok(git_status(id).await)
 }
 
 pub async fn git_commit(id: String, message: String) -> GitCommitResult {
@@ -718,6 +813,105 @@ mod tests {
     fn drop(&mut self) {
       let _ = std::fs::remove_dir_all(&self.root);
     }
+  }
+
+  #[tokio::test]
+  async fn branch_switch_from_nested_project_updates_the_containing_repo() {
+    let repo = TestRepo::new();
+    let app = repo.dir.join("apps").join("my app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(app.join("app.txt"), "main\n").unwrap();
+    run_git(&repo.dir, &["add", "-A"]);
+    run_git(&repo.dir, &["commit", "-qm", "First"]);
+    run_git(&repo.dir, &["switch", "-c", "feature/report"]);
+    std::fs::write(app.join("app.txt"), "feature\n").unwrap();
+    run_git(&repo.dir, &["commit", "-qam", "Feature"]);
+    run_git(&repo.dir, &["switch", "main"]);
+    let cwd = app.to_str().unwrap();
+    let branches = branches_in(cwd).await.unwrap();
+    assert_eq!(branches.len(), 2);
+    assert!(branches.iter().any(|b| b.name == "main" && b.current && !b.remote));
+    switch_branch_in(cwd, "refs/heads/feature/report").await.unwrap();
+    assert_eq!(run_git(&repo.dir, &["branch", "--show-current"]), "feature/report");
+    assert_eq!(std::fs::read_to_string(app.join("app.txt")).unwrap(), "feature\n");
+    assert!(switch_branch_in(cwd, "refs/heads/missing").await.unwrap_err().contains("no longer exists"));
+    assert!(switch_branch_in(cwd, "--discard-changes").await.is_err());
+  }
+
+  #[tokio::test]
+  async fn branch_switch_blocks_all_repo_changes_including_siblings() {
+    let repo = TestRepo::new();
+    let app = repo.dir.join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(app.join("app.txt"), "main\n").unwrap();
+    std::fs::write(repo.dir.join("sibling.txt"), "original\n").unwrap();
+    run_git(&repo.dir, &["add", "-A"]);
+    run_git(&repo.dir, &["commit", "-qm", "First"]);
+    run_git(&repo.dir, &["branch", "feature"]);
+    let cwd = app.to_str().unwrap();
+    for mode in ["unstaged", "staged", "untracked"] {
+      let path = if mode == "untracked" { repo.dir.join("new.txt") } else { repo.dir.join("sibling.txt") };
+      std::fs::write(&path, "keep me\n").unwrap();
+      if mode == "staged" {
+        run_git(&repo.dir, &["add", "-A"]);
+      }
+      let error = switch_branch_in(cwd, "refs/heads/feature").await.unwrap_err();
+      assert!(error.contains("Commit or stash"), "{mode}: {error}");
+      assert_eq!(run_git(&repo.dir, &["branch", "--show-current"]), "main");
+      assert_eq!(std::fs::read_to_string(&path).unwrap(), "keep me\n");
+      if mode == "untracked" {
+        std::fs::remove_file(path).unwrap();
+      } else {
+        std::fs::write(path, "original\n").unwrap();
+        run_git(&repo.dir, &["add", "-A"]);
+      }
+    }
+  }
+
+  #[tokio::test]
+  async fn branch_switch_tracks_remote_branches_and_skips_symbolic_head() {
+    let repo = TestRepo::new();
+    std::fs::write(repo.dir.join("app.txt"), "main\n").unwrap();
+    run_git(&repo.dir, &["add", "-A"]);
+    run_git(&repo.dir, &["commit", "-qm", "First"]);
+    run_git(&repo.dir, &["remote", "add", "ado", repo.root.join("remote.git").to_str().unwrap()]);
+    run_git(&repo.dir, &["update-ref", "refs/remotes/ado/feature/report", "HEAD"]);
+    run_git(&repo.dir, &["symbolic-ref", "refs/remotes/ado/HEAD", "refs/remotes/ado/feature/report"]);
+    let cwd = repo.dir.to_str().unwrap();
+    let branches = branches_in(cwd).await.unwrap();
+    assert_eq!(branches.len(), 2);
+    assert!(branches.iter().any(|b| b.name == "ado/feature/report" && b.remote && !b.current));
+    switch_branch_in(cwd, "refs/remotes/ado/feature/report").await.unwrap();
+    assert_eq!(run_git(&repo.dir, &["branch", "--show-current"]), "feature/report");
+    assert_eq!(run_git(&repo.dir, &["rev-parse", "--abbrev-ref", "@{u}"]), "ado/feature/report");
+    run_git(&repo.dir, &["switch", "main"]);
+    assert!(switch_branch_in(cwd, "refs/remotes/ado/feature/report").await.is_err());
+    assert_eq!(run_git(&repo.dir, &["branch", "--show-current"]), "main");
+  }
+
+  #[tokio::test]
+  async fn branch_switch_rejects_missing_project_and_checked_out_worktree_branch() {
+    let repo = TestRepo::new();
+    std::fs::write(repo.dir.join("root.txt"), "main\n").unwrap();
+    run_git(&repo.dir, &["add", "-A"]);
+    run_git(&repo.dir, &["commit", "-qm", "Root"]);
+    run_git(&repo.dir, &["branch", "without-app"]);
+    let app = repo.dir.join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(app.join("app.txt"), "app\n").unwrap();
+    run_git(&repo.dir, &["add", "-A"]);
+    run_git(&repo.dir, &["commit", "-qm", "App"]);
+    let error = switch_branch_in(app.to_str().unwrap(), "refs/heads/without-app").await.unwrap_err();
+    assert!(error.contains("project folder does not exist"));
+    let worktree = repo.root.join("worktree");
+    run_git(&repo.dir, &["worktree", "add", "-q", "-b", "other", worktree.to_str().unwrap()]);
+    assert!(switch_branch_in(app.to_str().unwrap(), "refs/heads/other").await.is_err());
+    assert_eq!(run_git(&repo.dir, &["branch", "--show-current"]), "main");
+    // Switching from a linked worktree uses its own HEAD, not the main worktree's.
+    run_git(&worktree, &["branch", "available"]);
+    switch_branch_in(worktree.join("app").to_str().unwrap(), "refs/heads/available").await.unwrap();
+    assert_eq!(run_git(&worktree, &["branch", "--show-current"]), "available");
+    assert_eq!(run_git(&repo.dir, &["branch", "--show-current"]), "main");
   }
 
   #[tokio::test]
