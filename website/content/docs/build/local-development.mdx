@@ -81,7 +81,9 @@ The [Advisor](/docs/ship/advisor#checks-for-apps-that-run-on-this-computer) flag
 
 ## Watch your app in the preview
 
-The preview shows your app at a `localhost` address. Its toolbar shows the local backend's state, **Starting…**, **Running**, **Restarting…**, **Error** or **Stopped**: select it to open **Output**, the output of your app's backend, Vite and functions. When the app can't start, the preview says why and offers a fix, such as **Install dependencies** or **Stop the other one**, with **Try again**, **View output** and **Find out why**, which asks Help. See [Your app on this computer](/docs/build/preview#your-app-on-this-computer) and [Your app doesn't start on this computer](/docs/troubleshooting/preview#your-app-doesnt-start-on-this-computer).
+The preview shows your app at a `localhost` address. Its toolbar shows the local backend's state, **Starting…**, **Running**, **Restarting…**, **Error** or **Stopped**, and **Running · problem** when a change didn't apply, such as a data model that couldn't be read: select it to open **Output**, the output of your app's backend, Vite and functions, with **Restart**. When the app can't start, the preview says why and offers a fix, such as **Install dependencies** or **Stop the other one**, with **Try again**, **View output** and **Find out why**, which asks Help. See [Your app on this computer](/docs/build/preview#your-app-on-this-computer) and [Your app doesn't start on this computer](/docs/troubleshooting/preview#your-app-doesnt-start-on-this-computer).
+
+After each chat turn that changes your app, Fabricator saves a version in **Code → History**, named after your request, so you can restore an earlier one.
 
 ## Try the app as other people
 

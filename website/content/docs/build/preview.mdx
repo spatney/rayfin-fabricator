@@ -33,11 +33,11 @@ With Local development on, the preview shows your app as it runs on this compute
 
 The toolbar adds:
 
-- The local backend's state: **Starting…**, **Running**, **Restarting…**, **Error** or **Stopped**. Select it to open or close **Output**.
+- The local backend's state: **Starting…**, **Running**, **Restarting…**, **Error** or **Stopped**. Select it to open or close **Output**. When the app runs but its latest change didn't apply, it says **Running · problem** (or the number of problems) with an amber dot, and **Output** starts with what's wrong, for example "Your app’s latest data model change couldn’t be read, so it still uses the previous data model."
 - **Preview as**, to choose who the app signs in as. See [Preview as someone else](/docs/build/preview#preview-as-someone-else).
 - **Local** and **Published**, once the app is published. See [Switch between Local and Published](/docs/build/preview#switch-between-local-and-published).
 
-**Output**, under the preview, shows the latest output of your app's backend, Vite and functions, with the time and source of each line and the newest at the bottom. It follows new lines unless you scroll up. Select **Copy** to copy it, for example for a bug report.
+**Output**, under the preview, shows the latest output of your app's backend, Vite and functions, with the time and source of each line and the newest at the bottom. It follows new lines unless you scroll up. Select **Copy** to copy it, for example for a bug report, or **Restart** to stop your app's backend and Vite and start them again.
 
 While the app starts, the preview says what it's doing, such as "Reading your app’s data model", "Updating its database" or "Building its functions". If the app stopped, select **Start**.
 
