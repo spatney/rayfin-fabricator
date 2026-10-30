@@ -37,6 +37,7 @@ fn default_flags() -> ExperimentFlags {
   ExperimentFlags {
     team_workspaces: Some(false),
     report_migration: Some(false),
+    local_development: Some(false),
   }
 }
 
@@ -172,6 +173,7 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   let current = experiments.get_or_insert_with(default_flags);
   if let Some(v) = patch.team_workspaces { current.team_workspaces = Some(v); }
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
+  if let Some(v) = patch.local_development { current.local_development = Some(v); }
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -213,6 +215,18 @@ pub fn report_migration_enabled() -> bool {
       .experiments
       .as_ref()
       .and_then(|e| e.report_migration)
+      .unwrap_or(false)
+  })
+}
+
+/// True when the Local development experiment is on: personal apps run on this
+/// computer with the bundled local backend.
+pub fn local_development_enabled() -> bool {
+  with_cache(|c| {
+    c.settings
+      .experiments
+      .as_ref()
+      .and_then(|e| e.local_development)
       .unwrap_or(false)
   })
 }

@@ -1694,6 +1694,13 @@ export interface ExperimentFlags {
    * page by page.
    */
   reportMigration?: boolean
+  /**
+   * Local development: personal apps run on this computer with the bundled
+   * local backend from creation, and publishing to Fabric is optional. Off:
+   * apps are developed against their Fabric deployment. Team apps aren't
+   * affected.
+   */
+  localDevelopment?: boolean
 }
 
 export interface CreateProjectInput {

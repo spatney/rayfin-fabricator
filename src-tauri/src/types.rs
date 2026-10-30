@@ -732,6 +732,12 @@ pub struct ExperimentFlags {
   /// page by page. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub report_migration: Option<bool>,
+  /// Local development: personal apps run on this computer with the bundled
+  /// local backend (rayfin-local) from creation, and publishing to Fabric is
+  /// optional. Off: apps are developed against their Fabric deployment, as
+  /// before. Opt-in (off by default); team apps aren't affected.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub local_development: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
