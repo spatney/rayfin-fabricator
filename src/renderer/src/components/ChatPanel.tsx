@@ -151,13 +151,13 @@ interface Props {
   focused?: boolean
   /** Toggle chat focus (full-width chat ⇄ split with preview). */
   onToggleFocus?: () => void
-  /** True while the project is deploying (pauses sending with `blockSubmitWhileDeploying`). */
+  /** True while the project is publishing (pauses sending with `blockSubmitWhileDeploying`). */
   deploying?: boolean
-  /** When true, a deploy in progress pauses *submitting* a new turn (typing stays
-   *  enabled). Used by the live local preview so a turn never overlaps a deploy —
-   *  otherwise the dev server can't start during the deploy and never comes back. */
+  /** When true, a publish in progress pauses *submitting* a new turn (typing stays
+   *  enabled). Used by the live local preview so a turn never overlaps a publish —
+   *  otherwise the dev server can't start during the publish and never comes back. */
   blockSubmitWhileDeploying?: boolean
-  /** Tooltip on the paused Send button (defaults to the deploy wording). */
+  /** Tooltip on the paused Send button (defaults to the publish wording). */
   submitBlockedTitle?: string
   /** The host owns the global chat-event subscription (keeps turns live while this panel is unmounted). */
   eventsManagedExternally?: boolean
@@ -211,7 +211,7 @@ export default function ChatPanel({
   onToggleFocus,
   deploying = false,
   blockSubmitWhileDeploying = false,
-  submitBlockedTitle = 'Deploying — sending resumes when it goes live',
+  submitBlockedTitle = 'Publishing — sending resumes when it goes live',
   eventsManagedExternally = false,
   onOpenMention,
   draft,
@@ -1675,7 +1675,6 @@ export default function ChatPanel({
           <div className="composer-actions">
             <div className="composer-left">
               <AddMenu
-                locked={false}
                 attaching={attaching}
                 imageNote={imageNote}
                 onImage={() => fileRef.current?.click()}

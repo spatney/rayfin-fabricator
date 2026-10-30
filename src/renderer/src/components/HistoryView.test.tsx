@@ -1,7 +1,13 @@
 import type { DiffEditorProps } from '@monaco-editor/react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { GitChange, GitFileDiff, GitHistory, RayfinStudioApi } from '@shared/ipc'
+import type {
+  GitChange,
+  GitFileDiff,
+  GitHistory,
+  RayfinStudioApi,
+  StudioProject
+} from '@shared/ipc'
 import { makeProject } from '../../test/harness'
 import HistoryView from './HistoryView'
 
@@ -120,27 +126,84 @@ describe('HistoryView uncommitted diffs', () => {
 })
 
 describe('HistoryView live-version banner', () => {
-  // HEAD (abc123) is not the deployed commit in either case.
+  // HEAD (abc123) is not the published commit in either case.
   const project = makeProject('p1', {
     lastDeploy: { url: 'https://p1.example.app/', status: 'success', commit: 'old456' }
   })
 
-  it('offers to publish when the live app lags the code', async () => {
+  it('offers to publish when the published app lags the code', async () => {
     installApi({}, { ...history, liveDiffers: true })
     const onRequestDeploy = vi.fn()
-    render(<HistoryView project={project} refreshKey={0} theme="vs-dark" onRequestDeploy={onRequestDeploy} />)
+    render(
+      <HistoryView
+        project={project}
+        refreshKey={0}
+        theme="vs-dark"
+        onRequestDeploy={onRequestDeploy}
+      />
+    )
     expect(
-      await screen.findByText('Your live app is showing an earlier version than your current code.')
+      await screen.findByText('Your published app doesn’t match your current code.')
     ).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Publish current version' }))
     expect(onRequestDeploy).toHaveBeenCalledTimes(1)
   })
 
-  it('stays quiet when only files that never ship changed since the deploy', async () => {
+  it('stays quiet when only files that never ship changed since publishing', async () => {
     installApi({}, { ...history, liveDiffers: false })
     render(<HistoryView project={project} refreshKey={0} theme="vs-dark" onRequestDeploy={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByText('Create app').length).toBeGreaterThan(0))
-    expect(screen.queryByText(/earlier version than your current code/)).toBeNull()
+    expect(screen.queryByText(/match your current code/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Publish current version' })).toBeNull()
+  })
+})
+
+describe('HistoryView restore', () => {
+  const older = {
+    ...history.commits[0],
+    hash: 'old456',
+    shortHash: 'old456',
+    subject: 'First version'
+  }
+
+  async function restore(project: StudioProject): Promise<ReturnType<typeof vi.fn>> {
+    const git = installApi(
+      {},
+      { ...history, workingChanges: 0, commits: [...history.commits, older] }
+    )
+    const revert = vi
+      .fn<RayfinStudioApi['projects']['git']['revert']>()
+      .mockResolvedValue({ ok: true, head: 'new789' })
+    Object.assign(git, { revert })
+    const onRequestDeploy = vi.fn()
+    render(
+      <HistoryView
+        project={project}
+        refreshKey={0}
+        theme="vs-dark"
+        onRequestDeploy={onRequestDeploy}
+      />
+    )
+    fireEvent.click(await screen.findByText('First version'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore this version' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull())
+    expect(revert).toHaveBeenCalledWith('p1', 'old456')
+    return onRequestDeploy
+  }
+
+  it('keeps a personal app’s restore on this computer until the user publishes', async () => {
+    const published = makeProject('p1', {
+      lastDeploy: { url: 'https://p1.example.app/', status: 'success', commit: 'abc123' }
+    })
+    expect(await restore(published)).not.toHaveBeenCalled()
+  })
+
+  it('saves a team app’s restore for its pipeline', async () => {
+    const team = {
+      ...makeProject('p1'),
+      team: { workspaceId: 'w1', folder: 'meow', worktree: 'C:\\team' }
+    }
+    expect(await restore(team)).toHaveBeenCalledTimes(1)
   })
 })

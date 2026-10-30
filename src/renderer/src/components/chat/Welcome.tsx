@@ -29,8 +29,8 @@ export function Welcome({
       </div>
       <h2 className="chat-welcome-title">Let’s build {projectName}</h2>
       <p className="chat-welcome-sub">
-        Describe what you want in plain language. I’ll write the code and deploy it live — no coding
-        required.
+        Describe what you want in plain language. I’ll write the code and show it running in the
+        preview — no coding required.
       </p>
       <div className="chat-ideas">
         <div className="chat-ideas-head">

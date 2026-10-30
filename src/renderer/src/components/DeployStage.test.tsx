@@ -14,7 +14,7 @@ afterEach(() => {
 })
 
 const RUN = [
-  'Deploying Boo to Fabric…\n',
+  'Publishing Boo to Fabric…\n',
   '👀 Found Rayfin project root: C:\\Users\\sachi\\RayfinProjects\\boo\n',
   '[rayfin] license: Checking user license\n',
   '[rayfin] workspace: Resolving workspace\n',
@@ -25,7 +25,7 @@ const RUN = [
 
 const said = (): string => document.querySelector('.mascot-bubble')?.textContent ?? ''
 
-describe('the deploy screen', () => {
+describe('the publish screen', () => {
   it('is Ray’s, unless he was sent away', () => {
     render(<DeployStage log={RUN.slice(0, 1)} name="Boo" firstDeploy />)
     expect(screen.getByRole('button', { name: /Ray, the Fabricator stingray/ })).toBeTruthy()
@@ -40,7 +40,7 @@ describe('the deploy screen', () => {
 
   it('lists the steps Rayfin reports, in its own words for the one in progress', () => {
     const { rerender } = render(<DeployStage log={RUN} name="Boo" />)
-    const steps = within(screen.getByRole('list', { name: 'Deploy steps' }))
+    const steps = within(screen.getByRole('list', { name: 'Publish steps' }))
       .getAllByRole('listitem')
       .map((li) => [li.getAttribute('data-state'), li.textContent])
     expect(steps).toEqual([

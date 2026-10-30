@@ -356,7 +356,7 @@ async fn has_changes_since_deploy(dir: &str, deployed_commit: Option<&str>) -> R
   .await;
   if !status.ok {
     return Err(format!(
-      "Could not check for undeployed changes. {}",
+      "Could not check for unpublished changes. {}",
       error_text(&status, &status.stdout, "git status failed.")
     ));
   }
@@ -365,7 +365,7 @@ async fn has_changes_since_deploy(dir: &str, deployed_commit: Option<&str>) -> R
   }
 
   // A clean working tree can still contain committed edits that were never
-  // deployed. Without a recorded baseline, deploy once to establish one.
+  // published. Without a recorded baseline, publish once to establish one.
   let Some(commit) = deployed_commit.map(str::trim).filter(|s| !s.is_empty()) else {
     return Ok(true);
   };
@@ -378,7 +378,7 @@ async fn has_changes_since_deploy(dir: &str, deployed_commit: Option<&str>) -> R
     Some(0) if diff.ok => Ok(false),
     Some(1) if !diff.not_found => Ok(true),
     _ => Err(format!(
-      "Could not compare the project with its last deployment. {}",
+      "Could not compare the project with its last published version. {}",
       error_text(&diff, &diff.stdout, "git diff failed.")
     )),
   }
@@ -416,7 +416,7 @@ async fn pending_since_deploy(dir: &str, deployed_commit: Option<&str>) -> Resul
   .await;
   if !status.ok {
     return Err(format!(
-      "Could not check for undeployed changes. {}",
+      "Could not check for unpublished changes. {}",
       error_text(&status, &status.stdout, "git status failed.")
     ));
   }
@@ -431,7 +431,7 @@ async fn pending_since_deploy(dir: &str, deployed_commit: Option<&str>) -> Resul
   .await;
   if !diff.ok {
     return Err(format!(
-      "Could not compare the project with its last deployment. {}",
+      "Could not compare the project with its last published version. {}",
       error_text(&diff, &diff.stdout, "git diff failed.")
     ));
   }
@@ -494,7 +494,7 @@ pub async fn deploy_run(
   // renderer's lifetime.
   match tokio::spawn(async move { run_deploy(app, project_id, workspace).await }).await {
     Ok(result) => result,
-    Err(error) => deployment_error(format!("Deployment task failed: {error}")),
+    Err(error) => deployment_error(format!("The publish task failed: {error}")),
   }
 }
 
@@ -533,7 +533,7 @@ const FAILURE_DETAIL_LINES: usize = 16;
 /// The error the UI shows is one line, and often only the headline — "Runtime
 /// settings sync failed: 400 Bad Request" — while the line that explains it
 /// ("Details: The PostgreSQLDatabase feature is not enabled.") comes after.
-/// Help reads the journal to answer "why did my deploy fail?", so it needs both.
+/// Help reads the journal to answer "why couldn't my app publish?", so it needs both.
 fn failure_detail(output: &str) -> Option<String> {
   let clean = crate::commands::chat_tools::strip_ansi(output);
   let lines: Vec<&str> = clean.lines().map(str::trim_end).filter(|line| !line.trim().is_empty()).collect();
@@ -543,20 +543,20 @@ fn failure_detail(output: &str) -> Option<String> {
   Some(lines[lines.len().saturating_sub(FAILURE_DETAIL_LINES)..].join("\n"))
 }
 
-/// Note the outcome of a deploy in the activity journal.
+/// Note the outcome of a publish in the activity journal.
 ///
-/// Both outcomes are recorded. "Did my deploy work?" is one of the most common
+/// Both outcomes are recorded. "Did my app publish?" is one of the most common
 /// questions the Help assistant is asked, and a journal that only ever noted
-/// failures would answer a successful deploy with the last one that went wrong.
+/// failures would answer a successful publish with the last one that went wrong.
 fn record_deploy(project_id: &str, result: &DeployResult, detail: Option<String>) {
   use journal::{Area, Level};
   let message = if result.ok {
     match result.url.as_deref() {
-      Some(url) => format!("Deployed successfully. The app is live at {url}"),
-      None => "Deployed successfully.".to_string(),
+      Some(url) => format!("Published successfully. The app is live at {url}"),
+      None => "Published successfully.".to_string(),
     }
   } else {
-    result.error.clone().unwrap_or_else(|| "The deploy failed.".to_string())
+    result.error.clone().unwrap_or_else(|| "Couldn't publish the app.".to_string())
   };
   let mut entry = journal::entry(
     if result.ok { Level::Info } else { Level::Error },
@@ -658,7 +658,7 @@ async fn run_deploy_inner(
   });
 
   let renderer = emit::proc_streamer(&app, DEPLOY_CHANNEL);
-  renderer(Stream::System, &format!("Deploying {} to Fabric…\n", project.name));
+  renderer(Stream::System, &format!("Publishing {} to Fabric…\n", project.name));
 
   let captured = Arc::new(Mutex::new(String::new()));
   let on_data: OnData = {
@@ -681,7 +681,7 @@ async fn run_deploy_inner(
       d.at = Some(now_iso());
     });
     telemetry::track_deploy(get_cached_identity().as_ref(), false);
-    renderer(Stream::System, &format!("\nDeploy failed: {error}\n"));
+    renderer(Stream::System, &format!("\nCouldn't publish: {error}\n"));
     return DeployResult {
       ok: false,
       outcome: "error".into(),
@@ -727,7 +727,7 @@ async fn run_deploy_inner(
       d.error = Some(error.clone());
       d.at = Some(now_iso());
     });
-    renderer(Stream::System, &format!("\nDeploy failed: {error}\n"));
+    renderer(Stream::System, &format!("\nCouldn't publish: {error}\n"));
     crashlog::log_error("deploy", &error);
     return DeployResult {
       ok: false,
@@ -741,7 +741,7 @@ async fn run_deploy_inner(
 
   if !result.ok {
     let fallback = format!(
-      "rayfin up exited with code {} without a detailed failure reason. View the deploy logs. If Fabric sign-in looks successful but deploys keep failing, use Refresh Fabric authentication and update the project's Rayfin CLI and SDK to 1.35.1 or newer.",
+      "rayfin up exited with code {} without a detailed failure reason. View the publish log. If Fabric sign-in looks successful but publishing keeps failing, use Refresh Fabric authentication and update the project's Rayfin CLI and SDK to 1.35.1 or newer.",
       result.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into())
     );
     let detail = error_text(&result, &captured_text, &fallback);
@@ -760,8 +760,8 @@ async fn run_deploy_inner(
     crashlog::log_error("deploy", &format!("exit={:?} outcome={outcome}: {error}", result.exit_code));
     telemetry::track_deploy(get_cached_identity().as_ref(), false);
     let sys = match outcome {
-      "needs-workspace" => "\nThis project has no Fabric workspace yet — choose one to deploy into.\n".to_string(),
-      _ => format!("\nDeploy failed: {error}\n"),
+      "needs-workspace" => "\nThis project has no Fabric workspace yet — choose one to publish to.\n".to_string(),
+      _ => format!("\nCouldn't publish: {error}\n"),
     };
     renderer(Stream::System, &sys);
     return DeployResult {
@@ -807,7 +807,8 @@ async fn run_deploy_inner(
     });
   }
 
-  // First successful deploy clears the onboarding "deploy first" gate.
+  // Projects from before local-first may still carry the retired first-deploy
+  // flag; a successful publish clears it.
   store::mutate_project(&project_id, |p| p.awaiting_first_deploy = None);
 
   // Semantic-model apps render correctly only inside the Fabric portal shell, so the
@@ -828,14 +829,14 @@ async fn run_deploy_inner(
   });
 
   // An app opened from disk may not have a repository yet; start its history so
-  // this deploy can record which version is live.
+  // this publish can record which version is live.
   let _ = version_history::ensure_project_tracked(&project).await;
-  commit_checkpoint(&project.path, &format!("Deploy {} ({})", project.name, now_iso())).await;
+  commit_checkpoint(&project.path, &format!("Publish {} ({})", project.name, now_iso())).await;
   let commit = head_sha(&project.path).await;
   patch_deploy(&project_id, move |d| d.commit = commit);
   telemetry::track_deploy(get_cached_identity().as_ref(), true);
   let live = url.as_deref().map(|u| format!("Live at {u}")).unwrap_or_default();
-  renderer(Stream::System, &format!("\n✅ Deployed. {live}\n"));
+  renderer(Stream::System, &format!("\n✅ Published. {live}\n"));
 
   DeployResult {
     ok: true,
@@ -920,12 +921,12 @@ fn checked_deploy_list(
 ) -> Result<Vec<FabricDeployment>, String> {
   if !res.ok || res.not_found {
     return Err(format!(
-      "Could not read recorded Fabric deployments. {}",
+      "Could not read this project's published apps. {}",
       crate::services::fabric_auth::failure_message(res)
     ));
   }
   parse_deploy_list_opt(&res.stdout, names)
-    .ok_or_else(|| "Could not read recorded Fabric deployments: invalid CLI response. Nothing was deleted.".into())
+    .ok_or_else(|| "Could not read this project's published apps: invalid CLI response. Nothing was deleted.".into())
 }
 
 /// Reconcile the Studio store's recorded deployment with on-disk reality
@@ -1008,7 +1009,7 @@ pub async fn deploy_reconcile(project_id: String) -> ProjectsState {
         p.last_deploy = Some(deploy);
         p.workspace = workspace;
         p.workspace_name = ws_name;
-        // A recorded deployment exists — lift the onboarding gate.
+        // A recorded deployment exists: clear the retired first-deploy flag too.
         p.awaiting_first_deploy = None;
       });
     }
@@ -1104,7 +1105,7 @@ pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String
     let w = workspace.clone();
     store::mutate_project(&project_id, move |p| {
       p.workspace = Some(w);
-      // Switching to an existing deployment proves one exists — lift the gate.
+      // Switching proves a deployment exists: clear the retired first-deploy flag too.
       p.awaiting_first_deploy = None;
     });
   }
@@ -1185,7 +1186,7 @@ mod tests {
   #[test]
   fn a_failure_keeps_the_lines_that_explain_it_for_help() {
     // The one-line error is only the headline; the cause is on the lines after it.
-    let output = "Deploying Contoso Expenses to Fabric…\n\
+    let output = "Publishing Contoso Expenses to Fabric…\n\
       [rayfin] settings: Applying runtime settings\n\n\
       \x1b[31m❌ Deployment failed: Runtime settings sync failed: 400 Bad Request\x1b[0m\n\
       \x20  Details: The PostgreSQLDatabase feature is not enabled.\n\
@@ -1368,11 +1369,11 @@ mod tests {
     let repo = TestRepo::new();
     repo.commit();
     let error = has_changes_since_deploy(repo.dir(), Some("missing-deployed-commit")).await.unwrap_err();
-    assert!(error.contains("Could not compare the project with its last deployment"));
+    assert!(error.contains("Could not compare the project with its last published version"));
 
     let outside = repo.0.join("..").join(format!("fabricator-missing-{}", uuid::Uuid::new_v4()));
     let error = has_changes_since_deploy(outside.to_str().unwrap(), None).await.unwrap_err();
-    assert!(error.contains("Could not check for undeployed changes"));
+    assert!(error.contains("Could not check for unpublished changes"));
   }
 
   #[test]

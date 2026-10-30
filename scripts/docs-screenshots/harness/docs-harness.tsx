@@ -1198,7 +1198,7 @@ const groundedHelp = {
 }
 
 /**
- * One finished Help exchange: a deploy that failed, diagnosed from the journal
+ * One finished Help exchange: publishing that failed, diagnosed from the journal
  * and the docs, with the button that fixes it. `savedAt` is empty so the shot
  * doesn't show the "picking up where you left off" seam.
  */
@@ -1207,13 +1207,13 @@ const helpConversation = {
   data: [
     {
       id: 'ask-1',
-      question: 'why did my deploy fail?',
+      question: 'why couldn’t I publish my app?',
       attachments: [],
       answer:
-        'Your Fabric sign-in expired part way through the deploy, so Fabricator could not upload the app.\n\n' +
-        'The deploy stopped with "The access token has expired". Contoso Expenses is still running on the version you deployed on Tuesday — nothing was lost.\n\n' +
+        'Your Fabric sign-in expired part way through publishing, so Fabricator could not upload the app.\n\n' +
+        'Publishing stopped with "The access token has expired". The published Contoso Expenses still runs the version you published on Tuesday — nothing was lost.\n\n' +
         '1. In the account menu, select **Refresh Fabric authentication** and finish signing in.\n' +
-        '2. In the app bar, select **Redeploy**.\n\n' +
+        '2. In the app bar, select **Try again**.\n\n' +
         'If it stops again at the same point, the workspace may no longer be assigned to a Fabric capacity. ' +
         'See [Deploy problems](https://spatney.github.io/rayfin-fabricator/docs/troubleshooting/deploy).',
       tools: [
@@ -1301,7 +1301,6 @@ function ComposerPicker({
             <div className="composer-actions">
               <div className="composer-left">
                 <AddMenu
-                  locked={false}
                   attaching={false}
                   onImage={noop}
                   onConnectData={noop}
@@ -1442,11 +1441,11 @@ function TypeInto({
 }
 
 /**
- * A Rayfin 1.36 deploy of the sample app, as `rayfin up` streams it, timed so the
+ * A Rayfin 1.36 publish of the sample app, as `rayfin up` streams it, timed so the
  * capture (10 s of virtual time) lands in the build.
  */
 const DEPLOY_LOG: Array<[number, string]> = [
-  [0, 'Deploying Contoso Expenses to Fabric…\n'],
+  [0, 'Publishing Contoso Expenses to Fabric…\n'],
   [600, '👀 Found Rayfin project root: C:\\Users\\avery\\RayfinProjects\\contoso-expenses\n'],
   [2500, '[rayfin] license: Checking user license\n'],
   [3200, '[rayfin] dependencies: Inspecting project dependencies\n[rayfin] workspace: Resolving workspace\n'],
@@ -1456,7 +1455,7 @@ const DEPLOY_LOG: Array<[number, string]> = [
   [6000, '[rayfin] persist: Recording deployment\n[rayfin] static: Deploying static content\n']
 ]
 
-/** The deploy screen in a preview-sized frame, fed the sample deploy's log. */
+/** The publish screen in a preview-sized frame, fed the sample publish's log. */
 function Deploying(): JSX.Element {
   const [log, setLog] = useState<string[]>([])
   useEffect(() => {
@@ -1484,9 +1483,9 @@ function Deploying(): JSX.Element {
   )
 }
 
-/** The sample app's deploy failing on a Fabric feature its tenant hasn't turned on, as Rayfin 1.36 reports it. */
+/** The sample app failing to publish on a Fabric feature its tenant hasn't turned on, as Rayfin 1.36 reports it. */
 const FAILED_DEPLOY_LOG = [
-  'Deploying Contoso Expenses to Fabric…\n',
+  'Publishing Contoso Expenses to Fabric…\n',
   '[rayfin] license: Checking user license\n',
   '[rayfin] dependencies: Inspecting project dependencies\n',
   '[rayfin] workspace: Resolving workspace\n',
@@ -1497,7 +1496,7 @@ const FAILED_DEPLOY_LOG = [
   '   Details: The PostgreSQLDatabase feature is not enabled.\n'
 ]
 
-/** The preview after that deploy failed: Ray above it, offering to find out why. */
+/** The preview after that publish failed: Ray above it, offering to find out why. */
 function DeployFailed(): JSX.Element {
   const app = {
     id: 'p2',
@@ -1552,8 +1551,8 @@ const expensesApp: StudioProject = {
 }
 
 /**
- * The app bar's deployment control, its panel open on the sample app's Development
- * deployment: live, nothing waiting, signed in.
+ * The app bar's publish control, its panel open on the sample app's Development
+ * published app: live, nothing waiting, signed in.
  */
 function Deployments(): JSX.Element {
   const app: StudioProject = { ...expensesApp, deploymentNames: { [APPS_WS]: 'Development' } }

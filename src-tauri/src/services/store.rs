@@ -61,42 +61,16 @@ struct RawStore {
   projects: Vec<StudioProject>,
   #[serde(default)]
   team_workspaces: Vec<TeamWorkspace>,
-  /// Read as JSON first, so settings from older versions can be carried over
-  /// (see [`migrate_settings`]) before they're typed.
+  /// Read as JSON first, so settings that can't be read fall back to the
+  /// defaults without losing the projects (see [`settings_from`]).
   #[serde(default)]
   settings: Option<Value>,
 }
 
-/// Carry settings saved by an older version over to this one. Deploying after
-/// each chat turn used to be the only mode unless the Deploy manually experiment
-/// was on, and that experiment started in Manual. It's now the deployment
-/// panel's switch, Auto unless the user turned it off, so its retired flag is
-/// read once: with it on, the user keeps the Manual they chose; with it off, a
-/// leftover "manual" from it goes back to Auto. Without the flag (settings from
-/// this version), nothing changes. Retired flags are then dropped as unknown.
-fn migrate_settings(mut settings: Value) -> Value {
-  let Some(experiment_on) = settings.pointer("/experiments/manualDeploy").and_then(Value::as_bool) else {
-    return settings;
-  };
-  if let Some(map) = settings.as_object_mut() {
-    match (experiment_on, map.get("deployMode").and_then(Value::as_str)) {
-      (true, None) => {
-        map.insert("deployMode".into(), "manual".into());
-      }
-      (false, Some("manual")) => {
-        map.remove("deployMode");
-      }
-      _ => {}
-    }
-  }
-  settings
-}
-
-/// The saved settings, carried over from an older version when need be. Settings
-/// that can't be read fall back to the defaults without losing the projects.
+/// The saved settings. Settings that can't be read fall back to the defaults
+/// without losing the projects. Retired experiment flags are dropped as unknown.
 fn settings_from(saved: Option<Value>) -> AppSettings {
   saved
-    .map(migrate_settings)
     .and_then(|settings| serde_json::from_value(settings).ok())
     .unwrap_or_else(default_settings)
 }
@@ -243,13 +217,15 @@ pub fn report_migration_enabled() -> bool {
   })
 }
 
-/// True when chat turns don't deploy: the user turned off the deployment
-/// panel's "Deploy after each chat turn". Auto is the default.
+/// True when chat turns don't publish: the changes stay on this computer until
+/// the user publishes them. That's the default; only turning on the published
+/// apps panel's "Publish after each chat turn" (saved as "auto") publishes
+/// after each turn.
 fn is_manual_deploy(settings: &AppSettings) -> bool {
-  settings.deploy_mode.as_deref() == Some("manual")
+  settings.deploy_mode.as_deref() != Some("auto")
 }
 
-/// True when chat turns don't deploy (see [`is_manual_deploy`]).
+/// True when chat turns don't publish (see [`is_manual_deploy`]).
 pub fn manual_deploy_enabled() -> bool {
   with_cache(|c| is_manual_deploy(&c.settings))
 }
@@ -424,37 +400,17 @@ mod tests {
   }
 
   #[test]
-  fn chat_turns_deploy_unless_the_user_chose_manual() {
-    let settings = |value: serde_json::Value| -> AppSettings { serde_json::from_value(value).unwrap() };
-    assert!(!is_manual_deploy(&default_settings()));
-    assert!(!is_manual_deploy(&settings(serde_json::json!({}))));
-    assert!(!is_manual_deploy(&settings(serde_json::json!({"deployMode":"auto"}))));
-    assert!(is_manual_deploy(&settings(serde_json::json!({"deployMode":"manual"}))));
-  }
-
-  #[test]
-  fn the_retired_deploy_manually_flag_carries_the_users_choice_over() {
-    let mode = |saved: serde_json::Value| settings_from(Some(saved)).deploy_mode;
-    // The experiment was on: Manual stays, including when it was Manual only by
-    // starting that way, unless the user had switched to Auto.
-    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":true}})).as_deref(), Some("manual"));
-    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":true},"deployMode":"manual"})).as_deref(), Some("manual"));
-    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":true},"deployMode":"auto"})).as_deref(), Some("auto"));
-    // It was turned off: the "manual" it started with is left over, not chosen.
-    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":false},"deployMode":"manual"})), None);
-    assert_eq!(mode(serde_json::json!({"experiments":{"manualDeploy":false}})), None);
-    // Settings from this version: Manual is the user's choice.
-    assert_eq!(mode(serde_json::json!({"deployMode":"manual"})).as_deref(), Some("manual"));
-    assert_eq!(mode(serde_json::json!({"experiments":{"teamWorkspaces":true}})), None);
-
-    // The flag is gone once the settings are saved again, so it's read only once.
-    let carried = settings_from(Some(serde_json::json!({
-      "theme":"dark","experiments":{"manualDeploy":true,"teamWorkspaces":true}
-    })));
-    assert_eq!(
-      serde_json::to_value(carried).unwrap(),
-      serde_json::json!({"theme":"dark","experiments":{"teamWorkspaces":true},"deployMode":"manual"})
-    );
+  fn chat_turns_publish_only_when_the_user_turned_it_on() {
+    let manual = |saved: serde_json::Value| is_manual_deploy(&settings_from(Some(saved)));
+    assert!(is_manual_deploy(&default_settings()));
+    assert!(manual(serde_json::json!({})));
+    assert!(manual(serde_json::json!({"deployMode":"manual"})));
+    assert!(!manual(serde_json::json!({"deployMode":"auto"})));
+    // Settings from before the switch, whatever the retired Deploy manually
+    // experiment said: only a switch the user turned on publishes.
+    assert!(manual(serde_json::json!({"experiments":{"manualDeploy":false}})));
+    assert!(manual(serde_json::json!({"experiments":{"manualDeploy":true}})));
+    assert!(!manual(serde_json::json!({"experiments":{"manualDeploy":true},"deployMode":"auto"})));
   }
 
   #[test]

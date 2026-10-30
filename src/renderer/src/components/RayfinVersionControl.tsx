@@ -103,7 +103,8 @@ export default function RayfinVersionControl({ info, onUpdate }: Props): JSX.Ele
             Update with Copilot
           </button>
           <p className="ver-note">
-            Copilot updates the packages and fixes any changes — then redeploy to apply.
+            Copilot updates the packages and fixes any changes. They reach Fabric the next time you
+            publish.
           </p>
         </div>
       )}

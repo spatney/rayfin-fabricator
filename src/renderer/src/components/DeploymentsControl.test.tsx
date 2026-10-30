@@ -23,7 +23,7 @@ afterEach(() => {
 })
 
 describe('DeploymentsControl chip', () => {
-  it('names the chip “Deployment:” for screen readers and shows its state as a dot', () => {
+  it('names the chip “Published app:” for screen readers and shows its state as a dot', () => {
     render(
       <OverlayProvider>
         <DeploymentsControl
@@ -39,9 +39,9 @@ describe('DeploymentsControl chip', () => {
         />
       </OverlayProvider>
     )
-    const chip = screen.getByRole('button', { name: /^Deployment:\s*Rayfin Apps$/ })
+    const chip = screen.getByRole('button', { name: /^Published app:\s*Rayfin Apps$/ })
     expect(chip.querySelector('.dep-dot--ok')).toBeTruthy()
-    expect(screen.getByText('Deployment:').classList.contains('sr-only')).toBe(true)
+    expect(screen.getByText('Published app:').classList.contains('sr-only')).toBe(true)
     expect(screen.queryByText('Workspace:')).toBeNull()
   })
 
@@ -86,7 +86,7 @@ describe('DeploymentsControl chip', () => {
       api.fabric.listWorkspaces.mockResolvedValue({ ok: false, needsLogin: true })
       api.auth.loginRayfin.mockReturnValueOnce(login.promise)
       renderControl()
-      fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
 
       await waitFor(() => expect(api.auth.loginRayfin).toHaveBeenCalledTimes(1))
       expect(api.fabric.listWorkspaces).toHaveBeenCalledTimes(1)
@@ -102,12 +102,14 @@ describe('DeploymentsControl chip', () => {
       if (failure === 'login') api.auth.loginRayfin.mockRejectedValueOnce('Auth verification failed')
       else onSignedIn.mockRejectedValueOnce(new Error('Auth verification failed'))
       renderControl(onSignedIn)
-      fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
 
       await screen.findAllByText('Auth verification failed')
       expect(api.fabric.listWorkspaces).toHaveBeenCalledTimes(1)
       expect((screen.getByRole('button', { name: 'Sign in to Fabric' }) as HTMLButtonElement).disabled).toBe(false)
-      expect((screen.getByRole('button', { name: 'Create & deploy' }) as HTMLButtonElement).disabled).toBe(true)
+      const form = screen.getByRole('dialog', { name: 'Publish to a Fabric workspace' })
+      const submit = within(form).getByRole('button', { name: 'Publish' }) as HTMLButtonElement
+      expect(submit.disabled).toBe(true)
     })
 
     it('does not launch an automatic sign-in after the popover is dismissed', async () => {
@@ -115,7 +117,7 @@ describe('DeploymentsControl chip', () => {
       const workspaces = deferred<FabricWorkspacesResult>()
       api.fabric.listWorkspaces.mockReturnValueOnce(workspaces.promise)
       renderControl()
-      fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
       fireEvent.click(document.body)
       await act(async () => workspaces.resolve({ ok: false, needsLogin: true }))
       expect(api.auth.loginRayfin).not.toHaveBeenCalled()
@@ -131,10 +133,10 @@ describe('DeploymentsControl chip', () => {
         .mockResolvedValueOnce({ ok: false, needsLogin: true })
       api.auth.loginRayfin.mockResolvedValueOnce({ ok: false, exitCode: 1, error: 'Sign in again' })
       renderControl()
-      fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
       await screen.findByRole('button', { name: /Old workspace/ })
       fireEvent.click(document.body)
-      fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
 
       await screen.findByRole('button', { name: 'Sign in to Fabric' })
       expect(api.fabric.listWorkspaces).toHaveBeenCalledTimes(2)
@@ -151,7 +153,7 @@ describe('DeploymentsControl chip', () => {
         onSwitch.mockRejectedValue('Fabric sign-in required')
       }
       renderControl(vi.fn(), onSwitch)
-      fireEvent.click(screen.getByRole('button', { name: /Deployment:/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
       fireEvent.click(await screen.findByRole('button', { name: 'Switch' }))
 
       expect((await screen.findByRole('alert')).textContent).toContain('Fabric sign-in required')
@@ -199,13 +201,13 @@ describe('DeploymentsControl chip', () => {
           </OverlayProvider>
         </ToastProvider>
       )
-      fireEvent.click(screen.getByRole('button', { name: /Deployment:/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
       const account = await screen.findByText('alice@contoso.com')
       expect(account.textContent).toBe('alice@contoso.com · Contoso')
       expect(account.closest('dd')?.previousElementSibling?.textContent).toBe('Account')
       fireEvent.click(screen.getByRole('button', { name: 'Change' }))
       expect(onManageAccounts).toHaveBeenCalledTimes(1)
-      expect(screen.queryByRole('dialog', { name: 'Deployments' })).toBeNull()
+      expect(screen.queryByRole('dialog', { name: 'Published apps' })).toBeNull()
     })
 
     it('opens its details without starting a sign-in, and offers one when signed out', async () => {
@@ -229,7 +231,7 @@ describe('DeploymentsControl chip', () => {
           </OverlayProvider>
         </ToastProvider>
       )
-      fireEvent.click(screen.getByRole('button', { name: /Deployment:/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
       await screen.findByText('alice@contoso.com')
       await act(async () => {})
       expect(api.fabric.listWorkspaces).toHaveBeenCalledTimes(1)
@@ -243,7 +245,7 @@ describe('DeploymentsControl chip', () => {
           </OverlayProvider>
         </ToastProvider>
       )
-      fireEvent.click(screen.getByRole('button', { name: /Deployment:/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
       expect(screen.getByText('Not signed in to Fabric')).toBeTruthy()
       await act(async () => {})
       expect(api.fabric.listWorkspaces).toHaveBeenCalledTimes(1)
@@ -279,31 +281,31 @@ describe('DeploymentsControl chip', () => {
       )
     }
 
-    it('keeps Redeploy quiet while everything is deployed, and lights it up for changes', () => {
+    it('keeps Publish quiet while everything is published, and lights it up for changes', () => {
       const onRedeploy = vi.fn()
       const { rerender } = render(control({ onRedeploy, pending: { changed: false, files: 0 } }))
-      const quiet = screen.getByRole('button', { name: 'Redeploy' })
+      const quiet = screen.getByRole('button', { name: 'Publish' })
       expect(quiet.classList.contains('seg-btn--primary')).toBe(false)
 
       rerender(control({ onRedeploy, pending: { changed: true, files: 3 } }))
-      const lit = screen.getByRole('button', { name: 'Deploy 3 changes' })
+      const lit = screen.getByRole('button', { name: 'Publish 3 changes' })
       expect(lit.classList.contains('seg-btn--primary')).toBe(true)
-      expect(lit.title).toBe('3 files changed since Production was deployed')
+      expect(lit.title).toBe('3 files changed since Production was published')
       fireEvent.click(lit)
       expect(onRedeploy).toHaveBeenCalledTimes(1)
 
       rerender(control({ onRedeploy, pending: { changed: true, files: 1 } }))
-      expect(screen.getByRole('button', { name: 'Deploy 1 change' })).toBeTruthy()
-      // Without a known deployed version, how much would ship isn't known.
+      expect(screen.getByRole('button', { name: 'Publish 1 change' })).toBeTruthy()
+      // Without a known published version, how much would ship isn't known.
       rerender(control({ onRedeploy, pending: { changed: true } }))
-      expect(screen.getByRole('button', { name: 'Deploy changes' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Publish changes' })).toBeTruthy()
     })
 
-    it('holds every deploy while Copilot is working on the app', () => {
+    it('holds every publish while Copilot is working on the app', () => {
       const onRedeploy = vi.fn()
-      const held = 'Copilot is working on this app. Deploys wait until the turn finishes.'
+      const held = 'Copilot is working on this app. Publishing waits until the turn finishes.'
       const { rerender } = render(control({ onRedeploy, chatBusy: true, pending: { changed: true, files: 2 } }))
-      const changes = screen.getByRole('button', { name: 'Deploy 2 changes' }) as HTMLButtonElement
+      const changes = screen.getByRole('button', { name: 'Publish 2 changes' }) as HTMLButtonElement
       expect(changes.disabled).toBe(true)
       expect(changes.title).toBe(held)
       fireEvent.click(changes)
@@ -318,7 +320,7 @@ describe('DeploymentsControl chip', () => {
       expect(onRedeploy).toHaveBeenCalledTimes(1)
     })
 
-    it('says a deploy failed on the chip and offers to try again and find out why', async () => {
+    it('says publishing failed on the chip and offers to try again and find out why', async () => {
       const api = installApi()
       api.deploy.list.mockResolvedValue([{ workspaceName: 'Sales', name: 'Production', workspaceId: 'ws1', active: true }])
       const onRedeploy = vi.fn()
@@ -330,7 +332,7 @@ describe('DeploymentsControl chip', () => {
           deploy: { running: false, log: [], result: { ok: false, outcome: 'error', error: 'Runtime settings sync failed' } }
         })
       )
-      const chip = screen.getByRole('button', { name: /^Deployment:\s*Production\s*· Failed$/ })
+      const chip = screen.getByRole('button', { name: /^Published app:\s*Production\s*· Failed$/ })
       expect(chip.querySelector('.dep-dot--err')).toBeTruthy()
       fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
       expect(onRedeploy).toHaveBeenCalledTimes(1)
@@ -339,10 +341,10 @@ describe('DeploymentsControl chip', () => {
       expect(await screen.findByText('Runtime settings sync failed')).toBeTruthy()
       fireEvent.click(screen.getByRole('button', { name: 'Find out why' }))
       expect(onDiagnose).toHaveBeenCalledTimes(1)
-      expect(screen.queryByRole('dialog', { name: 'Deployments' })).toBeNull()
+      expect(screen.queryByRole('dialog', { name: 'Published apps' })).toBeNull()
     })
 
-    it('shows a deploy in progress on the control and offers to watch it', async () => {
+    it('shows publishing in progress on the control and offers to watch it', async () => {
       const api = installApi()
       api.deploy.list.mockResolvedValue([{ workspaceName: 'Sales', name: 'Production', workspaceId: 'ws1', active: true }])
       const onWatch = vi.fn()
@@ -352,35 +354,38 @@ describe('DeploymentsControl chip', () => {
           onWatch,
           deploy: {
             running: true,
-            log: ['Deploying Sales to Fabric…\n', '[rayfin] settings: Applying runtime settings\n'],
+            log: [
+              'Publishing Sales to Fabric…\n',
+              '[rayfin] settings: Applying runtime settings\n'
+            ],
             startedAt: Date.now()
           }
         })
       )
-      const progress = screen.getByRole('button', { name: /^Deploying… \d+%$/ })
+      const progress = screen.getByRole('button', { name: /^Publishing… \d+%$/ })
       expect(progress.classList.contains('seg-btn--primary')).toBe(false)
       expect(container.querySelector('.dep-progress')).toBeTruthy()
 
       fireEvent.click(progress)
       expect(screen.getByText('Applying settings')).toBeTruthy()
-      expect(screen.getByRole('progressbar', { name: 'Deploy progress' })).toBeTruthy()
+      expect(screen.getByRole('progressbar', { name: 'Publish progress' })).toBeTruthy()
       fireEvent.click(screen.getByRole('button', { name: 'Watch' }))
       expect(onWatch).toHaveBeenCalledTimes(1)
     })
 
-    it('opens the details from what it knows, then lists the other deployments', async () => {
+    it('opens the details from what it knows, then lists the other published apps', async () => {
       const api = installApi()
       const list = deferred<unknown[]>()
       api.deploy.list.mockReturnValueOnce(list.promise)
       const onShowChanges = vi.fn()
       render(control({ pending: { changed: true, files: 2 }, onShowChanges }))
-      fireEvent.click(screen.getByRole('button', { name: /Deployment:/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
 
-      // Straight away, before the recorded deployments are read.
-      const panel = screen.getByRole('dialog', { name: 'Deployments' })
+      // Straight away, before the recorded published apps are read.
+      const panel = screen.getByRole('dialog', { name: 'Published apps' })
       expect(panel.querySelector('.dep-title')?.textContent).toBe('Production')
       expect(screen.getByText('sales.example.app')).toBeTruthy()
-      expect(panel.textContent).toContain('2 files changed since Production was deployed.')
+      expect(panel.textContent).toContain('2 files changed since Production was published.')
 
       await act(async () =>
         list.resolve([
@@ -388,7 +393,7 @@ describe('DeploymentsControl chip', () => {
           { workspaceName: 'Sales dev', name: 'Staging', workspaceId: 'ws2', active: false }
         ])
       )
-      expect(panel.textContent).toContain('Deployed just now')
+      expect(panel.textContent).toContain('Published just now')
       expect(panel.textContent).not.toContain('Live')
       expect(screen.getByText('Staging')).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Switch' })).toBeTruthy()
@@ -397,48 +402,57 @@ describe('DeploymentsControl chip', () => {
       expect(onShowChanges).toHaveBeenCalledTimes(1)
     })
 
-    it('turns deploying after each chat turn on and off, and says so on the control only when it is off', () => {
+    it('turns publishing after each chat turn on and off, and says so on the control only when it is on', () => {
       installApi()
       const onChange = vi.fn()
       const { rerender } = render(control({ autoDeploy: { on: false, onChange } }))
-      const chip = screen.getByRole('button', { name: /^Deployment:\s*Production\s*· Manual$/ })
-      expect(chip.title).toContain('Auto deploy is off')
+      // Off is the default, so the chip doesn't call it out.
+      const chip = screen.getByRole('button', { name: /^Published app:\s*Production$/ })
+      expect(chip.title).toContain('Publish after each chat turn is off')
       fireEvent.click(chip)
-      const toggle = screen.getByRole<HTMLInputElement>('checkbox', { name: /Deploy after each chat turn/ })
+      const toggle = screen.getByRole<HTMLInputElement>('checkbox', {
+        name: /Publish after each chat turn/
+      })
       expect(toggle.checked).toBe(false)
-      expect(screen.getByText(/until you deploy them/)).toBeTruthy()
+      expect(screen.getByText(/until you publish them/)).toBeTruthy()
       fireEvent.click(toggle)
       expect(onChange).toHaveBeenCalledWith(true)
 
-      // Auto is the default, so the chip doesn't call it out.
       rerender(control({ autoDeploy: { on: true, onChange } }))
-      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /Deploy after each chat turn/ }).checked).toBe(true)
-      const auto = screen.getByRole('button', { name: /^Deployment:\s*Production$/ })
-      expect(auto.title).toContain('Auto deploy is on')
+      expect(
+        screen.getByRole<HTMLInputElement>('checkbox', { name: /Publish after each chat turn/ })
+          .checked
+      ).toBe(true)
+      const auto = screen.getByRole('button', { name: /^Published app:\s*Production\s*· Auto$/ })
+      expect(auto.title).toContain('Publish after each chat turn is on')
 
-      // A failed deploy says so instead.
+      // A failed publish says so instead.
       rerender(
         control({
           autoDeploy: { on: true, onChange },
           deploy: { running: false, log: [], result: { ok: false, outcome: 'error', error: 'Broke' } }
         })
       )
-      expect(screen.getByRole('button', { name: /^Deployment:\s*Production\s*· Failed$/ })).toBeTruthy()
+      expect(
+        screen.getByRole('button', { name: /^Published app:\s*Production\s*· Failed$/ })
+      ).toBeTruthy()
     })
 
-    it('says nothing about auto deploy without the switch', () => {
+    it('says nothing about publishing after each turn without the switch', () => {
       render(control())
-      const chip = screen.getByRole('button', { name: /^Deployment:\s*Production$/ })
-      expect(chip.title).not.toContain('Auto deploy')
+      const chip = screen.getByRole('button', { name: /^Published app:\s*Production$/ })
+      expect(chip.title).not.toContain('after each chat turn')
     })
 
     it('has no Share until there is something to share', () => {
       render(control({ project: makeProject() }))
-      expect(screen.getByRole('button', { name: 'Deploy' }).classList.contains('seg-btn--primary')).toBe(true)
+      expect(
+        screen.getByRole('button', { name: 'Publish' }).classList.contains('seg-btn--primary')
+      ).toBe(true)
       expect(screen.queryByRole('button', { name: 'Share' })).toBeNull()
     })
 
-    it('names a deploy to a new deployment for it, not for the active one', async () => {
+    it('names publishing to a new workspace for it, not for the active one', async () => {
       const api = installApi()
       api.deploy.list.mockResolvedValue([{ workspaceName: 'Sales', name: 'Production', workspaceId: 'ws1', active: true }])
       render(
@@ -448,22 +462,22 @@ describe('DeploymentsControl chip', () => {
           deploy: { running: true, log: [], startedAt: Date.now(), workspace: 'ws2' }
         })
       )
-      expect(screen.getByRole('button', { name: /^Deployment:\s*Staging$/ })).toBeTruthy()
-      fireEvent.click(screen.getByRole('button', { name: /Deployment:/ }))
-      const panel = screen.getByRole('dialog', { name: 'Deployments' })
+      expect(screen.getByRole('button', { name: /^Published app:\s*Staging$/ })).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
+      const panel = screen.getByRole('dialog', { name: 'Published apps' })
       await act(async () => {})
       expect(panel.querySelector('.dep-title')?.textContent).toBe('Staging')
-      // Production's address and workspace aren't the new deployment's.
+      // Production's address and workspace aren't the new published app's.
       expect(screen.queryByText('sales.example.app')).toBeNull()
       expect(within(panel).queryByText('Workspace')).toBeNull()
-      expect(screen.queryByRole('button', { name: 'Rename this deployment' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Rename this published app' })).toBeNull()
     })
 
-    it('reads the deployments again when a deploy changes which one is active', async () => {
+    it('reads the published apps again when publishing changes which one is active', async () => {
       const api = installApi()
       api.deploy.list.mockResolvedValue([{ workspaceName: 'Sales', name: 'Production', workspaceId: 'ws1', active: true }])
       const { rerender } = render(control())
-      fireEvent.click(screen.getByRole('button', { name: /Deployment:/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
       await act(async () => {})
       expect(api.deploy.list).toHaveBeenCalledTimes(1)
       fireEvent.click(document.body)
@@ -477,25 +491,62 @@ describe('DeploymentsControl chip', () => {
         rerender(control({ project: moved }))
       })
       expect(api.deploy.list).toHaveBeenCalledTimes(2)
-      expect(screen.getByRole('button', { name: /^Deployment:\s*Staging$/ })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /^Published app:\s*Staging$/ })).toBeTruthy()
     })
   })
 
-  describe('DeploymentsControl new deployment', () => {
+  describe('DeploymentsControl publishing to a workspace', () => {
     it('leaves only the new-workspace form on Escape, not the panel', async () => {
       const api = installApi()
       ;(api.fabric as Record<string, unknown>).listCapacities = vi.fn().mockResolvedValue({ ok: true, capacities: [] })
       renderControl()
-      fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
       const add = await screen.findByRole('button', { name: '+ New workspace' })
       await waitFor(() => expect((add as HTMLButtonElement).disabled).toBe(false))
       fireEvent.click(add)
       const input = await screen.findByPlaceholderText('New workspace name')
       fireEvent.keyDown(input, { key: 'Escape' })
       expect(screen.queryByPlaceholderText('New workspace name')).toBeNull()
-      expect(screen.getByRole('dialog', { name: 'New deployment' })).toBeTruthy()
+      expect(screen.getByRole('dialog', { name: 'Publish to a Fabric workspace' })).toBeTruthy()
       fireEvent.keyDown(window, { key: 'Escape' })
-      expect(screen.queryByRole('dialog', { name: 'New deployment' })).toBeNull()
+      expect(screen.queryByRole('dialog', { name: 'Publish to a Fabric workspace' })).toBeNull()
+    })
+
+    it.each([
+      ['an app that was never published', makeProject(), 'Publish to a Fabric workspace'],
+      [
+        'a published app',
+        makeProject({
+          workspace: 'ws1',
+          lastDeploy: { url: 'https://sales.example.app/', status: 'success' }
+        }),
+        'Publish to another workspace'
+      ]
+    ])('offers %s a workspace to publish to', async (_, project, title) => {
+      const api = installApi()
+      if (project.workspace) {
+        api.deploy.list.mockResolvedValue([
+          { workspaceName: 'Sales', name: 'Production', workspaceId: 'ws1', active: true }
+        ])
+      }
+      render(
+        <ToastProvider>
+          <OverlayProvider>
+            <DeploymentsControl
+              project={project}
+              running={false}
+              onCreate={vi.fn()}
+              onRedeploy={vi.fn()}
+              onSwitch={vi.fn()}
+              onChanged={vi.fn()}
+            />
+          </OverlayProvider>
+        </ToastProvider>
+      )
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
+      fireEvent.click(screen.getByRole('button', { name: `${title}…` }))
+      expect(screen.getByRole('dialog', { name: title })).toBeTruthy()
+      await act(async () => {})
     })
   })
 

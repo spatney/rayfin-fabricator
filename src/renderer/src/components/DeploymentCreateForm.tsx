@@ -40,7 +40,7 @@ function skuText(w: FabricWorkspace): string {
 /** Tooltip for a workspace's capacity chip. */
 function skuTitle(w: FabricWorkspace): string | undefined {
   if (w.capacityKind === 'unknown') {
-    return 'On a dedicated capacity, but its SKU isn’t visible to you (you don’t administer it) — verified when you deploy'
+    return 'On a dedicated capacity, but its SKU isn’t visible to you (you don’t administer it) — verified when you publish'
   }
   return w.capacityName ? `${w.capacityName} (${w.sku})` : w.sku
 }
@@ -74,13 +74,13 @@ interface Props {
   cancelLabel?: string
   /** Secondary action; the Cancel button is hidden when omitted. */
   onCancel?: () => void
-  /** Submit: deploy `name` (friendly, may be empty) into `workspaceId`. */
+  /** Submit: publish as `name` (friendly, may be empty) into `workspaceId`. */
   onSubmit: (name: string, workspaceId: string) => void
-  /** Pre-fill the (editable) deployment name — e.g. "Development" for a first deploy. */
+  /** Pre-fill the (editable) published app's name — e.g. "Development" for a first publish. */
   defaultName?: string
   /**
-   * Check a selected workspace for an app this deploy would replace. While it
-   * runs, Deploy waits; a conflict needs an explicit "Replace it anyway".
+   * Check a selected workspace for an app this publish would replace. While it
+   * runs, Publish waits; a conflict needs an explicit "Replace it anyway".
    */
   checkTarget?: (workspaceId: string) => Promise<DeployTargetCheck>
   /** The workspaces your apps use, most recent first (ids, or names in older
@@ -89,10 +89,10 @@ interface Props {
 }
 
 /**
- * The presentational "pick a workspace and deploy" form. Extracted so the
- * app bar's deployments popover and the fullscreen create/deploy flow share
- * one consistent picker (eligible F-SKU/P-SKU list, greyed-out ineligible rows
- * with reasons, search, optional name, and the no-capacity / error empty states).
+ * The presentational "pick a workspace and publish" form, in the app bar's
+ * publish popover: one consistent picker (eligible F-SKU/P-SKU list, greyed-out
+ * ineligible rows with reasons, search, optional name, and the no-capacity /
+ * error empty states).
  * It owns only its transient input state; the workspace data is supplied (and
  * cached) by the parent.
  */
@@ -103,8 +103,8 @@ export default function DeploymentCreateForm({
   onReload,
   onSignedIn,
   running = false,
-  submitLabel = 'Create & deploy',
-  busyLabel = 'Deploying…',
+  submitLabel = 'Publish',
+  busyLabel = 'Publishing…',
   cancelLabel = 'Cancel',
   onCancel,
   onSubmit,
@@ -330,7 +330,7 @@ export default function DeploymentCreateForm({
 
       <div className="dep-field">
         <div className="dep-field-head">
-          <span className="dep-field-label">Deploy to workspace</span>
+          <span className="dep-field-label">Publish to workspace</span>
           <div className="dep-field-head-actions">
             <button
               className="ws-create-link"
@@ -491,8 +491,8 @@ export default function DeploymentCreateForm({
                 <span className="codicon codicon-warning" aria-hidden="true" />
                 <span className="ws-target-conflict-text">
                   {replaceIn === selectedWorkspace.id
-                    ? `Deploying will replace the app “${replaces}” in ${selectedWorkspace.displayName}.`
-                    : `${selectedWorkspace.displayName} already has an app named “${replaces}”. Deploying here would replace it, so pick another workspace.`}
+                    ? `Publishing will replace the app “${replaces}” in ${selectedWorkspace.displayName}.`
+                    : `${selectedWorkspace.displayName} already has an app named “${replaces}”. Publishing here would replace it, so pick another workspace.`}
                 </span>
                 {replaceIn !== selectedWorkspace.id && (
                   <button type="button" className="link-btn" onClick={() => setReplaceIn(selectedWorkspace.id)}>

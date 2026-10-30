@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { FactDeck, RAYFIN_FACTS, buildDeck, greeting, launchGreeting } from './lines'
+import { FactDeck, RAYFIN_FACTS, buildDeck, greeting, launchGreeting, successLine } from './lines'
 
 /** A repeatable stand-in for Math.random. */
 function seeded(seed: number): () => number {
@@ -46,6 +46,13 @@ describe('what Ray says', () => {
   it('introduces himself only the first time', () => {
     expect(greeting('create', true).text).toMatch(/^Hi, I’m Ray!/)
     expect(greeting('create', false, seeded(2)).text).not.toMatch(/I’m Ray/)
+  })
+
+  it('sends a new app straight to building, and a team app to its pipeline', () => {
+    const personal = successLine('create').text
+    expect(personal).toMatch(/on your computer/)
+    expect(personal).not.toMatch(/deploy|publish|workspace/i)
+    expect(successLine('team').text).toMatch(/team pipeline/)
   })
 
   it('says a short welcome back at launch, now and then by the time of day', () => {

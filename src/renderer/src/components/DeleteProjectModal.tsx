@@ -95,7 +95,7 @@ function localStepHint(
 
 /**
  * A focused, stepped dialog for moving a project to trash. It can additionally
- * remove deployed Fabric app(s), only when that separate option is selected.
+ * remove the published Fabric app(s), only when that separate option is selected.
  */
 export default function DeleteProjectModal({
   project,
@@ -107,7 +107,7 @@ export default function DeleteProjectModal({
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const hasDeploy = Boolean(project.lastDeploy?.url)
-  // Default the destructive Fabric cleanup on when there's actually a deployed app
+  // Default the destructive Fabric cleanup on when there's actually a published app
   // to remove (the toggle is only shown when `hasDeploy`); opt-out, not opt-in.
   const [alsoDeleteFabric, setAlsoDeleteFabric] = useState(hasDeploy)
   const [phase, setPhase] = useState<'confirm' | 'running' | 'error' | 'done'>('confirm')
@@ -155,8 +155,8 @@ export default function DeleteProjectModal({
   const fabricLabel = useMemo(
     () =>
       project.workspaceName
-        ? `Removing the deployed app from ${project.workspaceName}`
-        : 'Removing the deployed app from Fabric',
+        ? `Removing the published app from ${project.workspaceName}`
+        : 'Removing the published app from Fabric',
     [project.workspaceName]
   )
 
@@ -334,7 +334,7 @@ export default function DeleteProjectModal({
                 >
                   <span className="confirm-check-copy">
                     <span className="confirm-check-label">
-                      Also permanently delete the deployed Fabric app
+                      Also permanently delete the published Fabric app
                     </span>
                     <span className="confirm-check-hint">
                       {project.workspaceName ? (
@@ -356,7 +356,7 @@ export default function DeleteProjectModal({
                   <span className={`switch${alsoDeleteFabric ? ' switch--on' : ''}`}>
                     <input
                       type="checkbox"
-                      aria-label="Also permanently delete the deployed Fabric app"
+                      aria-label="Also permanently delete the published Fabric app"
                       checked={alsoDeleteFabric}
                       onChange={(e) => setAlsoDeleteFabric(e.target.checked)}
                     />
@@ -365,7 +365,7 @@ export default function DeleteProjectModal({
                 </label>
               ) : (
                 <p className="confirm-note">
-                  No deployed Fabric app is linked to this project. Only the local folder will be
+                  No published Fabric app is linked to this project. Only the local folder will be
                   moved to trash.
                 </p>
               )}

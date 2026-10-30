@@ -786,7 +786,7 @@ export function buildArchitecture(input: ArchitectureInput): AppArchitecture | {
     if (access === 'unset') {
       issues.push({
         tone: 'info',
-        text: '`assetAccess` isn’t set. Choose `protected` or `public` before deploying.'
+        text: '`assetAccess` isn’t set. Choose `protected` or `public` before publishing.'
       })
     }
     services.push({

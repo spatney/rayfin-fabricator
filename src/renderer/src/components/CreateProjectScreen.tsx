@@ -161,7 +161,7 @@ export default function CreateProjectScreen({
 
   // Ray keeps the user company through the slow scaffold and npm install.
   const mascot = useMascotInstall(
-    'create',
+    destination ? 'team' : 'create',
     busy ? 'running' : done ? 'success' : error ? 'error' : 'idle',
     screenRef
   )

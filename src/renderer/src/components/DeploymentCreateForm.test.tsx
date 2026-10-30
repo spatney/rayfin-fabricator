@@ -177,7 +177,7 @@ describe('DeploymentCreateForm Fabric reauth', () => {
     const props = { wsResult: initial, loadingWs: false, onReload: vi.fn(), onSubmit }
     const view = render(<DeploymentCreateForm {...props} />)
     fireEvent.click(screen.getByRole('button', { name: /App workspace/ }))
-    expect((screen.getByRole('button', { name: 'Create & deploy' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement).disabled).toBe(false)
 
     view.rerender(
       <DeploymentCreateForm
@@ -186,7 +186,7 @@ describe('DeploymentCreateForm Fabric reauth', () => {
         wsResult={failure === 'loading' ? initial : failure === 'expired' ? { ok: false, needsLogin: true } : { ok: true, workspaces: [] }}
       />
     )
-    const submit = screen.getByRole('button', { name: 'Create & deploy' }) as HTMLButtonElement
+    const submit = screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement
     expect(submit.disabled).toBe(true)
     fireEvent.click(submit)
     fireEvent.keyDown(screen.getByPlaceholderText('e.g. Production'), { key: 'Enter' })
@@ -254,7 +254,7 @@ describe('DeploymentCreateForm replace check', () => {
     ]
   }
 
-  it('holds Deploy while checking, and asks before replacing a same-named app', async () => {
+  it('holds Publish while checking, and asks before replacing a same-named app', async () => {
     const check = deferred<{ itemName: string; conflict?: string }>()
     const checkTarget = vi.fn((ws: string) =>
       ws === 'w1' ? check.promise : Promise.resolve({ itemName: 'notes' })
@@ -266,11 +266,11 @@ describe('DeploymentCreateForm replace check', () => {
         loadingWs={false}
         onReload={vi.fn()}
         onSubmit={onSubmit}
-        submitLabel="Deploy app"
+        submitLabel="Publish app"
         checkTarget={checkTarget}
       />
     )
-    const deploy = screen.getByRole('button', { name: 'Deploy app' }) as HTMLButtonElement
+    const deploy = screen.getByRole('button', { name: 'Publish app' }) as HTMLButtonElement
 
     fireEvent.click(screen.getByText('Sales apps'))
     expect(checkTarget).toHaveBeenCalledWith('w1')
@@ -282,10 +282,12 @@ describe('DeploymentCreateForm replace check', () => {
     expect(deploy.disabled).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Replace it anyway' }))
-    expect(screen.getByRole('alert').textContent).toContain('Deploying will replace the app “Notes”')
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Publishing will replace the app “Notes”'
+    )
     expect(deploy.disabled).toBe(false)
 
-    // Another workspace without that app deploys normally.
+    // Another workspace without that app publishes normally.
     fireEvent.click(screen.getByText('Development'))
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
     expect(deploy.disabled).toBe(false)
@@ -293,7 +295,7 @@ describe('DeploymentCreateForm replace check', () => {
     expect(onSubmit).toHaveBeenCalledWith('Development', 'w2')
   })
 
-  it('never blocks the deploy when the check fails', async () => {
+  it('never blocks publishing when the check fails', async () => {
     const checkTarget = vi.fn(() => Promise.reject(new Error('offline')))
     render(
       <DeploymentCreateForm
@@ -301,13 +303,15 @@ describe('DeploymentCreateForm replace check', () => {
         loadingWs={false}
         onReload={vi.fn()}
         onSubmit={vi.fn()}
-        submitLabel="Deploy app"
+        submitLabel="Publish app"
         checkTarget={checkTarget}
       />
     )
     fireEvent.click(screen.getByText('Development'))
     await waitFor(() =>
-      expect((screen.getByRole('button', { name: 'Deploy app' }) as HTMLButtonElement).disabled).toBe(false)
+      expect(
+        (screen.getByRole('button', { name: 'Publish app' }) as HTMLButtonElement).disabled
+      ).toBe(false)
     )
     expect(screen.queryByRole('alert')).toBeNull()
   })

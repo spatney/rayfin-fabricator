@@ -499,7 +499,7 @@ export default function AccountsModal({
           <AccountCard
             icon={<img className="brand-glyph" src={fabricSvg} alt="" />}
             title="Microsoft Fabric"
-            purpose="Deploys, hosts, and shares your apps."
+            purpose="Publishes, hosts, and shares your apps."
             state={fabricState}
             action={
               rayfin.signedIn
@@ -524,7 +524,7 @@ export default function AccountsModal({
                 meta={fabricTenant}
                 title={rayfin.tenant}
                 badge="In use"
-                badgeTitle="Deploying, workspace lists, sharing, and secrets use this account."
+                badgeTitle="Publishing, workspace lists, sharing, and secrets use this account."
               >
                 {fabric.canRefresh && (
                   <button

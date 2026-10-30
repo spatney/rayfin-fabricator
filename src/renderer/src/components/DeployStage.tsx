@@ -22,10 +22,10 @@ import {
 } from './mascot/lines'
 
 /**
- * The deploy screen, shown in the preview while a deploy runs. It's Ray's: he
- * swims up, talks you through the deploy in his own words, shares a fact or two
- * on a long build, and celebrates when the app is live. Beneath him are the
- * steps the deploy has been through, read from `rayfin up`'s output (see
+ * The publish screen, shown in the preview while the app publishes. It's Ray's:
+ * he swims up, talks you through publishing in his own words, shares a fact or
+ * two on a long build, and celebrates when the app is live. Beneath him are the
+ * steps publishing has been through, read from `rayfin up`'s output (see
  * deployProgress.ts), with the CLI's own words for the step in progress. The
  * raw output is one click away under View logs.
  *
@@ -211,13 +211,13 @@ export default function DeployStage({
 }: {
   log: string[]
   name?: string
-  /** The app has never been deployed, so this is its first trip to Fabric. */
+  /** The app has never been published, so this is its first trip to Fabric. */
   firstDeploy?: boolean
-  /** When the deploy started (`Date.now()`), so the screen is right when it opens mid-deploy. */
+  /** When publishing started (`Date.now()`), so the screen is right when it opens partway. */
   startedAt?: number
-  /** Shares the bar with the deploy's other progress (see deployMeter); otherwise it's this screen's own. */
+  /** Shares the bar with the publish's other progress (see deployMeter); otherwise it's this screen's own. */
   meterKey?: string
-  /** Go back to the app while the deploy carries on beside it. */
+  /** Go back to the app while publishing carries on beside it. */
   onBack?: () => void
 }): JSX.Element {
   const appName = name?.trim() ?? ''
@@ -293,7 +293,7 @@ export default function DeployStage({
         )}
 
         <div className="dstage-hud">
-          <span className="dstage-eyebrow">{progress.live ? 'Shipped' : 'Fabricating'}</span>
+          <span className="dstage-eyebrow">{progress.live ? 'Published' : 'Fabricating'}</span>
           <h3 className="dstage-title">
             {progress.live ? (
               <>
@@ -301,21 +301,21 @@ export default function DeployStage({
               </>
             ) : (
               <>
-                Deploying <b>{appName || 'your app'}</b>
+                Publishing <b>{appName || 'your app'}</b>
               </>
             )}
           </h3>
           <div
             className="dstage-bar"
             role="progressbar"
-            aria-label="Deploy progress"
+            aria-label="Publish progress"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(bar * 100)}
           >
             <span style={{ width: `${(bar * 100).toFixed(1)}%` }} />
           </div>
-          <ol className="dstage-steps" aria-label="Deploy steps">
+          <ol className="dstage-steps" aria-label="Publish steps">
             {progress.steps.map((s) => (
               <li key={s.id} className="dstage-step" data-state={s.state}>
                 <span className="dstage-step-mark" aria-hidden="true">
@@ -339,7 +339,7 @@ export default function DeployStage({
       <div className="dstage-foot">
         <div className="dstage-ticker">
           <span className="dstage-ticker-caret">›</span>
-          <span className="dstage-ticker-text">{lastLine || 'Starting the deploy…'}</span>
+          <span className="dstage-ticker-text">{lastLine || 'Starting to publish…'}</span>
           <span className="dstage-ticker-cursor" aria-hidden="true" />
         </div>
         <div className="dstage-foot-actions">
@@ -356,7 +356,7 @@ export default function DeployStage({
 
       {showLog && (
         <pre className="deploy-log deploy-log--static dstage-fulllog" ref={logRef}>
-          {log.join('') || 'Starting deploy…'}
+          {log.join('') || 'Starting to publish…'}
         </pre>
       )}
     </div>

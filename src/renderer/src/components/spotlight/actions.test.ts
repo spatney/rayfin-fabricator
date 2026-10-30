@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { StudioProject } from '@shared/ipc'
 import { buildActions, type ActionContext, type ActionHandlers } from './actions'
+import { prepare, rank } from './rank'
 
 const project: StudioProject = {
   id: 'p1',
@@ -47,21 +48,29 @@ describe('Search actions', () => {
     expect(offered.some((id) => /deploy|share|home|manage/.test(id))).toBe(false)
   })
 
-  it('words a deploy as the deployment control does, and runs it', () => {
+  it('words a publish as the publish control does, and runs it', () => {
     const ctx = context({ pending: { changed: true, files: 3 } })
     const deploy = buildActions(ctx).find((a) => a.id === 'action:deploy')!
-    expect(deploy.title).toBe('Deploy 3 changes')
+    expect(deploy.title).toBe('Publish 3 changes')
     deploy.run()
     expect(ctx.do.deploy).toHaveBeenCalled()
-    expect(buildActions(context()).find((a) => a.id === 'action:deploy')?.title).toBe('Redeploy')
+    expect(buildActions(context()).find((a) => a.id === 'action:deploy')?.title).toBe('Publish')
   })
 
-  it('holds a deploy back while Copilot works on the app or one is running', () => {
+  it('still finds Publish for someone who types deploy', () => {
+    const prepared = prepare(buildActions(context()))
+    const top = (query: string): string | undefined => rank(prepared, query)[0]?.item.id
+    expect(top('deploy')).toBe('action:deploy')
+    expect(top('redeploy')).toBe('action:deploy')
+    expect(top('deploy after each chat turn')).toBe('action:auto-deploy')
+  })
+
+  it('holds publishing back while Copilot works on the app or a publish is running', () => {
     expect(ids(context({ chatBusy: true }))).not.toContain('action:deploy')
     expect(ids(context({ deploying: true }))).not.toContain('action:deploy')
   })
 
-  it('offers a team app its overview, not a deploy or Share', () => {
+  it('offers a team app its overview, not Publish or Share', () => {
     const team = {
       ...project,
       team: { workspaceId: 'w1', folder: 'apps/contoso' }
@@ -78,10 +87,10 @@ describe('Search actions', () => {
     expect(hinted).toEqual(['action:view-code', 'action:theme-light', 'action:text-size-125'])
   })
 
-  it('switches deploying after each chat turn the other way', () => {
+  it('switches publishing after each chat turn the other way', () => {
     const ctx = context({ autoDeploy: true })
     const toggle = buildActions(ctx).find((a) => a.id === 'action:auto-deploy')!
-    expect(toggle.title).toBe('Turn off Deploy after each chat turn')
+    expect(toggle.title).toBe('Turn off Publish after each chat turn')
     toggle.run()
     expect(ctx.do.setAutoDeploy).toHaveBeenCalledWith(false)
   })
