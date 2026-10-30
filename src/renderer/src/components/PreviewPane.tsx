@@ -37,6 +37,7 @@ import TeamDeployCard from './team/TeamDeployCard'
 import TeamRunStrip from './team/TeamRunStrip'
 import LocalStatePanel from './local/LocalStatePanel'
 import LocalStatusPill from './local/LocalStatusPill'
+import PreviewAsMenu from './local/PreviewAsMenu'
 import LocalOutput from './local/LocalOutput'
 import {
   FallbackNote,
@@ -144,7 +145,8 @@ interface Props {
     onManageKeys: () => void
   }
   /** Why sending the queued design changes is blocked right now (a turn is
-   *  running, a publish is running…), or null when it can go. */
+   *  running, the first publish is pending, a publish is running…), or null
+   *  when it can go. */
   designSendBlocked?: string | null
   /** Send the queued design changes to chat (the composer text is the note). */
   onDesignSend?: () => void
@@ -158,10 +160,11 @@ interface Props {
    *  preview pane). `null` when not loading. */
   onLoadingChange?: (state: { name: string; fading: boolean } | null) => void
   /**
-   * A personal app's local backend (rayfin-local): by default the preview
-   * shows the app running on this computer, with its own backend and data.
-   * Absent for team apps, and for a published app it can't run, whose preview
-   * falls back to the published backend (`fallbackReason`).
+   * A personal app's local backend (rayfin-local), with Local development on:
+   * by default the preview shows the app running on this computer, with its
+   * own backend and data. Absent without Local development, for team apps, and
+   * for a published app it can't run, whose preview falls back to the
+   * published backend (`fallbackReason`).
    */
   local?: LocalBackend
   /** With `local`: which app the preview shows. Published is offered once the app is. */
@@ -175,14 +178,15 @@ interface Props {
   onOpenSetup?: () => void
   /** Show the dialog for a schema change that would delete local data. */
   onReviewSchema?: () => void
-  /** Team apps and the published-backend fallback: the `localhost` URL of the
-   *  project's Vite dev server, or null/undefined when none. When set (and no
-   *  publish is running), the preview surface shows this instead of the
-   *  published app. See {@link RayfinStudioApi.dev}. */
+  /** An app on its published backend (team apps, every app without Local
+   *  development, and the fallback): the `localhost` URL of the project's Vite
+   *  dev server, or null/undefined when none. When set (and no publish is
+   *  running), the preview surface shows this instead of the published app.
+   *  See {@link RayfinStudioApi.dev}. */
   localPreviewUrl?: string | null
-  /** Chat turns don't publish (the user didn't turn on "Publish after each chat
-   *  turn"): the fallback's local preview runs whenever the app is open,
-   *  instead of only during turns. */
+  /** Chat turns don't publish ("Publish after each chat turn" is off): the live
+   *  preview on the published backend runs whenever the app is open, instead
+   *  of only during turns. */
   manualDeploy?: boolean
   /** Changes when the local page should load again: a chat turn ended that
    *  changed what hot updates don't bring, or the backend rebuilt. */
@@ -354,6 +358,10 @@ export default function PreviewPane({
   // Team apps: the pipeline is publishing this app (its preview, or the published app).
   const teamDeploying = Boolean(team && teamRun && teamRun.status !== 'completed')
   const outcome = deploy?.result?.outcome ?? project.lastDeploy?.outcome
+  // An app that has never been published has no Fabric workspace yet: a publish
+  // that needed one (after a chat turn, without Local development) asks where to
+  // publish it instead of failing. The Local view shows the app on this computer.
+  const needsWorkspace = !running && outcome === 'needs-workspace' && !localView
   // A failed publish's notice can be put away until the next publish, or another
   // app, comes along.
   const [failureDismissed, setFailureDismissed] = useState(false)
@@ -557,18 +565,19 @@ export default function PreviewPane({
   // Only when the surface holds that page: a publish can end on another one than
   // it ran over (the local preview kept through it closes with it, maybe while
   // its full screen was up). That page's own load shows the new version, and
-  // reloading the old one would only race it. A page on this computer doesn't
-  // change with a publish.
+  // reloading the old one would only race it. A live preview kept through it
+  // reloads too, for its published backend changed; the app on its local
+  // backend doesn't change with a publish.
   useEffect(() => {
     const wasRunning = prevRunningRef.current
     prevRunningRef.current = running
-    if (wasRunning && !running && deploy?.result?.ok && previewUrl && !isLocal) {
+    if (wasRunning && !running && deploy?.result?.ok && previewUrl && !localView) {
       if ((loadedUrlRef.current ?? surfaceShownUrl) === previewUrl) {
         beginTransition(previewUrl)
         void window.api.preview.reload()
       }
     }
-  }, [running, deploy?.result, previewUrl, isLocal, beginTransition])
+  }, [running, deploy?.result, previewUrl, localView, beginTransition])
 
   // A local page only takes Vite's hot updates, which keep the page's state
   // through a turn's edits and can leave it out of step with the app (a changed
@@ -1144,6 +1153,15 @@ export default function PreviewPane({
               onToggle={() => setOutputOpen((open) => !open)}
             />
           )}
+          {/* The local Fabric host signs the app in with its own form, so Preview as
+              is off in the Fabric view. */}
+          {localView && localRunning && !turnRunning && (
+            <PreviewAsMenu
+              key={project.id}
+              projectId={project.id}
+              disabled={transitioning || designActive || previewMode === 'fabric'}
+            />
+          )}
           {team && (
             <span className={`preview-status preview-status--${dotClass}`} title={statusTitle}>
               <span className="preview-dot" />
@@ -1361,7 +1379,7 @@ export default function PreviewPane({
 
       {surfaceError && <div className="preview-error-banner" role="alert">{surfaceError}</div>}
 
-      {status === 'error' && !running && !failureDismissed && (
+      {status === 'error' && !running && !needsWorkspace && !failureDismissed && (
         <DeployFailedNotice
           key={project.id}
           outcome={outcome}
@@ -1412,6 +1430,18 @@ export default function PreviewPane({
             onOpenSetup={onOpenSetup}
             onReviewSchema={onReviewSchema}
           />
+        ) : needsWorkspace ? (
+          <div className="preview-placeholder">
+            <div className="ws-prompt">
+              <h3 className="ws-prompt-title">Choose where to publish</h3>
+              <p className="ws-prompt-sub">
+                <strong>{project.name}</strong> hasn’t been published yet. Select{' '}
+                <strong>Publish</strong> in the header above to name it and pick the Fabric
+                workspace to publish it to.
+              </p>
+              {error && <div className="alert alert--error ws-prompt-err">{error}</div>}
+            </div>
+          </div>
         ) : teamDeploying && teamRun ? (
           <div className="preview-placeholder">
             <TeamDeployCard run={teamRun} first={!deployedUrl} onOpenMap={onOpenTeamMap} />
@@ -1431,8 +1461,13 @@ export default function PreviewPane({
                 GitHub and the team pipeline publishes your own preview. The first one takes a few
                 minutes.
               </p>
-            ) : (
+            ) : localMode ? (
               <p>Your published app shows here once you publish it.</p>
+            ) : (
+              <p>
+                Your published app will render here after a full <code>rayfin up</code>. Ask Copilot
+                to build something, or select <strong>Publish</strong>.
+              </p>
             )}
           </div>
         )}

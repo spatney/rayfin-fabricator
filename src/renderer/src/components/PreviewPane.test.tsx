@@ -991,6 +991,66 @@ describe('PreviewPane local preview', () => {
     expect(reveal!.url).toBe('https://p1.example.app/')
     expect(screen.queryByText('Local')).toBeNull()
   })
+
+  it('reloads a live preview kept through a publish, as its published backend changed', async () => {
+    const project = makeProject('p1')
+    const pane = (deploy: DeployUiState): JSX.Element => (
+      <Harnessed
+        project={project}
+        suppressed={false}
+        deploy={deploy}
+        localPreviewUrl={LOCAL}
+        manualDeploy
+      />
+    )
+    const { rerender } = render(pane({ running: true, log: [], startedAt: Date.now() }))
+    await settle(e)
+    await act(async () => {
+      e.emitNav({ url: LOCAL, loading: false })
+    })
+    await settle(e)
+    const mark = e.calls.length
+
+    rerender(pane({ running: false, log: [], result: { ok: true, outcome: 'success' } }))
+    await settle(e)
+    expect(e.methodsAfter(mark)).toContain('reload')
+  })
+})
+
+/** Without Local development, the preview shows the published app (or a live preview on its backend). */
+describe('PreviewPane before an app is published', () => {
+  it('asks where to publish an app a turn tried to publish before it ever was', async () => {
+    render(
+      <Harnessed
+        project={makeProject('p1', { name: 'Trip Logger', lastDeploy: undefined })}
+        suppressed={false}
+        deploy={{
+          running: false,
+          log: [],
+          result: {
+            ok: false,
+            outcome: 'needs-workspace',
+            error: 'This project has no Fabric workspace yet — choose one to publish to.'
+          }
+        }}
+      />
+    )
+    await settle(e)
+    expect(screen.getByRole('heading', { name: 'Choose where to publish' })).toBeTruthy()
+    expect(screen.getByText(/hasn’t been published yet/).textContent).toBe(
+      'Trip Logger hasn’t been published yet. Select Publish in the header above to name it and pick the Fabric workspace to publish it to.'
+    )
+    // It isn't a failure to look into.
+    expect(screen.queryByRole('region', { name: 'Couldn’t publish' })).toBeNull()
+  })
+
+  it('says where the published app will show', async () => {
+    render(<Harnessed project={makeProject('p1', { lastDeploy: undefined })} suppressed={false} />)
+    await settle(e)
+    expect(screen.getByText(/Your published app will render here/).textContent).toBe(
+      'Your published app will render here after a full rayfin up. Ask Copilot to build something, or select Publish.'
+    )
+  })
 })
 
 /** A Fabric-view project fixture: a direct app URL plus the portal deep link. */
@@ -1363,7 +1423,8 @@ function OnThisComputer({
   deploy,
   onDiagnoseLocal,
   onOpenSetup,
-  onReviewSchema
+  onReviewSchema,
+  turnRunning
 }: {
   project: StudioProject
   local: LocalBackend
@@ -1373,6 +1434,7 @@ function OnThisComputer({
   onDiagnoseLocal?: () => void
   onOpenSetup?: () => void
   onReviewSchema?: () => void
+  turnRunning?: boolean
 }): JSX.Element {
   return (
     <OverlayProvider>
@@ -1385,6 +1447,7 @@ function OnThisComputer({
         onDiagnoseLocal={onDiagnoseLocal}
         onOpenSetup={onOpenSetup}
         onReviewSchema={onReviewSchema}
+        turnRunning={turnRunning}
         focused={false}
         onToggleFocus={() => {}}
         onWatchChange={() => {}}
@@ -1408,7 +1471,14 @@ describe('PreviewPane on this computer', () => {
   beforeEach(() => {
     localStorage.clear()
     Object.assign(window.api, {
-      local: { logs: vi.fn(async () => [outputLine]), onLog: vi.fn(() => () => {}) }
+      local: {
+        logs: vi.fn(async () => [outputLine]),
+        onLog: vi.fn(() => () => {}),
+        // Preview as, in the toolbar while the app runs here.
+        onState: vi.fn(() => () => {}),
+        identity: vi.fn(async () => ({ kind: 'developer', user: null })),
+        users: vi.fn(async () => [])
+      }
     })
   })
 
@@ -1553,6 +1623,16 @@ describe('PreviewPane on this computer', () => {
     const note = screen.getByRole('region', { name: 'Data model change waiting' })
     fireEvent.click(within(note).getByRole('button', { name: 'Review the change' }))
     expect(onReviewSchema).toHaveBeenCalledTimes(2)
+  })
+
+  it('offers Preview as while the app runs here, but not during a turn', async () => {
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const view = render(<OnThisComputer project={project} local={runningLocally()} />)
+    await settle(e)
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: /^Preview as/ })).toBeTruthy()
+    view.rerender(<OnThisComputer project={project} local={runningLocally()} turnRunning />)
+    expect(screen.queryByRole('button', { name: /^Preview as/ })).toBeNull()
   })
 
   it('opens and closes the output from the status pill', async () => {
