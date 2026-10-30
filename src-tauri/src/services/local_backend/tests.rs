@@ -61,12 +61,18 @@ impl Harness {
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
       let status = self.backends.status(id);
-      if done(&status) {
+      // The renderer hears of a change just after it's made; wait for that too, so `states` has it.
+      if done(&status) && self.told(id, status.revision) {
         return status;
       }
       assert!(Instant::now() < deadline, "timed out waiting for {what}: {status:#?}");
       tokio::time::sleep(Duration::from_millis(20)).await;
     }
+  }
+
+  fn told(&self, id: &str, revision: u64) -> bool {
+    revision == 0
+      || self.emitted.lock().unwrap().iter().any(|e| matches!(e, Emit::State(s) if s.project_id == id && s.revision >= revision))
   }
 
   async fn running(&self, id: &str) -> LocalStatus {
@@ -104,6 +110,15 @@ impl Harness {
 
 fn starts(dir: &Path) -> u32 {
   std::fs::read_to_string(dir.join("starts")).map(|s| s.trim().parse().unwrap()).unwrap_or(0)
+}
+
+/// Wait for what follows a status change, such as its journal entry.
+async fn eventually(what: &str, done: impl Fn() -> bool) {
+  let deadline = Instant::now() + Duration::from_secs(20);
+  while !done() {
+    assert!(Instant::now() < deadline, "timed out waiting for {what}");
+    tokio::time::sleep(Duration::from_millis(20)).await;
+  }
 }
 
 fn args_of(dir: &Path, start: u32) -> Vec<String> {
@@ -298,6 +313,7 @@ async fn other_projects_keep_off_a_running_backends_ports_until_it_is_forgotten(
   let dir = h.project("notes", "ok");
   h.backends.start("a", dir, LocalStartOptions::default()).await;
   let status = h.running("a").await;
+  eventually("the journal entry", || !h.milestones("a").is_empty()).await;
   assert_eq!(h.milestones("a"), [("local.started", None)]);
   let api_port = tauri::Url::parse(&status.ready.unwrap().api_url).unwrap().port().unwrap();
   assert!(h.backends.held_ports("b").contains(&(api_port, "a".to_string())));
