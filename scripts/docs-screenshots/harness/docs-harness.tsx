@@ -1475,7 +1475,7 @@ const helpConversation = {
         '1. In the account menu, select **Refresh Fabric authentication** and finish signing in.\n' +
         '2. In the app bar, select **Try again**.\n\n' +
         'If it stops again at the same point, the workspace may no longer be assigned to a Fabric capacity. ' +
-        'See [Deploy problems](https://spatney.github.io/rayfin-fabricator/docs/troubleshooting/deploy).',
+        'See [Publishing and Fabric problems](https://spatney.github.io/rayfin-fabricator/docs/troubleshooting/deploy).',
       tools: [
         { id: 't1', name: 'read', title: 'Read the activity journal', status: 'done' },
         { id: 't2', name: 'grep', title: 'Searched the documentation for "access token has expired"', status: 'done' },
@@ -1484,7 +1484,7 @@ const helpConversation = {
       actions: [{ id: 'refresh-fabric-auth', label: 'Refresh Fabric authentication' }],
       citations: [
         {
-          title: 'Deploy problems',
+          title: 'Publishing and Fabric problems',
           url: 'https://spatney.github.io/rayfin-fabricator/docs/troubleshooting/deploy'
         }
       ],
@@ -1647,27 +1647,45 @@ function SettingsShot({ experiments = false }: { experiments?: boolean }): JSX.E
   )
 }
 
-/** Accounts, scrolled to Model providers: an Anthropic key saved, OpenAI's key being added. */
-function ModelProvidersShot(): JSX.Element {
-  return (
-    <Steps clicks={['[aria-label="Add your OpenAI API key"]']}>
-      <AccountsModal
-        auth={setupAuth}
-        onAuthChanged={noop}
-        fabric={{
-          busy: false,
-          signingIn: false,
-          signingOut: false,
-          canRefresh: false,
-          onSignIn: noop,
-          onSignOut: noop,
-          onRefresh: noop
-        }}
-        modelProviders={{ focus: true }}
-        onReviewSetup={noop}
-        onClose={noop}
-      />
-    </Steps>
+/**
+ * Takes the focus off what a dialog focused as it opened: opened with the mouse, it draws no
+ * focus ring, but a page nobody has touched yet does.
+ */
+function Unfocused({ children }: { children: ReactNode }): JSX.Element {
+  useEffect(() => {
+    const id = window.setTimeout(() => (document.activeElement as HTMLElement | null)?.blur(), 400)
+    return () => window.clearTimeout(id)
+  }, [])
+  return <>{children}</>
+}
+
+/**
+ * Accounts with the sample user signed in to each service, as it opens from the account menu,
+ * or `providers` scrolled to Model providers: an Anthropic key saved, OpenAI's key being added.
+ */
+function AccountsShot({ providers = false }: { providers?: boolean }): JSX.Element {
+  const accounts = (
+    <AccountsModal
+      auth={setupAuth}
+      onAuthChanged={noop}
+      fabric={{
+        busy: false,
+        signingIn: false,
+        signingOut: false,
+        canRefresh: !providers,
+        onSignIn: noop,
+        onSignOut: noop,
+        onRefresh: noop
+      }}
+      modelProviders={{ focus: providers }}
+      onReviewSetup={noop}
+      onClose={noop}
+    />
+  )
+  return providers ? (
+    <Steps clicks={['[aria-label="Add your OpenAI API key"]']}>{accounts}</Steps>
+  ) : (
+    <Unfocused>{accounts}</Unfocused>
   )
 }
 
@@ -1812,7 +1830,8 @@ const expensesApp: StudioProject = {
 
 /**
  * The app bar's publish control, its panel open on the sample app's Development
- * published app: live, nothing waiting, signed in.
+ * published app: live, nothing waiting, signed in, and publishing after each chat turn, the
+ * default without Local development.
  */
 function Deployments(): JSX.Element {
   const app: StudioProject = { ...expensesApp, deploymentNames: { [APPS_WS]: 'Development' } }
@@ -1834,7 +1853,7 @@ function Deployments(): JSX.Element {
               account={{ user: 'avery.chen@contoso.com', tenant: 'Contoso' }}
               onManageAccounts={noop}
               onSignIn={noop}
-              autoDeploy={{ on: true, onChange: noop }}
+              autoDeploy={{ on: true, defaultOn: true, onChange: noop }}
             />
           </Open>
           <div className="app-bar-global">
@@ -2116,8 +2135,10 @@ function Shot({ id }: { id: string | null }): JSX.Element {
           <ComposerPicker value={{ model: 'claude-opus-5.5', effort: 'high', autoTier: '', contextTier: '' }} />
         </Steps>
       )
+    case 'accounts':
+      return <AccountsShot />
     case 'model-providers':
-      return <ModelProvidersShot />
+      return <AccountsShot providers />
     case 'add-menu':
       return (
         <Steps clicks={['.add-menu .composer-icon-btn', '[data-sub="data"]']}>

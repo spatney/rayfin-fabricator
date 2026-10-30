@@ -20,7 +20,7 @@ Everything here is a maintainer tool. It isn't part of the app or of CI.
 | `scrub.js` | Replaces personal details (names, emails, tenant, workspace and repo names, paths) in a page |
 | `capture-window.ps1` | Captures the app window, including the native preview webview a DevTools screenshot can't see |
 | `optimize.mjs` | Crops, resizes and converts a capture to WebP, and its light twin the same way (uses `sharp` from `website/node_modules`) |
-| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Search, Blueprint, its Data model view with related entities and with loose access, its Data view of the sample app's local data, the local preview with the local backend's output, deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Migrate a Power BI report, the Migration card) and captures each in both themes with headless Edge. Its sample settings turn on the Local development experiment, and its local backend runs the sample app with made-up users, rows, secrets and output |
+| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Accounts, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Search, Blueprint, its Data model view with related entities and with loose access, its Data view of the sample app's local data, the local preview with the local backend's output (a stand-in without the app, left out of the default list: the docs capture is live), deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Migrate a Power BI report, the Migration card) and captures each in both themes with headless Edge. Its sample settings turn on the Local development experiment, and its local backend runs the sample app with made-up users, rows, secrets and output |
 
 ## Before you start
 
@@ -28,8 +28,13 @@ Everything here is a maintainer tool. It isn't part of the app or of CI.
 - Signed in to GitHub Copilot and the Azure CLI. The isolated instance shares these sign-ins
   (and the Rayfin CLI's Fabric sign-in) because those tools own their credentials.
 - `npm install` in `website/` for `sharp`.
-- A Fabric workspace you can deploy a sample app into and delete afterwards.
+- The rayfin-local sidecar in `src-tauri/binaries/` (`npm run rayfin-local:fetch`). The build
+  copies it next to the app, and the app runs the sample app on it with Local development on.
 - Expect to use some Copilot requests: a few chat turns and one Advisor deep review.
+
+Nothing is published: the sample app runs on this computer, and a sample publish record
+stands in for its published copy (see [Show the app as published](#show-the-app-as-published)).
+The Fabric sign-in is only needed to list workspaces in the **Publish your app** step.
 
 ## 1. Build an isolated instance
 
@@ -88,6 +93,56 @@ project with the current CLI installed (`npm install @microsoft/rayfin-cli` in a
 project) fixes that. The preview's sign-in (Fabric SSO) completes on its own once you select
 **Sign in** in it.
 
+### Build the sample app on this computer
+
+Take `new-project` and `first-deploy` with Local development off, the default, then select
+**Continue without publishing →** and turn on **Settings → Experiments → Local development**.
+The app then runs on the local backend and chat unlocks, so the build prompt, `chat-working`,
+`preview-local`, `preview-as`, `code`, `history`, `model`, `advisor` and `home` need no Fabric
+workspace. Add sample rows through the app's own form in the preview, and test users with
+**Preview as → Add test user…** (they exist only on this computer). Before `preview-local`,
+select **Restart** in **Output**, so its last lines are a clean start rather than a hot update
+from the last turn.
+
+### Show the app as published
+
+Shots of the published app (`workbench`, and `search`, which renders over it) and the
+**Local** and **Published** switch need an app that's published. Don't publish: give the
+sample project a sample publish record instead. Close the instance, then write
+`<project>/rayfin/.deployments.json` (git-ignored, so it's never in Code or History), which
+Fabricator reads instead of asking Fabric:
+
+```json
+{
+  "deployments": {
+    "Contoso Apps": {
+      "fabricItemId": "66666666-6666-4666-8666-666666666666",
+      "fabricApiUrl": "https://contoso-expenses-1a2b3c4d5e-westus.api.fabricapps.net",
+      "fabricWorkspaceId": "55555555-5555-4555-8555-555555555555",
+      "hostingUrl": "http://localhost:5173/",
+      "fabricDeepLink": "https://app.fabric.microsoft.com/groups/55555555-5555-4555-8555-555555555555/appbackends/66666666-6666-4666-8666-666666666666",
+      "deployedAt": "<two hours ago, ISO 8601>"
+    }
+  },
+  "active": "Contoso Apps"
+}
+```
+
+In `studio.json`, remove the project's `awaitingFirstDeploy` and add
+`"deploymentNames": { "55555555-5555-4555-8555-555555555555": "Development" }`. With Local
+development on, the preview now has **Local** and **Published**. For `workbench` and
+`preview-toolbar`, which show the default flow, close the instance again, turn Local
+development off in `studio.json`, set the project's `lastDeploy.commit` to the sample
+project's `HEAD` (so the publish control has no changes waiting), and serve the app where the
+record says it's published, with its local data:
+
+```powershell
+& $env:TEMP\fab-docs\target\debug\rayfin-local.exe serve -C <project>   # stop it with Ctrl+C afterwards
+```
+
+Then scrub the address to the published host with whole-text keys, so only the toolbar's
+address changes: `"=localhost:5173": "contoso-expenses-1a2b3c4d5e-westus.webapp.fabricapps.net"`.
+
 Keep the scrub map outside the repository. It maps your real values onto sample ones:
 
 ```json
@@ -105,7 +160,9 @@ Keys match case-insensitively, longest first. A key starting with `=` replaces o
 text node equal to it (for avatar initials), and `@initials` sets the badge drawn over
 avatar images. `shoot.mjs` scrubs right before each capture, because the app re-renders, and
 scrubs every page that's on screen (the app window and the preview are separate pages). To
-scrub by hand, use `node cdp.mjs scrub <map>` (and `--url <host>` for the preview).
+scrub by hand, use `node cdp.mjs scrub <map>` (and `--url <host>` for the preview). For
+`first-deploy`, add a whole-text key for each of your Fabric workspaces and capacities
+(`"=Finance Dev": "Contoso Apps"`), in the same alphabetical order as the real names.
 
 Always look at each capture before you use it, in both themes, and discard any that still
 show personal data, real tenant or workspace names, or other people from your directory.
@@ -138,12 +195,14 @@ of them. The current crops (no crop means the whole 1440×900 window):
 
 | Screenshot | Captured | Crop |
 | --- | --- | --- |
-| `workbench`, `chat-working`, `code`, `history`, `advisor` | live (`chat-working` with `--freeze`) | none |
+| `workbench`, `chat-working`, `code`, `history`, `advisor` | live (`chat-working` with `--freeze`; `workbench` as published, see above) | none |
 | `home` | live | `0,0,1440,560` |
 | `team-home`, `model` | live | `0,0,1440,700` |
 | `new-project` | live | `0,0,1440,380` |
 | `first-deploy` | live | `0,0,1440,740` |
 | `preview-toolbar` | live, from the `workbench` capture | `720,40,720,300` |
+| `preview-local` | live, Local development on, the chat and preview divider dragged to x 545, **Output** open | `549,43,891,820` |
+| `preview-as` | live, the same split, `--open` and `--close` on `.pva-trigger` | `549,43,891,480` |
 | `chat-done` | live, window 1440×1060 | `0,40,720,882` |
 | `chat-diff` | live | `0,40,720,860` |
 | `model-picker` | harness | `0,355,720,545` |
@@ -157,10 +216,12 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `migrate-report` | harness | `340,12,760,716` |
 | `migration-card` | harness | `0,610,720,290` |
 | `account-menu` | harness | `1040,0,400,272` |
+| `accounts` | harness | `390,40,660,820` |
 | `deployments` | harness | `1000,0,440,360` |
 | `share` | live, `--open` on Share, `--close` on Cancel | `400,240,640,420` |
 | `team-overview`, `skills`, `secrets`, `blueprint` | harness | none |
 | `model-relations`, `model-access` | harness | `0,0,1440,770` |
+| `local-data` | harness | `0,0,1440,580` |
 | `setup`, `help` | harness, shorter window (picked by the script) | none |
 | `search` | harness, over the `workbench` screenshot | `225,90,990,546` |
 | `team-create` | harness | `405,100,630,700` |
@@ -173,6 +234,5 @@ of them. The current crops (no crop means the whole 1440×900 window):
 
 ## 5. Clean up
 
-Stop the instance, delete the sample Fabric workspace, and remove
-`$env:TEMP\fab-docs` (data, WebView2 profile, projects) and the worktree
-(`git worktree remove $env:TEMP\fab-docs\wt`).
+Stop the instance and the rayfin-local you started, and remove `$env:TEMP\fab-docs` (data,
+WebView2 profile, projects) and the worktree (`git worktree remove $env:TEMP\fab-docs\wt`).
