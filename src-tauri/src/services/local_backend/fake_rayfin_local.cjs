@@ -1,8 +1,10 @@
 // A stand-in for rayfin-local that speaks host contract 1, for Fabricator's
 // supervisor tests (services/local_backend/tests.rs). What `serve` does comes
 // from `<project>/fake-mode`: ok, fatal, already-serving, crash, crash-once,
-// config-restart or ignore-stdin. Each start is counted in `<project>/starts`
-// and its arguments saved in `<project>/args-<start>.json`.
+// config-restart, ignore-stdin or analysis-fails-once (its first run then reports
+// a data model change it couldn't analyze, as live reload does, and keeps
+// running). Each start is counted in `<project>/starts` and its arguments saved
+// in `<project>/args-<start>.json`.
 'use strict'
 const fs = require('fs')
 const http = require('http')
@@ -174,6 +176,10 @@ function serve() {
       features: { data: { enabled: true, entities: ['Note'] } }
     })
     if (mode === 'crash' || (mode === 'crash-once' && starts === 1)) setTimeout(() => process.exit(3), 100)
+    if (mode === 'analysis-fails-once' && starts === 1) {
+      const message = 'The data package packages/data has not been built.'
+      emit('analysis', { ok: false, sdk: { version: '1.36.2', supported: true }, entities: [], storageFolders: [], message })
+    }
     if (mode === 'config-restart' && starts === 1) {
       setTimeout(() => emit('config-changed', { applied: false, restartRequired: true, what: ['frontend'], message: 'The frontend moved.' }), 100)
     }

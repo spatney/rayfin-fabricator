@@ -366,6 +366,8 @@ export function useLocalBackend(projectId: string | null | undefined): LocalBack
         run(async (id) => {
           if (state !== 'running') return window.api.local.restart(id, { reset: true })
           await window.api.local.resetData(id)
+          // It signed every session out: the preview forgets its own, and signs in again.
+          void window.api.preview.resetSiteData().catch(() => undefined)
           // A change refused for the data it would lose applies now there's none.
           if (schemaWaiting) await window.api.local.reload(id, false)
         }),

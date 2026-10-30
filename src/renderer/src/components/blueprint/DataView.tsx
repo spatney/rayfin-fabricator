@@ -247,6 +247,8 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
     } else if (confirm.kind === 'reset') {
       void perform(async () => {
         await window.api.local.resetData(projectId)
+        // It signed every session out: the preview forgets its own, and signs in again.
+        void window.api.preview.resetSiteData().catch(() => undefined)
         reportEvent('preview', 'local.data_reset', 'Reset the app’s local data.', { projectId })
         if (schemaWaiting) await window.api.local.reload(projectId, false)
       })

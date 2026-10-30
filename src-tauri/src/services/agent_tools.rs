@@ -544,8 +544,10 @@ fn gate(project_id: &str) -> Gate {
 
 /// Bring the project's local backend up to date for a tool: start it when it
 /// isn't running, start it again when it stopped on a problem in the app that
-/// changed since, then wait until it runs, has reported on the latest changes
-/// to the app's backend sources, and isn't building the functions.
+/// changed since, or when it kept the previous data model after a change it
+/// couldn't analyze and the app changed since, then wait until it runs, has
+/// reported on the latest changes to the app's backend sources, and isn't
+/// building the functions.
 async fn prepare(backends: &LocalBackends, project_id: &str, dir: &Path, waits: Waits) -> Prepared {
   let gate = gate(project_id);
   let mut given_up = gate.lock().await;
@@ -563,6 +565,14 @@ async fn prepare(backends: &LocalBackends, project_id: &str, dir: &Path, waits: 
       let code = before.error.as_ref().map(|e| e.code.clone()).unwrap_or_default();
       backends.restart(project_id, dir.to_path_buf(), LocalStartOptions::default()).await;
       Some(format!("The local backend had stopped (`{code}`), and the app changed since"))
+    }
+    State::Running if stuck_on_failed_analysis(&before, &stamps) => {
+      backends.restart(project_id, dir.to_path_buf(), LocalStartOptions::default()).await;
+      Some(
+        "The local backend had kept the previous data model after a change it couldn't analyze, and the app changed \
+         since"
+          .to_string(),
+      )
     }
     _ => None,
   };
@@ -659,6 +669,18 @@ fn restartable(status: &LocalStatus, stamps: &Stamps, dir: &Path) -> bool {
     return false;
   };
   [stamps.model, stamps.functions, stamps.config, installed(dir, error)].into_iter().flatten().any(|at| at > failed_at)
+}
+
+/// Whether a running backend serves the data model it had before a change it
+/// couldn't analyze, and the app's data model or `rayfin.yml` changed after
+/// that. rayfin-local doesn't always analyze the app again then: a data package
+/// that `rayfin.yml` turned on while it ran is neither built nor followed until
+/// it starts again, and starting builds it first.
+fn stuck_on_failed_analysis(status: &LocalStatus, stamps: &Stamps) -> bool {
+  let Some(failed_at) = status.analysis.as_ref().filter(|a| !a.ok).and_then(|a| time_of(a.time.as_deref())) else {
+    return false;
+  };
+  [stamps.model, stamps.config].into_iter().flatten().any(|at| at > failed_at)
 }
 
 /// When npm last installed packages in the project, its functions package, or
@@ -1811,6 +1833,28 @@ mod tests {
     let fixed = json_of(&local_status(&fake.backends, &id, &dir, quick()).await);
     assert_eq!(fixed["state"], "running", "{fixed}");
     assert!(fixed["notes"][0].as_str().unwrap().contains("(`schema-refused`)"), "{fixed}");
+  }
+
+  #[tokio::test(flavor = "multi_thread")]
+  async fn a_backend_left_on_a_model_it_couldnt_analyze_starts_again_once_the_app_changed() {
+    let Some(fake) = fake() else { return };
+    let (id, dir) = fake.project("analysis-fails-once");
+    let stuck = json_of(&local_status(&fake.backends, &id, &dir, quick()).await);
+    assert_eq!((stuck["state"].as_str(), stuck["analysis"]["ok"].as_bool()), (Some("running"), Some(false)), "{stuck}");
+    assert!(stuck["advice"].to_string().contains("couldn't be analyzed"), "{stuck}");
+    // Nothing changed since: it keeps running.
+    let unchanged = json_of(&local_status(&fake.backends, &id, &dir, quick()).await);
+    assert!(unchanged.get("notes").is_none(), "{unchanged}");
+    assert_eq!(std::fs::read_to_string(dir.join("starts")).unwrap(), "1");
+
+    // The data model changes after the analysis that failed, which live reload doesn't always analyze again.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    write_aged(&dir, "rayfin/data/Note.ts", "export class Note {}", Duration::ZERO);
+    let fixed = json_of(&local_status(&fake.backends, &id, &dir, quick()).await);
+    assert_eq!(fixed["state"], "running", "{fixed}");
+    assert!(fixed.get("analysis").is_none(), "starting analyzed it again: {fixed}");
+    assert!(fixed["notes"][0].as_str().unwrap().contains("a change it couldn't analyze"), "{fixed}");
+    assert_eq!(std::fs::read_to_string(dir.join("starts")).unwrap(), "2");
   }
 
   #[tokio::test(flavor = "multi_thread")]

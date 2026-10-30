@@ -82,9 +82,11 @@ function line(seq: number, projectId = 'p1'): LocalLogEvent {
 let emitState: (status: LocalStatus) => void
 let emitLog: (line: LocalLogEvent) => void
 let local: Record<string, Mock>
+let preview: { resetSiteData: Mock }
 
 beforeEach(() => {
   localBackendStore.clear()
+  preview = { resetSiteData: vi.fn(async () => true) }
   local = {
     start: vi.fn(async (id: string) => status({ projectId: id, state: 'starting' })),
     stop: vi.fn(async (id: string) => status({ projectId: id })),
@@ -104,7 +106,7 @@ beforeEach(() => {
       return () => {}
     })
   }
-  ;(window as unknown as { api: unknown }).api = { local }
+  ;(window as unknown as { api: unknown }).api = { local, preview }
 })
 
 afterEach(() => {
@@ -147,6 +149,7 @@ describe('useLocalBackend', () => {
     })
     expect(local.restart).toHaveBeenNthCalledWith(1, 'p1', { forceSchema: true })
     expect(local.restart).toHaveBeenNthCalledWith(2, 'p1', { reset: true })
+    expect(preview.resetSiteData).not.toHaveBeenCalled()
 
     act(() => emitState(status({ state: 'running', revision: 10, ready })))
     await act(async () => {
@@ -156,6 +159,11 @@ describe('useLocalBackend', () => {
     expect(local.reload).toHaveBeenCalledWith('p1', true)
     expect(local.resetData).toHaveBeenCalledWith('p1')
     expect(local.restart).toHaveBeenCalledTimes(2)
+    // The reset signed the preview's session out: it signs in again from scratch.
+    expect(preview.resetSiteData).toHaveBeenCalledTimes(1)
+    expect(local.resetData.mock.invocationCallOrder[0]).toBeLessThan(
+      preview.resetSiteData.mock.invocationCallOrder[0]
+    )
   })
 
   it('resets the data under a refused change, which then applies, and installs missing packages before starting again', async () => {

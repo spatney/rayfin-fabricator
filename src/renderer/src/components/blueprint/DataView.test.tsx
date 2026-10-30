@@ -100,6 +100,7 @@ let current: LocalStatus
 let entities: LocalEntity[]
 let users: LocalUser[]
 let local: Record<string, Mock>
+let preview: { resetSiteData: Mock }
 let record: Mock
 let emitState: (status: LocalStatus) => void
 
@@ -179,7 +180,8 @@ beforeEach(() => {
     }),
     reload: vi.fn(async () => ({ schema: null, config: null }))
   }
-  ;(window as unknown as { api: unknown }).api = { local, diagnostics: { record } }
+  preview = { resetSiteData: vi.fn(async () => true) }
+  ;(window as unknown as { api: unknown }).api = { local, preview, diagnostics: { record } }
 })
 
 afterEach(() => {
@@ -334,6 +336,11 @@ describe('DataView', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(local.resetData).toHaveBeenCalledWith('p1')
     expect(local.reload).not.toHaveBeenCalled()
+    // The reset signed the preview's session out: it signs in again from scratch.
+    expect(preview.resetSiteData).toHaveBeenCalledTimes(1)
+    expect(local.resetData.mock.invocationCallOrder[0]).toBeLessThan(
+      preview.resetSiteData.mock.invocationCallOrder[0]
+    )
     expect(await screen.findByText('3 entities · 0 rows')).toBeTruthy()
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ event: 'local.data_reset' }))
   })
