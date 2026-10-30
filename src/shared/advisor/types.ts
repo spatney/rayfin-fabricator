@@ -182,7 +182,10 @@ export interface AdvisorPackage {
 
 /** Everything the quick checks read, gathered in one IPC round-trip. */
 export interface AdvisorProjectSnapshot {
-  /** Every project file outside heavy/generated folders. */
+  /**
+   * Every project file outside heavy/generated folders. Of `.rayfin-local/`,
+   * the local backend's state, only its own files and a few of each subfolder's.
+   */
   files: AdvisorProjectFile[]
   /** Text contents of the files the rules read, keyed by path. */
   contents: Record<string, string>
@@ -191,6 +194,12 @@ export interface AdvisorProjectSnapshot {
   /** The project is a git work tree (so `ignored` flags are meaningful). */
   isGitRepo: boolean
   packages: AdvisorPackage[]
+  /**
+   * The Rayfin releases Fabricator's bundled local backend runs, as an npm
+   * range (`sdk.supported` in `rayfin-local.json`, such as `>=1.36.0 <1.37.0`).
+   * Absent for apps it doesn't run, such as team apps.
+   */
+  localSdkRange?: string
 }
 
 /* ------------------------------------------------------------------ *

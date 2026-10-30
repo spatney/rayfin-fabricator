@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { AI_RULES, CATEGORIES, QUICK_RULES, RULES } from '@shared/advisor/catalog'
-import { matchesWorkspace } from './context'
+import { localSdkOf, matchesWorkspace } from './context'
 import { QUICK_IMPLS } from './rules'
+import { npmRangeSpan } from './source'
 import { GOOD_PROJECT, check, versionInfo } from './testFixtures'
 
 const TODO = GOOD_PROJECT['rayfin/data/Todo.ts']
@@ -36,6 +37,32 @@ describe('quick checks on a healthy project', () => {
     expect(out.results.filter((r) => r.status === 'skipped')).toEqual([])
     expect(out.status('data-model/text-without-max')).toBe('pass')
     expect(out.status('platform/functions-mssql')).toBe('na')
+  })
+})
+
+describe('npm ranges', () => {
+  it('reads the releases a range allows', () => {
+    const span = (range: string) => npmRangeSpan(range)
+    expect(span('>=1.36.0 <1.37.0')).toEqual({ lo: [1, 36, 0], hi: [1, 37, 0] })
+    expect(span('~1.36.0')).toEqual({ lo: [1, 36, 0], hi: [1, 37, 0] })
+    expect(span('^1.36.2')).toEqual({ lo: [1, 36, 2], hi: [2, 0, 0] })
+    expect(span('^0.2.3')).toEqual({ lo: [0, 2, 3], hi: [0, 3, 0] })
+    expect(span('1.36.x')).toEqual({ lo: [1, 36, 0], hi: [1, 37, 0] })
+    expect(span('1.36.2')).toEqual({ lo: [1, 36, 2], hi: [1, 36, 3] })
+    expect(span('>= 1.35 <=1.36')).toEqual({ lo: [1, 35, 0], hi: [1, 37, 0] })
+    expect(span('1.35.0 - 1.36')).toEqual({ lo: [1, 35, 0], hi: [1, 37, 0] })
+    expect(span('~1.35.0 || ^2.0.0-alpha')).toEqual({ lo: [1, 35, 0], hi: [3, 0, 0] })
+    expect(span('*')).toEqual({ lo: [0, 0, 0], hi: null })
+    expect(span('latest')).toBeNull()
+  })
+
+  it('names the line of releases the local backend runs and its pin', () => {
+    expect(localSdkOf('>=1.36.0 <1.37.0')).toMatchObject({ label: '1.36.x', pin: '~1.36.0' })
+    expect(localSdkOf('>=1.36.2 <1.38.0')).toMatchObject({
+      label: '>=1.36.2 <1.38.0',
+      pin: '~1.36.2'
+    })
+    expect(localSdkOf(undefined)).toBeNull()
   })
 })
 
@@ -165,6 +192,17 @@ describe('access and policy rules', () => {
     const read = await check({ 'rayfin/data/Todo.ts': TODO.replace('@entity()', "@entity()\n@anonymous('read')") })
     expect(read.ids).toContain('policy/anonymous-grant')
     expect(read.ids).not.toContain('policy/anonymous-write')
+  })
+
+  it('says anonymous reads work locally but that publishing to most tenants fails', async () => {
+    const files = { 'rayfin/data/Todo.ts': TODO.replace('@entity()', "@entity()\n@anonymous('read')") }
+    expect((await check(files)).finding('policy/anonymous-grant')!.detail).toBe(
+      '`Todo` allows anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps.'
+    )
+    // A team app has no local preview.
+    expect((await check(files, { localSdkRange: null })).finding('policy/anonymous-grant')!.detail).toBe(
+      '`Todo` allows anonymous reads, which Fabric refuses unless your tenant admin has turned on anonymous data access for Fabric apps.'
+    )
   })
 
   it('flags unsupported claims and the verbose role form', async () => {
@@ -302,6 +340,59 @@ describe('secrets rules', () => {
     expect(out.ids).toEqual(
       expect.arrayContaining(['secrets/publishable-key-mismatch', 'secrets/deployments-file-tracked'])
     )
+  })
+
+  it('keeps the local backend folder out of git', async () => {
+    const STATE = [
+      '.rayfin-local/db.sqlite',
+      '.rayfin-local/keys/signing.json',
+      '.rayfin-local/secrets.json',
+      '.rayfin-local/state.json'
+    ]
+    const rule = 'secrets/local-backend-not-ignored'
+    const intact = { '.rayfin-local/.gitignore': '*\n' }
+    // rayfin-local's own `.gitignore` ignores the whole folder, as does a project-wide entry.
+    expect(
+      (
+        await check(intact, { listed: STATE, ignored: [...STATE, '.rayfin-local/.gitignore'] })
+      ).status(rule)
+    ).toBe('pass')
+    expect((await check({}, { listed: STATE, ignored: STATE })).status(rule)).toBe('pass')
+
+    const missing = (await check({}, { listed: STATE })).finding(rule)!
+    expect(missing.severity).toBe('high')
+    expect(missing.file).toBeUndefined()
+    expect(missing.detail).toBe(
+      "`.rayfin-local/.gitignore` is missing, so git can commit your secrets' local values, the local backend's signing keys, the app's local database and the local app's IDs (`.rayfin-local/secrets.json`, `.rayfin-local/keys/`, `.rayfin-local/db.sqlite`, `.rayfin-local/state.json`)."
+    )
+
+    // A changed `.gitignore` is the place to fix.
+    const changed = (
+      await check(
+        { '.rayfin-local/.gitignore': 'db.sqlite\nkeys/\nsecrets.json\n' },
+        { listed: STATE, ignored: STATE.slice(0, 3) }
+      )
+    ).finding(rule)!
+    expect(changed.severity).toBe('low')
+    expect(changed.file).toBe('.rayfin-local/.gitignore')
+    expect(changed.excerpt).toContain('secrets.json')
+    expect(changed.detail).toBe(
+      "`.rayfin-local/.gitignore` no longer ignores everything in the folder, so git can commit the local app's IDs (`.rayfin-local/state.json`)."
+    )
+
+    // Files git already tracks stay in commits, whatever `.gitignore` says.
+    const tracked = (
+      await check(intact, {
+        listed: STATE,
+        ignored: ['.rayfin-local/.gitignore', ...STATE.slice(1)]
+      })
+    ).finding(rule)!
+    expect(tracked.detail).toBe(
+      "Git tracks files in `.rayfin-local/` even though `.rayfin-local/.gitignore` ignores the folder, so commits include the app's local database (`.rayfin-local/db.sqlite`)."
+    )
+
+    expect((await check({}, { listed: STATE, isGitRepo: false })).status(rule)).toBe('na')
+    expect((await check()).status(rule)).toBe('na')
   })
 })
 
@@ -497,15 +588,118 @@ describe('config rules', () => {
 
 describe('platform rules', () => {
   it('grades outdated versions by how far behind they are', async () => {
-    const minor = await check({}, { versions: versionInfo('1.33.2', '1.35.1') })
+    // A team app, which the local backend doesn't run: every newer release counts.
+    const team = { localSdkRange: null }
+    const minor = await check({}, { ...team, versions: versionInfo('1.33.2', '1.35.1') })
     expect(minor.finding('platform/cli-outdated')!.severity).toBe('medium')
     expect(minor.finding('platform/sdk-outdated')!.severity).toBe('medium')
-    const major = await check({}, { versions: versionInfo('1.35.1', '2.0.0') })
+    const major = await check({}, { ...team, versions: versionInfo('1.35.1', '2.0.0') })
     expect(major.finding('platform/cli-outdated')!.severity).toBe('high')
-    const patch = await check({}, { versions: versionInfo('1.35.0', '1.35.1') })
+    const patch = await check({}, { ...team, versions: versionInfo('1.35.0', '1.35.1') })
     expect(patch.finding('platform/cli-outdated')!.severity).toBe('low')
     const offline = await check({}, { versions: null })
     expect(offline.status('platform/cli-outdated')).toBe('skipped')
+  })
+
+  it('only counts releases the local backend runs as updates for apps it runs', async () => {
+    const beyond = await check({}, { versions: versionInfo('1.36.2', '1.37.0') })
+    expect(beyond.status('platform/cli-outdated')).toBe('pass')
+    expect(beyond.status('platform/sdk-outdated')).toBe('pass')
+    const patch = await check({}, { versions: versionInfo('1.36.0', '1.36.2') })
+    expect(patch.finding('platform/cli-outdated')!.severity).toBe('low')
+    expect(patch.finding('platform/sdk-outdated')!.severity).toBe('low')
+  })
+
+  it('keeps Rayfin packages on the releases the local backend runs', async () => {
+    const pkg = JSON.parse(GOOD_PROJECT['package.json'])
+    const declare = (deps: Record<string, string>): string =>
+      JSON.stringify({ ...pkg, dependencies: { ...pkg.dependencies, ...deps } }, null, 2)
+    // New projects' `~1.36.0` pins pass (GOOD_PROJECT uses them).
+    expect((await check()).status('platform/sdk-local-range')).toBe('pass')
+
+    const manifest = declare({ '@microsoft/rayfin-core': '^1.36.0' })
+    const caret = await check({ 'package.json': manifest })
+    const loose = caret.finding('platform/sdk-local-range')!
+    expect(loose.severity).toBe('low')
+    expect(loose.detail).toBe(
+      '`@microsoft/rayfin-core` is declared as `^1.36.0`, so the next install can move it past Rayfin 1.36.x, the releases Fabricator runs on this computer. Pin it to `~1.36.0`.'
+    )
+    expect(loose.line).toBe(
+      manifest.split('\n').findIndex((l) => l.includes('"@microsoft/rayfin-core"')) + 1
+    )
+
+    const outside = await check({
+      'package.json': declare({
+        '@microsoft/rayfin-client': '~1.35.0',
+        '@microsoft/rayfin-core': 'latest'
+      })
+    })
+    const both = outside.finding('platform/sdk-local-range')!
+    expect(both.severity).toBe('medium')
+    expect(both.detail).toBe(
+      "These Rayfin packages aren't on Rayfin 1.36.x, the releases Fabricator runs on this computer: rayfin-client ~1.35.0, rayfin-core latest. Pin them to `~1.36.0`, and reinstall."
+    )
+
+    // Installed outside the line, though declared right: reinstall.
+    const stale = await check(
+      {},
+      { packages: [{ name: '@microsoft/rayfin-core', installed: '1.37.0', declared: '~1.36.0' }] }
+    )
+    const reinstall = stale.finding('platform/sdk-local-range')!
+    expect(reinstall.severity).toBe('medium')
+    expect(reinstall.detail).toContain('is installed at 1.37.0')
+    expect(reinstall.detail).toContain('Run `npm install`')
+
+    // The functions package's manifest counts too.
+    const functions = await check({
+      'rayfin/functions/package.json': JSON.stringify({
+        dependencies: { '@microsoft/rayfin-functions': '^1.36.2' }
+      })
+    })
+    expect(functions.finding('platform/sdk-local-range')!.file).toBe(
+      'rayfin/functions/package.json'
+    )
+
+    // Team apps don't run on the local backend.
+    expect(
+      (await check({ 'package.json': manifest }, { localSdkRange: null })).status(
+        'platform/sdk-local-range'
+      )
+    ).toBe('na')
+  })
+
+  it('accepts `~` pins for connector packages but not caret ranges', async () => {
+    const connector = (declared: string) =>
+      check(
+        {},
+        {
+          packages: [
+            { name: '@microsoft/rayfin-cli', installed: '1.36.2', declared: '~1.36.0' },
+            { name: '@microsoft/rayfin-connector-kusto', installed: '1.36.2', declared }
+          ]
+        }
+      )
+    expect((await connector('~1.36.0')).status('platform/connector-version')).toBe('pass')
+    expect((await connector('1.36.2')).status('platform/connector-version')).toBe('pass')
+    expect((await connector('^1.36.0')).finding('platform/connector-version')!.detail).toBe(
+      "`@microsoft/rayfin-connector-kusto` is declared as `^1.36.0`, which can install a different release than the CLI's."
+    )
+    expect((await connector('~1.36')).status('platform/connector-version')).toBe('pass')
+    expect((await connector('~1')).status('platform/connector-version')).toBe('fail')
+  })
+
+  it('notes connectors that run only on Fabric, for apps the local backend runs', async () => {
+    const yml = `${YML}connectors:\n  - name: sales\n    type: fabric-semanticmodel\n  - name: orders\n    type: fabric-sqldatabase\n  - name: logs\n    type: kusto\n`
+    const out = await check({ 'rayfin/rayfin.yml': yml })
+    const f = out.finding('platform/connector-fabric-only')!
+    expect(f.severity).toBe('note')
+    expect(f.detail).toBe(
+      "`logs` is a `kusto` connector, which runs only on Fabric, so the local preview can't call it. Until the app is published, those calls fail; after that, the preview uses the published app's backend."
+    )
+    expect(f.line).toBe(yml.split('\n').indexOf('  - name: logs') + 1)
+    // A team app previews on Fabric, where the connector runs.
+    const team = await check({ 'rayfin/rayfin.yml': yml }, { localSdkRange: null })
+    expect(team.status('platform/connector-fabric-only')).toBe('na')
   })
 
   it('flags SDK packages installed at different versions', async () => {

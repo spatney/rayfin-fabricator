@@ -289,3 +289,125 @@ export function compareSemver(a: SemverCore, b: SemverCore): number {
 export function isPrerelease(version: string | undefined | null): boolean {
   return /\d+\.\d+\.\d+-/.test(version ?? '')
 }
+
+/* ------------------------------ npm ranges ------------------------------ */
+
+/**
+ * The releases an npm range allows, by version core: from `lo` up to, but
+ * not including, `hi` (`null`: no upper bound).
+ */
+export interface VersionSpan {
+  lo: SemverCore
+  hi: SemverCore | null
+}
+
+const ZERO: SemverCore = [0, 0, 0]
+
+/** A full or partial version (`1`, `1.36`, `1.36.x`, `v1.36.2-alpha`) and how many numbers it gives. */
+function partialVersion(text: string): { core: SemverCore; parts: number } | null {
+  const m =
+    /^v?(\d+|[xX*])(?:\.(\d+|[xX*]))?(?:\.(\d+|[xX*]))?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+      text.trim()
+    )
+  if (!m) return null
+  const nums: number[] = []
+  for (const part of [m[1], m[2], m[3]]) {
+    if (part === undefined || !/^\d+$/.test(part)) break
+    nums.push(Number(part))
+  }
+  return { core: [nums[0] ?? 0, nums[1] ?? 0, nums[2] ?? 0], parts: nums.length }
+}
+
+/** The first version after every one a partial version matches (`1.36` → 1.37.0). */
+function after(p: { core: SemverCore; parts: number }): SemverCore | null {
+  const [major, minor, patch] = p.core
+  if (p.parts === 0) return null
+  if (p.parts === 1) return [major + 1, 0, 0]
+  if (p.parts === 2) return [major, minor + 1, 0]
+  return [major, minor, patch + 1]
+}
+
+function comparatorSpan(token: string): VersionSpan | null {
+  const m = /^(<=|>=|<|>|=|~>?|\^)?(.*)$/.exec(token) as RegExpExecArray
+  const op = m[1] ?? ''
+  const p = partialVersion(m[2])
+  if (!p) return null
+  if (p.parts === 0) return op === '<' || op === '>' ? null : { lo: ZERO, hi: null }
+  const [major, minor] = p.core
+  switch (op) {
+    case '>=':
+      return { lo: p.core, hi: null }
+    case '>':
+      return { lo: after(p) as SemverCore, hi: null }
+    case '<':
+      return { lo: ZERO, hi: p.core }
+    case '<=':
+      return { lo: ZERO, hi: after(p) }
+    case '~':
+    case '~>':
+      return { lo: p.core, hi: p.parts === 1 ? [major + 1, 0, 0] : [major, minor + 1, 0] }
+    case '^':
+      if (major > 0 || p.parts === 1) return { lo: p.core, hi: [major + 1, 0, 0] }
+      if (minor > 0 || p.parts === 2) return { lo: p.core, hi: [0, minor + 1, 0] }
+      return { lo: p.core, hi: after(p) }
+    default:
+      return { lo: p.core, hi: after(p) }
+  }
+}
+
+/** One `||` alternative: space-separated comparators (all must hold), or a hyphen range. */
+function comparatorSetSpan(set: string): VersionSpan | null {
+  const hyphen = /^(\S+)\s+-\s+(\S+)$/.exec(set)
+  if (hyphen) {
+    const from = partialVersion(hyphen[1])
+    const to = partialVersion(hyphen[2])
+    return from && to ? { lo: from.core, hi: after(to) } : null
+  }
+  // npm allows a space between an operator and its version (`>= 1.2.3`).
+  const tokens = set
+    .replace(/(<=|>=|<|>|=|~>?|\^)\s+/g, '$1')
+    .split(/\s+/)
+    .filter(Boolean)
+  let span: VersionSpan = { lo: ZERO, hi: null }
+  for (const token of tokens) {
+    const s = comparatorSpan(token)
+    if (!s) return null
+    span = {
+      lo: compareSemver(s.lo, span.lo) > 0 ? s.lo : span.lo,
+      hi: span.hi === null || (s.hi !== null && compareSemver(s.hi, span.hi) < 0) ? s.hi : span.hi
+    }
+  }
+  return span
+}
+
+/**
+ * The releases an npm range allows (`>=1.36.0 <1.37.0`, `~1.36.0`, `^1.36.2`,
+ * `1.36.x`, `1.2 - 1.4`, `a || b`), as one span that covers them all; `null`
+ * for what isn't a range, such as a dist-tag.
+ */
+export function npmRangeSpan(range: string): VersionSpan | null {
+  let span: VersionSpan | null = null
+  for (const set of range.split('||')) {
+    const s = comparatorSetSpan(set.trim())
+    if (!s) return null
+    span = !span
+      ? s
+      : {
+          lo: compareSemver(s.lo, span.lo) < 0 ? s.lo : span.lo,
+          hi:
+            span.hi === null || s.hi === null
+              ? null
+              : compareSemver(s.hi, span.hi) > 0
+                ? s.hi
+                : span.hi
+        }
+  }
+  return span
+}
+
+export function spanIncludes(span: VersionSpan, version: SemverCore): boolean {
+  return (
+    compareSemver(version, span.lo) >= 0 &&
+    (span.hi === null || compareSemver(version, span.hi) < 0)
+  )
+}

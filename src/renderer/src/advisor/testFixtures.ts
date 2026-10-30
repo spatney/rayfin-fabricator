@@ -12,13 +12,13 @@ export const GOOD_PROJECT: Record<string, string> = {
   'package.json': JSON.stringify(
     {
       dependencies: {
-        '@microsoft/rayfin-auth-provider-fabric': '1.36.2',
-        '@microsoft/rayfin-client': '1.36.2',
-        '@microsoft/rayfin-core': '1.36.2',
+        '@microsoft/rayfin-auth-provider-fabric': '~1.36.0',
+        '@microsoft/rayfin-client': '~1.36.0',
+        '@microsoft/rayfin-core': '~1.36.0',
         react: '^19.0.0'
       },
       devDependencies: {
-        '@microsoft/rayfin-cli': '1.36.2',
+        '@microsoft/rayfin-cli': '~1.36.0',
         '@vitejs/plugin-react-swc': '^4.2.2',
         vite: '^7.3.2'
       }
@@ -119,13 +119,16 @@ export const GOOD_PROJECT: Record<string, string> = {
 }
 
 const INSTALLED: AdvisorPackage[] = [
-  { name: '@microsoft/rayfin-auth-provider-fabric', installed: '1.36.2', declared: '1.36.2', dev: false },
-  { name: '@microsoft/rayfin-cli', installed: '1.36.2', declared: '1.36.2', dev: true },
-  { name: '@microsoft/rayfin-client', installed: '1.36.2', declared: '1.36.2', dev: false },
-  { name: '@microsoft/rayfin-core', installed: '1.36.2', declared: '1.36.2', dev: false },
+  { name: '@microsoft/rayfin-auth-provider-fabric', installed: '1.36.2', declared: '~1.36.0', dev: false },
+  { name: '@microsoft/rayfin-cli', installed: '1.36.2', declared: '~1.36.0', dev: true },
+  { name: '@microsoft/rayfin-client', installed: '1.36.2', declared: '~1.36.0', dev: false },
+  { name: '@microsoft/rayfin-core', installed: '1.36.2', declared: '~1.36.0', dev: false },
   { name: '@microsoft/rayfin-data', installed: '1.36.2' },
   { name: '@microsoft/rayfin-lib', installed: '1.36.2' }
 ]
+
+/** The Rayfin releases the bundled local backend runs, as `rayfin-local.json` says. */
+export const LOCAL_SDK_RANGE = '>=1.36.0 <1.37.0'
 
 export function versionInfo(installed = '1.36.2', latest = '1.36.2'): RayfinVersionInfo {
   const pkg = (name: string, kind: 'cli' | 'sdk'): RayfinPackageVersion => ({
@@ -155,6 +158,8 @@ export interface FixtureOptions {
   listed?: string[]
   packages?: AdvisorPackage[]
   isGitRepo?: boolean
+  /** The local backend's supported range (default {@link LOCAL_SDK_RANGE}); `null` for an app it doesn't run, such as a team app. */
+  localSdkRange?: string | null
 }
 
 export function snapshotOf(files: Record<string, string | null>, opts: FixtureOptions = {}): AdvisorProjectSnapshot {
@@ -170,7 +175,8 @@ export function snapshotOf(files: Record<string, string | null>, opts: FixtureOp
     })),
     contents,
     isGitRepo: opts.isGitRepo ?? true,
-    packages: opts.packages ?? INSTALLED
+    packages: opts.packages ?? INSTALLED,
+    localSdkRange: opts.localSdkRange === null ? undefined : (opts.localSdkRange ?? LOCAL_SDK_RANGE)
   }
 }
 

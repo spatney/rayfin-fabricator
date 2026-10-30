@@ -73,4 +73,14 @@ describe('fixPrompt', () => {
     expect(summary.fixes).toHaveLength(1)
     expect(summary.fixes[0]).toMatchObject({ id: MAX.id, severity: 'high' })
   })
+
+  it('tells Copilot the fix shows in the local preview and leaves publishing to the user', () => {
+    for (const findings of [[MAX], [LABEL, MAX]]) {
+      const { prompt } = fixPrompt(findings)
+      expect(prompt).toContain(
+        "Don't publish the app or run `rayfin up`: the change shows in Fabricator's local preview, and it reaches the published app when the user publishes."
+      )
+      expect(prompt).not.toMatch(/deploy/i)
+    }
+  })
 })

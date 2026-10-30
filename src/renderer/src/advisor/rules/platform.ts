@@ -1,17 +1,21 @@
 import type { AdvisorSeverity } from '@shared/ipc'
+import { severityRank } from '@shared/advisor/catalog'
 import { parseClasses } from '../../model/parseSchema'
 import { isUnder } from '../../model/projectLayout'
-import type { QuickContext } from '../context'
+import { matchesWorkspace, workspacePatterns, type QuickContext } from '../context'
 import type { QuickHit, QuickRuleImpl } from '../quick'
+import { listLabels } from '../quick'
 import {
   compareSemver,
   importsOf,
   importsValues,
   jsonKeyLine,
   lineOf,
+  npmRangeSpan,
   parseJsonc,
   resolveRelative,
   semverCore,
+  spanIncludes,
   yamlKeyLine,
   type SemverCore,
   type SourceFile
@@ -35,6 +39,19 @@ export const SDK_FAMILY = [
 ]
 const CONNECTOR_PACKAGE = /^@microsoft\/rayfin-connector(s|-.+)$/
 const CATEGORY_B = new Set(['fabric-semanticmodel', 'kusto'])
+/** Connector types Fabricator's local backend runs, as the developer; every other type runs only on Fabric. */
+const LOCAL_CONNECTOR_TYPES = new Set([
+  'fabric-semanticmodel',
+  'fabric-sqldatabase',
+  'fabric-warehouse',
+  'fabric-sqlanalytics'
+])
+/** What happens to an app with a connector the local preview can't call. */
+const FABRIC_ONLY_THEN =
+  "Until the app is published, those calls fail; after that, the preview uses the published app's backend."
+/** Ranges that let npm pick another release than the CLI's; a `~` range that keeps the minor is fine. */
+const LOOSE_RANGE = /^[\^><=*]|^(latest|preview|next|experimental)$|\.(x|\*)(\.|$)/i
+const TILDE_RANGE = /^~\s*v?\d+\.\d+(\.\d+(-[0-9A-Za-z.-]+)?)?$/
 const CORE_EXPERIMENTAL = '@microsoft/rayfin-core/experimental'
 /** Exports `@microsoft/rayfin-core/experimental` dropped in 1.36, and where they live now. */
 const MOVED_EXPORTS: Record<string, string> = {
@@ -71,6 +88,51 @@ function outdatedSeverity(installed: SemverCore, latest: SemverCore): AdvisorSev
   return 'low'
 }
 
+/** A release newer than the local backend runs: no update for an app it runs, until Fabricator supports it. */
+function beyondLocal(ctx: QuickContext, version: SemverCore): boolean {
+  const hi = ctx.localSdk?.span.hi
+  return Boolean(hi && compareSemver(version, hi) >= 0)
+}
+
+/** Whether a dependency spec asks the registry for a version, not a file, link, git or alias source. */
+function fromRegistry(spec: string): boolean {
+  return !spec.includes(':') && !spec.includes('/')
+}
+
+interface DeclaredSpec {
+  file: string
+  name: string
+  spec: string
+}
+
+/**
+ * The `@microsoft/rayfin-*` registry dependencies the project's manifests
+ * declare: the root's, its npm workspaces' and the functions package's.
+ */
+function rayfinSpecs(ctx: QuickContext): DeclaredSpec[] {
+  const root = parseJsonc(ctx.file('package.json')?.text ?? '') as Obj | null
+  const patterns = root ? workspacePatterns(root) : []
+  const functionsManifest = `${ctx.layout.functionsRoot}/package.json`
+  const manifests = ctx.sources((p) => {
+    if (p === 'package.json' || p === functionsManifest) return true
+    const dir = p.endsWith('/package.json') ? p.slice(0, -'/package.json'.length) : null
+    return dir !== null && patterns.some((pattern) => matchesWorkspace(dir, pattern))
+  })
+  const out: DeclaredSpec[] = []
+  for (const src of manifests) {
+    const json = parseJsonc(src.text) as Obj | null
+    for (const field of ['dependencies', 'devDependencies']) {
+      const deps = json?.[field]
+      if (!deps || typeof deps !== 'object') continue
+      for (const [name, spec] of Object.entries(deps as Obj)) {
+        if (typeof spec !== 'string' || !name.startsWith('@microsoft/rayfin-')) continue
+        if (fromRegistry(spec.trim())) out.push({ file: src.path, name, spec: spec.trim() })
+      }
+    }
+  }
+  return out
+}
+
 function connectorsList(ctx: QuickContext): Obj[] {
   const block = ctx.yml?.data.connectors
   if (Array.isArray(block)) return block.filter((c): c is Obj => Boolean(c) && typeof c === 'object')
@@ -87,6 +149,15 @@ function short(name: string): string {
   return name.replace('@microsoft/', '')
 }
 
+/** 1-based line of a connector's entry in rayfin.yml. */
+function connectorLine(text: string, name: string): number | undefined {
+  return (
+    lineContaining(text, `name: ${name}`) ??
+    lineContaining(text, `${name}:`) ??
+    yamlKeyLine(text, ['connectors'])
+  )
+}
+
 export const platformRules: QuickRuleImpl[] = [
   {
     id: 'platform/cli-outdated',
@@ -96,7 +167,7 @@ export const platformRules: QuickRuleImpl[] = [
       const installed = semverCore(pkg.installed)
       const latest = semverCore(pkg.latest)
       if (!installed || !latest) return 'skipped'
-      if (compareSemver(latest, installed) <= 0) return []
+      if (beyondLocal(ctx, latest) || compareSemver(latest, installed) <= 0) return []
       return [
         {
           file: 'package.json',
@@ -115,18 +186,24 @@ export const platformRules: QuickRuleImpl[] = [
       if (family.length === 0) return SDK_FAMILY.some((n) => ctx.hasDependency(n)) ? 'skipped' : 'na'
       let lowest: { name: string; version: string; core: SemverCore } | undefined
       let newest: { version: string; core: SemverCore } | undefined
+      let knowsLatest = false
       for (const p of family) {
         const installed = semverCore(p.installed)
         const latest = semverCore(p.latest)
         if (installed && (!lowest || compareSemver(installed, lowest.core) < 0)) {
           lowest = { name: p.name, version: p.installed as string, core: installed }
         }
-        if (latest && (!newest || compareSemver(latest, newest.core) > 0)) {
+        if (latest) knowsLatest = true
+        if (
+          latest &&
+          !beyondLocal(ctx, latest) &&
+          (!newest || compareSemver(latest, newest.core) > 0)
+        ) {
           newest = { version: p.latest as string, core: latest }
         }
       }
-      if (!lowest || !newest) return 'skipped'
-      if (compareSemver(newest.core, lowest.core) <= 0) return []
+      if (!lowest || !knowsLatest) return 'skipped'
+      if (!newest || compareSemver(newest.core, lowest.core) <= 0) return []
       return [
         {
           file: 'package.json',
@@ -160,6 +237,77 @@ export const platformRules: QuickRuleImpl[] = [
     }
   },
   {
+    id: 'platform/sdk-local-range',
+    run: (ctx) => {
+      if (!ctx.runsLocally) return 'na'
+      const declared = rayfinSpecs(ctx)
+      const installed = ctx.packages.filter(
+        (p) => p.name.startsWith('@microsoft/rayfin-') && p.installed
+      )
+      if (declared.length === 0 && installed.length === 0) return 'na'
+      const local = ctx.localSdk
+      if (!local) return 'skipped'
+      const { span } = local
+      const runs = `Rayfin ${local.label}, the releases Fabricator runs on this computer`
+      const pinIt = local.pin ? ` Pin it to ${code(local.pin)}.` : ''
+      const classify = (spec: string): 'ok' | 'outside' | 'newer' => {
+        const s = npmRangeSpan(spec)
+        if (
+          s &&
+          ((s.hi !== null && compareSemver(s.hi, span.lo) <= 0) ||
+            (span.hi !== null && compareSemver(s.lo, span.hi) >= 0))
+        ) {
+          return 'outside'
+        }
+        // A tag, or a range that reaches past the line: npm installs the newest release it allows.
+        if (span.hi === null) return 'ok'
+        return !s || s.hi === null || compareSemver(s.hi, span.hi) > 0 ? 'newer' : 'ok'
+      }
+      // One hit per package: its most severe problem, the declaration's on a tie.
+      const worst = new Map<string, QuickHit>()
+      const add = (name: string, hit: QuickHit): void => {
+        const known = worst.get(name)
+        if (known && severityRank(hit.severity) >= severityRank(known.severity)) return
+        worst.set(name, hit)
+      }
+      for (const d of declared) {
+        const problem = classify(d.spec)
+        if (problem === 'ok') continue
+        add(d.name, {
+          file: d.file,
+          line: jsonKeyLine(ctx.file(d.file)?.text ?? '', d.name),
+          label: `${short(d.name)} ${d.spec}`,
+          severity: problem === 'outside' ? 'medium' : 'low',
+          message:
+            problem === 'outside'
+              ? `${code(d.name)} is declared as ${code(d.spec)}, which can't install ${runs}.${pinIt}`
+              : `${code(d.name)} is declared as ${code(d.spec)}, so the next install can move it past ${runs}.${pinIt}`
+        })
+      }
+      for (const p of installed) {
+        const core = semverCore(p.installed)
+        if (!core || spanIncludes(span, core)) continue
+        const specs = declared.filter((d) => d.name === p.name)
+        const pinned = specs.length > 0 && specs.every((d) => classify(d.spec) === 'ok')
+        add(p.name, {
+          file: specs[0]?.file ?? 'package.json',
+          line: specs[0] ? jsonKeyLine(ctx.file(specs[0].file)?.text ?? '', p.name) : undefined,
+          label: `${short(p.name)} ${p.installed}`,
+          severity: 'medium',
+          message: pinned
+            ? `${code(p.name)} is installed at ${p.installed}, outside ${runs}, although it's declared as ${code(specs[0].spec)}. Run ${code('npm install')} to bring it back.`
+            : `${code(p.name)} is installed at ${p.installed}, outside ${runs}.${pinIt}`
+        })
+      }
+      return [...worst.values()]
+    },
+    summarize: (hits, ctx) => {
+      const local = ctx.localSdk
+      const pin = local?.pin ? ` Pin them to ${code(local.pin)}, and reinstall.` : ''
+      return `These Rayfin packages aren't on Rayfin ${local?.label ?? ''}, the releases Fabricator runs on this computer: ${listLabels(hits)}.${pin}`
+    }
+  },
+  {
     id: 'platform/connector-version',
     run: (ctx) => {
       const cli = ctx.packages.find((p) => p.name === CLI)?.installed
@@ -168,8 +316,8 @@ export const platformRules: QuickRuleImpl[] = [
         if (!CONNECTOR_PACKAGE.test(p.name) || !p.declared) continue
         const range = p.declared.trim()
         let problem: string | undefined
-        if (/^[\^~><=*]|^(latest|preview|next|experimental)$|\.(x|\*)(\.|$)/i.test(range)) {
-          problem = `is declared as ${code(range)} instead of an exact version`
+        if (range.startsWith('~') ? !TILDE_RANGE.test(range) : LOOSE_RANGE.test(range)) {
+          problem = `is declared as ${code(range)}, which can install a different release than the CLI's`
         } else if (cli && p.installed && p.installed !== cli) {
           problem = `is installed at ${p.installed} while the CLI is ${cli}`
         }
@@ -275,16 +423,35 @@ export const platformRules: QuickRuleImpl[] = [
         const name = String(c.name ?? type)
         hits.push({
           file: ctx.yml.path,
-          line:
-            lineContaining(ctx.yml.text, `name: ${name}`) ??
-            lineContaining(ctx.yml.text, `${name}:`) ??
-            yamlKeyLine(ctx.yml.text, ['connectors']),
+          line: connectorLine(ctx.yml.text, name),
           label: name,
           message: `The ${code(type)} connector ${code(name)} uses ${code('auth.type: application')}, which isn't allowed for this connector type.`
         })
       }
       return hits
     }
+  },
+  {
+    id: 'platform/connector-fabric-only',
+    run: (ctx) => {
+      if (!ctx.runsLocally) return 'na'
+      if (!ctx.yml) return []
+      const hits: QuickHit[] = []
+      for (const c of connectorsList(ctx)) {
+        const type = String(c.type ?? '').trim()
+        if (!type || LOCAL_CONNECTOR_TYPES.has(type.toLowerCase())) continue
+        const name = String(c.name ?? type)
+        hits.push({
+          file: ctx.yml.path,
+          line: connectorLine(ctx.yml.text, name),
+          label: `${name} (${type})`,
+          message: `${code(name)} is a ${code(type)} connector, which runs only on Fabric, so the local preview can't call it. ${FABRIC_ONLY_THEN}`
+        })
+      }
+      return hits
+    },
+    summarize: (hits) =>
+      `These connectors run only on Fabric, so the local preview can't call them: ${listLabels(hits)}. ${FABRIC_ONLY_THEN}`
   },
   {
     id: 'platform/connector-orphaned-dir',

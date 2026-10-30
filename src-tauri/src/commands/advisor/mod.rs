@@ -169,6 +169,13 @@ fn is_secret_file(path: &str) -> bool {
     || [".pem", ".key", ".pfx", ".p12"].iter().any(|ext| name.ends_with(ext))
 }
 
+/// Whether `path` is in an app's `.rayfin-local` folder: the local backend's
+/// database, signing keys and secret values. The quick checks look at its
+/// `.gitignore` locally, and nothing else needs it.
+fn in_local_state(path: &str) -> bool {
+  path.split(['/', '\\']).any(|part| part.eq_ignore_ascii_case(".rayfin-local"))
+}
+
 /// Whether a read-only Advisor session may perform a requested action. Fails
 /// closed: anything unrecognized, and any sandbox-bypass request, is denied.
 #[cfg(test)]
@@ -184,7 +191,7 @@ pub(crate) fn permitted_in(root: &Path, sandbox: Sandbox, data: &PermissionReque
     return false;
   }
   match request_kind(data).as_deref() {
-    Some("read") => text("path").is_some_and(|p| path_inside(root, p) && !is_secret_file(p)),
+    Some("read") => text("path").is_some_and(|p| path_inside(root, p) && !is_secret_file(p) && !in_local_state(p)),
     Some("url") => text("url").is_some_and(|u| url_allowed(u, sandbox.url_hosts)),
     Some("custom-tool") => true,
     Some("mcp") => sandbox.read_only_mcp && body.get("readOnly").and_then(Value::as_bool).unwrap_or(false),
@@ -537,7 +544,8 @@ pub async fn advisor_collect(project_id: String) -> Result<AdvisorProjectSnapsho
   let Some(project) = store::find_project(&project_id) else {
     return Err("Project not found.".into());
   };
-  Ok(collect::collect(&project.path).await)
+  // Personal apps run on the bundled local backend; team apps on their pipeline's.
+  Ok(collect::collect(&project.path, project.team.is_none()).await)
 }
 
 /// Return the saved deep review (with `stale` recomputed) and the
@@ -1103,6 +1111,17 @@ mod tests {
     for fine in [".env.example", "rayfin/.env.sample", "src/env.ts", "src/vite-env.d.ts", "rayfin/rayfin.yml"] {
       assert!(permitted(&root, &read(fine)), "{fine} must be readable");
     }
+  }
+
+  #[test]
+  fn the_local_backends_state_is_never_read() {
+    let root = std::env::temp_dir().join("advisor-perm-root");
+    let read = |path: &str| request(json!({ "kind": "read", "path": path }));
+    for state in [".rayfin-local", ".rayfin-local/db.sqlite", ".rayfin-local\\keys\\signing.json", ".Rayfin-Local/secrets.json"] {
+      assert!(!permitted(&root, &read(state)), "{state} must be blocked");
+    }
+    assert!(!permitted(&root, &read(&root.join(".rayfin-local").join("state.json").to_string_lossy())));
+    assert!(permitted(&root, &read("rayfin-local.toml")), "the backend's settings file isn't its state");
   }
 
   #[test]

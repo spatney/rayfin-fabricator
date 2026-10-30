@@ -1,5 +1,5 @@
 {
-  "catalogVersion": "2026-10-04",
+  "catalogVersion": "2026-10-29",
   "rayfinBaseline": "1.36.2",
   "categories": [
     {
@@ -192,7 +192,7 @@
       "appliesWhen": ["auth"],
       "title": "Entra token sign-in isn't enabled in rayfin.yml",
       "summary": "Apps that sign in with an Entra token, including local automatic sign-in, enable `externalEntraExchange`",
-      "why": "`signInWithEntraToken()` and local automatic sign-in (`fetchRayfinLocalSessionToken()`) exchange a delegated Entra token for a Rayfin session. Unless `services.auth.fabric.externalEntraExchange` is `true`, the backend rejects it with \"External Entra exchange is not enabled.\"",
+      "why": "`signInWithEntraToken()` and local automatic sign-in (`fetchRayfinLocalSessionToken()`) exchange a delegated Entra token for a Rayfin session. Fabricator's local backend accepts the exchange with a warning, but unless `services.auth.fabric.externalEntraExchange` is `true`, a published app's backend rejects it with \"External Entra exchange is not enabled.\"",
       "fix": "Set `externalEntraExchange: true` under `services.auth.fabric` in rayfin.yml.",
       "docs": [
         { "title": "Direct Entra token sign-in", "url": "https://rayfin.ai/docs/auth/entra-token" },
@@ -252,7 +252,7 @@
       "appliesWhen": ["data"],
       "title": "Anyone can change this data without signing in",
       "summary": "Anonymous (public) grants are read-only",
-      "why": "An `@anonymous` grant that includes create, update, or delete lets unauthenticated callers modify rows.",
+      "why": "An `@anonymous` grant that includes create, update, or delete lets unauthenticated callers modify rows: in the local preview, and in the published app wherever a tenant admin allows anonymous data access (most tenants refuse the `anonymous` role when you publish).",
       "fix": "Limit `@anonymous` to `'read'` for genuinely public data, and move writes to `@authenticated` with an owner policy.",
       "docs": [
         { "title": "Public read, authenticated write", "url": "https://rayfin.ai/docs/data/permissions#public-read-authenticated-write" }
@@ -264,10 +264,10 @@
       "engine": "quick",
       "severity": "medium",
       "appliesWhen": ["data"],
-      "title": "Anonymous data access may be rejected on Fabric",
+      "title": "Anonymous data access may block publishing",
       "summary": "Public (anonymous) data access is only used where the tenant allows it",
-      "why": "Anonymous data access on Fabric requires a tenant admin to enable it, and the CLI currently rejects configurations that grant the `anonymous` role at apply time — so the deploy or schema apply can fail.",
-      "fix": "Use `@authenticated('read')` for data only signed-in users need. Keep `@anonymous('read')` only for genuinely public data, and confirm your tenant allows anonymous data access.",
+      "why": "Fabricator's local backend allows the `anonymous` role, so public data works in the local preview. Most Fabric tenants refuse it, though: publishing (`rayfin up`) fails with `ANONYMOUS_DATA_ACCESS_BLOCKED_BY_TENANT_ADMIN` unless a tenant admin turned on \"Enable anonymous data access for Fabric Apps (Preview)\".",
+      "fix": "Grant data only signed-in users need to the `authenticated` role instead: replace `@anonymous('read')` (or `@role('anonymous', …)`) with `@authenticated('read')`. Keep `@anonymous('read')` only for genuinely public data, and only if your tenant admin has turned on anonymous data access for Fabric apps.",
       "docs": [
         { "title": "@anonymous()", "url": "https://rayfin.ai/docs/reference/sdk/rayfin-core#anonymousactions-options" },
         { "title": "Built-in roles", "url": "https://rayfin.ai/docs/data/permissions#built-in-roles" }
@@ -414,7 +414,7 @@
       "severity": "high",
       "title": "Environment file isn't git-ignored",
       "summary": "Local environment files are git-ignored",
-      "why": "`rayfin/.env` and `.env.local` hold deployment values and sometimes secrets. If they aren't ignored they end up in git history.",
+      "why": "`rayfin/.env` and `.env.local` hold your published app's settings and sometimes secrets. If they aren't ignored they end up in git history.",
       "fix": "Add the file to `.gitignore`, commit a placeholder `.env.example` instead, and rotate anything that was already committed.",
       "docs": [
         { "title": "Environment file locations", "url": "https://rayfin.ai/docs/deploy/environments#file-locations" }
@@ -442,7 +442,7 @@
       "title": "Redirect URIs allow unexpected origins",
       "summary": "`allowedRedirectUris` lists only the app's own origins",
       "why": "Every listed origin can receive the Fabric SSO hand-off. Wildcards and plain-`http` non-local origins widen who can receive it.",
-      "fix": "Keep only your local dev origin (such as `http://localhost:5173`) and the app's own deployed origin, and remove wildcards and entries copied from other projects.",
+      "fix": "Keep only your local dev origin (such as `http://localhost:5173`) and the published app's own origin, and remove wildcards and entries copied from other projects.",
       "docs": [
         { "title": "Keep the list tight", "url": "https://rayfin.ai/docs/hosting/redirect-uris#keep-the-list-tight" }
       ]
@@ -455,7 +455,7 @@
       "title": "Publishable-key variable holds something else",
       "summary": "Publishable-key variables contain a publishable key (`pk-…`)",
       "why": "Only publishable keys (`pk-…`) are safe in client code. Any other value in this variable ships to the browser.",
-      "fix": "Restore the value that `rayfin up` / `rayfin env` generate (it starts with `pk-`), and rotate the value that was pasted by mistake.",
+      "fix": "Restore the value that publishing (`rayfin up`) or `rayfin env` writes (it starts with `pk-`), and rotate the value that was pasted by mistake.",
       "docs": [
         { "title": "Secrets", "url": "https://rayfin.ai/docs/deploy/secrets" }
       ]
@@ -465,11 +465,25 @@
       "category": "secrets",
       "engine": "quick",
       "severity": "low",
-      "title": "Deployment registry isn't git-ignored",
+      "title": "Published app registry isn't git-ignored",
       "summary": "`rayfin/.deployments.json` is git-ignored",
-      "why": "It holds workspace, tenant, and item IDs for your own deployments and is regenerated by `rayfin up`; it isn't meant to be shared.",
+      "why": "It holds the workspace, tenant, and item IDs of the apps you published and is rewritten each time you publish (`rayfin up`); it isn't meant to be shared.",
       "fix": "Add `rayfin/.deployments.json` to `.gitignore` and untrack it with `git rm --cached rayfin/.deployments.json`.",
       "docs": [
+        { "title": "Generated and local files", "url": "https://rayfin.ai/docs/start/project-structure#generated-and-local-files" }
+      ]
+    },
+    {
+      "id": "secrets/local-backend-not-ignored",
+      "category": "secrets",
+      "engine": "quick",
+      "severity": "high",
+      "title": "Local backend folder isn't git-ignored",
+      "summary": "`.rayfin-local/`, where the local backend keeps its data, keys and secrets, stays out of git",
+      "why": "Fabricator runs the app on this computer with a local backend that keeps its state in `.rayfin-local/`: the app's local database with its users and sessions (`db.sqlite`), signing keys (`keys/`), and the local values of your secrets (`secrets.json`). The folder's own `.gitignore`, a single `*` line, keeps all of it out of git. If that file is missing or changed, or git already tracks files in the folder, commits — including the ones Fabricator makes — carry them into git history.",
+      "fix": "Restore `.rayfin-local/.gitignore` to a single `*` line (the local backend writes it again the next time it starts if it's missing), or add `.rayfin-local/` to the project's `.gitignore`. If git already tracks files there, untrack them with `git rm -r --cached .rayfin-local`, and rotate any real secrets that were committed.",
+      "docs": [
+        { "title": "Local state and reset (rayfin-local)", "url": "https://github.com/spatney/rayfin-local#local-state-and-reset" },
         { "title": "Generated and local files", "url": "https://rayfin.ai/docs/start/project-structure#generated-and-local-files" }
       ]
     },
@@ -494,7 +508,7 @@
       "title": "Browser code calls a service with a secret credential",
       "summary": "Credentials for other services stay server-side",
       "why": "Anything the browser sends is visible to users, so calling paid or privileged APIs from frontend code exposes the credential.",
-      "fix": "Move the call into a Rayfin function that reads the key as `ctx.Secrets.<NAME>` (store it with `rayfin secret set`), and call that function from the app. Functions aren't available in every Fabric region, so confirm they deploy in your workspace.",
+      "fix": "Move the call into a Rayfin function that reads the key as `ctx.Secrets.<NAME>` (store it with `rayfin secret set`), and call that function from the app. Functions run in the local preview, but not in every Fabric region, so confirm that publishing with Functions succeeds in your workspace.",
       "check": "Look for frontend code that sends API keys, bearer tokens or other credentials to other services (fetch or axios headers, SDK constructors), or that embeds such values. Rayfin publishable keys (pk-…) and keys designed to be public are fine. Mask any value you quote.",
       "docs": [
         { "title": "Read secrets from functions", "url": "https://rayfin.ai/docs/deploy/secrets#read-secrets-from-functions" },
@@ -509,7 +523,7 @@
       "appliesWhen": ["data"],
       "title": "Text field has no maximum length",
       "summary": "Every `@text` and `@email` field sets `max`",
-      "why": "On MSSQL, a `@text()` or `@email()` without `max` becomes `NVARCHAR(MAX)`, which can break GraphQL schema generation — the deploy reports success, then queries fail with an internal server error.",
+      "why": "On MSSQL, which published apps use, a `@text()` or `@email()` without `max` becomes `NVARCHAR(MAX)`, which can break GraphQL schema generation — publishing reports success, then the published app's queries fail with an internal server error.",
       "fix": "Set an explicit length, for example `@text({ max: 200 })`. Use `max: 128` for owner ids that come from `claims.sub`.",
       "docs": [
         { "title": "@text() without max", "url": "https://rayfin.ai/docs/reference/known-limitations#text-without-max-breaks-graphql-schema-generation-on-mssql" },
@@ -638,7 +652,7 @@
       "appliesWhen": ["data"],
       "title": "Entity name is reserved by GraphQL",
       "summary": "No entity is named after a built-in GraphQL type",
-      "why": "Entity names become GraphQL type names. Since Rayfin 1.36 the CLI rejects names such as `Date`, `String`, `Query`, or `UUID`, and anything starting with `__`, so the deploy stops.",
+      "why": "Entity names become GraphQL type names. Since Rayfin 1.36 the CLI rejects names such as `Date`, `String`, `Query`, or `UUID`, and anything starting with `__`, so publishing fails.",
       "fix": "Rename the class (for example `EventDate` instead of `Date`), or keep it and pass a safe name with `@entity('EventDate')`.",
       "docs": [
         { "title": "Reserved entity names", "url": "https://rayfin.ai/docs/reference/sdk/rayfin-core#reserved-entity-names" },
@@ -684,7 +698,7 @@
       "title": "Seed script writes to a sign-in-only entity",
       "summary": "Seed scripts only target entities that allow scripted writes",
       "why": "There is no supported way to script data into entities that require sign-in, so these seed scripts fail.",
-      "fix": "Seed only `@anonymous()` entities from scripts, and create signed-in data through the running app.",
+      "fix": "Create signed-in data through the running app. Scripts can seed only `@anonymous()` entities, which most Fabric tenants refuse when you publish.",
       "check": "If the project has seed scripts (for example scripts/seed*.ts that use RayfinServerClient), flag writes to entities whose relevant action is only granted to signed-in users.",
       "docs": [
         { "title": "No supported path for authenticated entities", "url": "https://rayfin.ai/docs/data/seeding#no-supported-path-for-authenticated-entities" }
@@ -857,7 +871,7 @@
       "severity": "high",
       "title": "rayfin.yml doesn't declare auth and data",
       "summary": "rayfin.yml declares `services.auth` and `services.data`, even when disabled",
-      "why": "The CLI reads these keys without applying defaults, so leaving one out makes deploys fail.",
+      "why": "The CLI reads these keys without applying defaults, so leaving one out makes publishing fail.",
       "fix": "Add both blocks — for example `data: { enabled: false }` when the app doesn't store data.",
       "docs": [
         { "title": "Configuration rules", "url": "https://rayfin.ai/docs/reference/agent-rules#configuration" },
@@ -872,7 +886,7 @@
       "appliesWhen": ["data"],
       "title": "Data service needs `dialect: mssql`",
       "summary": "The data service declares `dialect: mssql`",
-      "why": "With `services.data.enabled: true`, `dialect` is required and Fabric apps support only `mssql` — otherwise the deploy fails with \"Dialect is required when Data module is enabled\".",
+      "why": "With `services.data.enabled: true`, `dialect` is required and Fabric apps support only `mssql` — otherwise publishing fails with \"Dialect is required when Data module is enabled\".",
       "fix": "Set `dialect: mssql` under `services.data`.",
       "docs": [
         { "title": "dialect is required", "url": "https://rayfin.ai/docs/reference/known-limitations#dialect-is-required-when-the-data-module-is-enabled" },
@@ -942,7 +956,7 @@
       "appliesWhen": ["hosting"],
       "title": "Static hosting folder doesn't match the build output",
       "summary": "`staticHosting.folder` matches the frontend's build output directory",
-      "why": "`rayfin up` uploads `staticHosting.folder`. If it differs from where the bundler writes the build, the deploy fails or publishes stale files.",
+      "why": "Publishing (`rayfin up`) uploads `staticHosting.folder`. If it differs from where the bundler writes the build, publishing fails or uploads stale files.",
       "fix": "Make `services.staticHosting.folder` match Vite's `build.outDir` (default `dist`).",
       "docs": [
         { "title": "Static hosting troubleshooting", "url": "https://rayfin.ai/docs/hosting#troubleshooting" },
@@ -985,7 +999,7 @@
       "appliesWhen": ["functions"],
       "title": "Functions are enabled without application auth",
       "summary": "Enabled Functions declare `auth.type: application`",
-      "why": "Since Rayfin 1.36, `rayfin up` refuses to deploy enabled Functions unless `services.functions.auth.type` is `application`: \"authentication is required when Functions are enabled.\"",
+      "why": "Since Rayfin 1.36, publishing (`rayfin up`) refuses enabled Functions unless `services.functions.auth.type` is `application`: \"authentication is required when Functions are enabled.\"",
       "fix": "Add `auth: { type: application }` under `services.functions` in rayfin.yml. Functions then call other services as the app's identity.",
       "docs": [
         { "title": "Authentication is required when Functions are enabled", "url": "https://rayfin.ai/docs/reference/errors#authentication-is-required-when-functions-are-enabled" },
@@ -1000,7 +1014,7 @@
       "appliesWhen": ["hosting"],
       "title": "Static hosting doesn't say who can load the app",
       "summary": "`services.staticHosting.assetAccess` is set explicitly",
-      "why": "Since Rayfin 1.35.1 a hosted app must choose `protected` (Fabric sign-in required) or `public`. When it's missing, the first non-interactive deploy writes `protected` into rayfin.yml for you, so access isn't a deliberate choice.",
+      "why": "Since Rayfin 1.35.1 a hosted app must choose `protected` (Fabric sign-in required) or `public`. When it's missing, the first non-interactive publish (`rayfin up`) writes `protected` into rayfin.yml for you, so access isn't a deliberate choice.",
       "fix": "Add `assetAccess: protected` under `services.staticHosting` (or `public` if anyone with the link should load the app's files; data permissions still apply).",
       "docs": [
         { "title": "Static hosting posture is missing", "url": "https://rayfin.ai/docs/reference/errors#static-hosting-posture-is-missing" },
@@ -1015,7 +1029,7 @@
       "appliesWhen": ["hosting"],
       "title": "Embedded-only app is set to public",
       "summary": "`assetAccess: public` isn't combined with `embedded.only: true`",
-      "why": "An app that only loads inside the Fabric portal has no standalone page to make public, so `rayfin up` rejects the combination with \"Invalid static hosting posture\".",
+      "why": "An app that only loads inside the Fabric portal has no standalone page to make public, so publishing fails: `rayfin up` rejects the combination with \"Invalid static hosting posture\".",
       "fix": "Use `assetAccess: protected` for an embedded-only app, or set `embedded.only: false` if it should also load on its own.",
       "docs": [
         { "title": "Choose protected or public assets", "url": "https://rayfin.ai/docs/hosting#choose-protected-or-public-assets" }
@@ -1041,7 +1055,7 @@
       "severity": "medium",
       "title": "Rayfin CLI is out of date",
       "summary": "The Rayfin CLI is on the latest release",
-      "why": "Newer CLIs ship fixes and match the current documentation; behavior described on rayfin.ai may not apply to older versions.",
+      "why": "Newer CLIs ship fixes and match the current documentation; behavior described on rayfin.ai may not apply to older versions. For apps Fabricator runs on this computer, only releases its local backend runs count.",
       "fix": "Update `@microsoft/rayfin-cli` to the latest release — Fabricator can hand the upgrade to Copilot.",
       "docs": [
         { "title": "Update the CLI", "url": "https://rayfin.ai/docs/reference/cli/installation#update-the-cli" }
@@ -1054,7 +1068,7 @@
       "severity": "medium",
       "title": "Rayfin SDK is out of date",
       "summary": "The Rayfin SDK packages are on the latest release",
-      "why": "The SDK and CLI version independently, and newer SDK releases carry fixes and the APIs the current docs describe. Rayfin 1.36 also changed several imports and Functions APIs.",
+      "why": "The SDK and CLI version independently, and newer SDK releases carry fixes and the APIs the current docs describe. Rayfin 1.36 also changed several imports and Functions APIs. For apps Fabricator runs on this computer, only releases its local backend runs count.",
       "fix": "Update all Rayfin SDK packages together to the same latest version — Fabricator can hand the upgrade to Copilot.",
       "docs": [
         { "title": "SDK version notes", "url": "https://rayfin.ai/docs/reference/sdk#version-notes" }
@@ -1068,8 +1082,22 @@
       "title": "Rayfin SDK packages are on different versions",
       "summary": "The Rayfin SDK family is installed at one version",
       "why": "`rayfin-core`, `-client`, `-data`, `-auth`, `-auth-provider-fabric`, `-lib`, `-functions`, `-storage`, `-embed-host`, and `-local-dev` ship in lockstep; mixing versions is untested and can break at runtime.",
-      "fix": "Pin every Rayfin SDK package to the same version (normally the latest) and reinstall.",
+      "fix": "Pin every Rayfin SDK package to the same release and reinstall. In apps Fabricator runs on this computer, that's the project's `~` range, such as `~1.36.0`.",
       "docs": [
+        { "title": "SDK version notes", "url": "https://rayfin.ai/docs/reference/sdk#version-notes" }
+      ]
+    },
+    {
+      "id": "platform/sdk-local-range",
+      "category": "platform",
+      "engine": "quick",
+      "severity": "medium",
+      "title": "Rayfin packages aren't pinned to a release Fabricator runs locally",
+      "summary": "Rayfin packages stay on the line of releases Fabricator runs on this computer",
+      "why": "Fabricator's local backend runs one line of Rayfin releases, such as 1.36.x, so new projects pin every `@microsoft/rayfin-*` package to it with a `~` range (`~1.36.0`). On another release, parts of the app can misbehave on this computer, and a published app previews on its published backend instead. A `^` range, or a tag such as `latest`, lets the next install move the app to a newer release before Fabricator runs it.",
+      "fix": "Set every `@microsoft/rayfin-*` package in package.json to the `~` range of the line Fabricator runs, such as `~1.36.0`, and run `npm install` so they all resolve to that line. Don't upgrade past it until Fabricator supports a newer one.",
+      "docs": [
+        { "title": "SDK versions (rayfin-local)", "url": "https://github.com/spatney/rayfin-local/blob/main/docs/differences.md#platform" },
         { "title": "SDK version notes", "url": "https://rayfin.ai/docs/reference/sdk#version-notes" }
       ]
     },
@@ -1080,9 +1108,9 @@
       "severity": "medium",
       "appliesWhen": ["connectors"],
       "title": "Connector package isn't pinned to the CLI's version",
-      "summary": "Connector packages are pinned to the version the CLI installs",
+      "summary": "Connector packages are pinned to the CLI's version or the project's `~` range",
       "why": "Connector packages ship in lockstep with the CLI, but their npm tags can lag behind. An unpinned install can pull an older connector that brings its own `rayfin-data`, leaving two Rayfin versions in one app.",
-      "fix": "Install the exact version `rayfin connector add` prints (normally the CLI's version), without `^` or `~`.",
+      "fix": "Install the exact version `rayfin connector add` prints (normally the CLI's version), or the `~` range the project's other Rayfin packages use, such as `~1.36.0` — never a `^` range.",
       "docs": [
         { "title": "Install connector packages at the pinned version", "url": "https://rayfin.ai/docs/reference/known-limitations#install-connector-packages-at-the-pinned-version" },
         { "title": "Install the pinned packages", "url": "https://rayfin.ai/docs/connectors/adding#install-the-pinned-packages" }
@@ -1096,8 +1124,8 @@
       "appliesWhen": ["connectors"],
       "title": "Connector schema bundles decorated entity classes",
       "summary": "Connector `schema.ts` files list entity fields by name unless relationship paths need the classes",
-      "why": "Importing entity classes as values ships their decorators into the browser bundle. The build and deploy succeed, but the deployed page can render blank.",
-      "fix": "In `rayfin/connectors/<name>/schema.ts`, list each entity's scalar fields as a string array in `connectorConfig.entities` and use `import type` / `export type` for the classes. Keep the class form only when the app selects relationship paths such as `orderItems.quantity`, and check that the deployed page loads.",
+      "why": "Importing entity classes as values ships their decorators into the browser bundle. The build and publishing succeed, but the published page can render blank.",
+      "fix": "In `rayfin/connectors/<name>/schema.ts`, list each entity's scalar fields as a string array in `connectorConfig.entities` and use `import type` / `export type` for the classes. Keep the class form only when the app selects relationship paths such as `orderItems.quantity`, and check that the published page loads.",
       "docs": [
         { "title": "Choose an entities registration form", "url": "https://rayfin.ai/docs/connectors/client-setup#choose-an-entities-registration-form" },
         { "title": "Decorated entity classes can break a browser bundle", "url": "https://rayfin.ai/docs/reference/known-limitations#decorated-entity-classes-can-break-a-browser-bundle" }
@@ -1111,10 +1139,25 @@
       "appliesWhen": ["connectors"],
       "title": "Semantic model or KQL connector uses application auth",
       "summary": "Semantic model and KQL connectors use delegated auth",
-      "why": "`auth.type: application` isn't allowed for `fabric-semanticmodel` and `kusto` connectors, so `rayfin up` rejects the configuration.",
+      "why": "`auth.type: application` isn't allowed for `fabric-semanticmodel` and `kusto` connectors, so publishing fails: `rayfin up` rejects the configuration.",
       "fix": "Set `auth.type: delegated` for these connectors.",
       "docs": [
         { "title": "Allowed auth values per connector type", "url": "https://rayfin.ai/docs/connectors/auth#use-an-allowed-value-for-the-connector-type" }
+      ]
+    },
+    {
+      "id": "platform/connector-fabric-only",
+      "category": "platform",
+      "engine": "quick",
+      "severity": "note",
+      "appliesWhen": ["connectors"],
+      "title": "Connector runs only on Fabric",
+      "summary": "Every connector runs in the local preview",
+      "why": "Fabricator runs the app on this computer, where semantic model and SQL connectors (`fabric-semanticmodel`, `fabric-sqldatabase`, `fabric-warehouse`, `fabric-sqlanalytics`) run as you. Other types, such as `kusto`, run only on Fabric. Until the app is published, its calls to them fail in the preview. Once it's published, the preview uses the published app's backend instead of this computer's, so changes to the data model, functions and connectors show there only after you publish.",
+      "fix": "Keep the connector if the app needs this data, and publish to try changes that use it. If the same data is also in a semantic model, warehouse or SQL database, a connector of that type runs in the local preview.",
+      "docs": [
+        { "title": "Differences from Fabric (rayfin-local)", "url": "https://github.com/spatney/rayfin-local/blob/main/docs/differences.md" },
+        { "title": "KQL databases", "url": "https://rayfin.ai/docs/connectors/kusto" }
       ]
     },
     {
@@ -1125,7 +1168,7 @@
       "appliesWhen": ["connectors"],
       "title": "Connector folder has no rayfin.yml entry",
       "summary": "Every `rayfin/connectors` folder matches a connector in rayfin.yml",
-      "why": "A leftover connector folder is no longer deployed or refreshed, but app code may still import from it.",
+      "why": "A leftover connector folder is no longer published or refreshed, but app code may still import from it.",
       "fix": "Delete the folder and its imports, or re-add the connector with `rayfin connector add`.",
       "docs": [
         { "title": "List and remove connectors", "url": "https://rayfin.ai/docs/connectors/adding#list-and-remove-connectors" }
@@ -1183,7 +1226,7 @@
       "appliesWhen": ["functions"],
       "title": "Function handler isn't registered",
       "summary": "Every function handler is registered with `udf.func`",
-      "why": "Only handlers registered with `udf.func(...)` are deployed and typed for the client. `types.ts` is generated, so hand edits are overwritten.",
+      "why": "Only handlers registered with `udf.func(...)` can be called, locally or once published, and are typed for the client. `types.ts` is generated, so hand edits are overwritten.",
       "fix": "Register each handler with `udf.func(name, handler, …)`, and regenerate types instead of editing `types.ts`.",
       "check": "In the functions' source (rayfin/functions/, or the functions package rayfin.yml's services.functions.path names, such as packages/functions), find exported handlers that are never passed to udf.func, and manual edits to the generated types.ts.",
       "docs": [
@@ -1200,7 +1243,7 @@
       "title": "App uses experimental Rayfin Storage",
       "summary": "Experimental Storage is noted for availability",
       "why": "Storage is experimental: it isn't available in every Fabric region or tenant, and `@microsoft/rayfin-storage` may change substantially between releases.",
-      "fix": "Confirm a storage-enabled deploy succeeds in your target workspace before depending on it, and pin every Rayfin package to one exact version.",
+      "fix": "Storage runs in the local preview, but before you depend on it, confirm that publishing with storage succeeds in your target workspace, and keep every Rayfin package on the same release.",
       "docs": [
         { "title": "Storage is experimental", "url": "https://rayfin.ai/docs/reference/known-limitations#storage-is-experimental" }
       ]
@@ -1297,7 +1340,7 @@
       "title": "App uses Rayfin Functions",
       "summary": "Functions availability in the target workspace is noted",
       "why": "Functions are generally available since Rayfin 1.36, but not in every Fabric region or tenant.",
-      "fix": "Confirm a deploy with Functions succeeds in your target workspace before depending on them, and keep data access in `client.data` where a function isn't required.",
+      "fix": "Functions run in the local preview, but before you depend on them, confirm that publishing with Functions succeeds in your target workspace, and keep data access in `client.data` where a function isn't required.",
       "docs": [
         { "title": "Functions are not available in every region or tenant", "url": "https://rayfin.ai/docs/reference/known-limitations#functions-are-not-available-in-every-region-or-tenant" }
       ]

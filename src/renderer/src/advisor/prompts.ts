@@ -10,7 +10,8 @@ const GUIDANCE =
   'Before changing Rayfin APIs, confirm them in the version-matched docs — ' +
   '`.agents/skills/rayfin/SKILL.md` and `node_modules/@microsoft/rayfin-guide/assets/docs/` — ' +
   'or the linked rayfin.ai pages, and only use documented APIs. Keep the app building and follow ' +
-  'Rayfin conventions. Do not run `rayfin up` or deploy — Fabricator redeploys automatically.'
+  "Rayfin conventions. Don't publish the app or run `rayfin up`: the change shows in Fabricator's " +
+  'local preview, and it reaches the published app when the user publishes.'
 
 function location(f: AdvisorFinding): string | undefined {
   if (!f.file) return undefined
