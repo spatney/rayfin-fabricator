@@ -10,7 +10,8 @@
 use std::path::PathBuf;
 
 use super::tools::Surface;
-use crate::services::{grounding, journal, paths, store};
+use crate::services::{diagnostics, grounding, journal, paths, store};
+use crate::types::{LocalStatus, StudioProject};
 
 /// How many journal records to put in front of the model each turn.
 ///
@@ -25,9 +26,13 @@ pub struct ProjectContext {
   pub name: String,
   pub path: String,
   /// Set when the project belongs to a team workspace. Team apps work
-  /// differently enough (publishing, and who may grant access) that the
-  /// assistant must not offer the personal-project controls for them.
+  /// differently enough (publishing, who may grant access, and no local
+  /// backend) that the assistant must not offer the personal-project controls
+  /// for them.
   pub team: Option<String>,
+  /// Published to Microsoft Fabric at least once, so its preview has a
+  /// published backend to fall back to.
+  pub published: bool,
 }
 
 /// One of the user's projects, so the assistant can answer "open my expenses
@@ -36,9 +41,9 @@ pub struct ProjectContext {
 pub struct ProjectSummary {
   pub id: String,
   pub name: String,
-  /// Whether the project has ever been deployed, which decides whether sharing
+  /// Whether the project has ever been published, which decides whether sharing
   /// it is possible yet.
-  pub deployed: bool,
+  pub published: bool,
 }
 
 /// The mirrored release notes.
@@ -77,6 +82,14 @@ pub struct HelpContext {
   pub recent_activity: String,
   /// What is true right now, from the screen that opened Help.
   pub facts: Vec<String>,
+  /// The Local development experiment is on: personal apps run on this
+  /// computer with a local backend. Off, they're developed against their Fabric
+  /// deployment, and Help says nothing of a local backend.
+  pub local_development: bool,
+  /// The open personal project's local backend, as the supervisor last
+  /// reported it. `None` without one open, or with Local development off: team
+  /// apps don't run on one.
+  pub local: Option<LocalStatus>,
   /// Which screen the user is on, so an action that can't work from there is
   /// never offered as a button.
   pub surface: Surface,
@@ -113,9 +126,29 @@ impl HelpContext {
       projects: all_projects(),
       recent_activity: journal::recent(RECENT_ACTIVITY),
       facts: facts.to_vec(),
+      local_development: store::local_development_enabled(),
+      local: None,
       surface,
       extra_roots: attachments.to_vec(),
     }
+  }
+
+  /// Whether the open project is a personal one.
+  pub fn personal_project(&self) -> bool {
+    self.project.as_ref().is_some_and(|p| p.team.is_none())
+  }
+
+  /// Whether Help describes and reads the open project's local backend: a
+  /// personal one, while Local development is on.
+  pub fn reads_local_backend(&self) -> bool {
+    self.local_development && self.personal_project()
+  }
+
+  /// Places inside the roots the session must not read directly: the local
+  /// backend's raw output, which Help reads redacted through
+  /// `help_local_output` instead (while Local development is on).
+  pub fn denied(&self) -> Vec<PathBuf> {
+    vec![PathBuf::from(&self.logs_dir).join(diagnostics::LOCAL_LOG_DIR)]
   }
 
   /// Every directory or file the session may read. The permission policy allows
@@ -162,11 +195,24 @@ writes are marked `dev: true`.\n",
         s.push_str(&format!("- The user's open project: \"{}\" at `{}`\n", p.name, p.path));
         if p.team.is_some() {
           s.push_str(
-            "  It is a **team app**, which works differently from a personal one. It is published \
-by the team's pipeline, not deployed from this computer, and access to it is granted to the whole \
-team workspace rather than per app. So there is no **Share** control for it: an owner grants \
-access under **App access** in the workspace overview. Offer `open-team-access` instead of \
-`share-app`, and say that only a workspace owner can grant it.\n",
+            "  It is a **team app**, which works differently from a personal one. It doesn't run on \
+a local backend: its preview uses a backend the team's pipeline publishes. It is published by the \
+team's pipeline, not from this computer, and access to it is granted to the whole team workspace \
+rather than per app. So there is no **Share** control for it: an owner grants access under **App \
+access** in the workspace overview. Offer `open-team-access` instead of `share-app`, and say that \
+only a workspace owner can grant it.\n",
+          );
+        } else if p.published {
+          s.push_str("  It has been published to Microsoft Fabric.\n");
+        } else if self.local_development {
+          s.push_str(
+            "  It has never been published to Microsoft Fabric. That's fine: it runs on this \
+computer, and publishing is optional.\n",
+          );
+        } else {
+          s.push_str(
+            "  It has never been published to Microsoft Fabric. It's developed against its \
+published app, so the preview can show it only after a first publish.\n",
           );
         }
       }
@@ -180,8 +226,8 @@ access under **App access** in the workspace overview. Offer `open-team-access` 
         "- Their projects, with the id to pass as `target` when you offer `open-project`:\n",
       );
       for p in &self.projects {
-        let deployed = if p.deployed { "deployed" } else { "never deployed" };
-        s.push_str(&format!("  - \"{}\" — id `{}` ({deployed})\n", p.name, p.id));
+        let published = if p.published { "published" } else { "never published" };
+        s.push_str(&format!("  - \"{}\" — id `{}` ({published})\n", p.name, p.id));
       }
       s.push_str(
         "  Match the user's wording loosely against these names. If exactly one is a plausible \
@@ -191,9 +237,16 @@ candidates. Never invent an id.\n",
     }
 
     s.push_str(&format!(
-      "- Logs and the error journal: `{}` (files named `errors-*.jsonl`, `diagnostics-*.jsonl`, `main-*.log`)\n",
+      "- Logs and the activity journal: `{}` (files named `activity-*.jsonl`, `diagnostics-*.jsonl`, \
+`main-*.log`).",
       self.logs_dir
     ));
+    s.push_str(if self.local_development {
+      " The local backend's output is read with `help_local_output`; its own log files there are \
+not readable directly.\n"
+    } else {
+      "\n"
+    });
 
     match &self.docs_dir {
       Some(d) => s.push_str(&format!(
@@ -260,6 +313,7 @@ causes. Work from the logs and the documentation.\n",
 /// Look up a project's name and folder from the app's store.
 fn project_context(project_id: &str) -> Option<ProjectContext> {
   store::find_project(project_id).map(|p| ProjectContext {
+    published: published(&p),
     name: p.name,
     path: p.path,
     team: p.team.map(|t| t.workspace_id),
@@ -271,8 +325,14 @@ fn all_projects() -> Vec<ProjectSummary> {
   store::get_state()
     .projects
     .into_iter()
-    .map(|p| ProjectSummary { id: p.id, name: p.name, deployed: p.last_deploy.is_some() })
+    .map(|p| ProjectSummary { published: published(&p), id: p.id, name: p.name })
     .collect()
+}
+
+/// Whether a project has a published app: a publish that never succeeded
+/// leaves a record without an address.
+fn published(project: &StudioProject) -> bool {
+  project.last_deploy.as_ref().and_then(|d| d.url.as_deref()).is_some_and(|url| !url.trim().is_empty())
 }
 
 #[cfg(test)]
@@ -296,10 +356,13 @@ mod tests {
         name: "Contoso Expenses".into(),
         path: "C:\\projects\\contoso".into(),
         team: None,
+        published: false,
       }),
       projects: Vec::new(),
       recent_activity: String::new(),
       facts: Vec::new(),
+      local_development: true,
+      local: None,
       surface: Surface::Project,
       extra_roots: vec!["C:\\Users\\me\\Desktop\\shot.png".into()],
     }
@@ -312,16 +375,76 @@ mod tests {
       name: "Contoso Expenses".into(),
       path: "C:\\projects\\contoso".into(),
       team: Some("ws-1".into()),
+      published: false,
     });
     let text = c.describe();
     assert!(text.contains("team app"));
     assert!(text.contains("no **Share** control"), "the missing control is explained, not ignored");
     assert!(text.contains("open-team-access"));
+    assert!(text.contains("doesn't run on a local backend"));
+    assert!(!c.personal_project(), "Help never describes a team app's local backend");
+    assert!(!c.reads_local_backend());
   }
 
   #[test]
   fn a_personal_project_says_nothing_about_team_access() {
     assert!(!ctx().describe().contains("team app"));
+    assert!(ctx().personal_project());
+    assert!(ctx().reads_local_backend());
+  }
+
+  #[test]
+  fn publishing_is_described_as_optional() {
+    let mut c = ctx();
+    assert!(c.describe().contains("never been published to Microsoft Fabric. That's fine"));
+    c.project.as_mut().unwrap().published = true;
+    c.projects = vec![
+      ProjectSummary { id: "p1".into(), name: "Expenses".into(), published: true },
+      ProjectSummary { id: "p2".into(), name: "Notes".into(), published: false },
+    ];
+    let text = c.describe();
+    assert!(text.contains("It has been published to Microsoft Fabric."));
+    assert!(text.contains("\"Expenses\" — id `p1` (published)"));
+    assert!(text.contains("\"Notes\" — id `p2` (never published)"));
+    assert!(!text.contains("deployed"), "the old word is gone: {text}");
+  }
+
+  #[test]
+  fn without_local_development_an_app_needs_publishing_and_has_no_local_backend() {
+    let mut c = ctx();
+    c.local_development = false;
+    assert!(!c.reads_local_backend(), "a personal app has no local backend to read");
+    let text = c.describe();
+    assert!(text.contains("never been published to Microsoft Fabric. It's developed against its published app"));
+    assert!(!text.contains("That's fine"), "{text}");
+    assert!(!text.contains("help_local_output"), "{text}");
+    assert!(text.contains("`activity-*.jsonl`"));
+    // Its raw output stays unreadable all the same.
+    assert_eq!(c.denied().len(), 1);
+  }
+
+  #[test]
+  fn a_publish_that_never_succeeded_is_not_a_published_app() {
+    let project = |last_deploy: serde_json::Value| -> StudioProject {
+      serde_json::from_value(serde_json::json!({
+        "id": "p", "name": "Notes", "path": "C:\\apps\\notes", "addedAt": "2026-01-01T00:00:00.000Z",
+        "lastDeploy": last_deploy
+      }))
+      .unwrap()
+    };
+    assert!(!published(&project(serde_json::Value::Null)));
+    assert!(!published(&project(serde_json::json!({ "status": "error", "error": "Tenant not authorized" }))));
+    assert!(published(&project(serde_json::json!({ "status": "success", "url": "https://app.fabric.example" }))));
+  }
+
+  #[test]
+  fn the_local_backend_output_is_read_through_its_tool_only() {
+    let c = ctx();
+    let denied: Vec<String> = c.denied().iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    assert_eq!(denied, [format!("C:\\data\\logs{}local-backend", std::path::MAIN_SEPARATOR)]);
+    let text = c.describe();
+    assert!(text.contains("`activity-*.jsonl`"));
+    assert!(text.contains("read with `help_local_output`"));
   }
 
   #[test]

@@ -1,10 +1,21 @@
 import { useState, type JSX } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { StudioProject } from '@shared/ipc'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import type {
+  LocalLogEvent,
+  LocalProblem,
+  LocalReady,
+  LocalStatus,
+  StudioProject
+} from '@shared/ipc'
 import { OverlayProvider, SuppressPreview } from '../overlay'
 import { useDesignSession, type DesignSurface } from '../design/useDesignSession'
-import PreviewPane, { type DeployUiState, __resetPreviewSurfaceState } from './PreviewPane'
+import type { LocalBackend } from '../localBackend'
+import PreviewPane, {
+  type DeployUiState,
+  type PreviewView,
+  __resetPreviewSurfaceState
+} from './PreviewPane'
 import { installPreviewEnv, makeProject, type PreviewEnv } from '../../test/harness'
 import { deferred } from '../../test/deferred'
 
@@ -118,7 +129,7 @@ describe('PreviewPane visibility', () => {
     )
     await settle(e)
     expect(screen.getByRole('alert').textContent).toBe(
-      'Fabric wants you to sign in again before this app can deploy.'
+      'Fabric wants you to sign in again before you can publish this app.'
     )
     expect(screen.queryByText(/Build succeeded/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'View logs' }))
@@ -130,7 +141,7 @@ describe('PreviewPane visibility', () => {
     expect(onDiagnoseDeploy).toHaveBeenCalledTimes(1)
   })
 
-  it('shows a first-deploy IPC error even before project state has refreshed', async () => {
+  it('shows a first publish’s IPC error even before project state has refreshed', async () => {
     const project = { ...makeProject('p1'), lastDeploy: undefined }
     render(
       <Harnessed
@@ -139,7 +150,7 @@ describe('PreviewPane visibility', () => {
         deploy={{ running: false, log: [], result: { ok: false, outcome: 'error', error: 'Deploy process disconnected' } }}
       />
     )
-    expect(screen.getByRole('region', { name: 'Deploy failed' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Couldn’t publish' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
     expect(screen.getByText('Deploy process disconnected')).toBeTruthy()
   })
@@ -162,7 +173,7 @@ describe('PreviewPane visibility', () => {
     )
     await settle(e)
     expect(screen.getByRole('alert').textContent).toBe(
-      'That deploy didn’t make it to Fabric. Want me to find out why?'
+      'Your app didn’t make it to Fabric. Want me to find out why?'
     )
     // The headline is in the logs, not spelled out over the preview.
     expect(screen.queryByText(/400 Bad Request/)).toBeNull()
@@ -184,13 +195,13 @@ describe('PreviewPane visibility', () => {
     await settle(e)
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     await settle(e)
-    expect(screen.queryByRole('region', { name: 'Deploy failed' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Couldn’t publish' })).toBeNull()
 
     rerender(<Harnessed project={project} suppressed={false} deploy={{ running: true, log: [] }} />)
     await settle(e)
     rerender(<Harnessed project={project} suppressed={false} deploy={{ ...failed }} />)
     await settle(e)
-    expect(screen.getByRole('region', { name: 'Deploy failed' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Couldn’t publish' })).toBeTruthy()
   })
 
   it('offers recovery for a persisted failure but disables it during another auth operation', async () => {
@@ -834,8 +845,11 @@ describe('PreviewPane local preview', () => {
     )
     await settle(e)
 
-    expect(screen.getByText('Deploying to Production')).toBeTruthy()
-    expect(screen.queryByText(/Fabricating/i), 'the deploy screen waits to be asked for').toBeNull()
+    expect(screen.getByText('Publishing to Production')).toBeTruthy()
+    expect(
+      screen.queryByText(/Fabricating/i),
+      'the publish screen waits to be asked for'
+    ).toBeNull()
     expect(screen.getByText('localhost:5173')).toBeTruthy()
     expect(lastShowUrl(e)?.url).toBe(LOCAL)
   })
@@ -945,7 +959,7 @@ describe('PreviewPane local preview', () => {
     expect(after, 'the stopped local page is not reloaded').not.toContain('reload')
     const nav = e.calls.slice(mark).find((c) => c.method === 'navigate')
     expect(nav?.args[0]).toBe('https://p1.example.app/')
-    expect(screen.queryByText('Deploying to Production')).toBeNull()
+    expect(screen.queryByText('Publishing to Production')).toBeNull()
   })
 
   it('returns to the deployed app when the dev server stops (turn ends)', async () => {
@@ -976,6 +990,84 @@ describe('PreviewPane local preview', () => {
     expect(reveal!.index).toBeGreaterThanOrEqual(mark)
     expect(reveal!.url).toBe('https://p1.example.app/')
     expect(screen.queryByText('Local')).toBeNull()
+  })
+
+  it('reloads a live preview kept through a publish, as its published backend changed', async () => {
+    const project = makeProject('p1')
+    const pane = (deploy: DeployUiState): JSX.Element => (
+      <Harnessed
+        project={project}
+        suppressed={false}
+        deploy={deploy}
+        localPreviewUrl={LOCAL}
+        manualDeploy
+      />
+    )
+    const { rerender } = render(pane({ running: true, log: [], startedAt: Date.now() }))
+    await settle(e)
+    await act(async () => {
+      e.emitNav({ url: LOCAL, loading: false })
+    })
+    await settle(e)
+    const mark = e.calls.length
+
+    rerender(pane({ running: false, log: [], result: { ok: true, outcome: 'success' } }))
+    await settle(e)
+    expect(e.methodsAfter(mark)).toContain('reload')
+  })
+})
+
+/** Without Local development, the preview shows the published app (or a live preview on its backend). */
+describe('PreviewPane before an app is published', () => {
+  it('asks where to publish an app a turn tried to publish before it ever was', async () => {
+    render(
+      <Harnessed
+        project={makeProject('p1', { name: 'Trip Logger', lastDeploy: undefined })}
+        suppressed={false}
+        deploy={{
+          running: false,
+          log: [],
+          result: {
+            ok: false,
+            outcome: 'needs-workspace',
+            error: 'This project has no Fabric workspace yet — choose one to publish to.'
+          }
+        }}
+      />
+    )
+    await settle(e)
+    expect(screen.getByRole('heading', { name: 'Choose where to publish' })).toBeTruthy()
+    expect(screen.getByText(/hasn’t been published yet/).textContent).toBe(
+      'Trip Logger hasn’t been published yet. Select Publish in the header above to name it and pick the Fabric workspace to publish it to.'
+    )
+    // It isn't a failure to look into.
+    expect(screen.queryByRole('region', { name: 'Couldn’t publish' })).toBeNull()
+  })
+
+  it('says where the published app will show', async () => {
+    render(<Harnessed project={makeProject('p1', { lastDeploy: undefined })} suppressed={false} />)
+    await settle(e)
+    expect(screen.getByText(/Your published app will render here/).textContent).toBe(
+      'Your published app will render here after a full rayfin up. Ask Copilot to build something, or select Publish.'
+    )
+  })
+
+  it('points at Publish, not at chat, while chat waits for the first publish', async () => {
+    render(
+      <OverlayProvider>
+        <PreviewPane
+          project={makeProject('p1', { lastDeploy: undefined, awaitingFirstDeploy: true })}
+          deploy={undefined}
+          awaitingPublish
+          focused={false}
+          onToggleFocus={() => {}}
+        />
+      </OverlayProvider>
+    )
+    await settle(e)
+    expect(screen.getByText(/Your published app will render here/).textContent).toBe(
+      'Your published app will render here once you publish it. Select Publish to publish it and start building.'
+    )
   })
 })
 
@@ -1063,7 +1155,9 @@ describe('PreviewPane design mode', () => {
     const bar = screen.getByRole('toolbar', { name: 'Design tools' })
     expect(bar.textContent).toContain('Click anything in your app to change it')
     // Switching views mid-session would reload the page, so the toggle is locked.
-    expect((screen.getByRole('button', { name: /fabric/i }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Fabric' }) as HTMLButtonElement).disabled).toBe(
+      true
+    )
     // Nothing queued yet → nothing to send.
     expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
 
@@ -1160,7 +1254,7 @@ describe('PreviewPane design mode', () => {
     expect(call!.args.slice(0, 3)).toEqual([true, false, localPreviewUrl])
     expect(call!.args[3]).toMatchObject({ items: [], sessionId: expect.any(String) })
     expect(screen.getByRole('toolbar', { name: 'Design tools' })).toBeTruthy()
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: /fabric/i }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Fabric' }).disabled).toBe(true)
   })
 
   it('ends local Design when a manual redeploy starts', async () => {
@@ -1221,6 +1315,7 @@ function DesignHarnessed({
   localPreviewUrl,
   manualDeploy,
   turnRunning,
+  local,
   onSend
 }: {
   project: StudioProject
@@ -1228,6 +1323,7 @@ function DesignHarnessed({
   localPreviewUrl?: string | null
   manualDeploy?: boolean
   turnRunning?: boolean
+  local?: LocalBackend
   onSend?: () => void
 }): JSX.Element {
   const [surface, setSurface] = useState<DesignSurface | null>(null)
@@ -1240,6 +1336,7 @@ function DesignHarnessed({
         localPreviewUrl={localPreviewUrl}
         manualDeploy={manualDeploy}
         turnRunning={turnRunning}
+        local={local}
         focused={false}
         onToggleFocus={() => {}}
         design={design}
@@ -1262,3 +1359,510 @@ function lastShowUrl(
   }
   return null
 }
+
+const LOCAL_APP = 'http://localhost:5173/'
+const LOCAL_EMBED = 'http://localhost:7171/.rayfin-local/portal/embed'
+
+const localReady: LocalReady = {
+  appUrl: LOCAL_APP,
+  apiUrl: 'http://localhost:7171',
+  embedUrl: LOCAL_EMBED,
+  portalUrl: 'http://localhost:7171/.rayfin-local/portal',
+  dataDir: null,
+  signInAs: { kind: 'developer' },
+  sdk: { version: '1.36.2', supported: true },
+  features: {
+    data: { enabled: true, entities: ['Note'] },
+    functions: { enabled: false, names: [] },
+    storage: { enabled: false, folders: [] },
+    auth: { enabled: true, fabric: true, password: false },
+    connectors: []
+  },
+  time: '2026-10-30T03:12:09.512Z'
+}
+
+function localProblem(code: string, details: LocalProblem['details'] = null): LocalProblem {
+  return { code, message: `${code} happened.`, hint: null, fatal: true, details, time: null }
+}
+
+/** A project's local backend in the given state, its actions recorded. */
+function localBackend(patch: Partial<LocalStatus>): LocalBackend {
+  const status: LocalStatus = {
+    projectId: 'p1',
+    state: 'stopped',
+    revision: 1,
+    phase: null,
+    pid: null,
+    version: null,
+    projectRoot: null,
+    signInAs: null,
+    ready: null,
+    analysis: null,
+    schema: null,
+    functions: null,
+    vite: null,
+    config: null,
+    warnings: [],
+    error: null,
+    stopped: null,
+    crashes: 0,
+    startedAt: null,
+    updatedAt: null,
+    ...patch
+  }
+  const action = (): LocalBackend['start'] => vi.fn(async () => status)
+  return {
+    status,
+    state: status.state,
+    ready: status.ready,
+    error: status.state === 'error' ? status.error : null,
+    busy: false,
+    actionError: null,
+    start: action(),
+    stop: action(),
+    restart: action(),
+    refresh: action(),
+    applySchemaChange: action(),
+    resetData: action(),
+    stopOtherServe: action(),
+    installPackages: action()
+  }
+}
+
+const runningLocally = (patch: Partial<LocalStatus> = {}): LocalBackend =>
+  localBackend({ state: 'running', ready: localReady, ...patch })
+
+/** PreviewPane for a personal app on its local backend, the way the Workbench wires it. */
+function OnThisComputer({
+  project,
+  local,
+  view,
+  onViewChange,
+  deploy,
+  onDiagnoseLocal,
+  onOpenSetup,
+  onReviewSchema,
+  turnRunning
+}: {
+  project: StudioProject
+  /** Absent once Local development is turned off. */
+  local?: LocalBackend
+  view?: PreviewView
+  onViewChange?: (view: PreviewView) => void
+  deploy?: DeployUiState
+  onDiagnoseLocal?: () => void
+  onOpenSetup?: () => void
+  onReviewSchema?: () => void
+  turnRunning?: boolean
+}): JSX.Element {
+  return (
+    <OverlayProvider>
+      <PreviewPane
+        project={project}
+        deploy={deploy}
+        local={local}
+        view={view}
+        onViewChange={onViewChange}
+        onDiagnoseLocal={onDiagnoseLocal}
+        onOpenSetup={onOpenSetup}
+        onReviewSchema={onReviewSchema}
+        turnRunning={turnRunning}
+        focused={false}
+        onToggleFocus={() => {}}
+        onWatchChange={() => {}}
+        deploymentName="Production"
+      />
+    </OverlayProvider>
+  )
+}
+
+describe('PreviewPane on this computer', () => {
+  const NOTICE = 'Your app runs on this computer'
+  const outputLine: LocalLogEvent = {
+    projectId: 'p1',
+    seq: 1,
+    source: 'vite',
+    level: 'info',
+    line: 'page reload src/App.tsx',
+    time: '2026-10-30T03:12:09.512Z'
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    Object.assign(window.api, {
+      local: {
+        logs: vi.fn(async () => [outputLine]),
+        onLog: vi.fn(() => () => {}),
+        // Preview as, in the toolbar while the app runs here.
+        onState: vi.fn(() => () => {}),
+        identity: vi.fn(async () => ({ kind: 'developer', user: null })),
+        users: vi.fn(async () => [])
+      }
+    })
+  })
+
+  it('shows a new app running on this computer, with nothing published to switch to', async () => {
+    render(
+      <OnThisComputer
+        project={makeProject('p1', { lastDeploy: undefined })}
+        local={runningLocally()}
+      />
+    )
+    await settle(e)
+    expect(lastShowUrl(e)?.url).toBe(LOCAL_APP)
+    expect(screen.getByRole('button', { name: 'localhost:5173' })).toBeTruthy()
+    expect(screen.queryByRole('group', { name: 'App to show' })).toBeNull()
+    expect(screen.queryByText(/Choose where to deploy/)).toBeNull()
+    expect(screen.queryByRole('region', { name: NOTICE })).toBeNull()
+  })
+
+  it('shows a starting app, not a stopped one, until its backend reports in', async () => {
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const unknown: LocalBackend = { ...localBackend({ state: 'stopped' }), status: null }
+    const { rerender } = render(<OnThisComputer project={project} local={unknown} />)
+    await settle(e)
+    expect(screen.getByRole('status').textContent).toContain('Starting…')
+    expect(screen.getByRole('button', { name: /^Starting… on this computer/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Start' })).toBeNull()
+
+    const stopped = localBackend({ state: 'stopped' })
+    rerender(<OnThisComputer project={project} local={stopped} />)
+    expect(screen.getByRole('button', { name: /^Stopped on this computer/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await act(async () => {})
+    expect(stopped.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('says what the app is doing while it starts, and loads its page again after a restart', async () => {
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const pane = (local: LocalBackend): JSX.Element => (
+      <OnThisComputer project={project} local={local} />
+    )
+    const { rerender } = render(pane(localBackend({ state: 'starting', phase: 'analysis' })))
+    await settle(e)
+    expect(screen.getByRole('status').textContent).toContain('Reading your app’s data model')
+    expect(screen.getByRole('button', { name: /^Starting… on this computer/ })).toBeTruthy()
+    expect(e.api.showUrl).not.toHaveBeenCalled()
+
+    rerender(pane(runningLocally()))
+    await settle(e)
+    expect(lastShowUrl(e)?.url).toBe(LOCAL_APP)
+
+    rerender(pane(localBackend({ state: 'restarting', error: localProblem('exited') })))
+    await settle(e)
+    expect(screen.getByRole('status').textContent).toContain(
+      'It stopped unexpectedly, so Fabricator is starting it again.'
+    )
+    const mark = e.calls.length
+    rerender(pane(runningLocally()))
+    await settle(e)
+    const nav = e.calls.slice(mark).find((c) => c.method === 'navigate')
+    expect(nav?.args[0], 'its dev server restarted under it').toBe(LOCAL_APP)
+  })
+
+  it.each([
+    ['packages-missing', 'Install dependencies', 'installPackages', { dir: 'rayfin/functions' }],
+    ['already-serving', 'Stop the other one', 'stopOtherServe', { pid: 4242 }]
+  ] as const)(
+    'offers what %s needs, beside Try again, View output and Find out why',
+    async (code, label, action, details) => {
+      const local = localBackend({ state: 'error', error: localProblem(code, details) })
+      const onDiagnoseLocal = vi.fn()
+      render(
+        <OnThisComputer
+          project={makeProject('p1')}
+          local={local}
+          onDiagnoseLocal={onDiagnoseLocal}
+        />
+      )
+      await settle(e)
+      const card = screen.getByRole('alert')
+      fireEvent.click(within(card).getByRole('button', { name: label }))
+      await act(async () => {})
+      expect(local[action]).toHaveBeenCalledTimes(1)
+      fireEvent.click(within(card).getByRole('button', { name: 'Try again' }))
+      await act(async () => {})
+      expect(local.restart).toHaveBeenCalledTimes(1)
+      fireEvent.click(within(card).getByRole('button', { name: 'Find out why' }))
+      expect(onDiagnoseLocal).toHaveBeenCalledTimes(1)
+      fireEvent.click(within(card).getByRole('button', { name: 'View output' }))
+      await act(async () => {})
+      expect(
+        within(screen.getByRole('region', { name: 'Output' })).getByText(outputLine.line)
+      ).toBeTruthy()
+    }
+  )
+
+  it('sends a refused data model change to its dialog, and Node.js problems to setup', async () => {
+    const onReviewSchema = vi.fn()
+    const onOpenSetup = vi.fn()
+    const pane = (local: LocalBackend): JSX.Element => (
+      <OnThisComputer
+        project={makeProject('p1', { lastDeploy: undefined })}
+        local={local}
+        onReviewSchema={onReviewSchema}
+        onOpenSetup={onOpenSetup}
+      />
+    )
+    const losses = ['Note.title (3 values)']
+    const { rerender } = render(
+      pane(localBackend({ state: 'error', error: localProblem('schema-refused', { losses }) }))
+    )
+    await settle(e)
+    expect(screen.getByRole('alert', { name: 'This change would delete local data' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Review the change' }))
+    expect(onReviewSchema).toHaveBeenCalledTimes(1)
+
+    rerender(
+      pane(
+        localBackend({
+          state: 'error',
+          error: localProblem('node-too-old', { version: 'v18.19.0' })
+        })
+      )
+    )
+    expect(screen.getByRole('alert', { name: 'Node.js needs an update' }).textContent).toContain(
+      'this computer has v18.19.0'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Set up Node.js' }))
+    expect(onOpenSetup).toHaveBeenCalledTimes(1)
+
+    // Refused while running, the change leaves the app on screen, and a note to decide.
+    const schema = {
+      result: 'refused' as const,
+      changes: [],
+      losses,
+      message: null,
+      live: true,
+      time: null
+    }
+    rerender(pane(runningLocally({ schema })))
+    await settle(e)
+    expect(lastShowUrl(e)?.url).toBe(LOCAL_APP)
+    const note = screen.getByRole('region', { name: 'Data model change waiting' })
+    fireEvent.click(within(note).getByRole('button', { name: 'Review the change' }))
+    expect(onReviewSchema).toHaveBeenCalledTimes(2)
+  })
+
+  it('offers Preview as while the app runs here, but not during a turn', async () => {
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const view = render(<OnThisComputer project={project} local={runningLocally()} />)
+    await settle(e)
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: /^Preview as/ })).toBeTruthy()
+    view.rerender(<OnThisComputer project={project} local={runningLocally()} turnRunning />)
+    expect(screen.queryByRole('button', { name: /^Preview as/ })).toBeNull()
+  })
+
+  it('opens and closes the output from the status pill', async () => {
+    render(
+      <OnThisComputer
+        project={makeProject('p1', { lastDeploy: undefined })}
+        local={runningLocally()}
+      />
+    )
+    await settle(e)
+    const pill = screen.getByRole('button', { name: /^Running on this computer/ })
+    fireEvent.click(pill)
+    await act(async () => {})
+    expect(pill.getAttribute('aria-pressed')).toBe('true')
+    expect(
+      within(screen.getByRole('region', { name: 'Output' })).getByText(outputLine.line)
+    ).toBeTruthy()
+    expect(window.api.local.logs).toHaveBeenCalledWith('p1', 500)
+    fireEvent.click(pill)
+    expect(screen.queryByRole('region', { name: 'Output' })).toBeNull()
+  })
+
+  it('says when the app runs with a problem, and restarts it from its output', async () => {
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const healthy = runningLocally()
+    const { rerender } = render(<OnThisComputer project={project} local={healthy} />)
+    await settle(e)
+    fireEvent.click(screen.getByRole('button', { name: /^Running on this computer/ }))
+    await act(async () => {})
+    const output = (): HTMLElement => screen.getByRole('region', { name: 'Output' })
+    expect(within(output()).queryByRole('list', { name: 'Problems' })).toBeNull()
+    expect(within(output()).getByRole('button', { name: 'Restart' })).toBeTruthy()
+
+    // A rayfin.yml change turned data on before the data package was built.
+    const stuck = runningLocally({
+      analysis: {
+        ok: false,
+        sdk: null,
+        entities: [],
+        storageFolders: [],
+        message: 'The data package packages/data has not been built',
+        time: null
+      }
+    })
+    rerender(<OnThisComputer project={project} local={stuck} />)
+    const pill = screen.getByRole('button', { name: /^Running · problem on this computer/ })
+    expect(pill.className).toContain('local-pill--warn')
+    expect(pill.title).toBe(
+      'Your app’s latest data model change couldn’t be read, so it still uses the previous data model. The data package packages/data has not been built. Select to hide its output.'
+    )
+    const problems = within(output()).getByRole('list', { name: 'Problems' })
+    expect(problems.textContent).toContain(
+      'Your app’s latest data model change couldn’t be read, so it still uses the previous data model.'
+    )
+    expect(problems.textContent).toContain('The data package packages/data has not been built')
+
+    fireEvent.click(within(output()).getByRole('button', { name: 'Restart' }))
+    await act(async () => {})
+    expect(stuck.restart).toHaveBeenCalledTimes(1)
+    expect(healthy.restart).not.toHaveBeenCalled()
+  })
+
+  it('drops the app’s local address once Local development is turned off', async () => {
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const { rerender } = render(<OnThisComputer project={project} local={runningLocally()} />)
+    await settle(e)
+    expect(screen.getByRole('button', { name: 'localhost:5173' })).toBeTruthy()
+
+    rerender(<OnThisComputer project={project} />)
+    await settle(e)
+    expect(screen.getByText(/Your published app will render here/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'localhost:5173' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /on this computer/ })).toBeNull()
+  })
+
+  it('switches between the app on this computer, in the local Fabric host, and the published one', async () => {
+    const onViewChange = vi.fn()
+    const project = fabricProject('p1')
+    const pane = (view: PreviewView): JSX.Element => (
+      <OnThisComputer
+        project={project}
+        local={runningLocally()}
+        view={view}
+        onViewChange={onViewChange}
+      />
+    )
+    const { rerender } = render(pane('local'))
+    await settle(e)
+    expect(lastShowUrl(e)?.url, 'the Fabric view embeds the app on this computer').toBe(LOCAL_EMBED)
+    const views = screen.getByRole('group', { name: 'App to show' })
+    expect(within(views).getByRole('button', { name: 'Local' }).getAttribute('aria-pressed')).toBe(
+      'true'
+    )
+    fireEvent.click(within(views).getByRole('button', { name: 'Published' }))
+    expect(onViewChange).toHaveBeenCalledWith('published')
+
+    const mark = e.calls.length
+    rerender(pane('published'))
+    await settle(e)
+    const nav = e.calls.slice(mark).find((c) => c.method === 'navigate')
+    expect(nav?.args[0]).toBe(project.lastDeploy?.portalUrl)
+    expect(screen.queryByRole('button', { name: /on this computer/ })).toBeNull()
+  })
+
+  it.each([
+    ['direct', makeProject('p1', { lastDeploy: undefined }), false],
+    ['Fabric host', fabricProject('p1'), true]
+  ] as const)(
+    'offers Design on the app on this computer (%s) whenever no turn runs, even while publishing',
+    async (_, project, embedded) => {
+      const design = (): HTMLButtonElement => screen.getByRole('button', { name: /^design/i })
+      const { rerender } = render(
+        <DesignHarnessed project={project} local={runningLocally()} turnRunning />
+      )
+      await settle(e)
+      expect(design().disabled).toBe(true)
+      expect(design().title).toContain('once this turn finishes')
+
+      const publishing = { running: true, log: [], startedAt: Date.now() }
+      rerender(<DesignHarnessed project={project} local={runningLocally()} deploy={publishing} />)
+      await settle(e)
+      expect(design().disabled).toBe(false)
+      fireEvent.click(design())
+      await settle(e)
+      const call = e.calls.find((c) => c.method === 'design.setEnabled')
+      expect(call?.args.slice(0, 3)).toEqual([true, embedded, LOCAL_APP])
+    }
+  )
+
+  it('tells a previously published app once that its local data starts empty', async () => {
+    const onViewChange = vi.fn()
+    const first = render(
+      <OnThisComputer
+        project={makeProject('p1')}
+        local={runningLocally()}
+        view="local"
+        onViewChange={onViewChange}
+      />
+    )
+    await settle(e)
+    const notice = screen.getByRole('region', { name: NOTICE })
+    expect(notice.textContent).toContain(
+      'Project p1 now runs on this computer. Its local data starts empty. Your published app and its data are unchanged.'
+    )
+    fireEvent.click(within(notice).getByRole('button', { name: 'Show published app' }))
+    expect(onViewChange).toHaveBeenCalledWith('published')
+    expect(screen.queryByRole('region', { name: NOTICE })).toBeNull()
+    first.unmount()
+
+    const again = render(
+      <OnThisComputer project={makeProject('p1')} local={runningLocally()} view="local" />
+    )
+    expect(screen.queryByRole('region', { name: NOTICE }), 'dismissed for this app').toBeNull()
+    again.unmount()
+    render(
+      <OnThisComputer
+        project={makeProject('p2')}
+        local={runningLocally({ projectId: 'p2' })}
+        view="local"
+      />
+    )
+    expect(screen.getByRole('region', { name: NOTICE })).toBeTruthy()
+  })
+
+  it('never tells an app that ran here before it was published', async () => {
+    const pane = (project: StudioProject): JSX.Element => (
+      <OnThisComputer project={project} local={runningLocally()} view="local" />
+    )
+    const { rerender } = render(pane(makeProject('p1', { lastDeploy: undefined })))
+    await settle(e)
+    rerender(pane(makeProject('p1')))
+    await settle(e)
+    expect(screen.getByRole('group', { name: 'App to show' })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: NOTICE })).toBeNull()
+  })
+
+  it('keeps the app on this computer through a first publish, and leaves it be after', async () => {
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const pane = (deploy: DeployUiState): JSX.Element => (
+      <OnThisComputer project={project} local={runningLocally()} deploy={deploy} />
+    )
+    const { rerender } = render(pane({ running: true, log: [], startedAt: Date.now() }))
+    await settle(e)
+    expect(screen.getByText('Publishing to Production')).toBeTruthy()
+    expect(screen.queryByText(/Fabricating/i), 'no full screen for a first publish').toBeNull()
+    expect(lastShowUrl(e)?.url).toBe(LOCAL_APP)
+
+    const mark = e.calls.length
+    rerender(pane({ running: false, log: [], result: { ok: true, outcome: 'success' } }))
+    await settle(e)
+    expect(e.methodsAfter(mark)).not.toContain('reload')
+    expect(e.methodsAfter(mark)).not.toContain('navigate')
+  })
+
+  it('says why a published app previews on its published backend', async () => {
+    const reason =
+      'The logs connector runs only on Fabric, so the preview uses your published app’s backend.'
+    render(
+      <OverlayProvider>
+        <PreviewPane
+          project={makeProject('p1')}
+          deploy={undefined}
+          fallbackReason={reason}
+          focused={false}
+          onToggleFocus={() => {}}
+        />
+      </OverlayProvider>
+    )
+    await settle(e)
+    expect(screen.getByRole('region', { name: 'Preview backend' }).textContent).toBe(reason)
+    expect(lastShowUrl(e)?.url).toBe('https://p1.example.app/')
+    expect(screen.queryByRole('group', { name: 'App to show' })).toBeNull()
+  })
+})

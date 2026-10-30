@@ -1,4 +1,5 @@
 import type { AdvisorSeverity } from '@shared/ipc'
+import { severityRank } from '@shared/advisor/catalog'
 import { isUnder, relativeTo } from '../../model/projectLayout'
 import type { QuickContext } from '../context'
 import { maskEnvValues, maskSecrets } from '../mask'
@@ -12,7 +13,7 @@ import {
   matchAll,
   type SourceFile
 } from '../source'
-import { code, lineContaining } from './util'
+import { andList, code, lineContaining } from './util'
 
 /** Local env files the CLI and frameworks read (root and `rayfin/`). */
 const ENV_FILE = /^(rayfin\/)?\.env(\.[^/]+)?$/
@@ -40,6 +41,40 @@ const CREDENTIAL_PATTERNS: { re: RegExp; what: string }[] = [
 ]
 
 const FAKE_VALUE = /(example|dummy|fake|placeholder|sample|xxxx)/i
+
+/** The local backend's state folder, which its own `.gitignore` (`*`) keeps out of git. */
+const LOCAL_STATE = '.rayfin-local'
+const LOCAL_GITIGNORE = `${LOCAL_STATE}/.gitignore`
+/** What the local backend keeps in `.rayfin-local/`, by name, most sensitive first. */
+const LOCAL_STATE_PARTS: { name: string; holds: string; severity: AdvisorSeverity }[] = [
+  { name: 'secrets.json', holds: "your secrets' local values", severity: 'high' },
+  { name: 'keys', holds: "the local backend's signing keys", severity: 'high' },
+  { name: 'db.sqlite', holds: "the app's local database", severity: 'high' },
+  { name: 'storage', holds: 'files uploaded to the local app', severity: 'medium' },
+  { name: 'state.json', holds: "the local app's IDs", severity: 'low' }
+]
+const MAX_LOCAL_PARTS = 6
+
+/** A part of `.rayfin-local/` that git can commit. */
+interface LocalPart {
+  label: string
+  holds?: string
+  severity: AdvisorSeverity
+  /** Its place in {@link LOCAL_STATE_PARTS}; unknown parts come last. */
+  rank: number
+}
+
+/** Whether a `.gitignore` ignores everything next to it: a `*` line, taking nothing back but itself. */
+function ignoresEverything(text: string): boolean {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+  return (
+    lines.some((l) => /^\/?\*\*?$/.test(l)) &&
+    !lines.some((l) => l.startsWith('!') && !/^!\/?\.gitignore$/.test(l))
+  )
+}
 
 function secretSeverity(name: string): AdvisorSeverity | undefined {
   const bare = name.replace(PUBLIC_PREFIX, '')
@@ -233,6 +268,64 @@ export const secretRules: QuickRuleImpl[] = [
           file: file.path,
           label: file.path,
           message: `${code(file.path)} isn't git-ignored, so your workspace and item IDs can be committed.`
+        }
+      ]
+    }
+  },
+  {
+    id: 'secrets/local-backend-not-ignored',
+    run: (ctx) => {
+      if (!ctx.snapshot.isGitRepo) return 'na'
+      const files = ctx.snapshot.files.filter((f) => f.path.startsWith(`${LOCAL_STATE}/`))
+      if (files.length === 0) return 'na'
+      // What git can commit, by the folder's parts: `keys/` rather than each key.
+      const parts = new Map<string, LocalPart>()
+      for (const f of files) {
+        if (f.ignored || f.path === LOCAL_GITIGNORE) continue
+        const segments = f.path.slice(LOCAL_STATE.length + 1).split('/')
+        const name = segments[0].startsWith('db.sqlite') ? 'db.sqlite' : segments[0]
+        if (parts.has(name)) continue
+        const known = LOCAL_STATE_PARTS.findIndex((p) => p.name === name)
+        const part = LOCAL_STATE_PARTS[known]
+        parts.set(name, {
+          label: code(`${LOCAL_STATE}/${name}${segments.length > 1 ? '/' : ''}`),
+          holds: part?.holds,
+          severity: part?.severity ?? 'low',
+          rank: known < 0 ? LOCAL_STATE_PARTS.length : known
+        })
+      }
+      if (parts.size === 0) return []
+      const exposed = [...parts.values()].sort((a, b) => a.rank - b.rank)
+      const holds = exposed.flatMap((p) => (p.holds ? [p.holds] : []))
+      if (exposed.some((p) => !p.holds)) {
+        holds.push(holds.length ? "the local backend's other files" : "the local backend's files")
+      }
+      const shown = exposed.slice(0, MAX_LOCAL_PARTS).map((p) => p.label)
+      const more = exposed.length - shown.length
+      const what = `${andList(holds)} (${shown.join(', ')}${more > 0 ? `, and ${more} more` : ''})`
+      const gitignore = ctx.fileInfo(LOCAL_GITIGNORE)
+      const text = ctx.snapshot.contents[LOCAL_GITIGNORE]
+      const changed = text !== undefined && !ignoresEverything(text)
+      let message: string
+      if (!gitignore) {
+        message = `${code(LOCAL_GITIGNORE)} is missing, so git can commit ${what}.`
+      } else if (changed) {
+        message = `${code(LOCAL_GITIGNORE)} no longer ignores everything in the folder, so git can commit ${what}.`
+      } else if (text !== undefined) {
+        message = `Git tracks files in ${code(`${LOCAL_STATE}/`)} even though ${code(LOCAL_GITIGNORE)} ignores the folder, so commits include ${what}.`
+      } else {
+        message = `Git can commit ${what}.`
+      }
+      return [
+        {
+          file: changed ? LOCAL_GITIGNORE : undefined,
+          line: changed ? 1 : undefined,
+          label: `${LOCAL_STATE}/`,
+          severity: exposed.reduce<AdvisorSeverity>(
+            (worst, p) => (severityRank(p.severity) < severityRank(worst) ? p.severity : worst),
+            'low'
+          ),
+          message
         }
       ]
     }

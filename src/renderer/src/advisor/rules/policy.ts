@@ -67,13 +67,17 @@ export const policyRules: QuickRuleImpl[] = [
           file: e.file,
           line: grants[0].decorator.line,
           label: e.name,
-          message: `${code(e.name)} allows anonymous reads, which Fabric rejects unless your tenant admin has enabled anonymous data access.`
+          message: ctx.runsLocally
+            ? `${code(e.name)} allows anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps.`
+            : `${code(e.name)} allows anonymous reads, which Fabric refuses unless your tenant admin has turned on anonymous data access for Fabric apps.`
         })
       }
       return hits
     },
-    summarize: (hits) =>
-      `${hits.length} entities allow anonymous reads, which Fabric rejects unless your tenant allows anonymous data access: ${listLabels(hits)}.`
+    summarize: (hits, ctx) =>
+      ctx.runsLocally
+        ? `${hits.length} entities allow anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps: ${listLabels(hits)}.`
+        : `${hits.length} entities allow anonymous reads, which Fabric refuses unless your tenant admin has turned on anonymous data access for Fabric apps: ${listLabels(hits)}.`
   },
   {
     id: 'policy/unsupported-claim',

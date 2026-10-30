@@ -81,7 +81,7 @@ export const LEGACY_PHASES: PhaseDef[] = [
   { id: 'connect', label: 'Connecting to Fabric', markers: [] },
   {
     id: 'prepare',
-    label: 'Preparing deployment',
+    label: 'Preparing to publish',
     markers: [
       'targeting',
       'workload endpoint',
@@ -214,7 +214,7 @@ const LABELS: Partial<Record<DeployStepId, string>> = {
   connectors: 'Connecting your data sources',
   // Rayfin builds the app quietly and uploads it in the same step.
   build: 'Building and uploading your app',
-  functions: 'Deploying your functions',
+  functions: 'Publishing your functions',
   live: 'Going live'
 }
 
@@ -249,8 +249,8 @@ const EXPECTED: DeployStepId[] = ['connect', 'workspace', 'item', 'settings', 'b
 
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]/g
-/** Fabricator's own first line of a deploy (commands/deploy.rs). A sign-in retry runs it again. */
-const RUN_START = /^Deploying .+ to Fabric…$/
+/** Fabricator's own first line of a publish (commands/deploy.rs). A sign-in retry runs it again. */
+const RUN_START = /^Publishing .+ to Fabric…$/
 /** Fabricator installing a project's missing (or repairing its incomplete) packages before the CLI
  *  can run, or waiting for another install in the project to finish first. */
 const PACKAGES = /^(?:Project dependencies are missing|Waiting for changes to this project's packages)/i

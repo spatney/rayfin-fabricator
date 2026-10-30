@@ -12,7 +12,7 @@ interface Props {
   project: StudioProject
   /** Bumped by the parent when files may have changed (e.g. after a chat turn). */
   refreshKey: number
-  /** Ask the parent to deploy the current code (used by History → Restore). */
+  /** Ask the parent to publish the current code (see HistoryView's `onRequestDeploy`). */
   onRequestDeploy?: () => void
   /** Hand a slice of history (commit/file/comparison) to the Build chat. */
   onSendToChat?: (display: string, prompt: string) => void

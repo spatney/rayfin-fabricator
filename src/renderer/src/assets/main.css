@@ -5898,11 +5898,11 @@ code {
 }
 
 /* ============================================================
-   A failed deploy (DeployFailedNotice.tsx): Ray swims in above the preview,
-   worried, and offers to find out why in Help. It's in the layout, not over the
-   preview, because the preview is a native surface nothing can cover. Calm on
-   purpose: the status says "Deploy failed" in red already, and the log stays
-   folded away until asked for.
+   Publishing that failed (DeployFailedNotice.tsx): Ray swims in above the
+   preview, worried, and offers to find out why in Help. It's in the layout, not
+   over the preview, because the preview is a native surface nothing can cover.
+   Calm on purpose: the status says "Couldn’t publish" in red already, and the
+   log stays folded away until asked for.
    ============================================================ */
 .deploy-trouble {
   flex: none;
@@ -8554,7 +8554,7 @@ select.ws-input:disabled {
   background: var(--accent-soft);
   color: var(--accent);
 }
-/* Primary call-to-action segment (Deploy). */
+/* Primary call-to-action segment (Publish). */
 .seg--toolbar .seg-btn--primary {
   background: var(--accent);
   color: var(--on-accent);
@@ -10554,7 +10554,7 @@ select.ws-input:disabled {
   line-height: 1.45;
 }
 
-/* Step indicator (Details → Deploy) */
+/* Step indicator (Details → Publish), while Local development is off */
 .create-steps {
   display: flex;
   align-items: center;
@@ -11385,7 +11385,7 @@ select.ws-input:disabled {
   }
 }
 
-/* Deploy step: the shared workspace picker in a card, aligned with the title
+/* Publish step: the shared workspace picker in a card, aligned with the title
    like the Details step's fields. */
 .create-deploy {
   width: 100%;

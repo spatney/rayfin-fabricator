@@ -54,6 +54,9 @@ static NOT_SIGNED_IN_RE: Lazy<Regex> =
 static SIGNED_IN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)signed\s+in").unwrap());
 static USER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)User:\s*(.+)").unwrap());
 static TENANT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)Tenant:\s*(.+)").unwrap());
+/// What the Azure CLI says when it has no account at all.
+static AZ_SIGNED_OUT_RE: Lazy<Regex> =
+  Lazy::new(|| Regex::new(r#"(?i)please run ['"]?az login['"]? to set ?up (?:an? )?account"#).unwrap());
 
 /// Keep credential changes from interrupting a deploy or authentication probe.
 pub(crate) async fn rayfin_auth_read() -> tokio::sync::RwLockReadGuard<'static, ()> {
@@ -222,16 +225,27 @@ pub async fn get_az_auth() -> AzAuthStatus {
     ),
   );
   if !token.ok {
-    return AzAuthStatus {
-      error: Some(cli_failure_detail(
-        &token,
-        "Azure authentication check",
-        "Check your connection and sign in to Azure again.",
-      )),
-      ..Default::default()
-    };
+    return az_token_failure(&token);
   }
   parse_az_account(&show)
+}
+
+/// The Azure CLI's sign-in when its token check failed. Azure is optional, so
+/// an Azure CLI that isn't installed or has never been signed in is simply
+/// signed out. A sign-in that stopped working, or a check that couldn't run,
+/// is an error worth showing.
+fn az_token_failure(res: &exec::RunResult) -> AzAuthStatus {
+  if res.not_found || AZ_SIGNED_OUT_RE.is_match(&res.stderr) || AZ_SIGNED_OUT_RE.is_match(&res.stdout) {
+    return AzAuthStatus::default();
+  }
+  AzAuthStatus {
+    error: Some(cli_failure_detail(
+      res,
+      "Azure authentication check",
+      "Check your connection and sign in to Azure again.",
+    )),
+    ..Default::default()
+  }
 }
 
 /// Verify the requested providers concurrently.
@@ -948,6 +962,23 @@ process.exit(config.loginExit);
       result.ok = true;
       assert_eq!(parse_az_account(&result).tenant_name.as_deref(), Some(name), "{profile}");
     }
+  }
+
+  #[test]
+  fn a_missing_or_never_signed_in_azure_cli_is_signed_out_not_failing() {
+    for signed_out in [
+      res(None, true, "", "az was not found on PATH"),
+      res(Some(1), false, "", "ERROR: Please run 'az login' to setup account.\n"),
+    ] {
+      let status = az_token_failure(&signed_out);
+      assert!(!status.signed_in);
+      assert!(status.error.is_none(), "{}", signed_out.stderr);
+    }
+    // A sign-in that stopped working still says why.
+    let expired = "ERROR: AADSTS700082: The refresh token has expired due to inactivity.\nTo re-authenticate, please run:\naz login --scope https://management.core.windows.net//.default\n";
+    let status = az_token_failure(&res(Some(1), false, "", expired));
+    assert!(!status.signed_in);
+    assert!(status.error.unwrap().contains("AADSTS700082"));
   }
 
   #[test]

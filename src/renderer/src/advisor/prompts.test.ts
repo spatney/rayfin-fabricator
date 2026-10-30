@@ -73,4 +73,16 @@ describe('fixPrompt', () => {
     expect(summary.fixes).toHaveLength(1)
     expect(summary.fixes[0]).toMatchObject({ id: MAX.id, severity: 'high' })
   })
+
+  it('leaves publishing to Fabricator, whose note on the message says how the change goes live', () => {
+    // The core prepends that note to every chat message: where the app runs, and
+    // whether the turn publishes, with Local development on or off.
+    for (const findings of [[MAX], [LABEL, MAX]]) {
+      const { prompt } = fixPrompt(findings)
+      expect(prompt).toContain(
+        "Don't publish the app or run `rayfin up`: Fabricator's note at the start of this message says how the change goes live."
+      )
+      expect(prompt).not.toMatch(/deploy|local preview/i)
+    }
+  })
 })

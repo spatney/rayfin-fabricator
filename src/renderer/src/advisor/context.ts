@@ -18,7 +18,7 @@ import {
   SINGLE_PACKAGE_LAYOUT,
   type ProjectLayout
 } from '../model/projectLayout'
-import { sourceFile, type SourceFile } from './source'
+import { npmRangeSpan, sourceFile, type SourceFile, type VersionSpan } from './source'
 
 const CODE_FILE = /\.(tsx?|jsx?|mts|cts|mjs|cjs)$/i
 const TEST_FILE = /(\.test\.|\.spec\.|(^|\/)__tests__\/|(^|\/)tests?\/)/i
@@ -32,6 +32,17 @@ export interface PackageJsonInfo {
   devDependencies: Record<string, string>
   /** The root package.json's scripts. */
   scripts: Record<string, string>
+}
+
+/** The line of Rayfin releases Fabricator's local backend runs. */
+export interface LocalSdk {
+  /** The npm range, such as `>=1.36.0 <1.37.0`. */
+  range: string
+  span: VersionSpan
+  /** As people read it: `1.36.x`, or the range itself. */
+  label: string
+  /** The `~` range that keeps a package on the line, such as `~1.36.0`. */
+  pin: string | null
 }
 
 export interface QuickContext {
@@ -70,6 +81,34 @@ export interface QuickContext {
   conditions: Set<AdvisorCondition>
   versions: RayfinVersionInfo | null
   packages: AdvisorPackage[]
+  /**
+   * Fabricator's local backend runs the app: personal apps while the Local
+   * development experiment is on (the snapshot then carries `localSdkRange`).
+   * Team apps run on their pipeline's backend, and every app on its Fabric
+   * deployment while the experiment is off.
+   */
+  runsLocally: boolean
+  /** The Rayfin releases that local backend runs; `null` when it doesn't run the app or the range is unreadable. */
+  localSdk: LocalSdk | null
+}
+
+/** The line of releases an npm range such as `>=1.36.0 <1.37.0` describes. */
+export function localSdkOf(range: string | undefined): LocalSdk | null {
+  const span = range ? npmRangeSpan(range) : null
+  if (!range || !span) return null
+  const [major, minor, patch] = span.lo
+  const oneMinor =
+    patch === 0 &&
+    span.hi !== null &&
+    span.hi[0] === major &&
+    span.hi[1] === minor + 1 &&
+    span.hi[2] === 0
+  return {
+    range,
+    span,
+    label: oneMinor ? `${major}.${minor}.x` : range,
+    pin: span.lo.some((n) => n > 0) ? `~${span.lo.join('.')}` : null
+  }
 }
 
 function asObj(value: unknown): Obj | undefined {
@@ -85,7 +124,7 @@ function asStringMap(value: unknown): Record<string, string> {
 }
 
 /** The `workspaces` globs of a root package.json (a list, or `{ packages }`). */
-function workspacePatterns(pkg: Obj): string[] {
+export function workspacePatterns(pkg: Obj): string[] {
   const field = pkg.workspaces
   const list = Array.isArray(field) ? field : asObj(field)?.packages
   return Array.isArray(list) ? list.filter((p): p is string => typeof p === 'string') : []
@@ -241,6 +280,8 @@ export async function buildQuickContext(
     model,
     conditions,
     versions,
-    packages: snapshot.packages
+    packages: snapshot.packages,
+    runsLocally: Boolean(snapshot.localSdkRange),
+    localSdk: localSdkOf(snapshot.localSdkRange)
   }
 }

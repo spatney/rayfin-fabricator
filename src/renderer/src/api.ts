@@ -28,6 +28,10 @@ import {
   type CustomSkillSaveInput,
   type DevStateEvent,
   type HelpEventEnvelope,
+  type LocalIdentityRequest,
+  type LocalLogEvent,
+  type LocalStartOptions,
+  type LocalStatus,
   type MigrationInspectedPage,
   type MigrationPage,
   type MigrationSource,
@@ -58,6 +62,7 @@ import type {
   DesignRestyleContext,
   DesignVariationEvent
 } from '@shared/design'
+import { toLocalBackendError } from './localBackend'
 
 /** Subscribe to a Tauri event, returning a synchronous unsubscribe function. */
 function subscribe<T>(name: string, cb: (payload: T) => void): () => void {
@@ -82,6 +87,13 @@ function modelChoiceArgs(choice?: AdvisorModelChoice): AdvisorModelChoice {
     autoTier: choice?.autoTier || undefined,
     contextTier: choice?.contextTier || undefined
   }
+}
+
+/** Invoke a local backend command; a rejection becomes a `LocalBackendError`. */
+function localInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  return invoke<T>(command, args).catch((reason: unknown) => {
+    throw toLocalBackendError(reason)
+  })
 }
 
 export const api: RayfinStudioApi = {
@@ -227,6 +239,7 @@ export const api: RayfinStudioApi = {
     git: {
       status: (id: string) => invoke('projects_git_status', { id }),
       commit: (id: string, message: string) => invoke('projects_git_commit', { id, message }),
+      saveTurn: (id: string, request: string) => invoke('projects_git_save_turn', { id, request }),
       log: (id: string) => invoke('projects_git_log', { id }),
       changes: (id: string, ref: string) => invoke('projects_git_changes', { id, ref }),
       fileDiff: (id: string, ref: string, path: string, oldPath?: string) =>
@@ -276,7 +289,9 @@ export const api: RayfinStudioApi = {
     list: (projectId: string) => invoke('secrets_list', { projectId }),
     set: (projectId: string, name: string, value: string, description?: string) =>
       invoke('secrets_set', { projectId, name, value, description }),
-    remove: (projectId: string, name: string) => invoke('secrets_delete', { projectId, name })
+    remove: (projectId: string, name: string) => invoke('secrets_delete', { projectId, name }),
+    declare: (projectId: string, name: string, description?: string) =>
+      invoke('secrets_declare', { projectId, name, description })
   },
 
   advisor: {
@@ -432,6 +447,7 @@ export const api: RayfinStudioApi = {
       forward: () => invoke('preview_forward')
     }),
     capture: () => invoke('preview_capture'),
+    resetSiteData: () => invoke('preview_reset_site_data'),
     onNavState: (cb: (state: PreviewNavState) => void) =>
       subscribe<PreviewNavState>(IpcChannels.previewNav, cb),
     onAgentPreview: (cb: (event: PreviewAgentEvent) => void) =>
@@ -539,6 +555,64 @@ export const api: RayfinStudioApi = {
       subscribe<TeamDiagnosisEnvelope>(IpcChannels.teamDiagnosis, cb),
     onProgress: (cb: (event: TeamProgressEvent) => void) =>
       subscribe<TeamProgressEvent>(IpcChannels.teamProgress, cb)
+  },
+
+  local: {
+    start: (projectId: string, options?: LocalStartOptions) =>
+      localInvoke('local_start', { projectId, options: options ?? null }),
+    stop: (projectId: string) => localInvoke('local_stop', { projectId }),
+    restart: (projectId: string, options?: LocalStartOptions) =>
+      localInvoke('local_restart', { projectId, options: options ?? null }),
+    status: (projectId: string) => localInvoke('local_status', { projectId }),
+    logs: (projectId: string, limit?: number) =>
+      localInvoke('local_logs', { projectId, limit: limit ?? null }),
+    reload: (projectId: string, forceSchema: boolean) =>
+      localInvoke('local_reload', { projectId, forceSchema }),
+    resetData: (projectId: string) => localInvoke('local_reset_data', { projectId }),
+    users: (projectId: string) => localInvoke('local_users', { projectId }),
+    addUser: (projectId: string, username: string, password?: string) =>
+      localInvoke('local_add_user', { projectId, username, password: password ?? null }),
+    deleteUser: (projectId: string, user: string) =>
+      localInvoke('local_delete_user', { projectId, user }),
+    identity: (projectId: string) => localInvoke('local_identity', { projectId }),
+    setIdentity: (projectId: string, identity: LocalIdentityRequest) =>
+      localInvoke('local_set_identity', { projectId, identity }),
+    entities: (projectId: string) => localInvoke('local_entities', { projectId }),
+    rows: (
+      projectId: string,
+      entity: string,
+      offset: number,
+      limit: number,
+      orderBy?: string,
+      desc?: boolean
+    ) =>
+      localInvoke('local_rows', {
+        projectId,
+        entity,
+        offset,
+        limit,
+        orderBy: orderBy ?? null,
+        desc: desc ?? null
+      }),
+    clearRows: (projectId: string, entity: string) =>
+      localInvoke('local_clear_rows', { projectId, entity }),
+    secrets: (projectId: string) => localInvoke('local_secrets', { projectId }),
+    setSecret: (projectId: string, name: string, value: string) =>
+      localInvoke('local_set_secret', { projectId, name, value }),
+    deleteSecret: (projectId: string, name: string) =>
+      localInvoke('local_delete_secret', { projectId, name }),
+    stopExternal: (projectId: string, pid: number) =>
+      localInvoke('local_stop_external', { projectId, pid }),
+    onState: (cb: (status: LocalStatus) => void) =>
+      subscribe<LocalStatus>(IpcChannels.localState, cb),
+    onLog: (cb: (line: LocalLogEvent) => void) =>
+      subscribe<LocalLogEvent>(IpcChannels.localLog, cb),
+    installPackages: (projectId: string) => localInvoke('local_install_packages', { projectId }),
+    reportFallback: (
+      projectId: string,
+      code: 'sdk-unsupported' | 'connector-unsupported',
+      reason: string
+    ) => localInvoke('local_report_fallback', { projectId, code, reason })
   }
 }
 

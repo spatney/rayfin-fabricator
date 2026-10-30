@@ -924,8 +924,8 @@ export default function SemanticModelView({
       <div className="semantic-empty semantic-empty--cta">
         <div className="semantic-empty-title">Sign in to Azure to view the semantic model</div>
         <p className="semantic-empty-sub">
-          The semantic model’s schema is read live from Fabric using your Azure CLI session. Sign
-          in with <code>az login</code> to continue.
+          Fabricator reads the model’s tables, measures and relationships from Fabric with your
+          Azure sign-in.
         </p>
         <button
           className="btn btn--primary"

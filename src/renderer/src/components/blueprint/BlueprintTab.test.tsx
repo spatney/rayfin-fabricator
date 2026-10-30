@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { FileNode, StudioProject, TeamManifest } from '@shared/ipc'
 import { ToastProvider } from '../../toast'
+import { LocalDevelopmentContext } from '../../localDevelopment'
 import { makeProject } from '../../../test/harness'
 import BlueprintTab from './BlueprintTab'
 import { clearFabricInfo } from './fabricInfo'
@@ -11,8 +12,8 @@ import { clearFabricInfo } from './fabricInfo'
  * connects to, and who each connection signs in as. These tests feed it a
  * project's files through a mocked `window.api` and protect what people rely on:
  * the identities and whose credentials the app uses, the details panel and its
- * Copilot hand-offs, and moving between the Architecture, Data model and Fabric
- * data views.
+ * Copilot hand-offs, and moving between the Architecture, Data model, Data and
+ * Fabric data views.
  */
 
 const WS = '5d1c2a9e-1b7f-4c3d-9e21-8a64f0c2b7d1'
@@ -203,7 +204,12 @@ const FULL_FILES = {
 }
 
 function renderTab(
-  over: { project?: StudioProject; teamManifest?: TeamManifest; fabricUser?: string } = {}
+  over: {
+    project?: StudioProject
+    teamManifest?: TeamManifest
+    fabricUser?: string
+    localDevelopment?: boolean
+  } = {}
 ): {
   onSendToChat: ReturnType<typeof vi.fn>
   onOpenFile: ReturnType<typeof vi.fn>
@@ -214,15 +220,20 @@ function renderTab(
   const onOpenSecrets = vi.fn()
   render(
     <ToastProvider>
-      <BlueprintTab
-        project={over.project ?? makeProject('p1', { name: 'Contoso Expenses', workspaceName: 'Contoso Apps' })}
-        refreshKey={0}
-        onOpenFile={onOpenFile}
-        onSendToChat={onSendToChat}
-        onOpenSecrets={onOpenSecrets}
-        fabricUser={'fabricUser' in over ? over.fabricUser : 'avery.chen@contoso.com'}
-        teamManifest={over.teamManifest}
-      />
+      <LocalDevelopmentContext.Provider value={Boolean(over.localDevelopment)}>
+        <BlueprintTab
+          project={
+            over.project ??
+            makeProject('p1', { name: 'Contoso Expenses', workspaceName: 'Contoso Apps' })
+          }
+          refreshKey={0}
+          onOpenFile={onOpenFile}
+          onSendToChat={onSendToChat}
+          onOpenSecrets={onOpenSecrets}
+          fabricUser={'fabricUser' in over ? over.fabricUser : 'avery.chen@contoso.com'}
+          teamManifest={over.teamManifest}
+        />
+      </LocalDevelopmentContext.Provider>
     </ToastProvider>
   )
   return { onSendToChat, onOpenFile, onOpenSecrets }
@@ -314,7 +325,7 @@ describe('BlueprintTab', () => {
     await screen.findByText('Contoso Expenses')
     fireEvent.click(appIdentity())
     const panel = screen.getByRole('complementary', { name: 'App identity details' })
-    expect(within(panel).getByText('Your Fabric account, which deploys this app')).toBeTruthy()
+    expect(within(panel).getByText('Your Fabric account, which publishes this app')).toBeTruthy()
     expect(within(panel).getByText('Grant it access to')).toBeTruthy()
     expect(within(panel).getByText('Finance warehouse')).toBeTruthy()
     expect(within(panel).getByText('Azure AI Foundry')).toBeTruthy()
@@ -369,7 +380,7 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
     fireEvent.click(part)
     const panel = screen.getByRole('complementary', { name: 'Secrets details' })
     expect(within(panel).getByText('Read by readReceipt')).toBeTruthy()
-    // The deployed app has no value for it, and a function reads it.
+    // The published app has no value for it, and a function reads it.
     expect(await within(panel).findByText('No value')).toBeTruthy()
     expect(within(panel).getByText(/no value for/).closest('.bp-issue')!.textContent).toContain('OCR_KEY')
     // The API called alongside it.
@@ -436,6 +447,54 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
     fireEvent.click(screen.getByRole('tab', { name: /Architecture/ }))
     expect(localStorage.getItem('rayfin.model.view.p1')).toBe('architecture')
     await screen.findByText('Contoso Expenses')
+  })
+
+  it('shows the app’s local data in the Data view, with its summary in the header', async () => {
+    const running = {
+      projectId: 'p1',
+      state: 'running',
+      revision: 1,
+      ready: {
+        features: {
+          data: { enabled: true, entities: ['Expense'] },
+          storage: { enabled: false, folders: [] },
+          auth: { enabled: true, fabric: true, password: false },
+          connectors: []
+        }
+      },
+      warnings: [],
+      error: null
+    }
+    Object.assign((window as unknown as { api: object }).api, {
+      local: {
+        status: vi.fn(async () => running),
+        onState: vi.fn(() => () => {}),
+        entities: vi.fn(async () => [{ name: 'Expense', rows: 1 }]),
+        users: vi.fn(async () => []),
+        rows: vi.fn(async () => ({
+          columns: [{ name: 'id', type: 'UUID', key: true }],
+          rows: [{ id: 'e1' }],
+          total: 1
+        }))
+      }
+    })
+    renderTab({ localDevelopment: true })
+    fireEvent.click(screen.getByRole('tab', { name: 'Data' }))
+    expect(await screen.findByRole('button', { name: 'Expense, 1 row' })).toBeTruthy()
+    expect(localStorage.getItem('rayfin.model.view.p1')).toBe('local-data')
+    expect(document.querySelector('.bp-head-slot')!.textContent).toContain('1 entity · 1 row')
+    expect(await screen.findByText('1–1 of 1')).toBeTruthy()
+  })
+
+  it('has no Data view without Local development, even when it was the one last shown', async () => {
+    localStorage.setItem('rayfin.model.view.p1', 'local-data')
+    renderTab()
+    await screen.findByText('Contoso Expenses')
+    expect(screen.queryByRole('tab', { name: 'Data' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Architecture' }).getAttribute('aria-selected')).toBe(
+      'true'
+    )
+    expect(screen.getByRole('tab', { name: /Data model/ })).toBeTruthy()
   })
 
   it('explains an unreadable rayfin.yml instead of drawing nothing', async () => {

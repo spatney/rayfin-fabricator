@@ -901,7 +901,7 @@ pub async fn run_project_rayfin(project_dir: &Path, args: &[&str], mut opts: Run
         on(
           Stream::System,
           &format!(
-            "\nSome of this project's packages didn't install completely ({}). Fabricator reinstalls them the next time you deploy, sign in to Fabric or open the project.\n",
+            "\nSome of this project's packages didn't install completely ({}). Fabricator reinstalls them the next time you publish, sign in to Fabric or open the project.\n",
             package_names(&incomplete)
           ),
         );

@@ -6,9 +6,14 @@ Repository: https://github.com/spatney/rayfin-fabricator
 
 ## What this project is
 
-Fabricator is a desktop app for Windows and macOS (Apple Silicon) for building "Rayfin apps" via chat. It uses Tauri v2 with a Rust backend and a React 19 + TypeScript renderer built with Vite. It wraps the GitHub Copilot CLI for authoring and the Rayfin CLI (`rayfin up`) for deployment to Microsoft Fabric.
+Fabricator is a desktop app for Windows and macOS (Apple Silicon) for building "Rayfin apps" via chat. It uses Tauri v2 with a Rust backend and a React 19 + TypeScript renderer built with Vite. It wraps the GitHub Copilot CLI for authoring, can run apps on your computer with rayfin-local, a local Rayfin backend it bundles, and uses each project's Rayfin CLI (`rayfin up`) to publish apps to Microsoft Fabric.
 
-You author locally. Fabricator automatically manages a local Vite frontend preview during chat turns when the project has Vite installed, using the existing Fabric backend. Deployment and backend validation still target Microsoft Fabric; projects without local Vite keep the deployed preview.
+You author locally. How an app runs while you build it depends on the **Local development** experiment (**Settings → Experiments**, off by default):
+
+- **On:** each personal app runs on this computer from the moment it's created. The bundled rayfin-local serves its whole backend (the data API with its policies, sign-in, functions, connectors and storage) and the app's own Vite, and keeps the app's local data in the project's `.rayfin-local/` folder. The preview shows that app, and Copilot checks its work against it with Fabricator's `fabricator_local_status` and `fabricator_local_call` tools. Publishing to Microsoft Fabric is optional: select **Publish**, or turn on **Publish after each chat turn**.
+- **Off:** apps are developed against their Fabric deployment. A new app is published before chat unlocks, chat turns publish it again unless you turn **Publish after each chat turn** off, and the preview shows the published app. When the project has Vite installed, Fabricator runs the app's Vite locally during chat turns, against the published backend.
+
+Team apps (the **Team workspaces** experiment) work the same either way: the team's pipeline publishes each member's preview to Fabric. A published app the local backend can't run, such as one with a Kusto connector, previews against its published backend too.
 
 ## Prerequisites
 
@@ -19,13 +24,14 @@ You author locally. Fabricator automatically manages a local Vite frontend previ
 | Rust stable | Windows: the MSVC toolchain. macOS: the default toolchain plus the Xcode command-line tools. |
 | Tauri prerequisites | For local desktop development and packaging. |
 | Git | Used for local project history. |
+| Network access to GitHub | `npm ci` downloads rayfin-local, the local Rayfin backend Fabricator bundles, from its GitHub release. See [The rayfin-local sidecar](#the-rayfin-local-sidecar). |
 
 You don't need to install the Rayfin CLI or the GitHub Copilot CLI. Each Rayfin project pins its own Rayfin CLI, which Fabricator runs through `npx rayfin`, and the Copilot engine is bundled with the app; you sign in to both from inside Fabricator.
 
 ## Development setup
 
 1. Clone the repository.
-2. Install dependencies with `npm ci`.
+2. Install dependencies with `npm ci`. It also downloads the rayfin-local sidecar.
 3. Start the app with `npm run dev`.
 
 ## Useful scripts
@@ -40,6 +46,7 @@ You don't need to install the Rayfin CLI or the GitHub Copilot CLI. Each Rayfin 
 | `npm test` | Runs renderer regression tests (also run in CI). |
 | `npm run lint` | Runs lint checks. |
 | `npm run format` | Formats code with Prettier. |
+| `npm run rayfin-local:fetch` | Downloads the pinned rayfin-local sidecar into `src-tauri/binaries/`. `npm ci`, `npm run dev` and `npm run build` run it too. |
 
 ## Verification before opening a PR
 
@@ -58,15 +65,17 @@ cd src-tauri
 & "$env:USERPROFILE\.cargo\bin\cargo.exe" check
 ```
 
-Cargo may not be on `PATH`, so the explicit path above is often safest on Windows.
+Cargo may not be on `PATH`, so the explicit path above is often safest on Windows. Every Cargo build needs the rayfin-local sidecar in `src-tauri/binaries/`: if `npm ci` couldn't download it, run `npm run rayfin-local:fetch` first.
 
 ## Project layout
 
 ```text
 rayfin-fabricator/
 ├─ src-tauri/                 Rust Tauri backend, IPC commands, services, resources, packaging
-│  ├─ src/commands/           IPC handlers: advisor, auth, chat, deploy, design, doctor, fabric, files, git, projects, settings, team, …
-│  ├─ src/services/           exec, preview, store, telemetry, history, crashlog, emit, paths, team, …
+│  ├─ src/commands/           IPC handlers: advisor, auth, chat, deploy (publishing), design, doctor, fabric, files, git, local, projects, settings, team, …
+│  ├─ src/services/           exec, local_backend (the rayfin-local supervisor), preview, store, telemetry, history, crashlog, emit, paths, team, …
+│  ├─ binaries/               The rayfin-local sidecar, downloaded by scripts/rayfin-local (not committed)
+│  ├─ windows/                NSIS installer hooks that stop the sidecar before an update or uninstall
 │  ├─ vendor/wry/             Vendored wry: upstream crate + the patches in vendor/wry-patches
 │  └─ vendor/wry-patches/     WebView2 device-compliance SSO + macOS preview-positioning fix
 ├─ src/renderer/              React 19 + TypeScript UI built with Vite
@@ -80,11 +89,13 @@ rayfin-fabricator/
 ├─ scripts/videos/            Videos hosted by Ray: the landing page's intro and the Learn Rayfin with Ray lessons (Remotion + ElevenLabs)
 ├─ scripts/design-bench/      Times Design mode's AI options per Copilot model, to order the models Design picks
 ├─ scripts/wry/               Re-vendors wry from crates.io and applies the local patches
+├─ scripts/rayfin-local/      Downloads the rayfin-local sidecar that rayfin-local.json pins
 ├─ docs/                      Maintainer deployment notes and the vendored wry patch write-up
 ├─ analytics/                 Application Insights KQL queries and notes
 ├─ resources/                 Runtime resources, including telemetry configuration placeholders
 ├─ .github/workflows/         CI, the release workflow (Windows NSIS and macOS dmg builds), and the docs site deploy
 ├─ package.json               npm scripts and renderer dependencies
+├─ rayfin-local.json          The rayfin-local release Fabricator bundles, with each archive's SHA-256
 └─ logo.png                   Project logo
 ```
 
@@ -100,21 +111,24 @@ flowchart TD
     Renderer["React 19 + TypeScript renderer<br/>Vite UI"]
     Core["Tauri v2 Rust core<br/>IPC commands + services"]
     Editor["Monaco code editor"]
-    Model["Data model view<br/>entities + access"]
-    Preview["Native WebView2 preview<br/>deployed app or Fabric portal shell"]
+    Model["Blueprint<br/>architecture, data model, local data"]
+    Preview["Native WebView2 preview<br/>local app, published app or Fabric portal shell"]
     Advisor["Advisor<br/>quick checks + read-only Copilot review"]
   end
 
-  subgraph Local["Local workspace"]
+  subgraph Local["This computer"]
     Files["Project files under workspace/"]
     Git["Git history"]
+    Backend["rayfin-local sidecar<br/>local Rayfin backend (Local development)"]
+    Vite["The app's Vite dev server"]
+    State[".rayfin-local/<br/>local database, keys, secret values"]
   end
 
   Copilot["GitHub Copilot CLI<br/>authoring agent"]
-  Rayfin["Rayfin CLI<br/>rayfin up"]
+  Rayfin["Rayfin CLI<br/>rayfin up (Publish)"]
 
   subgraph Fabric["Microsoft Fabric"]
-    Runtime["Remote app runtime"]
+    Runtime["Published app runtime"]
     Data["Remote data and platform services"]
     Portal["Fabric portal shell"]
   end
@@ -128,20 +142,26 @@ flowchart TD
 
   Core --> Files
   Core --> Git
-  Core --> Copilot
+  Core -- "runs, controls" --> Backend
+  Core <--> Copilot
   Core --> Rayfin
   Copilot --> Files
+  Backend --> Vite
+  Backend <--> State
+  Vite --> Files
   Advisor --> Copilot
-  Rayfin --> Runtime
+  Rayfin -- "Publish" --> Runtime
   Runtime <--> Data
+  Preview --> Vite
+  Preview --> Backend
   Preview --> Runtime
   Preview --> Portal
   Portal --> Runtime
 ```
 
-A React renderer drives the workbench, chat, editor, data model view, preview, deployments, advisor, settings, skills, and history. A Tauri v2 Rust core owns the IPC handlers in `src-tauri/src/commands/` and the services in `src-tauri/src/services/` for running external tools, persistence, preview hosting, telemetry, history, crash logs, auto-updates, and path management.
+A React renderer drives the workbench, chat, editor, Blueprint, preview, publishing, advisor, settings, skills, and history. A Tauri v2 Rust core owns the IPC handlers in `src-tauri/src/commands/` and the services in `src-tauri/src/services/` for running external tools, supervising each project's local backend, persistence, preview hosting, telemetry, history, crash logs, auto-updates, and path management.
 
-Fabricator wraps the tools you'd otherwise run by hand. It shells out to the GitHub Copilot CLI to author and to the Rayfin CLI to deploy, tracks your project with git, and loads the running app — deployed to Microsoft Fabric — into the embedded preview. The Advisor closes the loop: instant rule checks plus an on-demand, read-only Copilot review flag issues like unguarded routes, loose database policies, or unbounded text columns, and it tells you when a review has gone stale.
+Fabricator wraps the tools you'd otherwise run by hand. It drives the GitHub Copilot CLI to author, runs each app on this computer with rayfin-local while you build (with Local development on), shells out to the Rayfin CLI to publish to Microsoft Fabric, tracks your project with git, and loads the running app — on this computer, or published to Fabric — into the embedded preview. Copilot checks the app through Fabricator's `fabricator_local_status` and `fabricator_local_call` tools, and its chat sandbox keeps it out of `.rayfin-local/`. The Advisor closes the loop: instant rule checks plus an on-demand, read-only Copilot review flag issues like unguarded routes, loose database policies, or unbounded text columns, and it tells you when a review has gone stale.
 
 ## Documentation site
 
@@ -180,6 +200,16 @@ npm run check:docs   # content lint
 
 `src-tauri/vendor/wry` is the upstream `wry` crate plus the patches in `src-tauri/vendor/wry-patches` (WebView2 device-compliance SSO and the macOS preview position). When a Tauri upgrade moves the `wry` version, `cargo test` fails until you re-vendor it with `node scripts/wry/vendor-wry.mjs update <version>`. Change vendored files only through a patch: CI runs `npm run vendor:wry -- verify`. See `docs/VENDORED-WRY-PATCH.md` before changing Tauri or `wry`.
 
+## The rayfin-local sidecar
+
+With the **Local development** experiment on, Fabricator runs [rayfin-local](https://github.com/spatney/rayfin-local) for each open personal project: it serves a Rayfin app and its whole backend locally, and keeps the app's local state in the project's `.rayfin-local/` folder. Fabricator supervises it (`src-tauri/src/services/local_backend/`), keeps its output in memory and under the logs folder with credentials masked, and controls it through its loopback-only control API. It ships inside the app as a Tauri sidecar (`bundle.externalBin` in `src-tauri/tauri.conf.json`): Cargo builds of `src-tauri` copy `src-tauri/binaries/rayfin-local-<target triple>[.exe]` next to the app's executable (for example to `src-tauri/target/debug/rayfin-local.exe`), and the Windows installer and the macOS app bundle install it there too.
+
+- `rayfin-local.json` pins the release and the SHA-256 of each platform's archive. `scripts/rayfin-local/fetch.mjs` downloads the archive, checks it against the pin and unpacks the binary with the system `tar`. A stamp file next to the binary skips the download until the pin changes.
+- `npm ci` runs the fetch but only warns when it can't, for example offline, or on Linux, which Fabricator doesn't ship for. `npm run dev`, `npm run build` and `npm run rayfin-local:fetch` fail instead. Add `-- --target <triple>` to fetch for another target, or `-- --force` to download again.
+- To bundle a rayfin-local you built, for example while you change both repositories, set `FABRICATOR_RAYFIN_LOCAL_BIN` to its binary and run `npm run rayfin-local:fetch` or `npm run dev`. The fetch copies that binary without checking it, and the app runs the binary the variable names. Unset it and fetch again to go back to the pinned release.
+- To move to a new rayfin-local release, set `version` and each target's `archive` and `sha256` in `rayfin-local.json` from the release's `SHA256SUMS.txt`, update `sdk` when the Rayfin versions it supports change, and run `npm run rayfin-local:fetch`.
+- The Windows installer and uninstaller stop a rayfin-local that runs from the install folder before they replace or remove it, and leave any other rayfin-local alone (`src-tauri/windows/installer-hooks.nsh`).
+
 ## Releases
 
 Pushing a version tag drives `.github/workflows/release.yml`. The release workflow builds the NSIS installer and injects the Application Insights connection string from the `APPINSIGHTS_CONNECTION_STRING` GitHub Actions secret into `resources/telemetry.json` at build time.
@@ -188,7 +218,7 @@ Pushing a version tag drives `.github/workflows/release.yml`. The release workfl
 
 ### Code signing (maintainers)
 
-Release installers are signed with **Azure Trusted Signing** (a.k.a. Azure Artifact Signing) when the required GitHub Actions settings are present. The release workflow signs both the app executable and the NSIS installer through Tauri's `signCommand` and [`artifact-signing-cli`](https://github.com/Levminer/trusted-signing-cli). When the signing credentials are absent (forks, PR builds), the installer is still produced — just unsigned — so contributors never need a certificate to build.
+Release installers are signed with **Azure Trusted Signing** (a.k.a. Azure Artifact Signing) when the required GitHub Actions settings are present. The release workflow signs both the app executable and the NSIS installer through Tauri's `signCommand` and [`artifact-signing-cli`](https://github.com/Levminer/trusted-signing-cli). It signs the rayfin-local sidecar with the same tool and certificate before the build, and afterwards checks that the installer's copy and the one next to the app's executable carry the installer's signature. On macOS, Tauri signs the sidecar inside the app bundle like the app's own executable, and the workflow checks that too. When the signing credentials are absent (forks, PR builds), the installer is still produced — just unsigned — so contributors never need a certificate to build.
 
 To enable signing, set the following on the repository (**Settings → Secrets and variables → Actions**):
 

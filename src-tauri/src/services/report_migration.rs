@@ -3,9 +3,9 @@
 //! Fabricator gathers what Copilot rebuilds a report from: the report's
 //! definition (pages, visuals, fields, filters, theme), its semantic model's
 //! tables and measures, and a PDF of its pages, which the renderer turns into
-//! page images and text. Everything is read with the **Azure CLI**'s sign-in
-//! (a tool setup already requires), so a report can be picked before any
-//! project exists. A short-lived `node` helper does the REST calls, as the
+//! page images and text. Everything is read with the **Azure CLI**'s sign-in,
+//! which the picker asks for when it's missing, so a report can be picked
+//! before any project exists. A short-lived `node` helper does the REST calls, as the
 //! other Fabric helpers do: [`HELPER_SOURCE`] with the pure [`DEFINITION_SOURCE`].
 //!
 //! The material lives in the project under [`MIGRATION_ROOT`], kept out of git

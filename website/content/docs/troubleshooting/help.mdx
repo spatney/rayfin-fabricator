@@ -5,7 +5,7 @@ description: "Open the built-in Help assistant to find out why something failed,
 
 Use Help when something went wrong and you want to know why. Help reads what Fabricator recorded on your computer, checks it against the documentation, and tells you what to do next in plain language.
 
-![The Help assistant answering "why did my deploy fail?" with a cause, numbered steps, a Refresh Fabric authentication button and a link to the deploy troubleshooting page.](/screenshots/help.webp)
+![The Help assistant answering "why couldn't I publish my app?" with the cause, numbered steps, a Refresh Fabric authentication button and a link to Publishing and Fabric problems.](/screenshots/help.webp)
 
 ## Open Help
 
@@ -19,11 +19,14 @@ You can also ask Help from Search without leaving what you're doing: press `Ctrl
 
 Help is also available during setup: connect GitHub Copilot in step 1 and a **Help** button appears at the bottom of the setup screen. It answers the same way, but only offers the actions setup can actually carry out — re-checking your tools, signing in to Copilot, opening the logs or the documentation — because the rest of the app isn't running yet.
 
-When a deploy fails, you don't have to open Help yourself. Ray swims in above the preview and offers **Find out why**. Select it, or select Ray, and Help opens and asks "Why did my last deploy fail?" for you. It reads the end of the deploy's log, so it can quote the line that explains the failure.
+When a publish fails, you don't have to open Help yourself. Ray swims in above the preview and offers **Find out why**. Select it, or select Ray, and Help opens and asks "Why did my last publish fail?" for you. It reads the end of the publish log, so it can quote the line that explains the failure.
+
+With the **Local development** experiment on, the same goes for your app on this computer. When it doesn't start, the preview offers **Find out why**: select it, and Help asks "Why didn’t my app start on this computer?" for you. It reads your app's output on this computer, so it can quote the line that explains the problem. See [Your app doesn't start on this computer](/docs/troubleshooting/preview#your-app-doesnt-start-on-this-computer).
 
 Describe the problem the way you would to a colleague. These all work:
 
-- "Why did my last deploy fail?"
+- "Why did my last publish fail?"
+- "Why didn’t my app start on this computer?"
 - "What went wrong most recently?"
 - "The preview won't start"
 - "Find me my expenses app"
@@ -43,7 +46,7 @@ A conversation you haven't touched for a day is dropped, so an unrelated problem
 
 ## What Help can see
 
-Help reads five things, and nothing else:
+Help reads these things, and nothing else:
 
 | Source | What it is used for |
 | --- | --- |
@@ -52,10 +55,11 @@ Help reads five things, and nothing else:
 | The release notes | What changed in each version of Fabricator |
 | Your open project | Your app's files, when the question is about your app |
 | Fabricator's own code | Tracing an error message back to the condition that caused it |
+| Your app's output on this computer | With the **Local development** experiment on: what the local backend, your app's dev server and its functions printed, to find out why the app didn't start or stopped |
 
-Fabricator keeps a record of what happens as you work: setup finishing, signing in, installing a tool, creating or opening an app, starting a preview, deploying, and every message it shows you. Successes are recorded as well as failures, which is what lets Help tell the difference between a problem you are having now and one you already got past. That history is kept for seven days and never leaves your computer unless you attach it to a bug report yourself.
+Fabricator keeps a record of what happens as you work: setup finishing, signing in, installing a tool, creating or opening an app, starting a preview, publishing, and every message it shows you. With the **Local development** experiment on, it also records the problems your app's local backend reports. Successes are recorded as well as failures, which is what lets Help tell the difference between a problem you are having now and one you already got past. That history is kept for seven days and never leaves your computer unless you attach it to a bug report yourself.
 
-Help is also told what is true at the moment you ask: which accounts are connected, whether your tools are ready, and which app is open. So "how did setup go?" is answered from how setup actually stands, not from the last thing that went wrong on the way there.
+Help is also told what is true at the moment you ask: which accounts are connected, whether your tools are ready, which app is open and, with the **Local development** experiment on, how that app is running on this computer. So "how did setup go?" is answered from how setup actually stands, not from the last thing that went wrong on the way there.
 
 The badge next to **fabricator help** at the top shows what Help has available. When it shows a version such as `v1.9.5`, Help is reading the exact code your copy of Fabricator is built from, so its answers match the app in front of you. Select the badge to download a fresh copy.
 
@@ -69,7 +73,7 @@ Help is read-only. It can't change your project, your settings, or your app, and
 What it does instead is explain and take you places. When something is a step you could take yourself, Help offers it as a button under its answer rather than describing where to click. Selecting the button does exactly what finding that control yourself would do. It can:
 
 - Open one of your projects by name, or show you all of them when you're not sure.
-- Open the dialog for sharing your deployed app. For a team app it opens the workspace overview instead, because a team app's access is granted there by an owner.
+- Open the dialog for sharing your published app. For a team app it opens the workspace overview instead, because a team app's access is granted there by an owner.
 - Open the Advisor, your project's files, Settings, the Accounts dialog, or the logs folder.
 - Re-check your setup, or refresh a Fabric or GitHub Copilot sign-in.
 - Open the documentation page the answer came from.

@@ -2685,7 +2685,8 @@ button.thinking-head:hover {
   }
 }
 
-/* Chat hard-gate banner: shown above the composer until the project is deployed. */
+/* Chat hard-gate banner: shown above the composer until the project is
+   published, while Local development is off. */
 .deploy-gate {
   display: flex;
   align-items: center;

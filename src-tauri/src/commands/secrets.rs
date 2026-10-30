@@ -1,14 +1,20 @@
 //! Function secrets (API keys, connection strings, tokens) for a project's
-//! deployed Rayfin app, managed through the project's own Rayfin CLI:
+//! published Rayfin app, managed through the project's own Rayfin CLI:
 //! `rayfin secret list|set|delete --json`.
 //!
 //! Values are write-only. Fabricator hands a value to `rayfin secret set --stdin`
 //! (never in the arguments, which other processes on the machine can read) and
-//! keeps no copy; neither the CLI nor the deployed app ever returns one. Names and
+//! keeps no copy; neither the CLI nor the published app ever returns one. Names and
 //! descriptions live in `rayfin/rayfin.yml`, which the CLI updates together with
 //! the generated `secrets.generated.ts` that types `ctx.Secrets` in functions.
 //! Fabricator commits just those files when the CLI changes them, so History
 //! records "Add secret: NAME" the way it records skills.
+//!
+//! Every personal app also runs on this computer, where rayfin-local gives the
+//! functions each declared secret's local value (`commands::local`). An app that
+//! hasn't been published has no published values, but secrets can still be
+//! added: [`secrets_declare`] records a name in `rayfin.yml` with the code the CLI's
+//! `secret set` runs, and its value goes to rayfin-local.
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -42,9 +48,44 @@ const CLI_TIMEOUT_MS: u64 = 120_000;
 
 const TIMED_OUT: &str = "The Rayfin CLI didn't finish in time. Check your connection, then try again.";
 
-const NOT_DEPLOYED: &str = "Deploy your app first. Secrets are stored with the deployed app.";
+const NOT_DEPLOYED: &str = "Publish your app first. Published values are stored with the published app.";
 
 const MAX_DESCRIPTION: usize = 200;
+
+/// Adding a name to `rayfin.yml` is local: Node starts, and the CLI's helpers run.
+const DECLARE_TIMEOUT_MS: u64 = 30_000;
+
+/// Adds a secret to `rayfin.yml` with the app's own Rayfin CLI, as its `secret
+/// set` does once the published app has stored the value: `upsertSecretMetadata`,
+/// then `generateSecretsTypes` for `ctx.Secrets`. Its arguments are the CLI's
+/// folder, the project's, the name and the description (empty for none). Prints
+/// one JSON line.
+const DECLARE_SCRIPT: &str = r#"
+const [cli, root, name, description] = process.argv.slice(1);
+const { pathToFileURL } = await import('node:url');
+const { join } = await import('node:path');
+const load = (file) => import(pathToFileURL(join(cli, 'dist', 'utils', file)).href);
+const say = (result) => console.log(JSON.stringify(result));
+try {
+  const { upsertSecretMetadata } = await load('config-utils.js');
+  const added = upsertSecretMetadata(name, root, description || undefined);
+  if (added.status === 'added' || added.status === 'exists') {
+    let types = 'skipped';
+    try {
+      types = (await load('secrets-types-generator.js')).generateSecretsTypes(root).status;
+    } catch {
+      types = 'failed';
+    }
+    say({ status: 'success', declared: added.status, types });
+  } else {
+    say({ status: 'error', reason: added.reason ?? added.status });
+    process.exitCode = 1;
+  }
+} catch (error) {
+  say({ status: 'error', error: String(error?.message ?? error) });
+  process.exitCode = 1;
+}
+"#;
 
 /// Check a secret name: it becomes a property of `ctx.Secrets` and of the
 /// generated TypeScript, so it has to be a plain identifier.
@@ -264,7 +305,7 @@ fn parse_stored(result: &Value) -> Vec<Stored> {
 }
 
 /// Every secret the app knows about: declared in `rayfin.yml`, stored on the
-/// deployed app, or both. Sorted by name.
+/// published app, or both. Sorted by name.
 fn merge(declared: &[(String, Option<String>)], stored: &[Stored]) -> Vec<SecretInfo> {
   let mut list: Vec<SecretInfo> = declared
     .iter()
@@ -345,9 +386,9 @@ async fn team_environment(
   environment
 }
 
-/// Whether the app has a deployment for its secrets to live on, by the CLI's
-/// own rule: an entry in `rayfin/.deployments.json` with a workspace and an
-/// item (`rayfin init` can record a workspace before anything is deployed).
+/// Whether the app has been published, so its secrets have published values, by
+/// the CLI's own rule: an entry in `rayfin/.deployments.json` with a workspace
+/// and an item (`rayfin init` can record a workspace before anything is deployed).
 fn has_deployment(dir: &Path) -> bool {
   let registry = std::fs::read_to_string(dir.join("rayfin").join(".deployments.json"))
     .ok()
@@ -366,13 +407,13 @@ fn has_deployment(dir: &Path) -> bool {
 /// sign in again and wait for it; the list runs as soon as the tab opens. So
 /// Fabricator checks first, without a browser, and reports an expired sign-in.
 async fn with_sign_in<T>(dir: &Path, cli: impl Future<Output = Result<T, Failure>>) -> Result<T, Failure> {
+  // Without a published app, the CLI stops before it signs in: that's the
+  // problem to report, and Fabric (and its sign-in) isn't needed to find it.
+  if !has_deployment(dir) {
+    return Err(Failure { message: NOT_DEPLOYED.into(), not_deployed: true, sign_in: false });
+  }
   let _auth = crate::commands::auth::rayfin_auth_read().await;
   if let Err(error) = crate::commands::fabric::probe_rayfin_auth(Some(dir)).await {
-    // Without a deployment, the CLI stops before it signs in: that's the
-    // problem to report, not the sign-in.
-    if !has_deployment(dir) {
-      return Err(Failure { message: NOT_DEPLOYED.into(), not_deployed: true, sign_in: false });
-    }
     let message = fabric_auth::redact(&error);
     return Err(Failure { sign_in: needs_sign_in(&message), message, not_deployed: false });
   }
@@ -411,6 +452,42 @@ async fn cli_set(dir: &Path, name: &str, value: String, description: Option<&str
 
 async fn cli_delete(dir: &Path, name: &str) -> Result<Value, Failure> {
   run_cli(dir, &["secret", "delete", name, "--yes", "--json"], None).await
+}
+
+/// What a failed [`DECLARE_SCRIPT`] run means for someone adding `name`.
+fn declare_error(name: &str, res: &exec::RunResult) -> String {
+  let reason = json_result(&res.stdout).and_then(|v| v.get("reason").and_then(Value::as_str).map(String::from));
+  match reason.as_deref() {
+    Some("invalid-shape") => {
+      format!("Fabricator can’t add {name}: the secrets: entry in rayfin/rayfin.yml isn’t a list. Fix the file, then try again.")
+    }
+    Some("config-not-found" | "project-root-not-found") => "Fabricator can’t find rayfin/rayfin.yml in this project.".into(),
+    _ => {
+      let detail = match outcome(res) {
+        Err(failure) => failure.message,
+        Ok(_) => "The Rayfin CLI didn't confirm the change.".into(),
+      };
+      format!("Couldn’t add {name} to rayfin.yml: {detail}")
+    }
+  }
+}
+
+/// Add `name` to `rayfin.yml`'s secrets (with `description`) and to the
+/// generated `ctx.Secrets` types, through the app's own Rayfin CLI. A name that's
+/// already there stays as it is.
+async fn declare(dir: &Path, name: &str, description: Option<&str>) -> Result<(), String> {
+  let cli = dir.join("node_modules").join("@microsoft").join("rayfin-cli");
+  let (cli, root) = (cli.to_string_lossy().into_owned(), dir.to_string_lossy().into_owned());
+  let description = description_arg(description).unwrap_or_default();
+  let args = ["--input-type=module", "-e", DECLARE_SCRIPT, "--", &cli, &root, name, &description];
+  let options = RunOptions { cwd: Some(dir.to_path_buf()), timeout_ms: Some(DECLARE_TIMEOUT_MS), ..Default::default() };
+  let res = exec::run("node", &args, options).await;
+  let confirmed = json_result(&res.stdout).is_some_and(|v| v.get("status").and_then(Value::as_str) == Some("success"));
+  if res.ok && confirmed {
+    Ok(())
+  } else {
+    Err(declare_error(name, &res))
+  }
 }
 
 fn git_opts(dir: &Path) -> RunOptions {
@@ -465,12 +542,18 @@ fn writable(project_id: &str) -> Result<PathBuf, String> {
   Ok(dir)
 }
 
-/// The app's secrets: names, descriptions and when each value last changed.
+/// The app's secrets: names, descriptions and when each published value last
+/// changed. An app that hasn't been published is `not-deployed`: its declared
+/// secrets, read without the CLI or a Fabric sign-in.
 #[tauri::command]
 pub async fn secrets_list(project_id: String) -> SecretsState {
   let Some(project) = store::find_project(&project_id) else {
     return SecretsState { status: "error".into(), error: Some("Project not found.".into()), ..Default::default() };
   };
+  list(&project).await
+}
+
+async fn list(project: &StudioProject) -> SecretsState {
   let dir = PathBuf::from(&project.path);
   let config = read_config(&dir);
   let version = installed_version(&dir);
@@ -498,7 +581,7 @@ pub async fn secrets_list(project_id: String) -> SecretsState {
     state.environments = vec![published, preview];
     return state;
   }
-  if let Some((status, _)) = unavailable(&project, version.as_deref()) {
+  if let Some((status, _)) = unavailable(project, version.as_deref()) {
     state.status = status.into();
     return state;
   }
@@ -514,8 +597,9 @@ pub async fn secrets_list(project_id: String) -> SecretsState {
   state
 }
 
-/// Add a secret, or replace its value. The value goes to the CLI on stdin; a
-/// new name is also recorded in `rayfin.yml` (with `description`) and committed.
+/// Add a secret, or replace its value, on the published app. The value goes to
+/// the CLI on stdin; a new name is also recorded in `rayfin.yml` (with
+/// `description`) and committed.
 #[tauri::command]
 pub async fn secrets_set(
   app: AppHandle,
@@ -553,7 +637,7 @@ pub async fn secrets_set(
   }
 }
 
-/// Delete a secret from the deployed app (and from `rayfin.yml`).
+/// Delete a secret from the published app (and from `rayfin.yml`).
 #[tauri::command]
 pub async fn secrets_delete(app: AppHandle, project_id: String, name: String) -> SecretActionResult {
   let name = name.trim().to_string();
@@ -577,6 +661,45 @@ pub async fn secrets_delete(app: AppHandle, project_id: String, name: String) ->
       SecretActionResult { ok: true, error: None, sign_in: None }
     }
     Err(failure) => from_failure(failure),
+  }
+}
+
+/// Add a secret to `rayfin.yml` (with `description`) without a published app,
+/// and commit it as "Add secret: NAME". Its value goes to this computer's
+/// local backend separately (`local_set_secret`); its published value, once the
+/// app is published, through [`secrets_set`]. A declared name stays as it is.
+#[tauri::command]
+pub async fn secrets_declare(
+  app: AppHandle,
+  project_id: String,
+  name: String,
+  description: Option<String>,
+) -> SecretActionResult {
+  let name = name.trim().to_string();
+  if let Err(error) = validate_name(&name) {
+    return failed(error);
+  }
+  let dir = match writable(&project_id) {
+    Ok(dir) => dir,
+    Err(error) => return failed(error),
+  };
+  let state = app.state::<AppState>();
+  let _lease = match state.mutations.secrets(&project_id) {
+    Ok(lease) => lease,
+    Err(error) => return failed(error),
+  };
+  let config = read_config(&dir);
+  if config.declared.iter().any(|(known, _)| known == &name) {
+    return SecretActionResult { ok: true, error: None, sign_in: None };
+  }
+  let paths = tracked_paths(&config);
+  let before = dirty_all(&dir, &paths).await;
+  match declare(&dir, &name, description.as_deref()).await {
+    Ok(()) => {
+      commit_changes(&dir, &paths, &before, &format!("Add secret: {name}")).await;
+      SecretActionResult { ok: true, error: None, sign_in: None }
+    }
+    Err(error) => failed(error),
   }
 }
 
@@ -838,6 +961,80 @@ mod tests {
     let stored = cli_list(&project.0).await.unwrap();
     assert_eq!(stored.len(), 1);
     assert_eq!(stored[0].name, "OPENAI_KEY");
+  }
+
+  #[tokio::test]
+  async fn an_unpublished_app_lists_its_declared_secrets_without_fabric() {
+    let Some(project) = FakeProject::new() else { return };
+    let dir = &project.0;
+    // Fabric's sign-in check loads the CLI's auth module, and the list runs the CLI.
+    let touched = dir.join("touched");
+    let touch = format!("require('fs').writeFileSync({}, 'yes')", serde_json::to_string(&touched).unwrap());
+    let cli = dir.join("node_modules/@microsoft/rayfin-cli");
+    std::fs::create_dir_all(cli.join("dist/auth")).unwrap();
+    std::fs::write(cli.join("dist/auth/index.js"), &touch).unwrap();
+    std::fs::write(cli.join("scripts/main.js"), &touch).unwrap();
+    std::fs::create_dir_all(dir.join("rayfin")).unwrap();
+    std::fs::write(
+      dir.join("rayfin/rayfin.yml"),
+      "services:\n  functions:\n    enabled: true\nsecrets:\n  - name: OPENAI_KEY\n    description: Key for chat\n",
+    )
+    .unwrap();
+    let app: StudioProject =
+      serde_json::from_value(serde_json::json!({"id": "p1", "name": "App", "path": dir, "addedAt": "2026-10-01T00:00:00Z"}))
+        .unwrap();
+
+    let state = list(&app).await;
+    assert_eq!(state.status, "not-deployed");
+    assert_eq!(state.secrets.len(), 1);
+    assert_eq!(state.secrets[0].name, "OPENAI_KEY");
+    assert_eq!(state.secrets[0].description.as_deref(), Some("Key for chat"));
+    assert!(state.secrets[0].declared && !state.secrets[0].stored);
+    assert!(state.functions_enabled);
+    assert_eq!(state.rayfin_version.as_deref(), Some("1.36.2"));
+    assert_eq!(state.error, None);
+    assert!(!touched.exists(), "the list reached for Fabric");
+  }
+
+  #[tokio::test]
+  async fn declaring_runs_the_clis_own_rayfin_yml_code() {
+    let Some(project) = FakeProject::new() else { return };
+    let dir = &project.0;
+    // Stand-ins for the CLI's helpers that record what they're given.
+    let utils = dir.join("node_modules/@microsoft/rayfin-cli/dist/utils");
+    std::fs::create_dir_all(&utils).unwrap();
+    std::fs::write(utils.join("../package.json"), r#"{"type":"module"}"#).unwrap();
+    std::fs::write(
+      utils.join("config-utils.js"),
+      "import { writeFileSync } from 'node:fs';\nimport { join } from 'node:path';\nexport const upsertSecretMetadata = (name, root, description) => {\n  writeFileSync(join(root, 'declared.json'), JSON.stringify({ name, root, description: description ?? null }));\n  return name === 'BROKEN' ? { status: 'skipped', reason: 'invalid-shape' } : { status: 'added' };\n};\n",
+    )
+    .unwrap();
+    std::fs::write(
+      utils.join("secrets-types-generator.js"),
+      "import { writeFileSync } from 'node:fs';\nimport { join } from 'node:path';\nexport const generateSecretsTypes = (root) => {\n  writeFileSync(join(root, 'types.txt'), 'written');\n  return { status: 'written' };\n};\n",
+    )
+    .unwrap();
+    let recorded = || -> Value { serde_json::from_str(&std::fs::read_to_string(dir.join("declared.json")).unwrap()).unwrap() };
+
+    declare(dir, "OPENAI_KEY", Some("Key for\n the chat")).await.unwrap();
+    let call = recorded();
+    assert_eq!(call["name"], "OPENAI_KEY");
+    assert_eq!(call["description"], "Key for the chat");
+    assert_eq!(Path::new(call["root"].as_str().unwrap()), dir.as_path());
+    assert!(dir.join("types.txt").is_file());
+
+    // Without a description, the CLI writes its own placeholder.
+    declare(dir, "NO_TEXT", Some("  ")).await.unwrap();
+    assert_eq!(recorded()["description"], Value::Null);
+
+    let broken = declare(dir, "BROKEN", None).await.unwrap_err();
+    assert!(broken.contains("isn’t a list"), "{broken}");
+
+    // A CLI without these helpers says so.
+    std::fs::remove_file(utils.join("config-utils.js")).unwrap();
+    let missing = declare(dir, "OTHER", None).await.unwrap_err();
+    assert!(missing.starts_with("Couldn’t add OTHER to rayfin.yml: "), "{missing}");
+    assert!(missing.contains("config-utils.js"), "{missing}");
   }
 
   #[tokio::test]

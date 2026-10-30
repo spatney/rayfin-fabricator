@@ -1,6 +1,6 @@
 //! Environment doctor — the Rust port of `src/main/services/doctor.ts`.
 //! Detects the external prerequisites the user must provide (Node, npm, Git, and
-//! the Azure CLI) and can auto-install them via winget (Windows) / brew (macOS),
+//! the optional Azure CLI) and can auto-install them via winget (Windows) / brew (macOS),
 //! falling back to the official installer. Fabric sign-in and deploys use each
 //! project's locally-installed `@microsoft/rayfin-cli` (installed with the
 //! project), so no global Rayfin CLI is required here. The Copilot CLI is
@@ -86,13 +86,14 @@ static TOOLS: Lazy<Vec<ToolDef>> = Lazy::new(|| {
       name: "Azure CLI",
       bin: "az",
       version_args: &["version"],
-      required: true,
+      // Features that need an Azure sign-in ask for it when they're used.
+      required: false,
       system: Some(SystemPkg {
         winget: Some("Microsoft.AzureCLI"),
         brew: Some("azure-cli"),
       }),
       min_version: None,
-      install_hint: "Required to sign in to Azure.",
+      install_hint: "Optional. Sign in to Azure to share published apps, add Fabric data and migrate Power BI reports, and to let your app's functions and connectors use your Azure access while you develop.",
       install_url: Some("https://learn.microsoft.com/cli/azure/install-azure-cli"),
     },
     ToolDef {
@@ -230,7 +231,12 @@ pub async fn check_environment() -> DoctorReport {
   crate::services::env_path::repair();
   // Each probe is its own process; run them together so the check takes as long
   // as the slowest tool rather than the sum of all of them.
-  let tools = futures::future::join_all(TOOLS.iter().map(check_tool)).await;
+  let (mut tools, local_backend) = futures::join!(
+    futures::future::join_all(TOOLS.iter().map(check_tool)),
+    // The bundled rayfin-local runs apps locally; optional, so it never gates setup.
+    crate::services::local_backend::doctor_status(),
+  );
+  tools.push(local_backend);
   let ready = tools.iter().filter(|t| t.required).all(|t| t.satisfied);
   DoctorReport { tools, ready }
 }
@@ -462,9 +468,9 @@ pub async fn install_all_missing(app: &AppHandle, on_data: Option<OnData>) -> In
   }
 
   // All auto-installable prerequisites are system packages (Node first so npm
-  // appears, then Git, then the Azure CLI). They land on PATH and need a relaunch
-  // to be picked up.
-  let system_missing: Vec<&ToolDef> = ["node", "git", "az"]
+  // appears, then Git). They land on PATH and need a relaunch to be picked up.
+  // Optional tools, such as the Azure CLI, are installed one at a time.
+  let system_missing: Vec<&ToolDef> = ["node", "git"]
     .iter()
     .filter_map(|id| tool_by_id(id))
     .filter(|def| missing.iter().any(|m| m == def.id) && system_installable(def))
@@ -544,10 +550,15 @@ mod tests {
   #[test]
   fn bulk_install_is_blocked_by_required_probe_errors_not_optional_ones() {
     let failed = probe(false, false, "", "Shim launch failed");
-    let report = DoctorReport { ready: false, tools: vec![tool_status(tool_by_id("az").unwrap(), &failed)] };
+    let report = DoctorReport { ready: false, tools: vec![tool_status(tool_by_id("git").unwrap(), &failed)] };
     assert!(required_probe_failure(&report).is_some());
-    let optional = DoctorReport { ready: true, tools: vec![tool_status(tool_by_id("gh").unwrap(), &failed)] };
-    assert!(required_probe_failure(&optional).is_none());
+    // The Azure CLI is optional: a broken one never holds up setup.
+    for id in ["gh", "az"] {
+      let status = tool_status(tool_by_id(id).unwrap(), &failed);
+      assert!(!status.required, "{id}");
+      let optional = DoctorReport { ready: true, tools: vec![status] };
+      assert!(required_probe_failure(&optional).is_none(), "{id}");
+    }
   }
 
   #[cfg(windows)]

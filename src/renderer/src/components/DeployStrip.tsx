@@ -2,21 +2,21 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import { clockLabel, meterStepLabel, useDeployMeter } from '../deployMeter'
 
 interface Props {
-  /** The project: the deploy's progress is shared with the app bar and the deploy screen. */
+  /** The project: publishing progress is shared with the app bar and the publish screen. */
   meterKey: string
   log: string[]
-  /** When the deploy started (`Date.now()`). */
+  /** When publishing started (`Date.now()`). */
   startedAt?: number
-  /** The deployment it goes to, e.g. "Production". */
+  /** The published app it goes to, e.g. "Production". */
   target?: string
-  /** Show the full deploy screen instead. */
+  /** Show the full publish screen instead. */
   onWatch: () => void
 }
 
 /**
- * A redeploy in progress, above the app it's updating. The app stays on screen
- * and usable meanwhile; this says what the deploy is doing, how far it has got
- * and for how long, with the full deploy screen and the log one click away.
+ * Publishing in progress, above the app it's updating. The app stays on screen
+ * and usable meanwhile; this says what publishing is doing, how far it has got
+ * and for how long, with the full publish screen and the log one click away.
  * The preview reloads when the new version is live.
  */
 export default function DeployStrip({ meterKey, log, startedAt, target, onWatch }: Props): JSX.Element {
@@ -38,16 +38,16 @@ export default function DeployStrip({ meterKey, log, startedAt, target, onWatch 
         <span className="ws-spinner deploy-strip-spin" aria-hidden="true" />
         {/* Only the words are announced: they change with the step, not every second. */}
         <span className="deploy-strip-text" role="status">
-          <strong>{target ? `Deploying to ${target}` : 'Deploying'}</strong>
+          <strong>{target ? `Publishing to ${target}` : 'Publishing'}</strong>
           <span className="deploy-strip-step">
-            {meter ? meterStepLabel(meter) : 'Starting the deploy'}
+            {meter ? meterStepLabel(meter) : 'Starting to publish'}
             {position}
           </span>
         </span>
         <span
           className="deploy-strip-bar"
           role="progressbar"
-          aria-label="Deploy progress"
+          aria-label="Publish progress"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={percent}
@@ -57,7 +57,12 @@ export default function DeployStrip({ meterKey, log, startedAt, target, onWatch 
         <span className="deploy-strip-time" aria-hidden="true">
           {clockLabel(meter?.elapsed ?? 0)}
         </span>
-        <button type="button" className="btn btn--xs btn--ghost" onClick={onWatch} title="Show the deploy screen">
+        <button
+          type="button"
+          className="btn btn--xs btn--ghost"
+          onClick={onWatch}
+          title="Show the publish screen"
+        >
           Watch
         </button>
         <button
@@ -71,7 +76,7 @@ export default function DeployStrip({ meterKey, log, startedAt, target, onWatch 
       </div>
       {showLog && (
         <pre className="deploy-log deploy-log--static deploy-strip-log" ref={logRef}>
-          {log.join('') || 'Starting the deploy…'}
+          {log.join('') || 'Starting to publish…'}
         </pre>
       )}
     </div>

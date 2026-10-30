@@ -1,0 +1,131 @@
+import type { LocalColumn } from '@shared/ipc'
+import type { DataModel } from '../../model/parseSchema'
+
+/** Rows the Data view reads at a time (the control API allows up to 500). */
+export const PAGE_SIZE = 50
+
+/** The most of a value a cell renders; the full value is on hover. */
+const MAX_CELL_TEXT = 300
+
+const NUMBER_TYPE =
+  /^(int\d*|integer|bigint|smallint|tinyint|long|short|byte|single|decimal|numeric|money|float\d*|double|real|number)$/i
+const BOOLEAN_TYPE = /^(boolean|bool|bit)$/i
+const DATE_TYPE = /date|time/i
+const ID_TYPE = /^(uuid|uniqueidentifier|guid)$/i
+const JSON_TYPE = /^jsonb?$/i
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
+const DATE_FORMAT = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' })
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short'
+})
+
+export type CellKind = 'null' | 'empty' | 'boolean' | 'number' | 'date' | 'json' | 'id' | 'text'
+
+/** How a cell shows a value: its text, and the full value on hover when that says more. */
+export interface CellView {
+  kind: CellKind
+  text: string
+  title?: string
+}
+
+function clip(text: string): string {
+  return text.length > MAX_CELL_TEXT ? `${text.slice(0, MAX_CELL_TEXT)}…` : text
+}
+
+/** A date-time in the local time zone; a date alone as written. */
+export function formatDate(text: string): string | null {
+  const time = Date.parse(text)
+  if (Number.isNaN(time)) return null
+  return (DATE_ONLY.test(text) ? DATE_FORMAT : DATE_TIME_FORMAT).format(time)
+}
+
+function json(value: unknown): CellView {
+  try {
+    return {
+      kind: 'json',
+      text: clip(JSON.stringify(value)),
+      title: JSON.stringify(value, null, 2)
+    }
+  } catch {
+    return { kind: 'text', text: clip(String(value)), title: String(value) }
+  }
+}
+
+/**
+ * A value as the Data view shows it, by its column's type and its own:
+ * `null` and empty text faintly, booleans and numbers as such, dates in local
+ * time, objects as JSON, ids in a monospace font, and text clipped (CSS
+ * truncates it further).
+ */
+export function formatCell(value: unknown, column?: Pick<LocalColumn, 'type'>): CellView {
+  const type = column?.type?.trim() ?? ''
+  if (value === null || value === undefined) return { kind: 'null', text: 'null' }
+  if (typeof value === 'boolean') return { kind: 'boolean', text: String(value) }
+  if (typeof value === 'number') {
+    if (BOOLEAN_TYPE.test(type) && (value === 0 || value === 1))
+      return { kind: 'boolean', text: value === 1 ? 'true' : 'false' }
+    return { kind: 'number', text: String(value) }
+  }
+  if (typeof value === 'object') return json(value)
+  const text = String(value)
+  if (text === '') return { kind: 'empty', text: '""', title: 'Empty text' }
+  if (DATE_TYPE.test(type)) {
+    const date = formatDate(text)
+    if (date) return { kind: 'date', text: date, title: text }
+  }
+  if (NUMBER_TYPE.test(type) && text.trim() !== '' && Number.isFinite(Number(text)))
+    return { kind: 'number', text }
+  if (JSON_TYPE.test(type)) {
+    try {
+      const parsed: unknown = JSON.parse(text)
+      if (parsed !== null && typeof parsed === 'object') return json(parsed)
+    } catch {
+      /* not JSON after all: show it as text */
+    }
+  }
+  if (ID_TYPE.test(type)) return { kind: 'id', text: clip(text), title: text }
+  return { kind: 'text', text: clip(text), title: text }
+}
+
+/** A column whose values line up on the right. */
+export function isNumberColumn(column: Pick<LocalColumn, 'type'>): boolean {
+  return NUMBER_TYPE.test(column.type.trim())
+}
+
+/** `1 row`, `1,204 rows`. */
+export function plural(count: number, one: string, many = `${one}s`): string {
+  return `${count.toLocaleString('en-US')} ${count === 1 ? one : many}`
+}
+
+/** `A`, `A and B`, `A, B and C`. */
+export function listNames(names: string[]): string {
+  if (names.length <= 1) return names.join('')
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/**
+ * The entities whose rows refer to `entity`'s rows, from the data model: those
+ * with a key to it (`@one`, or a `<name>_id` field), and the targets of its
+ * `@many` relations. Rows that refer to themselves don't count.
+ */
+export function referrersOf(model: DataModel | undefined, entity: string): string[] {
+  if (!model) return []
+  const shown = new Map(model.entities.map((e) => [e.name, e.customName || e.name]))
+  const target =
+    model.entities.find((e) => e.name === entity || e.customName === entity)?.name ?? entity
+  const found = new Set<string>()
+  for (const relation of model.relations) {
+    const referrer =
+      relation.kind === 'many'
+        ? relation.from === target
+          ? relation.to
+          : null
+        : relation.to === target
+          ? relation.from
+          : null
+    if (referrer && referrer !== target) found.add(shown.get(referrer) ?? referrer)
+  }
+  return [...found]
+}

@@ -29,6 +29,7 @@ use uuid::Uuid;
 
 use crate::commands::chat_tools;
 use crate::commands::screenshot;
+use crate::services::agent_skills::{self, Guidance};
 use crate::services::copilot::{is_recoverable_session_error, PlanModeHandler};
 use crate::services::diagnostics;
 use crate::services::emit::emit_chat_event;
@@ -40,7 +41,7 @@ use crate::services::store;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
   ChatEvent, ChatMessage, ChatOptions, ChatPlanDependency, ChatPlanTodo, ChatToolCall, ChatToolState, ChatTurnResult,
-  CopilotModel, SteerResult,
+  CopilotModel, SteerResult, StudioProject,
 };
 
 /// Up to this many copilot invocations per turn on a transient pre-work failure.
@@ -49,20 +50,42 @@ const MAX_ATTEMPTS: u32 = 3;
 /// deploys) can legitimately run well past an hour.
 const TURN_TIMEOUT_MS: u64 = 2 * 60 * 60_000;
 
-/// Guidance prepended to each chat message while the user has turned off
-/// "Deploy after each chat turn". Fabricator's always-on instructions say it
-/// deploys after every turn, so the exception travels with the message, as the
-/// team guidance does.
-const MANUAL_DEPLOY_NOTE: &str = "[Fabricator: the user turned off Deploy after each chat turn, so Fabricator doesn't deploy when this turn ends. The changes stay on this computer until the user deploys them. Fabricator's local preview shows frontend changes as you make them, but it uses the deployed backend, so changes to data, permissions or functions work only after a deploy. Still don't deploy yourself. End by saying what to try in the preview and whether it needs a deploy first.]";
+/// Notes prepended to each chat message of a personal app, on how its changes
+/// go live, which the session's guidance leaves to the message: whether chat
+/// turns publish (the published apps panel's "Publish after each chat turn")
+/// can change between turns. Team apps get the team's note instead.
+///
+/// Fabricator runs the app on this computer (the Local guidance), and turns don't publish.
+const LOCAL_NOTE: &str = "[Fabricator: this app runs on this computer. Publish after each chat turn is off, so your changes stay here until the user publishes them.]";
+/// Fabricator runs the app on this computer, and publishes it after each turn.
+const LOCAL_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app runs on this computer. Publish after each chat turn is on, so Fabricator also publishes the app to Microsoft Fabric when this turn ends.]";
+/// A published app the local backend can't run all of (the Fabric-backed
+/// guidance), whose turns don't publish.
+const FALLBACK_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric, because the local backend can't run all of it. The preview shows your frontend changes against the published backend. Publish after each chat turn is off, so changes to data, permissions or functions reach that backend only once the user publishes. End by saying what to try in the preview and whether it needs a publish first.]";
+/// A published app the local backend can't run all of, published after each turn.
+const FALLBACK_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric, because the local backend can't run all of it. Publish after each chat turn is on, so Fabricator publishes the app when this turn ends, and the preview then shows the result.]";
+/// The Local development experiment is off, so the app is developed against its
+/// published backend (the Fabric-backed guidance), and turns don't publish.
+const FABRIC_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric. Publish after each chat turn is off, so Fabricator doesn't publish when this turn ends: your changes stay on this computer until the user publishes them. The preview shows your frontend changes as you make them, but against the published backend, so changes to data, permissions or functions work there only after a publish. End by saying what to try in the preview and whether it needs a publish first.]";
+/// The Local development experiment is off, and Fabricator publishes after each turn.
+const FABRIC_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric. Publish after each chat turn is on, so Fabricator publishes the app when this turn ends, and the preview then shows the result.]";
 
-/// The text sent to Copilot for a chat message in `project_id`. Manual deploy
-/// doesn't apply to team apps: their pipeline deploys them.
-fn turn_text(project_id: &str, text: &str, manual_deploy: bool) -> String {
-  if manual_deploy && !crate::services::team::is_team_project_id(project_id) {
-    format!("{MANUAL_DEPLOY_NOTE}\n\n{text}")
-  } else {
-    crate::services::team::chat_text(project_id, text)
+/// The text sent to Copilot for a chat message in `project`, with the note on
+/// how its changes go live. `local_development`: the Local development
+/// experiment is on, so a Fabric-backed app is one the local backend can't run.
+fn turn_text(project: &StudioProject, text: &str, guidance: Guidance, local_development: bool, manual_publish: bool) -> String {
+  if project.team.is_some() {
+    return crate::services::team::chat_text(&project.id, text);
   }
+  let note = match (guidance, local_development, manual_publish) {
+    (Guidance::Local, _, true) => LOCAL_NOTE,
+    (Guidance::Local, _, false) => LOCAL_AUTO_PUBLISH_NOTE,
+    (Guidance::FabricBacked, true, true) => FALLBACK_NOTE,
+    (Guidance::FabricBacked, true, false) => FALLBACK_AUTO_PUBLISH_NOTE,
+    (Guidance::FabricBacked, false, true) => FABRIC_NOTE,
+    (Guidance::FabricBacked, false, false) => FABRIC_AUTO_PUBLISH_NOTE,
+  };
+  format!("{note}\n\n{text}")
 }
 
 /// Stderr signatures that indicate a transient, safe-to-retry failure.
@@ -707,10 +730,18 @@ pub(crate) async fn run_turn(
   let plan_handler: Arc<dyn ExitPlanModeHandler> = bridge.clone();
   let user_input_handler: Arc<dyn UserInputHandler> = bridge;
 
-  // Build Fabricator's in-process tools for this turn. They let the agent locate
-  // and wire semantic models; visual validation happens via headless `npm run
-  // preview` and Fabricator auto-deploys after the turn.
-  let fab_tools = crate::services::agent_tools::fabricator_tools(app.clone(), project_id.clone());
+  // The guidance and Fabricator's in-process tools fit where the app's backend
+  // runs (see `agent_skills::guidance_for`): on this computer, with the local
+  // backend tools beside the semantic-model ones, or on Microsoft Fabric, which
+  // is where every app's runs while the Local development experiment is off.
+  // The session is resumed with another set when that changes.
+  let local_development = store::local_development_enabled();
+  let guidance = agent_skills::guidance_for(
+    &project,
+    &crate::services::local_backend::snapshot(&app, &project_id),
+    local_development,
+  );
+  let fab_tools = crate::services::agent_tools::fabricator_tools(app.clone(), project_id.clone(), guidance);
 
   // Your own API keys: every session gets the provider registry so
   // a thread can switch between Copilot's models and the user's own, and a turn
@@ -735,6 +766,7 @@ pub(crate) async fn run_turn(
       Some(plan_handler.clone()),
       Some(user_input_handler.clone()),
       fab_tools.clone(),
+      Some(guidance),
       byok_registry.clone(),
     );
   let first_open = match &provider_model {
@@ -882,7 +914,7 @@ pub(crate) async fn run_turn(
     let opts = match continuation {
       Some(prompt) => MessageOptions::new(prompt.to_string()),
       None => {
-        let opts = MessageOptions::new(turn_text(&project_id, &text, store::manual_deploy_enabled()));
+        let opts = MessageOptions::new(turn_text(&project, &text, guidance, local_development, store::manual_deploy_enabled()));
         if attach.is_empty() { opts } else { opts.with_attachments(attach.clone()) }
       }
     };
@@ -1448,6 +1480,35 @@ mod tests {
       map_event(event_type, data, &mut sink, ctx);
     }
     out
+  }
+
+  #[test]
+  fn each_message_says_where_the_app_runs_and_whether_the_turn_publishes() {
+    let project: StudioProject = serde_json::from_value(json!({
+      "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z"
+    }))
+    .unwrap();
+    // Local development on: the app runs here, or falls back to its published backend.
+    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true, true), format!("{LOCAL_NOTE}\n\nAdd a list"));
+    assert!(turn_text(&project, "x", Guidance::Local, true, false).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, true).starts_with(FALLBACK_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, false).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
+    // Off: every personal app is developed against its published backend, as before.
+    assert_eq!(turn_text(&project, "Add a list", Guidance::FabricBacked, false, true), format!("{FABRIC_NOTE}\n\nAdd a list"));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, false, false).starts_with(FABRIC_AUTO_PUBLISH_NOTE));
+    assert!(LOCAL_NOTE.contains("runs on this computer") && LOCAL_NOTE.contains("Publish after each chat turn is off"));
+    assert!(FALLBACK_NOTE.contains("published backend") && FALLBACK_NOTE.contains("whether it needs a publish first"));
+    assert!(FABRIC_NOTE.contains("Publish after each chat turn is off") && FABRIC_NOTE.contains("whether it needs a publish first"));
+    assert!(FABRIC_AUTO_PUBLISH_NOTE.contains("Publish after each chat turn is on") && FABRIC_AUTO_PUBLISH_NOTE.contains("publishes the app when this turn ends"));
+    for note in [FABRIC_NOTE, FABRIC_AUTO_PUBLISH_NOTE] {
+      // Nothing about the local backend while the experiment is off.
+      assert!(!note.contains("local backend") && !note.contains("runs on this computer"), "{note}");
+    }
+    for note in [LOCAL_NOTE, LOCAL_AUTO_PUBLISH_NOTE, FALLBACK_NOTE, FALLBACK_AUTO_PUBLISH_NOTE, FABRIC_NOTE, FABRIC_AUTO_PUBLISH_NOTE] {
+      assert!(note.starts_with("[Fabricator: ") && note.ends_with(']'), "{note}");
+      // Publishing is what the UI calls it: no note talks about deploying.
+      assert!(!note.to_lowercase().contains("deploy"), "{note}");
+    }
   }
 
   #[test]

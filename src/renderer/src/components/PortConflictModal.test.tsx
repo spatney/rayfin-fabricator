@@ -36,7 +36,9 @@ describe('PortConflictModal', () => {
 
   it('only edits rayfin.yml for an app that has no backend yet', () => {
     show({ ...base, needsPush: false })
-    expect(screen.getByRole('dialog').textContent).toContain('Your next deploy registers it for sign-in.')
+    expect(screen.getByRole('dialog').textContent).toContain(
+      'It’s registered for sign-in the next time you publish.'
+    )
   })
 
   it('routes each button to its action', () => {

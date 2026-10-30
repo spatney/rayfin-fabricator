@@ -151,17 +151,19 @@ interface Props {
   focused?: boolean
   /** Toggle chat focus (full-width chat ⇄ split with preview). */
   onToggleFocus?: () => void
-  /** Hard-gate: the project has no deployment yet — disable the composer until it does. */
+  /** Hard gate: the app hasn't been published yet, and without Local development
+   *  it is before chat starts, so the composer stays disabled until it is. */
   deployLock?: boolean
-  /** True while the project's first deploy is actively streaming (gate shows progress). */
+  /** True while the project is publishing: the first-publish gate shows its
+   *  progress, and `blockSubmitWhileDeploying` pauses sending. */
   deploying?: boolean
-  /** When true, a deploy in progress pauses *submitting* a new turn (typing stays
-   *  enabled). Used by the live local preview so a turn never overlaps a deploy —
-   *  otherwise the dev server can't start during the deploy and never comes back. */
+  /** When true, a publish in progress pauses *submitting* a new turn (typing stays
+   *  enabled). Used by the live local preview so a turn never overlaps a publish —
+   *  otherwise the dev server can't start during the publish and never comes back. */
   blockSubmitWhileDeploying?: boolean
-  /** Tooltip on the paused Send button (defaults to the deploy wording). */
+  /** Tooltip on the paused Send button (defaults to the publish wording). */
   submitBlockedTitle?: string
-  /** Open the fullscreen deploy step (the gate CTA). */
+  /** Open the full-screen Publish your app step (the first-publish gate's button). */
   onRequestDeploy?: () => void
   /** The host owns the global chat-event subscription (keeps turns live while this panel is unmounted). */
   eventsManagedExternally?: boolean
@@ -216,7 +218,7 @@ export default function ChatPanel({
   deployLock = false,
   deploying = false,
   blockSubmitWhileDeploying = false,
-  submitBlockedTitle = 'Deploying — sending resumes when it goes live',
+  submitBlockedTitle = 'Publishing — sending resumes when it goes live',
   onRequestDeploy,
   eventsManagedExternally = false,
   onOpenMention,
@@ -1449,13 +1451,7 @@ export default function ChatPanel({
         const next = messages[i + 1]
         const working = m.role === 'user' && next?.role === 'assistant' && next.pending
         const canTryAgain =
-          latest &&
-          rerunnable &&
-          !deployLock &&
-          !m.pending &&
-          !m.error &&
-          !m.interrupted &&
-          !m.plan
+          latest && rerunnable && !deployLock && !m.pending && !m.error && !m.interrupted && !m.plan
         return (
           <MessageRow
             key={m.id}
@@ -1581,21 +1577,21 @@ export default function ChatPanel({
             )}
             <div className="deploy-gate-text">
               <span className="deploy-gate-title">
-                {deploying ? 'Deploying your app…' : 'Deploy your app to start building'}
+                {deploying ? 'Publishing your app…' : 'Publish your app to start building'}
               </span>
               <span className="deploy-gate-sub">
                 {deploying
                   ? `Chat unlocks as soon as ${project.name} is live.`
-                  : `Chat is locked until ${project.name} has a deployment.`}
+                  : `Chat is locked until ${project.name} is published.`}
               </span>
             </div>
             {deploying ? (
               <button className="btn btn--sm" disabled>
-                Deploying…
+                Publishing…
               </button>
             ) : (
               <button className="btn btn--sm btn--primary" onClick={onRequestDeploy}>
-                Deploy now
+                Publish now
               </button>
             )}
           </div>
@@ -1701,7 +1697,7 @@ export default function ChatPanel({
               className="composer-input"
               placeholder={
                 deployLock
-                  ? 'Deploy your app to start chatting…'
+                  ? 'Publish your app to start chatting…'
                   : designItems.length > 0
                     ? 'Add a note for these changes (optional) — or just press Enter to send them'
                     : dataChips.length > 0

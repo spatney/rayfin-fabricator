@@ -19,19 +19,21 @@ import type {
 } from '@shared/ipc'
 import { GIT_WORKING_REF } from '@shared/ipc'
 import { monacoLanguage } from '../monaco'
+import { useLocalDevelopment } from '../localDevelopment'
 import { ChatIcon, CompareIcon, CopyIcon, HistoryIcon, SearchIcon } from './icons'
 import ConfirmModal from './ConfirmModal'
 import Skeleton from './Skeleton'
 
 interface Props {
   project: StudioProject
-  /** Bumped by the parent when history may have changed (e.g. after a deploy). */
+  /** Bumped by the parent when history may have changed (e.g. after publishing). */
   refreshKey: number
   /** Resolved Monaco theme id (light/dark) from the parent. */
   theme: string
   /**
-   * Ask the parent to deploy the project's current code. Used after restoring an
-   * older version (to publish it) and by the "live version differs" banner.
+   * Ask the parent to publish the project's current code: from the "published
+   * version differs" banner, and after a team app restores an older version (its
+   * pipeline deploys it). A personal app's restore stays on this computer.
    */
   onRequestDeploy?: () => void
   /**
@@ -174,9 +176,11 @@ const DIFF_OPTIONS = {
 
 /**
  * The "History" view: a vibe-coder-friendly timeline of everything that changed
- * in the project. Studio commits on the user's behalf (scaffold + every deploy),
- * so the git log reads as a plain-English list of "what happened". Picking an
- * entry lists its changed files; picking a file shows a clear before/after diff.
+ * in the project. Studio commits on the user's behalf (scaffold, every publish,
+ * and with Local development each chat turn that changes a personal app, named
+ * after what was asked), so the git log reads as a plain-English list of "what
+ * happened". Picking an entry lists its changed files; picking a file shows a
+ * clear before/after diff.
  *
  * Beyond browsing, it can hand a commit, a single file's change, or a comparison
  * of two snapshots to the Build chat as context, search/group the timeline, show
@@ -201,6 +205,11 @@ export default function HistoryView({
   const [wrap, setWrap] = useState(false)
   const [query, setQuery] = useState('')
   const [confirmRevert, setConfirmRevert] = useState<GitCommitSummary | null>(null)
+  // Without Local development a published personal app is developed against its published
+  // backend, so a restore publishes again to keep the two in step. With it, the restore stays
+  // on this computer until the user publishes.
+  const localDevelopment = useLocalDevelopment()
+  const republishes = !project.team && !localDevelopment && Boolean(project.lastDeploy?.url)
   const [reverting, setReverting] = useState(false)
   const [revertError, setRevertError] = useState<string | null>(null)
   const [copiedSha, setCopiedSha] = useState(false)
@@ -221,7 +230,7 @@ export default function HistoryView({
   const preferredPathRef = useRef<string | null>(null)
 
   // Load (and refresh) the timeline; default the selection to the newest entry.
-  // A new deployment changes whether the live app lags the code, so reload then too.
+  // Publishing changes whether the published app lags the code, so reload then too.
   const liveCommit = project.lastDeploy?.commit
   useEffect(() => {
     let live = true
@@ -351,11 +360,12 @@ export default function HistoryView({
         return
       }
       setConfirmRevert(null)
-      if (!res.noChanges) onRequestDeploy?.()
+      // A team app saves the restore for its pipeline; see `republishes` for personal apps.
+      if (!res.noChanges && (project.team || republishes)) onRequestDeploy?.()
     } finally {
       setReverting(false)
     }
-  }, [confirmRevert, project.id, onRequestDeploy])
+  }, [confirmRevert, project.id, project.team, republishes, onRequestDeploy])
 
   const copySha = useCallback((hash: string): void => {
     void navigator.clipboard.writeText(hash)
@@ -499,8 +509,8 @@ export default function HistoryView({
       <div className="hist-empty">
         <div className="hist-empty-title">No history yet</div>
         <div className="hist-empty-sub">
-          Every time you deploy or save, Fabricator records a snapshot here so you can see
-          exactly what changed.
+          Every time you publish or save, Fabricator records a snapshot here so you can see exactly
+          what changed.
         </div>
       </div>
     )
@@ -519,7 +529,7 @@ export default function HistoryView({
       {drift && (
         <div className="hist-drift">
           <span className="hist-drift-text">
-            Your live app is showing an earlier version than your current code.
+            Your published app doesn’t match your current code.
           </span>
           {onRequestDeploy && (
             <button className="btn btn--xs btn--primary" onClick={onRequestDeploy} disabled={reverting}>
@@ -619,7 +629,7 @@ export default function HistoryView({
                     <span className="hist-commit-main">
                       <span className="hist-commit-msg">Uncommitted changes</span>
                       <span className="hist-commit-meta">
-                        {plural(working, 'file')} changed · not deployed yet
+                        {plural(working, 'file')} changed · not published yet
                       </span>
                     </span>
                   </button>
@@ -883,7 +893,7 @@ export default function HistoryView({
       {confirmRevert && (
         <ConfirmModal
           title="Restore this version?"
-          confirmLabel="Restore & redeploy"
+          confirmLabel={republishes ? 'Restore & publish' : 'Restore'}
           busy={reverting}
           onCancel={() => {
             if (!reverting) setConfirmRevert(null)
@@ -897,7 +907,13 @@ export default function HistoryView({
               </p>
               <p>
                 Your current version stays saved in this timeline, so you can switch back anytime.
-                Fabricator will then redeploy so your live app matches.
+                {project.team
+                  ? ' Fabricator then saves it, and the team pipeline updates your preview.'
+                  : republishes
+                    ? ' Fabricator then publishes it, so your published app matches.'
+                    : project.lastDeploy?.url
+                      ? ' Your published app doesn’t change until you publish.'
+                      : null}
               </p>
               {revertError && <p className="confirm-error">{revertError}</p>}
             </>

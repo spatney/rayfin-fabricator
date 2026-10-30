@@ -14,13 +14,17 @@
     "url": "https://github.com/spatney/rayfin-fabricator/issues"
   },
   "scripts": {
+    "predev": "node scripts/rayfin-local/fetch.mjs",
     "dev": "tauri dev",
+    "prebuild": "node scripts/rayfin-local/fetch.mjs",
     "build": "tauri build",
     "dev:renderer": "vite",
     "build:renderer": "vite build",
     "check:build": "node scripts/check-renderer-build.mjs",
     "tauri": "tauri",
+    "pretauri:dev": "node scripts/rayfin-local/fetch.mjs",
     "tauri:dev": "tauri dev",
+    "pretauri:build": "node scripts/rayfin-local/fetch.mjs",
     "tauri:build": "tauri build",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
@@ -29,7 +33,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\"",
-    "vendor:wry": "node scripts/wry/vendor-wry.mjs"
+    "vendor:wry": "node scripts/wry/vendor-wry.mjs",
+    "rayfin-local:fetch": "node scripts/rayfin-local/fetch.mjs",
+    "postinstall": "node scripts/rayfin-local/fetch.mjs --optional"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

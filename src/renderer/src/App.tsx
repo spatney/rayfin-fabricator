@@ -14,6 +14,7 @@ import { useUpdates } from './update'
 import { useToast } from './toast'
 import { authErrorMessage } from './authErrors'
 import { reportEvent } from './errorReport'
+import { localDevelopmentEnabled } from './localDevelopment'
 import {
   CHECKING_AUTH,
   failedAuth,
@@ -21,6 +22,7 @@ import {
   pickAuth,
   rememberSetupComplete,
   setupAttention,
+  setupReady,
   startupStage
 } from './startup'
 
@@ -51,7 +53,10 @@ function prefersReducedMotion(): boolean {
 }
 
 const ALL_PROVIDERS: AuthProvider[] = ['copilot', 'rayfin', 'az']
-/** Setup gates entry on these; the slower Fabric check only matters inside the app. */
+/**
+ * The sign-ins setup shows. Only Copilot gates entry: Azure is optional, and the
+ * slower Fabric check only matters inside the app.
+ */
 const SETUP_PROVIDERS: AuthProvider[] = ['copilot', 'az']
 
 /**
@@ -74,7 +79,7 @@ function recordStartup(ready: boolean, doctor: DoctorReport | null): void {
     reportEvent(
       'app',
       'app.ready',
-      'Fabricator started. All required tools are ready and both accounts are connected.'
+      'Fabricator started. All required tools are ready and GitHub Copilot is connected.'
     )
     return
   }
@@ -193,11 +198,7 @@ function App(): JSX.Element {
         setAuthError(authErrorMessage(a.reason, 'Could not verify sign-in. Please retry.'))
       }
       const ready =
-        d.status === 'fulfilled' &&
-        d.value.ready &&
-        a.status === 'fulfilled' &&
-        Boolean(a.value.copilot?.signedIn) &&
-        Boolean(a.value.az?.signedIn)
+        d.status === 'fulfilled' && a.status === 'fulfilled' && setupReady(d.value, a.value)
       if (enterWhenReady && ready) {
         // Nothing to set up: skip the checklist.
         rememberSetupComplete()
@@ -237,10 +238,7 @@ function App(): JSX.Element {
     // This is the common launch path, so it is also the one that most needs an
     // "everything was fine" marker in the journal.
     recordStartup(
-      Boolean(doctorReport?.ready) &&
-        accounts.status === 'fulfilled' &&
-        Boolean(accounts.value.copilot?.signedIn) &&
-        Boolean(accounts.value.az?.signedIn),
+      accounts.status === 'fulfilled' && setupReady(doctorReport, accounts.value),
       doctorReport
     )
   }, [checkAuth])
@@ -258,9 +256,9 @@ function App(): JSX.Element {
   }, [checkAuth])
 
   // Explicit transition into the workbench, triggered by the setup screen's
-  // "Enter" button once every prerequisite is satisfied.
+  // "Enter" button once every required step is done.
   const enter = useCallback((): void => {
-    if (refreshing || !doctor?.ready || !auth?.copilot.signedIn || !auth.az.signedIn) return
+    if (refreshing || !doctor || !setupReady(doctor, auth)) return
     ++refreshSeqRef.current
     if (phaseTimerRef.current !== null) {
       clearTimeout(phaseTimerRef.current)
@@ -270,7 +268,7 @@ function App(): JSX.Element {
     reportEvent(
       'setup',
       'setup.completed',
-      `Setup finished: all ${doctor.tools.filter((t) => t.required).length} required tools are ready and both accounts are connected.`
+      `Setup finished: all ${doctor.tools.filter((t) => t.required).length} required tools are ready and GitHub Copilot is connected.`
     )
     setSetupDone(true)
     setPhase('ready')
@@ -401,6 +399,7 @@ function App(): JSX.Element {
         onRefresh={recheck}
         onEnter={enter}
         onBack={setupDone ? backToApp : undefined}
+        localDevelopment={localDevelopmentEnabled(settings)}
       />
     )
 

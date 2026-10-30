@@ -1,7 +1,9 @@
 //! Embedded preview pane.
 //!
 //! A single native WebView2 **child webview** (label [`PREVIEW_LABEL`]) overlaid
-//! on the main window, rendering the user's *deployed* Rayfin app. It replaces the
+//! on the main window, rendering the user's Rayfin app: by default the one running
+//! on this computer (its local backend's Vite, or the local Fabric host that
+//! embeds it), else the published app on Fabric. It replaces the
 //! Electron `<webview>` (see the former `src/main/index.ts`). The child webview is
 //! a real OS surface that always paints above the HTML layout, so the renderer
 //! reports the host element's bounds and we keep the webview positioned over it;
@@ -647,6 +649,62 @@ pub fn preview_reload(app: AppHandle) -> AppResult<()> {
   Ok(())
 }
 
+/// Clear the `localStorage` and `sessionStorage` of the page the preview shows,
+/// then reload it. Preview as calls this once it has changed who the app signs in
+/// as on its local backend, so the app forgets its old session and signs in
+/// again. Only for a page served from this computer ([`loopback_origin`]): it
+/// resolves `false`, changing nothing, while the preview shows another site or
+/// nothing at all, and fails when the page doesn't answer in time.
+#[tauri::command]
+pub async fn preview_reset_site_data(app: AppHandle) -> AppResult<bool> {
+  let Some(wv) = app.get_webview(PREVIEW_LABEL) else {
+    return Ok(false);
+  };
+  let url = wv.url().map_err(|e| AppError::Msg(e.to_string()))?;
+  let Some(origin) = loopback_origin(&url) else {
+    return Ok(false);
+  };
+  match design_eval::<bool>(&app, &reset_site_data_js(&origin)).await? {
+    Some(true) => {
+      wv.reload().map_err(|e| AppError::Msg(e.to_string()))?;
+      Ok(true)
+    }
+    // It went to another page in the meantime, which isn't this one's to clear.
+    Some(false) => Ok(false),
+    None => Err(AppError::Msg("The preview didn’t answer, so it wasn’t reloaded.".into())),
+  }
+}
+
+/// The origin (`scheme://host:port`) of a page served from this computer: `http`
+/// or `https` on `localhost` or a loopback address. `None` for anything else, so
+/// [`preview_reset_site_data`] never clears a site on the web.
+fn loopback_origin(url: &Url) -> Option<String> {
+  if !matches!(url.scheme(), "http" | "https") {
+    return None;
+  }
+  let host = url.host_str()?;
+  let loopback = host.eq_ignore_ascii_case("localhost")
+    || host
+      .trim_start_matches('[')
+      .trim_end_matches(']')
+      .parse::<std::net::IpAddr>()
+      .is_ok_and(|ip| ip.is_loopback());
+  loopback.then(|| url.origin().ascii_serialization())
+}
+
+/// JS that clears the page's `localStorage` and `sessionStorage` when it is still
+/// on `origin` (it may have navigated since its URL was read), and answers
+/// whether it was. Storage the page can't use holds nothing to clear.
+fn reset_site_data_js(origin: &str) -> String {
+  let origin = serde_json::to_string(origin).unwrap_or_else(|_| "null".into());
+  format!(
+    "(function(){{try{{if(location.origin!=={origin})return false;\
+     try{{localStorage.clear()}}catch(e){{}}\
+     try{{sessionStorage.clear()}}catch(e){{}}\
+     return true}}catch(e){{return false}}}})()"
+  )
+}
+
 /// Reload the preview when it shows a page from `origin` (e.g. a local preview
 /// that was just started again), leaving any other page alone.
 pub fn reload_if_showing(app: &AppHandle, origin: &str) {
@@ -1196,7 +1254,8 @@ unsafe fn snapshot_image_to_png(
 
 #[cfg(test)]
 mod tests {
-  use super::{design_command_js, design_enable_js, PreviewBounds};
+  use super::{design_command_js, design_enable_js, loopback_origin, reset_site_data_js, PreviewBounds};
+  use tauri::Url;
 
   fn bounds(pixel_ratio: Option<f64>) -> PreviewBounds {
     PreviewBounds { x: 100.0, y: 80.0, width: 900.0, height: 600.0, pixel_ratio }
@@ -1290,5 +1349,46 @@ mod tests {
       .trim_start_matches("try{window.__rayfinDesign&&window.__rayfinDesign.command(")
       .trim_end_matches(")}catch(e){}");
     assert_eq!(serde_json::from_str::<serde_json::Value>(json).unwrap(), cmd);
+  }
+
+  #[test]
+  fn site_data_is_reset_only_for_pages_served_from_this_computer() {
+    for (url, origin) in [
+      ("http://localhost:5173/", "http://localhost:5173"),
+      ("http://localhost:5173/notes?id=1#top", "http://localhost:5173"),
+      ("http://LOCALHOST:5173/", "http://localhost:5173"),
+      ("https://localhost:7171/.rayfin-local/portal/embed", "https://localhost:7171"),
+      ("http://127.0.0.1:5173/", "http://127.0.0.1:5173"),
+      ("http://127.4.5.6/", "http://127.4.5.6"),
+      ("http://[::1]:5173/", "http://[::1]:5173"),
+    ] {
+      assert_eq!(loopback_origin(&Url::parse(url).unwrap()).as_deref(), Some(origin), "{url}");
+    }
+    for url in [
+      "https://app.fabric.microsoft.com/groups/1/appbackends/2",
+      "https://notes.example.app/",
+      "http://localhost.example.com:5173/",
+      "http://192.168.1.4:5173/",
+      "http://0.0.0.0:5173/",
+      "ws://localhost:5173/",
+      "tauri://localhost/",
+      "file:///C:/apps/notes/index.html",
+      "about:blank",
+    ] {
+      assert_eq!(loopback_origin(&Url::parse(url).unwrap()), None, "{url}");
+    }
+  }
+
+  #[test]
+  fn the_site_data_reset_runs_only_on_the_origin_it_was_asked_for() {
+    let js = reset_site_data_js("http://localhost:5173");
+    assert!(js.starts_with("(function(){"), "{js}");
+    assert!(js.contains(r#"if(location.origin!=="http://localhost:5173")return false;"#), "{js}");
+    assert!(js.contains("try{localStorage.clear()}catch(e){}"), "{js}");
+    assert!(js.contains("try{sessionStorage.clear()}catch(e){}"), "{js}");
+    assert!(js.ends_with("return true}catch(e){return false}})()"), "{js}");
+    // Whatever the origin holds, it stays inside a JSON string literal.
+    let odd = reset_site_data_js(r#"http://localhost:1")||alert(1)//"#);
+    assert!(odd.contains(r#"location.origin!=="http://localhost:1\")||alert(1)//")return false;"#), "{odd}");
   }
 }

@@ -52,6 +52,8 @@ hex = "0.4"
 base64 = "0.23"
 regex = "1"
 once_cell = "1"
+# npm version ranges: the Rayfin release new projects start on (services/rayfin_sdk.rs).
+semver = "1"
 chrono = { version = "0.4", features = ["clock"], default-features = false }
 
 # native-tls: the OS TLS stack and trust store (SChannel / Security.framework), the same one

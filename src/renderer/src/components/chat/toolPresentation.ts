@@ -22,6 +22,8 @@ export type ToolKind =
   | 'console'
   | 'scroll'
   | 'model'
+  | 'local-status'
+  | 'local-call'
   | 'other'
 
 /** Tools whose UI lives elsewhere (question cards, the plan card, the status line). */
@@ -36,6 +38,8 @@ export function toolKind(name: string): ToolKind {
   // Fabricator's own tools first: their names contain substrings ("cat", "read")
   // that would otherwise be misread.
   if (n.startsWith('fabricator_')) {
+    if (n.includes('local_status')) return 'local-status'
+    if (n.includes('local_call')) return 'local-call'
     if (n.includes('screenshot')) return 'screenshot'
     if (n.includes('navigate')) return 'navigate'
     if (n.includes('deploy')) return 'deploy'
@@ -75,12 +79,14 @@ const VERBS: Record<ToolKind, [running: string, done: string]> = {
   skill: ['Loading the skill', 'Used the skill'],
   todo: ['Updating the task list', 'Updated the task list'],
   agent: ['Delegating', 'Delegated'],
-  deploy: ['Deploying the app', 'Deployed the app'],
+  deploy: ['Publishing the app', 'Published the app'],
   navigate: ['Opening in the preview', 'Opened in the preview'],
   screenshot: ['Taking a screenshot', 'Took a screenshot'],
   console: ['Reading the preview console', 'Read the preview console'],
   scroll: ['Scrolling the preview', 'Scrolled the preview'],
   model: ['Looking up a semantic model', 'Looked up a semantic model'],
+  'local-status': ['Checking the local backend', 'Checked the local backend'],
+  'local-call': ['Calling', 'Called'],
   other: ['Using', 'Used']
 }
 
@@ -96,7 +102,8 @@ const BARE_VERBS: Partial<Record<ToolKind, [running: string, done: string]>> = {
   web: ['Reading a web page', 'Read a web page'],
   'web-search': ['Searching the web', 'Searched the web'],
   skill: ['Loading a skill', 'Used a skill'],
-  agent: ['Delegating a task', 'Delegated a task']
+  agent: ['Delegating a task', 'Delegated a task'],
+  'local-call': ['Calling the app', 'Called the app']
 }
 
 /** Present-tense phrase for the live status line ("Running a command"). */
@@ -114,12 +121,14 @@ const PHASES: Record<ToolKind, string> = {
   skill: 'Loading a skill',
   todo: 'Updating the task list',
   agent: 'Delegating a task',
-  deploy: 'Deploying the app',
+  deploy: 'Publishing the app',
   navigate: 'Opening the preview',
   screenshot: 'Taking a screenshot',
   console: 'Reading the preview console',
   scroll: 'Scrolling the preview',
   model: 'Looking up a semantic model',
+  'local-status': 'Checking the local backend',
+  'local-call': 'Calling the app',
   other: 'Working'
 }
 
@@ -207,6 +216,7 @@ export function describeStep(tool: ChatToolCall, projectPath: string): StepView 
     case 'screenshot':
     case 'console':
     case 'scroll':
+    case 'local-status':
       break
     case 'other':
       target = { kind: 'text', text: hasTitle ? title : humanize(tool.name) }

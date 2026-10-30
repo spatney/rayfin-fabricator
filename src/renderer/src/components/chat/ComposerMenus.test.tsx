@@ -6,7 +6,7 @@ afterEach(cleanup)
 
 function renderMenu(over: { imageNote?: string } = {}) {
   const handlers = { onImage: vi.fn(), onConnectData: vi.fn(), onReferenceFile: vi.fn() }
-  render(<AddMenu locked={false} attaching={false} imageNote={over.imageNote} {...handlers} />)
+  render(<AddMenu attaching={false} imageNote={over.imageNote} {...handlers} />)
   const open = (): HTMLElement => {
     fireEvent.click(screen.getByRole('button', { name: 'Add images, files or data' }))
     return screen.getByRole('menu', { name: 'Add' })

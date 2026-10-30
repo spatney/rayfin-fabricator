@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MigrationState, StudioProject } from '@shared/ipc'
 import { isFresh, materialReady, migrationTurn, needsDrawing, nextPage, type MigrationTurn } from './turns'
 
-/** How long a chained page waits after the previous turn for its deploy to begin. */
+/** How long a chained page waits after the previous turn, for a publish it starts to begin. */
 const CHAIN_DELAY_MS = 1500
 
 interface Options {
@@ -16,8 +16,9 @@ interface Options {
   /** The open project. */
   project: StudioProject | null
   /**
-   * A migration turn can start in the open project now: it's deployed (or a team
-   * app), its tools are ready, the Build chat is showing and idle, and no deploy runs.
+   * A migration turn can start in the open project now: its tools are ready, the
+   * Build chat is showing and idle, and it isn't publishing (or, for a team app,
+   * saving to GitHub).
    */
   canStart: boolean
   /** Send a migration turn to the project's chat. */
@@ -41,7 +42,7 @@ export interface MigrationControl {
   dismiss: () => void
   /** The workbench reports every finished turn… */
   onTurnComplete: (projectId: string, ok: boolean) => void
-  /** …and when its after-turn work (saving, starting a deploy) is done. */
+  /** …and when its after-turn work (saving, starting a publish) is done. */
   onTurnSettled: (projectId: string) => void
 }
 
@@ -149,7 +150,8 @@ export function useMigration(options: Options): MigrationControl {
     void start(projectId, nextPage(state))
   }, [enabled, projectId, state, canStart, start, settleTick])
 
-  // "Migrate the rest": the next page starts once the last turn's deploy is under way and done.
+  // "Migrate the rest": the next page starts once the last turn's after-work, a
+  // publish included, is under way and done.
   useEffect(() => {
     if (!enabled || !projectId || !state || !canStart || !chainIds.has(projectId)) return
     if (inflight.current.has(projectId) || !settled.current.has(projectId)) return

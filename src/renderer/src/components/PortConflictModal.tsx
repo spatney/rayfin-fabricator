@@ -91,7 +91,7 @@ export default function PortConflictModal({
                 <strong>Use port {next}</strong> adds <code>{origin}</code> to rayfin.yml
                 {needsPush
                   ? ' and pushes your sign-in settings to Fabric. Your app isn’t rebuilt.'
-                  : '. Your next deploy registers it for sign-in.'}{' '}
+                  : '. It’s registered for sign-in the next time you publish.'}{' '}
                 Fabricator reuses it whenever port {port} is busy.
               </li>
             )}

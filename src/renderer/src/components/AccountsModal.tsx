@@ -499,7 +499,7 @@ export default function AccountsModal({
           <AccountCard
             icon={<img className="brand-glyph" src={fabricSvg} alt="" />}
             title="Microsoft Fabric"
-            purpose="Deploys, hosts, and shares your apps."
+            purpose="Publishes, hosts, and shares your apps."
             state={fabricState}
             action={
               rayfin.signedIn
@@ -524,7 +524,7 @@ export default function AccountsModal({
                 meta={fabricTenant}
                 title={rayfin.tenant}
                 badge="In use"
-                badgeTitle="Deploying, workspace lists, sharing, and secrets use this account."
+                badgeTitle="Publishing, workspace lists, sharing, and secrets use this account."
               >
                 {fabric.canRefresh && (
                   <button
@@ -586,7 +586,7 @@ export default function AccountsModal({
           <AccountCard
             icon={<img className="brand-glyph" src={azureSvg} alt="" />}
             title="Azure CLI"
-            purpose="Finds people when you share an app, connects Fabric data, and sets up team workspaces. Shared with your terminal."
+            purpose="Optional. Finds people when you share an app, reads the Power BI reports you migrate, sets up team workspaces, and, with Local development, lets your app read Fabric data while you build it. Shared with your terminal."
             state={azureState}
             action={
               azMissing ? (
@@ -600,7 +600,7 @@ export default function AccountsModal({
                   <AddButton disabled={busy} onClick={() => setAdding({ service: 'az' })} />
                 ) : (
                   <button
-                    className="btn btn--sm btn--primary"
+                    className="btn btn--sm"
                     disabled={busy}
                     aria-label="Sign in to the Azure CLI"
                     onClick={() => setAdding({ service: 'az' })}

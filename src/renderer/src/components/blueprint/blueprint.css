@@ -1,6 +1,7 @@
 /* Blueprint tab: how the app is put together. One header row holds the view
-   switcher (Architecture / Data model / Semantic model) and the active view's
-   summary; the Data and Semantic model views keep their own .model-* styles.
+   switcher (Architecture / Data model / Data / Fabric data) and the active
+   view's summary; the Data model and Fabric data views keep their own .model-*
+   styles, and the Data view's rows are .bp-data-*.
    Flat, like the workspace overview: solid surfaces, neutral 1px borders,
    dashed outlines for the places things live, and color only for the
    identity a connection signs in as. The toolbar reuses .model-toolbar. */
@@ -1331,6 +1332,541 @@
 
 .bp-insp-actions .btn .codicon {
   font-size: 13px;
+}
+
+/* ── Data view: the app's local data ───────────────────────────────────── */
+
+.bp-data {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.bp-data .model-tool-btn .codicon[class*='codicon-'] {
+  font-size: 13px;
+}
+
+.bp-data .model-tool-btn:disabled,
+.bp-data .model-tool-btn:disabled:hover {
+  color: var(--text-dim);
+  background: transparent;
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bp-data-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bp-data-note .codicon[class*='codicon-'] {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+/* The preview runs on the published app's backend. */
+.bp-data-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: none;
+  padding: 8px 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+
+.bp-data-notice .codicon[class*='codicon-'] {
+  flex: none;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.bp-data-notice code,
+.bp-data-alert code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* The backend runs on the previous data model: a change couldn't be read. */
+.bp-data-notice-dot {
+  flex: none;
+  margin-top: 5px;
+}
+
+.bp-data-notice-text {
+  min-width: 0;
+}
+
+.bp-data-notice-detail {
+  display: block;
+  max-height: 4.8em;
+  margin-top: 3px;
+  padding: 0;
+  overflow: hidden;
+  line-height: 1.6;
+  color: var(--text-faint);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: none;
+}
+
+/* A stopped backend: a hollow dot. */
+.bp-dot--off {
+  background: transparent;
+  border: 1.5px solid var(--text-faint);
+}
+
+.bp-data-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.bp-data-state .bp-dot {
+  width: 7px;
+  height: 7px;
+}
+
+.bp-data .model-empty .btn {
+  margin-top: 4px;
+}
+
+.bp-data-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.bp-data .model-empty .btn .codicon[class*='codicon-'] {
+  font-size: 13px;
+}
+
+.bp-data .model-empty-sub {
+  margin: 0;
+}
+
+.bp-data .model-empty-sub.bp-data-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.bp-data-empty-ico {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border-radius: 9px;
+}
+
+.bp-data-empty-ico .codicon[class*='codicon-'] {
+  font-size: 18px;
+}
+
+.bp-data-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The entities and the local users. */
+.bp-data-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 1px;
+  width: 232px;
+  padding: 10px 8px;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border);
+}
+
+.bp-data-side-h {
+  padding: 4px 8px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.bp-data-side-empty {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.bp-data-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.bp-data-item:hover {
+  background: var(--bg-elev-2);
+}
+
+.bp-data-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.bp-data-item--on,
+.bp-data-item--on:hover {
+  background: var(--bg-elev-2);
+  box-shadow: inset 2px 0 0 var(--text-dim);
+}
+
+.bp-data-item .codicon[class*='codicon-'] {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.bp-data-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-data-item--on .bp-data-item-name {
+  font-weight: 600;
+}
+
+.bp-data-item-count {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.bp-data-sep {
+  flex: none;
+  height: 1px;
+  margin: 8px;
+  background: var(--border-soft);
+}
+
+/* The selected entity's rows, or the local users. */
+.bp-data-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.bp-data-main-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  min-height: 44px;
+  padding: 6px 12px 6px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bp-data-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-data-meta {
+  flex: none;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.bp-data-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.bp-data-table {
+  min-width: 100%;
+  font-size: 12px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.bp-data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: bottom;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+
+.bp-data-table th + th,
+.bp-data-table td + td {
+  border-left: 1px solid var(--border-soft);
+}
+
+.bp-data-table td {
+  padding: 6px 12px;
+  white-space: nowrap;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.bp-data-table tbody tr:hover td {
+  background: var(--bg-elev);
+}
+
+/* Light: rows on a white surface, the header a faint band above them. */
+[data-theme='light'] .bp-data-main {
+  background: var(--bg-elev);
+}
+
+[data-theme='light'] .bp-data-table th {
+  background: var(--bg-elev-3);
+}
+
+[data-theme='light'] .bp-data-table tbody tr:hover td {
+  background: var(--bg-elev-3);
+}
+
+.bp-data-th {
+  display: block;
+  padding: 8px 12px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.bp-data-sort {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 12px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.bp-data-sort:hover {
+  background: var(--bg-elev-2);
+}
+
+.bp-data-sort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.bp-data-num .bp-data-sort {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.bp-data-col {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bp-data-col-name {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.bp-data-col-type {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+
+.bp-data-sort .codicon[class*='codicon-'] {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.bp-data-sort .bp-data-key.codicon[class*='codicon-'] {
+  color: var(--pending);
+}
+
+/* Values, by type: the full value is on hover. */
+.bp-data-cell {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-data-td--number,
+.bp-data-td--date {
+  font-variant-numeric: tabular-nums;
+}
+
+.bp-data-td--number {
+  text-align: right;
+}
+
+.bp-data-td--null .bp-data-cell,
+.bp-data-td--empty .bp-data-cell {
+  font-style: italic;
+  color: var(--text-faint);
+}
+
+.bp-data-td--boolean .bp-data-cell,
+.bp-data-td--id .bp-data-cell,
+.bp-data-td--json .bp-data-cell,
+.bp-data-td--key .bp-data-cell {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.bp-data-td--id .bp-data-cell,
+.bp-data-td--json .bp-data-cell {
+  color: var(--text-dim);
+}
+
+.bp-data-pager {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 38px;
+  padding: 5px 12px 5px 16px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border);
+}
+
+.bp-data-pager .model-tool-btn {
+  padding: 3px 8px;
+}
+
+.bp-data-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.bp-data-td--actions {
+  width: 1%;
+  text-align: right;
+}
+
+.bp-data-row-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.bp-data-row-btn:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
+.bp-data-row-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.bp-data-row-btn .codicon[class*='codicon-'] {
+  font-size: 12px;
+}
+
+/* Confirmations: what they delete, and why a clear was refused. */
+.bp-data-confirm-list {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.bp-data-confirm-list li + li {
+  margin-top: 3px;
+}
+
+.bp-data-alert {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 9px 11px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+  border-radius: 8px;
+}
+
+.bp-data-alert .codicon[class*='codicon-'] {
+  flex: none;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--danger);
+}
+
+.confirm-message .bp-data-alert p {
+  margin: 0;
+}
+
+.confirm-message .bp-data-alert .bp-data-alert-detail {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-dim);
 }
 
 /* ── Motion ─────────────────────────────────────────────────────────────── */

@@ -23,12 +23,19 @@ interface Over {
   listWorkspaceData?: ReturnType<typeof vi.fn>
   rayfinYml?: string
   loginRayfin?: ReturnType<typeof vi.fn>
+  azureSignedIn?: boolean
 }
 
-function installApi(over: Over = {}): { listWorkspaceData: ReturnType<typeof vi.fn>; loginRayfin: ReturnType<typeof vi.fn> } {
+function installApi(over: Over = {}): {
+  listWorkspaceData: ReturnType<typeof vi.fn>
+  loginRayfin: ReturnType<typeof vi.fn>
+  loginAz: ReturnType<typeof vi.fn>
+} {
   const listWorkspaceData =
     over.listWorkspaceData ?? vi.fn(async (id: string) => ({ ok: true, items: DATA[id] ?? [] }))
   const loginRayfin = over.loginRayfin ?? vi.fn(async () => ({ ok: true, exitCode: 0 }))
+  const loginAz = vi.fn(async () => ({ ok: true, exitCode: 0 }))
+  const check = vi.fn(async () => ({ az: { signedIn: over.azureSignedIn ?? true } }))
   ;(window as unknown as { api: unknown }).api = {
     deploy: { list: vi.fn(async () => [{ workspaceName: 'App WS', active: true, workspaceId: 'ws-app' }]) },
     fabric: {
@@ -43,9 +50,9 @@ function installApi(over: Over = {}): { listWorkspaceData: ReturnType<typeof vi.
         )
       }
     },
-    auth: { loginRayfin }
+    auth: { loginRayfin, loginAz, check }
   }
-  return { listWorkspaceData, loginRayfin }
+  return { listWorkspaceData, loginRayfin, loginAz }
 }
 
 beforeEach(() => localStorage.clear())
@@ -162,5 +169,29 @@ describe('ConnectDataModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('checkbox', { name: /Sales/ })).toBeTruthy()
     expect(listWorkspaceData).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks for the Azure sign-in your app reads the data with, without holding up the picking', async () => {
+    const { loginAz } = installApi({ azureSignedIn: false })
+    const onSignedIn = vi.fn()
+    const onAdd = vi.fn()
+    render(
+      <ConnectDataModal
+        project={makeProject('p1')}
+        onClose={vi.fn()}
+        onAdd={onAdd}
+        onSignedIn={onSignedIn}
+      />
+    )
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Sales/ }))
+    expect(await screen.findByText(/reads Fabric data with your Azure sign-in/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in to Azure' }))
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledTimes(1))
+    expect(loginAz).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Sign in to Azure' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to chat' }))
+    expect(onAdd).toHaveBeenCalledTimes(1)
   })
 })

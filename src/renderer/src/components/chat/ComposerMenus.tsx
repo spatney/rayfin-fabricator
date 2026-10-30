@@ -26,15 +26,15 @@ const DATA_HINT: Record<DataKind, string> = {
  * that kind; "Browse all" opens it on every kind.
  */
 export function AddMenu({
-  locked,
+  locked = false,
   attaching,
   imageNote,
   onImage,
   onConnectData,
   onReferenceFile
 }: {
-  /** The composer is locked (the app's first deploy is running). */
-  locked: boolean
+  /** The composer is locked (the app's first publish comes first). */
+  locked?: boolean
   attaching: boolean
   /** Why images can't be added (the chosen model can't read them). */
   imageNote?: string

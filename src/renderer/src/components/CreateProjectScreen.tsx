@@ -28,19 +28,33 @@ type Start = 'scratch' | 'example'
 export const STARTER_TEMPLATE = 'universal-app'
 
 interface Props {
-  /** 'create' runs Details → Deploy; 'deploy' shows only the Deploy step for the active project. */
-  mode: Mode
-  /** Display name of the active project (used by the deploy-only header). */
+  /**
+   * 'create' (the default) names the app and creates it. 'deploy' shows only the
+   * Publish your app step, for the active project: the chat lock's Publish now,
+   * without Local development.
+   */
+  mode?: Mode
+  /**
+   * Without Local development, a new app is published before chat unlocks, so the
+   * Publish your app step follows the details. Otherwise the new app opens in
+   * the workbench as soon as it's created.
+   */
+  publishStep?: boolean
+  /** Display name of the active project (the Publish your app step on its own). */
   projectName?: string
-  /** Abandon the flow from the Details step (no project is created). */
+  /** Abandon the flow from the details (no project is created). */
   onCancel: () => void
-  /** A project was just scaffolded; the parent refreshes its list but keeps this screen up. */
+  /**
+   * A project was created. With the publish step the parent refreshes its list
+   * and this screen moves on to publishing the app; otherwise the parent opens
+   * it in the workbench.
+   */
   onCreated?: (result: ProjectActionResult) => void
-  /** Deploy `name` into `workspaceId`, then leave the flow. */
-  onDeploy: (name: string, workspaceId: string) => void
-  /** Skip deploying and enter the workbench (chat lands gated until a deployment exists). */
-  onContinueWithoutDeploy: () => void
-  /** True while a `rayfin up` is already streaming for this project (disables the submit). */
+  /** Publish the app as `name` into `workspaceId`, then leave the flow. */
+  onDeploy?: (name: string, workspaceId: string) => void
+  /** Skip publishing and enter the workbench (chat stays locked until the app is published). */
+  onContinueWithoutDeploy?: () => void
+  /** True while the app is already publishing (disables the submit). */
   deploying?: boolean
   /** Refresh app auth after sign-in; rejection prevents retrying with an unverified account. */
   onSignedIn?: () => Promise<void> | void
@@ -48,9 +62,9 @@ interface Props {
   teamWorkspaces?: TeamWorkspace[]
   /** Preselect this team workspace as the destination. */
   initialTeamWorkspaceId?: string
-  /** A team app was created; there's no Deploy step (its pipeline deploys it). */
+  /** A team app was created; its pipeline deploys it. */
   onTeamCreated?: (result: TeamActionResult) => void
-  /** The workspaces your apps use, most recent first; the Deploy step lists them first. */
+  /** The workspaces your apps use, most recent first; the Publish your app step lists them first. */
   recentWorkspaces?: readonly string[]
   /** Creating an app from something else (a Power BI report): shown in place of the examples. */
   source?: { label: string; detail: string }
@@ -133,21 +147,24 @@ function fallbackPhase(elapsedSec: number, running: boolean): CreatePhase {
 }
 
 /**
- * The full-window create-a-project experience. In `create` mode it runs a two-step
- * wizard — Details (name + template, ported from the old New Project dialog) then
- * Deploy (pick a Fabric workspace via the shared {@link DeploymentCreateForm}). In
- * `deploy` mode it shows only the Deploy step, used by the chat hard-gate CTA to
- * guide a freshly created project to its first deployment before chatting.
+ * The full-window create-a-project experience: name the app and pick where it
+ * starts (ported from the old New Project dialog), then follow the scaffold.
+ * With Local development the new app runs on this computer, so it opens in the
+ * workbench as soon as it's created. Without it, the Publish your app step
+ * follows (`publishStep`): pick a Fabric workspace through the shared
+ * {@link DeploymentCreateForm}, since chat stays locked until the app is
+ * published. In `deploy` mode only that step shows, from the chat lock.
  */
 export default function CreateProjectScreen({
-  mode,
+  mode = 'create',
+  publishStep = false,
   projectName,
   onCancel,
   onCreated,
   onDeploy,
   onContinueWithoutDeploy,
-  onSignedIn,
   deploying = false,
+  onSignedIn,
   teamWorkspaces,
   initialTeamWorkspaceId,
   onTeamCreated,
@@ -169,7 +186,6 @@ export default function CreateProjectScreen({
       : ''
   )
 
-  // ----- Details step -----
   const [name, setName] = useState(initialName ?? '')
   const [start, setStart] = useState<Start>('scratch')
   const [gallery, setGallery] = useState<CommunityGallery | null>(null)
@@ -191,19 +207,22 @@ export default function CreateProjectScreen({
 
   // Ray keeps the user company through the slow scaffold and npm install.
   const mascot = useMascotInstall(
-    'create',
+    destination ? 'team' : publishStep ? 'create' : 'create-local',
     busy ? 'running' : done ? 'success' : error ? 'error' : 'idle',
     screenRef
   )
 
-  // ----- Deploy step -----
+  // ----- Publish your app step -----
   const [wsResult, setWsResult] = useState<FabricWorkspacesResult | null>(null)
   const [loadingWs, setLoadingWs] = useState(false)
   const wsSeqRef = useRef(0)
 
-  useEffect(() => () => {
-    ++wsSeqRef.current
-  }, [])
+  useEffect(
+    () => () => {
+      ++wsSeqRef.current
+    },
+    []
+  )
 
   async function loadWorkspaces(): Promise<void> {
     const seq = ++wsSeqRef.current
@@ -224,19 +243,31 @@ export default function CreateProjectScreen({
     }
   }
 
-  // Esc abandons the Details step (never mid-create); on the Deploy step it skips.
+  // Esc abandons the details, but never mid-create or once the app exists; on
+  // the Publish your app step it skips publishing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       if (step === 'details') {
-        if (!busy) onCancel()
+        if (!busy && !done) onCancel()
       } else if (!deploying) {
-        onContinueWithoutDeploy()
+        onContinueWithoutDeploy?.()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [step, busy, deploying, onCancel, onContinueWithoutDeploy])
+  }, [step, busy, done, deploying, onCancel, onContinueWithoutDeploy])
+
+  // Fetch workspaces when the Publish your app step first appears.
+  useEffect(() => {
+    if (step === 'deploy' && !wsResult && !loadingWs) void loadWorkspaces()
+  }, [step])
+
+  // Local development turned on meanwhile: the new app runs on this computer,
+  // so there's nothing to publish first.
+  useEffect(() => {
+    if (mode === 'create' && step === 'deploy' && !publishStep) onContinueWithoutDeploy?.()
+  }, [mode, step, publishStep, onContinueWithoutDeploy])
 
   async function loadGallery(repoUrl?: string): Promise<void> {
     setLoadingGallery(true)
@@ -283,11 +314,6 @@ export default function CreateProjectScreen({
     return () => window.clearInterval(id)
   }, [busy, startedAt])
 
-  // Fetch workspaces when the Deploy step first appears.
-  useEffect(() => {
-    if (step === 'deploy' && !wsResult && !loadingWs) void loadWorkspaces()
-  }, [step])
-
   const selectedEntry = gallery?.templates.find((t) => keyOf(t) === communitySel) ?? null
 
   async function create(): Promise<void> {
@@ -332,9 +358,15 @@ export default function CreateProjectScreen({
       })
       if (result.ok) {
         setDone(true)
-        setCreatedName(result.project?.name ?? name.trim())
+        if (publishStep) {
+          setCreatedName(result.project?.name ?? name.trim())
+          onCreated?.(result)
+          setStep('deploy')
+          return
+        }
+        // The workbench opens in the same moment, so tell Ray directly.
+        mascot.succeed()
         onCreated?.(result)
-        setStep('deploy')
       } else {
         setError(result.error ?? 'Project creation failed.')
         // Surface the raw output so the real failure (not just our summary) is
@@ -360,7 +392,7 @@ export default function CreateProjectScreen({
   const checkKey = `${destination}\u0000${name.trim()}`
   const [nameCheck, setNameCheck] = useState<(ProjectNameCheck & { key: string }) | null>(null)
   useEffect(() => {
-    if (!slug || nameProblem || busy || step !== 'details') return
+    if (!slug || nameProblem || busy || done || step !== 'details') return
     let stale = false
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -377,7 +409,7 @@ export default function CreateProjectScreen({
       stale = true
       window.clearTimeout(timer)
     }
-  }, [checkKey, slug, nameProblem, busy, step])
+  }, [checkKey, slug, nameProblem, busy, done, step])
   const nameTaken = nameCheck?.key === checkKey && !nameCheck.ok ? (nameCheck.message ?? 'That name is taken.') : null
   const nameWarning = nameProblem ?? nameTaken
 
@@ -404,359 +436,53 @@ export default function CreateProjectScreen({
     phase === 'done' ? 'Project ready' : (CREATE_PHASES[activeIdx]?.label ?? 'Preparing')
   const createFailed = !busy && !done && Boolean(error)
   const showProgress = busy || Boolean(log)
+  /** The fields step aside while the app is created, and while the workbench opens it. */
+  const hideFields = busy || done
 
   const heading =
-    step === 'deploy'
-      ? mode === 'create'
-        ? 'Deploy your app'
-        : 'Create your first deployment'
-      : source
-        ? 'New app from Power BI'
-        : 'New project'
+    step === 'deploy' ? 'Publish your app' : source ? 'New app from Power BI' : 'New project'
   const sub =
     step === 'deploy'
       ? `Publish ${createdName || 'your app'} to a Fabric workspace to start building with chat.`
-      : busy
+      : hideFields
         ? `Setting up ${name.trim() || 'your app'}…`
         : source
-          ? 'Name your app. Fabricator reads the report while it creates and deploys the app, then Copilot rebuilds it page by page.'
+          ? publishStep
+            ? 'Name your app. Fabricator reads the report while it creates and publishes the app, then Copilot rebuilds it page by page.'
+            : 'Name your app. Fabricator reads the report while it creates the app, then Copilot rebuilds it page by page.'
           : 'Give it a name. Next, describe what you want and Copilot builds it.'
-  const skipLabel = mode === 'deploy' ? 'Maybe later' : 'Continue without deploying →'
 
-  return (
-    <div className="create-screen" ref={screenRef}>
-      <div className="create-shell">
-        <header className="create-head" data-mascot-avoid="">
-          <div className="create-head-text">
-            <h1 className="create-title">{heading}</h1>
-            <p className="create-sub">{sub}</p>
-          </div>
-          {mode === 'create' && !destination && (
-            <ol className="create-steps" aria-label="Progress">
-              <li
-                className={`create-step${
-                  step === 'details' ? ' create-step--active' : ' create-step--done'
-                }`}
-              >
-                <span className="create-step-no">1</span>
-                <span className="create-step-label">Details</span>
-              </li>
-              <li className={`create-step${step === 'deploy' ? ' create-step--active' : ''}`}>
-                <span className="create-step-no">2</span>
-                <span className="create-step-label">Deploy</span>
-              </li>
-            </ol>
-          )}
-        </header>
+  const head = (
+    <header className="create-head" data-mascot-avoid="">
+      <div className="create-head-text">
+        <h1 className="create-title">{heading}</h1>
+        <p className="create-sub">{sub}</p>
+      </div>
+      {mode === 'create' && publishStep && !destination && (
+        <ol className="create-steps" aria-label="Progress">
+          <li
+            className={`create-step${
+              step === 'details' ? ' create-step--active' : ' create-step--done'
+            }`}
+          >
+            <span className="create-step-no">1</span>
+            <span className="create-step-label">Details</span>
+          </li>
+          <li className={`create-step${step === 'deploy' ? ' create-step--active' : ''}`}>
+            <span className="create-step-no">2</span>
+            <span className="create-step-label">Publish</span>
+          </li>
+        </ol>
+      )}
+    </header>
+  )
 
-        {step === 'details' ? (
-          <>
-            <div className="create-body" data-mascot-avoid="">
-              <label className={`field${busy ? ' create-field-hidden' : ''}`}>
-                <span className="field-label">Project name</span>
-                <input
-                  className="field-input"
-                  type="text"
-                  value={name}
-                  autoFocus
-                  placeholder="My Rayfin App"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  disabled={busy}
-                  aria-invalid={nameWarning ? true : undefined}
-                  onChange={(e) => setName(e.target.value)}
-                />
-                {nameWarning ? (
-                  <span className="field-hint field-hint--warn" role="alert">
-                    {nameWarning}
-                  </span>
-                ) : (
-                  slug && (
-                    <span className="field-hint">
-                      Folder: <code>{slug}</code>
-                    </span>
-                  )
-                )}
-              </label>
-              {teamTargets.length > 0 && (
-                <label className={`field${busy ? ' create-field-hidden' : ''}`}>
-                  <span className="field-label">Where</span>
-                  <select
-                    className="field-input"
-                    value={destination}
-                    disabled={busy}
-                    onChange={(e) => setDestination(e.target.value)}
-                  >
-                    <option value="">Just me, on this computer</option>
-                    {teamTargets.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        Team workspace: {w.name}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="field-hint">
-                    {destination
-                      ? 'Your team sees the app once you publish it. The team pipeline deploys your preview, so there’s no deploy step.'
-                      : 'You deploy it yourself to a Fabric workspace you choose.'}
-                  </span>
-                </label>
-              )}
-
-              <div className={`field${busy ? ' create-field-hidden' : ''}`}>
-                {source ? (
-                  <>
-                    <div className="create-source">
-                      <span className="field-label">{source.label}</span>
-                      <span className="create-source-detail">{source.detail}</span>
-                    </div>
-                    {model && (
-                      <div className="create-model">
-                        <span className="field-label">Copilot model</span>
-                        <ModelPicker
-                          value={model.value}
-                          disabled={busy}
-                          onChange={model.onChange}
-                          tiers
-                          placement="down"
-                          onManageKeys={model.onManageKeys}
-                          label="Copilot model"
-                        />
-                        <span className="field-hint">
-                          Copilot rebuilds the report with this model. You can change it in the chat later.
-                        </span>
-                      </div>
-                    )}
-                  </>
-                ) : start === 'scratch' ? (
-                  <p className="create-start">
-                    Want a head start?{' '}
-                    <button
-                      type="button"
-                      className="link-btn"
-                      disabled={busy}
-                      onClick={() => setStart('example')}
-                    >
-                      Start from a community example
-                    </button>
-                  </p>
-                ) : (
-                  <div className="create-examples-head">
-                    <span className="field-label">Start from an example</span>
-                    <button
-                      type="button"
-                      className="link-btn"
-                      disabled={busy}
-                      onClick={() => {
-                        setStart('scratch')
-                        setCustomMode(false)
-                      }}
-                    >
-                      Start from scratch instead
-                    </button>
-                  </div>
-                )}
-
-                {start === 'example' && !customMode && (
-                  <p className="template-caption">
-                    Ready-made apps from the Rayfin community. Pick one to build on.
-                  </p>
-                )}
-
-                {start === 'scratch' ? null : customMode ? (
-                  <div className="template-url">
-                    <input
-                      className="field-input"
-                      type="text"
-                      value={url}
-                      placeholder="https://github.com/owner/awesome-rayfin-template"
-                      spellCheck={false}
-                      disabled={busy}
-                      onChange={(e) => setUrl(e.target.value)}
-                    />
-                    <span className="field-hint">
-                      A git or tarball URL for a community (awesome-rayfin) template.
-                    </span>
-                    <input
-                      className="field-input"
-                      type="text"
-                      value={templateName}
-                      placeholder="Template name (optional, for multi-template repos)"
-                      spellCheck={false}
-                      disabled={busy}
-                      onChange={(e) => setTemplateName(e.target.value)}
-                    />
-                    {url.trim() && !urlValid && (
-                      <span className="field-hint field-hint--warn">
-                        Enter a valid http(s) or git URL.
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="link-btn"
-                      disabled={busy}
-                      onClick={() => setCustomMode(false)}
-                    >
-                      ← Back to the examples
-                    </button>
-                  </div>
-                ) : loadingGallery ? (
-                  <div className="template-grid" aria-busy="true">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="template-card template-card--skel">
-                        <span className="skel-line skel-line--title" />
-                        <span className="skel-line" />
-                        <span className="skel-line skel-line--short" />
-                      </div>
-                    ))}
-                  </div>
-                ) : galleryError ? (
-                  <div className="gallery-empty">
-                    <p className="gallery-empty-msg">{galleryError}</p>
-                    <div className="gallery-empty-actions">
-                      <button
-                        type="button"
-                        className="btn btn--sm"
-                        disabled={busy}
-                        onClick={() => void loadGallery()}
-                      >
-                        Try again
-                      </button>
-                      <button
-                        type="button"
-                        className="link-btn"
-                        disabled={busy}
-                        onClick={() => setCustomMode(true)}
-                      >
-                        Use a custom URL
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {gallery && gallery.templates.length === 0 ? (
-                      <div className="gallery-empty">
-                        <p className="gallery-empty-msg">This gallery doesn’t have any examples yet.</p>
-                      </div>
-                    ) : (
-                      <div className="template-grid">
-                        {gallery?.templates.map((t) => (
-                          <button
-                            key={keyOf(t)}
-                            type="button"
-                            disabled={busy}
-                            className={`template-card${communitySel === keyOf(t) ? ' template-card--active' : ''}`}
-                            onClick={() => setCommunitySel(keyOf(t))}
-                          >
-                            <span className="template-card-name">{t.name}</span>
-                            <span className="template-card-desc">{t.description}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="gallery-footer">
-                      <span className="field-hint">
-                        From{' '}
-                        <span className="gallery-source">
-                          {gallery?.displayName || gallery?.repoUrl.replace(/^https?:\/\//, '')}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        className="link-btn"
-                        disabled={busy}
-                        onClick={() => setCustomMode(true)}
-                      >
-                        Use a custom URL
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {showProgress && (
-                <div className="create-progress" aria-busy={busy}>
-                  <span className="sr-only" role="status" aria-live="polite">
-                    {busy ? activePhaseLabel : done ? 'Project ready' : ''}
-                  </span>
-                  <ol className="create-phases">
-                    {CREATE_PHASES.map((p, i) => {
-                      const state =
-                        phase === 'done' || i < activeIdx
-                          ? 'done'
-                          : i === activeIdx
-                            ? 'active'
-                            : 'pending'
-                      return (
-                        <li
-                          key={p.id}
-                          className={`create-phase create-phase--${state}${
-                            createFailed && state === 'active' ? ' create-phase--failed' : ''
-                          }`}
-                        >
-                          <span className="create-phase-ico" aria-hidden="true">
-                            {state === 'active' ? (
-                              busy ? (
-                                <span className="ws-spinner" />
-                              ) : createFailed ? (
-                                '✕'
-                              ) : null
-                            ) : state === 'done' ? (
-                              '✓'
-                            ) : null}
-                          </span>
-                          <span className="create-phase-text">
-                            <span className="create-phase-label">{p.label}</span>
-                            {p.id === 'installing' && state === 'active' && (
-                              <span className="create-phase-hint">
-                                {elapsedSec > 75
-                                  ? 'Still working — large dependency trees take a little longer.'
-                                  : p.hint}
-                              </span>
-                            )}
-                          </span>
-                        </li>
-                      )
-                    })}
-                  </ol>
-
-                  <div className="create-progress-meta">
-                    <span className="create-elapsed" aria-hidden="true">
-                      {busy ? `${elapsedLabel} elapsed` : done ? 'Done' : ''}
-                    </span>
-                    <button
-                      type="button"
-                      className="link-btn create-progress-toggle"
-                      onClick={() => setShowDetails((v) => !v)}
-                    >
-                      {showDetails ? 'Hide details' : 'Show details'}
-                    </button>
-                  </div>
-
-                  {showDetails && (
-                    <pre
-                      className="log-console log-console--sm create-progress-details"
-                      ref={logRef}
-                    >
-                      {log || 'Starting…'}
-                    </pre>
-                  )}
-                </div>
-              )}
-
-              {error && <div className="alert alert--error">{error}</div>}
-            </div>
-
-            <footer className="create-foot" data-mascot-avoid="">
-              <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
-                Cancel
-              </button>
-              <button className="btn btn--primary" onClick={create} disabled={busy || !canCreate}>
-                {busy ? 'Creating…' : 'Create project'}
-              </button>
-            </footer>
-          </>
-        ) : (
+  // Without Local development, the app is published before chat unlocks.
+  if (step === 'deploy') {
+    return (
+      <div className="create-screen" ref={screenRef}>
+        <div className="create-shell">
+          {head}
           <div className="create-body create-body--deploy" data-mascot-avoid="">
             <div className="create-deploy">
               <DeploymentCreateForm
@@ -765,24 +491,343 @@ export default function CreateProjectScreen({
                 onReload={loadWorkspaces}
                 onSignedIn={onSignedIn}
                 running={deploying}
-                submitLabel="Deploy app"
-                busyLabel="Deploying…"
+                submitLabel="Publish app"
+                busyLabel="Publishing…"
                 defaultName="Development"
-                onSubmit={onDeploy}
+                onSubmit={(depName, workspaceId) => onDeploy?.(depName, workspaceId)}
                 checkTarget={checkActiveDeployTarget}
                 recentWorkspaces={recentWorkspaces}
               />
               <div className="create-skip">
                 <button type="button" className="link-btn" onClick={onContinueWithoutDeploy}>
-                  {skipLabel}
+                  {mode === 'deploy' ? 'Maybe later' : 'Continue without publishing →'}
                 </button>
                 <span className="create-skip-hint">
-                  You can deploy any time, but chat stays locked until your app has a deployment.
+                  You can publish any time, but chat stays locked until your app is published.
                 </span>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="create-screen" ref={screenRef}>
+      <div className="create-shell">
+        {head}
+
+        <div className="create-body" data-mascot-avoid="">
+          <label className={`field${hideFields ? ' create-field-hidden' : ''}`}>
+            <span className="field-label">Project name</span>
+            <input
+              className="field-input"
+              type="text"
+              value={name}
+              autoFocus
+              placeholder="My Rayfin App"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              disabled={busy}
+              aria-invalid={nameWarning ? true : undefined}
+              onChange={(e) => setName(e.target.value)}
+            />
+            {nameWarning ? (
+              <span className="field-hint field-hint--warn" role="alert">
+                {nameWarning}
+              </span>
+            ) : (
+              slug && (
+                <span className="field-hint">
+                  Folder: <code>{slug}</code>
+                </span>
+              )
+            )}
+          </label>
+          {teamTargets.length > 0 && (
+            <label className={`field${hideFields ? ' create-field-hidden' : ''}`}>
+              <span className="field-label">Where</span>
+              <select
+                className="field-input"
+                value={destination}
+                disabled={busy}
+                onChange={(e) => setDestination(e.target.value)}
+              >
+                <option value="">Just me, on this computer</option>
+                {teamTargets.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    Team workspace: {w.name}
+                  </option>
+                ))}
+              </select>
+              <span className="field-hint">
+                {destination
+                  ? publishStep
+                    ? 'Your team sees the app once you publish it. The team pipeline deploys your preview, so there’s no publish step.'
+                    : 'Your team sees the app once you publish it. The team pipeline deploys your preview.'
+                  : publishStep
+                    ? 'You publish it yourself to a Fabric workspace you choose.'
+                    : 'It runs on this computer. Publish it to a Fabric workspace whenever you’re ready.'}
+              </span>
+            </label>
+          )}
+
+          <div className={`field${hideFields ? ' create-field-hidden' : ''}`}>
+            {source ? (
+              <>
+                <div className="create-source">
+                  <span className="field-label">{source.label}</span>
+                  <span className="create-source-detail">{source.detail}</span>
+                </div>
+                {model && (
+                  <div className="create-model">
+                    <span className="field-label">Copilot model</span>
+                    <ModelPicker
+                      value={model.value}
+                      disabled={busy}
+                      onChange={model.onChange}
+                      tiers
+                      placement="down"
+                      onManageKeys={model.onManageKeys}
+                      label="Copilot model"
+                    />
+                    <span className="field-hint">
+                      Copilot rebuilds the report with this model. You can change it in the chat
+                      later.
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : start === 'scratch' ? (
+              <p className="create-start">
+                Want a head start?{' '}
+                <button
+                  type="button"
+                  className="link-btn"
+                  disabled={busy}
+                  onClick={() => setStart('example')}
+                >
+                  Start from a community example
+                </button>
+              </p>
+            ) : (
+              <div className="create-examples-head">
+                <span className="field-label">Start from an example</span>
+                <button
+                  type="button"
+                  className="link-btn"
+                  disabled={busy}
+                  onClick={() => {
+                    setStart('scratch')
+                    setCustomMode(false)
+                  }}
+                >
+                  Start from scratch instead
+                </button>
+              </div>
+            )}
+
+            {start === 'example' && !customMode && (
+              <p className="template-caption">
+                Ready-made apps from the Rayfin community. Pick one to build on.
+              </p>
+            )}
+
+            {start === 'scratch' ? null : customMode ? (
+              <div className="template-url">
+                <input
+                  className="field-input"
+                  type="text"
+                  value={url}
+                  placeholder="https://github.com/owner/awesome-rayfin-template"
+                  spellCheck={false}
+                  disabled={busy}
+                  onChange={(e) => setUrl(e.target.value)}
+                />
+                <span className="field-hint">
+                  A git or tarball URL for a community (awesome-rayfin) template.
+                </span>
+                <input
+                  className="field-input"
+                  type="text"
+                  value={templateName}
+                  placeholder="Template name (optional, for multi-template repos)"
+                  spellCheck={false}
+                  disabled={busy}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                />
+                {url.trim() && !urlValid && (
+                  <span className="field-hint field-hint--warn">
+                    Enter a valid http(s) or git URL.
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="link-btn"
+                  disabled={busy}
+                  onClick={() => setCustomMode(false)}
+                >
+                  ← Back to the examples
+                </button>
+              </div>
+            ) : loadingGallery ? (
+              <div className="template-grid" aria-busy="true">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="template-card template-card--skel">
+                    <span className="skel-line skel-line--title" />
+                    <span className="skel-line" />
+                    <span className="skel-line skel-line--short" />
+                  </div>
+                ))}
+              </div>
+            ) : galleryError ? (
+              <div className="gallery-empty">
+                <p className="gallery-empty-msg">{galleryError}</p>
+                <div className="gallery-empty-actions">
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    disabled={busy}
+                    onClick={() => void loadGallery()}
+                  >
+                    Try again
+                  </button>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    disabled={busy}
+                    onClick={() => setCustomMode(true)}
+                  >
+                    Use a custom URL
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {gallery && gallery.templates.length === 0 ? (
+                  <div className="gallery-empty">
+                    <p className="gallery-empty-msg">This gallery doesn’t have any examples yet.</p>
+                  </div>
+                ) : (
+                  <div className="template-grid">
+                    {gallery?.templates.map((t) => (
+                      <button
+                        key={keyOf(t)}
+                        type="button"
+                        disabled={busy}
+                        className={`template-card${communitySel === keyOf(t) ? ' template-card--active' : ''}`}
+                        onClick={() => setCommunitySel(keyOf(t))}
+                      >
+                        <span className="template-card-name">{t.name}</span>
+                        <span className="template-card-desc">{t.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="gallery-footer">
+                  <span className="field-hint">
+                    From{' '}
+                    <span className="gallery-source">
+                      {gallery?.displayName || gallery?.repoUrl.replace(/^https?:\/\//, '')}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    disabled={busy}
+                    onClick={() => setCustomMode(true)}
+                  >
+                    Use a custom URL
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {showProgress && (
+            <div className="create-progress" aria-busy={busy}>
+              <span className="sr-only" role="status" aria-live="polite">
+                {busy ? activePhaseLabel : done ? 'Project ready' : ''}
+              </span>
+              <ol className="create-phases">
+                {CREATE_PHASES.map((p, i) => {
+                  const state =
+                    phase === 'done' || i < activeIdx
+                      ? 'done'
+                      : i === activeIdx
+                        ? 'active'
+                        : 'pending'
+                  return (
+                    <li
+                      key={p.id}
+                      className={`create-phase create-phase--${state}${
+                        createFailed && state === 'active' ? ' create-phase--failed' : ''
+                      }`}
+                    >
+                      <span className="create-phase-ico" aria-hidden="true">
+                        {state === 'active' ? (
+                          busy ? (
+                            <span className="ws-spinner" />
+                          ) : createFailed ? (
+                            '✕'
+                          ) : null
+                        ) : state === 'done' ? (
+                          '✓'
+                        ) : null}
+                      </span>
+                      <span className="create-phase-text">
+                        <span className="create-phase-label">{p.label}</span>
+                        {p.id === 'installing' && state === 'active' && (
+                          <span className="create-phase-hint">
+                            {elapsedSec > 75
+                              ? 'Still working — large dependency trees take a little longer.'
+                              : p.hint}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ol>
+
+              <div className="create-progress-meta">
+                <span className="create-elapsed" aria-hidden="true">
+                  {busy ? `${elapsedLabel} elapsed` : done ? 'Done' : ''}
+                </span>
+                <button
+                  type="button"
+                  className="link-btn create-progress-toggle"
+                  onClick={() => setShowDetails((v) => !v)}
+                >
+                  {showDetails ? 'Hide details' : 'Show details'}
+                </button>
+              </div>
+
+              {showDetails && (
+                <pre className="log-console log-console--sm create-progress-details" ref={logRef}>
+                  {log || 'Starting…'}
+                </pre>
+              )}
+            </div>
+          )}
+
+          {error && <div className="alert alert--error">{error}</div>}
+        </div>
+
+        <footer className="create-foot" data-mascot-avoid="">
+          <button className="btn btn--ghost" onClick={onCancel} disabled={busy || done}>
+            Cancel
+          </button>
+          <button
+            className="btn btn--primary"
+            onClick={create}
+            disabled={busy || done || !canCreate}
+          >
+            {busy ? 'Creating…' : done ? 'Opening…' : 'Create project'}
+          </button>
+        </footer>
       </div>
     </div>
   )

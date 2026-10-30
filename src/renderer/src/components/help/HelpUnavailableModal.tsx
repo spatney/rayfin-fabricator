@@ -78,7 +78,7 @@ export default function HelpUnavailableModal({
                 <BookIcon />
                 <span className="help-offline-text">
                   <span className="help-offline-title">Browse the documentation</span>
-                  <span className="help-offline-sub">Setup, deploying, and troubleshooting</span>
+                  <span className="help-offline-sub">Setup, publishing, and troubleshooting</span>
                 </span>
                 <Codicon name="link-external" className="help-offline-go" />
               </button>

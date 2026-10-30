@@ -18,6 +18,7 @@ jobs:
       matrix:
         include:
           - os: windows-latest
+            target: x86_64-pc-windows-msvc
             bundles: nsis
             artifacts: |
               src-tauri/target/release/bundle/nsis/*-setup.exe
@@ -25,6 +26,7 @@ jobs:
           # macOS ships an Apple-silicon (arm64) build. The updater artifact is
           # the *.app.tar.gz; the *.dmg is for manual download.
           - os: macos-latest
+            target: aarch64-apple-darwin
             bundles: app,dmg
             artifacts: |
               src-tauri/target/release/bundle/dmg/*.dmg
@@ -64,6 +66,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Fetch rayfin-local sidecar
+        # The rayfin-local release that rayfin-local.json pins, checked against its SHA-256.
+        # tauri build bundles it (bundle.externalBin) for the runner's own target, matrix.target.
+        run: node scripts/rayfin-local/fetch.mjs --target ${{ matrix.target }}
 
       - name: Write telemetry configuration
         run: node -e "const fs=require('fs');fs.mkdirSync('resources',{recursive:true});fs.writeFileSync('resources/telemetry.json',JSON.stringify({connectionString:process.env.CS},null,2))"
@@ -109,6 +116,33 @@ jobs:
             "$SIGNING_ENDPOINT" "$SIGNING_ACCOUNT" "$SIGNING_PROFILE" > src-tauri/tauri.signing.conf.json
           echo "Generated src-tauri/tauri.signing.conf.json:"
           cat src-tauri/tauri.signing.conf.json
+
+      - name: Sign rayfin-local sidecar (Windows)
+        # Same tool and certificate as signCommand. Tauri's bundler signs an unsigned sidecar
+        # only while it bundles, after Cargo has already copied it next to the app's exe, so sign
+        # it before the build: the installer and that copy then carry the same signature.
+        if: runner.os == 'Windows' && steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_SIGNING_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_SIGNING_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_SIGNING_TENANT_ID }}
+          SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_CERT_PROFILE }}
+          SIDECAR: src-tauri\binaries\rayfin-local-${{ matrix.target }}.exe
+        run: |
+          artifact-signing-cli -e $env:SIGNING_ENDPOINT -a $env:SIGNING_ACCOUNT -c $env:SIGNING_PROFILE $env:SIDECAR
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error::artifact-signing-cli couldn't sign $env:SIDECAR (exit code $LASTEXITCODE)."
+            exit 1
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $env:SIDECAR
+          if ($signature.Status -ne 'Valid') {
+            Write-Output "::error::$env:SIDECAR isn't validly signed: $($signature.Status). $($signature.StatusMessage)"
+            exit 1
+          }
+          Write-Output "Signed $env:SIDECAR as $($signature.SignerCertificate.Subject)"
 
       # --- macOS code signing (Apple Developer ID + notarization) --------------
       - name: Detect code-signing configuration (macOS)
@@ -188,6 +222,61 @@ jobs:
             export APPLE_SIGNING_IDENTITY="-"
           fi
           npm run tauri:build -- --bundles ${{ matrix.bundles }}
+
+      # --- Check that the bundled rayfin-local sidecar is signed ---------------
+      - name: Verify rayfin-local signature (Windows)
+        # The installer packs src-tauri/binaries' copy; Cargo put the other next to the app's exe.
+        if: runner.os == 'Windows' && steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          if (-not $installer) {
+            Write-Output '::error::No installer in src-tauri/target/release/bundle/nsis'
+            exit 1
+          }
+          $publisher = (Get-AuthenticodeSignature -FilePath $installer.FullName).SignerCertificate.Subject
+          foreach ($file in 'src-tauri/target/release/rayfin-local.exe', 'src-tauri/binaries/rayfin-local-${{ matrix.target }}.exe') {
+            $signature = Get-AuthenticodeSignature -FilePath $file
+            if ($signature.Status -ne 'Valid' -or -not $publisher -or $signature.SignerCertificate.Subject -ne $publisher) {
+              Write-Output "::error::$file isn't signed like the installer ($publisher): $($signature.Status), signer '$($signature.SignerCertificate.Subject)'. $($signature.StatusMessage)"
+              exit 1
+            }
+            Write-Output "$file is signed by $($signature.SignerCertificate.Subject)"
+          }
+
+      - name: Verify rayfin-local signature (macOS)
+        # Tauri's bundler copies the sidecar into Contents/MacOS and signs it like the app's own
+        # executable: same identity (ad-hoc when unsigned), hardened runtime, then notarization.
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)
+          if [ -z "$app" ]; then
+            echo "::error::No .app bundle in src-tauri/target/release/bundle/macos"
+            exit 1
+          fi
+          main="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+          sidecar="$app/Contents/MacOS/rayfin-local"
+          codesign --verify --strict --verbose=2 "$sidecar"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          main_sig=$(codesign --display --verbose=4 "$main" 2>&1)
+          sidecar_sig=$(codesign --display --verbose=4 "$sidecar" 2>&1)
+          echo "$sidecar_sig"
+          team() { printf '%s\n' "$1" | sed -n 's/^TeamIdentifier=//p'; }
+          hardened() { printf '%s\n' "$1" | grep -E 'flags=0x[0-9a-f]+\([^)]*runtime' > /dev/null; }
+          if [ "$(team "$sidecar_sig")" != "$(team "$main_sig")" ]; then
+            echo "::error::rayfin-local's team ($(team "$sidecar_sig")) isn't the app's ($(team "$main_sig"))."
+            exit 1
+          fi
+          if hardened "$main_sig" && ! hardened "$sidecar_sig"; then
+            echo "::error::rayfin-local isn't signed with the hardened runtime, unlike the app."
+            exit 1
+          fi
+          if [ "${{ steps.macsigning.outputs.enabled }}" = "true" ] && [ "$(team "$sidecar_sig")" = "not set" ]; then
+            echo "::error::rayfin-local isn't signed with the Developer ID certificate."
+            exit 1
+          fi
 
       - name: Upload installer artifacts
         if: always()

@@ -230,7 +230,7 @@ export default function ManageProjectModal({
                   <span className="set-item-desc">
                     Copies this app and its chat into the team workspace so your team can work on
                     it. The team pipeline deploys it as a new app, without the data in this
-                    project&apos;s current deployment. This local project stays as it is.
+                    project&apos;s published app. This local project stays as it is.
                   </span>
                 </div>
                 <div className="project-manage-field">
@@ -299,7 +299,7 @@ export default function ManageProjectModal({
                   <span className="set-item-title">Remove project</span>
                   <span className="set-item-desc">
                     {hasDeploy
-                      ? "Review two independent removal options in the next step: move this local folder to your system trash, and optionally delete this project's deployed Fabric app and its data for good. Your Fabric workspace is never deleted."
+                      ? "Review two independent removal options in the next step: move this local folder to your system trash, and optionally delete this project's published Fabric app and its data for good. Your Fabric workspace is never deleted."
                       : 'Move this local folder to your system trash in the next step. You can restore it there; no Fabric app will be changed.'}
                   </span>
                 </div>

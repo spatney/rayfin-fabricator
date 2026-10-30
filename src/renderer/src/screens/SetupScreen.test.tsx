@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { AuthStatus, DoctorReport, ProcResult, ToolStatus } from '@shared/ipc'
 import SetupScreen from './SetupScreen'
 
@@ -101,7 +101,10 @@ describe('SetupScreen sign-in providers', () => {
     openCompletedSteps()
     expect(screen.queryByRole('button', { name: `Sign out of ${name}` })).toBeNull()
     expect(screen.getAllByText('Connected')).toHaveLength(1)
-    expect((screen.getByRole('button', { name: /Enter Fabricator/ }) as HTMLButtonElement).disabled).toBe(true)
+    // Only Copilot is needed to enter; Azure is optional.
+    expect(
+      (screen.getByRole('button', { name: /Enter Fabricator/ }) as HTMLButtonElement).disabled
+    ).toBe(provider === 'copilot')
     if (provider === 'copilot') {
       expect((screen.getByLabelText('GitHub host') as HTMLInputElement).value).toBe('https://company.ghe.com')
     }
@@ -147,7 +150,8 @@ describe('SetupScreen sign-in providers', () => {
     expect(refresh).toHaveBeenCalledOnce()
     expect((screen.getByRole('button', { name: `Sign out of ${name}` }) as HTMLButtonElement).disabled).toBe(false)
     expect(screen.getAllByText('Connected')).toHaveLength(2)
-    expect(screen.queryByText("You're all set")).toBeNull()
+    // A failure in the optional Azure step is shown, but doesn't keep you out.
+    expect(Boolean(screen.queryByText("You're all set"))).toBe(method === 'logoutAz')
   })
 
   it('surfaces rejected sign-out calls and refreshes the account status', async () => {
@@ -176,16 +180,26 @@ describe('SetupScreen sign-in providers', () => {
   it('offers re-check rather than reinstall when an existing CLI cannot be verified', async () => {
     const error = 'Azure CLI was found, but its version check failed.'
     const report: DoctorReport = {
-      ready: false,
-      tools: doctor.tools.map((item) => item.id === 'az'
-        ? { ...item, found: true, satisfied: false, version: null, autoInstallable: true, checkError: error }
-        : item)
+      ready: true,
+      tools: doctor.tools.map((item) =>
+        item.id === 'az'
+          ? {
+              ...item,
+              required: false,
+              found: true,
+              satisfied: false,
+              version: null,
+              autoInstallable: true,
+              checkError: error
+            }
+          : item
+      )
     }
     const refresh = vi.fn()
     render(<SetupScreen doctor={report} auth={auth} refreshing={false} onRefresh={refresh} onEnter={() => {}} />)
     expect(screen.getByRole('alert').textContent).toBe(error)
-    expect(screen.getByText('Resolve the Azure CLI check error first')).toBeTruthy()
-    expect(screen.queryByText('Install the Azure CLI first')).toBeNull()
+    // Azure sign-in waits for a working Azure CLI: only Copilot's Sign in is offered.
+    expect(screen.getAllByRole('button', { name: 'Sign in' })).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'Install all' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Update' })).toBeNull()
     expect(screen.queryByText(/null.*update to/)).toBeNull()
@@ -195,16 +209,56 @@ describe('SetupScreen sign-in providers', () => {
     expect(window.api.doctor.installAll).not.toHaveBeenCalled()
   })
 
-  it('does not bulk-install over a failed required tool check', () => {
-    const report: DoctorReport = {
+  it('does not bulk-install over a failed required tool check, but an optional one never blocks it', () => {
+    const report = (failing: ToolStatus): DoctorReport => ({
       ready: false,
       tools: [
-        tool({ id: 'node', name: 'Node.js', found: false, satisfied: false, autoInstallable: true }),
-        tool({ id: 'az', name: 'Azure CLI', satisfied: false, autoInstallable: true, checkError: 'Shim failed' })
+        tool({
+          id: 'node',
+          name: 'Node.js',
+          found: false,
+          satisfied: false,
+          autoInstallable: true
+        }),
+        failing
       ]
-    }
-    render(<SetupScreen doctor={report} auth={auth} refreshing={false} onRefresh={() => {}} onEnter={() => {}} />)
-    expect((screen.getByRole('button', { name: 'Install all' }) as HTMLButtonElement).disabled).toBe(true)
+    })
+    const props = { auth, refreshing: false, onRefresh: () => {}, onEnter: () => {} }
+    const { rerender } = render(
+      <SetupScreen
+        {...props}
+        doctor={report(
+          tool({
+            id: 'git',
+            name: 'Git',
+            satisfied: false,
+            autoInstallable: true,
+            checkError: 'Shim failed'
+          })
+        )}
+      />
+    )
+    expect(
+      (screen.getByRole('button', { name: 'Install all' }) as HTMLButtonElement).disabled
+    ).toBe(true)
+    rerender(
+      <SetupScreen
+        {...props}
+        doctor={report(
+          tool({
+            id: 'az',
+            name: 'Azure CLI',
+            required: false,
+            satisfied: false,
+            autoInstallable: true,
+            checkError: 'Shim failed'
+          })
+        )}
+      />
+    )
+    expect(
+      (screen.getByRole('button', { name: 'Install all' }) as HTMLButtonElement).disabled
+    ).toBe(false)
   })
 
   it('still offers an update for a verified but outdated Node installation', () => {
@@ -327,5 +381,156 @@ describe('SetupScreen sign-in providers', () => {
     const ready = { ...auth, copilot: { signedIn: true }, az: { signedIn: true } }
     rerender(<SetupScreen {...props} auth={ready} onBack={onBack} />)
     expect(screen.queryByRole('button', { name: 'Back to Fabricator' })).toBeNull()
+  })
+})
+
+describe('the optional Azure step', () => {
+  const copilotOnly: AuthStatus = { ...auth, copilot: { signedIn: true, user: 'octocat' } }
+
+  it('lets you enter without Azure, and still offers to sign in to it', async () => {
+    vi.mocked(window.api.auth.loginAz).mockResolvedValue({
+      ok: false,
+      exitCode: 1,
+      error: 'The browser sign-in was closed'
+    })
+    const enter = vi.fn()
+    const refresh = vi.fn()
+    render(
+      <SetupScreen
+        doctor={doctor}
+        auth={copilotOnly}
+        refreshing={false}
+        onRefresh={refresh}
+        onEnter={enter}
+      />
+    )
+    expect(screen.getByText("You're all set")).toBeTruthy()
+    expect(screen.getByText('Optional')).toBeTruthy()
+
+    // A failed attempt is shown, but doesn't keep you out.
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('The browser sign-in was closed')
+    )
+    expect(window.api.auth.loginAz).toHaveBeenCalledOnce()
+    expect(refresh).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: /Enter Fabricator/ }))
+    expect(enter).toHaveBeenCalledOnce()
+  })
+
+  it('installs the Azure CLI from its own step, without counting it as left to do', async () => {
+    vi.mocked(window.api.doctor.install).mockResolvedValue({
+      ok: true,
+      exitCode: 0,
+      requiresRelaunch: true
+    })
+    const report: DoctorReport = {
+      ready: false,
+      tools: [
+        tool({
+          id: 'node',
+          name: 'Node.js',
+          found: false,
+          satisfied: false,
+          version: null,
+          autoInstallable: true
+        }),
+        tool({
+          id: 'az',
+          name: 'Azure CLI',
+          found: false,
+          satisfied: false,
+          version: null,
+          autoInstallable: true,
+          required: false
+        })
+      ]
+    }
+    render(
+      <SetupScreen
+        doctor={report}
+        auth={copilotOnly}
+        refreshing={false}
+        onRefresh={vi.fn()}
+        onEnter={() => {}}
+      />
+    )
+    expect(screen.getByText('1 thing left to set up.')).toBeTruthy()
+    // No Azure sign-in until the Azure CLI is there.
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull()
+
+    const azure = screen.getByText('Azure CLI').closest('li') as HTMLElement
+    fireEvent.click(within(azure).getByRole('button', { name: 'Install' }))
+    await waitFor(() => expect(window.api.doctor.install).toHaveBeenCalledWith('az'))
+    expect(await screen.findByRole('button', { name: 'Restart now' })).toBeTruthy()
+  })
+})
+
+describe('the Local backend check', () => {
+  const report: DoctorReport = {
+    ready: true,
+    tools: [
+      ...doctor.tools,
+      tool({ id: 'rayfin-local', name: 'Local backend', version: '0.2.0', required: false })
+    ]
+  }
+  const copilotOnly: AuthStatus = { ...auth, copilot: { signedIn: true, user: 'octocat' } }
+  const props = {
+    doctor: report,
+    auth: copilotOnly,
+    refreshing: false,
+    onRefresh: () => {},
+    onEnter: () => {}
+  }
+
+  it('stays out of setup without Local development', () => {
+    render(<SetupScreen {...props} />)
+    openCompletedSteps()
+    expect(screen.queryByText('Local backend')).toBeNull()
+    expect(screen.getByText('All 3 installed')).toBeTruthy()
+    expect(screen.getByText("You're all set")).toBeTruthy()
+  })
+
+  it('shows with Local development, without ever keeping you out', () => {
+    render(<SetupScreen {...props} localDevelopment />)
+    openCompletedSteps()
+    expect(screen.getByText('Local backend')).toBeTruthy()
+    expect(screen.getByText('All 4 installed')).toBeTruthy()
+    expect(screen.getByText("You're all set")).toBeTruthy()
+  })
+})
+
+describe('the Install the tools step', () => {
+  const copilotOnly: AuthStatus = { ...auth, copilot: { signedIn: true, user: 'octocat' } }
+  const tools = (ghInstalled: boolean): ToolStatus[] => [
+    tool({ id: 'node', name: 'Node.js' }),
+    tool({ id: 'npm', name: 'npm' }),
+    tool({ id: 'git', name: 'Git' }),
+    tool({
+      id: 'gh',
+      name: 'GitHub CLI (gh)',
+      found: ghInstalled,
+      satisfied: ghInstalled,
+      required: false
+    }),
+    tool({ id: 'az', name: 'Azure CLI', required: false })
+  ]
+
+  it.each([
+    ['every tool', true, 'All 4 installed', '4/4'],
+    ['the required tools', false, 'All 3 required tools installed', '3/3']
+  ] as const)('counts %s the way its summary says', (_, ghInstalled, summary, count) => {
+    render(
+      <SetupScreen
+        doctor={{ ready: true, tools: tools(ghInstalled) }}
+        auth={copilotOnly}
+        refreshing={false}
+        onRefresh={() => {}}
+        onEnter={() => {}}
+      />
+    )
+    const step = screen.getByText(summary).closest('li') as HTMLElement
+    expect(within(step).getByRole('heading', { name: 'Install the tools' })).toBeTruthy()
+    expect(within(step).getByText(count)).toBeTruthy()
   })
 })

@@ -420,7 +420,8 @@ fn clone_target(input: &str) -> Option<(String, String)> {
 }
 
 /// Clone a repository (`owner/name` or a GitHub URL) into the workspace root,
-/// install its dependencies (`npm install`), then register + open it. Enforces the
+/// install its dependencies (`npm install`, also in the functions folder when it
+/// has its own), then register + open it. Enforces the
 /// Rayfin-project requirement: a clone that isn't a Rayfin project is removed and
 /// reported as an error. A dependency-install failure keeps the clone on disk (so
 /// the user can finish it manually) and is reported. Streams output on the
@@ -507,6 +508,11 @@ pub async fn github_clone(app: AppHandle, input: String) -> ProjectActionResult 
       "Cloned to {dir_str}, but installing dependencies failed (npm install exited {code}). \
        See details below, then run \"npm install\" in that folder and use Open existing → Browse folder to open it."
     ));
+  }
+  // The functions folder may have its own packages that the root install skips.
+  // Opening the app tries again, so a failure here doesn't stop it.
+  if let Err(e) = crate::commands::projects_impl::ensure_functions_dependencies(&dir, Some(on.clone())).await {
+    say(&on, &format!("\n⚠️ {e}\nFabricator tries again when the app opens.\n"));
   }
 
   say(&on, "\n✅ Cloned and dependencies installed. Opening…\n");

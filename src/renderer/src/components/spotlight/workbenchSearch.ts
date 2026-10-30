@@ -11,7 +11,7 @@ export interface WorkbenchSearchContext extends Omit<ActionContext, 'do'> {
   projects: readonly StudioProject[]
   /** Team workspaces, when that experiment is on. */
   teamWorkspaces: readonly TeamWorkspace[]
-  /** The open app's last deploy didn't finish. */
+  /** The open app's last publish didn't finish. */
   deployFailed: boolean
   /** Open high and medium Advisor issues in the open app. */
   advisorIssues: number
@@ -78,8 +78,8 @@ export function workbenchSearch(ctx: WorkbenchSearchContext): WorkbenchSearch {
     questions.push({
       id: 'deploy-failed',
       question: DEPLOY_QUESTION,
-      title: 'Find out why the deploy failed',
-      subtitle: `${ctx.project.name}’s last deploy didn’t finish`
+      title: 'Find out why publishing failed',
+      subtitle: `Couldn’t publish ${ctx.project.name}`
     })
   }
   for (const prompt of PROMPTS) {

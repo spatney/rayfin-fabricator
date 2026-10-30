@@ -125,6 +125,9 @@ describe('reading a thrown value', () => {
 describe('grouping by area', () => {
   it.each([
     ['deploy_run', 'The deploy failed.', 'deploy'],
+    [undefined, "Couldn't publish: Runtime settings sync failed", 'deploy'],
+    [undefined, 'The local backend refused the control token', 'preview'],
+    ['local_reset_data', 'Request failed', 'preview'],
     [undefined, 'Fabric sign-in did not complete', 'auth'],
     [undefined, 'All preview ports are busy', 'preview'],
     [undefined, 'Could not push the branch', 'git'],

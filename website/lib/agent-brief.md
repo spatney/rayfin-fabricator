@@ -1,6 +1,6 @@
 # Fabricator — instructions for coding agents
 
-Fabricator is a desktop app, not an API. It helps people build Rayfin apps by chatting with GitHub Copilot, previewing the app live, and deploying it to Microsoft Fabric.
+Fabricator is a desktop app, not an API. It helps people build Rayfin apps by chatting with GitHub Copilot, previewing the app live, and publishing it to Microsoft Fabric.
 
 ## Use these docs
 

@@ -47,7 +47,13 @@ interface StageApi {
 const StageContext = createContext<StageApi | null>(null)
 
 /** How long an install runs before Ray swims in. */
-const DELAY: Record<Occasion, number> = { create: 700, clone: 700, prepare: 1600 }
+const DELAY: Record<Occasion, number> = {
+  create: 700,
+  'create-local': 700,
+  team: 700,
+  clone: 700,
+  prepare: 1600
+}
 
 /** Sent away: he stays away until Fabricator restarts. */
 let dismissed = false

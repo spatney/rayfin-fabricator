@@ -183,6 +183,25 @@ pub fn track_migration(identity: Option<&TelemetryIdentity>, step: &str, props: 
   track("migration", identity, &all);
 }
 
+/// Record what a project's local backend did: `started`, `failed` (with the
+/// problem's stable code, such as `schema-refused`) or `fallback` (a published
+/// app previewed on its published backend: `sdk-unsupported` or
+/// `connector-unsupported`). No project, path or app names are sent.
+pub fn track_local(identity: Option<&TelemetryIdentity>, outcome: &str, code: Option<&str>) {
+  let mut props = vec![("outcome", outcome.to_string())];
+  if let Some(code) = code {
+    props.push(("code", local_code(code)));
+  }
+  track("local", identity, &props);
+}
+
+/// A problem code as sent: rayfin-local's and Fabricator's codes are short
+/// kebab-case words; anything else is `other`.
+fn local_code(code: &str) -> String {
+  let known = !code.is_empty() && code.len() <= 40 && code.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+  if known { code.to_string() } else { "other".to_string() }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -198,5 +217,14 @@ mod tests {
     std::thread::spawn(move || send(&conn, "migration", "user".into(), Map::new()))
       .join()
       .expect("sending telemetry panicked");
+  }
+
+  #[test]
+  fn local_backend_codes_are_sent_only_as_codes() {
+    assert_eq!(local_code("schema-refused"), "schema-refused");
+    assert_eq!(local_code("binary-missing"), "binary-missing");
+    for odd in ["", "C:\\Users\\me\\app", "Note.title (3 values)", "a-very-long-code-that-is-longer-than-forty-characters"] {
+      assert_eq!(local_code(odd), "other", "{odd}");
+    }
   }
 }

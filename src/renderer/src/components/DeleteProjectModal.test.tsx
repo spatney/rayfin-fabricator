@@ -18,7 +18,7 @@ afterEach(() => {
 })
 
 describe('DeleteProjectModal', () => {
-  it('defaults permanent Fabric app cleanup on for a deployed project, and lets the user turn it off', () => {
+  it('defaults permanent Fabric app cleanup on for a published project, and lets the user turn it off', () => {
     installApi()
     render(
       <OverlayProvider>
@@ -36,9 +36,9 @@ describe('DeleteProjectModal', () => {
       screen.getByText(/Move it to your system trash. You can restore it from there/i)
     ).toBeTruthy()
     const toggle = screen.getByRole('checkbox', {
-      name: /also permanently delete the deployed Fabric app/i
+      name: /also permanently delete the published Fabric app/i
     }) as HTMLInputElement
-    // Checked by default when a deployed Fabric app exists.
+    // Checked by default when a published Fabric app exists.
     expect(toggle.checked).toBe(true)
     expect(screen.getByText(/Fabric workspace itself is not deleted/i)).toBeTruthy()
     expect(
@@ -53,7 +53,7 @@ describe('DeleteProjectModal', () => {
     expect(screen.queryByRole('heading', { name: 'Delete project?' })).toBeNull()
   })
 
-  it('makes clear that an undeployed project only moves its local folder to trash', () => {
+  it('makes clear that an unpublished project only moves its local folder to trash', () => {
     installApi()
     render(
       <OverlayProvider>
@@ -65,7 +65,7 @@ describe('DeleteProjectModal', () => {
       </OverlayProvider>
     )
 
-    expect(screen.getByText(/No deployed Fabric app is linked to this project/i)).toBeTruthy()
+    expect(screen.getByText(/No published Fabric app is linked to this project/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Move folder to trash' })).toBeTruthy()
   })
 

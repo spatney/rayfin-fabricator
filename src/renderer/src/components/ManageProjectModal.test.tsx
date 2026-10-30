@@ -61,7 +61,7 @@ describe('ManageProjectModal', () => {
     expect(props.onMoveToTrash).not.toHaveBeenCalled()
   })
 
-  it('explains the separate local and deployed-app removal options before opening that flow', () => {
+  it('explains the separate local and published-app removal options before opening that flow', () => {
     const props = baseProps()
     renderModal(props)
 
@@ -74,7 +74,7 @@ describe('ManageProjectModal', () => {
     expect(props.onRemoveFromList).not.toHaveBeenCalled()
   })
 
-  it('does not imply that an undeployed project has Fabric cleanup to perform', () => {
+  it('does not imply that an unpublished project has Fabric cleanup to perform', () => {
     const props = baseProps()
     props.project = makeProject('p1', { lastDeploy: undefined })
     renderModal(props)

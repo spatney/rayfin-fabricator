@@ -37,6 +37,7 @@ fn default_flags() -> ExperimentFlags {
   ExperimentFlags {
     team_workspaces: Some(false),
     report_migration: Some(false),
+    local_development: Some(false),
   }
 }
 
@@ -62,18 +63,20 @@ struct RawStore {
   #[serde(default)]
   team_workspaces: Vec<TeamWorkspace>,
   /// Read as JSON first, so settings from older versions can be carried over
-  /// (see [`migrate_settings`]) before they're typed.
+  /// (see [`migrate_settings`]) and settings that can't be read fall back to the
+  /// defaults without losing the projects (see [`settings_from`]).
   #[serde(default)]
   settings: Option<Value>,
 }
 
-/// Carry settings saved by an older version over to this one. Deploying after
+/// Carry settings saved by an older version over to this one. Publishing after
 /// each chat turn used to be the only mode unless the Deploy manually experiment
-/// was on, and that experiment started in Manual. It's now the deployment
-/// panel's switch, Auto unless the user turned it off, so its retired flag is
-/// read once: with it on, the user keeps the Manual they chose; with it off, a
-/// leftover "manual" from it goes back to Auto. Without the flag (settings from
-/// this version), nothing changes. Retired flags are then dropped as unknown.
+/// was on, and that experiment started in Manual. It's now the published apps
+/// panel's switch, so its retired flag is read once: with it on, the user keeps
+/// the Manual they chose; with it off, a leftover "manual" from it goes back to
+/// unset, which [`is_manual_deploy`] reads by the Local development experiment.
+/// Without the flag (settings from this version), nothing changes. Retired flags
+/// are then dropped as unknown.
 fn migrate_settings(mut settings: Value) -> Value {
   let Some(experiment_on) = settings.pointer("/experiments/manualDeploy").and_then(Value::as_bool) else {
     return settings;
@@ -198,6 +201,7 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   let current = experiments.get_or_insert_with(default_flags);
   if let Some(v) = patch.team_workspaces { current.team_workspaces = Some(v); }
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
+  if let Some(v) = patch.local_development { current.local_development = Some(v); }
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -243,13 +247,33 @@ pub fn report_migration_enabled() -> bool {
   })
 }
 
-/// True when chat turns don't deploy: the user turned off the deployment
-/// panel's "Deploy after each chat turn". Auto is the default.
-fn is_manual_deploy(settings: &AppSettings) -> bool {
-  settings.deploy_mode.as_deref() == Some("manual")
+/// True when the Local development experiment is on: personal apps run on this
+/// computer with the bundled local backend.
+pub fn local_development_enabled() -> bool {
+  with_cache(|c| local_development_in(&c.settings))
 }
 
-/// True when chat turns don't deploy (see [`is_manual_deploy`]).
+/// Whether `settings` turn the Local development experiment on.
+pub fn local_development_in(settings: &AppSettings) -> bool {
+  settings.experiments.as_ref().and_then(|e| e.local_development).unwrap_or(false)
+}
+
+/// True when chat turns don't publish personal apps: the changes stay on this
+/// computer until the user publishes them. The published apps panel's "Publish
+/// after each chat turn" saves the user's choice ("auto" or "manual"), which
+/// always wins. Without one, turns publish while the Local development
+/// experiment is off, as they always have, and don't while it's on: the app
+/// runs on this computer, and publishing is the user's choice.
+fn is_manual_deploy(settings: &AppSettings) -> bool {
+  match settings.deploy_mode.as_deref() {
+    Some("auto") => false,
+    Some("manual") => true,
+    _ => local_development_in(settings),
+  }
+}
+
+/// True when chat turns don't publish (see [`is_manual_deploy`]). Every decision
+/// the backend makes about publishing after a turn goes through this.
 pub fn manual_deploy_enabled() -> bool {
   with_cache(|c| is_manual_deploy(&c.settings))
 }
@@ -424,12 +448,23 @@ mod tests {
   }
 
   #[test]
-  fn chat_turns_deploy_unless_the_user_chose_manual() {
-    let settings = |value: serde_json::Value| -> AppSettings { serde_json::from_value(value).unwrap() };
+  fn an_explicit_choice_decides_whether_turns_publish_and_unset_follows_local_development() {
+    let manual = |saved: serde_json::Value| is_manual_deploy(&settings_from(Some(saved)));
+    let off = serde_json::json!({"localDevelopment":false});
+    let on = serde_json::json!({"localDevelopment":true});
+    // Unset: turns publish with Local development off, as before it existed, and not with it on.
     assert!(!is_manual_deploy(&default_settings()));
-    assert!(!is_manual_deploy(&settings(serde_json::json!({}))));
-    assert!(!is_manual_deploy(&settings(serde_json::json!({"deployMode":"auto"}))));
-    assert!(is_manual_deploy(&settings(serde_json::json!({"deployMode":"manual"}))));
+    assert!(!manual(serde_json::json!({})));
+    assert!(!manual(serde_json::json!({"experiments":off})));
+    assert!(manual(serde_json::json!({"experiments":on})));
+    // The user's choice wins either way.
+    for experiments in [&off, &on] {
+      assert!(manual(serde_json::json!({"experiments":experiments,"deployMode":"manual"})));
+      assert!(!manual(serde_json::json!({"experiments":experiments,"deployMode":"auto"})));
+    }
+    // A value the switch never saves counts as no choice.
+    assert!(!manual(serde_json::json!({"deployMode":"sometimes"})));
+    assert!(manual(serde_json::json!({"experiments":on,"deployMode":"sometimes"})));
   }
 
   #[test]

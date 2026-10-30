@@ -233,6 +233,20 @@ describe('App startup', () => {
     expect(api.auth.status).not.toHaveBeenCalled()
   })
 
+  it('opens the app at first launch without the optional Azure sign-in', async () => {
+    const api = installApi()
+    answerSetupChecks(api, () =>
+      Promise.resolve(pick(['copilot', 'az'], { ...signedIn, az: { signedIn: false } }))
+    )
+    renderApp()
+    await finishSplash()
+
+    expect(screen.getByTestId('workbench')).toBeTruthy()
+    expect(screen.getByTestId('azure').textContent).toBe('false')
+    expect(screen.getByTestId('attention').textContent).toBe('none')
+    expect(localStorage.getItem(SETUP_DONE)).toBe('1')
+  })
+
   it('opens straight into the app once setup has passed, verifying in the background', async () => {
     localStorage.setItem(SETUP_DONE, '1')
     const api = installApi()
@@ -261,11 +275,18 @@ describe('App startup', () => {
     const api = installApi()
     api.doctor.check.mockResolvedValue(missingNode)
     answerSetupChecks(api, () =>
-      Promise.resolve(pick(['copilot', 'az'], { ...signedIn, copilot: { signedIn: false } }))
+      Promise.resolve(
+        pick(['copilot', 'az'], {
+          ...signedIn,
+          copilot: { signedIn: false },
+          az: { signedIn: false }
+        })
+      )
     )
     renderApp()
     await settle()
 
+    // A signed-out Azure CLI is optional, so it's not a problem to raise.
     expect(screen.getByTestId('workbench')).toBeTruthy()
     expect(JSON.parse(screen.getByTestId('attention').textContent ?? '')).toEqual({
       tools: ['Node.js'],
@@ -291,7 +312,7 @@ describe('App startup', () => {
   it('shows setup at first launch until everything is ready, then waits for Enter', async () => {
     const api = installApi()
     answerSetupChecks(api, () =>
-      Promise.resolve(pick(['copilot', 'az'], { ...signedIn, az: { signedIn: false } }))
+      Promise.resolve(pick(['copilot', 'az'], { ...signedIn, copilot: { signedIn: false } }))
     )
     renderApp()
     await finishSplash()
@@ -301,11 +322,27 @@ describe('App startup', () => {
     // Signing in during setup re-checks, but never leaves setup by itself.
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Refresh setup' })))
     expect(screen.getByTestId('setup')).toBeTruthy()
-    expect(screen.getByTestId('azure').textContent).toBe('true')
+    expect(screen.getByTestId('copilot').textContent).toBe('true')
     expect(localStorage.getItem(SETUP_DONE)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Enter' }))
     expect(screen.getByTestId('workbench')).toBeTruthy()
     expect(localStorage.getItem(SETUP_DONE)).toBe('1')
+  })
+
+  it('lets you enter from setup without signing in to Azure', async () => {
+    const api = installApi()
+    answerSetupChecks(
+      api,
+      () => Promise.resolve(pick(['copilot', 'az'], { ...signedIn, copilot: { signedIn: false } })),
+      () => Promise.resolve(pick(['copilot', 'az'], { ...signedIn, az: { signedIn: false } }))
+    )
+    renderApp()
+    await finishSplash()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Refresh setup' })))
+    expect(screen.getByTestId('azure').textContent).toBe('false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enter' }))
+    expect(screen.getByTestId('workbench')).toBeTruthy()
   })
 })
 
@@ -501,7 +538,7 @@ describe('the launch screen', () => {
   it('fades the first-run splash into setup once its showtime is up', async () => {
     const api = installApi()
     answerSetupChecks(api, () =>
-      Promise.resolve(pick(['copilot', 'az'], { ...signedIn, az: { signedIn: false } }))
+      Promise.resolve(pick(['copilot', 'az'], { ...signedIn, copilot: { signedIn: false } }))
     )
     renderApp()
     expect(screen.getByTestId('splash').dataset.launch).toBe('false')

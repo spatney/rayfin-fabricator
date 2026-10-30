@@ -84,7 +84,7 @@ export interface DeleteProgressEvent {
  * Environment doctor
  * ------------------------------------------------------------------ */
 
-export type ToolId = 'node' | 'npm' | 'git' | 'rayfin' | 'copilot' | 'az' | 'gh'
+export type ToolId = 'node' | 'npm' | 'git' | 'rayfin' | 'copilot' | 'az' | 'gh' | 'rayfin-local'
 
 export interface ToolStatus {
   id: ToolId
@@ -1545,10 +1545,11 @@ export interface StudioProject {
    */
   deploymentNames?: Record<string, string>
   /**
-   * Set when a project is freshly created in-app and has never been deployed.
-   * Drives the onboarding "deploy first" gate — the chat composer is disabled
-   * until a deployment exists. Cleared on the first successful deploy. Never set
-   * for projects opened from disk, so opening an existing app is never gated.
+   * Set on a project created in-app while the Local development experiment is
+   * off: it has never been published, and chat stays locked until its first
+   * publish, which clears it. Never set for projects opened from disk or created
+   * with Local development on, and ignored while it's on, when apps run on this
+   * computer from the start. Team apps aren't gated.
    */
   awaitingFirstDeploy?: boolean
   /** Copilot model id for this project's chat (`--model`); undefined = auto. */
@@ -1602,10 +1603,13 @@ export interface AppSettings {
    */
   fullDiagnostics?: boolean
   /**
-   * How chat turns deploy personal apps, set by the deployment panel's "Deploy
-   * after each chat turn" switch: 'auto' (the default, also when unset) deploys
-   * as each turn finishes; 'manual' keeps chat changes on this computer until the
-   * user deploys them. Team apps aren't affected.
+   * How chat turns publish personal apps, set by the published apps panel's
+   * "Publish after each chat turn" switch: 'auto' publishes as each turn
+   * finishes; 'manual' keeps chat changes on this computer until the user
+   * publishes them. The user's choice always wins. Unset, it follows the Local
+   * development experiment: turns publish while it's off, and don't while it's on
+   * (the renderer's `publishesAfterTurn`, the core's `store::is_manual_deploy`).
+   * Team apps aren't affected.
    */
   deployMode?: 'auto' | 'manual'
   /**
@@ -1695,6 +1699,13 @@ export interface ExperimentFlags {
    * page by page.
    */
   reportMigration?: boolean
+  /**
+   * Local development: personal apps run on this computer with the bundled
+   * local backend from creation, and publishing to Fabric is optional. Off:
+   * apps are developed against their Fabric deployment. Team apps aren't
+   * affected.
+   */
+  localDevelopment?: boolean
 }
 
 export interface CreateProjectInput {
@@ -1814,6 +1825,14 @@ export interface RevertResult {
   head?: string
   /** True when the project was already at that version (nothing to restore). */
   noChanges?: boolean
+  error?: string
+}
+
+/** A chat turn's changes, saved as a version (`projects.git.saveTurn`). */
+export interface SavedTurn {
+  /** The new version's commit; absent when nothing was saved. */
+  commit?: string
+  /** Why the changes couldn't be saved: they stay as uncommitted changes. */
   error?: string
 }
 
@@ -2069,6 +2088,14 @@ export interface RayfinVersionInfo {
   upgradeAvailable: boolean
   /** Per-package detail, used to build the upgrade prompt + popover. */
   packages: RayfinPackageVersion[]
+  /**
+   * The newest stable release within the Rayfin versions the bundled local
+   * backend runs (`rayfin-local.json` `sdk.supported`), for the headline
+   * package; Rayfin's packages ship in lockstep. While the Local development
+   * experiment is on, upgrades stop here. Absent when npm couldn't list the
+   * releases or none is in the range.
+   */
+  latestSupportedLocally?: string
 }
 
 /* ------------------------------------------------------------------ *
@@ -2203,7 +2230,7 @@ export interface CustomSkillPreview {
 
 /**
  * One function secret: its name and description from `rayfin/rayfin.yml`, and
- * whether the deployed app has a value. Values are write-only and never returned.
+ * whether the published app has a value. Values are write-only and never returned.
  */
 export interface SecretInfo {
   name: string
@@ -2211,16 +2238,22 @@ export interface SecretInfo {
   description?: string
   /** Listed in `rayfin.yml`, so functions can reference it by name. */
   declared: boolean
-  /** The deployed app has a value for it. */
+  /** The published app has a value for it. */
   stored: boolean
   createdAt?: string
   updatedAt?: string
 }
 
-/** Why secrets can't be managed, or `ready`. */
+/**
+ * Why the published app's secrets can't be managed here (`not-deployed`: the
+ * app isn't published yet), or `ready`.
+ */
 export type SecretsStatus = 'ready' | 'not-deployed' | 'team' | 'update-rayfin' | 'error'
 
-/** A project's secrets (from the Rayfin CLI), or why they can't be managed here. */
+/**
+ * A project's secrets on its published app (from the Rayfin CLI), or why they
+ * can't be managed here. Their values on this computer are `local.secrets`'.
+ */
 export interface SecretsState {
   status: SecretsStatus
   /** With `ready`, every secret; otherwise only the ones `rayfin.yml` lists. */
@@ -2935,7 +2968,9 @@ export const IpcChannels = {
   teamProgress: 'team:progress',
   teamDiagnosis: 'team:diagnosis',
   devState: 'dev:state',
-  migrationState: 'migration:state'
+  migrationState: 'migration:state',
+  localState: 'local:state',
+  localLog: 'local:log'
 } as const
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels]
@@ -3239,6 +3274,14 @@ export interface RayfinStudioApi {
       status: (id: string) => Promise<GitStatus>
       /** Stage everything and commit; resolves with the post-commit status. */
       commit: (id: string, message: string) => Promise<GitCommitResult>
+      /**
+       * With the Local development experiment on, after a chat turn that
+       * changed a personal app: save its changes as a version named after what
+       * the user asked (`request`, trimmed to a commit subject), never the
+       * local backend's `.rayfin-local`. Does nothing for team apps, and
+       * without Local development, where a publish saves the changes.
+       */
+      saveTurn: (id: string, request: string) => Promise<SavedTurn>
       /** The project's commit timeline + uncommitted-change count (History view). */
       log: (id: string) => Promise<GitHistory>
       /**
@@ -3342,9 +3385,10 @@ export interface RayfinStudioApi {
   }
 
   /**
-   * Function secrets on the project's deployed app, through its Rayfin CLI
+   * Function secrets on the project's published app, through its Rayfin CLI
    * (`rayfin secret`). Values are write-only: they go to the CLI and are never
-   * returned, stored or logged by Fabricator.
+   * returned, stored or logged by Fabricator. Values on this computer are
+   * `local`'s (`secrets`, `setSecret`, `deleteSecret`).
    */
   secrets: {
     /** Every secret's name, description and when its value last changed. */
@@ -3354,8 +3398,14 @@ export interface RayfinStudioApi {
      * (with `description`) and the change is committed.
      */
     set: (projectId: string, name: string, value: string, description?: string) => Promise<SecretActionResult>
-    /** Delete a secret from the deployed app and `rayfin.yml`. */
+    /** Delete a secret from the published app and `rayfin.yml`. */
     remove: (projectId: string, name: string) => Promise<SecretActionResult>
+    /**
+     * Add a secret to `rayfin.yml` (with `description`) and commit it, with no
+     * value and no published app needed. Its value on this computer is
+     * `local.setSecret`'s; a name that's already declared stays as it is.
+     */
+    declare: (projectId: string, name: string, description?: string) => Promise<SecretActionResult>
   }
 
   /**
@@ -3758,6 +3808,15 @@ export interface RayfinStudioApi {
        */
       setTheme: (theme: DesignHostTheme) => Promise<void>
     }
+    /**
+     * Clear the `localStorage` and `sessionStorage` of the page the preview
+     * shows, then reload it, so an app that signs itself in signs in again:
+     * Preview as calls it after changing who the app signs in as on its local
+     * backend. Only for a page served from this computer (`localhost` or a
+     * loopback address): resolves `false`, changing nothing, while the preview
+     * shows another site or nothing. Rejects when the page doesn't answer.
+     */
+    resetSiteData: () => Promise<boolean>
   }
 
   /** Subscribe to streamed process output. Returns an unsubscribe function. */
@@ -3901,4 +3960,394 @@ export interface RayfinStudioApi {
     onDiagnosis: (cb: (envelope: TeamDiagnosisEnvelope) => void) => () => void
     onProgress: (cb: (event: TeamProgressEvent) => void) => () => void
   }
+
+  /** Each project's local backend (rayfin-local); see {@link LocalBackendApi}. */
+  local: LocalBackendApi
+}
+
+/* ------------------------------------------------------------------ *
+ * Local backend (rayfin-local)
+ *
+ * Every personal project runs its whole Rayfin backend and its Vite on this
+ * computer under the bundled rayfin-local. These mirror the Rust DTOs in
+ * `types.rs` and rayfin-local's host contract (version 1). Fields rayfin-local
+ * doesn't send are `null` or empty.
+ * ------------------------------------------------------------------ */
+
+/** Where a project's local backend is in its lifecycle (`local:state`). */
+export type LocalBackendState = 'stopped' | 'starting' | 'running' | 'restarting' | 'error'
+
+/** Who the app signs in as automatically: `developer`, `none` or `user:<username>`. */
+export type LocalSignInAs = 'developer' | 'none' | `user:${string}`
+
+/** How to start a project's local backend. */
+export interface LocalStartOptions {
+  /** Apply a schema change that loses data (`--force-schema`), for this start only. */
+  forceSchema?: boolean
+  /** Start from an empty database (`--reset`), for this start only. */
+  reset?: boolean
+  /** Who the app signs in as. Restarts keep it. */
+  signInAs?: LocalSignInAs
+}
+
+/** The Rayfin SDK an app uses, and whether rayfin-local implements it. */
+export interface LocalSdk {
+  /** `null` when the packages aren't installed. */
+  version: string | null
+  supported: boolean
+}
+
+export interface LocalConnector {
+  name: string
+  type: string
+  /** `false` for connector types that run only on Fabric (rayfin-local answers 501). */
+  supported: boolean
+}
+
+/** What the running app offers. */
+export interface LocalFeatures {
+  data: { enabled: boolean; entities: string[] }
+  functions: { enabled: boolean; names: string[] }
+  storage: { enabled: boolean; folders: string[] }
+  /** `fabric`: the local Fabric sign-in page; `password`: username and password sign-in. */
+  auth: { enabled: boolean; fabric: boolean; password: boolean }
+  connectors: LocalConnector[]
+}
+
+/** Everything started: where the app and its backend answer. */
+export interface LocalReady {
+  /** The app's own dev server (show this in the preview); `null` without a frontend. */
+  appUrl: string | null
+  apiUrl: string
+  /** The local Fabric host that embeds the app; `null` when the app has no Fabric sign-in. */
+  embedUrl: string | null
+  portalUrl: string | null
+  dataDir: string | null
+  signInAs: { kind: 'developer' | 'user' | 'none'; [key: string]: unknown } | null
+  sdk: LocalSdk | null
+  features: LocalFeatures
+  time: string | null
+}
+
+/** The app model was analyzed. `ok: false` while running keeps the previous model. */
+export interface LocalAnalysis {
+  ok: boolean
+  sdk: LocalSdk | null
+  entities: string[]
+  storageFolders: string[]
+  message: string | null
+  time: string | null
+}
+
+/** The database was brought up to date with the model, or wasn't. */
+export interface LocalSchema {
+  result: 'unchanged' | 'applied' | 'refused' | 'failed'
+  changes: string[]
+  /** `refused`: the data the change would lose. `applied` with `forceSchema`: what it dropped. */
+  losses: string[]
+  message: string | null
+  /** A change made while serving (a refused one keeps the previous schema). */
+  live: boolean
+  time: string | null
+}
+
+export interface LocalFunctions {
+  state: 'building' | 'ready' | 'failed' | 'off'
+  names: string[]
+  /** With `failed`: one compiler message each. */
+  errors: string[]
+  message: string | null
+  time: string | null
+}
+
+export interface LocalVite {
+  state: 'ready' | 'exited' | 'restarting' | 'failed'
+  url: string | null
+  version: string | null
+  message: string | null
+  time: string | null
+}
+
+/** `rayfin.yml`, `rayfin-local.toml` or a secret's value changed while serving. */
+export interface LocalConfigChanged {
+  /** Applied on the same ports; a new `ready` follows. */
+  applied: boolean
+  /** Fabricator restarts the backend by itself. */
+  restartRequired: boolean
+  what: string[]
+  message: string | null
+  time: string | null
+}
+
+/** {@link LocalProblem} codes: rayfin-local's (stable, documented in its contract) and Fabricator's. */
+export type LocalProblemCode =
+  | 'node-missing'
+  | 'node-too-old'
+  | 'project-not-found'
+  | 'config-invalid'
+  | 'packages-missing'
+  | 'sdk-unsupported'
+  | 'analysis-failed'
+  | 'schema-refused'
+  | 'schema-failed'
+  | 'port-in-use'
+  | 'already-serving'
+  | 'vite-failed'
+  | 'functions-build-failed'
+  | 'secret-missing'
+  | 'anonymous-role'
+  | 'connector-unsupported'
+  | 'azure-sign-in'
+  | 'internal'
+  /** The bundled rayfin-local is missing. */
+  | 'binary-missing'
+  /** It predates host contract 1 (rayfin-local 0.1.x). */
+  | 'binary-too-old'
+  /** It speaks a newer contract. */
+  | 'binary-incompatible'
+  /** Windows (antivirus, app control) refused to run it; `details.docs` says what to do. */
+  | 'binary-blocked'
+  | 'binary-failed'
+  | 'spawn-failed'
+  /** It exited unexpectedly and is being restarted (`state: 'restarting'`). */
+  | 'exited'
+  /** It exited unexpectedly too often; `details.lines` has its last output. */
+  | 'crashed'
+
+/** The structured data of a {@link LocalProblem}, by code. */
+export interface LocalErrorDetails {
+  /** `already-serving`: the other `serve`'s process (stop it with `local.stopExternal`) and URLs. */
+  pid?: number
+  appUrl?: string | null
+  apiUrl?: string | null
+  /** `schema-refused`: the data the change would lose. */
+  losses?: string[]
+  /** `packages-missing`: the folder to run `npm install` in. */
+  dir?: string
+  /** `port-in-use`. */
+  port?: number
+  /** `node-too-old`, `sdk-unsupported`, `binary-too-old`. */
+  version?: string | null
+  /** `sdk-unsupported`: the supported range. */
+  supported?: string
+  /** `secret-missing`, `connector-unsupported`. */
+  name?: string
+  /** `connector-unsupported`. */
+  type?: string
+  /** `anonymous-role`. */
+  entities?: string[]
+  /** `exited`, `crashed`. */
+  exitCode?: number | null
+  /** `exited`, `crashed`: the last lines of output. */
+  lines?: string[]
+  /** `binary-blocked`: what to do. */
+  docs?: string
+  [key: string]: unknown
+}
+
+/** A warning or an error. Act on `code`; `message` and `hint` are for people. */
+export interface LocalProblem {
+  code: LocalProblemCode | (string & Record<never, never>)
+  message: string
+  hint: string | null
+  /** The backend stops after a fatal error. */
+  fatal: boolean
+  details: LocalErrorDetails | null
+  time: string | null
+}
+
+/** How a run ended. */
+export interface LocalStopped {
+  reason: 'stdin-closed' | 'signal' | 'error' | 'backend-exited'
+  exitCode: number | null
+  time: string | null
+}
+
+/** A project's local backend: its state and the latest it reported (`local:state`). */
+export interface LocalStatus {
+  projectId: string
+  state: LocalBackendState
+  /** Grows with every change: keep the snapshot with the highest. */
+  revision: number
+  /** While starting: the last step (`starting`, `analysis`, `schema`, `functions`, `vite`). */
+  phase: string | null
+  pid: number | null
+  /** rayfin-local's version. */
+  version: string | null
+  projectRoot: string | null
+  /** The sign-in identity restarts keep. */
+  signInAs: LocalSignInAs | null
+  /** While running: the app's URLs and features. */
+  ready: LocalReady | null
+  analysis: LocalAnalysis | null
+  schema: LocalSchema | null
+  functions: LocalFunctions | null
+  vite: LocalVite | null
+  config: LocalConfigChanged | null
+  /** This run's warnings, oldest first. */
+  warnings: LocalProblem[]
+  /** The last error. With `state: 'error'`, why the backend isn't running. */
+  error: LocalProblem | null
+  stopped: LocalStopped | null
+  /** Unexpected exits in the last two minutes. */
+  crashes: number
+  startedAt: string | null
+  updatedAt: string | null
+}
+
+/** One line of a project's local backend output (`local:log`). */
+export interface LocalLogEvent {
+  projectId: string
+  /** Grows with every line of the project: merge a fetched tail with live lines by it. */
+  seq: number
+  /** `vite`, `functions`, `build`, `rayfin-local`, `stderr`, `stdout` or `fabricator`. */
+  source: string
+  level: 'debug' | 'info' | 'warn' | 'error'
+  line: string
+  time: string
+}
+
+/** A local user of the app. */
+export interface LocalUser {
+  id: string
+  username: string
+  /** `null` when the username isn't an email address. */
+  email: string | null
+  createdAt: string | null
+  /** How the user can sign in: `password`, `entra`. */
+  signIn: string[]
+  /** The developer's own account. */
+  developer: boolean
+}
+
+/** Who the app signs in as automatically. */
+export interface LocalIdentity {
+  kind: 'developer' | 'user' | 'none'
+  /** The user it signs in as (`developer`: `null` until first used). */
+  user: LocalUser | null
+}
+
+/** A new sign-in identity. Changing it signs every local session out. */
+export type LocalIdentityRequest =
+  | { kind: 'developer' }
+  | { kind: 'none' }
+  /** `user`: a username or id; `create` makes a missing one. */
+  | { kind: 'user'; user: string; create?: boolean }
+
+export interface LocalEntity {
+  name: string
+  rows: number
+}
+
+export interface LocalColumn {
+  name: string
+  type: string
+  /** Part of the primary key. */
+  key: boolean
+}
+
+/** A page of an entity's rows, regardless of permissions, formatted as the data API formats them. */
+export interface LocalRows {
+  columns: LocalColumn[]
+  rows: Record<string, unknown>[]
+  total: number
+}
+
+export interface LocalReloadResult {
+  schema: LocalSchema | null
+  config: LocalConfigChanged | null
+}
+
+/** Where a secret's local value comes from (never the value). */
+export interface LocalSecret {
+  name: string
+  /** Listed under `secrets:` in `rayfin.yml`. */
+  declared: boolean
+  description: string | null
+  /** `local`: `.rayfin-local/secrets.json`; `settings`: `local.settings.json`. */
+  source: 'env' | 'local' | 'settings' | 'none'
+}
+
+/**
+ * Why a `window.api.local` command failed. `code` is stable: the control API's
+ * own codes, or `not-running`, `project-not-found`, `invalid`, `unreachable`,
+ * `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed`, `experiment-off`
+ * (the Local development experiment is off) and the `binary-*` codes of
+ * {@link LocalProblemCode}.
+ */
+export interface LocalCommandError {
+  code: string
+  message: string
+  hint?: string
+  /** The HTTP status the control API answered with. */
+  status?: number
+}
+
+/**
+ * `window.api.local`: each project's local backend. Commands reject with a
+ * `LocalBackendError` (`localBackend.ts`), an `Error` carrying the
+ * {@link LocalCommandError} fields. The data, user and identity commands, and
+ * `reload` and `resetData`, need the backend running.
+ */
+export interface LocalBackendApi {
+  /** Start the backend unless it runs. Resolves at once (`starting`); `onState` follows. */
+  start: (projectId: string, options?: LocalStartOptions) => Promise<LocalStatus>
+  /** Stop it (it gets 8 s after its stdin closes) and resolve once it has. */
+  stop: (projectId: string) => Promise<LocalStatus>
+  /** Stop it if it runs and start it with `options`. */
+  restart: (projectId: string, options?: LocalStartOptions) => Promise<LocalStatus>
+  status: (projectId: string) => Promise<LocalStatus>
+  /** The last `limit` lines of output (default 500, at most 2000), oldest first. */
+  logs: (projectId: string, limit?: number) => Promise<LocalLogEvent[]>
+  /** Read `rayfin.yml`, the entities and the secrets again; `forceSchema` applies a change that loses data. */
+  reload: (projectId: string, forceSchema: boolean) => Promise<LocalReloadResult>
+  /** Delete every row, the local users and the stored files, without a restart. */
+  resetData: (projectId: string) => Promise<void>
+  users: (projectId: string) => Promise<LocalUser[]>
+  /** Without a password the user can only be signed in by Fabricator. */
+  addUser: (projectId: string, username: string, password?: string) => Promise<LocalUser>
+  /** By username or id. */
+  deleteUser: (projectId: string, user: string) => Promise<void>
+  identity: (projectId: string) => Promise<LocalIdentity>
+  /** Restarts keep it. */
+  setIdentity: (projectId: string, identity: LocalIdentityRequest) => Promise<LocalIdentity>
+  entities: (projectId: string) => Promise<LocalEntity[]>
+  /** `limit` is at most 500. */
+  rows: (
+    projectId: string,
+    entity: string,
+    offset: number,
+    limit: number,
+    orderBy?: string,
+    desc?: boolean
+  ) => Promise<LocalRows>
+  /** Delete every row of an entity; resolves with how many. */
+  clearRows: (projectId: string, entity: string) => Promise<number>
+  /** Works whether or not the backend runs. */
+  secrets: (projectId: string) => Promise<LocalSecret[]>
+  /** The value goes to rayfin-local through stdin; a running backend applies it by itself. */
+  setSecret: (projectId: string, name: string, value: string) => Promise<void>
+  deleteSecret: (projectId: string, name: string) => Promise<void>
+  /** Stop the rayfin-local another program runs on the project (`already-serving`'s `details.pid`). */
+  stopExternal: (projectId: string, pid: number) => Promise<void>
+  /** Every project's status changes; returns an unsubscribe function. */
+  onState: (cb: (status: LocalStatus) => void) => () => void
+  /** Every project's output lines; returns an unsubscribe function. */
+  onLog: (cb: (line: LocalLogEvent) => void) => () => void
+  /**
+   * Install the npm packages the backend reported missing (`packages-missing`),
+   * with npm's output in the project's output. It doesn't start the backend:
+   * start it again once this resolves.
+   */
+  installPackages: (projectId: string) => Promise<void>
+  /**
+   * A published app's preview uses its published backend because this computer
+   * can't run the app: journal it (`local.fallback`, for Help) and count it.
+   * `reason` is what the preview says.
+   */
+  reportFallback: (
+    projectId: string,
+    code: 'sdk-unsupported' | 'connector-unsupported',
+    reason: string
+  ) => Promise<void>
 }

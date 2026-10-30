@@ -31,7 +31,7 @@ export interface QuickRuleImpl {
    */
   run(ctx: QuickContext): QuickHit[] | 'na' | 'skipped'
   /** Describe several hits in one sentence (defaults to a list of labels). */
-  summarize?(hits: QuickHit[]): string
+  summarize?(hits: QuickHit[], ctx: QuickContext): string
 }
 
 const CONTEXT_LINES = 2
@@ -76,7 +76,8 @@ export function toFinding(
   const detail =
     sorted.length === 1
       ? primary.message
-      : (impl.summarize?.(sorted) ?? `Found in ${sorted.length} places: ${listLabels(sorted)}.`)
+      : (impl.summarize?.(sorted, ctx) ??
+        `Found in ${sorted.length} places: ${listLabels(sorted)}.`)
 
   let excerpt: string | undefined
   let excerptStart: number | undefined

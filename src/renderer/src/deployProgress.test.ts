@@ -14,7 +14,7 @@ import {
  * diagnostic log of a real run.
  */
 const V2 = {
-  start: `Deploying Boo to Fabric…
+  start: `Publishing Boo to Fabric…
 👀 Found Rayfin project root: C:\\Users\\sachi\\RayfinProjects\\boo`,
   license: `[rayfin] license: Checking user license`,
   workspace: `[rayfin] dependencies: Inspecting project dependencies
@@ -145,7 +145,7 @@ describe('reading any deploy', () => {
 
   it('installs missing packages before connecting', () => {
     const installing = [
-      'Deploying Boo to Fabric…\n',
+      'Publishing Boo to Fabric…\n',
       'Project dependencies are missing; installing them with npm...\n',
       'added 412 packages in 38s\n'
     ]
@@ -160,7 +160,7 @@ describe('reading any deploy', () => {
 
     const repairing = readDeployProgress(
       [
-        'Deploying Boo to Fabric…\n',
+        'Publishing Boo to Fabric…\n',
         'Project dependencies are missing or incomplete (commander); reinstalling them with npm...\n'
       ],
       5
@@ -169,18 +169,21 @@ describe('reading any deploy', () => {
 
     // Waiting for another install to finish isn't an older CLI building.
     const waiting = readDeployProgress(
-      ['Deploying Boo to Fabric…\n', "Waiting for changes to this project's packages to finish...\n"],
+      [
+        'Publishing Boo to Fabric…\n',
+        "Waiting for changes to this project's packages to finish...\n"
+      ],
       60
     )
     expect(waiting.current.label).toBe('Installing packages')
     expect(waiting.reading).toBe('pending')
   })
 
-  it('starts over when a sign-in retry runs the deploy again', () => {
+  it('starts over when a sign-in retry runs the publish again', () => {
     const log = [
       ...v2('license'),
-      'Deploy failed: Unauthorized\n',
-      'Deploying Boo to Fabric…\n',
+      "Couldn't publish: Unauthorized\n",
+      'Publishing Boo to Fabric…\n',
       `${V2.license}\n`
     ]
     expect(deployRuns(log)).toBe(2)
@@ -201,7 +204,7 @@ describe('reading any deploy', () => {
  * transcript. Each slice is appended to the previous ones, as the log streams.
  */
 const LEGACY = {
-  connect: `Deploying blanky to Fabric…
+  connect: `Publishing blanky to Fabric…
 👀 Found Rayfin project root: C:\\Users\\sachi\\RayfinProjects\\blanky
 📋 Using project name 'blanky' from rayfin.yml configuration
 🔑 No active session found — launching login...
@@ -256,7 +259,7 @@ describe('reading an older CLI’s deploy', () => {
   it('tracks the real rayfin up output through every step in order', () => {
     // elapsed 0 so the time floor never interferes — pure marker detection.
     expect(labelAt(legacyPhaseIndex(cumulative('connect'), 0))).toBe('Connecting to Fabric')
-    expect(labelAt(legacyPhaseIndex(cumulative('prepare'), 0))).toBe('Preparing deployment')
+    expect(labelAt(legacyPhaseIndex(cumulative('prepare'), 0))).toBe('Preparing to publish')
     expect(labelAt(legacyPhaseIndex(cumulative('build'), 0))).toBe('Building your app')
     expect(labelAt(legacyPhaseIndex(cumulative('pkg'), 0))).toBe('Packaging assets')
     expect(labelAt(legacyPhaseIndex(cumulative('upload'), 0))).toBe('Uploading to Fabric')
@@ -264,7 +267,11 @@ describe('reading an older CLI’s deploy', () => {
 
     const p = readDeployProgress([`${cumulative('pkg')}\n`], 0)
     expect(p.reading).toBe('legacy')
-    expect(labels(p, 'done')).toEqual(['Connecting to Fabric', 'Preparing deployment', 'Building your app'])
+    expect(labels(p, 'done')).toEqual([
+      'Connecting to Fabric',
+      'Preparing to publish',
+      'Building your app'
+    ])
     expect(p.current.label).toBe('Packaging assets')
     expect(labels(p, 'todo')).toEqual(['Uploading to Fabric', 'Going live'])
     expect(p.detail).toBeNull()
@@ -282,7 +289,7 @@ describe('reading an older CLI’s deploy', () => {
 
   it('advances gently by time during silent stretches, capped at Packaging', () => {
     expect(labelAt(legacyPhaseIndex('', 0))).toBe('Connecting to Fabric')
-    expect(labelAt(legacyPhaseIndex('', 5))).toBe('Preparing deployment')
+    expect(labelAt(legacyPhaseIndex('', 5))).toBe('Preparing to publish')
     expect(labelAt(legacyPhaseIndex('', 12))).toBe('Building your app')
     // Time alone never claims the app is uploaded or live — capped at Packaging.
     expect(labelAt(legacyPhaseIndex('', 600))).toBe('Packaging assets')

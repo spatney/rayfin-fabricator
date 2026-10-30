@@ -34,7 +34,7 @@ export function lineLabel(kind: LineKind): string | null {
 export const RAYFIN_FACTS: readonly string[] = [
   'Rayfin turns TypeScript classes into a database, APIs and a type-safe client.',
   'Your data model is plain TypeScript. Decorators like @text, @int and @date describe each field.',
-  'One command, rayfin up, deploys the whole app to Microsoft Fabric.',
+  'One command, rayfin up, publishes the whole app to Microsoft Fabric.',
   'Rayfin apps run on Microsoft Fabric, inside your organization’s boundary.',
   'Sign-in comes built in: Rayfin apps sign people in with Microsoft Entra ID.',
   'A policy on @authenticated can show each person only their own rows. Row-level security, in one line.',
@@ -45,11 +45,11 @@ export const RAYFIN_FACTS: readonly string[] = [
   'Connectors read data that already lives in Fabric: warehouses, SQL databases, semantic models and KQL databases.',
   'With a connector, your app can run DAX against a Fabric semantic model.',
   'Functions run server-side TypeScript next to your data. Heads up: they aren’t in every Fabric region yet.',
-  'Functions can call outside APIs using secrets you store with rayfin secret set.',
+  'Functions can call outside APIs with keys kept as secrets, so the keys never sit in your code.',
   'Every @microsoft/rayfin-* package shares one version number, so upgrades move in lockstep.',
   'New apps start from Rayfin’s Universal App. It starts small and grows into whatever you describe.',
   'Rayfin hosts your frontend too. The built app is served from Fabric, next to its data.',
-  'While you build, rayfin dev keeps the backend in Fabric and runs the frontend on your machine.',
+  'Rayfin apps can keep files too, like photos and receipts, in their own file storage.',
   'Rayfin is TypeScript all the way down: data model, client code and app logic.',
   'Rayfin’s docs are written for agents too. Add .md to any page on rayfin.ai to get it as Markdown.'
 ]
@@ -60,8 +60,10 @@ export const FABRICATOR_TIPS: readonly string[] = [
   'Every change is kept. Code → History can restore an earlier version.',
   'The Advisor grades your app’s health, and every finding comes with a one-click fix.',
   'Blueprint shows how your app is put together, data model included.',
-  'After each successful chat turn, Fabricator redeploys your app for you.',
-  'Once your app is deployed, Share lets people in your organization open it.',
+  'An API key for a function? Add it in Code → Secrets, so it never sits in your code.',
+  'Publishing puts your app on Microsoft Fabric, where people in your organization can open it.',
+  'Publish after each chat turn decides whether every change goes to Fabric right away.',
+  'Once your app is published, Share lets people in your organization open it.',
   'Stuck later? Select Help in the status bar, and I’ll dig through the logs with you.'
 ]
 
@@ -82,7 +84,13 @@ export const QUIPS: readonly string[] = [
   'Most fish can’t blink. I practiced.'
 ]
 
-export type Occasion = 'create' | 'clone' | 'prepare'
+/**
+ * What Ray keeps you company through: creating an app (`create`, which a first
+ * publish follows; `create-local`, which runs on this computer with Local
+ * development; `team`, in a team workspace), cloning one, or installing an
+ * opened app's packages.
+ */
+export type Occasion = 'create' | 'create-local' | 'team' | 'clone' | 'prepare'
 
 export function pickLine<T>(items: readonly T[], random: () => number = Math.random): T {
   return items[Math.min(items.length - 1, Math.floor(random() * items.length))]
@@ -101,11 +109,14 @@ export function greeting(
         : 'While npm fetches your packages'
     return { kind: 'chat', text: `Hi, I’m Ray! ${what}, I’ll tell you about Rayfin.` }
   }
+  const create = [
+    'Ooh, a new app! I’ll share some Rayfin facts while npm does its thing.',
+    'Welcome back! New app, new packages. I’ll keep you company.'
+  ]
   const lines: Record<Occasion, readonly string[]> = {
-    create: [
-      'Ooh, a new app! I’ll share some Rayfin facts while npm does its thing.',
-      'Welcome back! New app, new packages. I’ll keep you company.'
-    ],
+    create,
+    'create-local': create,
+    team: create,
     clone: [
       'Cloning, nice. I’ll keep you company while the packages arrive.',
       'Welcome back! I’ll share some Rayfin facts while this installs.'
@@ -119,13 +130,12 @@ export function greeting(
 }
 
 export function successLine(occasion: Occasion): MascotLine {
-  return {
-    kind: 'chat',
-    text:
-      occasion === 'create'
-        ? 'Your app is ready! Next, pick a Fabric workspace to deploy it.'
-        : 'All set! Your app is ready.'
+  const text: Partial<Record<Occasion, string>> = {
+    'create-local': 'Your app is ready! It runs right here on your computer. Let’s build.',
+    create: 'Your app is ready! Next, pick a Fabric workspace to publish it.',
+    team: 'Your app is ready! The team pipeline is deploying your first preview.'
   }
+  return { kind: 'chat', text: text[occasion] ?? 'All set! Your app is ready.' }
 }
 
 export function errorLine(occasion: Occasion): MascotLine {
@@ -240,33 +250,33 @@ export const SPLASH_LINES: Record<StartupStage, readonly string[]> = {
   error: ['Hmm, something got tangled in the seaweed. Let’s take a look.']
 }
 
-/** Ray's hello on the deploy screen. */
+/** Ray's hello on the publish screen. */
 export function deployGreeting(name: string, firstDeploy: boolean): string {
   return firstDeploy
     ? `${name}’s first trip to Fabric! I’ll swim it over.`
     : 'Taking your latest changes to Fabric!'
 }
 
-/** Ray's cheer when the deploy is done. */
+/** Ray's cheer when publishing is done. */
 export function deployLiveLine(name: string): string {
   return `${name} is live! Go take a look.`
 }
 
-/** Why a deploy didn't finish, as far as what to offer goes. */
+/** Why publishing didn't finish, as far as what to offer goes. */
 export type DeployTrouble = 'failed' | 'signin' | 'stopped'
 
 /**
- * What Ray says when a deploy fails: what happened, in a sentence, and that he
- * can find out why. The details are a click away; he doesn't read them out.
+ * What Ray says when publishing fails: what happened, in a sentence, and that
+ * he can find out why. The details are a click away; he doesn't read them out.
  */
 export const DEPLOY_TROUBLE_LINES: Record<DeployTrouble, string> = {
-  failed: 'That deploy didn’t make it to Fabric. Want me to find out why?',
-  signin: 'Fabric wants you to sign in again before this app can deploy.',
-  stopped: 'That deploy was stopped before it finished.'
+  failed: 'Your app didn’t make it to Fabric. Want me to find out why?',
+  signin: 'Fabric wants you to sign in again before you can publish this app.',
+  stopped: 'Publishing was stopped before it finished.'
 }
 
 /**
- * What Ray says while an app deploys: a wink at each step, not its details
+ * What Ray says while an app publishes: a wink at each step, not its details
  * (the step list has those). When a step takes a while, he moves on to its
  * next line, and on a long one he shares facts.
  */

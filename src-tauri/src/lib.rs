@@ -109,6 +109,7 @@ pub fn run() {
     .manage(PreviewState::default())
     .manage(UpdaterState::default())
     .manage(DevServers::default())
+    .manage(services::local_backend::LocalBackends::default())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -124,6 +125,10 @@ pub fn run() {
       // monitor actively probes the main thread, so an idle (event-starved) loop
       // is never mistaken for a hang.
       services::watchdog::start(app.handle().clone());
+
+      // Journal the local backends' problems that their supervisor only reports
+      // in its status, so Help can see them (see commands::help::local_journal).
+      commands::help::watch_local_backends(app.handle());
 
       // The main window starts hidden; the renderer shows it once its first
       // screen is painted (see `window_reveal`). Should the page never get that
@@ -309,6 +314,7 @@ pub fn run() {
       commands::projects::projects_remove,
       commands::projects::projects_git_status,
       commands::projects::projects_git_commit,
+      commands::projects::projects_git_save_turn,
       commands::projects::projects_git_log,
       commands::projects::projects_git_changes,
       commands::projects::projects_git_file_diff,
@@ -341,6 +347,7 @@ pub fn run() {
       commands::secrets::secrets_list,
       commands::secrets::secrets_set,
       commands::secrets::secrets_delete,
+      commands::secrets::secrets_declare,
       // advisor
       commands::advisor::advisor_collect,
       commands::advisor::advisor_run,
@@ -414,6 +421,30 @@ pub fn run() {
       commands::design::design_variations,
       commands::design::design_polish,
       commands::design::design_locate,
+      // local backend (rayfin-local)
+      commands::local::local_start,
+      commands::local::local_stop,
+      commands::local::local_restart,
+      commands::local::local_status,
+      commands::local::local_logs,
+      commands::local::local_reload,
+      commands::local::local_reset_data,
+      commands::local::local_users,
+      commands::local::local_add_user,
+      commands::local::local_delete_user,
+      commands::local::local_identity,
+      commands::local::local_set_identity,
+      commands::local::local_entities,
+      commands::local::local_rows,
+      commands::local::local_clear_rows,
+      commands::local::local_secrets,
+      commands::local::local_set_secret,
+      commands::local::local_delete_secret,
+      commands::local::local_stop_external,
+      commands::local::local_install_packages,
+      commands::local::local_report_fallback,
+      // Preview as: clear the local preview's site data and reload it
+      services::preview::preview_reset_site_data,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
@@ -422,6 +453,7 @@ pub fn run() {
       // Kill any live Vite dev servers when the app exits so they never orphan.
       if let tauri::RunEvent::Exit = event {
         services::dev_server::kill_all(app);
+        services::local_backend::kill_all(app);
       }
     });
 }

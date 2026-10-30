@@ -1,6 +1,7 @@
 //! Reports a project's local Rayfin toolchain version — the `@microsoft/rayfin-*`
-//! CLI and SDK packages pinned in its package.json — and whether a newer stable
-//! release is available on npm.
+//! CLI and SDK packages pinned in its package.json — whether a newer stable
+//! release is available on npm, and the newest one the bundled local backend
+//! runs, where upgrades stop while the Local development experiment is on.
 //!
 //! The app never upgrades these itself: when an update exists, Fabricator
 //! hands a prepared prompt to the Copilot agent (which edits package.json and runs
@@ -16,7 +17,7 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 
 use crate::services::exec::{self, RunOptions};
-use crate::services::store;
+use crate::services::{rayfin_sdk, store};
 use crate::types::{RayfinPackageVersion, RayfinVersionInfo};
 
 /// The canonical CLI package; every other `@microsoft/rayfin-*` is treated as SDK.
@@ -26,6 +27,10 @@ const CLI_PACKAGE: &str = "@microsoft/rayfin-cli";
 const LATEST_TTL: Duration = Duration::from_millis(30 * 60_000);
 
 static LATEST_CACHE: Lazy<std::sync::Mutex<HashMap<String, (Option<String>, Instant)>>> =
+  Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
+
+/// The newest release the local backend runs, per package, cached like `latest`.
+static SUPPORTED_CACHE: Lazy<std::sync::Mutex<HashMap<String, (Option<String>, Instant)>>> =
   Lazy::new(|| std::sync::Mutex::new(HashMap::new()));
 
 #[derive(Deserialize)]
@@ -90,6 +95,22 @@ async fn latest_version(pkg: &str) -> Option<String> {
   version
 }
 
+/// The newest stable release of a package within the Rayfin versions the bundled
+/// local backend runs, cached; None when npm is unreachable or none is in range.
+async fn latest_supported_locally(pkg: &str) -> Option<String> {
+  if let Some((version, at)) = SUPPORTED_CACHE.lock().unwrap().get(pkg) {
+    if at.elapsed() < LATEST_TTL {
+      return version.clone();
+    }
+  }
+  let version = rayfin_sdk::published_versions(pkg, None)
+    .await
+    .and_then(|published| rayfin_sdk::newest_supported(&published))
+    .map(|v| v.to_string());
+  SUPPORTED_CACHE.lock().unwrap().insert(pkg.to_string(), (version.clone(), Instant::now()));
+  version
+}
+
 /// Parse the `x.y.z` core of a semver string (ignoring any prerelease/build).
 pub(crate) fn parse_core(version: Option<&str>) -> Option<(u64, u64, u64)> {
   static RE: Lazy<regex::Regex> =
@@ -117,6 +138,7 @@ fn empty() -> RayfinVersionInfo {
     latest: None,
     upgrade_available: false,
     packages: vec![],
+    latest_supported_locally: None,
   }
 }
 
@@ -154,12 +176,21 @@ pub async fn rayfin_versions(id: String) -> RayfinVersionInfo {
     .find(|p| p.kind == "cli")
     .or_else(|| packages.iter().find(|p| p.installed.is_some()))
     .or_else(|| packages.first());
+  let version = headline.and_then(|p| p.installed.clone());
+  let latest = headline.and_then(|p| p.latest.clone());
+  // Rayfin's packages ship in lockstep, so the headline's newest supported
+  // release is every package's.
+  let latest_supported_locally = match headline.map(|p| p.name.clone()) {
+    Some(name) => latest_supported_locally(&name).await,
+    None => None,
+  };
 
   RayfinVersionInfo {
-    version: headline.and_then(|p| p.installed.clone()),
-    latest: headline.and_then(|p| p.latest.clone()),
+    version,
+    latest,
     upgrade_available: packages.iter().any(|p| p.upgradable),
     packages,
+    latest_supported_locally,
   }
 }
 

@@ -13,28 +13,32 @@
 //! separate global install — users sign in through Fabricator.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use github_copilot_sdk::handler::{
-  ApproveAllHandler, ExitPlanModeHandler, ExitPlanModeResult, PermissionHandler, UserInputHandler,
+  ApproveAllHandler, ExitPlanModeHandler, ExitPlanModeResult, PermissionHandler, PermissionResult, UserInputHandler,
   UserInputResponse,
 };
-use github_copilot_sdk::rpc::{AccountLogoutRequest, AuthInfo, AutoTierMetadata};
+use github_copilot_sdk::rpc::{
+  AccountLogoutRequest, AuthInfo, AutoTierMetadata, PermissionDecision, PermissionDecisionDeniedByPermissionRequestHook,
+};
 use github_copilot_sdk::session::Session;
 use github_copilot_sdk::types::GetAuthStatusResponse;
 use github_copilot_sdk::{
-  CliProgram, Client, ClientOptions, Error as SdkError, ExitPlanModeData, Model, ResumeSessionConfig,
-  SessionConfig, SessionId, Tool, Transport,
+  CliProgram, Client, ClientOptions, Error as SdkError, ExitPlanModeData, Model, PermissionRequestData,
+  PermissionRequestKind, RequestId, ResumeSessionConfig, SessionConfig, SessionId, Tool, Transport,
 };
 use once_cell::sync::Lazy;
 use regex::Regex;
+use serde_json::Value;
 use tauri::AppHandle;
 use tokio::sync::{Mutex, OnceCell};
 
+use crate::services::agent_skills::{self, Guidance};
 use crate::services::emit::emit_chat_event;
 use crate::services::exec;
 use crate::state::PlanGate;
@@ -63,6 +67,9 @@ struct Entry {
   /// Revision of the provider registry (Your own API keys) the session was
   /// opened with; a different one (a key replaced, a model added) reopens it.
   registry_rev: Option<String>,
+  /// The guidance the session was opened with; a different one (the app's
+  /// backend moved between this computer and Fabric) reopens it.
+  guidance: Option<Guidance>,
 }
 
 /// Context window tiers (SDK `ContextTier`).
@@ -347,10 +354,12 @@ pub struct SessionOptions {
   pub user_input: Option<Arc<dyn UserInputHandler>>,
   /// Client-defined tools (Fabricator's in-process `fabricator_*` capabilities).
   pub tools: Vec<Tool>,
-  /// Register the product-scoped skill/instruction directories (materialized
-  /// under app-data, never in the repo) so Fabricator's build guidance only ever
-  /// appears in Fabricator-driven Build chat sessions.
-  pub guidance: bool,
+  /// Fabricator's build guidance for the session, as the set that fits the app
+  /// (see `agent_skills::guidance_for`): the product-scoped skill and
+  /// instruction directories, materialized under app-data and never in the
+  /// repo, so it only ever appears in Fabricator-driven Build chat sessions.
+  /// `None` for every other session.
+  pub guidance: Option<Guidance>,
   /// Answers tool permission requests; `None` approves everything.
   pub permission: Option<Arc<dyn PermissionHandler>>,
   /// Built-in tools the agent must not use.
@@ -362,6 +371,163 @@ pub struct SessionOptions {
   /// switch to. The runtime doesn't persist them, so they are re-supplied on
   /// every resume.
   pub byok: Option<crate::services::byok::registry::ByokRegistry>,
+}
+
+/* ----------------------------- Build chat sandbox ----------------------------- */
+
+/// The folder where a project's local backend (rayfin-local) keeps its state:
+/// the app's local database, its signing keys and the local values of its secrets.
+const LOCAL_STATE_DIR: &str = ".rayfin-local";
+
+/// The Build chat's local backend tool the denial points the agent at (see `agent_tools`).
+const LOCAL_STATUS_TOOL: &str = "fabricator_local_status";
+
+/// Git commands that only inspect or change the index, never a file's contents:
+/// `git rm --cached` is how a tracked `.rayfin-local` leaves git (an Advisor fix).
+static GIT_INDEX_ONLY: Lazy<Regex> = Lazy::new(|| {
+  Regex::new(
+    r"(?i)^\s*git(?:\.exe)?(?:\s+-[cC]\s+\S+|\s+--?[a-z][\w-]*(?:=\S+)?)*\s+(?:rm\s(?:.*\s)?--cached(?:\s|$)|check-ignore\b|ls-files\b|status\b)",
+  )
+  .unwrap()
+});
+
+/// Where one command of a shell line ends and the next begins.
+static COMMAND_BREAK: Lazy<Regex> = Lazy::new(|| Regex::new(r"&&|\|\||[;|\r\n]").unwrap());
+
+/// Whether `path` is in a `.rayfin-local` folder (the Advisor's and Help's
+/// read-only sandboxes keep out of it the same way).
+pub(crate) fn in_local_state(path: &str) -> bool {
+  path.split(['/', '\\']).any(|part| part.eq_ignore_ascii_case(LOCAL_STATE_DIR))
+}
+
+/// Whether a command's text names something in a `.rayfin-local` folder.
+fn names_local_state(command: &str) -> bool {
+  command
+    .split(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | '`' | '=' | '(' | ')' | '<' | '>' | ',' | '{' | '}'))
+    .any(in_local_state)
+}
+
+/// The permission request itself: nested under `permissionRequest` by current
+/// runtimes, flat in older ones.
+fn request_body(data: &PermissionRequestData) -> &Value {
+  data.extra.get("permissionRequest").filter(|v| v.is_object()).unwrap_or(&data.extra)
+}
+
+fn request_kind(data: &PermissionRequestData) -> Option<String> {
+  if let Some(kind) = request_body(data).get("kind").and_then(Value::as_str) {
+    return Some(kind.to_string());
+  }
+  let kind = match data.kind.as_ref()? {
+    PermissionRequestKind::Read => "read",
+    PermissionRequestKind::Write => "write",
+    PermissionRequestKind::Shell => "shell",
+    _ => "other",
+  };
+  Some(kind.to_string())
+}
+
+/// Whether a shell command reaches into a `.rayfin-local` folder, by its text or
+/// by the paths the runtime found in it (a glob, say). Git commands that only
+/// touch the index may name the folder.
+fn shell_reaches_local_state(body: &Value) -> bool {
+  let full = body.get("fullCommandText").and_then(Value::as_str).unwrap_or_default();
+  let parsed: Vec<&str> = body
+    .get("commandSegments")
+    .and_then(Value::as_array)
+    .map(|segments| segments.iter().filter_map(|s| s.get("fullCommandText").and_then(Value::as_str)).collect())
+    .unwrap_or_default();
+  let segments: Vec<&str> = if parsed.is_empty() { COMMAND_BREAK.split(full).collect() } else { parsed };
+  let (index_only, others): (Vec<&str>, Vec<&str>) = segments.into_iter().partition(|s| GIT_INDEX_ONLY.is_match(s));
+  if others.iter().any(|s| names_local_state(s)) {
+    return true;
+  }
+  let strings = |key: &str| -> Vec<String> {
+    match body.get(key) {
+      Some(Value::Array(items)) => items.iter().filter_map(Value::as_str).map(str::to_string).collect(),
+      Some(Value::Object(map)) => {
+        map.iter().flat_map(|(k, v)| std::iter::once(k.clone()).chain(v.as_str().map(str::to_string))).collect()
+      }
+      _ => Vec::new(),
+    }
+  };
+  let paths = strings("possiblePaths").into_iter().chain(strings("resolvedPaths"));
+  paths.into_iter().any(|p| in_local_state(&p)) && !index_only.iter().any(|s| names_local_state(s))
+}
+
+/// Whether a permission request reads, writes or runs a command on something in
+/// a `.rayfin-local` folder.
+fn reaches_local_state(data: &PermissionRequestData) -> bool {
+  let body = request_body(data);
+  let text = |key: &str| body.get(key).and_then(Value::as_str);
+  match request_kind(data).as_deref() {
+    Some("read") => [text("path"), text("resolvedPath")].into_iter().flatten().any(in_local_state),
+    Some("write") => [text("fileName"), text("resolvedPath")].into_iter().flatten().any(in_local_state),
+    Some("shell") => shell_reaches_local_state(body),
+    _ => false,
+  }
+}
+
+/// What the agent is told when it reaches into `.rayfin-local`.
+fn local_state_denial(local_tools: bool) -> PermissionResult {
+  let mut message = String::from(
+    "Fabricator keeps this app's local data in `.rayfin-local`: its database, signing keys and the local values of \
+     its secrets. That folder is off limits, so don't read, change or delete anything in it.",
+  );
+  if local_tools {
+    message.push_str(
+      " Use `fabricator_local_status` for the local backend's state, errors and output, and `fabricator_local_call` \
+       to read or change the app's data through its own API.",
+    );
+  }
+  PermissionDecision::DeniedByPermissionRequestHook(PermissionDecisionDeniedByPermissionRequestHook {
+    // Fails only this call: the turn carries on.
+    interrupt: Some(false),
+    message: Some(message),
+    ..Default::default()
+  })
+  .into()
+}
+
+/// The Build chat's permission policy. The chat never reads or changes the
+/// local backend's state in `.rayfin-local`, which Fabricator manages; every
+/// other request goes to `inner`: a team project's guardrails, or approval.
+struct BuildChatPolicy {
+  inner: Arc<dyn PermissionHandler>,
+  /// The session has the local backend tools, for the denial to point at.
+  local_tools: bool,
+}
+
+#[async_trait]
+impl PermissionHandler for BuildChatPolicy {
+  async fn handle(&self, session_id: SessionId, request_id: RequestId, data: PermissionRequestData) -> PermissionResult {
+    if reaches_local_state(&data) {
+      log::info!("Build chat: declined a {} request in .rayfin-local", request_kind(&data).unwrap_or_else(|| "unknown".into()));
+      return local_state_denial(self.local_tools);
+    }
+    self.inner.handle(session_id, request_id, data).await
+  }
+}
+
+/// The permission policy of a project's Build chat session with `tools`.
+fn build_chat_policy(project_id: &str, tools: &[Tool]) -> Arc<dyn PermissionHandler> {
+  // Team projects may not deploy, push or merge from chat (see team::guard).
+  let inner = crate::services::team::guard::chat_policy(project_id).unwrap_or_else(|| Arc::new(ApproveAllHandler));
+  Arc::new(BuildChatPolicy { inner, local_tools: tools.iter().any(|t| t.name == LOCAL_STATUS_TOOL) })
+}
+
+/// The project folders that hold its own skills (`<skill>/SKILL.md`): the
+/// templates' `.agents/skills`, and `.github/skills`.
+const PROJECT_SKILL_DIRS: [&str; 2] = [".agents/skills", ".github/skills"];
+
+/// The skill directories of a Build chat session in `cwd`: Fabricator's set
+/// first, so its guidance comes before a project skill of the same name, then
+/// the project's own that exist. A session that names its skill directories
+/// loads only those, so without them the project's skills (such as the
+/// templates' capability router) aren't found.
+fn skill_directories(guidance: Guidance, cwd: &Path) -> Vec<PathBuf> {
+  let mut dirs = vec![agent_skills::skills_dir(guidance)];
+  dirs.extend(PROJECT_SKILL_DIRS.iter().map(|dir| cwd.join(dir)).filter(|dir| dir.is_dir()));
+  dirs
 }
 
 /// Ask the runtime to resume, or create a session bound to `session_id`,
@@ -385,11 +551,11 @@ async fn open_session(
       .with_client_name(CLIENT_NAME)
       .with_working_directory(cwd_pb.clone())
       .with_permission_handler(handler.clone());
-    if opts.guidance {
+    if let Some(guidance) = opts.guidance {
       cfg = cfg
         .with_enable_skills(true)
-        .with_skill_directories([crate::services::agent_skills::skills_dir()])
-        .with_instruction_directories([crate::services::agent_skills::instructions_dir()]);
+        .with_skill_directories(skill_directories(guidance, &cwd_pb))
+        .with_instruction_directories([agent_skills::instructions_dir(guidance)]);
     }
     if !opts.tools.is_empty() {
       cfg = cfg.with_tools(opts.tools.clone());
@@ -435,11 +601,11 @@ async fn open_session(
     .with_client_name(CLIENT_NAME)
     .with_working_directory(cwd_pb)
     .with_permission_handler(handler);
-  if opts.guidance {
+  if let Some(guidance) = opts.guidance {
     cfg = cfg
       .with_enable_skills(true)
-      .with_skill_directories([crate::services::agent_skills::skills_dir()])
-      .with_instruction_directories([crate::services::agent_skills::instructions_dir()]);
+      .with_skill_directories(skill_directories(guidance, Path::new(cwd)))
+      .with_instruction_directories([agent_skills::instructions_dir(guidance)]);
   }
   if !opts.tools.is_empty() {
     cfg = cfg.with_tools(opts.tools.clone());
@@ -850,9 +1016,10 @@ impl CopilotManager {
 
   /// Get the persistent, cached session for a project turn, creating or
   /// resuming it as needed and reconciling the current model choice. `byok` is
-  /// the registry of providers on the user's own keys; a cached session opened
-  /// with a different one is reopened, since the runtime only takes the
-  /// registry when a session is created or resumed.
+  /// the registry of providers on the user's own keys, and `guidance` the set
+  /// of Fabricator's guidance that fits the app; a cached session opened with a
+  /// different one of either is reopened, since the runtime only takes them
+  /// (with `tools`) when a session is created or resumed.
   #[allow(clippy::too_many_arguments)]
   pub async fn turn_session(
     &self,
@@ -863,6 +1030,7 @@ impl CopilotManager {
     exit_plan: Option<Arc<dyn ExitPlanModeHandler>>,
     user_input: Option<Arc<dyn UserInputHandler>>,
     tools: Vec<Tool>,
+    guidance: Option<Guidance>,
     byok: Option<crate::services::byok::registry::ByokRegistry>,
   ) -> Result<TurnSession, String> {
     let key = project_id.to_string();
@@ -878,7 +1046,12 @@ impl CopilotManager {
       Reopen,
     }
     let action = match engine.sessions.get(&key) {
-      Some(e) if e.cwd == cwd && e.session.id().as_str() == session_id && e.registry_rev == registry_rev => {
+      Some(e)
+        if e.cwd == cwd
+          && e.session.id().as_str() == session_id
+          && e.registry_rev == registry_rev
+          && e.guidance == guidance =>
+      {
         match session_sync(&e.choice, &choice) {
           // The choice changed — apply it on the live session. `set_model`
           // switches back to the "auto" router too, so returning to Auto takes
@@ -911,13 +1084,13 @@ impl CopilotManager {
       disconnect_session(&old.session).await;
     }
 
+    let permission = Some(build_chat_policy(project_id, &tools));
     let opts = SessionOptions {
       exit_plan,
       user_input,
-      guidance: !tools.is_empty(),
+      guidance,
       tools,
-      // Team projects may not deploy, push or merge from chat (see team::guard).
-      permission: crate::services::team::guard::chat_policy(project_id),
+      permission,
       byok,
       ..Default::default()
     };
@@ -941,6 +1114,7 @@ impl CopilotManager {
         cwd: cwd.to_string(),
         choice,
         registry_rev,
+        guidance,
       },
     );
     Ok(opened)
@@ -1306,7 +1480,7 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
     });
     manager.reload_auth().await;
     let engine = manager.engine.lock().await;
@@ -1334,6 +1508,45 @@ mod tests {
     client.force_stop();
   }
 
+  /// A session that names its skill directories loads only those, so the
+  /// project's own skills go after Fabricator's, on resume and create alike.
+  #[tokio::test]
+  async fn a_build_chat_also_gets_the_projects_own_skills_after_fabricators() {
+    let project = std::env::temp_dir().join(format!("fab-skills-{}", uuid::Uuid::new_v4()));
+    for skill in [".agents/skills/capability-router", ".github/skills/release-notes"] {
+      std::fs::create_dir_all(project.join(skill)).unwrap();
+      std::fs::write(project.join(skill).join("SKILL.md"), "---\nname: x\n---\n").unwrap();
+    }
+    let fabricator = agent_skills::skills_dir(Guidance::Local);
+    let expected = vec![fabricator.clone(), project.join(".agents/skills"), project.join(".github/skills")];
+    assert_eq!(skill_directories(Guidance::Local, &project), expected);
+    std::fs::remove_dir_all(project.join(".github")).unwrap();
+    assert_eq!(skill_directories(Guidance::Local, &project), expected[..2]);
+    std::fs::remove_dir_all(project.join(".agents")).unwrap();
+    std::fs::write(project.join(".agents"), "not a folder").unwrap();
+    assert_eq!(skill_directories(Guidance::Local, &project), [fabricator.clone()]);
+    std::fs::remove_file(project.join(".agents")).unwrap();
+    std::fs::create_dir_all(project.join(".agents/skills")).unwrap();
+
+    let (client, server) = fake_client(vec![
+      ("session.resume", rpc_error("Session not found s")),
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+    ]);
+    let opts = SessionOptions { guidance: Some(Guidance::Local), ..Default::default() };
+    open_session(&client, project.to_str().unwrap(), "s", &ModelChoice::default(), &opts, true).await.unwrap();
+    let requests = server.await.unwrap();
+    for request in &requests {
+      let dirs: Vec<PathBuf> = request["params"]["skillDirectories"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(PathBuf::from)).collect())
+        .unwrap_or_default();
+      assert_eq!(dirs, [fabricator.clone(), project.join(".agents/skills")], "{request}");
+      assert_eq!(request["params"]["instructionDirectories"][0], json!(agent_skills::instructions_dir(Guidance::Local)));
+    }
+    client.force_stop();
+    let _ = std::fs::remove_dir_all(&project);
+  }
+
   #[tokio::test]
   async fn a_model_auth_error_does_not_discard_healthy_chat_sessions() {
     let (client, server) = fake_client(vec![
@@ -1347,7 +1560,7 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
     });
     assert!(manager.list_models().await.is_err());
     let engine = manager.engine.lock().await;
@@ -1374,7 +1587,7 @@ mod tests {
     ).await.unwrap());
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
     });
     manager.invalidate_transport("project", &stale).await;
     assert!(manager.engine.lock().await.client.is_some());
@@ -1414,10 +1627,10 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
     });
     let opened = manager.turn_session(
-      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None,
+      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None, None,
     ).await.unwrap();
     assert_eq!(opened.session.id().as_str(), "new-session");
     assert!(!opened.recreated);
@@ -1445,7 +1658,7 @@ mod tests {
     let choice = ModelChoice::of(m("anthropic/claude-opus-5-5"), None);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: choice.clone(),
-      registry_rev: Some("before-the-new-key".into()),
+      registry_rev: Some("before-the-new-key".into()), guidance: None,
     });
     let mut settings = crate::types::ByokSettings::default();
     settings.providers.insert("anthropic".into(), crate::types::ByokProviderSettings {
@@ -1459,7 +1672,7 @@ mod tests {
     let keys = HashMap::from([("anthropic".to_string(), "sk-ant-test".to_string())]);
     let registry = crate::services::byok::registry::build(&settings, &keys);
     manager.turn_session(
-      "project", ".", "thread", choice, None, None, Vec::new(), Some(registry.clone()),
+      "project", ".", "thread", choice, None, None, Vec::new(), None, Some(registry.clone()),
     ).await.unwrap();
     let requests = server.await.unwrap();
     let resume = &requests[3]["params"];
@@ -1470,6 +1683,39 @@ mod tests {
     assert!(switch.contains_key("reasoningEffort") && switch["reasoningEffort"].is_null());
     assert!(!switch.contains_key("autoTier") && !switch.contains_key("contextTier"));
     assert_eq!(manager.engine.lock().await.sessions["project"].registry_rev, Some(registry.revision));
+    client.force_stop();
+  }
+
+  /// The guidance follows where the app's backend runs (see
+  /// `agent_skills::guidance_for`). When that changes, the cached session is
+  /// resumed again with the other set's skills and instructions.
+  #[tokio::test]
+  async fn a_changed_guidance_reopens_the_session_with_its_directories() {
+    let (client, server) = fake_client(vec![
+      ("session.create", json!({ "result": { "sessionId": "thread" } })),
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": true } })),
+      ("session.detach", json!({ "result": {} })),
+      ("session.resume", json!({ "result": { "sessionId": "thread" } })),
+      ("session.skills.reload", json!({ "result": {} })),
+      ("session.model.switchTo", json!({ "result": {} })),
+    ]);
+    let cached = client.create_session(SessionConfig::default().with_session_id(SessionId::new("thread"))).await.unwrap();
+    let manager = manager_with(client.clone());
+    manager.engine.lock().await.sessions.insert("project".into(), Entry {
+      session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      guidance: Some(Guidance::Local),
+    });
+    manager.turn_session(
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::FabricBacked), None,
+    ).await.unwrap();
+    let requests = server.await.unwrap();
+    let resume = &requests[3]["params"];
+    let dirs = |key: &str| -> Vec<PathBuf> {
+      resume[key].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(PathBuf::from)).collect()).unwrap_or_default()
+    };
+    assert_eq!(dirs("instructionDirectories"), [agent_skills::instructions_dir(Guidance::FabricBacked)], "{resume}");
+    assert_eq!(dirs("skillDirectories"), [agent_skills::skills_dir(Guidance::FabricBacked)], "{resume}");
+    assert_eq!(manager.engine.lock().await.sessions["project"].guidance, Some(Guidance::FabricBacked));
     client.force_stop();
   }
 
@@ -1584,7 +1830,7 @@ mod tests {
     ]);
     let manager = manager_with(client);
     let result = manager.turn_session(
-      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None,
+      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None, None,
     ).await;
     assert!(result.err().unwrap().contains("Sign in to Copilot"));
     assert!(manager.engine.lock().await.sessions.is_empty());
@@ -1737,5 +1983,94 @@ mod tests {
     }))
     .unwrap();
     assert!(map_model(&plain).unwrap().context_tiers.is_empty());
+  }
+
+  /// A `permission.requested` payload as the runtime sends it: the request nested.
+  fn permission(body: Value) -> PermissionRequestData {
+    serde_json::from_value(json!({ "requestId": "r1", "permissionRequest": body })).unwrap()
+  }
+
+  #[test]
+  fn the_build_chat_never_reaches_into_the_local_backends_state() {
+    let read = |path: &str| reaches_local_state(&permission(json!({ "kind": "read", "path": path })));
+    for state in [".rayfin-local", ".rayfin-local/secrets.json", "C:\\apps\\notes\\.rayfin-local\\db.sqlite", ".Rayfin-Local/keys/signing.json"] {
+      assert!(read(state), "{state} must be blocked");
+    }
+    for fine in ["rayfin-local.toml", "src/App.tsx", "rayfin/rayfin.yml", "C:\\apps\\notes\\.gitignore"] {
+      assert!(!read(fine), "{fine} must stay readable");
+    }
+    let write = |file: &str| reaches_local_state(&permission(json!({ "kind": "write", "fileName": file })));
+    assert!(write(".rayfin-local/.gitignore"));
+    assert!(!write(".gitignore"));
+    let typed = PermissionRequestData {
+      kind: Some(PermissionRequestKind::Write),
+      extra: json!({ "fileName": "C:/apps/notes/.rayfin-local/secrets.json" }),
+      ..Default::default()
+    };
+    assert!(reaches_local_state(&typed), "older runtimes send the request flat");
+
+    let shell = |command: &str, paths: Value| {
+      reaches_local_state(&permission(json!({ "kind": "shell", "fullCommandText": command, "possiblePaths": paths })))
+    };
+    for blocked in [
+      "Get-Content .rayfin-local\\secrets.json",
+      "sqlite3 ./.rayfin-local/db.sqlite \"select * from Note\"",
+      "rm -rf .rayfin-local",
+      "npm run build && type \".\\.rayfin-local\\keys\\signing.json\"",
+      "git rm .rayfin-local/secrets.json",
+    ] {
+      assert!(shell(blocked, json!([])), "{blocked} must be blocked");
+    }
+    assert!(shell("cat .rayfin*/secrets.json", json!([".rayfin-local/secrets.json"])), "the paths the runtime found count");
+    for fine in ["npm run build", "npx vitest run", "git status", "node scripts/check.mjs rayfin-local.toml"] {
+      assert!(!shell(fine, json!([])), "{fine} must run");
+    }
+    // Untracking the folder only changes git's index, as the Advisor's fix asks.
+    for untrack in ["git rm -r --cached .rayfin-local", "git rm -r --cached .rayfin-local && git add .gitignore"] {
+      assert!(!shell(untrack, json!([".rayfin-local"])), "{untrack} must run");
+    }
+    let segments = json!({
+      "kind": "shell",
+      "fullCommandText": "git status; Get-Content .rayfin-local/secrets.json",
+      "commandSegments": [
+        { "fullCommandText": "git status", "identifier": "git" },
+        { "fullCommandText": "Get-Content .rayfin-local/secrets.json", "identifier": "Get-Content" }
+      ]
+    });
+    assert!(reaches_local_state(&permission(segments)));
+    assert!(!reaches_local_state(&permission(json!({ "kind": "url", "url": "https://rayfin.ai/.rayfin-local" }))));
+  }
+
+  #[tokio::test]
+  async fn a_denial_says_what_to_do_instead_and_fails_only_the_call() {
+    async fn decide(policy: &dyn PermissionHandler, body: Value) -> PermissionResult {
+      policy.handle(SessionId::from("s"), RequestId::new("1"), permission(body)).await
+    }
+    let message = |result: PermissionResult| match result {
+      PermissionResult::Decision { decision: PermissionDecision::DeniedByPermissionRequestHook(denied), .. } => {
+        assert_eq!(denied.interrupt, Some(false), "the turn carries on");
+        denied.message.unwrap()
+      }
+      other => panic!("expected a denial, got {other:?}"),
+    };
+    let read_secrets = json!({ "kind": "read", "path": ".rayfin-local/secrets.json" });
+    let local = build_chat_policy("a-personal-project", &[Tool::new(LOCAL_STATUS_TOOL), Tool::new("fabricator_local_call")]);
+    let said = message(decide(local.as_ref(), read_secrets.clone()).await);
+    assert!(said.contains("Fabricator keeps this app's local data in `.rayfin-local`"), "{said}");
+    assert!(said.contains("`fabricator_local_status`") && said.contains("`fabricator_local_call`"), "{said}");
+    // Without the local backend tools (a Fabric-backed session), it doesn't point at them.
+    let fabric_backed = build_chat_policy("a-personal-project", &[Tool::new("fabricator_locate_semantic_model")]);
+    assert!(!message(decide(fabric_backed.as_ref(), read_secrets).await).contains("fabricator_local"));
+    assert!(matches!(
+      decide(local.as_ref(), json!({ "kind": "write", "fileName": "src/App.tsx" })).await,
+      PermissionResult::Decision { decision: PermissionDecision::ApproveOnce(_), .. }
+    ));
+    // A team project keeps its own guardrails as well.
+    let team = BuildChatPolicy { inner: Arc::new(crate::services::team::guard::TeamChatPolicy), local_tools: false };
+    assert!(matches!(
+      decide(&team, json!({ "kind": "shell", "fullCommandText": "npx rayfin up --yes" })).await,
+      PermissionResult::Decision { decision: PermissionDecision::UserNotAvailable(_), .. }
+    ));
+    message(decide(&team, json!({ "kind": "shell", "fullCommandText": "del .rayfin-local\\db.sqlite" })).await);
   }
 }

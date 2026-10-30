@@ -73,7 +73,7 @@ afterEach(() => {
 describe('opening Help', () => {
   it('offers starter questions before anything is asked', async () => {
     setup()
-    expect(await screen.findByText('Why did my last deploy fail?')).toBeTruthy()
+    expect(await screen.findByText('Why did my last publish fail?')).toBeTruthy()
     expect(screen.getByText('What\u2019s new in this release?')).toBeTruthy()
   })
 
@@ -318,7 +318,7 @@ describe('keeping the conversation', () => {
 
   it('shows the welcome screen when there is nothing to resume', async () => {
     setup()
-    expect(await screen.findByText('Why did my last deploy fail?')).toBeTruthy()
+    expect(await screen.findByText('Why did my last publish fail?')).toBeTruthy()
     expect(screen.queryByText(/Picking up where you left off/)).toBeNull()
   })
 
@@ -332,12 +332,12 @@ describe('keeping the conversation', () => {
     expect(clearHistory).toHaveBeenCalled()
     expect(screen.queryByText('why did my deploy fail?')).toBeNull()
     // Back to the starter questions.
-    expect(await screen.findByText('Why did my last deploy fail?')).toBeTruthy()
+    expect(await screen.findByText('Why did my last publish fail?')).toBeTruthy()
   })
 
   it('offers no New button on an empty conversation', async () => {
     setup()
-    await screen.findByText('Why did my last deploy fail?')
+    await screen.findByText('Why did my last publish fail?')
     expect(screen.queryByText('New')).toBeNull()
   })
 
@@ -357,7 +357,7 @@ describe('keeping the conversation', () => {
   it('survives a conversation it cannot read', async () => {
     loadHistory.mockRejectedValueOnce(new Error('disk gone'))
     setup()
-    expect(await screen.findByText('Why did my last deploy fail?')).toBeTruthy()
+    expect(await screen.findByText('Why did my last publish fail?')).toBeTruthy()
   })
 })
 
@@ -376,39 +376,39 @@ describe('opening Help to ask something', () => {
   ]
 
   it('asks the question it was opened with straight away, once', async () => {
-    setup({ initialQuestion: 'Why did my last deploy fail?', projectId: 'proj-1' })
+    setup({ initialQuestion: 'Why did my last publish fail?', projectId: 'proj-1' })
 
     await waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
     expect(ask).toHaveBeenCalledWith(
-      expect.objectContaining({ question: 'Why did my last deploy fail?', projectId: 'proj-1' })
+      expect.objectContaining({ question: 'Why did my last publish fail?', projectId: 'proj-1' })
     )
     // In the transcript, not on the welcome screen's list of starters.
-    expect(screen.getByText('Why did my last deploy fail?').closest('.help-prompts')).toBeNull()
+    expect(screen.getByText('Why did my last publish fail?').closest('.help-prompts')).toBeNull()
     expect(document.querySelector('.help-prompts')).toBeNull()
   })
 
   it('asks after the saved conversation is back, as its next turn', async () => {
     loadHistory.mockResolvedValueOnce({ savedAt: new Date().toISOString(), data: earlier })
-    setup({ initialQuestion: 'Why did my last deploy fail?' })
+    setup({ initialQuestion: 'Why did my last publish fail?' })
 
     await waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
     expect(ask).toHaveBeenCalledWith(
       expect.objectContaining({
-        question: 'Why did my last deploy fail?',
+        question: 'Why did my last publish fail?',
         history: [{ question: 'how do I share my app?', answer: 'Select Share in the app bar.' }]
       })
     )
     expect(screen.getByText('how do I share my app?')).toBeTruthy()
-    expect(screen.getByText('Why did my last deploy fail?')).toBeTruthy()
+    expect(screen.getByText('Why did my last publish fail?')).toBeTruthy()
   })
 
   it('does not ask again once the answer is in, or after starting over', async () => {
     ask.mockResolvedValueOnce({ text: 'Your workspace has no capacity.', actions: [], citations: [], elapsedMs: 10 })
-    setup({ initialQuestion: 'Why did my last deploy fail?' })
+    setup({ initialQuestion: 'Why did my last publish fail?' })
     await screen.findByText(/Your workspace has no capacity/)
 
     fireEvent.click(screen.getByText('New'))
-    expect(await screen.findByText('Why did my last deploy fail?')).toBeTruthy()
+    expect(await screen.findByText('Why did my last publish fail?')).toBeTruthy()
     expect(ask).toHaveBeenCalledTimes(1)
   })
 })
@@ -417,7 +417,7 @@ describe('closing', () => {
   it('closes on Escape when idle', async () => {
     const onClose = vi.fn()
     setup({ onClose })
-    await screen.findByText('Why did my last deploy fail?')
+    await screen.findByText('Why did my last publish fail?')
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalled()
   })

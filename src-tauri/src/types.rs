@@ -669,10 +669,12 @@ pub struct StudioProject {
   pub workspace_name: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub deployment_names: Option<std::collections::HashMap<String, String>>,
-  /// Set when a project is freshly created in-app and has never been deployed.
-  /// Drives the onboarding "deploy first" gate (the chat composer is disabled
-  /// until a deployment exists). Cleared on the first successful deploy. Never
-  /// set for projects opened from disk, so opening an existing app is not gated.
+  /// Set on a project created while the Local development experiment is off:
+  /// it's developed against its Fabric deployment, so the workbench keeps chat
+  /// locked until its first publish, which clears it. Projects created with the
+  /// experiment on run on this computer from the start and don't get it, and the
+  /// renderer applies the gate only while the experiment is off. Projects opened
+  /// from disk never get it.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub awaiting_first_deploy: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -732,6 +734,12 @@ pub struct ExperimentFlags {
   /// page by page. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub report_migration: Option<bool>,
+  /// Local development: personal apps run on this computer with the bundled
+  /// local backend (rayfin-local) from creation, and publishing to Fabric is
+  /// optional. Off: apps are developed against their Fabric deployment, as
+  /// before. Opt-in (off by default); team apps aren't affected.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub local_development: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -750,11 +758,12 @@ pub struct AppSettings {
   /// Settings → Diagnostics.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub full_diagnostics: Option<bool>,
-  /// How chat turns deploy personal apps, set by the deployment panel's
-  /// "Deploy after each chat turn" switch: "auto" (the default, also when unset)
-  /// deploys as each turn finishes; "manual" keeps the changes on this machine,
-  /// with the live local preview kept between turns, until the user deploys.
-  /// Team projects aren't affected.
+  /// How chat turns publish personal apps, set by the published apps panel's
+  /// "Publish after each chat turn" switch: "auto" publishes as each turn
+  /// finishes; "manual" keeps the changes on this computer until the user
+  /// publishes. The user's choice always wins. Unset, it's "auto" while the
+  /// Local development experiment is off and "manual" while it's on (see
+  /// `store::manual_deploy_enabled`). Team projects aren't affected.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub deploy_mode: Option<String>,
   /// Your own API keys: each provider's models and which of them the model
@@ -2033,6 +2042,18 @@ pub struct RevertResult {
   pub error: Option<String>,
 }
 
+/// A chat turn's changes, saved as a version of the app (`projects_git_save_turn`).
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedTurn {
+  /// The new version's commit; absent when nothing was saved.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub commit: Option<String>,
+  /// Why the changes couldn't be saved: they stay as uncommitted changes.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GitChange {
@@ -2646,6 +2667,12 @@ pub struct RayfinVersionInfo {
   pub latest: Option<String>,
   pub upgrade_available: bool,
   pub packages: Vec<RayfinPackageVersion>,
+  /// The newest stable release npm lists within the Rayfin versions the bundled
+  /// local backend runs (`rayfin-local.json` `sdk.supported`), for the headline
+  /// package: where upgrades stop while the Local development experiment is on.
+  /// Absent when npm couldn't list them or none is in the range.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub latest_supported_locally: Option<String>,
 }
 
 /* ----------------------------- skills ----------------------------- */
@@ -3085,6 +3112,11 @@ pub struct AdvisorProjectSnapshot {
   pub truncated: Option<bool>,
   pub is_git_repo: bool,
   pub packages: Vec<AdvisorPackage>,
+  /// The Rayfin releases the bundled local backend runs, as an npm range
+  /// (`rayfin-local.json` `sdk.supported`). Absent for apps it doesn't run: team
+  /// apps, and every app while the Local development experiment is off.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub local_sdk_range: Option<String>,
 }
 
 /// `advisor_load` result: the saved deep review and the renderer-owned
@@ -3699,5 +3731,383 @@ mod tests {
     assert_eq!(end["exitCode"], 0);
     assert!(end.get("removed").is_none());
     assert!(end.get("output").is_none());
+  }
+}
+
+/* ----------------------------- local backend ----------------------------- */
+// Each personal project's whole Rayfin backend runs on this computer under
+// rayfin-local (services/local_backend). These mirror its host contract
+// (contract 1: `serve --json` events, the control API and the CLI's JSON) and
+// `src/shared/ipc.ts`. rayfin-local may add fields: unknown ones are ignored,
+// missing ones default.
+
+/// Text that may arrive as a string or a number, such as ids and timestamps.
+fn de_opt_text<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+  Ok(match serde_json::Value::deserialize(deserializer)? {
+    serde_json::Value::Null => None,
+    serde_json::Value::String(text) => Some(text),
+    other => Some(other.to_string()),
+  })
+}
+
+fn de_text<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+  Ok(de_opt_text(deserializer)?.unwrap_or_default())
+}
+
+/// Where a project's local backend is in its lifecycle.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LocalBackendState {
+  #[default]
+  Stopped,
+  Starting,
+  Running,
+  Restarting,
+  Error,
+}
+
+/// How to start a project's local backend.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalStartOptions {
+  /// Apply a schema change that loses data (`--force-schema`), for this start only.
+  pub force_schema: bool,
+  /// Start from an empty database (`--reset`), for this start only.
+  pub reset: bool,
+  /// Who the app signs in as: `developer`, `none` or `user:<username>`
+  /// (`--sign-in-as`). Restarts keep it.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub sign_in_as: Option<String>,
+}
+
+/// The Rayfin SDK an app uses, and whether rayfin-local implements it.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalSdk {
+  /// `None` when the packages aren't installed.
+  pub version: Option<String>,
+  pub supported: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalDataFeature {
+  pub enabled: bool,
+  pub entities: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalFunctionsFeature {
+  pub enabled: bool,
+  pub names: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalStorageFeature {
+  pub enabled: bool,
+  pub folders: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalAuthFeature {
+  pub enabled: bool,
+  /// The local Fabric sign-in page.
+  pub fabric: bool,
+  /// Username and password sign-in.
+  pub password: bool,
+}
+
+/// A connector the app declares.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalConnector {
+  pub name: String,
+  #[serde(rename = "type")]
+  pub kind: String,
+  /// `false` for connector types that run only on Fabric (rayfin-local answers 501).
+  pub supported: bool,
+}
+
+/// What the running app offers.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalFeatures {
+  pub data: LocalDataFeature,
+  pub functions: LocalFunctionsFeature,
+  pub storage: LocalStorageFeature,
+  pub auth: LocalAuthFeature,
+  pub connectors: Vec<LocalConnector>,
+}
+
+/// Everything started (the `ready` event): where the app and its backend answer.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalReady {
+  /// The app's own dev server; `None` without a frontend.
+  pub app_url: Option<String>,
+  pub api_url: String,
+  /// The local Fabric host that embeds the app; `None` when the app has no Fabric sign-in.
+  pub embed_url: Option<String>,
+  pub portal_url: Option<String>,
+  pub data_dir: Option<String>,
+  /// `{"kind": "developer" | "user" | "none", …}`.
+  pub sign_in_as: Option<serde_json::Value>,
+  pub sdk: Option<LocalSdk>,
+  pub features: LocalFeatures,
+  pub time: Option<String>,
+}
+
+/// The app model was analyzed (the `analysis` event).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalAnalysis {
+  pub ok: bool,
+  pub sdk: Option<LocalSdk>,
+  pub entities: Vec<String>,
+  pub storage_folders: Vec<String>,
+  pub message: Option<String>,
+  pub time: Option<String>,
+}
+
+/// The database was brought up to date with the model, or wasn't (the `schema` event).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalSchema {
+  /// `unchanged` | `applied` | `refused` | `failed`.
+  pub result: String,
+  pub changes: Vec<String>,
+  /// `refused`: the data the change would lose. `applied` with `forceSchema`: the data it dropped.
+  pub losses: Vec<String>,
+  pub message: Option<String>,
+  /// A change made while serving.
+  pub live: bool,
+  pub time: Option<String>,
+}
+
+/// The functions' build (the `functions` event).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalFunctions {
+  /// `building` | `ready` | `failed` | `off`.
+  pub state: String,
+  pub names: Vec<String>,
+  pub errors: Vec<String>,
+  pub message: Option<String>,
+  pub time: Option<String>,
+}
+
+/// The app's Vite dev server (the `vite` event).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalVite {
+  /// `ready` | `exited` | `restarting` | `failed`.
+  pub state: String,
+  pub url: Option<String>,
+  pub version: Option<String>,
+  pub message: Option<String>,
+  pub time: Option<String>,
+}
+
+/// `rayfin.yml`, `rayfin-local.toml` or a secret's value changed while serving.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalConfigChanged {
+  pub applied: bool,
+  pub restart_required: bool,
+  pub what: Vec<String>,
+  pub message: Option<String>,
+  pub time: Option<String>,
+}
+
+/// A warning or an error: from rayfin-local (its `warning` and `error` events)
+/// or from Fabricator (`binary-missing`, `binary-too-old`, `binary-incompatible`,
+/// `binary-blocked`, `binary-failed`, `spawn-failed`, `exited`, `crashed`).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalProblem {
+  /// Stable: act on it. `message` and `hint` are for people.
+  pub code: String,
+  pub message: String,
+  pub hint: Option<String>,
+  /// The backend stops after a fatal error.
+  pub fatal: bool,
+  /// The code's structured data, such as `{pid, appUrl, apiUrl}` for `already-serving`.
+  pub details: Option<serde_json::Value>,
+  pub time: Option<String>,
+}
+
+/// How a run ended (the `stopped` event).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalStopped {
+  /// `stdin-closed` | `signal` | `error` | `backend-exited`.
+  pub reason: String,
+  pub exit_code: Option<i32>,
+  pub time: Option<String>,
+}
+
+/// A project's local backend: its state and the latest it reported (`local:state`).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalStatus {
+  pub project_id: String,
+  pub state: LocalBackendState,
+  /// Grows with every change, so a client keeps the newest snapshot.
+  pub revision: u64,
+  /// While starting: the last startup step (`starting`, `analysis`, `schema`, `functions`, `vite`).
+  pub phase: Option<String>,
+  /// The `rayfin-local serve` process.
+  pub pid: Option<u32>,
+  /// rayfin-local's version.
+  pub version: Option<String>,
+  /// The project folder rayfin-local serves.
+  pub project_root: Option<String>,
+  /// The sign-in identity restarts keep (`developer`, `none` or `user:<username>`).
+  pub sign_in_as: Option<String>,
+  pub ready: Option<LocalReady>,
+  pub analysis: Option<LocalAnalysis>,
+  pub schema: Option<LocalSchema>,
+  pub functions: Option<LocalFunctions>,
+  pub vite: Option<LocalVite>,
+  pub config: Option<LocalConfigChanged>,
+  /// This run's warnings, oldest first.
+  pub warnings: Vec<LocalProblem>,
+  /// The last error. With `state: error`, why the backend isn't running.
+  pub error: Option<LocalProblem>,
+  pub stopped: Option<LocalStopped>,
+  /// Unexpected exits in the last two minutes.
+  pub crashes: u32,
+  pub started_at: Option<String>,
+  pub updated_at: Option<String>,
+}
+
+/// One line of a project's local backend output (`local:log`).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalLogEvent {
+  pub project_id: String,
+  /// Grows with every line of the project, to merge a fetched tail with live lines.
+  pub seq: u64,
+  /// `vite`, `functions`, `build`, `rayfin-local`, `stderr`, `stdout` or `fabricator`.
+  pub source: String,
+  /// `debug` | `info` | `warn` | `error`.
+  pub level: String,
+  pub line: String,
+  pub time: String,
+}
+
+/// A local user of the app.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalUser {
+  #[serde(deserialize_with = "de_text")]
+  pub id: String,
+  pub username: String,
+  /// `None` when the username isn't an email address.
+  pub email: Option<String>,
+  #[serde(deserialize_with = "de_opt_text")]
+  pub created_at: Option<String>,
+  /// How the user can sign in: `password`, `entra`.
+  pub sign_in: Vec<String>,
+  /// The developer's own account.
+  pub developer: bool,
+}
+
+/// Who the app signs in as automatically.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalIdentity {
+  /// `developer` | `user` | `none`.
+  pub kind: String,
+  /// The user it signs in as (`developer`: `None` until first used).
+  pub user: Option<LocalUser>,
+}
+
+/// A new sign-in identity: `{kind: "developer"}`, `{kind: "user", user, create}` or `{kind: "none"}`.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalIdentityRequest {
+  pub kind: String,
+  /// With `user`: a username or id.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub user: Option<String>,
+  /// With `user`: create the user when it's missing.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub create: Option<bool>,
+}
+
+/// An entity and how many rows it holds locally.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalEntity {
+  pub name: String,
+  pub rows: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalColumn {
+  pub name: String,
+  #[serde(rename = "type")]
+  pub kind: String,
+  /// Part of the primary key.
+  pub key: bool,
+}
+
+/// A page of an entity's rows, regardless of permissions.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalRows {
+  pub columns: Vec<LocalColumn>,
+  pub rows: Vec<serde_json::Value>,
+  pub total: u64,
+}
+
+/// What reading `rayfin.yml`, the entities and the secrets again did.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalReloadResult {
+  pub schema: Option<LocalSchema>,
+  pub config: Option<LocalConfigChanged>,
+}
+
+/// Where a secret's local value comes from (never the value).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalSecret {
+  pub name: String,
+  /// Listed under `secrets:` in `rayfin.yml`.
+  pub declared: bool,
+  pub description: Option<String>,
+  /// `env` | `local` (`.rayfin-local/secrets.json`) | `settings` (`local.settings.json`) | `none`.
+  pub source: String,
+}
+
+/// Why a local backend command failed. `code` is stable: the control API's
+/// own codes, or `not-running`, `project-not-found`, `invalid`, `unreachable`,
+/// `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed`,
+/// `experiment-off` (the Local development experiment is off) and the binary
+/// codes of [`LocalProblem`].
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalCommandError {
+  pub code: String,
+  pub message: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub hint: Option<String>,
+  /// The HTTP status the control API answered with.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub status: Option<u16>,
+}
+
+impl std::fmt::Display for LocalCommandError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match &self.hint {
+      Some(hint) => write!(f, "{} {hint}", self.message),
+      None => f.write_str(&self.message),
+    }
   }
 }

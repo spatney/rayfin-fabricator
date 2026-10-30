@@ -1,12 +1,14 @@
 /**
  * Prompts the Architecture view hands to the Build chat. Each is self-contained
  * and ends the way Fabricator's other hand-offs do: keep the app building and
- * leave deploying to Fabricator.
+ * leave publishing to Fabricator.
  */
 import { connectorKind, type ConnectorConfig, type TableInfo } from '../../model/architecture'
 
-const NO_DEPLOY =
-  'Keep the app building and do not run `rayfin up` or deploy — Fabricator redeploys automatically.'
+/** How every hand-off ends: the change shows in the preview and is published when the user publishes. */
+export const NO_DEPLOY =
+  'Keep the app building, and do not run `rayfin up` or publish the app yourself: the change shows in ' +
+  'Fabricator’s preview, and reaches the published app when it’s published.'
 
 export interface ChatPrompt {
   display: string
@@ -114,8 +116,9 @@ export function moveKeysToSecrets(keys: { file: string; name: string }[]): ChatP
     display: keys.length === 1 ? `Move ${keys[0].name} into a secret` : 'Move keys into secrets',
     prompt:
       `In this Rayfin app, these values in the functions' code look like keys: ${list}. Move each one into a ` +
-      'Rayfin secret with `npx rayfin secret set <NAME> --describe="<what it is for>"`, read it from ' +
-      '`ctx.Secrets.<NAME>` instead, and remove it from the code. Never print a key’s value in the chat. ' +
+      'Rayfin secret: declare it under `secrets:` in rayfin/rayfin.yml with a description of what it is for, ' +
+      'read it from `ctx.Secrets.<NAME>` instead, and remove it from the code. Don’t run `rayfin secret set`: ' +
+      'I’ll add the values in Fabricator’s Secrets view. Never print a key’s value in the chat. ' +
       NO_DEPLOY
   }
 }

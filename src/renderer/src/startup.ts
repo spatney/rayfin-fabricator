@@ -57,8 +57,20 @@ export interface SetupAttention {
 }
 
 /**
+ * Whether Fabricator can be entered: the required tools work and GitHub Copilot
+ * is signed in. Azure is optional; the features that need it ask for it.
+ */
+export function setupReady(
+  doctor: DoctorReport | null | undefined,
+  auth: Partial<AuthStatus> | null | undefined
+): boolean {
+  return Boolean(doctor?.ready && auth?.copilot?.signedIn)
+}
+
+/**
  * Problems to raise in the app after a background check, or null. Accounts that
- * are still being checked are never reported as signed out.
+ * are still being checked are never reported as signed out, and optional ones
+ * (Azure, Fabric) never are.
  */
 export function setupAttention(
   doctor: DoctorReport | null,
@@ -68,7 +80,6 @@ export function setupAttention(
   const tools = (doctor?.tools ?? []).filter((t) => t.required && !t.satisfied).map((t) => t.name)
   const signIns: string[] = []
   if (auth && !auth.copilot.checking && !auth.copilot.signedIn) signIns.push('GitHub Copilot')
-  if (auth && !auth.az.checking && !auth.az.signedIn) signIns.push('the Azure CLI')
   const error = toolsError ?? undefined
   return tools.length > 0 || signIns.length > 0 || error ? { tools, signIns, error } : null
 }
@@ -83,7 +94,7 @@ export function listText(items: string[]): string {
 export type StartupStage = 'tools' | 'accounts' | 'ready' | 'setup' | 'error'
 
 /**
- * Where the startup checks stand: the tools, then the sign-ins setup needs, then
+ * Where the startup checks stand: the tools, then the sign-in setup needs, then
  * whether the app opens or setup is next. A check that couldn't run is `error`.
  */
 export function startupStage(
@@ -93,6 +104,6 @@ export function startupStage(
 ): StartupStage {
   if (failed) return 'error'
   if (!doctor) return 'tools'
-  if (!auth || auth.copilot.checking || auth.az.checking) return 'accounts'
-  return doctor.ready && auth.copilot.signedIn && auth.az.signedIn ? 'ready' : 'setup'
+  if (!auth || auth.copilot.checking) return 'accounts'
+  return setupReady(doctor, auth) ? 'ready' : 'setup'
 }

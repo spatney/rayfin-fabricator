@@ -10,7 +10,7 @@ import CreateProjectScreen from './CreateProjectScreen'
  * so we assert they are disabled on the input.
  */
 
-/** Minimal `window.api` surface CreateProjectScreen touches on mount (create mode). */
+/** Minimal `window.api` surface CreateProjectScreen touches. */
 function installApi(): void {
   ;(window as unknown as { api: unknown }).api = {
     projects: {
@@ -18,8 +18,7 @@ function installApi(): void {
       checkName: vi.fn(() => Promise.resolve({ ok: true })),
       create: vi.fn(() => Promise.resolve({ ok: true }))
     },
-    onProcLog: vi.fn(() => () => {}),
-    fabric: { listWorkspaces: vi.fn(() => Promise.resolve({ ok: true, workspaces: [] })) }
+    onProcLog: vi.fn(() => () => {})
   }
 }
 
@@ -37,12 +36,7 @@ describe('CreateProjectScreen project name input', () => {
     await act(async () => {
       render(
         <OverlayProvider>
-          <CreateProjectScreen
-            mode="create"
-            onCancel={() => {}}
-            onDeploy={() => {}}
-            onContinueWithoutDeploy={() => {}}
-          />
+          <CreateProjectScreen onCancel={() => {}} />
         </OverlayProvider>
       )
     })
@@ -72,19 +66,13 @@ describe('CreateProjectScreen create progress', () => {
         ),
         create: vi.fn(() => createPromise)
       },
-      onProcLog: vi.fn(() => () => {}),
-      fabric: { listWorkspaces: vi.fn(() => Promise.resolve({ ok: true, workspaces: [] })) }
+      onProcLog: vi.fn(() => () => {})
     }
 
     await act(async () => {
       render(
         <OverlayProvider>
-          <CreateProjectScreen
-            mode="create"
-            onCancel={() => {}}
-            onDeploy={() => {}}
-            onContinueWithoutDeploy={() => {}}
-          />
+          <CreateProjectScreen onCancel={() => {}} />
         </OverlayProvider>
       )
     })
@@ -119,16 +107,153 @@ describe('CreateProjectScreen create progress', () => {
   })
 })
 
+describe('CreateProjectScreen after creating', () => {
+  it('hands the new app to the workbench, with no publish step, with Local development', async () => {
+    const project = { id: 'p1', name: 'Trip Logger', path: 'C:/projects/trip-logger', addedAt: '' }
+    const create = (
+      window as unknown as { api: { projects: { create: ReturnType<typeof vi.fn> } } }
+    ).api.projects.create
+    create.mockResolvedValue({ ok: true, project })
+    const onCreated = vi.fn()
+    await act(async () => {
+      render(
+        <OverlayProvider>
+          <CreateProjectScreen onCancel={() => {}} onCreated={onCreated} />
+        </OverlayProvider>
+      )
+    })
+    expect(screen.queryByLabelText('Progress')).toBeNull()
+
+    fireEvent.change(screen.getByPlaceholderText('My Rayfin App'), {
+      target: { value: 'Trip Logger' }
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
+    })
+
+    expect(onCreated).toHaveBeenCalledWith({ ok: true, project })
+    expect(screen.queryByText('Publish your app')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Continue without publishing/ })).toBeNull()
+    // The screen waits for the workbench to take over, and can't create it twice.
+    const nameField = screen.getByPlaceholderText('My Rayfin App').closest('.field') as HTMLElement
+    expect(nameField.className).toContain('create-field-hidden')
+    const opening = screen.getByRole('button', { name: 'Opening…' }) as HTMLButtonElement
+    const cancel = screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement
+    expect(opening.disabled && cancel.disabled).toBe(true)
+  })
+})
+
+/** Without Local development, a new app is published before chat unlocks. */
+describe('CreateProjectScreen publish step', () => {
+  const project = { id: 'p1', name: 'Trip Logger', path: 'C:/projects/trip-logger', addedAt: '' }
+
+  function installPublishApi(): {
+    create: ReturnType<typeof vi.fn>
+    listWorkspaces: ReturnType<typeof vi.fn>
+  } {
+    const create = vi.fn(() => Promise.resolve({ ok: true, project }))
+    const listWorkspaces = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        workspaces: [
+          { id: 'w1', displayName: 'Sales apps', capacityKind: 'fabric', sku: 'F2', eligible: true }
+        ]
+      })
+    )
+    ;(window as unknown as { api: unknown }).api = {
+      projects: {
+        communityTemplates: vi.fn(() => Promise.resolve({ ok: true, gallery: { templates: [] } })),
+        checkName: vi.fn(() => Promise.resolve({ ok: true })),
+        create
+      },
+      fabric: { listWorkspaces, checkDeployTarget: vi.fn(() => Promise.resolve({})) },
+      onProcLog: vi.fn(() => () => {})
+    }
+    return { create, listWorkspaces }
+  }
+
+  it('asks to publish the new app, then publishes it or carries on without', async () => {
+    const { listWorkspaces } = installPublishApi()
+    const onCreated = vi.fn()
+    const onDeploy = vi.fn()
+    const onContinueWithoutDeploy = vi.fn()
+    await act(async () => {
+      render(
+        <OverlayProvider>
+          <CreateProjectScreen
+            publishStep
+            onCancel={() => {}}
+            onCreated={onCreated}
+            onDeploy={onDeploy}
+            onContinueWithoutDeploy={onContinueWithoutDeploy}
+          />
+        </OverlayProvider>
+      )
+    })
+    const steps = screen.getByRole('list', { name: 'Progress' })
+    expect(steps.textContent).toBe('1Details2Publish')
+
+    fireEvent.change(screen.getByPlaceholderText('My Rayfin App'), {
+      target: { value: 'Trip Logger' }
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
+    })
+
+    expect(onCreated).toHaveBeenCalledWith({ ok: true, project })
+    expect(screen.getByRole('heading', { name: 'Publish your app' })).toBeTruthy()
+    expect(
+      screen.getByText('Publish Trip Logger to a Fabric workspace to start building with chat.')
+    ).toBeTruthy()
+    expect(
+      screen.getByText(
+        'You can publish any time, but chat stays locked until your app is published.'
+      )
+    ).toBeTruthy()
+    expect(listWorkspaces).toHaveBeenCalledTimes(1)
+    expect(screen.queryByPlaceholderText('My Rayfin App')).toBeNull()
+
+    fireEvent.click(await screen.findByText('Sales apps'))
+    const publish = screen.getByRole('button', { name: 'Publish app' }) as HTMLButtonElement
+    await waitFor(() => expect(publish.disabled).toBe(false))
+    fireEvent.click(publish)
+    expect(onDeploy).toHaveBeenCalledWith('Development', 'w1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue without publishing →' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onContinueWithoutDeploy).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows the Publish your app step alone from the chat lock', async () => {
+    const { create } = installPublishApi()
+    const onContinueWithoutDeploy = vi.fn()
+    await act(async () => {
+      render(
+        <OverlayProvider>
+          <CreateProjectScreen
+            mode="deploy"
+            publishStep
+            projectName="Trip Logger"
+            onCancel={() => {}}
+            onContinueWithoutDeploy={onContinueWithoutDeploy}
+          />
+        </OverlayProvider>
+      )
+    })
+    expect(screen.getByRole('heading', { name: 'Publish your app' })).toBeTruthy()
+    expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull()
+    expect(screen.queryByPlaceholderText('My Rayfin App')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Maybe later' }))
+    expect(onContinueWithoutDeploy).toHaveBeenCalledTimes(1)
+    expect(create).not.toHaveBeenCalled()
+  })
+})
+
 describe('CreateProjectScreen starting point', () => {
   function renderCreate(): void {
     render(
       <OverlayProvider>
-        <CreateProjectScreen
-          mode="create"
-          onCancel={() => {}}
-          onDeploy={() => {}}
-          onContinueWithoutDeploy={() => {}}
-        />
+        <CreateProjectScreen onCancel={() => {}} />
       </OverlayProvider>
     )
   }
@@ -177,10 +302,7 @@ describe('CreateProjectScreen starting point', () => {
       render(
         <OverlayProvider>
           <CreateProjectScreen
-            mode="create"
             onCancel={() => {}}
-            onDeploy={() => {}}
-            onContinueWithoutDeploy={() => {}}
             source={{ label: 'From Power BI', detail: 'Sales · 3 pages' }}
             model={{ value: { model: '', effort: '', autoTier: '', contextTier: '' }, onChange }}
           />

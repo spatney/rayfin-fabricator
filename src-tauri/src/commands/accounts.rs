@@ -31,6 +31,10 @@ static AZ_USER_RE: Lazy<Regex> =
 
 const FABRIC_BUSY: &str = "A Fabric sign-in, sign-out, or account change is already in progress.";
 const AZURE_BUSY: &str = "An Azure sign-in, sign-out, or account change is already in progress.";
+/// Signing in to Azure on demand, from a feature that needs it, before the
+/// optional Azure CLI is installed.
+const AZURE_MISSING: &str =
+  "The Azure CLI isn't installed, so Fabricator can't sign you in to Azure. Install it from setup (open Settings and select Open setup), then try again.";
 
 fn done(exit_code: Option<i32>) -> ProcResult {
   ProcResult { ok: true, exit_code, error: None }
@@ -320,6 +324,9 @@ pub(crate) async fn login_az(on_data: OnData, tenant: Option<&str>) -> ProcResul
     RunOptions { on_data: Some(on_data.clone()), timeout_ms: Some(5 * 60_000), ..Default::default() },
   )
   .await;
+  if res.not_found {
+    return auth::auth_failure("azure-login", None, AZURE_MISSING.into());
+  }
   if !res.ok {
     return auth::auth_failure(
       "azure-login",
