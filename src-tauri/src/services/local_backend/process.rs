@@ -151,7 +151,12 @@ mod tests {
 
   #[test]
   fn recognizes_rayfin_local_executables() {
-    for path in ["C:\\Program Files\\Rayfin Fabricator\\rayfin-local.exe", "/Applications/Fab.app/Contents/MacOS/rayfin-local", "x/RAYFIN-LOCAL-x86_64-pc-windows-msvc.EXE"] {
+    let mut executables = vec!["/Applications/Fab.app/Contents/MacOS/rayfin-local", "x/RAYFIN-LOCAL-x86_64-pc-windows-msvc.EXE"];
+    if cfg!(windows) {
+      // Only Windows reads `\` as a separator; elsewhere this whole string is one file name.
+      executables.push("C:\\Program Files\\Rayfin Fabricator\\rayfin-local.exe");
+    }
+    for path in executables {
       assert!(is_rayfin_local(Path::new(path)), "{path}");
     }
     for path in ["C:\\Windows\\node.exe", "rayfin-localhost.exe", "rayfin-local.js", "/usr/bin/rayfin", ""] {
