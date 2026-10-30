@@ -252,7 +252,7 @@
       "appliesWhen": ["data"],
       "title": "Anyone can change this data without signing in",
       "summary": "Anonymous (public) grants are read-only",
-      "why": "An `@anonymous` grant that includes create, update, or delete lets unauthenticated callers modify rows: in the local preview, and in the published app wherever a tenant admin allows anonymous data access (most tenants refuse the `anonymous` role when you publish).",
+      "why": "An `@anonymous` grant that includes create, update, or delete lets unauthenticated callers modify rows in the published app wherever a tenant admin allows anonymous data access (most tenants refuse the `anonymous` role when you publish), and in Fabricator's local preview when Local development is on.",
       "fix": "Limit `@anonymous` to `'read'` for genuinely public data, and move writes to `@authenticated` with an owner policy.",
       "docs": [
         { "title": "Public read, authenticated write", "url": "https://rayfin.ai/docs/data/permissions#public-read-authenticated-write" }
@@ -266,7 +266,7 @@
       "appliesWhen": ["data"],
       "title": "Anonymous data access may block publishing",
       "summary": "Public (anonymous) data access is only used where the tenant allows it",
-      "why": "Fabricator's local backend allows the `anonymous` role, so public data works in the local preview. Most Fabric tenants refuse it, though: publishing (`rayfin up`) fails with `ANONYMOUS_DATA_ACCESS_BLOCKED_BY_TENANT_ADMIN` unless a tenant admin turned on \"Enable anonymous data access for Fabric Apps (Preview)\".",
+      "why": "Most Fabric tenants refuse the `anonymous` role: publishing (`rayfin up`) fails with `ANONYMOUS_DATA_ACCESS_BLOCKED_BY_TENANT_ADMIN` unless a tenant admin turned on \"Enable anonymous data access for Fabric Apps (Preview)\". With Local development on, Fabricator's local backend allows the role, so public data works in the local preview and the problem shows up only when you publish.",
       "fix": "Grant data only signed-in users need to the `authenticated` role instead: replace `@anonymous('read')` (or `@role('anonymous', …)`) with `@authenticated('read')`. Keep `@anonymous('read')` only for genuinely public data, and only if your tenant admin has turned on anonymous data access for Fabric apps.",
       "docs": [
         { "title": "@anonymous()", "url": "https://rayfin.ai/docs/reference/sdk/rayfin-core#anonymousactions-options" },
@@ -508,7 +508,7 @@
       "title": "Browser code calls a service with a secret credential",
       "summary": "Credentials for other services stay server-side",
       "why": "Anything the browser sends is visible to users, so calling paid or privileged APIs from frontend code exposes the credential.",
-      "fix": "Move the call into a Rayfin function that reads the key as `ctx.Secrets.<NAME>` (store it with `rayfin secret set`), and call that function from the app. Functions run in the local preview, but not in every Fabric region, so confirm that publishing with Functions succeeds in your workspace.",
+      "fix": "Move the call into a Rayfin function that reads the key as `ctx.Secrets.<NAME>` (add the secret in Fabricator's Secrets view), and call that function from the app. Functions aren't available in every Fabric region, so confirm that publishing with Functions succeeds in your workspace.",
       "check": "Look for frontend code that sends API keys, bearer tokens or other credentials to other services (fetch or axios headers, SDK constructors), or that embeds such values. Rayfin publishable keys (pk-…) and keys designed to be public are fine. Mask any value you quote.",
       "docs": [
         { "title": "Read secrets from functions", "url": "https://rayfin.ai/docs/deploy/secrets#read-secrets-from-functions" },
@@ -1243,7 +1243,7 @@
       "title": "App uses experimental Rayfin Storage",
       "summary": "Experimental Storage is noted for availability",
       "why": "Storage is experimental: it isn't available in every Fabric region or tenant, and `@microsoft/rayfin-storage` may change substantially between releases.",
-      "fix": "Storage runs in the local preview, but before you depend on it, confirm that publishing with storage succeeds in your target workspace, and keep every Rayfin package on the same release.",
+      "fix": "Before you depend on storage, confirm that publishing with storage succeeds in your target workspace (with Local development on, it also runs in the local preview), and keep every Rayfin package on the same release.",
       "docs": [
         { "title": "Storage is experimental", "url": "https://rayfin.ai/docs/reference/known-limitations#storage-is-experimental" }
       ]
@@ -1340,7 +1340,7 @@
       "title": "App uses Rayfin Functions",
       "summary": "Functions availability in the target workspace is noted",
       "why": "Functions are generally available since Rayfin 1.36, but not in every Fabric region or tenant.",
-      "fix": "Functions run in the local preview, but before you depend on them, confirm that publishing with Functions succeeds in your target workspace, and keep data access in `client.data` where a function isn't required.",
+      "fix": "Before you depend on functions, confirm that publishing with Functions succeeds in your target workspace (with Local development on, they also run in the local preview), and keep data access in `client.data` where a function isn't required.",
       "docs": [
         { "title": "Functions are not available in every region or tenant", "url": "https://rayfin.ai/docs/reference/known-limitations#functions-are-not-available-in-every-region-or-tenant" }
       ]

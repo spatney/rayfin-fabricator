@@ -388,6 +388,12 @@ export default function SettingsModal({
                       checked={Boolean(settings.experiments?.reportMigration)}
                       onChange={(v) => onChange({ experiments: { reportMigration: v } })}
                     />
+                    <ToggleRow
+                      label="Local development"
+                      hint="Run your apps and their backend on this computer while you build, and publish to Microsoft Fabric when you choose."
+                      checked={Boolean(settings.experiments?.localDevelopment)}
+                      onChange={(v) => onChange({ experiments: { localDevelopment: v } })}
+                    />
                   </div>
                 )}
               </div>

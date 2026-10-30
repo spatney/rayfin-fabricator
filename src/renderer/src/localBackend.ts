@@ -75,6 +75,13 @@ export class LocalBackendStore {
     return this.statuses.get(projectId)
   }
 
+  /** The projects whose backend a supervisor is on (starting, running or restarting), as last seen. */
+  activeProjects(): string[] {
+    return [...this.statuses.values()]
+      .filter((status) => isLocalBackendActive(status))
+      .map((status) => status.projectId)
+  }
+
   /** Keep `status` unless a newer snapshot of its project is already known. */
   accept(status: LocalStatus): void {
     const known = this.statuses.get(status.projectId)
@@ -299,7 +306,8 @@ export interface LocalBackend {
 
 /**
  * A project's local backend: its live status (from `local:state`, fetched once
- * on mount) and lifecycle actions. Pass `null` while no project is open.
+ * on mount) and lifecycle actions. Pass `null` while no project is open, and
+ * while the Local development experiment is off, when no app has one.
  */
 export function useLocalBackend(projectId: string | null | undefined): LocalBackend {
   const status = useSyncExternalStore(localBackendStore.subscribe, () =>

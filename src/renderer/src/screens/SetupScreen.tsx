@@ -26,6 +26,7 @@ import { reportIssue } from './reportIssue'
 import { progressLine, toolLine, toolState } from './setupCopy'
 import { setupProblem } from './setupProblems'
 import { setupReady } from '../startup'
+import { visibleTools } from '../localDevelopment'
 
 /** Official product logo (as an <img> src) for each tool, keyed by the doctor's tool id. */
 const TOOL_LOGOS: Record<string, string> = {
@@ -47,9 +48,20 @@ interface Props {
   onEnter: () => void
   /** Return to the app without finishing setup (offered once setup has passed on this computer). */
   onBack?: () => void
+  /** The Local development experiment is on, so the bundled local backend's check shows (never required). */
+  localDevelopment?: boolean
 }
 
-export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh, onEnter, onBack }: Props): JSX.Element {
+export default function SetupScreen({
+  doctor,
+  auth,
+  refreshing,
+  error,
+  onRefresh,
+  onEnter,
+  onBack,
+  localDevelopment = false
+}: Props): JSX.Element {
   const [copilotHost, setCopilotHost] = useState(() => auth?.copilot.host ?? getCopilotHost())
   const [log, setLog] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
@@ -228,7 +240,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
     }
   }
 
-  const tools = doctor?.tools ?? []
+  const tools = visibleTools(doctor?.tools ?? [], localDevelopment)
   const required = tools.filter((t) => t.required)
   const requiredReady = required.filter((t) => t.satisfied).length
   const needsAuto = required.filter((t) => !t.satisfied && !t.checkError && t.autoInstallable)
@@ -614,7 +626,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
         <HelpView
           onClose={() => setShowHelp(false)}
           appVersion={undefined}
-          facts={setupFacts(doctor, auth, { online })}
+          facts={setupFacts(doctor, auth, { online, localDevelopment })}
           surface="setup"
           onAction={runSetupHelpAction}
           onReportIssue={(issue) => void reportIssue(window.api, null, navigator.userAgent, issue)}

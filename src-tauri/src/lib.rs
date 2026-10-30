@@ -442,6 +442,8 @@ pub fn run() {
       commands::local::local_stop_external,
       commands::local::local_install_packages,
       commands::local::local_report_fallback,
+      // Preview as: clear the local preview's site data and reload it
+      services::preview::preview_reset_site_data,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

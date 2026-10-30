@@ -1545,9 +1545,11 @@ export interface StudioProject {
    */
   deploymentNames?: Record<string, string>
   /**
-   * Set by earlier releases on a project created in-app, which kept chat locked
-   * until its first deploy. New projects run on this computer from the start, so
-   * nothing sets it now, and listing the projects clears a stored one.
+   * Set on a project created in-app while the Local development experiment is
+   * off: it has never been published, and chat stays locked until its first
+   * publish, which clears it. Never set for projects opened from disk or created
+   * with Local development on, and ignored while it's on, when apps run on this
+   * computer from the start. Team apps aren't gated.
    */
   awaitingFirstDeploy?: boolean
   /** Copilot model id for this project's chat (`--model`); undefined = auto. */
@@ -1601,10 +1603,13 @@ export interface AppSettings {
    */
   fullDiagnostics?: boolean
   /**
-   * How chat turns deploy personal apps, set by the deployment panel's "Deploy
-   * after each chat turn" switch: 'auto' (the default, also when unset) deploys
-   * as each turn finishes; 'manual' keeps chat changes on this computer until the
-   * user deploys them. Team apps aren't affected.
+   * How chat turns publish personal apps, set by the published apps panel's
+   * "Publish after each chat turn" switch: 'auto' publishes as each turn
+   * finishes; 'manual' keeps chat changes on this computer until the user
+   * publishes them. The user's choice always wins. Unset, it follows the Local
+   * development experiment: turns publish while it's off, and don't while it's on
+   * (the renderer's `publishesAfterTurn`, the core's `store::is_manual_deploy`).
+   * Team apps aren't affected.
    */
   deployMode?: 'auto' | 'manual'
   /**
@@ -2075,6 +2080,14 @@ export interface RayfinVersionInfo {
   upgradeAvailable: boolean
   /** Per-package detail, used to build the upgrade prompt + popover. */
   packages: RayfinPackageVersion[]
+  /**
+   * The newest stable release within the Rayfin versions the bundled local
+   * backend runs (`rayfin-local.json` `sdk.supported`), for the headline
+   * package; Rayfin's packages ship in lockstep. While the Local development
+   * experiment is on, upgrades stop here. Absent when npm couldn't list the
+   * releases or none is in the range.
+   */
+  latestSupportedLocally?: string
 }
 
 /* ------------------------------------------------------------------ *
@@ -2209,7 +2222,7 @@ export interface CustomSkillPreview {
 
 /**
  * One function secret: its name and description from `rayfin/rayfin.yml`, and
- * whether the deployed app has a value. Values are write-only and never returned.
+ * whether the published app has a value. Values are write-only and never returned.
  */
 export interface SecretInfo {
   name: string
@@ -2217,16 +2230,22 @@ export interface SecretInfo {
   description?: string
   /** Listed in `rayfin.yml`, so functions can reference it by name. */
   declared: boolean
-  /** The deployed app has a value for it. */
+  /** The published app has a value for it. */
   stored: boolean
   createdAt?: string
   updatedAt?: string
 }
 
-/** Why secrets can't be managed, or `ready`. */
+/**
+ * Why the published app's secrets can't be managed here (`not-deployed`: the
+ * app isn't published yet), or `ready`.
+ */
 export type SecretsStatus = 'ready' | 'not-deployed' | 'team' | 'update-rayfin' | 'error'
 
-/** A project's secrets (from the Rayfin CLI), or why they can't be managed here. */
+/**
+ * A project's secrets on its published app (from the Rayfin CLI), or why they
+ * can't be managed here. Their values on this computer are `local.secrets`'.
+ */
 export interface SecretsState {
   status: SecretsStatus
   /** With `ready`, every secret; otherwise only the ones `rayfin.yml` lists. */
@@ -3350,9 +3369,10 @@ export interface RayfinStudioApi {
   }
 
   /**
-   * Function secrets on the project's deployed app, through its Rayfin CLI
+   * Function secrets on the project's published app, through its Rayfin CLI
    * (`rayfin secret`). Values are write-only: they go to the CLI and are never
-   * returned, stored or logged by Fabricator.
+   * returned, stored or logged by Fabricator. Values on this computer are
+   * `local`'s (`secrets`, `setSecret`, `deleteSecret`).
    */
   secrets: {
     /** Every secret's name, description and when its value last changed. */
@@ -3362,7 +3382,7 @@ export interface RayfinStudioApi {
      * (with `description`) and the change is committed.
      */
     set: (projectId: string, name: string, value: string, description?: string) => Promise<SecretActionResult>
-    /** Delete a secret from the deployed app and `rayfin.yml`. */
+    /** Delete a secret from the published app and `rayfin.yml`. */
     remove: (projectId: string, name: string) => Promise<SecretActionResult>
     /**
      * Add a secret to `rayfin.yml` (with `description`) and commit it, with no
@@ -3772,6 +3792,15 @@ export interface RayfinStudioApi {
        */
       setTheme: (theme: DesignHostTheme) => Promise<void>
     }
+    /**
+     * Clear the `localStorage` and `sessionStorage` of the page the preview
+     * shows, then reload it, so an app that signs itself in signs in again:
+     * Preview as calls it after changing who the app signs in as on its local
+     * backend. Only for a page served from this computer (`localhost` or a
+     * loopback address): resolves `false`, changing nothing, while the preview
+     * shows another site or nothing. Rejects when the page doesn't answer.
+     */
+    resetSiteData: () => Promise<boolean>
   }
 
   /** Subscribe to streamed process output. Returns an unsubscribe function. */
@@ -4226,8 +4255,9 @@ export interface LocalSecret {
 /**
  * Why a `window.api.local` command failed. `code` is stable: the control API's
  * own codes, or `not-running`, `project-not-found`, `invalid`, `unreachable`,
- * `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed` and the
- * `binary-*` codes of {@link LocalProblemCode}.
+ * `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed`, `experiment-off`
+ * (the Local development experiment is off) and the `binary-*` codes of
+ * {@link LocalProblemCode}.
  */
 export interface LocalCommandError {
   code: string

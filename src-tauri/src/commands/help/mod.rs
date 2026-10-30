@@ -8,9 +8,9 @@
 //! * the **activity journal** (`services::journal`), which records what the app
 //!   did — successes as well as failures — so "why did that fail?" and "how did
 //!   that go?" both have real answers;
-//! * the open app's **local backend**: its status, put in front of the model
-//!   with each question, and its recent output, which it reads redacted through
-//!   `help_local_output`;
+//! * the open app's **local backend**, while the Local development experiment
+//!   is on: its status, put in front of the model with each question, and its
+//!   recent output, which it reads redacted through `help_local_output`;
 //! * the **published documentation**, mirrored locally, for how things are meant
 //!   to work;
 //! * the **release notes**, mirrored locally, for what changed in each version;
@@ -545,10 +545,11 @@ pub async fn help_ask(
     &facts,
     tools::Surface::parse(surface.as_deref()),
   );
-  // The open personal app's local backend: its status for the prompt, and its
-  // output for `help_local_output`. Team apps don't run on one.
+  // The open personal app's local backend, while Local development is on: its
+  // status for the prompt, and its output for `help_local_output`. Team apps
+  // don't run on one, and no app does with the experiment off.
   let local_output: Option<tools::LocalOutput> = match project_id.as_deref() {
-    Some(id) if ctx.personal_project() => {
+    Some(id) if ctx.reads_local_backend() => {
       ctx.local = Some(crate::services::local_backend::snapshot(&app, id));
       let (app, id) = (app.clone(), id.to_string());
       Some(Arc::new(move |n| local::read_output(&app, &id, n)))
@@ -625,6 +626,7 @@ async fn run_turn(
     has_project: ctx.project.is_some(),
     team_project: ctx.project.as_ref().is_some_and(|p| p.team.is_some()),
     surface: ctx.surface,
+    local_development: ctx.local_development,
     local_output,
   });
   let opts = SessionOptions {
@@ -784,6 +786,7 @@ mod tests {
       projects: Vec::new(),
       recent_activity: String::new(),
       facts: Vec::new(),
+      local_development: true,
       local: None,
       surface: crate::commands::help::tools::Surface::Project,
       extra_roots: Vec::new(),

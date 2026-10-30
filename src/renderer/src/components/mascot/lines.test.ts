@@ -48,10 +48,11 @@ describe('what Ray says', () => {
     expect(greeting('create', false, seeded(2)).text).not.toMatch(/I’m Ray/)
   })
 
-  it('sends a new app straight to building, and a team app to its pipeline', () => {
-    const personal = successLine('create').text
-    expect(personal).toMatch(/on your computer/)
-    expect(personal).not.toMatch(/deploy|publish|workspace/i)
+  it('sends a new app to building, its first publish or its team pipeline', () => {
+    const local = successLine('create-local').text
+    expect(local).toMatch(/on your computer/)
+    expect(local).not.toMatch(/deploy|publish|workspace/i)
+    expect(successLine('create').text).toMatch(/Fabric workspace to publish/)
     expect(successLine('team').text).toMatch(/team pipeline/)
   })
 

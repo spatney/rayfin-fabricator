@@ -101,6 +101,19 @@ describe('setupFacts', () => {
     )
     expect(absent.some((f) => f.includes('optional'))).toBe(false)
   })
+
+  it('mentions the local backend only with Local development, as setup shows it', () => {
+    const report = doctor([
+      tool('node', true),
+      tool('rayfin-local', true, { name: 'Local backend', required: false })
+    ])
+    expect(setupFacts(report, auth(true, true))).not.toContain(
+      'Also installed (optional): Local backend.'
+    )
+    expect(setupFacts(report, auth(true, true), { localDevelopment: true })).toContain(
+      'Also installed (optional): Local backend.'
+    )
+  })
 })
 
 describe('accountFacts', () => {
@@ -131,8 +144,8 @@ describe('accountFacts', () => {
     ])
   })
 
-  it('describes Fabric and Azure as optional when signed out', () => {
-    const facts = accountFacts(null)
+  it('describes Fabric and Azure as optional when signed out with Local development', () => {
+    const facts = accountFacts(null, { localDevelopment: true })
     expect(facts).toContain('Not signed in to GitHub Copilot.')
     const fabric = facts.find((f) => f.startsWith('Not signed in to Microsoft Fabric.'))
     expect(fabric).toContain('That is optional')
@@ -140,6 +153,17 @@ describe('accountFacts', () => {
     const azure = facts.find((f) => f.startsWith('Not signed in to Azure.'))
     expect(azure).toContain('That is optional')
     expect(azure).toContain('apps build and run on this computer without it')
+  })
+
+  it('needs Fabric to publish without Local development, when apps don’t run on this computer', () => {
+    const facts = accountFacts(null)
+    const fabric = facts.find((f) => f.startsWith('Not signed in to Microsoft Fabric.'))
+    expect(fabric).toBe(
+      'Not signed in to Microsoft Fabric. It is needed to publish apps, and publishing asks for it.'
+    )
+    const azure = facts.find((f) => f.startsWith('Not signed in to Azure.'))
+    expect(azure).toContain('That is optional')
+    expect(azure).not.toContain('on this computer')
   })
 })
 
@@ -173,14 +197,26 @@ describe('workbenchFacts', () => {
     expect(facts).toContain('"Expenses" has been published to the Sales workspace.')
   })
 
-  // Apps run on this computer from the start: never having published is fine,
-  // and the first-deploy gate of earlier releases is gone.
-  it('describes an app that was never published as running on this computer', () => {
-    const facts = workbenchFacts({ ...project, awaitingFirstDeploy: true } as StudioProject)
+  // With Local development apps run on this computer from the start: never
+  // having published is fine, and the first-publish gate doesn't apply.
+  it('describes an app that was never published as running on this computer with Local development', () => {
+    const facts = workbenchFacts({ ...project, awaitingFirstDeploy: true } as StudioProject, {
+      localDevelopment: true
+    })
     expect(facts).toContain(
       '"Expenses" has never been published, which is fine: it runs on this computer, and publishing is optional.'
     )
-    expect(facts.some((f) => /first deploy|deploy/i.test(f))).toBe(false)
+    expect(facts.some((f) => /first deploy|deploy|locked/i.test(f))).toBe(false)
+  })
+
+  it('says chat waits for a new app’s first publish without Local development', () => {
+    expect(workbenchFacts({ ...project, awaitingFirstDeploy: true } as StudioProject)).toContain(
+      '"Expenses" has never been published, so chat stays locked until its first publish.'
+    )
+    // An app opened from a folder was never gated.
+    const opened = workbenchFacts(project)
+    expect(opened).toContain('No publish of "Expenses" is recorded on this computer.')
+    expect(opened.some((f) => f.includes('runs on this computer'))).toBe(false)
   })
 
   it('reports a running preview and an in-flight publish', () => {
@@ -214,6 +250,11 @@ describe('the app on this computer', () => {
     path: 'C:\\apps\\expenses',
     addedAt: '2026-01-01T00:00:00Z'
   } as StudioProject
+  /** The facts with Local development on, which runs personal apps on this computer. */
+  const localDevFacts = (
+    active: StudioProject,
+    options: Parameters<typeof workbenchFacts>[1] = {}
+  ): string[] => workbenchFacts(active, { localDevelopment: true, ...options })
 
   function local(overrides: Partial<LocalStatus> = {}): LocalStatus {
     return {
@@ -242,19 +283,19 @@ describe('the app on this computer', () => {
   }
 
   it('says the app runs, as the preview’s status shows it', () => {
-    expect(workbenchFacts(project, { local: local() })).toContain(
+    expect(localDevFacts(project, { local: local() })).toContain(
       '"Expenses" is running on this computer; the preview\'s status says "Running".'
     )
-    expect(workbenchFacts(project, { local: local({ state: 'restarting' }) })).toContain(
+    expect(localDevFacts(project, { local: local({ state: 'restarting' }) })).toContain(
       '"Expenses" is starting on this computer; the preview\'s status says "Restarting…".'
     )
-    expect(workbenchFacts(project, { local: local({ state: 'stopped' }) })).toContain(
+    expect(localDevFacts(project, { local: local({ state: 'stopped' }) })).toContain(
       '"Expenses" is not running on this computer; the preview\'s status says "Stopped".'
     )
   })
 
   it('quotes what the preview says about a problem that stopped it', () => {
-    const facts = workbenchFacts(project, {
+    const facts = localDevFacts(project, {
       local: local({
         state: 'error',
         error: {
@@ -284,7 +325,7 @@ describe('the app on this computer', () => {
       }
     })
     expect(
-      workbenchFacts(project, { local: refused }).some((f) =>
+      localDevFacts(project, { local: refused }).some((f) =>
         f.includes('would delete local data, so it waits for the user to decide')
       )
     ).toBe(true)
@@ -293,25 +334,25 @@ describe('the app on this computer', () => {
   it('says which copy of a published app the preview shows', () => {
     const published = { ...project, lastDeploy: { url: 'https://app.example' } } as StudioProject
     expect(
-      workbenchFacts(published, { view: 'published', local: local() }).some((f) =>
+      localDevFacts(published, { view: 'published', local: local() }).some((f) =>
         f.startsWith('The preview shows the published copy of "Expenses" (Published)')
       )
     ).toBe(true)
     expect(
-      workbenchFacts(published, { view: 'local' }).some((f) =>
+      localDevFacts(published, { view: 'local' }).some((f) =>
         f.startsWith('The preview shows the copy of "Expenses" on this computer (Local)')
       )
     ).toBe(true)
     // Before it's published there's only one copy.
     expect(
-      workbenchFacts(project, { view: 'local' }).some((f) => f.startsWith('The preview shows'))
+      localDevFacts(project, { view: 'local' }).some((f) => f.startsWith('The preview shows'))
     ).toBe(false)
   })
 
   it('passes on why the preview uses the published backend instead', () => {
     const reason =
       'The logs connector runs only on Fabric, so the preview uses your published app’s backend.'
-    const facts = workbenchFacts(project, { fallbackReason: reason, local: local() })
+    const facts = localDevFacts(project, { fallbackReason: reason, local: local() })
     expect(facts).toContain(
       `The preview of "Expenses" uses its published app's backend, not this computer's, and says: "${reason}"`
     )
@@ -319,12 +360,18 @@ describe('the app on this computer', () => {
   })
 
   it('says nothing about a backend a team app does not have, or one it was not told about', () => {
-    const team = workbenchFacts(project, { team: true, local: local() })
+    const team = localDevFacts(project, { team: true, local: local() })
     expect(team.some((f) => f.includes('status says'))).toBe(false)
-    expect(workbenchFacts(project).some((f) => f.includes('status says'))).toBe(false)
-    expect(workbenchFacts(project, { local: null }).some((f) => f.includes('status says'))).toBe(
+    expect(localDevFacts(project).some((f) => f.includes('status says'))).toBe(false)
+    expect(localDevFacts(project, { local: null }).some((f) => f.includes('status says'))).toBe(
       false
     )
+  })
+
+  it('says nothing about the app on this computer without Local development', () => {
+    const published = { ...project, lastDeploy: { url: 'https://app.example' } } as StudioProject
+    const facts = workbenchFacts(published, { view: 'local', local: local() })
+    expect(facts.some((f) => f.includes('status says') || f.includes('(Local)'))).toBe(false)
   })
 })
 

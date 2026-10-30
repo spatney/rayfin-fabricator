@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { LocalSecret, SecretInfo, SecretsState, StudioProject } from '@shared/ipc'
 import { OverlayProvider } from '../overlay'
+import { LocalDevelopmentContext } from '../localDevelopment'
 import SecretsView from './SecretsView'
 import { nameProblem, toSecretName } from './secrets/SecretDialog'
 
@@ -56,18 +57,25 @@ function installApi(state: SecretsState, local: LocalSecret[] | Error = []) {
 }
 
 async function renderView(
-  props: { onChanged?: () => void; onSendToChat?: (d: string, p: string) => void } = {}
+  props: {
+    onChanged?: () => void
+    onSendToChat?: (d: string, p: string) => void
+    /** The Local development experiment (on unless a test says otherwise). */
+    localDevelopment?: boolean
+  } = {}
 ) {
   await act(async () => {
     render(
       <OverlayProvider>
-        <SecretsView
-          project={
-            { id: 'p1', lastDeploy: { url: 'https://app.example' } } as unknown as StudioProject
-          }
-          onChanged={props.onChanged ?? (() => {})}
-          onSendToChat={props.onSendToChat}
-        />
+        <LocalDevelopmentContext.Provider value={props.localDevelopment ?? true}>
+          <SecretsView
+            project={
+              { id: 'p1', lastDeploy: { url: 'https://app.example' } } as unknown as StudioProject
+            }
+            onChanged={props.onChanged ?? (() => {})}
+            onSendToChat={props.onSendToChat}
+          />
+        </LocalDevelopmentContext.Provider>
       </OverlayProvider>
     )
   })
@@ -432,5 +440,70 @@ describe('SecretsView', () => {
     )
     fireEvent.click(within(details).getByRole('button', { name: /Ask Copilot to use it/ }))
     expect(onSendToChat.mock.calls[0][1]).toContain("rayfin/rayfin.yml doesn't list it yet")
+  })
+})
+
+describe('SecretsView without Local development', () => {
+  it('shows each secret’s value on the published app alone', async () => {
+    const api = installApi(ready([OPENAI, MISSING]))
+    await renderView({ localDevelopment: false })
+
+    await screen.findByRole('region', { name: 'Secrets' })
+    expect(row('OPENAI_KEY').textContent).toContain('Published value: Set')
+    expect(row('STRIPE_KEY').textContent).toContain('Published value: Not set')
+    expect(row('OPENAI_KEY').textContent).not.toContain('Local value')
+    expect(screen.queryByText('Local value')).toBeNull()
+    expect(screen.queryByText('Set on this computer')).toBeNull()
+    expect(api.local.secrets).not.toHaveBeenCalled()
+
+    const details = await openDetails('OPENAI_KEY')
+    expect(within(details).queryByRole('region', { name: 'Local value' })).toBeNull()
+    const published = within(details).getByRole('region', { name: 'Published value' })
+    expect(within(published).getByRole('button', { name: /Replace value/ })).toBeTruthy()
+  })
+
+  it('waits for the app’s first publish', async () => {
+    const api = installApi(unpublished([UNPUBLISHED]))
+    await renderView({ localDevelopment: false })
+
+    expect(await screen.findByText('Publish your app first')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'Secrets are stored with your published app, so you can add them once it’s published.'
+      )
+    ).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'New secret' }) as HTMLButtonElement).disabled).toBe(
+      true
+    )
+    expect(api.local.secrets).not.toHaveBeenCalled()
+  })
+
+  it('adds a secret with its value on the published app', async () => {
+    const api = installApi(ready([]))
+    await renderView({ localDevelopment: false })
+
+    expect(await screen.findByText('No secrets yet')).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: /New secret/ })[1])
+    const dialog = await screen.findByRole('dialog', { name: 'New secret' })
+    expect(
+      within(dialog).getByText(
+        'Sent straight to your published app. Fabricator doesn’t keep it, and nobody can read it back.'
+      )
+    ).toBeTruthy()
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'API_KEY' } })
+    fireEvent.change(within(dialog).getByLabelText('Value'), { target: { value: 'abc' } })
+    fireEvent.change(within(dialog).getByLabelText(/What it’s for/), {
+      target: { value: 'Payments' }
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add secret' }))
+
+    await waitFor(() =>
+      expect(api.secrets.set).toHaveBeenCalledWith('p1', 'API_KEY', 'abc', 'Payments')
+    )
+    expect(api.secrets.declare).not.toHaveBeenCalled()
+    expect(api.local.setSecret).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText('Added API_KEY. Its value is stored with your published app.')
+    ).toBeTruthy()
   })
 })

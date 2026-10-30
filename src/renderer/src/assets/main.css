@@ -10554,6 +10554,56 @@ select.ws-input:disabled {
   line-height: 1.45;
 }
 
+/* Step indicator (Details → Publish), while Local development is off */
+.create-steps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.create-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* Flat step numbers: the current step is the one accent-filled circle. */
+.create-step-no {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+  background: var(--bg-elev-2);
+}
+
+.create-step--active {
+  color: var(--text);
+}
+
+.create-step--active .create-step-no {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.create-step--done {
+  color: var(--text-dim);
+}
+
+.create-step--done .create-step-no {
+  color: var(--text-dim);
+}
+
 .create-body {
   display: flex;
   flex-direction: column;
@@ -11333,6 +11383,43 @@ select.ws-input:disabled {
   .create-progress .ws-spinner {
     animation-duration: 1.6s;
   }
+}
+
+/* Publish step: the shared workspace picker in a card, aligned with the title
+   like the Details step's fields. */
+.create-deploy {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+}
+
+/* Bump the shared form's compact buttons up a notch for the fullscreen step. */
+.create-deploy .dep-create-actions .btn {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.create-skip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.create-skip .link-btn {
+  align-self: center;
+}
+
+.create-skip-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.4;
 }
 
 /* ── Plan Mode card + review dialog (`.chat-plan-*`) ─────────────────────────

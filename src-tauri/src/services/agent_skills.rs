@@ -12,15 +12,18 @@
 //! There are two sets, each with its own skills and instructions folder, and
 //! [`guidance_for`] picks one per session:
 //!
-//! - **Local**, the default: Fabricator runs the app and its whole backend on
-//!   this computer (`services::local_backend`) and shows it live. The agent never
-//!   starts or publishes the app; it checks its work with static checks, one-shot
-//!   unit tests and the `fabricator_local_*` tools (see
-//!   [`crate::services::agent_tools`]). Publishing to Fabric is the user's choice.
-//! - **Fabric-backed**: the app's backend runs on Microsoft Fabric (team apps,
-//!   and published apps the local backend can't run). The agent validates without
-//!   running the app (the headless `npm run preview` where the app has it), and
-//!   Fabricator deploys the app.
+//! - **Local**, while the Local development experiment is on: Fabricator runs
+//!   the app and its whole backend on this computer (`services::local_backend`)
+//!   and shows it live. The agent never starts or publishes the app; it checks
+//!   its work with static checks, one-shot unit tests and the
+//!   `fabricator_local_*` tools (see [`crate::services::agent_tools`]).
+//!   Publishing to Fabric is the user's choice.
+//! - **Fabric-backed**: the app's backend runs on Microsoft Fabric (every app
+//!   while the experiment is off, team apps, and published apps the local
+//!   backend can't run). The agent validates without running the app (the
+//!   headless `npm run preview` where the app has it), and Fabricator deploys
+//!   the app: after each chat turn or when the user publishes, as the note on
+//!   each message says.
 
 use std::path::{Path, PathBuf};
 
@@ -46,13 +49,17 @@ impl Guidance {
   }
 }
 
-/// The guidance a project's chat sessions get. Team apps are Fabric-backed: their
-/// pipeline deploys them, and their preview runs against that. So is a published
-/// app the local backend can't run all of ([`needs_fabric`]), which Fabricator
-/// previews against its published backend instead. Every other app runs locally.
-pub fn guidance_for(project: &StudioProject, local: &LocalStatus) -> Guidance {
+/// The guidance a project's chat sessions get. While the Local development
+/// experiment is off (`local_development`), every app is Fabric-backed: it's
+/// developed against its Fabric deployment, as before the local backend, and the
+/// local backend tools aren't offered. With it on, team apps are Fabric-backed
+/// too: their pipeline deploys them, and their preview runs against that. So is
+/// a published app the local backend can't run all of ([`needs_fabric`]), which
+/// Fabricator previews against its published backend instead. Every other app
+/// runs locally.
+pub fn guidance_for(project: &StudioProject, local: &LocalStatus, local_development: bool) -> Guidance {
   let published = project.last_deploy.as_ref().and_then(|d| d.url.as_deref()).is_some_and(|url| !url.trim().is_empty());
-  if project.team.is_some() || (published && needs_fabric(local)) {
+  if !local_development || project.team.is_some() || (published && needs_fabric(local)) {
     Guidance::FabricBacked
   } else {
     Guidance::Local
@@ -376,10 +383,9 @@ applyTo: '**'
 You are the coding agent inside **Fabricator**, and Fabricator owns deployment. This app's backend
 runs on Microsoft Fabric. Fabricator deploys the app there and shows the result in its preview:
 through the team's pipeline when your turn ends, for an app in a team workspace; otherwise with
-`rayfin up` when the user selects **Publish**, or when your turn ends if they turned on
-**Publish after each chat turn**. Fabricator's note at the start of the user's message says which
-applies. A deploy you start yourself races Fabricator's, can target the wrong workspace, and
-wastes the turn.
+`rayfin up` when your turn ends while **Publish after each chat turn** is on, or when the user
+selects **Publish**. Fabricator's note at the start of the user's message says which applies. A
+deploy you start yourself races Fabricator's, can target the wrong workspace, and wastes the turn.
 
 ## Never deploy, even when asked
 - Don't run `rayfin up` in any form: `npx rayfin up`, `npm run rayfin:up`, dry runs such as
@@ -392,8 +398,10 @@ wastes the turn.
   you're signed out, ask the user to select **Refresh Fabric authentication** in Fabricator's
   account menu.
 - If the user asks you to deploy, publish or "make it live", make the code changes and tell them
-  how they go live: in a team workspace, Fabricator saves them when your turn ends and the team's
-  pipeline deploys them; otherwise they select **Publish** in Fabricator.
+  how they go live, as Fabricator's note says: in a team workspace, Fabricator saves them when
+  your turn ends and the team's pipeline deploys them; otherwise Fabricator publishes them when
+  your turn ends while **Publish after each chat turn** is on, and while it's off, they select
+  **Publish** in Fabricator.
 
 ## Skip the project's own deployment steps
 Templates and skills, including the Rayfin CLI's default Universal App template and the `rayfin`
@@ -1229,11 +1237,12 @@ mod tests {
       ..Default::default()
     };
     let never_started = LocalStatus::default();
-    assert_eq!(guidance_for(&project(false, false), &running), Guidance::Local);
-    assert_eq!(guidance_for(&project(true, false), &running), Guidance::Local);
-    assert_eq!(guidance_for(&project(true, false), &never_started), Guidance::Local);
+    let local = |project: &StudioProject, status: &LocalStatus| guidance_for(project, status, true);
+    assert_eq!(local(&project(false, false), &running), Guidance::Local);
+    assert_eq!(local(&project(true, false), &running), Guidance::Local);
+    assert_eq!(local(&project(true, false), &never_started), Guidance::Local);
     // Team apps are previewed against, and deployed by, their pipeline.
-    assert_eq!(guidance_for(&project(false, true), &running), Guidance::FabricBacked);
+    assert_eq!(local(&project(false, true), &running), Guidance::FabricBacked);
 
     // A published app the local backend can't run all of falls back to its published backend.
     let newer_sdk = LocalStatus { analysis: Some(crate::types::LocalAnalysis { sdk: sdk(Some("1.37.0"), false), ..Default::default() }), ..Default::default() };
@@ -1244,14 +1253,48 @@ mod tests {
     let kusto_warning = LocalStatus { warnings: vec![warning("connector-unsupported")], ..Default::default() };
     for status in [&newer_sdk, &sdk_warning, &kusto, &kusto_warning] {
       assert!(needs_fabric(status), "{status:?}");
-      assert_eq!(guidance_for(&project(true, false), status), Guidance::FabricBacked);
+      assert_eq!(local(&project(true, false), status), Guidance::FabricBacked);
       // Never published: nothing to fall back to, so it keeps running locally.
-      assert_eq!(guidance_for(&project(false, false), status), Guidance::Local);
+      assert_eq!(local(&project(false, false), status), Guidance::Local);
     }
     // Packages that aren't installed say nothing about the version.
     let not_installed = LocalStatus { analysis: Some(crate::types::LocalAnalysis { sdk: sdk(None, false), ..Default::default() }), ..Default::default() };
     assert!(!needs_fabric(&not_installed));
-    assert_eq!(guidance_for(&project(true, false), &not_installed), Guidance::Local);
+    assert_eq!(local(&project(true, false), &not_installed), Guidance::Local);
+  }
+
+  #[test]
+  fn without_local_development_every_app_is_fabric_backed() {
+    let running = LocalStatus {
+      ready: Some(LocalReady { sdk: sdk(Some("1.36.2"), true), ..Default::default() }),
+      ..Default::default()
+    };
+    // So the local backend tools aren't offered, even with a backend still reporting in.
+    for status in [&running, &LocalStatus::default()] {
+      for (published, team) in [(false, false), (true, false), (false, true)] {
+        assert_eq!(guidance_for(&project(published, team), status, false), Guidance::FabricBacked, "{published} {team}");
+      }
+    }
+  }
+
+  #[test]
+  fn fabric_backed_guidance_covers_publishing_after_a_turn_and_on_demand() {
+    // While Local development is off, Publish after each chat turn starts on; the
+    // note on each message says which applies, so the guidance reads right either way.
+    for marker in [
+      "when your turn ends while **Publish after each chat turn** is on",
+      "or when the user\nselects **Publish**",
+      "while it's off, they select\n  **Publish** in Fabricator",
+      "as Fabricator's note says",
+    ] {
+      assert!(FABRIC_DEPLOY_INSTRUCTIONS.contains(marker), "deploy instructions should say {marker:?}");
+    }
+    // Nothing in the set assumes the user turned publishing after a turn on, or off.
+    for (name, text) in every_file().into_iter().filter(|(name, _)| name.starts_with("fabric/")) {
+      for phrase in ["if they turned on", "turned off", "Publish after each chat turn is off", "otherwise they select"] {
+        assert!(!text.contains(phrase), "{name} says {phrase:?}");
+      }
+    }
   }
 
   #[test]

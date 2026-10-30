@@ -241,7 +241,9 @@ fn rayfin_packages(root: &Path) -> Vec<AdvisorPackage> {
 }
 
 /// Build the quick-check snapshot for the project at `root`. `local`: the
-/// bundled local backend runs the app (personal apps; team apps don't).
+/// bundled local backend runs the app (personal apps while the Local
+/// development experiment is on), so the snapshot carries the Rayfin releases
+/// it runs and the local-only checks apply.
 pub(crate) async fn collect(root: &str, local: bool) -> AdvisorProjectSnapshot {
   let root_path = Path::new(root).to_path_buf();
   let is_git_repo = root_path.join(".git").exists();
@@ -413,6 +415,18 @@ mod tests {
     assert!(cli.installed.is_none());
     assert_eq!(pkg("@microsoft/rayfin-lib").unwrap().installed.as_deref(), Some("1.34.0"));
     assert!(pkg("react").is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  #[tokio::test]
+  async fn the_local_range_comes_only_for_apps_the_local_backend_runs() {
+    let dir = std::env::temp_dir().join(format!("advisor-local-range-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("package.json"), r#"{"dependencies":{"@microsoft/rayfin-core":"~1.36.0"}}"#).unwrap();
+    let root = dir.to_string_lossy().into_owned();
+    // Without it, the local-only checks (and the local cap on updates) don't apply.
+    assert_eq!(collect(&root, false).await.local_sdk_range, None);
+    assert_eq!(collect(&root, true).await.local_sdk_range.as_deref(), Some(rayfin_sdk::supported_range()));
     let _ = std::fs::remove_dir_all(&dir);
   }
 

@@ -45,7 +45,7 @@ export const RAYFIN_FACTS: readonly string[] = [
   'Connectors read data that already lives in Fabric: warehouses, SQL databases, semantic models and KQL databases.',
   'With a connector, your app can run DAX against a Fabric semantic model.',
   'Functions run server-side TypeScript next to your data. Heads up: they aren’t in every Fabric region yet.',
-  'Functions can call outside APIs using secrets you store with rayfin secret set.',
+  'Functions can call outside APIs with keys kept as secrets, so the keys never sit in your code.',
   'Every @microsoft/rayfin-* package shares one version number, so upgrades move in lockstep.',
   'New apps start from Rayfin’s Universal App. It starts small and grows into whatever you describe.',
   'Rayfin hosts your frontend too. The built app is served from Fabric, next to its data.',
@@ -60,8 +60,9 @@ export const FABRICATOR_TIPS: readonly string[] = [
   'Every change is kept. Code → History can restore an earlier version.',
   'The Advisor grades your app’s health, and every finding comes with a one-click fix.',
   'Blueprint shows how your app is put together, data model included.',
-  'Your app runs on your computer while you build. Publish it when others should use it.',
-  'Want every change in Fabric right away? Turn on Publish after each chat turn.',
+  'An API key for a function? Add it in Code → Secrets, so it never sits in your code.',
+  'Publishing puts your app on Microsoft Fabric, where people in your organization can open it.',
+  'Publish after each chat turn decides whether every change goes to Fabric right away.',
   'Once your app is published, Share lets people in your organization open it.',
   'Stuck later? Select Help in the status bar, and I’ll dig through the logs with you.'
 ]
@@ -84,10 +85,12 @@ export const QUIPS: readonly string[] = [
 ]
 
 /**
- * What Ray keeps you company through: creating an app on this computer or in a
- * team workspace (`team`), cloning one, or installing an opened app's packages.
+ * What Ray keeps you company through: creating an app (`create`, which a first
+ * publish follows; `create-local`, which runs on this computer with Local
+ * development; `team`, in a team workspace), cloning one, or installing an
+ * opened app's packages.
  */
-export type Occasion = 'create' | 'team' | 'clone' | 'prepare'
+export type Occasion = 'create' | 'create-local' | 'team' | 'clone' | 'prepare'
 
 export function pickLine<T>(items: readonly T[], random: () => number = Math.random): T {
   return items[Math.min(items.length - 1, Math.floor(random() * items.length))]
@@ -112,6 +115,7 @@ export function greeting(
   ]
   const lines: Record<Occasion, readonly string[]> = {
     create,
+    'create-local': create,
     team: create,
     clone: [
       'Cloning, nice. I’ll keep you company while the packages arrive.',
@@ -126,15 +130,12 @@ export function greeting(
 }
 
 export function successLine(occasion: Occasion): MascotLine {
-  return {
-    kind: 'chat',
-    text:
-      occasion === 'create'
-        ? 'Your app is ready! It runs right here on your computer. Let’s build.'
-        : occasion === 'team'
-          ? 'Your app is ready! The team pipeline is deploying your first preview.'
-          : 'All set! Your app is ready.'
+  const text: Partial<Record<Occasion, string>> = {
+    'create-local': 'Your app is ready! It runs right here on your computer. Let’s build.',
+    create: 'Your app is ready! Next, pick a Fabric workspace to publish it.',
+    team: 'Your app is ready! The team pipeline is deploying your first preview.'
   }
+  return { kind: 'chat', text: text[occasion] ?? 'All set! Your app is ready.' }
 }
 
 export function errorLine(occasion: Occasion): MascotLine {

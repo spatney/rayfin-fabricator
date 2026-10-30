@@ -23,6 +23,7 @@
 import type { AuthStatus, DoctorReport, LocalStatus, StudioProject } from '@shared/ipc'
 import { describeProblem } from './components/local/problems'
 import { localStateLabel, refusedSchemaLosses } from './localBackend'
+import { visibleTools } from './localDevelopment'
 import { setupReady } from './startup'
 
 /** Join a list the way a person would: "a, b and c". */
@@ -35,13 +36,15 @@ function sentenceList(items: string[]): string {
  * The state of setup: tools, accounts, and whether the user can get in.
  *
  * Used on the setup screen, where all of it is on screen in front of the user.
+ * The local backend's check shows there only with Local development on.
  */
 export function setupFacts(
   doctor: DoctorReport | null,
   auth: AuthStatus | null,
-  options: { online?: boolean } = {}
+  options: { online?: boolean; localDevelopment?: boolean } = {}
 ): string[] {
   const facts: string[] = []
+  const localDevelopment = Boolean(options.localDevelopment)
 
   if (options.online === false) {
     // Worth saying first: it explains most of what follows.
@@ -51,7 +54,8 @@ export function setupFacts(
   if (!doctor) {
     facts.push('The tool check has not finished running yet.')
   } else {
-    const required = doctor.tools.filter((t) => t.required)
+    const tools = visibleTools(doctor.tools, localDevelopment)
+    const required = tools.filter((t) => t.required)
     const missing = required.filter((t) => !t.satisfied)
     if (missing.length === 0 && required.length > 0) {
       facts.push(
@@ -73,13 +77,13 @@ export function setupFacts(
       }
     }
     // Optional tools only matter when they're present; absence isn't a problem.
-    const optional = doctor.tools.filter((t) => !t.required && t.satisfied)
+    const optional = tools.filter((t) => !t.required && t.satisfied)
     if (optional.length > 0) {
       facts.push(`Also installed (optional): ${sentenceList(optional.map((t) => t.name))}.`)
     }
   }
 
-  facts.push(...accountFacts(auth))
+  facts.push(...accountFacts(auth, { localDevelopment }))
 
   // The same test the setup screen uses: Azure is optional, so it isn't part of it.
   facts.push(
@@ -97,12 +101,17 @@ export function setupFacts(
  * "the tool check has not finished" to someone who is already inside the app
  * would be worse than saying nothing.
  *
- * Only GitHub Copilot is required. Microsoft Fabric and Azure are optional:
- * apps build and run on this computer without them, and the features that need
- * them ask for a sign-in when they're used.
+ * Only GitHub Copilot is required. Azure is optional: the features that need
+ * it ask for a sign-in when they're used. So is Microsoft Fabric with Local
+ * development on, when apps build and run on this computer; without it, apps
+ * are developed against their published copy, so publishing needs it.
  */
-export function accountFacts(auth: AuthStatus | null): string[] {
+export function accountFacts(
+  auth: AuthStatus | null,
+  options: { localDevelopment?: boolean } = {}
+): string[] {
   const facts: string[] = []
+  const localDevelopment = Boolean(options.localDevelopment)
 
   const copilot = auth?.copilot
   if (copilot?.signedIn) {
@@ -128,7 +137,9 @@ export function accountFacts(auth: AuthStatus | null): string[] {
     facts.push('The Microsoft Fabric account is still being checked.')
   } else {
     facts.push(
-      'Not signed in to Microsoft Fabric. That is optional: it is only needed to publish apps, and publishing asks for it.'
+      localDevelopment
+        ? 'Not signed in to Microsoft Fabric. That is optional: it is only needed to publish apps, and publishing asks for it.'
+        : 'Not signed in to Microsoft Fabric. It is needed to publish apps, and publishing asks for it.'
     )
   }
 
@@ -139,7 +150,9 @@ export function accountFacts(auth: AuthStatus | null): string[] {
     facts.push('The Azure account is still being checked.')
   } else {
     facts.push(
-      'Not signed in to Azure. That is optional: apps build and run on this computer without it, and sharing an app, adding Fabric data, migrating Power BI reports and connectors ask for it when they are used.'
+      localDevelopment
+        ? 'Not signed in to Azure. That is optional: apps build and run on this computer without it, and sharing an app, adding Fabric data, migrating Power BI reports and connectors ask for it when they are used.'
+        : 'Not signed in to Azure. That is optional: sharing an app, adding Fabric data, migrating Power BI reports and connectors ask for it when they are used.'
     )
   }
 
@@ -228,6 +241,12 @@ export function workbenchFacts(
     deploying?: boolean
     /** The most recent publish failed, and none has run since. */
     deployFailed?: boolean
+    /**
+     * The Local development experiment is on: personal apps run on this
+     * computer, on their local backend. Off, they're developed against their
+     * published copy, and a new one is published before chat unlocks.
+     */
+    localDevelopment?: boolean
   } & LocalPreviewFacts = {}
 ): string[] {
   const facts: string[] = []
@@ -262,10 +281,16 @@ export function workbenchFacts(
     facts.push(
       `No publish of "${active.name}" is recorded on this computer; the team's pipeline publishes it.`
     )
-  } else {
+  } else if (options.localDevelopment) {
     facts.push(
       `"${active.name}" has never been published, which is fine: it runs on this computer, and publishing is optional.`
     )
+  } else if (active.awaitingFirstDeploy) {
+    facts.push(
+      `"${active.name}" has never been published, so chat stays locked until its first publish.`
+    )
+  } else {
+    facts.push(`No publish of "${active.name}" is recorded on this computer.`)
   }
 
   if (options.deploying) facts.push(`"${active.name}" is being published right now.`)
@@ -276,8 +301,8 @@ export function workbenchFacts(
       `The most recent publish of "${active.name}" failed, and the notice above the preview says so. No publish has run since.`
     )
   }
-  // Team apps have no local backend.
-  if (!options.team) facts.push(...localFacts(active, options))
+  // Only personal apps with Local development have a local backend.
+  if (!options.team && options.localDevelopment) facts.push(...localFacts(active, options))
   if (options.previewUrl) facts.push(`A local preview of "${active.name}" is running.`)
 
   return facts

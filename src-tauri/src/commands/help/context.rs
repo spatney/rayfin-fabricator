@@ -82,8 +82,13 @@ pub struct HelpContext {
   pub recent_activity: String,
   /// What is true right now, from the screen that opened Help.
   pub facts: Vec<String>,
+  /// The Local development experiment is on: personal apps run on this
+  /// computer with a local backend. Off, they're developed against their Fabric
+  /// deployment, and Help says nothing of a local backend.
+  pub local_development: bool,
   /// The open personal project's local backend, as the supervisor last
-  /// reported it. `None` without one open: team apps don't run on one.
+  /// reported it. `None` without one open, or with Local development off: team
+  /// apps don't run on one.
   pub local: Option<LocalStatus>,
   /// Which screen the user is on, so an action that can't work from there is
   /// never offered as a button.
@@ -121,21 +126,27 @@ impl HelpContext {
       projects: all_projects(),
       recent_activity: journal::recent(RECENT_ACTIVITY),
       facts: facts.to_vec(),
+      local_development: store::local_development_enabled(),
       local: None,
       surface,
       extra_roots: attachments.to_vec(),
     }
   }
 
-  /// Whether the open project is a personal one, whose local backend Help may
-  /// describe and read.
+  /// Whether the open project is a personal one.
   pub fn personal_project(&self) -> bool {
     self.project.as_ref().is_some_and(|p| p.team.is_none())
   }
 
+  /// Whether Help describes and reads the open project's local backend: a
+  /// personal one, while Local development is on.
+  pub fn reads_local_backend(&self) -> bool {
+    self.local_development && self.personal_project()
+  }
+
   /// Places inside the roots the session must not read directly: the local
   /// backend's raw output, which Help reads redacted through
-  /// `help_local_output` instead.
+  /// `help_local_output` instead (while Local development is on).
   pub fn denied(&self) -> Vec<PathBuf> {
     vec![PathBuf::from(&self.logs_dir).join(diagnostics::LOCAL_LOG_DIR)]
   }
@@ -193,10 +204,15 @@ only a workspace owner can grant it.\n",
           );
         } else if p.published {
           s.push_str("  It has been published to Microsoft Fabric.\n");
-        } else {
+        } else if self.local_development {
           s.push_str(
             "  It has never been published to Microsoft Fabric. That's fine: it runs on this \
 computer, and publishing is optional.\n",
+          );
+        } else {
+          s.push_str(
+            "  It has never been published to Microsoft Fabric. It's developed against its \
+published app, so the preview can show it only after a first publish.\n",
           );
         }
       }
@@ -222,10 +238,15 @@ candidates. Never invent an id.\n",
 
     s.push_str(&format!(
       "- Logs and the activity journal: `{}` (files named `activity-*.jsonl`, `diagnostics-*.jsonl`, \
-`main-*.log`). The local backend's output is read with `help_local_output`; its own log files \
-there are not readable directly.\n",
+`main-*.log`).",
       self.logs_dir
     ));
+    s.push_str(if self.local_development {
+      " The local backend's output is read with `help_local_output`; its own log files there are \
+not readable directly.\n"
+    } else {
+      "\n"
+    });
 
     match &self.docs_dir {
       Some(d) => s.push_str(&format!(
@@ -340,6 +361,7 @@ mod tests {
       projects: Vec::new(),
       recent_activity: String::new(),
       facts: Vec::new(),
+      local_development: true,
       local: None,
       surface: Surface::Project,
       extra_roots: vec!["C:\\Users\\me\\Desktop\\shot.png".into()],
@@ -361,12 +383,14 @@ mod tests {
     assert!(text.contains("open-team-access"));
     assert!(text.contains("doesn't run on a local backend"));
     assert!(!c.personal_project(), "Help never describes a team app's local backend");
+    assert!(!c.reads_local_backend());
   }
 
   #[test]
   fn a_personal_project_says_nothing_about_team_access() {
     assert!(!ctx().describe().contains("team app"));
     assert!(ctx().personal_project());
+    assert!(ctx().reads_local_backend());
   }
 
   #[test]
@@ -383,6 +407,20 @@ mod tests {
     assert!(text.contains("\"Expenses\" — id `p1` (published)"));
     assert!(text.contains("\"Notes\" — id `p2` (never published)"));
     assert!(!text.contains("deployed"), "the old word is gone: {text}");
+  }
+
+  #[test]
+  fn without_local_development_an_app_needs_publishing_and_has_no_local_backend() {
+    let mut c = ctx();
+    c.local_development = false;
+    assert!(!c.reads_local_backend(), "a personal app has no local backend to read");
+    let text = c.describe();
+    assert!(text.contains("never been published to Microsoft Fabric. It's developed against its published app"));
+    assert!(!text.contains("That's fine"), "{text}");
+    assert!(!text.contains("help_local_output"), "{text}");
+    assert!(text.contains("`activity-*.jsonl`"));
+    // Its raw output stays unreadable all the same.
+    assert_eq!(c.denied().len(), 1);
   }
 
   #[test]

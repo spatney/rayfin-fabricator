@@ -7,6 +7,7 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { toLocalBackendError, type LocalBackendError } from '../localBackend'
+import { useLocalDevelopment } from '../localDevelopment'
 import { relativeTime } from './advisor/format'
 import { Codicon } from './icons'
 import Skeleton from './Skeleton'
@@ -114,7 +115,7 @@ function TeamSecretRow({
   )
 }
 
-/** A personal app's secret: its value on this computer and, once published, on the published app. */
+/** A personal app's secret: its value on this computer (with Local development) and, once published, on the published app. */
 function EntryRow({
   entry,
   localCheck,
@@ -123,13 +124,14 @@ function EntryRow({
   onSelect
 }: {
   entry: SecretEntry
-  localCheck: Check
+  /** `null` without Local development: there's no local column. */
+  localCheck: Check | null
   /** `null` while the app isn't published: there's no published column. */
   publishedCheck: Check | null
   selected: boolean
   onSelect: () => void
 }): JSX.Element {
-  const local = localValueState(entry, localCheck)
+  const local = localCheck && localValueState(entry, localCheck)
   const published = publishedCheck && publishedValueState(entry, publishedCheck)
   const about = [entry.declared ? null : 'Not in rayfin.yml', entry.description]
     .filter(Boolean)
@@ -149,14 +151,16 @@ function EntryRow({
           <span className="sec-name">{entry.name}</span>
           {about && <span className="sec-row-desc">{about}</span>}
         </span>
-        <span className="sec-cell">
-          {local && (
-            <>
-              <span className="sr-only">Local value: </span>
-              <ValueStatus state={local} />
-            </>
-          )}
-        </span>
+        {localCheck && (
+          <span className="sec-cell">
+            {local && (
+              <>
+                <span className="sr-only">Local value: </span>
+                <ValueStatus state={local} />
+              </>
+            )}
+          </span>
+        )}
         {publishedCheck && (
           <span className="sec-cell sec-cell--published">
             {published && (
@@ -175,12 +179,14 @@ function EntryRow({
 
 /**
  * The Secrets tab: API keys, passwords and connection strings the app's Rayfin
- * functions read as `ctx.Secrets.NAME`. Names live in `rayfin.yml`. Each secret
- * has a value on this computer, which rayfin-local keeps for the app while it
- * runs here, and, once the app is published, a value on the published app,
- * which goes through the app's Rayfin CLI (`rayfin secret`). Values are
- * write-only: the tab shows where each one comes from, never the value. A team
- * app's deployments are listed read-only; their secrets are changed in the portal.
+ * functions read as `ctx.Secrets.NAME`. Names live in `rayfin.yml`. With Local
+ * development, each secret has a value on this computer, which rayfin-local
+ * keeps for the app while it runs here, and, once the app is published, a value
+ * on the published app. Without it, there's only the published app's value, so
+ * secrets wait for the first publish. Published values go through the app's
+ * Rayfin CLI (`rayfin secret`). Values are write-only: the tab shows where each
+ * one comes from, never the value. A team app's deployments are listed
+ * read-only; their secrets are changed in the portal.
  */
 export default function SecretsView({ project, onChanged, onSendToChat }: Props): JSX.Element {
   const [data, setData] = useState<SecretsState | null>(null)
@@ -203,6 +209,8 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
   /** The dialog added a secret to rayfin.yml but didn't store its value. */
   const declaredInDialog = useRef(false)
   const team = Boolean(project.team)
+  /** Values on this computer: a personal app's, with Local development. */
+  const withLocal = useLocalDevelopment() && !team
 
   const load = useCallback(async () => {
     const id = ++request.current
@@ -218,9 +226,10 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
     }
   }, [project.id])
 
-  // Team apps don't run on this computer, so they have no local values.
+  // Only an app that runs on this computer has values here: not a team app, nor
+  // any app without Local development.
   const loadLocal = useCallback(async () => {
-    if (team) return
+    if (!withLocal) return
     const id = ++localRequest.current
     try {
       const secrets = await window.api.local.secrets(project.id)
@@ -230,7 +239,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       if (id === localRequest.current)
         setLocal({ status: 'error', error: toLocalBackendError(reason) })
     }
-  }, [project.id, team])
+  }, [project.id, withLocal])
 
   const reload = useCallback(() => {
     void load()
@@ -267,13 +276,25 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
   }, [])
 
   const status = data?.status
-  const personal = status === 'ready' || status === 'not-deployed' || status === 'error'
+  // Without Local development, secrets live on the published app alone, so an
+  // app that isn't published yet has none to show.
+  const waitsForPublish = !withLocal && status === 'not-deployed'
+  const personal =
+    status === 'ready' || status === 'error' || (status === 'not-deployed' && withLocal)
   const isTeam = status === 'team'
-  const localCheck: Check =
-    local.status === 'ok' ? 'ok' : local.status === 'error' ? 'failed' : 'loading'
+  /** Reading the values on this computer; `null` without them (no Local development). */
+  const localCheck: Check | null = !withLocal
+    ? null
+    : local.status === 'ok'
+      ? 'ok'
+      : local.status === 'error'
+        ? 'failed'
+        : 'loading'
   // The published column: values read, or not readable. None before the first publish.
   const publishedCheck: Check | null =
     status === 'ready' ? 'ok' : status === 'error' ? 'failed' : null
+  /** A new secret's value goes to this computer, or without it to the published app. */
+  const canAdd = withLocal ? personal : status === 'ready'
 
   const saved = useCallback(
     (name: string, what: SecretSaved) => {
@@ -281,7 +302,9 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       setError(null)
       flash(
         what === 'added'
-          ? `Added ${name}, with its value on this computer.${publishedCheck ? ' Set its published value too.' : ''}`
+          ? withLocal
+            ? `Added ${name}, with its value on this computer.${publishedCheck ? ' Set its published value too.' : ''}`
+            : `Added ${name}. Its value is stored with your published app.`
           : what === 'local'
             ? `Saved the value of ${name} on this computer.`
             : `Saved a new value for ${name} on your published app.`
@@ -293,7 +316,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       }
       void loadLocal()
     },
-    [flash, load, loadLocal, onChanged, publishedCheck]
+    [flash, load, loadLocal, onChanged, publishedCheck, withLocal]
   )
 
   const closeDialog = useCallback(() => {
@@ -476,6 +499,11 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
         Rayfin in the status bar and choose <strong>Update with Copilot</strong>.
       </>
     )
+  } else if (waitsForPublish) {
+    content = empty(
+      'Publish your app first',
+      'Secrets are stored with your published app, so you can add them once it’s published.'
+    )
   } else if (entries.length === 0) {
     content = (
       <>
@@ -484,13 +512,15 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
         {empty(
           'No secrets yet',
           'Add API keys, passwords and connection strings your functions need. Their values never go into your code.',
-          <button
-            type="button"
-            className="btn btn--sm btn--primary"
-            onClick={() => setDialog({ kind: 'new' })}
-          >
-            <Codicon name="add" /> New secret
-          </button>
+          canAdd ? (
+            <button
+              type="button"
+              className="btn btn--sm btn--primary"
+              onClick={() => setDialog({ kind: 'new', published: !withLocal })}
+            >
+              <Codicon name="add" /> New secret
+            </button>
+          ) : undefined
         )}
       </>
     )
@@ -510,7 +540,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
           <div className="sec-table">
             <div className="sec-cols" aria-hidden="true">
               <span className="sec-cols-name">Secret</span>
-              <span className="sec-cell">Local value</span>
+              {localCheck && <span className="sec-cell">Local value</span>}
               {publishedCheck && (
                 <span className="sec-cell sec-cell--published">Published value</span>
               )}
@@ -554,12 +584,18 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
     : personal
       ? [
           ['Secrets', String(entries.length)],
-          [
-            'Set on this computer',
-            localCheck === 'ok'
-              ? share(declared.filter((entry) => entry.local && entry.local !== 'none').length)
-              : '–'
-          ],
+          ...(localCheck
+            ? ([
+                [
+                  'Set on this computer',
+                  localCheck === 'ok'
+                    ? share(
+                        declared.filter((entry) => entry.local && entry.local !== 'none').length
+                      )
+                    : '–'
+                ]
+              ] as [string, string][])
+            : []),
           [
             'Set on the published app',
             publishedCheck === 'ok'
@@ -619,6 +655,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
         functionsEnabled={data.functionsEnabled}
         team={isTeam}
         published={publishedCheck !== null}
+        local={withLocal}
       />
     )
   }
@@ -649,8 +686,8 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
           <button
             type="button"
             className="model-tool-btn"
-            onClick={() => setDialog({ kind: 'new' })}
-            disabled={!personal}
+            onClick={() => setDialog({ kind: 'new', published: !withLocal })}
+            disabled={!canAdd}
             title={isTeam ? 'Change a team app’s secrets in the Fabric portal' : 'Add a secret'}
           >
             <Codicon name="add" /> New secret

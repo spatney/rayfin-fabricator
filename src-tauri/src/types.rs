@@ -669,10 +669,12 @@ pub struct StudioProject {
   pub workspace_name: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub deployment_names: Option<std::collections::HashMap<String, String>>,
-  /// Legacy: Fabricator once set this on new projects and kept chat locked until
-  /// their first deploy. Projects run locally from the start now, so nothing sets
-  /// it, and stored values are cleared when the projects load
-  /// (`projects_impl::forget_first_deploy_gates`). Kept for compatibility.
+  /// Set on a project created while the Local development experiment is off:
+  /// it's developed against its Fabric deployment, so the workbench keeps chat
+  /// locked until its first publish, which clears it. Projects created with the
+  /// experiment on run on this computer from the start and don't get it, and the
+  /// renderer applies the gate only while the experiment is off. Projects opened
+  /// from disk never get it.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub awaiting_first_deploy: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -758,9 +760,10 @@ pub struct AppSettings {
   pub full_diagnostics: Option<bool>,
   /// How chat turns publish personal apps, set by the published apps panel's
   /// "Publish after each chat turn" switch: "auto" publishes as each turn
-  /// finishes; "manual" (the default, also when unset) keeps the changes on this
-  /// computer, running locally, until the user publishes. Team projects aren't
-  /// affected.
+  /// finishes; "manual" keeps the changes on this computer until the user
+  /// publishes. The user's choice always wins. Unset, it's "auto" while the
+  /// Local development experiment is off and "manual" while it's on (see
+  /// `store::manual_deploy_enabled`). Team projects aren't affected.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub deploy_mode: Option<String>,
   /// Your own API keys: each provider's models and which of them the model
@@ -2652,6 +2655,12 @@ pub struct RayfinVersionInfo {
   pub latest: Option<String>,
   pub upgrade_available: bool,
   pub packages: Vec<RayfinPackageVersion>,
+  /// The newest stable release npm lists within the Rayfin versions the bundled
+  /// local backend runs (`rayfin-local.json` `sdk.supported`), for the headline
+  /// package: where upgrades stop while the Local development experiment is on.
+  /// Absent when npm couldn't list them or none is in the range.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub latest_supported_locally: Option<String>,
 }
 
 /* ----------------------------- skills ----------------------------- */
@@ -3092,8 +3101,8 @@ pub struct AdvisorProjectSnapshot {
   pub is_git_repo: bool,
   pub packages: Vec<AdvisorPackage>,
   /// The Rayfin releases the bundled local backend runs, as an npm range
-  /// (`rayfin-local.json` `sdk.supported`). Absent for apps it doesn't run,
-  /// such as team apps.
+  /// (`rayfin-local.json` `sdk.supported`). Absent for apps it doesn't run: team
+  /// apps, and every app while the Local development experiment is off.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub local_sdk_range: Option<String>,
 }
@@ -4067,7 +4076,8 @@ pub struct LocalSecret {
 
 /// Why a local backend command failed. `code` is stable: the control API's
 /// own codes, or `not-running`, `project-not-found`, `invalid`, `unreachable`,
-/// `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed` and the binary
+/// `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed`,
+/// `experiment-off` (the Local development experiment is off) and the binary
 /// codes of [`LocalProblem`].
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase", default)]

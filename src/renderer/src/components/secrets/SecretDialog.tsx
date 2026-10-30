@@ -26,8 +26,11 @@ export function nameProblem(name: string): string | null {
 
 /** What the dialog sets. */
 export type SecretDialogTarget =
-  /** A new secret: added to `rayfin.yml`, with its value on this computer. */
-  | { kind: 'new' }
+  /**
+   * A new secret: added to `rayfin.yml`, with its value on this computer, or,
+   * `published` (without Local development), on the published app.
+   */
+  | { kind: 'new'; published?: boolean }
   /** A secret's value on this computer. `replacing`: it has one now. */
   | { kind: 'local'; name: string; replacing: boolean }
   /** A secret's value on the published app. */
@@ -50,6 +53,8 @@ interface Props {
 
 const LOCAL_VALUE_HINT =
   'Saved on this computer, where your app runs while you build it. It never goes into your code or History.'
+const PUBLISHED_VALUE_HINT =
+  'Sent straight to your published app. Fabricator doesn’t keep it, and nobody can read it back.'
 
 /** A failed call's message, with its hint when there is one. */
 function failure(reason: unknown): string {
@@ -62,7 +67,8 @@ function failure(reason: unknown): string {
  * app. A value on this computer goes to rayfin-local (`rayfin-local secret
  * set`), one for the published app to the Rayfin CLI (`rayfin secret set
  * --stdin`); either way through stdin, and Fabricator keeps no copy. The value
- * lives only in this dialog until it's sent.
+ * lives only in this dialog until it's sent. Without Local development a new
+ * secret's value goes to the published app, as there are no values here.
  */
 export default function SecretDialog({
   projectId,
@@ -98,6 +104,8 @@ export default function SecretDialog({
 
   const problem = fixedName ? null : nameProblem(name)
   const match = target.kind === 'new' ? (existing.find((s) => s.name === name) ?? null) : null
+  /** A new secret whose value goes to the published app (no Local development). */
+  const newPublished = target.kind === 'new' && Boolean(target.published)
   const declared =
     target.kind === 'published'
       ? target.secret.declared
@@ -113,8 +121,7 @@ export default function SecretDialog({
     title = stored ? 'Replace published value' : 'Set published value'
     subtitle = `A new value for ${name} on your published app. Functions get it from their next run.`
     action = stored ? 'Replace value' : 'Set value'
-    valueHint =
-      'Sent straight to your published app. Fabricator doesn’t keep it, and nobody can read it back.'
+    valueHint = PUBLISHED_VALUE_HINT
   } else if (target.kind === 'local') {
     title = target.replacing ? 'Change local value' : 'Set local value'
     subtitle = `A value for ${name} on this computer. Functions get it from their next run.`
@@ -122,7 +129,16 @@ export default function SecretDialog({
   } else {
     title = 'New secret'
     subtitle = 'An API key, password or connection string your functions need.'
-    action = match?.declared ? 'Set value' : 'Add secret'
+    action = newPublished
+      ? match?.published?.stored
+        ? 'Replace value'
+        : match
+          ? 'Set value'
+          : 'Add secret'
+      : match?.declared
+        ? 'Set value'
+        : 'Add secret'
+    if (newPublished) valueHint = PUBLISHED_VALUE_HINT
   }
 
   const save = async (): Promise<void> => {
@@ -132,7 +148,7 @@ export default function SecretDialog({
     setSignIn(false)
     try {
       let saved: SecretSaved
-      if (target.kind === 'published') {
+      if (target.kind === 'published' || newPublished) {
         const result = await window.api.secrets.set(
           projectId,
           name,
@@ -144,7 +160,7 @@ export default function SecretDialog({
           setSignIn(Boolean(result.signIn))
           return
         }
-        saved = 'published'
+        saved = target.kind === 'new' && !match ? 'added' : 'published'
       } else {
         saved = 'local'
         if (!declared) {
@@ -230,9 +246,11 @@ export default function SecretDialog({
                 >
                   {problem ??
                     (match
-                      ? match.declared
-                        ? `This app already has ${match.name}. Saving sets its value on this computer.`
-                        : `rayfin.yml doesn’t list ${match.name} yet. Saving adds it and sets its value on this computer.`
+                      ? newPublished
+                        ? `This app already has ${match.name}. Saving replaces its value.`
+                        : match.declared
+                          ? `This app already has ${match.name}. Saving sets its value on this computer.`
+                          : `rayfin.yml doesn’t list ${match.name} yet. Saving adds it and sets its value on this computer.`
                       : 'Letters, numbers and underscores. Functions read it by this name.')}
                 </span>
               </div>

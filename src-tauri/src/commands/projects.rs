@@ -29,7 +29,6 @@ async fn pick_folder_dialog(app: &AppHandle) -> Option<String> {
 /// Runs off the main thread: it checks every project's folder on disk.
 #[tauri::command(async)]
 pub fn projects_state() -> ProjectsState {
-  crate::commands::projects_impl::forget_first_deploy_gates();
   annotate_state(store::get_state())
 }
 

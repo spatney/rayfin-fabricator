@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
+import { authErrorMessage } from '../authErrors'
 import type {
   CommunityGallery,
+  FabricWorkspacesResult,
   ProjectActionResult,
   ProjectNameCheck,
   TeamActionResult,
@@ -9,9 +11,12 @@ import type {
 import { useSuppressPreview } from '../overlay'
 import type { ModelSelection } from '../modelSelection'
 import { projectNameProblem } from '../projectName'
+import DeploymentCreateForm, { checkActiveDeployTarget } from './DeploymentCreateForm'
 import { useMascotInstall } from './mascot/stage'
 import { ModelPicker } from './models/ModelPicker'
 
+type Mode = 'create' | 'deploy'
+type Step = 'details' | 'deploy'
 /** `scratch` = the Rayfin CLI's Universal App that grows into anything; `example` = a community template. */
 type Start = 'scratch' | 'example'
 
@@ -23,16 +28,44 @@ type Start = 'scratch' | 'example'
 export const STARTER_TEMPLATE = 'universal-app'
 
 interface Props {
-  /** Abandon the flow (no project is created). */
+  /**
+   * 'create' (the default) names the app and creates it. 'deploy' shows only the
+   * Publish your app step, for the active project: the chat lock's Publish now,
+   * without Local development.
+   */
+  mode?: Mode
+  /**
+   * Without Local development, a new app is published before chat unlocks, so the
+   * Publish your app step follows the details. Otherwise the new app opens in
+   * the workbench as soon as it's created.
+   */
+  publishStep?: boolean
+  /** Display name of the active project (the Publish your app step on its own). */
+  projectName?: string
+  /** Abandon the flow from the details (no project is created). */
   onCancel: () => void
-  /** A project was created; the parent opens it in the workbench. */
+  /**
+   * A project was created. With the publish step the parent refreshes its list
+   * and this screen moves on to publishing the app; otherwise the parent opens
+   * it in the workbench.
+   */
   onCreated?: (result: ProjectActionResult) => void
+  /** Publish the app as `name` into `workspaceId`, then leave the flow. */
+  onDeploy?: (name: string, workspaceId: string) => void
+  /** Skip publishing and enter the workbench (chat stays locked until the app is published). */
+  onContinueWithoutDeploy?: () => void
+  /** True while the app is already publishing (disables the submit). */
+  deploying?: boolean
+  /** Refresh app auth after sign-in; rejection prevents retrying with an unverified account. */
+  onSignedIn?: () => Promise<void> | void
   /** Team workspaces a new app can go into (experimental). */
   teamWorkspaces?: TeamWorkspace[]
   /** Preselect this team workspace as the destination. */
   initialTeamWorkspaceId?: string
   /** A team app was created; its pipeline deploys it. */
   onTeamCreated?: (result: TeamActionResult) => void
+  /** The workspaces your apps use, most recent first; the Publish your app step lists them first. */
+  recentWorkspaces?: readonly string[]
   /** Creating an app from something else (a Power BI report): shown in place of the examples. */
   source?: { label: string; detail: string }
   /** The project name to start with. */
@@ -115,16 +148,27 @@ function fallbackPhase(elapsedSec: number, running: boolean): CreatePhase {
 
 /**
  * The full-window create-a-project experience: name the app and pick where it
- * starts (ported from the old New Project dialog), then follow the scaffold. The
- * new app opens in the workbench as soon as it's created. It runs on this
- * computer, so there's nothing to deploy first.
+ * starts (ported from the old New Project dialog), then follow the scaffold.
+ * With Local development the new app runs on this computer, so it opens in the
+ * workbench as soon as it's created. Without it, the Publish your app step
+ * follows (`publishStep`): pick a Fabric workspace through the shared
+ * {@link DeploymentCreateForm}, since chat stays locked until the app is
+ * published. In `deploy` mode only that step shows, from the chat lock.
  */
 export default function CreateProjectScreen({
+  mode = 'create',
+  publishStep = false,
+  projectName,
   onCancel,
   onCreated,
+  onDeploy,
+  onContinueWithoutDeploy,
+  deploying = false,
+  onSignedIn,
   teamWorkspaces,
   initialTeamWorkspaceId,
   onTeamCreated,
+  recentWorkspaces,
   source,
   initialName,
   model
@@ -132,6 +176,8 @@ export default function CreateProjectScreen({
   // The native preview webview floats above HTML; suppress it while this covers the body.
   useSuppressPreview()
 
+  const [step, setStep] = useState<Step>(mode === 'deploy' ? 'deploy' : 'details')
+  const [createdName, setCreatedName] = useState<string | undefined>(projectName)
   const teamTargets = (teamWorkspaces ?? []).filter((w) => !w.setup || w.setup.done)
   /** '' = this computer; otherwise a team workspace id. */
   const [destination, setDestination] = useState(
@@ -161,19 +207,67 @@ export default function CreateProjectScreen({
 
   // Ray keeps the user company through the slow scaffold and npm install.
   const mascot = useMascotInstall(
-    destination ? 'team' : 'create',
+    destination ? 'team' : publishStep ? 'create' : 'create-local',
     busy ? 'running' : done ? 'success' : error ? 'error' : 'idle',
     screenRef
   )
 
-  // Esc abandons the flow, but never mid-create or once the app exists.
+  // ----- Publish your app step -----
+  const [wsResult, setWsResult] = useState<FabricWorkspacesResult | null>(null)
+  const [loadingWs, setLoadingWs] = useState(false)
+  const wsSeqRef = useRef(0)
+
+  useEffect(
+    () => () => {
+      ++wsSeqRef.current
+    },
+    []
+  )
+
+  async function loadWorkspaces(): Promise<void> {
+    const seq = ++wsSeqRef.current
+    setLoadingWs(true)
+    setWsResult(null)
+    try {
+      const result = await window.api.fabric.listWorkspaces()
+      if (seq === wsSeqRef.current) setWsResult(result)
+    } catch (err) {
+      if (seq === wsSeqRef.current) {
+        setWsResult({
+          ok: false,
+          error: authErrorMessage(err, 'Could not load workspaces. Please retry.')
+        })
+      }
+    } finally {
+      if (seq === wsSeqRef.current) setLoadingWs(false)
+    }
+  }
+
+  // Esc abandons the details, but never mid-create or once the app exists; on
+  // the Publish your app step it skips publishing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !busy && !done) onCancel()
+      if (e.key !== 'Escape') return
+      if (step === 'details') {
+        if (!busy && !done) onCancel()
+      } else if (!deploying) {
+        onContinueWithoutDeploy?.()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [busy, done, onCancel])
+  }, [step, busy, done, deploying, onCancel, onContinueWithoutDeploy])
+
+  // Fetch workspaces when the Publish your app step first appears.
+  useEffect(() => {
+    if (step === 'deploy' && !wsResult && !loadingWs) void loadWorkspaces()
+  }, [step])
+
+  // Local development turned on meanwhile: the new app runs on this computer,
+  // so there's nothing to publish first.
+  useEffect(() => {
+    if (mode === 'create' && step === 'deploy' && !publishStep) onContinueWithoutDeploy?.()
+  }, [mode, step, publishStep, onContinueWithoutDeploy])
 
   async function loadGallery(repoUrl?: string): Promise<void> {
     setLoadingGallery(true)
@@ -264,6 +358,12 @@ export default function CreateProjectScreen({
       })
       if (result.ok) {
         setDone(true)
+        if (publishStep) {
+          setCreatedName(result.project?.name ?? name.trim())
+          onCreated?.(result)
+          setStep('deploy')
+          return
+        }
         // The workbench opens in the same moment, so tell Ray directly.
         mascot.succeed()
         onCreated?.(result)
@@ -292,7 +392,7 @@ export default function CreateProjectScreen({
   const checkKey = `${destination}\u0000${name.trim()}`
   const [nameCheck, setNameCheck] = useState<(ProjectNameCheck & { key: string }) | null>(null)
   useEffect(() => {
-    if (!slug || nameProblem || busy || done) return
+    if (!slug || nameProblem || busy || done || step !== 'details') return
     let stale = false
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -309,7 +409,7 @@ export default function CreateProjectScreen({
       stale = true
       window.clearTimeout(timer)
     }
-  }, [checkKey, slug, nameProblem, busy, done])
+  }, [checkKey, slug, nameProblem, busy, done, step])
   const nameTaken = nameCheck?.key === checkKey && !nameCheck.ok ? (nameCheck.message ?? 'That name is taken.') : null
   const nameWarning = nameProblem ?? nameTaken
 
@@ -339,22 +439,84 @@ export default function CreateProjectScreen({
   /** The fields step aside while the app is created, and while the workbench opens it. */
   const hideFields = busy || done
 
-  const heading = source ? 'New app from Power BI' : 'New project'
-  const sub = hideFields
-    ? `Setting up ${name.trim() || 'your app'}…`
-    : source
-      ? 'Name your app. Fabricator reads the report while it creates the app, then Copilot rebuilds it page by page.'
-      : 'Give it a name. Next, describe what you want and Copilot builds it.'
+  const heading =
+    step === 'deploy' ? 'Publish your app' : source ? 'New app from Power BI' : 'New project'
+  const sub =
+    step === 'deploy'
+      ? `Publish ${createdName || 'your app'} to a Fabric workspace to start building with chat.`
+      : hideFields
+        ? `Setting up ${name.trim() || 'your app'}…`
+        : source
+          ? publishStep
+            ? 'Name your app. Fabricator reads the report while it creates and publishes the app, then Copilot rebuilds it page by page.'
+            : 'Name your app. Fabricator reads the report while it creates the app, then Copilot rebuilds it page by page.'
+          : 'Give it a name. Next, describe what you want and Copilot builds it.'
+
+  const head = (
+    <header className="create-head" data-mascot-avoid="">
+      <div className="create-head-text">
+        <h1 className="create-title">{heading}</h1>
+        <p className="create-sub">{sub}</p>
+      </div>
+      {mode === 'create' && publishStep && !destination && (
+        <ol className="create-steps" aria-label="Progress">
+          <li
+            className={`create-step${
+              step === 'details' ? ' create-step--active' : ' create-step--done'
+            }`}
+          >
+            <span className="create-step-no">1</span>
+            <span className="create-step-label">Details</span>
+          </li>
+          <li className={`create-step${step === 'deploy' ? ' create-step--active' : ''}`}>
+            <span className="create-step-no">2</span>
+            <span className="create-step-label">Publish</span>
+          </li>
+        </ol>
+      )}
+    </header>
+  )
+
+  // Without Local development, the app is published before chat unlocks.
+  if (step === 'deploy') {
+    return (
+      <div className="create-screen" ref={screenRef}>
+        <div className="create-shell">
+          {head}
+          <div className="create-body create-body--deploy" data-mascot-avoid="">
+            <div className="create-deploy">
+              <DeploymentCreateForm
+                wsResult={wsResult}
+                loadingWs={loadingWs}
+                onReload={loadWorkspaces}
+                onSignedIn={onSignedIn}
+                running={deploying}
+                submitLabel="Publish app"
+                busyLabel="Publishing…"
+                defaultName="Development"
+                onSubmit={(depName, workspaceId) => onDeploy?.(depName, workspaceId)}
+                checkTarget={checkActiveDeployTarget}
+                recentWorkspaces={recentWorkspaces}
+              />
+              <div className="create-skip">
+                <button type="button" className="link-btn" onClick={onContinueWithoutDeploy}>
+                  {mode === 'deploy' ? 'Maybe later' : 'Continue without publishing →'}
+                </button>
+                <span className="create-skip-hint">
+                  You can publish any time, but chat stays locked until your app is published.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="create-screen" ref={screenRef}>
       <div className="create-shell">
-        <header className="create-head" data-mascot-avoid="">
-          <div className="create-head-text">
-            <h1 className="create-title">{heading}</h1>
-            <p className="create-sub">{sub}</p>
-          </div>
-        </header>
+        {head}
 
         <div className="create-body" data-mascot-avoid="">
           <label className={`field${hideFields ? ' create-field-hidden' : ''}`}>
@@ -402,8 +564,12 @@ export default function CreateProjectScreen({
               </select>
               <span className="field-hint">
                 {destination
-                  ? 'Your team sees the app once you publish it. The team pipeline deploys your preview.'
-                  : 'It runs on this computer. Publish it to a Fabric workspace whenever you’re ready.'}
+                  ? publishStep
+                    ? 'Your team sees the app once you publish it. The team pipeline deploys your preview, so there’s no publish step.'
+                    : 'Your team sees the app once you publish it. The team pipeline deploys your preview.'
+                  : publishStep
+                    ? 'You publish it yourself to a Fabric workspace you choose.'
+                    : 'It runs on this computer. Publish it to a Fabric workspace whenever you’re ready.'}
               </span>
             </label>
           )}

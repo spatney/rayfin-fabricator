@@ -81,7 +81,12 @@ export interface QuickContext {
   conditions: Set<AdvisorCondition>
   versions: RayfinVersionInfo | null
   packages: AdvisorPackage[]
-  /** Fabricator's local backend runs the app: personal apps; team apps run on their pipeline's. */
+  /**
+   * Fabricator's local backend runs the app: personal apps while the Local
+   * development experiment is on (the snapshot then carries `localSdkRange`).
+   * Team apps run on their pipeline's backend, and every app on its Fabric
+   * deployment while the experiment is off.
+   */
   runsLocally: boolean
   /** The Rayfin releases that local backend runs; `null` when it doesn't run the app or the range is unreadable. */
   localSdk: LocalSdk | null

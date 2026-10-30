@@ -1,11 +1,15 @@
-//! The Rayfin release new projects start on.
+//! The Rayfin release new projects start on, and the releases the local
+//! backend runs.
 //!
-//! Every personal project runs on the bundled rayfin-local backend, which runs
-//! one line of Rayfin SDK releases: `sdk.supported` in the repo's
-//! `rayfin-local.json`. A new project scaffolds with the newest stable release
-//! in that range and pins its `@microsoft/rayfin-*` packages to that minor
-//! (`~1.36.0`). The templates' caret ranges would otherwise pull a newer minor
-//! that rayfin-local can't run.
+//! While the Local development experiment is on, every personal project runs on
+//! the bundled rayfin-local backend, which runs one line of Rayfin SDK releases:
+//! `sdk.supported` in the repo's `rayfin-local.json`. A new project then
+//! scaffolds with the newest stable release in that range and pins its
+//! `@microsoft/rayfin-*` packages to that minor (`~1.36.0`). The templates'
+//! caret ranges would otherwise pull a newer minor that rayfin-local can't run.
+//! (With the experiment off, new projects start on the scaffolder's latest
+//! release, unpinned; team apps always take the pin.) Upgrades stop at
+//! [`newest_supported`] for the same reason.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -83,7 +87,13 @@ impl NewProjectSdk {
 /// The release a new project starts on: the newest stable one npm lists within
 /// rayfin-local's supported range, or the tested one when npm can't be reached.
 pub async fn new_project_sdk(cwd: &Path) -> NewProjectSdk {
-  choose(published_versions(cwd).await.as_deref(), &PIN.supported, tested_release())
+  choose(published_versions(SCAFFOLDER, Some(cwd)).await.as_deref(), &PIN.supported, tested_release())
+}
+
+/// The newest stable release in `published` (npm's list of a package's
+/// versions) that rayfin-local runs, if any.
+pub fn newest_supported(published: &[String]) -> Option<Version> {
+  supported_releases(published, &PIN.supported).pop()
 }
 
 /// [`new_project_sdk`] over npm's list of versions (`None` when it couldn't be read).
@@ -111,13 +121,14 @@ fn supported_releases(published: &[String], supported: &str) -> Vec<Version> {
   releases
 }
 
-/// Every version npm lists for the scaffolder, or `None` when npm can't say in time.
-async fn published_versions(cwd: &Path) -> Option<Vec<String>> {
+/// Every version npm lists for `package`, or `None` when npm can't say in time.
+/// `cwd`: where npm runs, for the project's npm configuration.
+pub async fn published_versions(package: &str, cwd: Option<&Path>) -> Option<Vec<String>> {
   let res = exec::run(
     "npm",
-    &["view", SCAFFOLDER, "versions", "--json"],
+    &["view", package, "versions", "--json"],
     RunOptions {
-      cwd: Some(cwd.to_path_buf()).filter(|dir| dir.is_dir()),
+      cwd: cwd.map(Path::to_path_buf).filter(|dir| dir.is_dir()),
       env: crate::services::npm_env::fresh_registry_env(),
       timeout_ms: Some(LOOKUP_TIMEOUT_MS),
       ..Default::default()
@@ -125,7 +136,7 @@ async fn published_versions(cwd: &Path) -> Option<Vec<String>> {
   )
   .await;
   if !res.ok {
-    log::warn!("couldn't list the {SCAFFOLDER} releases (exit code {:?}): {}", res.exit_code, res.stderr.trim());
+    log::warn!("couldn't list the {package} releases (exit code {:?}): {}", res.exit_code, res.stderr.trim());
     return None;
   }
   parse_version_list(&res.stdout)
@@ -487,6 +498,16 @@ mod tests {
     assert_eq!(offline, NewProjectSdk { version: tested.clone(), supported: vec![tested.clone()] });
     // A registry that lists nothing in range (a stale mirror) doesn't help either.
     assert_eq!(choose(Some(&list(&["1.35.1", "1.37.0"])), ">=1.36.0 <1.37.0", tested.clone()).version, tested);
+  }
+
+  #[test]
+  fn upgrades_stop_at_the_newest_stable_release_the_local_backend_runs() {
+    let tested = tested_release();
+    let beta = format!("{}.{}.{}-beta.1", tested.major, tested.minor, tested.patch + 1);
+    let published = vec!["0.1.0".to_string(), tested.to_string(), beta, "999.0.0".to_string()];
+    assert_eq!(newest_supported(&published), Some(tested));
+    assert_eq!(newest_supported(&list(&["999.0.0", "0.1.0"])), None);
+    assert_eq!(newest_supported(&[]), None);
   }
 
   #[test]

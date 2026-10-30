@@ -14,6 +14,7 @@ import { useUpdates } from './update'
 import { useToast } from './toast'
 import { authErrorMessage } from './authErrors'
 import { reportEvent } from './errorReport'
+import { localDevelopmentEnabled } from './localDevelopment'
 import {
   CHECKING_AUTH,
   failedAuth,
@@ -398,6 +399,7 @@ function App(): JSX.Element {
         onRefresh={recheck}
         onEnter={enter}
         onBack={setupDone ? backToApp : undefined}
+        localDevelopment={localDevelopmentEnabled(settings)}
       />
     )
 

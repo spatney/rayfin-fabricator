@@ -586,7 +586,7 @@ export default function AccountsModal({
           <AccountCard
             icon={<img className="brand-glyph" src={azureSvg} alt="" />}
             title="Azure CLI"
-            purpose="Optional. Finds people when you share an app, reads the Power BI reports you migrate, sets up team workspaces, and lets your app read Fabric data while you build it. Shared with your terminal."
+            purpose="Optional. Finds people when you share an app, reads the Power BI reports you migrate, sets up team workspaces, and, with Local development, lets your app read Fabric data while you build it. Shared with your terminal."
             state={azureState}
             action={
               azMissing ? (

@@ -465,3 +465,37 @@ describe('the optional Azure step', () => {
     expect(await screen.findByRole('button', { name: 'Restart now' })).toBeTruthy()
   })
 })
+
+describe('the Local backend check', () => {
+  const report: DoctorReport = {
+    ready: true,
+    tools: [
+      ...doctor.tools,
+      tool({ id: 'rayfin-local', name: 'Local backend', version: '0.2.0', required: false })
+    ]
+  }
+  const copilotOnly: AuthStatus = { ...auth, copilot: { signedIn: true, user: 'octocat' } }
+  const props = {
+    doctor: report,
+    auth: copilotOnly,
+    refreshing: false,
+    onRefresh: () => {},
+    onEnter: () => {}
+  }
+
+  it('stays out of setup without Local development', () => {
+    render(<SetupScreen {...props} />)
+    openCompletedSteps()
+    expect(screen.queryByText('Local backend')).toBeNull()
+    expect(screen.getByText('All 3 installed')).toBeTruthy()
+    expect(screen.getByText("You're all set")).toBeTruthy()
+  })
+
+  it('shows with Local development, without ever keeping you out', () => {
+    render(<SetupScreen {...props} localDevelopment />)
+    openCompletedSteps()
+    expect(screen.getByText('Local backend')).toBeTruthy()
+    expect(screen.getByText('All 4 installed')).toBeTruthy()
+    expect(screen.getByText("You're all set")).toBeTruthy()
+  })
+})

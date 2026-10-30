@@ -145,6 +145,9 @@ pub struct ToolContext {
   pub team_project: bool,
   /// Where the user is, which decides whether a navigation action is reachable.
   pub surface: Surface,
+  /// The Local development experiment is on; without it, `help_local_output`
+  /// isn't offered, since no app runs on a local backend.
+  pub local_development: bool,
   /// The open personal project's local backend output; `None` without one.
   pub local_output: Option<LocalOutput>,
 }
@@ -455,7 +458,8 @@ the user opens an app."
   }
 }
 
-/// The assistant's reporting tools.
+/// The assistant's tools: the reporting ones, and `help_local_output` while
+/// Local development is on.
 pub fn help_tools(ctx: Arc<ToolContext>) -> Vec<Tool> {
   let action = Tool::new(ACTION_TOOL)
     .with_description(
@@ -537,6 +541,10 @@ Alternatives considered' if they mentioned any. Don't invent steps to reproduce 
     }))
     .with_skip_permission(true)
     .with_handler(Arc::new(IssueTool(ctx.clone())));
+
+  if !ctx.local_development {
+    return vec![action, cite, issue];
+  }
 
   let output = Tool::new(LOCAL_OUTPUT_TOOL)
     .with_description(
@@ -679,8 +687,18 @@ mod tests {
       has_project: true,
       team_project,
       surface: Surface::Project,
+      local_development: true,
       local_output,
     })
+  }
+
+  #[test]
+  fn the_output_tool_comes_only_with_local_development() {
+    let names = |ctx: Arc<ToolContext>| help_tools(ctx).into_iter().map(|t| t.name).collect::<Vec<_>>();
+    assert_eq!(names(context(None, false)), [ACTION_TOOL, CITE_TOOL, ISSUE_TOOL, LOCAL_OUTPUT_TOOL]);
+    let mut off = Arc::try_unwrap(context(None, false)).ok().unwrap();
+    off.local_development = false;
+    assert_eq!(names(Arc::new(off)), [ACTION_TOOL, CITE_TOOL, ISSUE_TOOL]);
   }
 
   /// Call `help_local_output` with `arguments`: its result type and text.

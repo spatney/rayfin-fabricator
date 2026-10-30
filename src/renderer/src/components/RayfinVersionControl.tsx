@@ -3,10 +3,17 @@ import type { RayfinVersionInfo } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 
 interface Props {
-  /** Local Rayfin version report for the active project (null while loading). */
+  /**
+   * Local Rayfin version report for the active project (null while loading).
+   * With Local development on, a personal app's upgrades stop at the newest
+   * release the local backend runs (the workbench caps them, see
+   * `upgradesWithinLocalRange`).
+   */
   info: RayfinVersionInfo | null
   /** Hand the upgrade off to the Copilot agent (parent builds + sends the prompt). */
   onUpdate: (info: RayfinVersionInfo) => void
+  /** Chat turns publish the app as they finish, so the update reaches Fabric with its turn. */
+  publishes?: boolean
 }
 
 interface SummaryRow {
@@ -43,7 +50,11 @@ function summarize(info: RayfinVersionInfo): SummaryRow[] {
  * click. The app never runs the install itself — the agent edits package.json +
  * runs npm install.
  */
-export default function RayfinVersionControl({ info, onUpdate }: Props): JSX.Element | null {
+export default function RayfinVersionControl({
+  info,
+  onUpdate,
+  publishes = false
+}: Props): JSX.Element | null {
   const [open, setOpen] = useState(false)
 
   // The popover is plain HTML, but the live preview is a native webview that paints
@@ -103,8 +114,9 @@ export default function RayfinVersionControl({ info, onUpdate }: Props): JSX.Ele
             Update with Copilot
           </button>
           <p className="ver-note">
-            Copilot updates the packages and fixes any changes. They reach Fabric the next time you
-            publish.
+            {publishes
+              ? 'Copilot updates the packages and fixes any changes. They reach Fabric when Fabricator publishes the app after the turn.'
+              : 'Copilot updates the packages and fixes any changes. They reach Fabric the next time you publish.'}
           </p>
         </div>
       )}

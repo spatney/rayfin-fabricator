@@ -284,8 +284,8 @@ export function SecretDetails({
 
 interface EntryDetailsProps {
   entry: SecretEntry
-  /** Reading the values on this computer. */
-  localCheck: Check
+  /** Reading the values on this computer; `null` without them (no Local development). */
+  localCheck: Check | null
   /** Reading the published app's values; `null` while the app isn't published. */
   publishedCheck: Check | null
   /** The published values are being read again, so their actions wait. */
@@ -338,8 +338,8 @@ function localHint(entry: SecretEntry, check: Check): JSX.Element | null {
 }
 
 /**
- * A personal app's secret: its value on this computer, its value on the
- * published app once there is one, and how functions read it.
+ * A personal app's secret: its value on this computer (with Local development),
+ * its value on the published app once there is one, and how functions read it.
  */
 export function EntryDetails({
   entry,
@@ -356,13 +356,15 @@ export function EntryDetails({
   const localId = useId()
   const publishedId = useId()
   // An unused secret without a value here still says so, like its published value.
-  const local =
-    localValueState(entry, localCheck) ??
-    (entry.local === 'none' ? { tone: 'off' as const, label: 'Not set' } : null)
+  const local = localCheck
+    ? (localValueState(entry, localCheck) ??
+      (entry.local === 'none' ? { tone: 'off' as const, label: 'Not set' } : null))
+    : null
   const published = entry.published
   const stored = Boolean(published?.stored)
   // The environment's value always wins, so one set here wouldn't be used.
-  const canSetLocal = entry.declared && entry.local !== 'env' && localCheck !== 'loading'
+  const canSetLocal =
+    Boolean(localCheck) && entry.declared && entry.local !== 'env' && localCheck !== 'loading'
   const hasLocal = entry.local === 'local' || entry.local === 'settings'
 
   return (
@@ -392,29 +394,31 @@ export function EntryDetails({
         </p>
       )}
 
-      <section className="skl-section-block" aria-labelledby={localId}>
-        <h4 id={localId}>Local value</h4>
-        {local && <ValueStatus state={local} />}
-        {localHint(entry, localCheck)}
-        {(canSetLocal || entry.local === 'local') && (
-          <div className="sec-actions">
-            {canSetLocal && (
-              <button type="button" className="btn btn--sm" onClick={() => onSetLocal(entry)}>
-                <Codicon name="edit" /> {hasLocal ? 'Change' : 'Set'}
-              </button>
-            )}
-            {entry.local === 'local' && (
-              <button
-                type="button"
-                className="btn btn--sm skl-danger"
-                onClick={() => onRemoveLocal(entry)}
-              >
-                <Codicon name="trash" /> Remove
-              </button>
-            )}
-          </div>
-        )}
-      </section>
+      {localCheck && (
+        <section className="skl-section-block" aria-labelledby={localId}>
+          <h4 id={localId}>Local value</h4>
+          {local && <ValueStatus state={local} />}
+          {localHint(entry, localCheck)}
+          {(canSetLocal || entry.local === 'local') && (
+            <div className="sec-actions">
+              {canSetLocal && (
+                <button type="button" className="btn btn--sm" onClick={() => onSetLocal(entry)}>
+                  <Codicon name="edit" /> {hasLocal ? 'Change' : 'Set'}
+                </button>
+              )}
+              {entry.local === 'local' && (
+                <button
+                  type="button"
+                  className="btn btn--sm skl-danger"
+                  onClick={() => onRemoveLocal(entry)}
+                >
+                  <Codicon name="trash" /> Remove
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="skl-section-block" aria-labelledby={publishedId}>
         <h4 id={publishedId}>Published value</h4>
@@ -481,7 +485,8 @@ export function SecretsOverview({
   facts,
   functionsEnabled,
   team,
-  published = false
+  published = false,
+  local = true
 }: {
   /** Figures for "In this app", as (label, value). */
   facts: [string, string][]
@@ -490,6 +495,9 @@ export function SecretsOverview({
   team: boolean
   /** A personal app that has been published, so it has published values too. */
   published?: boolean
+  /** A personal app has values on this computer (with Local development). Without
+   *  them, its values live on the published app alone. */
+  local?: boolean
 }): JSX.Element {
   return (
     <aside className="skl-side skl-side--overview" aria-label="About secrets">
@@ -501,17 +509,22 @@ export function SecretsOverview({
               The published app and each person’s preview keep their own secrets. Change them in the
               Fabric portal.
             </li>
-          ) : (
+          ) : local ? (
             <li>
               Add a secret with a name and a value. The value stays on this computer, outside your
               code and History.
+            </li>
+          ) : (
+            <li>
+              Add a secret with a name and a value. Fabricator sends the value to your published
+              app; it never goes into your code or History.
             </li>
           )}
           <li>
             Your app’s functions read it by name, such as{' '}
             <code>{readExpression('OPENAI_API_KEY')}</code>.
           </li>
-          {team ? (
+          {team || !local ? (
             <li>Nobody can read a value back. To change one, set a new value.</li>
           ) : published ? (
             <li>

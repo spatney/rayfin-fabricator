@@ -20,6 +20,7 @@ import {
 import ModelView from '../ModelView'
 import SemanticModelView from '../SemanticModelView'
 import { Codicon } from '../icons'
+import { useLocalDevelopment } from '../../localDevelopment'
 import ArchitectureView from './ArchitectureView'
 import DataView from './DataView'
 import { BlueprintHeadSlot } from './ViewHead'
@@ -196,7 +197,8 @@ async function loadBlueprint(projectId: string, projectName: string): Promise<Lo
  *  - **Data model**: the entity diagram of the app's data model (`rayfin/data`,
  *    or the data package rayfin.yml names);
  *  - **Data**: the rows and local users the app's local backend stores on this
- *    computer, read-only, with clearing and resetting them;
+ *    computer, read-only, with clearing and resetting them (with the Local
+ *    development experiment on, which runs apps on this computer);
  *  - **Fabric data**: diagrams of the Fabric data it connects to (shown only
  *    when it connects to some): semantic models, read live from `fabric.yaml` or
  *    a connector, and the tables of its SQL database, warehouse and lakehouse
@@ -220,6 +222,7 @@ export default function BlueprintTab({
   const [entityRequest, setEntityRequest] = useState<{ entity: string; nonce: number } | null>(null)
   const [sourceRequest, setSourceRequest] = useState<{ key: string; nonce: number } | null>(null)
   const [activeAccount, setActiveAccount] = useState<string | undefined>(undefined)
+  const localDevelopment = useLocalDevelopment()
 
   // The sign-in status doesn't always name the account; the account list does.
   useEffect(() => {
@@ -265,8 +268,12 @@ export default function BlueprintTab({
   const semanticModels = useMemo(() => arch?.semanticModels ?? [], [arch])
   const sqlSources = useMemo(() => loaded?.sqlSources ?? [], [loaded])
   const fabricSources = semanticModels.length + sqlSources.length
-  // A remembered Fabric data view falls back when the app no longer connects to any.
-  const active: BlueprintView = view === 'fabric' && !fabricSources ? 'architecture' : view
+  // A remembered Fabric data view falls back when the app no longer connects to
+  // any, and a remembered Data view when Local development is off.
+  const active: BlueprintView =
+    (view === 'fabric' && !fabricSources) || (view === 'local-data' && !localDevelopment)
+      ? 'architecture'
+      : view
 
   const owner = fabricUser || activeAccount
   const appIdentity = useMemo(
@@ -298,7 +305,7 @@ export default function BlueprintTab({
   const tabs: { id: BlueprintView; label: string; icon: string; count?: number }[] = [
     { id: 'architecture', label: 'Architecture', icon: 'type-hierarchy-sub' },
     { id: 'data', label: 'Data model', icon: 'database', count: tables || undefined },
-    { id: 'local-data', label: 'Data', icon: 'table' },
+    ...(localDevelopment ? [{ id: 'local-data' as const, label: 'Data', icon: 'table' }] : []),
     ...(fabricSources
       ? [
           {

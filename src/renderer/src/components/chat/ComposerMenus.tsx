@@ -26,12 +26,15 @@ const DATA_HINT: Record<DataKind, string> = {
  * that kind; "Browse all" opens it on every kind.
  */
 export function AddMenu({
+  locked = false,
   attaching,
   imageNote,
   onImage,
   onConnectData,
   onReferenceFile
 }: {
+  /** The composer is locked (the app's first publish comes first). */
+  locked?: boolean
   attaching: boolean
   /** Why images can't be added (the chosen model can't read them). */
   imageNote?: string
@@ -142,6 +145,7 @@ export function AddMenu({
         type="button"
         className={`composer-icon-btn${open ? ' is-open' : ''}`}
         onClick={() => (open ? closeMenu(false) : openMenu())}
+        disabled={locked}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Add images, files or data"

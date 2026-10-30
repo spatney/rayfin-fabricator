@@ -1009,7 +1009,7 @@ describe('ChatPanel submit-pause while deploying', () => {
 })
 
 describe('ChatPanel before the first publish', () => {
-  it('builds an app that has never been published, with no deploy gate', async () => {
+  it('builds an app that has never been published when nothing locks it', async () => {
     const onTurnStart = vi.fn()
     await act(async () => {
       render(
@@ -1022,8 +1022,8 @@ describe('ChatPanel before the first publish', () => {
         />
       )
     })
-    expect(screen.queryByText(/Deploy your app/)).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Deploy now' })).toBeNull()
+    expect(screen.queryByText(/Publish your app/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Publish now' })).toBeNull()
 
     const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
     expect(ta.disabled).toBe(false)
@@ -1037,6 +1037,62 @@ describe('ChatPanel before the first publish', () => {
     expect(
       (window as unknown as { api: { chat: { send: ReturnType<typeof vi.fn> } } }).api.chat.send
     ).toHaveBeenCalled()
+  })
+
+  // Without Local development, a new app is published before chat starts.
+  it('locks chat until the app is published, and offers to publish it', async () => {
+    const onTurnStart = vi.fn()
+    const onRequestDeploy = vi.fn()
+    const project = makeProject('p1', {
+      name: 'Trip Logger',
+      lastDeploy: undefined,
+      awaitingFirstDeploy: true
+    })
+    const panel = (deploying: boolean): JSX.Element => (
+      <ChatPanel
+        project={project}
+        messages={[]}
+        onChange={() => {}}
+        draft="Add a task list"
+        onTurnStart={onTurnStart}
+        deployLock
+        deploying={deploying}
+        onRequestDeploy={onRequestDeploy}
+      />
+    )
+    let view!: ReturnType<typeof render>
+    await act(async () => {
+      view = render(panel(false))
+    })
+
+    const gate = screen.getByRole('status')
+    expect(gate.textContent).toContain('Publish your app to start building')
+    expect(gate.textContent).toContain('Chat is locked until Trip Logger is published.')
+    const ta = screen.getByPlaceholderText(
+      'Publish your app to start chatting…'
+    ) as HTMLTextAreaElement
+    expect(ta.disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(
+      (screen.getByRole('button', { name: 'Add images, files or data' }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true)
+    await act(async () => {
+      fireEvent.keyDown(ta, { key: 'Enter' })
+    })
+    expect(onTurnStart).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish now' }))
+    expect(onRequestDeploy).toHaveBeenCalledTimes(1)
+
+    view.rerender(panel(true))
+    expect(screen.getByRole('status').textContent).toContain('Publishing your app…')
+    expect(screen.getByRole('status').textContent).toContain(
+      'Chat unlocks as soon as Trip Logger is live.'
+    )
+    expect(
+      (screen.getByRole('button', { name: 'Publishing…' }) as HTMLButtonElement).disabled
+    ).toBe(true)
   })
 })
 
