@@ -1,68 +1,24 @@
 ---
 title: "Preview problems"
-description: "Fix blank, stale or stuck previews, busy preview ports, sign-in prompts, and, with Local development, apps that don't start on this computer and a blocked rayfin-local."
+description: "Fix blank, stale, or stuck previews, busy live-preview ports, preview sign-in prompts, and old preview surfaces."
 ---
 
-Use this page when the preview doesn't show the app you expect. By default, the preview shows your published app and, while Copilot works, a live preview: your app's pages from this computer, with your published app's backend. With the **Local development** experiment on, it shows your app running on this computer, on rayfin-local, the local backend that comes with Fabricator.
+Use this page when the inline preview does not show the app you expect.
 
 ## The preview is blank or stuck
 
-You see an empty preview, **Loading…** for a long time, a local browser error, or chat appears to hang while opening a preview. Before an app is published, the preview says "Your published app will render here after a full `rayfin up`. Ask Copilot to build something, or select Publish." instead.
+You see an empty preview, **Loading…** for a long time, a local browser error, or chat appears to hang while opening a preview.
 
-Fabricator shows the published app or, during a chat turn, the live preview: the project's Vite dev server on this computer, with the published app's backend. Dependency installs, port conflicts, or a dev server that stops answering can interrupt the live preview. An app that isn't published yet has no published app to show.
+Fabricator shows either the deployed app or, during a chat turn, a local Vite preview. The local preview uses the existing Fabric deployment's configuration and can be interrupted by dependency installs, port conflicts, or a dev server that stops answering.
 
 1. Select **Reload** in the preview toolbar.
 2. Select **Focus** to hide chat, then **Exit focus** to return. This forces the preview bounds to be recalculated.
-3. If the app isn't published yet, select **Publish** in the app bar and pick a workspace. See [Publish to Microsoft Fabric](/docs/ship/deploy).
-4. If the preview is live and the turn is still running, wait for the turn to finish. The published app returns after the turn and its publish. With **Publish after each chat turn** off, the live preview stays while the app is open.
-5. If the app is published but the preview is blank, select **Publish** in the app bar to publish it again.
-6. If you see "Local preview didn't become ready in time." or "Timed out waiting for Vite to start.", retry the chat turn after dependencies finish installing.
-7. With the **Local development** experiment on, check the status in the preview toolbar. If it says **Error**, see [Your app doesn't start on this computer](/docs/troubleshooting/preview#your-app-doesnt-start-on-this-computer). Select the status to see your app's output.
-8. If the same project repeatedly hangs while opening preview, restart Fabricator.
+3. If the preview is local and the turn is still running, wait for the turn to finish. The normal deployed preview returns after the turn and deploy. With **Deploy after each chat turn** off (see [Deploy manually](/docs/ship/deploy#deploy-manually)), the preview stays local while the app is open.
+4. If the app is deployed but the preview is blank, select **Redeploy**.
+5. If a local preview log says "Local preview didn't become ready in time." or "Timed out waiting for Vite to start.", retry the chat turn after dependencies finish installing.
+6. If the same project repeatedly hangs while opening preview, restart Fabricator.
 
 If the preview still hangs, [Report a problem](/docs/troubleshooting/report-a-problem).
-
-## The preview shows an old version
-
-The preview works, but it doesn't include the changes Copilot just made.
-
-During a turn, the live preview shows frontend edits from Vite. After a successful turn, Fabricator checks for changes and publishes them, while **Publish after each chat turn** is on. Failed or cancelled turns, failed publishes, and change-check errors can leave the preview on the previous version. With **Publish after each chat turn** off, nothing publishes after a turn: the live preview shows your changes while the app is open, and the published app stays on the previous version until you publish it, for example with **Publish 3 changes**. With the **Local development** experiment on, **Published** in the preview toolbar shows the published app, which changes only when you publish, and **Local** shows your latest changes.
-
-1. Select **Reload** in the preview toolbar.
-2. Check whether the preview's address starts with `localhost`. If it does and a turn is running, the preview is live: wait for the turn to finish.
-3. If the publish control in the app bar says "Failed" next to the published app's name, select **Find out why** above the preview and fix the publish first. See [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
-4. In the app bar, select the publish button, such as **Publish 3 changes** or **Publish**, to publish the current project files.
-5. If **History** says "Your published app doesn’t match your current code.", select **Publish current version**.
-6. With the **Local development** experiment on, select **Local** in the preview toolbar to see the app on this computer.
-
-If the preview remains stale after a successful publish, [Report a problem](/docs/troubleshooting/report-a-problem).
-
-## The preview asks you to sign in
-
-The app inside the preview opens a Microsoft sign-in prompt, asks again after Fabricator is signed in, or a semantic-model dialog offers **Sign in & retry**.
-
-The published app's browser session is separate from Fabricator's Rayfin CLI session. Fabricator can be signed in to Fabric for publishing while the app in the preview still needs an interactive browser token. On Windows, Fabricator's WebView2 preview supports compliant-device Conditional Access through the OS primary account. A Universal App's live preview signs you in automatically; if that fails, see [The local preview says automatic sign-in failed](/docs/troubleshooting/preview#the-local-preview-says-automatic-sign-in-failed). With the **Local development** experiment on, the app on this computer signs you in by itself, as the account that **Preview as** shows.
-
-1. Complete the sign-in inside the preview when the app asks.
-2. If a semantic-model dialog shows **Sign in & retry**, select it and complete the browser flow.
-3. If your organization requires a compliant or managed Windows device, make sure Microsoft Edge can sign in to the same app on this computer.
-4. On macOS, passwordless SSO for some tenants may still require opening the app externally or using a Windows compliant device.
-5. If publishing fails too, use **Refresh Fabric authentication** separately. That does not clear the preview browser session.
-
-If the preview sign-in loops, [Report a problem](/docs/troubleshooting/report-a-problem).
-
-## The local preview says automatic sign-in failed
-
-The live preview shows the app's sign-in page with a message that starts with "Automatic local sign-in failed."
-
-A Universal App's live preview, which runs on this computer with your published app's backend, signs in with the Fabric account Fabricator publishes with. Fabric has to accept that account for this app, and the rest of the message says why it didn't.
-
-1. If the message says "External Entra exchange is not enabled.", check that `rayfin/rayfin.yml` sets `externalEntraExchange: true` under `services.auth.fabric`. Then select **Publish** in the app bar so the setting reaches Fabric.
-2. If it says "Could not sign you in automatically for local development." or "Entra authentication failed.", open the account menu and select **Refresh Fabric authentication**. Then select **Reload** in the preview.
-3. If it says "Item Execute permission is required.", your Fabric account can't open this app. Use an account that has access to the app's workspace.
-4. To keep working in the meantime, select the app's sign-in button and complete the sign-in popup.
-
-If automatic sign-in still fails, [Report a problem](/docs/troubleshooting/report-a-problem) with the full message.
 
 ## All preview ports are busy
 
@@ -70,15 +26,56 @@ You see a dialog titled "localhost:5173 is in use" or a similar localhost port. 
 
 ![The dialog shown when localhost:5173 is in use, offering Skip live preview, Stop node.exe or Use port 5174.](/screenshots/port-conflict.webp)
 
-Fabricator runs the live preview on a localhost port that the app's sign-in accepts. If every registered port is busy, Fabricator asks what to do instead of stopping an unrelated process without permission. With the **Local development** experiment on, an app that runs on this computer doesn't need this: the local backend picks free ports itself.
+During a chat turn, Fabricator runs the project's local Vite server on a localhost port that the app's sign-in accepts. If every registered port is busy, Fabricator asks what to do instead of stopping an unrelated process without permission.
 
-1. If the dialog offers **Use port 5174** or another port, select it. Fabricator adds `http://localhost:<port>` to `rayfin/rayfin.yml`. If the app is published, it pushes the sign-in settings to Fabric without rebuilding the app. Otherwise, the port is registered for sign-in the next time you publish.
+1. If the dialog offers **Use port 5174** or another port, select it. Fabricator adds `http://localhost:<port>` to `rayfin/rayfin.yml`. If the app already has a Fabric backend, it pushes sign-in settings to Fabric without rebuilding the app.
 2. If the dialog identifies a process and offers a **Stop** button named for that process, such as **Stop node.exe**, use it only if you are sure that process can be closed. Unsaved work in that process is lost.
-3. Select **Skip live preview** to keep the chat turn moving without a live preview. You can use the published app's preview after the turn finishes.
+3. Select **Skip live preview** to keep the chat turn moving without a local preview. You can use the deployed preview after the turn finishes.
 4. If Fabricator says switching ports cannot happen while Copilot is working, skip for now and send the next message after the turn ends.
 5. If the port becomes busy again, close the other app or choose another port when prompted.
 
 If Fabricator cannot identify or stop the process, [Report a problem](/docs/troubleshooting/report-a-problem) with the port number and dialog text.
+
+## The preview shows an old version
+
+The preview is live, but it does not include the changes Copilot just made.
+
+During a turn, the local preview shows frontend edits from Vite. After a successful turn, Fabricator checks for undeployed changes and redeploys automatically. Failed or cancelled turns, deploy failures, and change-check errors can leave the preview on the previous deployment. With **Deploy after each chat turn** off (see [Deploy manually](/docs/ship/deploy#deploy-manually)), nothing deploys after a turn, so the deployed app stays on the previous version until you deploy from the app bar, for example with **Deploy 3 changes**.
+
+1. Select **Reload** in the preview toolbar.
+2. Check whether the preview's address starts with `localhost`. If it does, the preview is local: wait for the current turn to finish.
+3. If the deployment control in the app bar says **Failed**, select **Find out why** above the preview and fix the deploy first. See [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
+4. In the app bar, select the deploy button, such as **Deploy 3 changes** or **Redeploy**, to publish the current project files.
+5. If Code or History says the live app is showing an earlier version, use the offered publish action or **Redeploy**.
+
+If the preview remains stale after a successful deploy, [Report a problem](/docs/troubleshooting/report-a-problem).
+
+## The preview asks you to sign in
+
+The app inside the preview opens a Microsoft sign-in prompt, asks again after Fabricator is signed in, or a semantic-model dialog offers **Sign in & retry**.
+
+The deployed app's browser session is separate from Fabricator's Rayfin CLI session. Fabricator can be signed in to Fabric for deploy while the embedded app still needs an interactive browser token. On Windows, Fabricator's WebView2 preview supports compliant-device Conditional Access through the OS primary account. The local preview of a Universal App signs you in automatically; if that fails, see [The local preview says automatic sign-in failed](/docs/troubleshooting/preview#the-local-preview-says-automatic-sign-in-failed).
+
+1. Complete the sign-in inside the preview when the app asks.
+2. If a semantic-model dialog shows **Sign in & retry**, select it and complete the browser flow.
+3. If your organization requires a compliant or managed Windows device, make sure Microsoft Edge can sign in to the same app on this computer.
+4. On macOS, passwordless SSO for some tenants may still require opening the app externally or using a Windows compliant device.
+5. If Fabricator deploys fail too, use **Refresh Fabric authentication** separately. That does not clear the preview browser session.
+
+If the preview sign-in loops, [Report a problem](/docs/troubleshooting/report-a-problem).
+
+## The local preview says automatic sign-in failed
+
+The local preview shows the app's sign-in page with a message that starts with "Automatic local sign-in failed."
+
+Universal Apps sign in to the local preview with the Fabric account Fabricator deploys with. Fabric has to accept that account for this app, and the rest of the message says why it didn't.
+
+1. If the message says "External Entra exchange is not enabled.", check that `rayfin/rayfin.yml` sets `externalEntraExchange: true` under `services.auth.fabric`. Then deploy from the app bar so the setting reaches Fabric.
+2. If it says "Could not sign you in automatically for local development." or "Entra authentication failed.", open the account menu and select **Refresh Fabric authentication**. Then select **Reload** in the preview.
+3. If it says "Item Execute permission is required.", your Fabric account can't open this app. Use an account that has access to the app's workspace.
+4. To keep working in the meantime, select the app's sign-in button and complete the sign-in popup.
+
+If automatic sign-in still fails, [Report a problem](/docs/troubleshooting/report-a-problem) with the full message.
 
 ## The preview covers other Fabricator controls
 
@@ -100,74 +97,3 @@ Fabricator health-checks team local previews and starts Vite again when it stops
 
 1. Wait for the preview to come back.
 2. If it keeps restarting, open [Team workspace problems](/docs/troubleshooting/team).
-
-## Your app doesn't start on this computer
-
-With the **Local development** experiment on, the preview shows a card instead of your app, such as "Your app couldn’t start on this computer", and the status in the preview toolbar says **Error**. The card says what went wrong and offers **Try again**, **View output** and **Find out why**, plus a button for the fix when there is one. If the preview says "`<name>` isn’t running on this computer." instead, the app was stopped: select **Start**.
-
-Fabricator runs your app on this computer with rayfin-local, the local backend that comes with Fabricator. When the backend can't start the app, or the app keeps stopping, the preview says why. When the problem is in the app, such as an error in its code, Fabricator tries to start the app again after each chat turn.
-
-1. Find the card's title in the table below, and do what it says.
-2. If the card doesn't tell you enough, select **Find out why**. Help opens, asks "Why didn’t my app start on this computer?" for you, reads your app's output, and explains what went wrong. To read the output yourself, select **View output**.
-3. Once you've fixed the cause, select **Try again**.
-
-| The card says | What to do |
-| --- | --- |
-| "Your app’s packages aren’t installed" | Select **Install dependencies**. Fabricator installs the app's packages and starts it again. If npm can't install them, npm's messages in the output say why, such as no network connection. |
-| "This app is already running" | Another program runs this app on this computer, such as rayfin-local in a terminal. Select **Stop the other one**: Fabricator checks that it's rayfin-local, stops it and starts your app here. Or close the program that started it, then select **Try again**. |
-| "Node.js isn’t installed" or "Node.js needs an update" | Your app needs Node.js 20 or later. Select **Set up Node.js** to install or update it in setup, then select **Try again**. If your app still can't find it, restart Fabricator. |
-| "This change would delete local data" | A change to the data model is waiting for you. Select **Review the change**, and see [A data model change would delete local data](/docs/troubleshooting/preview#a-data-model-change-would-delete-local-data). |
-| "Your app keeps stopping" | It stopped several times in a row, so Fabricator stopped starting it again. Select **Find out why** or **View output** to find the cause, fix it, then select **Try again**. |
-| "Your app couldn’t start on this computer" | The message under the title says why. For an error in the app's code, send the prompt below in chat. If Windows blocked the local backend, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local). If the local backend didn't answer in time, wait a minute and select **Try again**. If it's missing or the wrong version, reinstall Fabricator from [the latest release](https://github.com/spatney/rayfin-fabricator/releases/latest). |
-
-```prompt title="Fix the error that stops the app"
-My app doesn't start on this computer. Find the error that stops it, fix it, and check that the app runs.
-```
-
-If your app still doesn't start, [Report a problem](/docs/troubleshooting/report-a-problem).
-
-## A data model change would delete local data
-
-With the **Local development** experiment on, a dialog says "This change would delete local data", then "The data model of `<name>` changed. Applying the change deletes this data, stored on this computer:", with a list of what it would delete. While the app runs, a note above the preview says "A data model change is waiting." with **Review the change**. If the app was starting, the preview shows "This change would delete local data" with **Review the change** instead of the app.
-
-As Copilot changes your app's data model, the local backend updates the app's database on this computer. A change that would delete data stored there waits for you: nothing is deleted until you choose, and the app keeps its previous data model meanwhile. Your published app and its data aren't affected.
-
-1. Read the list of what the change would delete.
-2. Choose what to do:
-   - **Delete this data and apply** deletes only what's listed, then applies the change.
-   - **Reset local data** deletes all of the app's local data, its test users and files, then applies the change.
-   - **Keep the current version** keeps your data and the data model you have now. If the app was starting, it doesn't start until you choose.
-3. To decide later, select **Keep the current version**. When you're ready, select **Review the change** above the preview to open the dialog again.
-
-If the change still can't be applied, [Report a problem](/docs/troubleshooting/report-a-problem).
-
-## The preview uses your published app's backend
-
-With the **Local development** experiment on, a note above the preview of a published app says why it doesn't run on this computer, such as "The `<name>` connector runs only on Fabric, so the preview uses your published app’s backend." or "This app uses Rayfin `<version>`, which Fabricator can’t run on this computer yet, so the preview uses your published app’s backend."
-
-The local backend runs one line of Rayfin releases, and some connectors, such as Kusto connectors, run only on Fabric. When a published app needs something the local backend can't run, Fabricator previews it as it would without the experiment: the app's pages run on this computer with the published app's backend, and changes to the data model, permissions and functions reach that backend when you publish. An app that was never published has no published backend to use, so it keeps running on this computer, and what needs Fabric fails there until you publish it.
-
-1. Keep building in chat as usual. To put your changes in the published app, select **Publish** in the app bar, or turn on **Publish after each chat turn** in the publish control's panel.
-2. When a chat turn changes the app's packages or `rayfin/rayfin.yml`, Fabricator checks again whether it can run the app on this computer. Once it can, the preview shows the app on this computer again.
-
-If the note names a connector or Rayfin version that you expect to run on this computer, [Report a problem](/docs/troubleshooting/report-a-problem).
-
-## Windows blocked rayfin-local
-
-With the **Local development** experiment on, you see "Windows blocked the local backend (rayfin-local):" followed by the reason Windows gave, such as "Access is denied.", and then "Your antivirus or your organization's app control policy may not allow it." In the preview, it's under "Your app couldn’t start on this computer", with **Learn how to allow it**. In setup, it's in the **Local backend** row.
-
-rayfin-local is the local backend that runs your apps on this computer, and it comes with Fabricator. On a PC your organization manages, Microsoft Defender's attack surface reduction rules, another antivirus or an app control policy can stop a program that's new to them from running, even when it's signed.
-
-1. Open **Windows Security**, select **Virus & threat protection**, then **Protection history**. Look for an entry that blocked `rayfin-local.exe`, and note what it says, such as the rule that blocked it.
-2. If your organization manages this PC, ask your IT department to allow rayfin-local. Tell them:
-   - Where it is: `%LOCALAPPDATA%\Rayfin Fabricator\rayfin-local.exe`, or `rayfin-local.exe` in the folder you installed Fabricator to.
-   - That it's signed by the same publisher as Fabricator's installer, Sachin Patney.
-   - What blocked it, from step 1. They can add an exclusion for the file to the attack surface reduction rule that blocked it, or allow the file or its publisher in their app control policy.
-3. Once it's allowed, select **Try again** in the preview, or **Re-check** in setup.
-4. If setup then says the local backend is missing, your antivirus removed the file. Reinstall Fabricator from [the latest release](https://github.com/spatney/rayfin-fabricator/releases/latest).
-
-If the message says "The local backend (rayfin-local) didn't answer within 20 seconds." instead, an antivirus scan can hold it up the first time it runs. Wait a minute, then select **Try again** or **Re-check**.
-
-Until rayfin-local is allowed, your apps can't run on this computer. To keep building in the meantime, turn off **Local development** in **Settings → Experiments**: Fabricator then develops your apps against their published copies in Fabric, without rayfin-local. See [Publish to Microsoft Fabric](/docs/ship/deploy).
-
-If Windows still blocks rayfin-local, [Report a problem](/docs/troubleshooting/report-a-problem).

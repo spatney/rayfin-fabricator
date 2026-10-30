@@ -1,43 +1,40 @@
 ---
 title: "Build your first app"
-description: "Create a project, publish it to a Fabric workspace, describe the app to Copilot, and watch it change in the preview."
+description: "Create a project, deploy it to Fabric, prompt Copilot, preview the result, and iterate."
 ---
 
-This quickstart takes you from an empty Fabricator install to a published Rayfin app that you can refine in chat. You need a Fabric workspace on an eligible capacity to publish it. To build on this computer without one, see [Build on this computer instead](/docs/start/first-app#build-on-this-computer-instead).
+This quickstart takes you from an empty Fabricator install to a deployed Rayfin app that you can refine in chat.
 
 ## Create a project
 
-1. On Home, select **New project**.
+1. On Home, choose **New project**.
 2. In **Project name**, enter a name for the app.
-3. Select **Create project**.
+3. Keep the default start option. New projects use the Rayfin CLI's default Universal App template; there is no template picker for the normal flow.
+4. Choose **Create project**.
 
-New projects start from the Rayfin CLI's default Universal App template; there's no template picker in the normal flow. To start from a ready-made app instead, see [Start from a community example](/docs/build/projects#start-from-a-community-example).
+![The New project screen with Contoso Expenses typed as the project name, the folder name below it, and the Create project button.](/screenshots/new-project.webp)
 
-![The New project screen with Contoso Expenses typed as the project name, the folder name below it, the Details and Publish steps, and the Create project button.](/screenshots/new-project.webp)
+Fabricator creates the project, installs dependencies, initializes Git, and moves to **Deploy your app**.
 
-Fabricator creates the project with Rayfin's latest release, installs its packages, and starts its version history with git. Then it moves to **Publish your app**.
+## Create the first deployment
 
-## Publish your app
+A normal local project needs a first Fabric deployment before chat can build against it.
 
-Fabricator builds your app against its copy in Microsoft Fabric, so a new app is published before chat opens for it. **Publish your app** says "Publish `<name>` to a Fabric workspace to start building with chat."
+1. If prompted, choose **Sign in to Fabric** and complete the browser sign-in.
+2. In **Name**, enter a friendly deployment name such as `Development`, or leave it blank.
+3. Under **Deploy to workspace**, pick an eligible workspace. Rayfin apps need a workspace on a Fabric **F-SKU** or Power BI Premium **P-SKU** capacity.
+4. If you need a new workspace, choose **+ New workspace**, enter **New workspace name**, pick a capacity, and choose **Create workspace**.
+5. Choose **Deploy app**.
 
-1. If the step asks you to, select **Sign in to Fabric** and finish signing in in your browser.
-2. In **Name**, keep `Development` or enter another name for this published app. The name is optional.
-3. Under **Publish to workspace**, select a workspace. Rayfin apps need a workspace on a Fabric **F-SKU** or Power BI Premium **P-SKU** capacity. Workspaces without one are listed under **Not eligible**.
-4. To use a new workspace, select **+ New workspace**, enter its name, pick a capacity, and select **Create workspace**.
-5. Select **Publish app**.
+![The Deploy your app step of a new project, with a deployment name, a list of Fabric workspaces with their region and capacity, and the Deploy app button.](/screenshots/first-deploy.webp)
 
-![The Publish your app step of a new project, with Development as the name, a list of Fabric workspaces with their region and capacity, the Publish app button, and Continue without publishing.](/screenshots/first-deploy.webp)
+You can choose **Continue without deploying →** and deploy later with **Deploy** in the app bar, but chat stays locked until the app has a deployment.
 
-Fabricator publishes the app with the project's Rayfin CLI, and Ray talks you through it. Chat unlocks as soon as the app is live.
-
-If no eligible workspace is listed, Fabricator offers **Start a free trial** and **Buy a capacity**. If the workspace you pick already has an app with the same name, pick another workspace, or select **Replace it anyway** to publish over that app. See [Same-name warning](/docs/ship/deploy#same-name-warning).
-
-You can select **Continue without publishing →** instead. The project opens, but chat stays locked until the app is published: above the chat box, it says "Publish your app to start building" and "Chat is locked until `<name>` is published." Select **Publish now** to come back to this step, or **Publish** in the app bar.
+If no eligible workspaces are listed, Fabricator can show **Start a free trial** and **Buy a capacity** links. If the selected workspace already has an app with the same name, choose another workspace or explicitly choose **Replace it anyway**.
 
 ## Describe the app
 
-When chat opens, type a prompt. Start with the outcome, the people using the app, and the data they need to track.
+When the Build view opens, type a prompt in chat. Start with the outcome, the people using the app, and the data they need to track.
 
 ```prompt title="Track equipment requests"
 Build an equipment request app for an operations team. Employees request a laptop, monitor, phone, or accessory with a reason and needed-by date. Managers review requests, approve or reject them with a comment, and see a dashboard of open requests by type and priority.
@@ -51,17 +48,19 @@ Build a simple team task tracker. Each task has a title, owner, due date, status
 
 ## Watch Copilot work
 
-![A chat turn in progress: the work log lists the files Copilot edited and the command it's running, while the live preview shows the app from localhost:5173 as it changes.](/screenshots/chat-working.webp)
+![A chat turn in progress: the work log lists the files Copilot edited and the command it is running, while the live local preview shows the app as it changes.](/screenshots/chat-working.webp)
 
-While a turn runs, the chat shows a live work log with steps such as file reads, searches, commands, and edits. Meanwhile, the preview runs the app's pages on this computer, at a `localhost` address, with your published app's backend, so new screens appear as Copilot saves them. Changes to the app's data model, permissions and functions reach the app when it's published.
+While a turn runs, the chat shows a live work log with steps such as file reads, searches, commands, and edits. The preview pane can switch to a local preview during the turn so frontend changes appear as Copilot makes them.
 
-When the turn finishes, Fabricator saves the chat history, checks the project's Rayfin version and, if the turn changed the app, publishes it: **Publish after each chat turn** is on by default. Failed or cancelled turns don't publish. Once the publish finishes, the preview shows the published app with the changes.
+When the turn finishes, Fabricator saves chat history, refreshes project state, checks the Rayfin version, and deploys changed local projects automatically when there are undeployed changes. Failed or cancelled turns do not auto-deploy. If the automatic check fails, use **Redeploy**.
 
-## Try the app
+## Preview, open, and share
 
-![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the preview shows the published app with a monthly total and a spending chart.](/screenshots/workbench.webp)
+![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the live preview shows the deployed app with a monthly total and a spending chart.](/screenshots/workbench.webp)
 
-The right side of the **Build** view shows your published app, with its data in Fabric, so you can add records and try each page. Use **Reload** to refresh it, the address in the toolbar to open it in your browser, **Fabric** to see it inside the Fabric portal, and **Design** to change it by clicking it. See [Live preview](/docs/build/preview) and [Design mode](/docs/build/design).
+The right side of the Build view shows your app preview. Use **Reload** to refresh it, the URL button to open it in your browser, **Fabric** to switch between the direct app and Fabric portal shell when available, and **Design** to make visual changes by clicking the running app.
+
+After a successful deploy, use **Share** in the deployment control to share with people in your tenant. See [Share your app](/docs/ship/share).
 
 ## Iterate
 
@@ -73,32 +72,9 @@ Good next prompts are specific:
 Add a reporting page that shows requests by status, requests by equipment type, and average approval time. Keep the dashboard readable on a laptop screen.
 ```
 
-## Choose when to publish
-
-To publish only when you choose, open the publish control in the app bar and turn off **Publish after each chat turn**. Your changes then stay on this computer, showing in the preview, until you publish them with the button next to the publish control, such as **Publish 3 changes**. See [Publish to Microsoft Fabric](/docs/ship/deploy#publish-after-each-chat-turn).
-
-## Share the app
-
-Once the app is published, select **Share** in the app bar to share it with people in your organization. See [Share your app](/docs/ship/share).
-
-## Build on this computer instead
-
-> [!WARNING]
-> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be
-> removed in a future update.
-
-With **Local development** on, a new app runs on this computer from the moment you create it, on the local backend that comes with Fabricator. There's no publish step: chat is ready right away, and the app's data, sign-in and functions run on this computer too. You publish the app to a Fabric workspace when you choose, so you don't need one to start.
-
-1. In the app bar, open the account menu and select **Settings**. If you aren't signed in to Fabric, the menu is the arrow next to **Sign in to Fabric**.
-2. Open **Experiments**, and turn on **Local development**.
-3. On Home, select **New project**, enter a **Project name**, and select **Create project**.
-
-The project opens in the **Build** view with chat ready for your first prompt. See [Develop on this computer](/docs/build/local-development).
-
 ## Next steps
 
 - Learn the layout in [Tour the workbench](/docs/start/tour).
 - Learn more about [Chat with Copilot](/docs/build/chat).
 - Use [Design mode](/docs/build/design) for visual changes.
 - Check app health with [Advisor](/docs/ship/advisor).
-- See how Fabricator builds and publishes your app in [How Fabricator works](/docs/reference/how-it-works).

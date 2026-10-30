@@ -9,11 +9,11 @@ The health dashboard for a Rayfin app. It runs quick checks locally and can run 
 
 ## App identity
 
-The identity a Rayfin app's connections use when they're set to application access: the owner of the app's Fabric item. For your own apps, that's the Fabric account that first published the app; for team apps, the team's deploy identity. While your app runs on this computer with the [Local development](/docs/reference/glossary#local-development) experiment, these connections run as you instead. Blueprint shows which connections use it. See [Blueprint](/docs/build/data-model#whose-credentials-the-app-identity-uses).
+The identity a Rayfin app's connections use when they're set to application access: the owner of the app's Fabric item. For your own apps, that's the Fabric account that first deployed the app; for team apps, the team's deploy identity. Blueprint shows which connections use it. See [Blueprint](/docs/build/data-model#whose-credentials-the-app-identity-uses).
 
 ## App item
 
-A Fabric item created when you publish a Rayfin app. Fabricator may also call this a Fabric app or App item when describing published apps. See [Publish to Microsoft Fabric](/docs/ship/deploy).
+A Fabric item created by a deployed Rayfin app. Fabricator may also call this a Fabric app or App item when describing deployed apps. See [Deploy to Fabric](/docs/ship/deploy).
 
 ## Autopilot
 
@@ -21,7 +21,7 @@ A chat route used after an approved plan when Copilot continues autonomously end
 
 ## Azure CLI
 
-Microsoft's command-line tool for Azure. Signing in to it is optional. Fabricator uses it to find people when you share an app, add Fabric data, read the Power BI reports you migrate, and set up team workspaces. While your app runs on this computer with the [Local development](/docs/reference/glossary#local-development) experiment, its functions and connectors use the Azure CLI's account too. See [Manage your accounts](/docs/start/accounts) and [Migrate a Power BI report](/docs/build/migrate-power-bi).
+Microsoft's command-line tool for Azure. Fabricator uses it for some team workspace setup and administrator flows, and to read the Power BI reports you migrate. See [Team prerequisites](/docs/team/prerequisites) and [Migrate a Power BI report](/docs/build/migrate-power-bi).
 
 ## Build permission
 
@@ -29,7 +29,7 @@ A Power BI permission on a semantic model that lets someone query it. An app tha
 
 ## Capacity
 
-Fabric capacity is the compute capacity assigned to Fabric workspaces. To publish a Rayfin app, you need a workspace on a Fabric (F-SKU) or Power BI Premium (P-SKU) capacity. Fabricator publishes a new app before you build it with chat, so you need one to build too, unless the [Local development](/docs/reference/glossary#local-development) experiment is on. Team workspace setup asks you to choose a capacity. See [Publish to Microsoft Fabric](/docs/ship/deploy) and [Team prerequisites](/docs/team/prerequisites).
+Fabric capacity is the compute capacity assigned to Fabric workspaces. Team workspace setup asks you to choose a capacity. See [Team prerequisites](/docs/team/prerequisites).
 
 ## Community example
 
@@ -45,7 +45,7 @@ A Microsoft Entra ID service principal used by a team workspace pipeline to depl
 
 ## Deployment
 
-Rayfin's word for an app in a Fabric workspace, put there with `rayfin up`. Fabricator calls it a [published app](/docs/reference/glossary#published-app). See [Publish to Microsoft Fabric](/docs/ship/deploy).
+A Rayfin app deployed to a Fabric workspace with `rayfin up`. Fabricator manages deployments from the deployments panel. See [Deploy to Fabric](/docs/ship/deploy).
 
 ## Design mode
 
@@ -53,15 +53,15 @@ A preview mode where you select elements in the app, describe visual changes, an
 
 ## Fabric app
 
-A Rayfin app hosted in Microsoft Fabric. In Fabric, the published app is represented by Fabric items in a workspace. See [Publish to Microsoft Fabric](/docs/ship/deploy).
+A Rayfin app hosted in Microsoft Fabric. In Fabric, the deployed app is represented by Fabric items in a workspace. See [Deploy to Fabric](/docs/ship/deploy).
 
 ## Fabric brokered auth
 
-How Rayfin apps sign people in: Fabric signs them in with the Microsoft Entra account they use for Fabric. The app needs no identity provider to run and no app registration of its own in Microsoft Entra ID, so there's nothing for a tenant admin to approve. Rayfin's docs also call it Fabric SSO. While your app runs on this computer with the [Local development](/docs/reference/glossary#local-development) experiment, a local Fabric sign-in page stands in for Fabric's. See [Blueprint](/docs/build/data-model#how-people-sign-in) and [Rayfin's auth docs](https://rayfin.ai/docs/auth).
+How Rayfin apps sign people in: Fabric signs them in with the Microsoft Entra account they use for Fabric. The app needs no identity provider to run and no app registration of its own in Microsoft Entra ID, so there's nothing for a tenant admin to approve. Rayfin's docs also call it Fabric SSO. See [Blueprint](/docs/build/data-model#how-people-sign-in) and [Rayfin's auth docs](https://rayfin.ai/docs/auth).
 
 ## Fabric workspace
 
-A Microsoft Fabric container for app items, data, semantic models, and other Fabric resources. You publish apps to one. See [Publish to Microsoft Fabric](/docs/ship/deploy).
+A Microsoft Fabric container for app items, data, semantic models, and other Fabric resources. See [Deploy to Fabric](/docs/ship/deploy).
 
 ## Finding
 
@@ -71,25 +71,13 @@ An Advisor issue. A finding includes what was flagged, why it matters, where it 
 
 GitHub's `gh` command-line tool. Fabricator uses it for cloning and team workspace repository operations. See [System requirements](/docs/reference/requirements).
 
-## Local backend
-
-The backend that runs your app on this computer while you build it, with the [Local development](/docs/reference/glossary#local-development) experiment on: its data, sign-in, functions, connectors and storage, and the app's own dev server. It's [rayfin-local](/docs/reference/glossary#rayfin-local), which comes with Fabricator. Fabricator starts it when you open a personal project; team apps run on Fabric. See [How Fabricator works](/docs/reference/how-it-works#the-local-backend).
-
-## Local data
-
-The data your app stores while it runs on this computer with the [Local development](/docs/reference/glossary#local-development) experiment: its records, local users and stored files. It starts empty, stays in the project's `.rayfin-local` folder, and is separate from your published app's data. See [Files and folders](/docs/reference/files#your-apps-local-data).
-
-## Local development
-
-An experiment, off by default, that runs your apps and their backend on this computer while you build, and lets you publish to Microsoft Fabric when you choose. With it on, a new app opens with chat ready, without a publish step. Turn it on in **Settings → Experiments**. See [Develop on this computer](/docs/build/local-development).
-
 ## Microsoft Entra ID
 
 Microsoft's identity platform. People sign in to Rayfin apps with their Microsoft Entra account, through [Fabric brokered auth](/docs/reference/glossary#fabric-brokered-auth). Team workspace deploy identities are service principals in Microsoft Entra ID. See [Team prerequisites](/docs/team/prerequisites).
 
 ## Microsoft Fabric
 
-Microsoft's data and analytics platform where Rayfin apps are published and hosted. See [Publish to Microsoft Fabric](/docs/ship/deploy).
+Microsoft's data and analytics platform where Rayfin apps are deployed and hosted. See [Deploy to Fabric](/docs/ship/deploy).
 
 ## Personal preview
 
@@ -101,19 +89,11 @@ The GitHub workflow in a team workspace repository that deploys previews and pub
 
 ## Preview
 
-The pane that shows your app inside Fabricator. It shows your published app and, while Copilot works, the app's pages from this computer with the published app's backend. With the [Local development](/docs/reference/glossary#local-development) experiment on, it shows the app running on this computer, or its published copy in Fabric. For team apps, it shows the app against the team's preview in Fabric. See [Live preview](/docs/build/preview).
-
-## Preview as
-
-A menu in the preview's toolbar, with the [Local development](/docs/reference/glossary#local-development) experiment on, that chooses who your app on this computer signs in as: you, a test user you add, or no one. See [Preview as someone else](/docs/build/preview#preview-as-someone-else).
-
-## Publish
-
-Put your app in a Fabric workspace, with `rayfin up`, so other people can use it. Select **Publish** in the app bar. A new app is published before you build it with chat, unless the [Local development](/docs/reference/glossary#local-development) experiment is on. **Publish after each chat turn** publishes your changes after every successful turn: it's on by default, and off by default with Local development on. Fabricator used to call this deploying. See [Publish to Microsoft Fabric](/docs/ship/deploy).
+The pane that shows your app inside Fabricator. It can show a local Vite frontend during chat, a deployed app, or the Fabric portal shell. See [Preview your app](/docs/build/preview).
 
 ## Published app
 
-Your app's copy in a Fabric workspace, which the people you share it with use. It keeps its data in Fabric, and an app can be published to more than one workspace. With the [Local development](/docs/reference/glossary#local-development) experiment on, its data is separate from the [local data](/docs/reference/glossary#local-data) on this computer. For a team app, the published app is the shared version deployed from the repository's main branch. See [Publish to Microsoft Fabric](/docs/ship/deploy) and [Publish changes](/docs/team/publish).
+The shared version of a team app deployed from the repository's main branch. See [Publish an app](/docs/team/publish).
 
 ## Quick check
 
@@ -121,19 +101,15 @@ An Advisor rule that runs locally without Copilot. Quick checks re-run as the pr
 
 ## Rayfin
 
-Microsoft's platform for building apps whose backend runs on Microsoft Fabric. Fabricator builds Rayfin apps and publishes them to Fabric. With the [Local development](/docs/reference/glossary#local-development) experiment on, it runs them on this computer while you build them. See [Rayfin's docs](https://rayfin.ai).
+Microsoft's platform for building apps that deploy to Microsoft Fabric. Fabricator builds Rayfin apps. See [Rayfin's docs](https://rayfin.ai).
 
 ## Rayfin CLI
 
-The command-line tool Fabricator runs through `npx rayfin` from each project. It publishes apps and manages Fabric sign-in. See [Rayfin versions](/docs/ship/rayfin-versions).
-
-## rayfin-local
-
-A local Rayfin backend that Fabricator bundles to run your app on this computer when the [Local development](/docs/reference/glossary#local-development) experiment is on. It answers the same requests as the app's backend in Fabric, so the app runs unchanged. See [Local backend](/docs/reference/glossary#local-backend) and the [rayfin-local repository](https://github.com/spatney/rayfin-local).
+The command-line tool Fabricator runs through `npx rayfin` from each project. It deploys apps and manages Fabric sign-in. See [Rayfin versions](/docs/ship/rayfin-versions).
 
 ## Secret
 
-A value such as an API key or password that your app's Rayfin functions read on the server. Its value is stored with the published app. With the [Local development](/docs/reference/glossary#local-development) experiment on, your app also keeps a value on this computer. Neither value is shown again. See [Secrets](/docs/build/secrets).
+A value such as an API key or password that your app's Rayfin functions read on the server. Secrets are stored with the deployed app and are never shown again. See [Secrets](/docs/build/secrets).
 
 ## Semantic model
 

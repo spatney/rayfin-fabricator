@@ -1,9 +1,9 @@
 ---
 title: "Tour the workbench"
-description: "Find Home, Search, project tabs, chat, preview, code, Blueprint, Advisor, the publish control, accounts, settings, the status bar and Ray."
+description: "Find Home, Search, project tabs, chat, preview, code, model, Advisor, accounts, settings, the status bar and Ray."
 ---
 
-Fabricator has two main places: Home, where you choose a project, and the project workbench, where you build, inspect, preview, and publish one app.
+Fabricator has two main places: Home, where you choose a project, and the project workbench, where you build, inspect, preview, and deploy one app.
 
 ## Home
 
@@ -11,7 +11,7 @@ Fabricator has two main places: Home, where you choose a project, and the projec
 
 Home is titled **Your projects**. Use it to start or open work:
 
-- **New project** creates a Rayfin app, then asks you to publish it to a Fabric workspace. With the **Local development** experiment on, the app opens with chat ready instead.
+- **New project** creates a Rayfin app and starts the deploy flow.
 - **Open folder** opens an existing local project.
 - **Clone from GitHub** brings a repository into Fabricator.
 - **Recent projects** lists projects you have opened before. A project can show **Open now** or **Missing**.
@@ -21,22 +21,22 @@ If **Team workspaces** is turned on in **Settings → Experiments**, Home also s
 
 ## Project app bar
 
-![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the preview shows the published app with a monthly total and a spending chart.](/screenshots/workbench.webp)
+![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the live preview shows the deployed app with a monthly total and a spending chart.](/screenshots/workbench.webp)
 
 When a project is open, the app bar starts with the project switcher. Choose the project name to open a menu of your recent projects, then choose one to switch to it. Choose **All projects** to see every project on Home while the current project keeps running, and choose the `Back to <project name>` button to return to it.
 
 The center of the app bar has project tabs:
 
-- **Build**: chat and the preview.
-- **Code**: files, history, skills, and secrets.
+- **Build**: chat and live preview.
+- **Code**: files, history, and skills.
 - **Blueprint**: how the app is put together: its architecture, data model and the Fabric data it connects to.
 - **Advisor**: app health checks and fixes.
 
-The right side has the publish controls:
+The right side can include deployment controls:
 
-- The publish control shows the published app's name, or **Not published**, with a dot for its state. Select it for the published app's address, workspace and account, to switch to or add another published app, and to turn **Publish after each chat turn** on or off. See [Publish to Microsoft Fabric](/docs/ship/deploy).
-- The button next to it publishes. **Publish** publishes the app for the first time, or again. A label such as **Publish 3 changes** says what's waiting, and **Try again** follows a publish that failed. See [Publish changes](/docs/ship/deploy#publish-changes).
-- **Share** shares the published app with people in your organization. It appears once the app is published.
+- The deployment control shows the deployment's name, or **Not deployed**, with a dot for its state. Select it for the deployment's details. See [Work with multiple deployments](/docs/ship/deploy#work-with-multiple-deployments).
+- The button next to it deploys. **Deploy** creates the first deployment, **Redeploy** publishes to the active deployment again, and a label such as **Deploy 3 changes** says what's waiting. See [Redeploy changes](/docs/ship/deploy#redeploy-changes).
+- **Share** opens sharing for the active deployment.
 
 The app bar also has the account menu, set apart from the project's controls. It holds **Settings** too.
 
@@ -46,19 +46,15 @@ The app bar also has the account menu, set apart from the project's controls. It
 
 ## Build view
 
-**Build** is where you spend most of your time. Chat is on the left. The preview is on the right. During a turn, the chat work log shows what Copilot is doing.
+**Build** is where you spend most of your time. Chat is on the left. The preview is on the right. During a turn, the chat work log shows what Copilot is doing. The preview can show a live local app while Copilot edits, then return to the deployed app after the turn.
 
-The preview shows your published app. While Copilot works, it shows the app's pages from this computer instead, at a `localhost` address with the published app's backend, so changes appear as Copilot makes them. It goes back to the published app once the turn's changes are published. With **Publish after each chat turn** off, it keeps showing your latest changes from this computer while the app is open.
-
-With the **Local development** experiment on, the preview shows your app running on this computer, with its own backend and data, and its status, such as **Running**, in the toolbar. Once that app is published, **Local** and **Published** switch between the two. See [Develop on this computer](/docs/build/local-development).
-
-The preview toolbar includes **Back**, **Forward**, **Reload**, the app's address, **Fabric**, **Design**, and **Focus**. With the **Local development** experiment on, it also has **Preview as**, which chooses who the app on this computer signs in as; see [Preview as someone else](/docs/build/preview#preview-as-someone-else). **Design** lets you click your app, queue visual changes, and send them to Copilot. See [Live preview](/docs/build/preview) and [Design mode](/docs/build/design).
+The preview toolbar includes **Reload**, a URL button, **Fabric**, **Design**, and **Focus**. **Design** lets you click your app, queue visual changes, and send them to Copilot. See [Live preview](/docs/build/preview) and [Design mode](/docs/build/design).
 
 ## Code, Blueprint, and Advisor
 
-**Code** has four sub-tabs: **Files**, **History**, **Skills**, and **Secrets**. **Files** opens a read-only code viewer. **History** shows a timeline of changes. **Skills** manages reusable Copilot instructions. **Secrets** holds the values your app's functions read, such as API keys. See [Code and history](/docs/build/code-and-history), [Skills](/docs/build/skills) and [Secrets](/docs/build/secrets).
+**Code** has three sub-tabs: **Files**, **History**, and **Skills**. **Files** opens a read-only code viewer. **History** shows a timeline of changes. **Skills** manages reusable Copilot instructions. See [Code and history](/docs/build/code-and-history) and [Skills](/docs/build/skills).
 
-**Blueprint** shows what the app is made of, what it connects to and which identity each connection uses, along with its Rayfin data model and the Fabric data it connects to: semantic models, and the tables of SQL databases, warehouses and lakehouses. With the **Local development** experiment on, its **Data** view shows the data your app stores on this computer. See [Blueprint](/docs/build/data-model).
+**Blueprint** shows what the app is made of, what it connects to and which identity each connection uses, along with its Rayfin data model and the Fabric data it connects to: semantic models, and the tables of SQL databases, warehouses and lakehouses. See [Blueprint](/docs/build/data-model).
 
 **Advisor** checks app health. The tab can show a badge for open high or medium issues. See [Check app health with the Advisor](/docs/ship/advisor).
 
@@ -68,7 +64,7 @@ The preview toolbar includes **Back**, **Forward**, **Reload**, the app's addres
 
 When you are signed in to Fabric, the account menu shows your account initials, and opening it shows your account and its organization. It has **Manage accounts…**, which opens **Accounts** for every account Fabricator uses, plus **Refresh Fabric authentication**, **Sign out** and **Settings**. When you are not signed in, it shows **Sign in to Fabric**, with **Manage accounts…** and **Settings** behind the arrow next to it. See [Manage your accounts](/docs/start/accounts).
 
-Open **Settings** from the account menu. Settings groups its options into **General** (**Accounts**, **API keys**, **Setup**, and **Workspace folder**), **Appearance** (**Theme** and **Text size**), **Diagnostics** (including **Usage stats**), **Experiments** (**Team workspaces**, **Migrate Power BI reports** and **Local development**), and **About** (the versions Fabricator runs on, and links to these docs). See [Settings](/docs/reference/settings).
+Open **Settings** from the account menu. Settings groups its options into **General** (**Accounts**, **API keys**, **Setup**, and **Workspace folder**), **Appearance** (**Theme** and **Text size**), **Diagnostics** (including **Usage stats**), experiments such as **Team workspaces** and **Migrate Power BI reports**, and **About** (the versions Fabricator runs on, and links to these docs).
 
 ## Status bar
 
@@ -83,7 +79,7 @@ The footer shows project and app status:
 
 ## Ray
 
-Ray is Fabricator's stingray. He keeps you company while an app installs its packages: when you create a project, clone one, or open one whose packages are missing. He shares facts about Rayfin and tips for Fabricator, and greets you in Help. The first time Fabricator starts on a computer, he's on the loading screen too, telling you in his own words how it's going. After that, he welcomes you back each time Fabricator opens, and he talks you through an app's first publish, and any publish you choose to watch.
+Ray is Fabricator's stingray. He keeps you company while an app installs its packages: when you create a project, clone one, or open one whose packages are missing. He shares facts about Rayfin and tips for Fabricator, and greets you in Help. The first time Fabricator starts on a computer, he's on the loading screen too, telling you in his own words how it's going. After that, he welcomes you back each time Fabricator opens, and he talks you through an app's first deploy, and any deploy you choose to watch.
 
 While Ray is on screen, you can:
 

@@ -3,14 +3,14 @@ title: "Troubleshooting overview"
 description: "Start here when Fabricator is not working, then jump to the symptom that matches what you see."
 ---
 
-Use this page when Fabricator gets stuck, a sign-in fails, a preview is blank, an app doesn't start, or publishing doesn't finish. Start with the checks below, then use the symptom index.
+Use this page when Fabricator gets stuck, a sign-in fails, a preview is blank, or a deploy does not finish. Start with the checks below, then use the symptom index.
 
 ## Ask Help first
 
 Fabricator has a built-in assistant that reads the errors it recorded on your computer and explains what went wrong.
 
 1. In the status bar, select **Help**, or press `Ctrl+J` (`Cmd+J` on macOS).
-2. Describe the problem, such as "why did my last publish fail?".
+2. Describe the problem, such as "why did my last deploy fail?".
 
 You can also press `Ctrl+K` (`Cmd+K` on macOS), type the question into Search and press `Tab`: Help answers right there.
 
@@ -34,7 +34,6 @@ Help often identifies the cause faster than working through the index below, bec
 | A setup tool is missing, outdated, or failed its version check | [A tool shows as missing or failed](/docs/troubleshooting/setup-and-sign-in#a-tool-shows-as-missing-or-failed) |
 | GitHub Copilot sign-in fails | [GitHub Copilot sign-in doesn't work](/docs/troubleshooting/setup-and-sign-in#github-copilot-sign-in-doesnt-work) |
 | Chat asks you to sign in again | [Copilot asks you to sign in again](/docs/troubleshooting/setup-and-sign-in#copilot-asks-you-to-sign-in-again) |
-| A feature shows **Sign in to Azure** or **Sign in to Azure & retry** | [A feature asks you to sign in to Azure](/docs/troubleshooting/setup-and-sign-in#a-feature-asks-you-to-sign-in-to-azure) |
 | Azure CLI is using the wrong tenant or account | [Azure CLI is signed in to the wrong account](/docs/troubleshooting/setup-and-sign-in#azure-cli-is-signed-in-to-the-wrong-account) |
 | Fabric sign-in does nothing or does not finish | [Fabric sign-in doesn't complete](/docs/troubleshooting/setup-and-sign-in#fabric-sign-in-doesnt-complete) |
 | Chat shows a Copilot error | [Chat shows a Copilot error](/docs/troubleshooting/chat#chat-shows-a-copilot-error) |
@@ -45,33 +44,23 @@ Help often identifies the cause faster than working through the index below, bec
 | A model on your own API key "isn't available" | [A model on your own API key isn't available](/docs/troubleshooting/chat#a-model-on-your-own-api-key-isnt-available) |
 | "The model stopped before finishing." | [The model stopped before finishing](/docs/troubleshooting/chat#the-model-stopped-before-finishing) |
 | Rayfin CLI reports missing packages such as `rxjs`, `commander`, or `jsonwebtoken` | [Rayfin CLI reports missing dependencies](/docs/troubleshooting/chat#rayfin-cli-reports-missing-dependencies) |
-| Chat says "Publish your app to start building" | [Chat is locked until the app is published](/docs/troubleshooting/deploy#chat-is-locked-until-the-app-is-published) |
 | Preview is blank, stale, or stuck opening | [The preview is blank or stuck](/docs/troubleshooting/preview#the-preview-is-blank-or-stuck) |
+| Every preview port is taken | [All preview ports are busy](/docs/troubleshooting/preview#all-preview-ports-are-busy) |
 | Preview shows an older app | [The preview shows an old version](/docs/troubleshooting/preview#the-preview-shows-an-old-version) |
 | The app inside the preview asks you to sign in | [The preview asks you to sign in](/docs/troubleshooting/preview#the-preview-asks-you-to-sign-in) |
-| The live preview says "Automatic local sign-in failed." | [The local preview says automatic sign-in failed](/docs/troubleshooting/preview#the-local-preview-says-automatic-sign-in-failed) |
-| Every preview port is taken | [All preview ports are busy](/docs/troubleshooting/preview#all-preview-ports-are-busy) |
+| The local preview says "Automatic local sign-in failed." | [The local preview says automatic sign-in failed](/docs/troubleshooting/preview#the-local-preview-says-automatic-sign-in-failed) |
 | Preview covers chat or other UI | [The preview covers other Fabricator controls](/docs/troubleshooting/preview#the-preview-covers-other-fabricator-controls) |
 | Team app local preview restarts | [A team app local preview restarts](/docs/troubleshooting/preview#a-team-app-local-preview-restarts) |
-| The preview says "Choose where to publish" | [The preview says Choose where to publish](/docs/troubleshooting/deploy#the-preview-says-choose-where-to-publish) |
-| With Local development on, the preview says "Your app couldn’t start on this computer", "Your app’s packages aren’t installed", "This app is already running", "Node.js needs an update" or "Your app keeps stopping" | [Your app doesn't start on this computer](/docs/troubleshooting/preview#your-app-doesnt-start-on-this-computer) |
-| With Local development on, a dialog says "This change would delete local data", or the preview says "A data model change is waiting." | [A data model change would delete local data](/docs/troubleshooting/preview#a-data-model-change-would-delete-local-data) |
-| With Local development on, a note says the preview uses your published app's backend | [The preview uses your published app's backend](/docs/troubleshooting/preview#the-preview-uses-your-published-apps-backend) |
-| Windows or your antivirus blocks rayfin-local, the local backend | [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local) |
-| You see "Couldn’t publish", or the publish control says "Failed" | [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed) |
-| Chat turns no longer publish your app | [Automatic redeploy stopped](/docs/troubleshooting/deploy#automatic-redeploy-stopped) |
-| Publishing keeps failing after Fabric sign-in | [Fabric authentication blocks publishing](/docs/troubleshooting/deploy#fabric-authentication-blocks-publishing) |
+| The preview says **Deploy failed** | [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed) |
+| Automatic redeploy no longer runs after chat | [Automatic redeploy stopped](/docs/troubleshooting/deploy#automatic-redeploy-stopped) |
+| Deploy keeps failing after Fabric sign-in | [Fabric authentication blocks deploy](/docs/troubleshooting/deploy#fabric-authentication-blocks-deploy) |
 | Semantic model reads fail | [Couldn't read the semantic model](/docs/troubleshooting/deploy#couldnt-read-the-semantic-model) |
-| Workspace or Fabric capacity blocks publishing | [The workspace or capacity blocks publishing](/docs/troubleshooting/deploy#the-workspace-or-capacity-blocks-publishing) |
+| Workspace or Fabric capacity blocks deployment | [The workspace or capacity blocks deploy](/docs/troubleshooting/deploy#the-workspace-or-capacity-blocks-deploy) |
 | Rayfin CLI is missing or npm reports `ETARGET` | [Rayfin CLI or npm package resolution failed](/docs/troubleshooting/deploy#rayfin-cli-or-npm-package-resolution-failed) |
 | Someone else cannot open the shared app | [Recipients can't open the shared app](/docs/troubleshooting/deploy#recipients-cant-open-the-shared-app) |
 | Migrating a Power BI report asks you to sign in to the Azure CLI | [Fabricator asks you to sign in to the Azure CLI](/docs/build/migrate-power-bi#fabricator-asks-you-to-sign-in-to-the-azure-cli) |
-| The Power BI report you want to migrate isn't listed | [The report isn't listed](/docs/build/migrate-power-bi#the-report-isnt-listed) |
 | A Power BI report can't be migrated, and **Continue** stays off | [A report can't be migrated](/docs/build/migrate-power-bi#a-report-cant-be-migrated) |
-| A migrated report's definition can't be read | [Fabricator can't read the report's definition](/docs/build/migrate-power-bi#fabricator-cant-read-the-reports-definition) |
-| A migrated report has no page images | [The pages can't be exported](/docs/build/migrate-power-bi#the-pages-cant-be-exported) |
-| A page on the Migration card shows **Try again** | [A page needs another try](/docs/build/migrate-power-bi#a-page-needs-another-try) |
-| People you share a migrated app with don't see its data | [People you share the app with don't see its data](/docs/build/migrate-power-bi#people-you-share-the-app-with-dont-see-its-data) |
+| A migrated report has no page images, or its definition can't be read | [The pages can't be exported](/docs/build/migrate-power-bi#the-pages-cant-be-exported) and [Fabricator can't read the report's definition](/docs/build/migrate-power-bi#fabricator-cant-read-the-reports-definition) |
 | A team workspace step failed and its message doesn't explain why | [A team step failed and the message doesn't explain it](/docs/troubleshooting/team#a-team-step-failed-and-the-message-doesnt-explain-it) |
 | A team workspace setup step needs admin help | [Setup needs an administrator](/docs/troubleshooting/team#setup-needs-an-administrator) |
 | Team workspace setup can't create the GitHub repository in your organization | [Setup can't create the GitHub repository](/docs/troubleshooting/team#setup-cant-create-the-github-repository) |

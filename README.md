@@ -23,7 +23,7 @@
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="./website/public/screenshots/workbench.webp" />
       <source media="(prefers-color-scheme: light)" srcset="./website/public/screenshots/workbench.light.webp" />
-      <img src="./website/public/screenshots/workbench.webp" alt="The Fabricator workbench: the chat on the left shows a finished Copilot turn that built an expense tracker, and the preview on the right shows the published app." width="100%" />
+      <img src="./website/public/screenshots/workbench.webp" alt="The Fabricator workbench: the chat on the left shows a finished Copilot turn that built an expense tracker, and the live preview on the right shows the deployed app." width="100%" />
     </picture>
   </a>
   <p><sub>Build, preview, and ship — all in one window.</sub></p>
@@ -34,7 +34,7 @@
 
 Building a Rayfin app usually means living in your terminal: scaffold with one CLI, prompt the Copilot CLI, run `rayfin up` to deploy, wrangle git, flip to a browser to check it, repeat. Fabricator folds all of that into a single desktop app.
 
-You chat, the app gets built, you watch it come together inline, and you manage every published app from one panel. It runs on the **GitHub Copilot account you already have** — nothing new to sign up for.
+You chat, the app gets built, you watch it come together inline, and you manage every deployment from one panel. It runs on the **GitHub Copilot account you already have** — nothing new to sign up for.
 
 **📖 Documentation: [spatney.github.io/rayfin-fabricator](https://spatney.github.io/rayfin-fabricator/)** — installation, a first-app walkthrough, guides for every part of the app, team workspaces, and troubleshooting.
 
@@ -46,12 +46,11 @@ Rayfin is Microsoft's **Backend-as-a-Service for the agentic era**. You define y
 
 1. **[Chat to build.](https://spatney.github.io/rayfin-fabricator/docs/build/chat)** Describe what you want in plain English. The built-in GitHub Copilot agent writes and edits the project files for you, and git quietly snapshots every change so you can diff and roll back.
 2. **[See it as it's built.](https://spatney.github.io/rayfin-fabricator/docs/build/preview)** Watch the app in a live inline preview, point at anything in it with [Design mode](https://spatney.github.io/rayfin-fabricator/docs/build/design) to change it, and browse every file, its history and the data model.
-3. **[Publish with a click.](https://spatney.github.io/rayfin-fabricator/docs/ship/deploy)** Fabricator runs `rayfin up` for you to publish your app to Microsoft Fabric, publishes again after each successful chat turn (or [only when you choose](https://spatney.github.io/rayfin-fabricator/docs/ship/deploy#publish-after-each-chat-turn)), and lets you [share the app](https://spatney.github.io/rayfin-fabricator/docs/ship/share) with people in your tenant.
+3. **[Deploy with a click.](https://spatney.github.io/rayfin-fabricator/docs/ship/deploy)** Fabricator runs `rayfin up` for you, redeploys after each successful chat turn (or [when you choose](https://spatney.github.io/rayfin-fabricator/docs/ship/deploy#deploy-manually)), and lets you [share the app](https://spatney.github.io/rayfin-fabricator/docs/ship/share) with people in your tenant.
 4. **[Harden it.](https://spatney.github.io/rayfin-fabricator/docs/ship/advisor)** The Advisor grades your app's health with instant checks and an on-demand, read-only Copilot review, and every finding comes with a one-click fix.
 5. **[Build with your team](https://spatney.github.io/rayfin-fabricator/docs/team)** *(experimental)*. Team workspaces keep your team's apps in a private GitHub repository, give everyone a personal preview, and publish to Fabric through a pipeline.
 6. **[Use your own API keys](https://spatney.github.io/rayfin-fabricator/docs/build/your-own-api-keys)**. Add Claude, GPT, Grok and Gemini models on your own Anthropic, OpenAI, xAI or Google key to the model pickers, next to your Copilot models, in chat, the Advisor and Design.
 7. **[Migrate a Power BI report](https://spatney.github.io/rayfin-fabricator/docs/build/migrate-power-bi)** *(experimental)*. Turn a report into an app that reads its semantic model live, while Copilot rebuilds its pages, visuals and filters one page at a time with [Graphein](https://github.com/spatney/graphein) charts.
-8. **[Develop on this computer](https://spatney.github.io/rayfin-fabricator/docs/build/local-development)** *(experimental)*. With the Local development experiment on, your apps and their backend run on this computer while you build, on the bundled [rayfin-local](https://github.com/spatney/rayfin-local), and you publish to Microsoft Fabric when you choose.
 
 ## Download
 
@@ -66,14 +65,14 @@ Fabricator runs on **Windows 10/11** and **macOS (Apple Silicon)**.
   xattr -dr com.apple.quarantine "/Applications/Rayfin Fabricator.app"
   ```
 
-Then launch the app: setup checks your tools and signs you in to GitHub Copilot. Signing in to Azure is optional. The app keeps itself up to date. See the [install guide](https://spatney.github.io/rayfin-fabricator/docs/start/install) and [Build your first app](https://spatney.github.io/rayfin-fabricator/docs/start/first-app) for the full walkthrough.
+Then launch the app: setup checks your tools and signs you in to GitHub Copilot and the Azure CLI. The app keeps itself up to date. See the [install guide](https://spatney.github.io/rayfin-fabricator/docs/start/install) and [Build your first app](https://spatney.github.io/rayfin-fabricator/docs/start/first-app) for the full walkthrough.
 
 ## Documentation
 
 | Start here | Guides | When something goes wrong |
 | --- | --- | --- |
 | [What is Fabricator?](https://spatney.github.io/rayfin-fabricator/docs) | [Chat with Copilot](https://spatney.github.io/rayfin-fabricator/docs/build/chat) | [Troubleshooting](https://spatney.github.io/rayfin-fabricator/docs/troubleshooting) |
-| [Install Fabricator](https://spatney.github.io/rayfin-fabricator/docs/start/install) | [Publish to Microsoft Fabric](https://spatney.github.io/rayfin-fabricator/docs/ship/deploy) | [Report a problem](https://spatney.github.io/rayfin-fabricator/docs/troubleshooting/report-a-problem) |
+| [Install Fabricator](https://spatney.github.io/rayfin-fabricator/docs/start/install) | [Deploy to Microsoft Fabric](https://spatney.github.io/rayfin-fabricator/docs/ship/deploy) | [Report a problem](https://spatney.github.io/rayfin-fabricator/docs/troubleshooting/report-a-problem) |
 | [Set up and sign in](https://spatney.github.io/rayfin-fabricator/docs/start/setup) | [Check app health with the Advisor](https://spatney.github.io/rayfin-fabricator/docs/ship/advisor) | [FAQ](https://spatney.github.io/rayfin-fabricator/docs/reference/faq) |
 | [Build your first app](https://spatney.github.io/rayfin-fabricator/docs/start/first-app) | [Team workspaces](https://spatney.github.io/rayfin-fabricator/docs/team) | [Privacy and telemetry](https://spatney.github.io/rayfin-fabricator/docs/reference/privacy) |
 

@@ -5,7 +5,7 @@ description: "See which GitHub Copilot, Microsoft Fabric, Azure CLI and GitHub a
 
 Fabricator signs in to a few services for you. **Accounts** shows who you're signed in as for each one, and which organization (Microsoft Entra ID tenant) the account belongs to. From there you can sign in, add more accounts, choose the one to use, and sign out without leaving your project.
 
-![Accounts with GitHub Copilot, Microsoft Fabric, the Azure CLI and GitHub each signed in, the Fabric and Azure CLI accounts marked In use, and the start of Model providers.](/screenshots/accounts.webp)
+{/* screenshot: accounts */}
 
 ## Open Accounts
 
@@ -21,12 +21,10 @@ Changes apply to every project on this computer. Select **Re-check** to verify e
 
 | Account | What Fabricator uses it for | Several accounts |
 | --- | --- | --- |
-| **GitHub Copilot** | Writes and edits your app's code when you chat. It's the only account Fabricator requires. | One at a time |
-| **Microsoft Fabric** | Publishes, hosts and shares your apps, lists your Fabric workspaces, and manages your published apps' secrets. A new app is published before you build it with chat, so you need it from your first project, unless the **Local development** experiment is on. | Yes |
-| **Azure CLI** | Optional. Finds people when you share an app, connects Fabric data, reads the Power BI reports you migrate, and sets up team workspaces. With the **Local development** experiment on, apps that run on this computer read Fabric data with this account too. | Yes |
+| **GitHub Copilot** | Writes and edits your app's code when you chat. | One at a time |
+| **Microsoft Fabric** | Deploys, hosts and shares your apps, lists your Fabric workspaces, and manages secrets. | Yes |
+| **Azure CLI** | Finds people when you share an app, connects Fabric data, reads the Power BI reports you migrate, and sets up team workspaces. | Yes |
 | **GitHub** | Clones repositories and runs team workspaces. It's optional and uses the GitHub CLI. | Yes |
-
-Features that need Azure ask you to **Sign in to Azure** when you use them, so you can leave it until then.
 
 **Accounts** also has **Model providers**, where you add API keys for Anthropic, OpenAI, xAI and Google. See [Use your own API keys](/docs/build/your-own-api-keys).
 
@@ -36,7 +34,7 @@ If Fabric and the Azure CLI are signed in to different organizations, **Accounts
 
 ## Use more than one Fabric account
 
-You can stay signed in to several Fabric accounts, for example your work account and an account in a client's organization. Fabricator uses one of them at a time, marked **In use**. Publishing, listing workspaces, sharing and secrets all use that account.
+You can stay signed in to several Fabric accounts, for example your work account and an account in a client's organization. Fabricator uses one of them at a time, marked **In use**. Deploying, listing workspaces, sharing and secrets all use that account.
 
 To add a Fabric account:
 
@@ -53,21 +51,13 @@ The first Fabric account you sign in to is the Rayfin CLI's own sign-in, so `ray
 > [!NOTE]
 > On macOS, the Rayfin CLI keeps every Fabric account's sign-in in one keychain item. Signing out of one Fabric account signs all of them out until you sign in again.
 
-## See which account publishes
+## See which account deploys
 
-In the app bar, select the publish control. Under **Account**, its panel names the account that publishes, for example "alice@contoso.com · Contoso". Select **Change** to open **Accounts**.
-
-## Which account your app uses on this computer
-
-> [!WARNING]
-> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be
-> removed in a future update.
-
-With **Local development** on, your app runs on this computer while you build, and signs you in by itself. It signs you in as the Azure CLI's account in use or, when the Azure CLI isn't signed in, as the Fabric account in use. Its functions and connectors reach Azure and Fabric data as that account too. When neither is signed in, the app signs you in as a local account, `developer@example.com`, and can't reach that data. To try the app as someone else, use **Preview as** in the preview's toolbar; see [Preview as someone else](/docs/build/preview#preview-as-someone-else). For more, see [Develop on this computer](/docs/build/local-development) and [How Fabricator works](/docs/reference/how-it-works#the-local-backend).
+In the app bar, select the deployment control. Under **Account**, its panel names the account that deploys, for example "alice@contoso.com · Contoso". Select **Change** to open **Accounts**.
 
 ## Use more than one Azure CLI account
 
-Signing in to the Azure CLI is optional. When it isn't signed in, **Azure CLI** offers **Sign in**, or **Install from setup** when the Azure CLI isn't installed. The Azure CLI can stay signed in to several accounts, for example the same person in two organizations. The account marked **In use** is the one the Azure CLI uses now.
+The Azure CLI can stay signed in to several accounts, for example the same person in two organizations. The account marked **In use** is the one the Azure CLI uses now.
 
 - To add an account, under **Azure CLI**, select **Add account**. Optionally enter an organization, select **Continue**, and finish signing in in your browser. The account you added becomes the one in use.
 - To switch accounts, select **Use** next to the account.

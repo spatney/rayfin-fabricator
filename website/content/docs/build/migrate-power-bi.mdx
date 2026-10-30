@@ -12,37 +12,29 @@ model live, so its numbers come from the same measures and the same data. GitHub
 the report one page at a time, with [Graphein](https://github.com/spatney/graphein) charts: every
 page, visual, filter and slicer, in the same arrangement and colors.
 
-You end up with an app that follows the report, and a `MIGRATION.md` file in the project that
-lists what each report visual became and what Copilot couldn't rebuild exactly.
+You end up with a deployed app that follows the report, and a `MIGRATION.md` file in the project
+that lists what each report visual became and what Copilot couldn't rebuild exactly.
 
 ## How a migration works
 
 1. You pick a report, and Fabricator checks what it can read of it.
-2. You name the new app and publish it, like any new project.
+2. You name the new app and deploy it, like any new project.
 3. Meanwhile, Fabricator reads the report: its definition, its data model and images of its pages.
-4. Once the app is published, the first chat turn starts by itself. Copilot sets up the app and
-   migrates the first page.
+4. The first chat turn starts by itself. Copilot sets up the app and migrates the first page.
 5. You migrate the other pages, one chat turn per page.
-
-With the **Local development** experiment on, the app runs on this computer instead. There's no
-publish step, the first page starts as soon as Fabricator has read the report, and you publish
-the app when you're ready to share it. See
-[Develop on this computer](/docs/build/local-development).
 
 ## Before you start
 
 You need:
 
-- An Azure sign-in with an account that can open the report. Fabricator finds and reads reports
-  with the Azure CLI's sign-in. Signing in to Azure is optional at setup, so if you skipped it,
-  **Migrate a Power BI report** asks you to **Sign in to Azure**. See
+- The Azure CLI, signed in with an account that can open the report. Fabricator finds and reads
+  reports with the Azure CLI's sign-in, which setup already asks for. See
   [Manage your accounts](/docs/start/accounts).
 - Build permission on the report's semantic model. The app queries the model live, so you need to
   be allowed to query it.
 - A semantic model in a shared workspace. Rayfin apps can't connect to a model in My workspace.
-- A Fabric workspace to publish the app to, as for any new app. With the **Local development**
-  experiment on, you need it only when you publish. See
-  [Publish to Microsoft Fabric](/docs/ship/deploy).
+- A Fabric workspace to deploy the app to, as for any app. See
+  [Deploy to Microsoft Fabric](/docs/ship/deploy).
 
 For the most faithful result, you also need:
 
@@ -60,7 +52,7 @@ migrated yet.
 2. Open **Experiments**.
 3. Turn on **Migrate Power BI reports**.
 
-![The Experiments section of Settings, with a warning that experiments may change, and the Team workspaces, Migrate Power BI reports and Local development switches.](/screenshots/settings-experiments.webp)
+![The Experiments section of Settings, with a warning that experiments may change, and the Team workspaces and Migrate Power BI reports switches.](/screenshots/settings-experiments.webp)
 
 Home now has **Migrate a Power BI report**. Turning the experiment off hides it and the Migration
 card. It doesn't change the apps you migrated or delete their migration material.
@@ -68,21 +60,18 @@ card. It doesn't change the apps you migrated or delete their migration material
 ## Pick a report
 
 1. On Home, select **Migrate a Power BI report**.
-2. If you aren't signed in to Azure, the screen says "Fabricator reads your Power BI reports with
-   your Azure sign-in. Sign in to Azure to pick one." Select **Sign in to Azure** and finish signing
-   in in your browser. The workspaces load once you're signed in.
-3. Find the report in one of these ways:
+2. Find the report in one of these ways:
    - Type at least two characters of its name in **Find a report** to search for it across your
      organization.
-   - Select a workspace in the list, then the report. The workspaces your apps are published to
-     come first, then My workspace and the rest.
+   - Select a workspace in the list, then the report. The workspaces your apps deploy to come
+     first, then My workspace and the rest.
    - Copy the report's link from Power BI, paste it into **Find a report** and press **Enter**.
      Links to a report in a workspace, in My workspace or in a Power BI app all work.
-4. Select the report. Fabricator reads it and shows its workspace, the semantic model it gets its
+3. Select the report. Fabricator reads it and shows its workspace, the semantic model it gets its
    data from, its pages and three checks.
-5. When the report can be migrated, select **Continue**.
+4. When the report can be migrated, select **Continue**.
 
-![The Migrate a Power BI report screen. Under Find a report, the hint names the Azure CLI account, and the workspace list starts with Contoso Apps, where the user's apps are published. Sales analytics is open, with Sales performance picked. Below, the report's workspace, its semantic model Sales model and its five pages, the Definition, Data model and Page images checks all passing, and Continue.](/screenshots/migrate-report.webp)
+![The Migrate a Power BI report screen. Under Find a report, the hint names the Azure CLI account, and the workspace list starts with Contoso Apps, where the user's apps deploy. Sales analytics is open, with Sales performance picked. Below, the report's workspace, its semantic model Sales model and its five pages, the Definition, Data model and Page images checks all passing, and Continue.](/screenshots/migrate-report.webp)
 
 The hint under **Find a report** names the Azure CLI account that Fabricator reads with, for
 example "Reports you can open as avery.chen@contoso.com, through the Azure CLI." To use another
@@ -103,10 +92,9 @@ A report also can't be migrated when Fabricator can read neither its definition 
 pages: "Fabricator can neither read this report's definition nor export its pages." For the other
 reasons, see [A report can't be migrated](#a-report-cant-be-migrated).
 
-## Name and publish the app
+## Name and create the app
 
-After **Continue**, the **New app from Power BI** screen opens. It says "Name your app. Fabricator
-reads the report while it creates and publishes the app, then Copilot rebuilds it page by page."
+After **Continue**, the **New app from Power BI** screen opens.
 
 1. Check the **Project name**. It starts as the report's name, without characters that project
    names can't have, such as parentheses.
@@ -117,23 +105,20 @@ reads the report while it creates and publishes the app, then Copilot rebuilds i
 4. If you use team workspaces, choose **Where** the app goes: **Just me, on this computer** or a
    team workspace.
 5. Select **Create project**.
-6. In **Publish your app**, choose a workspace and select **Publish app**. When the report's
+6. In **Deploy your app**, choose a workspace and select **Deploy app**. When the report's
    workspace can host Rayfin apps, it's listed first, under **Recent**.
 
 The app starts from the Universal App, the Rayfin CLI's default template, like any new project.
 See [Create a new project](/docs/build/projects#create-a-new-project). A team app skips the
-publish step, because the team pipeline deploys your preview. See
+deploy step, because the team pipeline deploys your preview. See
 [Work on a team app](/docs/team/work-on-an-app).
 
-If you select **Continue without publishing →**, Fabricator still reads the report, but the first
-page waits until you publish the app.
-
-With the **Local development** experiment on, there's no publish step: the app runs on this
-computer, and Fabricator opens it in the workbench and starts reading the report.
+If you select **Continue without deploying →**, Fabricator still reads the report, but the first
+page waits until you deploy the app.
 
 ## While Fabricator reads the report
 
-While the app is created and published, Fabricator reads the report in the background. The
+While the app is created and deployed, Fabricator reads the report in the background. The
 Migration card above the chat composer, "Migrating “Sales performance” from Power BI", shows each
 stage:
 
@@ -157,7 +142,7 @@ migration goes ahead with whatever Fabricator could read.
 
 ## The first page starts by itself
 
-Once Fabricator has read the report and the app is published, the first chat turn starts by
+Once Fabricator has read the report and the app is deployed, the first chat turn starts by
 itself. Its message says "Migrate “Sales performance” from Power BI". It carries the first page's
 image, when Fabricator could export the pages, and a chip with the report's name and, for example,
 "Setup and page 1 of 5: Overview".
@@ -176,22 +161,15 @@ In this turn, Copilot:
    bookmarks show and wires its buttons.
 6. Starts `MIGRATION.md`.
 
-The preview shows each page as Copilot builds it, and the page queries the semantic model live,
-as you. When the turn ends, Fabricator publishes the app, as it does after any chat turn, unless
-you turned off **Publish after each chat turn**. See
-[Publish to Microsoft Fabric](/docs/ship/deploy#publish-after-each-chat-turn).
+When the turn ends, Fabricator deploys the app, as it does after any chat turn, unless you turned
+off **Deploy after each chat turn**. See [Redeploy changes](/docs/ship/deploy#redeploy-changes).
 
-With the **Local development** experiment on, the app runs on this computer and queries the
-semantic model as you, with your Azure sign-in. When the turn ends, nothing is published: the app
-stays on this computer until you publish it.
+A migration's turns start only while the project is open on **Build** and nothing else is running.
+Until then, the card says what it's waiting for, such as:
 
-A migration's turns start only while the project is open on **Build** and nothing else is running,
-such as a chat turn or a publish. Until then, the card says what it's waiting for, such as:
-
-- "The first page starts once the app is published."
-- "Waiting for publishing to finish."
+- "The first page starts once the app is deployed."
+- "Waiting for the deploy to finish."
 - "Waiting for Copilot to finish."
-- "Waiting for the app’s dependencies."
 
 ## Migrate the other pages
 
@@ -204,8 +182,8 @@ first, in the report's order, then drillthrough pages, tooltip pages and any oth
 - Select **Migrate next page** to migrate the next page in one chat turn. Its message says, for
   example, "Migrate page 2 of 5: Regions", with an image of that page.
 - Select **Migrate the rest** to migrate the remaining pages one after another, one page per
-  turn. Each page starts once the previous page's turn, and any publish after it, has finished.
-  To stop once the current page is done, select **Stop after this page**.
+  turn. Each page waits until the deploy after the previous page has finished. To stop once the
+  current page is done, select **Stop after this page**.
 - Sending a message of your own pauses **Migrate the rest**. Select it again to carry on.
 - If a page doesn't migrate, it shows **Try again**.
 
@@ -296,15 +274,9 @@ This material stays on this computer:
 
 ## Share a migrated app
 
-A migrated app is shared like any app, with **Share** once it's published. With the **Local
-development** experiment on, publish it to a Fabric workspace first. See
-[Publish to Microsoft Fabric](/docs/ship/deploy).
-
-A published migrated app reads the semantic model as each person who uses it, with their own
-identity. The model's row-level security applies, so each person sees only the data they're
-allowed to see. While the app runs on this computer with the **Local development** experiment, it
-reads the model as you instead, so you see what your own account can see. Blueprint shows which
-identity each of the app's connections uses; see
+A migrated app reads the semantic model as each person who uses it, with their own identity. The
+model's row-level security applies, so each person sees only the data they're allowed to see.
+Blueprint shows which identity each of the app's connections uses; see
 [Which identity a connection uses](/docs/build/data-model#which-identity-a-connection-uses).
 
 So everyone who uses the app needs Build permission on the semantic model. **Share** takes care of
@@ -317,34 +289,23 @@ workspace. See [Share your app](/docs/ship/share).
 
 - Reading the report picks up where it stopped the next time you open the project.
 - A page whose turn was cut off shows **Try again**.
-- If the first page hadn't started yet, it starts by itself once the app is published and
+- If the first page hadn't started yet, it starts by itself once the app is deployed and
   Fabricator has read the report.
 
 ## Troubleshooting
 
 ### Fabricator asks you to sign in to the Azure CLI
 
-On the **Migrate a Power BI report** screen, you see **Sign in to Azure** with one of these
-messages:
+On the **Migrate a Power BI report** screen, you see this message, or one like it:
 
-- "Fabricator reads your Power BI reports with your Azure sign-in. Sign in to Azure to pick one."
-- "Sign in to Azure to see the reports."
-- "Sign in to Azure to read this report."
+> Sign in to the Azure CLI again (run az login), then try again.
 
-Or, on the Migration card, a stage shows **Not available**, with a reason that ends "Sign in to
-the Azure CLI again (az login), then try again."
+Fabricator reads reports with the Azure CLI's sign-in, and that sign-in has expired or is
+missing.
 
-Fabricator reads reports with the Azure CLI's sign-in, and that sign-in is missing or has expired.
-Signing in to Azure is optional at setup, so you may not have signed in yet.
-
-1. Select **Sign in to Azure**, and finish signing in in your browser. Fabricator then loads the
-   workspaces again, or reads the report again.
-2. If you see "The Azure CLI isn't installed, so Fabricator can't sign you in to Azure. Install it
-   from setup (open Settings and select Open setup), then try again.", open **Settings**, select
-   **Open setup**, and install the Azure CLI in **Sign in to Azure**. Then try again.
-3. For a stage on the Migration card, the migration goes ahead with what Fabricator could read. To
-   read the whole report, sign in to Azure in **Accounts**: under **Azure CLI**, select **Sign in**
-   or **Add account**. Then migrate the report again.
+1. Sign in to the Azure CLI again: run `az login` in a terminal, or open **Accounts** and, under
+   **Azure CLI**, select **Add account**.
+2. Select **Try again** if the screen offers it, or pick the report again.
 
 ### The report isn't listed
 

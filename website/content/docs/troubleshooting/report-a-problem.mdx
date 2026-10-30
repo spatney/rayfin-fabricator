@@ -52,11 +52,10 @@ A diagnostics export is a Markdown file named like `fabricator-diagnostics-20261
 - Recent activity as JSON lines.
 - Recent chat-turn diagnostics as JSON lines.
 - Recent crash or hang log entries.
-- With the **Local development** experiment on, the state of your apps' local backends and the last lines of their output.
 
-Recent activity covers both what worked and what didn't: setup finishing, signing in, installing a tool, creating or opening an app, starting a preview, publishing, and every message the app showed you. Each entry includes the time, whether it was a success or a failure, the part of the app it came from, and the message. Credentials and token-like values are masked before anything is written.
+Recent activity covers both what worked and what didn't: setup finishing, signing in, installing a tool, creating or opening an app, starting a preview, deploying, and every message the app showed you. Each entry includes the time, whether it was a success or a failure, the part of the app it came from, and the message. Credentials and token-like values are masked before anything is written.
 
-By default, chat-turn diagnostics are lightweight metadata: timing, model or mode when present, attachment count, files modified count, tool names and success, whether a publish ran, outcome, and errors.
+By default, chat-turn diagnostics are lightweight metadata: timing, model or mode when present, attachment count, files modified count, tool names and success, deploy involvement, outcome, and errors.
 
 ## What diagnostics do not include
 
@@ -79,9 +78,9 @@ Use **Settings → Diagnostics → Open logs folder** instead of browsing manual
 
 A useful report includes:
 
-1. The exact quoted message from Fabricator, chat, the preview, or the publish log.
+1. The exact quoted message from Fabricator, chat, the preview, or the deploy log.
 2. Numbered steps from a fresh launch to the problem.
-3. Whether the issue happens after **Restart**, **Re-check**, **Refresh Fabric authentication**, or **Publish**.
+3. Whether the issue happens after **Restart**, **Re-check**, **Refresh Fabric authentication**, or **Redeploy**.
 4. The Fabricator version from the status bar.
 5. The diagnostics bundle.
 6. Screenshots or screen recordings with names, emails, tenant names, workspace names, URLs, and app data hidden.

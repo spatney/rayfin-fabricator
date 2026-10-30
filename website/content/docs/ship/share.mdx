@@ -1,11 +1,9 @@
 ---
 title: "Share your app"
-description: "Give people in your Microsoft Entra tenant access to a published app by email, including Build access to semantic models the app reads from other workspaces."
+description: "Give people in your Microsoft Entra tenant access to a deployed app by email, including Build access to semantic models the app reads from other workspaces."
 ---
 
-After an app is published, you can share it with people or groups in your Microsoft Entra tenant. Fabricator grants access in Fabric and then lets you copy the app link.
-
-Sharing gives people your published app, with its data in Fabric. With the **Local development** experiment on, your app and its local data on this computer aren't shared.
+After an app is deployed, you can share it with people or groups in your Microsoft Entra tenant. Fabricator grants access in Fabric and then lets you copy the app link.
 
 ![The Share app dialog with a search box for people or groups, and the app’s workspace listed with the Contributor role.](/screenshots/share.webp)
 
@@ -13,7 +11,7 @@ Sharing gives people your published app, with its data in Fabric. With the **Loc
 
 For each recipient, Fabricator grants:
 
-- **Contributor** on the published app's Fabric workspace.
+- **Contributor** on the deployed app's Fabric workspace.
 - **Build** access to each semantic model the app reads from a different workspace: the models it connects to through Rayfin semantic model connectors, and the ones in its `fabric.yaml`.
 
 Semantic models in the same workspace are marked **Covered by workspace** because the workspace role already covers them.
@@ -23,9 +21,9 @@ An app that reads a semantic model as each person who uses it, such as a [migrat
 > [!IMPORTANT]
 > **Contributor** is broad workspace access. Share only with people who should be able to contribute to the app's Fabric workspace.
 
-## Share a published app
+## Share a deployed app
 
-1. Publish the app first. See [Publish to Microsoft Fabric](/docs/ship/deploy). Until it's published, **Share** isn't in the app bar.
+1. Deploy the app first. See [Deploy to Microsoft Fabric](/docs/ship/deploy).
 2. In the app bar, select **Share**.
 3. In **Share app**, use **People or groups** to search by name or email.
 4. Add one or more recipients.
@@ -44,10 +42,10 @@ To open the app, recipients need the app URL or they can find it in the Fabric p
 
 ## Same tenant only
 
-Fabricator shares only with people and groups it finds in your Microsoft Entra directory. It looks up each email address as a user, by sign-in name, email address or alias, or as a mail-enabled group. When it can't find one, the result says "Couldn't find 'name@example.com' in your directory." Fabricator doesn't invite people from outside your directory.
+Fabricator's share dialog is built around people and groups in your tenant. I could not verify guest-user support in the app source, so do not rely on it from Fabricator.
 
 ## Removing access
 
-The share dialog doesn't remove access. To remove access, manage the workspace role or semantic model permissions in Microsoft Fabric or Power BI.
+Fabricator's local deployment share dialog does not include a remove-access action. To remove access, manage the workspace role or semantic model permissions in Microsoft Fabric or Power BI.
 
-Team workspace apps use the team workspace's app access flow instead of this share dialog. See [team workspace members](/docs/team/members).
+Team workspace apps use the team workspace's app access flow instead of this local deployment share dialog. See [team workspace members](/docs/team/members).

@@ -70,7 +70,7 @@ const steps = [
 
     title: 'Ship it',
 
-    text: 'Publish to a Microsoft Fabric workspace, share the app with your tenant, and use Advisor checks to find issues before people rely on it.',
+    text: 'Deploy to a Microsoft Fabric workspace, share the app with your tenant, and use Advisor checks to find issues before people rely on it.',
 
     href: '/docs/ship/deploy',
 
@@ -104,11 +104,11 @@ const features = [
 
   {
 
-    title: 'One-click publish & sharing',
+    title: 'One-click deploy & sharing',
 
     href: '/docs/ship/deploy',
 
-    text: 'Publish the current app to a Fabric workspace, publish again after changes, and share the published app with people in your tenant.',
+    text: 'Publish the current app to a Fabric workspace, redeploy after changes, and share the deployed app with people in your tenant.',
 
   },
 
@@ -277,7 +277,7 @@ export default function HomePage() {
 
           <p className="mt-3 text-fd-muted-foreground">
 
-            The build loop stays in one desktop window: chat, preview, publish, then keep improving.
+            The build loop stays in one desktop window: chat, preview, deploy, then keep improving.
 
           </p>
 

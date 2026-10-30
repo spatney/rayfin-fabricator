@@ -14,7 +14,7 @@ export const siteConfig = {
   name: 'Fabricator',
   tagline: 'Chat to build. Preview it live. Ship it to Microsoft Fabric.',
   description:
-    'Fabricator is a desktop workbench for building Rayfin apps: chat with GitHub Copilot to build them, watch them run live, and publish them to Microsoft Fabric.',
+    'Fabricator is a desktop workbench for building Rayfin apps: chat with GitHub Copilot to build them, watch them run live, and deploy them to Microsoft Fabric.',
   baseUrl: (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://spatney.github.io/rayfin-fabricator').replace(/\/$/, ''),
   basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? '',
   repo: 'https://github.com/spatney/rayfin-fabricator',

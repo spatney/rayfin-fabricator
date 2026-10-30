@@ -30,7 +30,7 @@ Long turns can run for many minutes. Fabricator streams the work log, command ou
 2. If you know what should happen next, type a short steering message while the turn is running. Fabricator queues it for the active session.
 3. If the turn is clearly wrong or waiting forever, select **Stop**.
 4. After stopping, send a smaller follow-up prompt that names the file or problem to continue from the current project state.
-5. If the preview or a publish is also running, wait for it to finish before starting another large request.
+5. If the preview or deploy is also running, wait for it to finish before starting another large request.
 6. If Fabricator stops responding, restart it. Your project files and saved chat history are stored on disk.
 
 If stuck turns happen repeatedly, turn on **Settings → Diagnostics → Full diagnostics**, reproduce once, then [Report a problem](/docs/troubleshooting/report-a-problem).
@@ -114,13 +114,13 @@ If it keeps happening with one model, [Report a problem](/docs/troubleshooting/r
 
 ## Rayfin CLI reports missing dependencies
 
-Fabric sign-in, a publish, the preview, or a workspace list fails with a Node error such as "Cannot find package" or "Cannot find module" that names a package like `rxjs`, `commander`, or `jsonwebtoken`.
+Fabric sign-in, a deploy, the preview, or a workspace list fails with a Node error such as "Cannot find package" or "Cannot find module" that names a package like `rxjs`, `commander`, or `jsonwebtoken`.
 
 The project's `node_modules` folder is incomplete. A package install that stops part way, for example when creating a project times out, leaves package folders empty, and a sync or antivirus tool can remove files from the folder.
 
-Fabricator checks for missing or incomplete packages when you open a project and before it publishes or signs in to Fabric, and reinstalls them. When a Rayfin CLI command fails because a package is missing a file, the log says "Some of this project's packages didn't install completely", and Fabricator reinstalls that package at its next check.
+Fabricator checks for missing or incomplete packages when you open a project and before it deploys or signs in to Fabric, and reinstalls them. When a Rayfin CLI command fails because a package is missing a file, the log says "Some of this project's packages didn't install completely", and Fabricator reinstalls that package at its next check.
 
-1. Publish again from the app bar, where the button says **Try again** after a failed publish, or select **Sign in to Fabric** again. Fabricator reinstalls the incomplete packages first.
+1. Deploy again from the app bar, where the button says **Try again** after a failed deploy, or select **Sign in to Fabric** again. Fabricator reinstalls the incomplete packages first.
 2. If the error comes back, close Fabricator and delete the project's `node_modules` folder. Then open Fabricator and the project again, and Fabricator installs all of the project's packages.
 
 If the error keeps coming back, [Report a problem](/docs/troubleshooting/report-a-problem) and include the exact error.
