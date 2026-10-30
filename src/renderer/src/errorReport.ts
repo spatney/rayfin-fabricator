@@ -18,7 +18,7 @@
  *
  * Successes have no such chokepoint and are recorded deliberately with
  * {@link reportEvent} at the milestones that answer "did that work?" — setup
- * finishing, signing in, installing a tool, deploying, previewing, opening a
+ * finishing, signing in, installing a tool, publishing, previewing, opening a
  * project.
  *
  * Recording is best-effort and never throws: an error here would be an error
@@ -47,7 +47,10 @@ export function setErrorProject(projectId: string | undefined): void {
  */
 export function inferArea(operation: string | undefined, message: string): ErrorArea {
   const haystack = `${operation ?? ''} ${message}`.toLowerCase()
-  if (/\bdeploy|fabric workspace|capacity\b/.test(haystack)) return 'deploy'
+  if (/\bdeploy|\bpublish|fabric workspace|capacity\b/.test(haystack)) return 'deploy'
+  // The app's local backend (rayfin-local) runs what the preview shows; its
+  // supervisor journals under the same area.
+  if (/local backend|rayfin-local|\blocal_/.test(haystack)) return 'preview'
   if (/\bsign.?in|sign.?out|auth|token|credential|tenant\b/.test(haystack)) return 'auth'
   if (/\bpreview|dev server|port\b/.test(haystack)) return 'preview'
   if (/\bchat|copilot turn|steer\b/.test(haystack)) return 'chat'

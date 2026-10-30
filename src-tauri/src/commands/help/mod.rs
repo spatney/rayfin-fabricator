@@ -8,6 +8,9 @@
 //! * the **activity journal** (`services::journal`), which records what the app
 //!   did — successes as well as failures — so "why did that fail?" and "how did
 //!   that go?" both have real answers;
+//! * the open app's **local backend**: its status, put in front of the model
+//!   with each question, and its recent output, which it reads redacted through
+//!   `help_local_output`;
 //! * the **published documentation**, mirrored locally, for how things are meant
 //!   to work;
 //! * the **release notes**, mirrored locally, for what changed in each version;
@@ -20,8 +23,12 @@
 //! installed app, so the only useful answer is one phrased in terms of the UI.
 
 mod context;
+mod local;
+mod local_journal;
 mod prompt;
 mod tools;
+
+pub use local_journal::watch as watch_local_backends;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -204,13 +211,14 @@ pub(super) fn fabricator_docs_url(url: &str) -> bool {
   })
 }
 
-/// Whether `path` sits inside any readable root. Relative paths resolve against
-/// the session's working directory.
-fn path_allowed(roots: &[PathBuf], cwd: &Path, path: &str) -> bool {
+/// Whether `path` sits inside any readable root and outside every denied
+/// place. Relative paths resolve against the session's working directory.
+fn path_allowed(roots: &[PathBuf], denied: &[PathBuf], cwd: &Path, path: &str) -> bool {
   let p = Path::new(path);
   let joined = if p.is_absolute() { p.to_path_buf() } else { cwd.join(p) };
   let target = crate::commands::util::normalize(&joined);
   roots.iter().any(|root| target.starts_with(crate::commands::util::normalize(root)))
+    && !denied.iter().any(|place| target.starts_with(crate::commands::util::normalize(place)))
 }
 
 /// Files whose contents are secrets. The assistant never needs their values,
@@ -221,14 +229,26 @@ fn is_secret_file(path: &str) -> bool {
     const TEMPLATES: &[&str] = &[".example", ".sample", ".template", ".defaults", ".dist"];
     return !TEMPLATES.iter().any(|t| name.ends_with(t));
   }
-  matches!(name.as_str(), ".envrc" | ".npmrc" | ".netrc" | ".pypirc" | "id_rsa" | "id_ecdsa" | "id_ed25519")
-    || [".pem", ".key", ".pfx", ".p12"].iter().any(|ext| name.ends_with(ext))
+  // `local.settings.json` and `secrets.json` hold secrets' local values.
+  matches!(
+    name.as_str(),
+    ".envrc" | ".npmrc" | ".netrc" | ".pypirc" | "id_rsa" | "id_ecdsa" | "id_ed25519" | "local.settings.json" | "secrets.json"
+  ) || [".pem", ".key", ".pfx", ".p12"].iter().any(|ext| name.ends_with(ext))
+}
+
+/// Whether `path` is in an app's `.rayfin-local` folder: the local backend's
+/// signing keys, secret values and the app's local data, none of which Help
+/// needs (its status and output come to Help redacted).
+fn in_local_state(path: &str) -> bool {
+  path.split(['/', '\\']).any(|part| part.eq_ignore_ascii_case(".rayfin-local"))
 }
 
 /// Answers the session's permission requests. Fails closed: anything
 /// unrecognized, and any sandbox-bypass request, is denied.
 struct HelpPolicy {
   roots: Vec<PathBuf>,
+  /// Inside the roots, but never read directly (see [`HelpContext::denied`]).
+  denied: Vec<PathBuf>,
   cwd: PathBuf,
 }
 
@@ -240,9 +260,9 @@ impl HelpPolicy {
       return false;
     }
     match request_kind(data).as_deref() {
-      Some("read") => {
-        text("path").is_some_and(|p| path_allowed(&self.roots, &self.cwd, p) && !is_secret_file(p))
-      }
+      Some("read") => text("path").is_some_and(|p| {
+        path_allowed(&self.roots, &self.denied, &self.cwd, p) && !is_secret_file(p) && !in_local_state(p)
+      }),
       Some("url") => text("url").is_some_and(url_allowed),
       Some("custom-tool") => true,
       _ => false,
@@ -363,9 +383,14 @@ impl Activity {
         }
         let id = data.get("toolCallId").and_then(Value::as_str)?.to_string();
         let args = data.get("arguments");
+        let title = if name == tools::LOCAL_OUTPUT_TOOL {
+          tools::local_output_title(args)
+        } else {
+          chat_tools::tool_title(&name, args)
+        };
         let tool = ChatToolCall {
           id: id.clone(),
-          title: chat_tools::tool_title(&name, args),
+          title,
           command: chat_tools::shell_command(&name, args),
           paths: chat_tools::tool_paths(&name, args),
           name,
@@ -513,13 +538,23 @@ pub async fn help_ask(
     attachments.into_iter().filter(|p| !p.trim().is_empty()).take(MAX_ATTACHMENTS).collect();
 
   let version = app.package_info().version.to_string();
-  let ctx = HelpContext::build(
+  let mut ctx = HelpContext::build(
     &version,
     project_id.as_deref(),
     &attachments,
     &facts,
     tools::Surface::parse(surface.as_deref()),
   );
+  // The open personal app's local backend: its status for the prompt, and its
+  // output for `help_local_output`. Team apps don't run on one.
+  let local_output: Option<tools::LocalOutput> = match project_id.as_deref() {
+    Some(id) if ctx.personal_project() => {
+      ctx.local = Some(crate::services::local_backend::snapshot(&app, id));
+      let (app, id) = (app.clone(), id.to_string());
+      Some(Arc::new(move |n| local::read_output(&app, &id, n)))
+    }
+    _ => None,
+  };
   let token = state.begin_help();
 
   let emit: tools::Emit = {
@@ -538,6 +573,7 @@ pub async fn help_ask(
     &token,
     emit.clone(),
     artifacts.clone(),
+    local_output,
   )
   .await;
   state.end_help(&token);
@@ -576,10 +612,11 @@ async fn run_turn(
   token: &CancelToken,
   emit: tools::Emit,
   artifacts: SharedArtifacts,
+  local_output: Option<tools::LocalOutput>,
 ) -> Result<HelpAnswer, String> {
   let roots = ctx.roots();
   let cwd = ctx.cwd();
-  let policy: Arc<dyn PermissionHandler> = Arc::new(HelpPolicy { roots, cwd: cwd.clone() });
+  let policy: Arc<dyn PermissionHandler> = Arc::new(HelpPolicy { roots, denied: ctx.denied(), cwd: cwd.clone() });
 
   let tool_ctx = Arc::new(ToolContext {
     emit: emit.clone(),
@@ -588,6 +625,7 @@ async fn run_turn(
     has_project: ctx.project.is_some(),
     team_project: ctx.project.as_ref().is_some_and(|p| p.team.is_some()),
     surface: ctx.surface,
+    local_output,
   });
   let opts = SessionOptions {
     permission: Some(policy),
@@ -717,11 +755,19 @@ mod tests {
   }
 
   fn roots() -> Vec<PathBuf> {
-    vec![PathBuf::from(native("C:\\data\\logs")), PathBuf::from(native("C:\\cache\\source"))]
+    vec![
+      PathBuf::from(native("C:\\data\\logs")),
+      PathBuf::from(native("C:\\cache\\source")),
+      PathBuf::from(native("C:\\projects\\notes")),
+    ]
   }
 
   fn policy() -> HelpPolicy {
-    HelpPolicy { roots: roots(), cwd: PathBuf::from(native("C:\\cache")) }
+    HelpPolicy {
+      roots: roots(),
+      denied: vec![PathBuf::from(native("C:\\data\\logs\\local-backend"))],
+      cwd: PathBuf::from(native("C:\\cache")),
+    }
   }
 
   fn ctx() -> HelpContext {
@@ -738,6 +784,7 @@ mod tests {
       projects: Vec::new(),
       recent_activity: String::new(),
       facts: Vec::new(),
+      local: None,
       surface: crate::commands::help::tools::Surface::Project,
       extra_roots: Vec::new(),
     }
@@ -775,6 +822,29 @@ mod tests {
     assert!(!policy().permits(&read_request("C:\\cache\\source\\.env")));
     assert!(!policy().permits(&read_request("C:\\cache\\source\\id_rsa")));
     assert!(policy().permits(&read_request("C:\\cache\\source\\.env.example")), "templates are fine");
+  }
+
+  #[test]
+  fn an_apps_local_state_and_secret_values_are_denied() {
+    // The local backend's signing keys, the secrets' local values and the
+    // app's local data: Help gets the backend's status and output instead.
+    for path in [
+      "C:\\projects\\notes\\.rayfin-local\\keys\\signing.json",
+      "C:\\projects\\notes\\.rayfin-local\\secrets.json",
+      "C:\\projects\\notes\\.rayfin-local\\state.json",
+      "C:\\projects\\notes\\.Rayfin-Local\\db.sqlite",
+      "C:\\projects\\notes\\rayfin\\functions\\local.settings.json",
+    ] {
+      assert!(!policy().permits(&read_request(path)), "{path} must not be readable");
+    }
+    assert!(policy().permits(&read_request("C:\\projects\\notes\\rayfin\\rayfin.yml")));
+  }
+
+  #[test]
+  fn the_local_backend_output_is_only_read_through_its_tool() {
+    assert!(!policy().permits(&read_request("C:\\data\\logs\\local-backend\\p-1.log")));
+    assert!(!policy().permits(&read_request("C:\\data\\logs\\local-backend")));
+    assert!(policy().permits(&read_request("C:\\data\\logs\\activity-2026-10-30.jsonl")), "the journal is still readable");
   }
 
   #[test]

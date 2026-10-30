@@ -39,8 +39,8 @@ export interface HelpViewProps {
   surface?: 'setup' | 'home' | 'project'
   appVersion?: string
   /**
-   * A question to ask as soon as Help opens, such as "Why did my last deploy
-   * fail?" from a failed deploy. It's asked once, after any saved conversation
+   * A question to ask as soon as Help opens, such as "Why did my last publish
+   * fail?" from a failed publish. It's asked once, after any saved conversation
    * has been restored, so it follows on from that rather than replacing it.
    */
   initialQuestion?: string

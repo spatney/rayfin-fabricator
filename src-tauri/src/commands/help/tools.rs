@@ -1,8 +1,10 @@
-//! Client-defined tools the Help assistant reports through.
+//! Client-defined tools the Help assistant reports through, and the one it
+//! reads with.
 //!
-//! The assistant can't change anything, so its tools don't *do* work — they
-//! turn parts of an answer into UI the user can act on. An offered action
-//! becomes a button in the transcript; a citation becomes a docs link.
+//! The assistant can't change anything, so its reporting tools don't *do*
+//! work — they turn parts of an answer into UI the user can act on. An offered
+//! action becomes a button in the transcript; a citation becomes a docs link.
+//! `help_local_output` reads the open app's local backend output, redacted.
 
 use std::sync::{Arc, Mutex};
 
@@ -11,13 +13,22 @@ use github_copilot_sdk::tool::ToolHandler;
 use github_copilot_sdk::types::{ToolInvocation, ToolResultExpanded};
 use github_copilot_sdk::{Error as SdkError, Tool, ToolResult};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 
-use crate::types::{HelpAction, HelpCitation, HelpEvent, HelpIssueDraft};
+use super::local;
+use crate::types::{HelpAction, HelpCitation, HelpEvent, HelpIssueDraft, LocalLogEvent};
 
 pub const ACTION_TOOL: &str = "help_offer_action";
 pub const CITE_TOOL: &str = "help_cite";
 pub const ISSUE_TOOL: &str = "help_draft_issue";
+pub const LOCAL_OUTPUT_TOOL: &str = "help_local_output";
+
+/// Where `help_local_output` reads: the open project's last `n` lines of local
+/// backend output, oldest first.
+pub type LocalOutput = Arc<dyn Fn(usize) -> Vec<LocalLogEvent> + Send + Sync>;
+
+/// Sources a local backend output line can come from.
+const OUTPUT_SOURCES: &[&str] = &["rayfin-local", "vite", "functions", "build", "fabricator", "npm", "stderr", "stdout"];
 
 /// True for the assistant's own reporting tools, which are hidden from the
 /// activity feed (the user sees their result as a button or a link instead).
@@ -35,7 +46,7 @@ pub const ACTIONS: &[(&str, &str)] = &[
     "Open one of the user's projects. Needs `target`, the project's id from the list above.",
   ),
   ("open-home", "Show the list of all their projects, so they can pick one."),
-  ("share-app", "Open the dialog for sharing the open project's deployed app with someone. Personal projects only."),
+  ("share-app", "Open the dialog for sharing the open project's published app with someone. Personal projects only."),
   (
     "open-team-access",
     "Open the team workspace overview, where an owner grants access to the team's apps. Use this \
@@ -134,6 +145,8 @@ pub struct ToolContext {
   pub team_project: bool,
   /// Where the user is, which decides whether a navigation action is reachable.
   pub surface: Surface,
+  /// The open personal project's local backend output; `None` without one.
+  pub local_output: Option<LocalOutput>,
 }
 
 fn ok(text: impl Into<String>) -> ToolResult {
@@ -382,6 +395,66 @@ repeat the text in your answer — just say it's ready."
   }
 }
 
+/* ----------------------------- read the local backend's output ----------------------------- */
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct OutputParams {
+  lines: Option<u64>,
+  source: Option<String>,
+  problems_only: bool,
+}
+
+impl OutputParams {
+  fn query(self) -> local::OutputQuery {
+    local::OutputQuery {
+      lines: self.lines.map_or(local::DEFAULT_OUTPUT_LINES, |n| n.clamp(1, local::MAX_OUTPUT_LINES as u64) as usize),
+      source: self.source.map(|s| s.trim().to_ascii_lowercase()).filter(|s| !s.is_empty()),
+      problems_only: self.problems_only,
+    }
+  }
+}
+
+/// The work log's title for a `help_local_output` call.
+pub fn local_output_title(args: Option<&Value>) -> String {
+  let params = args.and_then(|a| serde_json::from_value::<OutputParams>(a.clone()).ok()).unwrap_or_default();
+  let query = params.query();
+  let mut title = "Read the local backend's output".to_string();
+  if let Some(source) = &query.source {
+    title.push_str(&format!(" from {source}"));
+  }
+  if query.problems_only {
+    title.push_str(" (warnings and errors)");
+  }
+  title
+}
+
+struct LocalOutputTool(Arc<ToolContext>);
+
+#[async_trait]
+impl ToolHandler for LocalOutputTool {
+  async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+    let params = match invocation.params::<OutputParams>() {
+      Ok(p) => p,
+      Err(e) => return Ok(fail(format!("Invalid request: {e}"))),
+    };
+    let ctx = &self.0;
+    let Some(read) = ctx.local_output.clone() else {
+      return Ok(fail(if ctx.team_project {
+        "The open app is a team app, and team apps don't run on a local backend: their preview \
+uses a backend the team's pipeline publishes, so there is no local output to read."
+      } else {
+        "No personal app is open, so there is no local backend output to read. It's there once \
+the user opens an app."
+      }));
+    };
+    let query = params.query();
+    let fetch = query.fetch();
+    let events = tokio::task::spawn_blocking(move || read(fetch)).await.unwrap_or_default();
+    Ok(ok(local::format_output(&events, &query)))
+  }
+}
+
 /// The assistant's reporting tools.
 pub fn help_tools(ctx: Arc<ToolContext>) -> Vec<Tool> {
   let action = Tool::new(ACTION_TOOL)
@@ -444,9 +517,9 @@ feature requests, not bugs."
         "title": {
           "type": "string",
           "description":
-            "One line naming the thing. For a bug, the symptom: \"Deploy fails with 'Tenant not \
-authorized for cluster'\". For a feature, the capability: \"Let me rename a deployment after \
-creating it\". Don't prefix it with Bug or Feature — the app does that."
+            "One line naming the thing. For a bug, the symptom: \"Publish fails with 'Tenant not \
+authorized for cluster'\". For a feature, the capability: \"Let me copy my local data to the \
+published app\". Don't prefix it with Bug or Feature — the app does that."
         },
         "body": {
           "type": "string",
@@ -463,9 +536,38 @@ Alternatives considered' if they mentioned any. Don't invent steps to reproduce 
       "required": ["kind", "title", "body"]
     }))
     .with_skip_permission(true)
-    .with_handler(Arc::new(IssueTool(ctx)));
+    .with_handler(Arc::new(IssueTool(ctx.clone())));
 
-  vec![action, cite, issue]
+  let output = Tool::new(LOCAL_OUTPUT_TOOL)
+    .with_description(
+      "Read the open app's recent local backend output: what rayfin-local, the app's dev server \
+(Vite), the functions' build and host, and Fabricator printed while running it, oldest first and \
+newest last. Read it before explaining why the app didn't start, stopped, or misbehaves in the \
+preview, and quote the line that explains it. Tokens and keys are masked. Only for a personal app \
+that's open.",
+    )
+    .with_parameters(json!({
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": local::MAX_OUTPUT_LINES,
+          "description": format!("How many of the newest matching lines to return (default {}).", local::DEFAULT_OUTPUT_LINES)
+        },
+        "source": {
+          "type": "string",
+          "enum": OUTPUT_SOURCES,
+          "description": "Only lines from this source: `rayfin-local` (the local backend itself, including failed requests), `vite` (the app's dev server), `functions` (the function host and its build), `build` (the data model's build), `fabricator` (Fabricator starting and stopping it), `npm` (installing the app's packages), `stderr` and `stdout` (anything else the local backend printed)."
+        },
+        "problemsOnly": { "type": "boolean", "description": "Only warnings and errors." }
+      }
+    }))
+    .with_skip_permission(true)
+    .with_handler(Arc::new(LocalOutputTool(ctx)));
+
+  vec![action, cite, issue, output]
 }
 
 #[cfg(test)]
@@ -567,5 +669,73 @@ mod tests {
   fn clip_shortens_long_labels() {
     assert_eq!(clip("  Refresh  ", 60), "Refresh");
     assert!(clip(&"x".repeat(100), 10).ends_with('…'));
+  }
+
+  fn context(local_output: Option<LocalOutput>, team_project: bool) -> Arc<ToolContext> {
+    Arc::new(ToolContext {
+      emit: Arc::new(|_| {}),
+      artifacts: Arc::new(Mutex::new(TurnArtifacts::default())),
+      project_ids: vec!["p".into()],
+      has_project: true,
+      team_project,
+      surface: Surface::Project,
+      local_output,
+    })
+  }
+
+  /// Call `help_local_output` with `arguments`: its result type and text.
+  async fn read_output(ctx: Arc<ToolContext>, arguments: Value) -> (String, String) {
+    let mut invocation = ToolInvocation::default();
+    invocation.tool_name = LOCAL_OUTPUT_TOOL.into();
+    invocation.arguments = arguments;
+    match LocalOutputTool(ctx).call(invocation).await.unwrap() {
+      ToolResult::Expanded(result) => (result.result_type, result.text_result_for_llm),
+      ToolResult::Text(text) => ("success".into(), text),
+      _ => panic!("an unexpected result"),
+    }
+  }
+
+  #[tokio::test]
+  async fn the_output_tool_reads_what_it_was_asked_for() {
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let seen = asked.clone();
+    let read: LocalOutput = Arc::new(move |n| {
+      seen.lock().unwrap().push(n);
+      (0..n.min(5))
+        .map(|i| LocalLogEvent {
+          source: if i % 2 == 0 { "vite" } else { "functions" }.into(),
+          level: "error".into(),
+          line: format!("line {i}"),
+          time: "2026-10-30T03:12:09Z".into(),
+          ..Default::default()
+        })
+        .collect()
+    });
+    let (kind, text) = read_output(context(Some(read.clone()), false), json!({ "lines": 3 })).await;
+    assert_eq!(kind, "success");
+    assert!(text.contains("3 lines"), "{text}");
+    let (_, text) = read_output(context(Some(read), false), json!({ "source": "Vite", "problemsOnly": true })).await;
+    assert!(text.contains("only warnings and errors from vite"), "{text}");
+    assert!(!text.contains("line 1"), "{text}");
+    assert_eq!(*asked.lock().unwrap(), [3, local::FILTER_WINDOW], "a filter looks through everything kept");
+  }
+
+  #[tokio::test]
+  async fn the_output_tool_says_why_there_is_nothing_to_read() {
+    let (kind, text) = read_output(context(None, true), json!({})).await;
+    assert_eq!(kind, "failure");
+    assert!(text.contains("team apps don't run on a local backend"));
+    let (_, text) = read_output(context(None, false), json!({})).await;
+    assert!(text.contains("No personal app is open"));
+  }
+
+  #[test]
+  fn the_work_log_names_what_was_read() {
+    assert_eq!(local_output_title(None), "Read the local backend's output");
+    assert_eq!(
+      local_output_title(Some(&json!({ "source": "vite", "problemsOnly": true }))),
+      "Read the local backend's output from vite (warnings and errors)"
+    );
+    assert!(!is_reporting_tool(LOCAL_OUTPUT_TOOL), "reading shows in the work log");
   }
 }

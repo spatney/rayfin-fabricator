@@ -2,8 +2,8 @@ import { Codicon } from '../icons'
 
 import type { JSX } from 'react'
 
-/** What Help is asked when a failed deploy's **Find out why** opens it. */
-export const DEPLOY_QUESTION = 'Why did my last deploy fail?'
+/** What Help is asked when a failed publish's **Find out why** opens it. */
+export const DEPLOY_QUESTION = 'Why did my last publish fail?'
 
 /** Starter questions shown on an empty Help screen. */
 export const PROMPTS = [
@@ -38,6 +38,8 @@ export function stepIcon(name: string): string {
   if (/grep|search|find/i.test(name)) return 'search'
   if (/glob|list|tree|dir/i.test(name)) return 'list-tree'
   if (/fetch|url|web/i.test(name)) return 'globe'
+  // `help_local_output`: the app's output on this computer.
+  if (/output/i.test(name)) return 'output'
   return 'circle-small-filled'
 }
 
