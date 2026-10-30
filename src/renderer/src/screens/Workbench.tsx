@@ -269,8 +269,8 @@ export default function Workbench({
     setShareRequest((current) => (current?.nonce === nonce ? null : current))
   }, [])
   const [projects, setProjects] = useState<ProjectsState | null>(null)
-  /** Fullscreen create/deploy flow: 'create' = new-project wizard, 'deploy' = first-deploy gate CTA. */
-  const [createMode, setCreateMode] = useState<'create' | 'deploy' | null>(null)
+  /** Fullscreen new-project flow. */
+  const [createMode, setCreateMode] = useState<'create' | null>(null)
   /** Fullscreen "Open existing… → Clone from GitHub" flow. */
   const [showClone, setShowClone] = useState(false)
   /** The Migrate a Power BI report picker is showing (experimental). */
@@ -1898,17 +1898,15 @@ export default function Workbench({
   /** Why a report migration's next turn can't start in the open project yet. */
   const migrationWaiting = !active
     ? undefined
-    : active.awaitingFirstDeploy && !active.team
-      ? 'The first page starts once the app is deployed.'
-      : active && deploys[active.id]?.running
-        ? 'Waiting for the deploy to finish.'
-        : activeSyncing
-          ? 'Waiting for the save to GitHub.'
-          : activeChatBusy
-            ? 'Waiting for Copilot to finish.'
-            : !projectToolsReady
-              ? 'Waiting for the app’s dependencies.'
-              : undefined
+    : active && deploys[active.id]?.running
+      ? 'Waiting for the deploy to finish.'
+      : activeSyncing
+        ? 'Waiting for the save to GitHub.'
+        : activeChatBusy
+          ? 'Waiting for Copilot to finish.'
+          : !projectToolsReady
+            ? 'Waiting for the app’s dependencies.'
+            : undefined
   const migration = useMigration({
     enabled: migrationEnabled,
     project: active ?? null,
@@ -1963,9 +1961,7 @@ export default function Workbench({
   const activeDeploying = Boolean(activeId && deploys[activeId]?.running)
   // Re-run when the open app's preview comes or goes, or changes deployment.
   const activePreviewTarget = activeId ? (devServers[activeId]?.target ?? '') : null
-  const keepLocal = Boolean(
-    manualDeploy && active && !active.team && !active.awaitingFirstDeploy && projectToolsReady
-  )
+  const keepLocal = Boolean(manualDeploy && active && !active.team && projectToolsReady)
   useEffect(() => {
     if (!keepLocal || !activeId) {
       keptAttemptRef.current = null
@@ -2336,19 +2332,26 @@ export default function Workbench({
         />
       ) : createMode ? (
         <CreateProjectScreen
-          mode={createMode}
-          projectName={active?.name}
-          deploying={Boolean(active && deploys[active.id]?.running)}
           onCancel={() => {
             setCreateMode(null)
             setNewAppTeamId(null)
             setMigrationPick(null)
           }}
           onCreated={(result) => {
-            void refreshProjects()
-            if (migrationPick && result.project) void startMigration(result.project.id, migrationPick, migrationModel)
+            const pick = migrationPick
+            void (async () => {
+              // Open the new app once the list has it, so the old view doesn't flash first.
+              await refreshProjects().catch(() => {})
+              setCreateMode(null)
+              setNewAppTeamId(null)
+              setMigrationPick(null)
+              setShowHome(false)
+              setViewMode('build')
+              if (pick && result.project) {
+                void startMigration(result.project.id, pick, migrationModel)
+              }
+            })()
           }}
-          onSignedIn={onAuthChanged}
           teamWorkspaces={teamEnabled ? projects?.teamWorkspaces : undefined}
           initialTeamWorkspaceId={newAppTeamId ?? undefined}
           onTeamCreated={(result) => {
@@ -2361,34 +2364,6 @@ export default function Workbench({
             setMigrationPick(null)
             if (result.error) toast.error(result.error, { title: 'Not on GitHub yet' })
           }}
-          onDeploy={(depName, workspaceId) => {
-            setMigrationPick(null)
-            if (!active) {
-              setCreateMode(null)
-              return
-            }
-            const projectId = active.id
-            setCreateMode(null)
-            setViewMode('build')
-            nameNewTarget(projectId, workspaceId, depName)
-            void (async () => {
-              try {
-                await window.api.deploy.setName(projectId, workspaceId, depName)
-              } catch {
-                /* naming is best-effort; deploy anyway */
-              }
-              await requestUserDeploy(projectId, workspaceId)
-            })()
-          }}
-          onContinueWithoutDeploy={() => {
-            setCreateMode(null)
-            setMigrationPick(null)
-          }}
-          recentWorkspaces={
-            migrationPick && !migrationPick.source.personal
-              ? [migrationPick.source.workspaceId, ...recentDeployWorkspaces]
-              : recentDeployWorkspaces
-          }
           source={migrationPick ? { label: 'From Power BI', detail: describePick(migrationPick) } : undefined}
           initialName={migrationPick ? toProjectName(migrationPick.source.reportName) : undefined}
           model={
@@ -2476,7 +2451,6 @@ export default function Workbench({
                             onAdvisorRerun={rerunAdvisorFix}
                             focused={focusPane === 'chat'}
                             onToggleFocus={() => setFocusPane((f) => (f === 'chat' ? null : 'chat'))}
-                            deployLock={active.awaitingFirstDeploy === true && !active.team}
                             deploying={
                               Boolean(deploys[active.id]?.running) ||
                               (Boolean(active.team) && teamWork.syncing(active.id))
@@ -2485,7 +2459,6 @@ export default function Workbench({
                             submitBlockedTitle={
                               active.team ? 'Saving to GitHub — sending resumes in a moment' : undefined
                             }
-                            onRequestDeploy={() => setCreateMode('deploy')}
                             eventsManagedExternally
                             onOpenMention={openMention}
                             draft={drafts[active.id] ?? ''}
@@ -2570,11 +2543,9 @@ export default function Workbench({
                           designSendBlocked={
                             activeChatBusy
                               ? 'Copilot is working — send when this turn finishes'
-                              : active.awaitingFirstDeploy === true
-                                ? 'Deploy your app first'
-                                : deploys[active.id]?.running
-                                  ? 'Deploying — send when it goes live'
-                                  : null
+                              : deploys[active.id]?.running
+                                ? 'Deploying — send when it goes live'
+                                : null
                           }
                           onDesignSend={() => {
                             // Show the chat so the new turn is visible, then send

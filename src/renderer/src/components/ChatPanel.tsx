@@ -151,9 +151,7 @@ interface Props {
   focused?: boolean
   /** Toggle chat focus (full-width chat ⇄ split with preview). */
   onToggleFocus?: () => void
-  /** Hard-gate: the project has no deployment yet — disable the composer until it does. */
-  deployLock?: boolean
-  /** True while the project's first deploy is actively streaming (gate shows progress). */
+  /** True while the project is deploying (pauses sending with `blockSubmitWhileDeploying`). */
   deploying?: boolean
   /** When true, a deploy in progress pauses *submitting* a new turn (typing stays
    *  enabled). Used by the live local preview so a turn never overlaps a deploy —
@@ -161,8 +159,6 @@ interface Props {
   blockSubmitWhileDeploying?: boolean
   /** Tooltip on the paused Send button (defaults to the deploy wording). */
   submitBlockedTitle?: string
-  /** Open the fullscreen deploy step (the gate CTA). */
-  onRequestDeploy?: () => void
   /** The host owns the global chat-event subscription (keeps turns live while this panel is unmounted). */
   eventsManagedExternally?: boolean
   /** Open a file referenced by an @-mention chip (path without the leading @). */
@@ -213,11 +209,9 @@ export default function ChatPanel({
   onAdvisorRerun,
   focused,
   onToggleFocus,
-  deployLock = false,
   deploying = false,
   blockSubmitWhileDeploying = false,
   submitBlockedTitle = 'Deploying — sending resumes when it goes live',
-  onRequestDeploy,
   eventsManagedExternally = false,
   onOpenMention,
   draft,
@@ -693,7 +687,7 @@ export default function ChatPanel({
   const submitBlocked = deploying && blockSubmitWhileDeploying
 
   async function send(): Promise<void> {
-    if (deployLock || imagesBlocked) return
+    if (imagesBlocked) return
     const text = input.trim()
     const shots = attachments ?? []
     // Mid-turn: interrupt the running reply with this message (conversation
@@ -959,7 +953,7 @@ export default function ChatPanel({
 
   /** Re-run the latest prompt for a fresh attempt (its context and file changes stay). */
   async function tryAgain(assistantId: string): Promise<void> {
-    if (sending || deployLock || submitBlocked) return
+    if (sending || submitBlocked) return
     const idx = messages.findIndex((m) => m.id === assistantId)
     if (idx <= 0 || idx !== messages.length - 1) return
     const turn = messages[idx]
@@ -1449,13 +1443,7 @@ export default function ChatPanel({
         const next = messages[i + 1]
         const working = m.role === 'user' && next?.role === 'assistant' && next.pending
         const canTryAgain =
-          latest &&
-          rerunnable &&
-          !deployLock &&
-          !m.pending &&
-          !m.error &&
-          !m.interrupted &&
-          !m.plan
+          latest && rerunnable && !m.pending && !m.error && !m.interrupted && !m.plan
         return (
           <MessageRow
             key={m.id}
@@ -1484,7 +1472,6 @@ export default function ChatPanel({
     [
       messages,
       sending,
-      deployLock,
       project.name,
       project.path,
       planBusyId,
@@ -1570,36 +1557,6 @@ export default function ChatPanel({
 
       <div className={`composer${sending ? ' composer--busy' : ''}`}>
         {banner}
-        {deployLock && (
-          <div className="deploy-gate" role="status">
-            {deploying ? (
-              <span className="ws-spinner deploy-gate-spin" aria-hidden="true" />
-            ) : (
-              <span className="deploy-gate-ico" aria-hidden="true">
-                <Codicon name="rocket" />
-              </span>
-            )}
-            <div className="deploy-gate-text">
-              <span className="deploy-gate-title">
-                {deploying ? 'Deploying your app…' : 'Deploy your app to start building'}
-              </span>
-              <span className="deploy-gate-sub">
-                {deploying
-                  ? `Chat unlocks as soon as ${project.name} is live.`
-                  : `Chat is locked until ${project.name} has a deployment.`}
-              </span>
-            </div>
-            {deploying ? (
-              <button className="btn btn--sm" disabled>
-                Deploying…
-              </button>
-            ) : (
-              <button className="btn btn--sm btn--primary" onClick={onRequestDeploy}>
-                Deploy now
-              </button>
-            )}
-          </div>
-        )}
         <div
           className={`composer-box${dragOver ? ' composer-box--drag' : ''}`}
           onDrop={onComposerDrop}
@@ -1700,17 +1657,14 @@ export default function ChatPanel({
               ref={taRef}
               className="composer-input"
               placeholder={
-                deployLock
-                  ? 'Deploy your app to start chatting…'
-                  : designItems.length > 0
-                    ? 'Add a note for these changes (optional) — or just press Enter to send them'
-                    : dataChips.length > 0
-                      ? 'Say what to build with this data, or just press Enter to connect it'
-                      : `Message Fabricator about ${project.name}…`
+                designItems.length > 0
+                  ? 'Add a note for these changes (optional) — or just press Enter to send them'
+                  : dataChips.length > 0
+                    ? 'Say what to build with this data, or just press Enter to connect it'
+                    : `Message Fabricator about ${project.name}…`
               }
               value={input}
               rows={1}
-              disabled={deployLock}
               onChange={onComposerChange}
               onSelect={onComposerSelect}
               onKeyDown={onKeyDown}
@@ -1721,7 +1675,7 @@ export default function ChatPanel({
           <div className="composer-actions">
             <div className="composer-left">
               <AddMenu
-                locked={deployLock}
+                locked={false}
                 attaching={attaching}
                 imageNote={imageNote}
                 onImage={() => fileRef.current?.click()}
@@ -1779,7 +1733,6 @@ export default function ChatPanel({
                     className="composer-send"
                     onClick={send}
                     disabled={
-                      deployLock ||
                       submitBlocked ||
                       designSending ||
                       imagesBlocked ||

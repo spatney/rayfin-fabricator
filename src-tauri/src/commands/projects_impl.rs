@@ -1,19 +1,22 @@
 //! Project scaffolding/registration (ported from `src/main/services/projects.ts`).
 //! Handles listing templates, creating a project via `npm create
 //! @microsoft/rayfin` (the official scaffolder, streaming live output on the
-//! `create:project` proc channel), opening an existing project, renaming, and
-//! removing.
+//! `create:project` proc channel) on the Rayfin release the local backend runs,
+//! opening an existing project, renaming, and removing.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use semver::Version;
 use tauri::{AppHandle, Emitter};
 
 use crate::commands::util::{is_rayfin_project, normalize, same_path, with_missing};
-use crate::services::exec::{run, OnData, RunOptions, Stream};
+use crate::services::exec::{run, OnData, RunOptions, RunResult, Stream};
+use crate::services::rayfin_sdk::{self, Pinning};
 use crate::services::{emit, git, history, store};
 use crate::state::AppState;
 use crate::types::{
@@ -374,18 +377,19 @@ pub(crate) fn scaffold_request(input: &CreateProjectInput) -> Result<ScaffoldReq
 
 /// The `npm` arguments that scaffold `request` into `<cwd>/<folder>`:
 ///
-/// `npm create @microsoft/rayfin@latest -- <folder> -t <template>
-///   [--template-name <name>] --project-name "<name>"`
+/// `npm create @microsoft/rayfin@<version> -- <folder> -t <template>
+///   [--template-name <name>] --project-name "<name>" [--skip-install]`
 ///
 /// `<template>` is a template built into the Rayfin CLI (resolved against the
 /// CLI's own set) or a community template URL, which may also name one entry of
 /// a multi-template gallery. The positional `<folder>` is the target directory;
 /// `--project-name` carries the human identity (rayfin.yml id/name + package
-/// name).
-fn create_args(folder: &str, request: &ScaffoldRequest) -> Vec<String> {
+/// name). `--skip-install`, a hidden `rayfin init` flag, leaves installing the
+/// packages to Fabricator, which pins their Rayfin versions first.
+fn create_args(folder: &str, request: &ScaffoldRequest, version: &Version, skip_install: bool) -> Vec<String> {
   let mut args: Vec<String> = vec![
     "create".into(),
-    "@microsoft/rayfin@latest".into(),
+    format!("@microsoft/rayfin@{version}"),
     "--".into(),
     folder.to_string(),
     "-t".into(),
@@ -399,23 +403,30 @@ fn create_args(folder: &str, request: &ScaffoldRequest) -> Vec<String> {
   }
   args.push("--project-name".into());
   args.push(request.name.clone());
+  if skip_install {
+    args.push("--skip-install".into());
+  }
   args
 }
 
-/// Run the Rayfin scaffolder into `<root>/<folder>` and add Fabricator's agent
-/// instructions. Doesn't touch git. Returns the project dir.
-pub(crate) async fn scaffold_project(
+/// Whether the scaffolder refused `--skip-install`, which a Rayfin CLI without
+/// the hidden flag reports as an unknown option before creating anything.
+fn rejects_skip_install(result: &RunResult) -> bool {
+  static REFUSED: Lazy<Regex> = Lazy::new(|| Regex::new(r#"unknown option ['"`]?--skip-install\b"#).unwrap());
+  !result.ok && !result.not_found && (REFUSED.is_match(&result.stderr) || REFUSED.is_match(&result.stdout))
+}
+
+async fn run_scaffolder(
   root: &Path,
   folder: &str,
   request: &ScaffoldRequest,
+  version: &Version,
+  skip_install: bool,
   on: &OnData,
-) -> Result<PathBuf, String> {
-  let dir = root.join(folder);
-  say(on, &format!("Creating \"{folder}\" from the {}…\n", request.label()));
-
-  let create_args = create_args(folder, request);
+) -> RunResult {
+  let create_args = create_args(folder, request, version, skip_install);
   let arg_refs: Vec<&str> = create_args.iter().map(String::as_str).collect();
-  let init = run(
+  run(
     "npm",
     &arg_refs,
     RunOptions {
@@ -426,7 +437,32 @@ pub(crate) async fn scaffold_project(
       ..Default::default()
     },
   )
-  .await;
+  .await
+}
+
+/// Run the Rayfin scaffolder into `<root>/<folder>` on the release the local
+/// backend runs, pin the project's Rayfin packages to it, install them, and add
+/// Fabricator's agent instructions. Doesn't touch git. Returns the project dir.
+pub(crate) async fn scaffold_project(
+  root: &Path,
+  folder: &str,
+  request: &ScaffoldRequest,
+  on: &OnData,
+) -> Result<PathBuf, String> {
+  let dir = root.join(folder);
+  let sdk = rayfin_sdk::new_project_sdk(root).await;
+  say(on, &format!("Creating \"{folder}\" from the {} with Rayfin {}…\n", request.label(), sdk.version));
+
+  let mut skipped_install = true;
+  let mut init = run_scaffolder(root, folder, request, &sdk.version, true, on).await;
+  if rejects_skip_install(&init) {
+    say(on, "\nThis Rayfin release doesn't take --skip-install, so it installs the packages itself.\n");
+    if dir.exists() {
+      let _ = std::fs::remove_dir_all(&dir);
+    }
+    skipped_install = false;
+    init = run_scaffolder(root, folder, request, &sdk.version, false, on).await;
+  }
 
   if init.not_found {
     return Err("npm was not found on PATH. Install Node.js (which includes npm) to create projects.".into());
@@ -440,8 +476,125 @@ pub(crate) async fn scaffold_project(
     });
   }
 
+  // A community template that asks for Rayfin releases the local backend can't
+  // run keeps them; the built-in templates always take the pin.
+  let pinned = match rayfin_sdk::pin_project(&dir, &sdk, request.is_url) {
+    Ok(Pinning::Pinned { range, files }) => {
+      if files > 0 {
+        say(on, &format!("\nPinned the Rayfin packages to {range}.\n"));
+      }
+      files > 0
+    }
+    Ok(Pinning::Kept { name, spec }) => {
+      say(
+        on,
+        &format!(
+          "\nThe template asks for {name} {spec}, outside the Rayfin releases Fabricator runs locally ({}), so it keeps its versions.\n",
+          rayfin_sdk::supported_range()
+        ),
+      );
+      false
+    }
+    Err(e) => {
+      say(on, &format!("\n⚠️ {e}\n"));
+      false
+    }
+  };
+  // Without --skip-install the scaffolder already installed, before the pin.
+  if skipped_install || pinned {
+    install_new_project(&dir, on).await;
+  }
+
   crate::commands::skills::ensure_project_skills(dir.to_string_lossy().as_ref());
   Ok(dir)
+}
+
+/// `npm install` in `dir`, streaming its output.
+async fn npm_install(dir: &Path, on: Option<OnData>) -> RunResult {
+  run(
+    "npm",
+    &["install", "--no-audit", "--no-fund"],
+    RunOptions {
+      cwd: Some(dir.to_path_buf()),
+      env: crate::services::npm_env::fresh_registry_env(),
+      on_data: on,
+      timeout_ms: Some(600_000),
+      ..Default::default()
+    },
+  )
+  .await
+}
+
+/// Why an `npm install` in `folder` failed, with npm's last word on it.
+fn install_failure(folder: &str, result: &RunResult) -> String {
+  if result.not_found {
+    return "npm was not found on PATH. Install Node.js (which includes npm), then retry.".into();
+  }
+  let code = result.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
+  let detail = if result.stderr.trim().is_empty() { &result.stdout } else { &result.stderr };
+  let last: String = detail
+    .lines()
+    .rev()
+    .map(str::trim)
+    .find(|l| !l.is_empty())
+    .unwrap_or_default()
+    .chars()
+    .take(300)
+    .collect();
+  if last.is_empty() {
+    format!("npm install failed in {folder} (exit code {code}).")
+  } else {
+    format!("npm install failed in {folder} (exit code {code}): {last}")
+  }
+}
+
+/// Install a new project's packages: the root's, with its workspaces, then the
+/// functions folder's when it has its own. A failure doesn't stop the project
+/// being created: the dependency check installs again when it opens.
+async fn install_new_project(dir: &Path, on: &OnData) {
+  say(on, "\nInstalling dependencies with npm…\n");
+  let result = npm_install(dir, Some(on.clone())).await;
+  let outcome = if result.ok {
+    ensure_functions_dependencies(dir, Some(on.clone())).await
+  } else {
+    Err(install_failure("the project", &result))
+  };
+  if let Err(e) = outcome {
+    say(on, &format!("\n⚠️ {e}\nFabricator tries again when the app opens.\n"));
+  }
+}
+
+/// One install at a time per functions folder.
+static FUNCTIONS_INSTALL_LOCKS: Lazy<tokio::sync::Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>> =
+  Lazy::new(|| tokio::sync::Mutex::new(HashMap::new()));
+
+/// Install the functions folder's packages when it has its own package.json,
+/// outside the root's npm workspaces, and nothing is installed there yet. The
+/// root install doesn't cover it, and the local backend builds the functions
+/// with them.
+pub(crate) async fn ensure_functions_dependencies(project: &Path, on: Option<OnData>) -> Result<(), String> {
+  let Some(functions) = rayfin_sdk::separate_functions_dir(project) else {
+    return Ok(());
+  };
+  if functions.join("node_modules").is_dir() {
+    return Ok(());
+  }
+  let lock = FUNCTIONS_INSTALL_LOCKS.lock().await.entry(functions.clone()).or_default().clone();
+  let _guard = lock.lock().await;
+  // Another request may have installed them while this one waited.
+  if functions.join("node_modules").is_dir() {
+    return Ok(());
+  }
+  let folder = functions.strip_prefix(project).unwrap_or(&functions).to_string_lossy().replace('\\', "/");
+  if let Some(on) = &on {
+    say(on, &format!("\nInstalling the dependencies in {folder} with npm…\n"));
+  }
+  let result = npm_install(&functions, on).await;
+  if result.ok {
+    Ok(())
+  } else {
+    Err(install_failure(&folder, &result))
+  }
 }
 
 /// Scaffold a new Rayfin project, git-init it, and make it active.
@@ -469,22 +622,24 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   };
   init_git_repo(&dir, &format!("Initial commit ({})", request.label()), &on).await;
 
+  // The app runs locally from the start, so nothing waits for a first deploy.
   let project = register_project(&dir, Some(&request.name));
-  // Mark this project as awaiting its first deployment so the workbench guides the
-  // user to deploy before chatting (cleared on the first successful deploy). This
-  // is set only on create — projects opened from disk are never gated. The preview
-  // mode is left at its default (direct view); a project that later connects a
-  // semantic model is switched to the embedded Fabric view on its next deploy.
-  store::mutate_project(&project.id, |p| {
-    p.awaiting_first_deploy = Some(true);
-  });
-  let project = store::find_project(&project.id).unwrap_or(project);
   store::set_active(Some(project.id.clone()));
   say(&on, "\n✅ Project ready.\n");
   ProjectActionResult {
     ok: true,
     error: None,
     project: Some(with_missing(project)),
+  }
+}
+
+/// Projects created before local development waited for a first deploy, and
+/// kept chat locked until then. Nothing does now, so their stored flags go.
+pub(crate) fn forget_first_deploy_gates() {
+  for project in store::get_state().projects {
+    if project.awaiting_first_deploy.is_some() {
+      store::mutate_project(&project.id, |p| p.awaiting_first_deploy = None);
+    }
   }
 }
 
@@ -509,7 +664,9 @@ pub async fn open_project(path: String) -> ProjectActionResult {
 }
 
 /// Ensure an opened project's local Rayfin CLI is available before the renderer
-/// mounts tools that depend on it (Fabric workspaces, deploy, and model browsing).
+/// mounts tools that depend on it (Fabric workspaces, deploy, and model browsing),
+/// along with the functions folder's own packages, which the root install doesn't
+/// cover.
 pub async fn prepare_project_dependencies(id: String) -> ProjectActionResult {
   let Some(project) = store::find_project(&id) else {
     return err("Project not found.");
@@ -519,6 +676,9 @@ pub async fn prepare_project_dependencies(id: String) -> ProjectActionResult {
     return err("That folder is no longer a Rayfin project (no rayfin/rayfin.yml).");
   }
   if let Err(error) = crate::services::exec::ensure_project_dependencies(dir, None).await {
+    return err(error);
+  }
+  if let Err(error) = ensure_functions_dependencies(dir, None).await {
     return err(error);
   }
   // A folder opened from disk may not have a repository yet. Start the version
@@ -703,29 +863,49 @@ entries:
       template: template.into(),
       template_name: template_name.map(String::from),
     };
-    let args = |request: &ScaffoldRequest| create_args(&request.slug, request).join(" ");
+    let version = Version::parse("1.36.2").unwrap();
+    let args = |request: &ScaffoldRequest| create_args(&request.slug, request, &version, true).join(" ");
 
-    // A blank template means the CLI's built-in Universal App, by name.
+    // A blank template means the CLI's built-in Universal App, by name, on the
+    // pinned release, leaving the install to Fabricator.
     let blank = scaffold_request(&input("", None)).unwrap();
     assert_eq!(blank.template, STARTER_TEMPLATE);
     assert!(!blank.is_url);
     assert_eq!(
       args(&blank),
-      "create @microsoft/rayfin@latest -- trip-logger -t universal-app --project-name Trip Logger"
+      "create @microsoft/rayfin@1.36.2 -- trip-logger -t universal-app --project-name Trip Logger --skip-install"
     );
+    assert!(!create_args(&blank.slug, &blank, &version, false).contains(&"--skip-install".to_string()));
 
     // A community gallery is passed by URL, with the chosen entry's name.
     let example = scaffold_request(&input("https://github.com/microsoft/awesome-rayfin", Some(" Todo App "))).unwrap();
     assert!(example.is_url);
     assert_eq!(
       args(&example),
-      "create @microsoft/rayfin@latest -- trip-logger -t https://github.com/microsoft/awesome-rayfin \
-       --template-name Todo App --project-name Trip Logger"
+      "create @microsoft/rayfin@1.36.2 -- trip-logger -t https://github.com/microsoft/awesome-rayfin \
+       --template-name Todo App --project-name Trip Logger --skip-install"
     );
 
     // Only URL sources take a template name.
     let named = scaffold_request(&input("universal-app", Some("Todo App"))).unwrap();
     assert!(!args(&named).contains("--template-name"));
+  }
+
+  #[test]
+  fn a_scaffolder_without_skip_install_is_detected() {
+    let result = |ok: bool, stderr: &str| RunResult {
+      ok,
+      exit_code: Some(if ok { 0 } else { 1 }),
+      stdout: String::new(),
+      stderr: stderr.into(),
+      not_found: false,
+    };
+    // npm echoes the whole command, flag included, whatever went wrong.
+    let echo = "npm error command C:\\WINDOWS\\system32\\cmd.exe /d /s /c create-rayfin app -t universal-app --skip-install";
+    assert!(rejects_skip_install(&result(false, &format!("error: unknown option '--skip-install'\n{echo}"))));
+    assert!(!rejects_skip_install(&result(false, &format!("npm error code ETARGET\n{echo}"))));
+    assert!(!rejects_skip_install(&result(false, &format!("error: unknown option '--template-name'\n{echo}"))));
+    assert!(!rejects_skip_install(&result(true, "")));
   }
 
   #[test]

@@ -1008,6 +1008,38 @@ describe('ChatPanel submit-pause while deploying', () => {
   })
 })
 
+describe('ChatPanel before the first publish', () => {
+  it('builds an app that has never been published, with no deploy gate', async () => {
+    const onTurnStart = vi.fn()
+    await act(async () => {
+      render(
+        <ChatPanel
+          project={makeProject('p1', { lastDeploy: undefined, awaitingFirstDeploy: true })}
+          messages={[]}
+          onChange={() => {}}
+          draft=""
+          onTurnStart={onTurnStart}
+        />
+      )
+    })
+    expect(screen.queryByText(/Deploy your app/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Deploy now' })).toBeNull()
+
+    const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    expect(ta.disabled).toBe(false)
+    await act(async () => {
+      fireEvent.change(ta, { target: { value: 'Add a task list' } })
+    })
+    await act(async () => {
+      fireEvent.keyDown(ta, { key: 'Enter' })
+    })
+    expect(onTurnStart).toHaveBeenCalledTimes(1)
+    expect(
+      (window as unknown as { api: { chat: { send: ReturnType<typeof vi.fn> } } }).api.chat.send
+    ).toHaveBeenCalled()
+  })
+})
+
 describe('ChatPanel images and the chosen model', () => {
   it('holds images back from a model on your own key that can’t read them', async () => {
     const api = (window as unknown as { api: { chat: { listModels: ReturnType<typeof vi.fn>; send: ReturnType<typeof vi.fn> } } }).api

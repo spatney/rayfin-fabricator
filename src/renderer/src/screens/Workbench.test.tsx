@@ -1653,7 +1653,7 @@ describe('Workbench team workspaces', () => {
     expect(bar.queryByRole('button', { name: 'Test deploy' })).toBeNull()
     expect(await bar.findByText('2 unpublished')).toBeTruthy()
     expect(bar.getByRole('button', { name: /^Workspace overview/ })).toBeTruthy()
-    expect(chatProps.mock.lastCall?.[0].deployLock).toBe(false)
+    expect(chatProps.mock.lastCall?.[0]).not.toHaveProperty('deployLock')
   })
 
   it('publishes through the team pipeline', async () => {
@@ -1808,5 +1808,65 @@ describe('Workbench search', () => {
     expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull()
     expect(screen.getByRole('dialog', { name: 'Help' })).toBeTruthy()
     expect(helpProps.mock.lastCall![0].continuing).toBe(true)
+  })
+})
+
+describe('Workbench before the first publish', () => {
+  const fresh: StudioProject = {
+    id: 'p9',
+    name: 'Fresh App',
+    path: 'C:\\projects\\fresh-app',
+    addedAt: '2026-10-01T00:00:00Z'
+  }
+  const opened = (project: StudioProject) => ({
+    workspaceRoot: 'C:\\projects',
+    activeProjectId: project.id,
+    projects: [project]
+  })
+
+  it('never locks chat or Design changes behind a first deploy', async () => {
+    const api = installApi(false)
+    // Created by an earlier release, which waited for a first deploy.
+    const waiting = opened({ ...fresh, awaitingFirstDeploy: true })
+    api.projects.state.mockResolvedValue(waiting)
+    api.deploy.reconcile.mockResolvedValue(waiting)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    const chat = chatProps.mock.lastCall![0]
+    expect(chat.project.id).toBe(fresh.id)
+    expect(chat).not.toHaveProperty('deployLock')
+    expect(chat).not.toHaveProperty('onRequestDeploy')
+    expect(previewProps.mock.lastCall?.[0].designSendBlocked).toBeNull()
+  })
+
+  it('opens a new app in the workbench as soon as it’s created', async () => {
+    const api = installApi(false)
+    const create = vi.fn(async () => {
+      api.projects.state.mockResolvedValue(opened(fresh))
+      api.deploy.reconcile.mockResolvedValue(opened(fresh))
+      return { ok: true, project: fresh }
+    })
+    Object.assign(api.projects, { create, checkName: vi.fn().mockResolvedValue({ ok: true }) })
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByTestId('home')
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const newProject = searchProps.mock.lastCall![0].items.find(
+      (item) => item.id === 'action:new-project'
+    )
+    act(() => newProject!.run())
+    fireEvent.change(screen.getByPlaceholderText('My Rayfin App'), {
+      target: { value: 'Fresh App' }
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
+    })
+
+    await screen.findByLabelText('Chat draft')
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(chatProps.mock.lastCall?.[0].project.id).toBe(fresh.id)
+    expect(screen.queryByPlaceholderText('My Rayfin App')).toBeNull()
+    expect(screen.queryByText('Deploy your app')).toBeNull()
   })
 })

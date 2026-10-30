@@ -454,10 +454,7 @@ describe('CreateProjectScreen team destination', () => {
       render(
         <OverlayProvider>
           <CreateProjectScreen
-            mode="create"
             onCancel={() => {}}
-            onDeploy={() => {}}
-            onContinueWithoutDeploy={() => {}}
             teamWorkspaces={workspaces}
             initialTeamWorkspaceId="w1"
             onTeamCreated={onTeamCreated}
@@ -494,13 +491,7 @@ describe('CreateProjectScreen team destination', () => {
     await act(async () => {
       render(
         <OverlayProvider>
-          <CreateProjectScreen
-            mode="create"
-            onCancel={() => {}}
-            onDeploy={() => {}}
-            onContinueWithoutDeploy={() => {}}
-            teamWorkspaces={workspaces}
-          />
+          <CreateProjectScreen onCancel={() => {}} teamWorkspaces={workspaces} />
         </OverlayProvider>
       )
     })

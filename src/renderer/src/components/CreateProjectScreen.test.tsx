@@ -10,7 +10,7 @@ import CreateProjectScreen from './CreateProjectScreen'
  * so we assert they are disabled on the input.
  */
 
-/** Minimal `window.api` surface CreateProjectScreen touches on mount (create mode). */
+/** Minimal `window.api` surface CreateProjectScreen touches. */
 function installApi(): void {
   ;(window as unknown as { api: unknown }).api = {
     projects: {
@@ -18,8 +18,7 @@ function installApi(): void {
       checkName: vi.fn(() => Promise.resolve({ ok: true })),
       create: vi.fn(() => Promise.resolve({ ok: true }))
     },
-    onProcLog: vi.fn(() => () => {}),
-    fabric: { listWorkspaces: vi.fn(() => Promise.resolve({ ok: true, workspaces: [] })) }
+    onProcLog: vi.fn(() => () => {})
   }
 }
 
@@ -37,12 +36,7 @@ describe('CreateProjectScreen project name input', () => {
     await act(async () => {
       render(
         <OverlayProvider>
-          <CreateProjectScreen
-            mode="create"
-            onCancel={() => {}}
-            onDeploy={() => {}}
-            onContinueWithoutDeploy={() => {}}
-          />
+          <CreateProjectScreen onCancel={() => {}} />
         </OverlayProvider>
       )
     })
@@ -72,19 +66,13 @@ describe('CreateProjectScreen create progress', () => {
         ),
         create: vi.fn(() => createPromise)
       },
-      onProcLog: vi.fn(() => () => {}),
-      fabric: { listWorkspaces: vi.fn(() => Promise.resolve({ ok: true, workspaces: [] })) }
+      onProcLog: vi.fn(() => () => {})
     }
 
     await act(async () => {
       render(
         <OverlayProvider>
-          <CreateProjectScreen
-            mode="create"
-            onCancel={() => {}}
-            onDeploy={() => {}}
-            onContinueWithoutDeploy={() => {}}
-          />
+          <CreateProjectScreen onCancel={() => {}} />
         </OverlayProvider>
       )
     })
@@ -119,16 +107,47 @@ describe('CreateProjectScreen create progress', () => {
   })
 })
 
+describe('CreateProjectScreen after creating', () => {
+  it('hands the new app to the workbench, with no deploy step', async () => {
+    const project = { id: 'p1', name: 'Trip Logger', path: 'C:/projects/trip-logger', addedAt: '' }
+    const create = (
+      window as unknown as { api: { projects: { create: ReturnType<typeof vi.fn> } } }
+    ).api.projects.create
+    create.mockResolvedValue({ ok: true, project })
+    const onCreated = vi.fn()
+    await act(async () => {
+      render(
+        <OverlayProvider>
+          <CreateProjectScreen onCancel={() => {}} onCreated={onCreated} />
+        </OverlayProvider>
+      )
+    })
+    expect(screen.queryByLabelText('Progress')).toBeNull()
+
+    fireEvent.change(screen.getByPlaceholderText('My Rayfin App'), {
+      target: { value: 'Trip Logger' }
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Create project' }))
+    })
+
+    expect(onCreated).toHaveBeenCalledWith({ ok: true, project })
+    expect(screen.queryByText('Deploy your app')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Continue without deploying/ })).toBeNull()
+    // The screen waits for the workbench to take over, and can't create it twice.
+    const nameField = screen.getByPlaceholderText('My Rayfin App').closest('.field') as HTMLElement
+    expect(nameField.className).toContain('create-field-hidden')
+    const opening = screen.getByRole('button', { name: 'Opening…' }) as HTMLButtonElement
+    const cancel = screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement
+    expect(opening.disabled && cancel.disabled).toBe(true)
+  })
+})
+
 describe('CreateProjectScreen starting point', () => {
   function renderCreate(): void {
     render(
       <OverlayProvider>
-        <CreateProjectScreen
-          mode="create"
-          onCancel={() => {}}
-          onDeploy={() => {}}
-          onContinueWithoutDeploy={() => {}}
-        />
+        <CreateProjectScreen onCancel={() => {}} />
       </OverlayProvider>
     )
   }
@@ -177,10 +196,7 @@ describe('CreateProjectScreen starting point', () => {
       render(
         <OverlayProvider>
           <CreateProjectScreen
-            mode="create"
             onCancel={() => {}}
-            onDeploy={() => {}}
-            onContinueWithoutDeploy={() => {}}
             source={{ label: 'From Power BI', detail: 'Sales · 3 pages' }}
             model={{ value: { model: '', effort: '', autoTier: '', contextTier: '' }, onChange }}
           />
