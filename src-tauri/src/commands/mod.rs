@@ -31,3 +31,4 @@ pub mod suggest;
 pub mod team;
 pub mod updates;
 pub mod util;
+pub mod local;

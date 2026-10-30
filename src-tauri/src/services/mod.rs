@@ -35,3 +35,5 @@ pub mod telemetry;
 pub mod updater;
 pub mod version_history;
 pub mod watchdog;
+pub mod rayfin_sdk;
+pub mod local_backend;

@@ -109,6 +109,7 @@ pub fn run() {
     .manage(PreviewState::default())
     .manage(UpdaterState::default())
     .manage(DevServers::default())
+    .manage(services::local_backend::LocalBackends::default())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -414,6 +415,26 @@ pub fn run() {
       commands::design::design_variations,
       commands::design::design_polish,
       commands::design::design_locate,
+      // local backend (rayfin-local)
+      commands::local::local_start,
+      commands::local::local_stop,
+      commands::local::local_restart,
+      commands::local::local_status,
+      commands::local::local_logs,
+      commands::local::local_reload,
+      commands::local::local_reset_data,
+      commands::local::local_users,
+      commands::local::local_add_user,
+      commands::local::local_delete_user,
+      commands::local::local_identity,
+      commands::local::local_set_identity,
+      commands::local::local_entities,
+      commands::local::local_rows,
+      commands::local::local_clear_rows,
+      commands::local::local_secrets,
+      commands::local::local_set_secret,
+      commands::local::local_delete_secret,
+      commands::local::local_stop_external,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
@@ -422,6 +443,7 @@ pub fn run() {
       // Kill any live Vite dev servers when the app exits so they never orphan.
       if let tauri::RunEvent::Exit = event {
         services::dev_server::kill_all(app);
+        services::local_backend::kill_all(app);
       }
     });
 }
