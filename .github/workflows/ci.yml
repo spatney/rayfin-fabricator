@@ -59,7 +59,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup Node for helper regressions
+      - name: Setup Node for the sidecar fetch and helper regressions
         uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -68,6 +68,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+
+      - name: Fetch rayfin-local sidecar
+        # tauri.conf.json bundles it (bundle.externalBin), so every Cargo build of src-tauri needs it.
+        run: node scripts/rayfin-local/fetch.mjs
 
       - name: Cargo check
         run: cargo check --manifest-path src-tauri/Cargo.toml
@@ -88,7 +92,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup Node for helper regressions
+      - name: Setup Node for the sidecar fetch and helper regressions
         uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -97,6 +101,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+
+      - name: Fetch rayfin-local sidecar
+        run: node scripts/rayfin-local/fetch.mjs
 
       - name: Cargo check
         run: cargo check --manifest-path src-tauri/Cargo.toml
