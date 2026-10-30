@@ -97,3 +97,23 @@ Fabricator health-checks team local previews and starts Vite again when it stops
 
 1. Wait for the preview to come back.
 2. If it keeps restarting, open [Team workspace problems](/docs/troubleshooting/team).
+
+## Windows blocked rayfin-local
+
+You see "Windows blocked the local backend (rayfin-local):" followed by the reason Windows gave, such as "Access is denied.", and then "Your antivirus or your organization's app control policy may not allow it." In the preview, it's under "Your app couldn’t start on this computer", with **Learn how to allow it**. In setup, it's in the **Local backend** row.
+
+rayfin-local is the local backend that runs your apps on this computer, and it comes with Fabricator. On a PC your organization manages, Microsoft Defender's attack surface reduction rules, another antivirus or an app control policy can stop a program that's new to them from running, even when it's signed.
+
+1. Open **Windows Security**, select **Virus & threat protection**, then **Protection history**. Look for an entry that blocked `rayfin-local.exe`, and note what it says, such as the rule that blocked it.
+2. If your organization manages this PC, ask your IT department to allow rayfin-local. Tell them:
+   - Where it is: `%LOCALAPPDATA%\Rayfin Fabricator\rayfin-local.exe`, or `rayfin-local.exe` in the folder you installed Fabricator to.
+   - That it's signed by the same publisher as Fabricator's installer, Sachin Patney.
+   - What blocked it, from step 1. They can add an exclusion for the file to the attack surface reduction rule that blocked it, or allow the file or its publisher in their app control policy.
+3. Once it's allowed, select **Try again** in the preview, or **Re-check** in setup.
+4. If setup then says the local backend is missing, your antivirus removed the file. Reinstall Fabricator from [the latest release](https://github.com/spatney/rayfin-fabricator/releases/latest).
+
+If the message says "The local backend (rayfin-local) didn't answer within 20 seconds." instead, an antivirus scan can hold it up the first time it runs. Wait a minute, then select **Try again** or **Re-check**.
+
+Until rayfin-local is allowed, your apps can't run on this computer. You can still build them in chat, and publish an app to use its published copy. See [Publish your app](/docs/ship/deploy).
+
+If Windows still blocks rayfin-local, [Report a problem](/docs/troubleshooting/report-a-problem).

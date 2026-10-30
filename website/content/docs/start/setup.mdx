@@ -1,11 +1,11 @@
 ---
 title: "Set up and sign in"
-description: "Use Fabricator setup the first time you open it: check tools, sign in to GitHub Copilot and the Azure CLI, and enter the app."
+description: "Use Fabricator setup the first time you open it: connect GitHub Copilot, install the tools, optionally sign in to Azure, and enter the app."
 ---
 
-Setup prepares your computer for Fabricator the first time you open it. It has three steps: connect GitHub Copilot, install the tools, and sign in to Microsoft. Work down the page, then choose **Enter Fabricator**. If everything is already in place, Fabricator skips setup and opens straight to Home. After that, Fabricator opens on your work after a short welcome.
+Setup prepares your computer for Fabricator the first time you open it. It has three steps: connect GitHub Copilot, install the tools, and sign in to Azure. The first two are required. Signing in to Azure is optional, and you can do it later. Work down the page, then choose **Enter Fabricator**. If the required steps are already done, Fabricator skips setup and opens straight to Home. After that, Fabricator opens on your work after a short welcome.
 
-![The setup screen with all three steps complete — GitHub Copilot connected, all five tools installed, Microsoft signed in — and a "You're all set" block offering Enter Fabricator.](/screenshots/setup.webp)
+{/* screenshot: setup */}
 
 ## Step 1: Connect GitHub Copilot
 
@@ -26,10 +26,12 @@ Fabricator uses a few free tools behind the scenes, and can install them for you
 | Node.js | Yes | 22.12 | Runs your app on this computer while you build it. |
 | npm | Yes | Any installed version | Fetches the building blocks your app is made from. |
 | Git | Yes | Any installed version | Keeps a history of your app so you can always go back. |
-| Azure CLI | Yes | Any installed version | Signs you in to Microsoft so your app can be published. |
 | GitHub CLI (gh) | No | Any installed version | Lets Fabricator work with your code on GitHub. |
+| Local backend | No | Comes with Fabricator | Runs your apps and their data on this computer. |
 
-For missing tools, choose **Install** on one row or **Install all** when it appears. On Windows, Fabricator tries `winget`. On macOS, it tries Homebrew. If that is not available or an install cannot run automatically, Fabricator opens the tool's official installer and shows **Get it**.
+**Local backend** is rayfin-local, which comes with Fabricator, so there's nothing to install. Setup checks that it runs. It doesn't stop you entering Fabricator, but your apps can't run on this computer without it. If Windows blocks it, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local).
+
+For missing tools, choose **Install** on one row, or **Install all** to install the missing required tools in one go. On Windows, Fabricator tries `winget`. On macOS, it tries Homebrew. If that is not available or an install cannot run automatically, Fabricator opens the tool's official installer and shows **Get it**.
 
 Installing downloads from the internet. If you are offline, the install buttons are disabled and setup says so; reconnect and choose **Re-check**.
 
@@ -45,17 +47,20 @@ Setup explains what went wrong in plain language instead of showing the installe
 
 Choose **Show details** to see the original message, or **Ask Help** to have the assistant look into it. Help is available once step 1 is done.
 
-## Step 3: Sign in to Microsoft
+## Step 3: Sign in to Azure
 
-Signing in to Microsoft lets Fabricator publish your app, find people when you share it, connect Fabric data, and set up team workspaces.
+This step is marked **Optional**, and doesn't stop you entering Fabricator. It says "Optional. Lets you share apps, add Fabric data and migrate Power BI reports. You can also sign in later." If you skip it, those features ask you to sign in when you use them, for example with a **Sign in to Azure** button. Team workspaces need an Azure sign-in too. And while your app runs on this computer, its functions and connectors reach Azure and Fabric data with your Azure sign-in.
 
-Choose **Sign in**, then complete `az login` in the browser. This row stays disabled until the Azure CLI is installed in step 2, and says so.
+1. If the Azure CLI isn't installed, choose **Install** in this step. Where Fabricator can't install it for you, the step shows **Get it**, which opens the Azure CLI's install page.
+2. Choose **Sign in**, then complete `az login` in the browser.
+
+If the sign-in fails, setup says why, but you can still enter Fabricator.
 
 ## What each account is for
 
-- GitHub Copilot writes code, edits files, answers chat prompts, and powers **Help**.
-- The Azure CLI finds people to share with, connects Fabric data, and sets up team workspaces.
-- Fabric sign-in is separate. Fabricator asks you to **Sign in to Fabric** later when it needs the project's Rayfin CLI to list workspaces, deploy, share, or refresh Fabric credentials.
+- GitHub Copilot writes code, edits files, answers chat prompts, and powers **Help**. It's the only account setup requires.
+- The Azure CLI, when you sign in to it, finds people to share with, connects Fabric data, reads the Power BI reports you migrate, and sets up team workspaces. While your app runs on this computer, the app reads Fabric data with it.
+- Fabric sign-in is separate. Fabricator asks you to **Sign in to Fabric** later when it needs the project's Rayfin CLI to list workspaces, publish, share, or refresh Fabric credentials.
 
 You can see and change all of these later, including adding more Fabric and Azure CLI accounts. See [Manage your accounts](/docs/start/accounts).
 
@@ -67,9 +72,9 @@ After signing out, installing a tool, or changing account state, choose **Re-che
 
 ## Enter Fabricator
 
-A step you have finished collapses to a single line with a check mark, so a completed setup is three short rows rather than a long list. Select **Details** on any of them to open it again.
+A step you have finished collapses to a single line with a check mark. Select **Details** on any of them to open it again. Step 3 stays open until you sign in to Azure.
 
-When required tools are installed and both setup accounts are verified, a **You're all set** block appears at the end of the page with **Enter Fabricator**. Choose it to open Home.
+When the required tools are installed and GitHub Copilot is connected, a **You're all set** block appears at the end of the page with **Enter Fabricator**. If you skipped Azure, it says "Your tools are installed and GitHub Copilot is connected. Sign in to Azure whenever you need it." Choose **Enter Fabricator** to open Home.
 
 ## Later launches
 
@@ -77,7 +82,7 @@ Once setup has passed, Fabricator skips setup. Each launch shows a short welcome
 
 Meanwhile, Fabricator checks your tools and accounts in the background. Until the check finishes, the account control in the app bar shows a spinner instead of **Sign in to Fabric**.
 
-If the check finds a problem, a bar under the app bar says what it is, for example "Not signed in to GitHub Copilot." Select **Manage accounts** to sign in, or **Review setup** to fix a missing tool. The bar doesn't stop you working; close it with its ✕ button.
+If the check finds a problem, a bar under the app bar says what it is, for example "Not signed in to GitHub Copilot." Select **Manage accounts** to sign in, or **Review setup** to fix a missing tool. The bar doesn't stop you working; close it with its ✕ button. Azure and Fabric are optional, so the bar never mentions them.
 
 To open setup yourself, open **Settings** and select **Open setup**. Until every check passes, setup offers **Back to Fabricator** to return without finishing.
 

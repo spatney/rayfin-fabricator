@@ -7,6 +7,7 @@
     "accounts": "/docs/start/accounts",
     "copilotSignIn": "/docs/troubleshooting/setup-and-sign-in#copilot-asks-you-to-sign-in-again",
     "previewPorts": "/docs/troubleshooting/preview#all-preview-ports-are-busy",
+    "localBackendBlocked": "/docs/troubleshooting/preview#windows-blocked-rayfin-local",
     "deployFailed": "/docs/troubleshooting/deploy#a-deploy-failed",
     "skills": "/docs/build/skills",
     "secrets": "/docs/build/secrets",

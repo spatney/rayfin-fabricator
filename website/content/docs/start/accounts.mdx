@@ -21,10 +21,12 @@ Changes apply to every project on this computer. Select **Re-check** to verify e
 
 | Account | What Fabricator uses it for | Several accounts |
 | --- | --- | --- |
-| **GitHub Copilot** | Writes and edits your app's code when you chat. | One at a time |
-| **Microsoft Fabric** | Deploys, hosts and shares your apps, lists your Fabric workspaces, and manages secrets. | Yes |
-| **Azure CLI** | Finds people when you share an app, connects Fabric data, reads the Power BI reports you migrate, and sets up team workspaces. | Yes |
+| **GitHub Copilot** | Writes and edits your app's code when you chat. It's the only account Fabricator requires. | One at a time |
+| **Microsoft Fabric** | Publishes, hosts and shares your apps, lists your Fabric workspaces, and manages your published apps' secrets. Optional until you publish an app or add Fabric data. | Yes |
+| **Azure CLI** | Optional. Finds people when you share an app, connects Fabric data, reads the Power BI reports you migrate, and sets up team workspaces. While your app runs on this computer, it reads Fabric data with this account. | Yes |
 | **GitHub** | Clones repositories and runs team workspaces. It's optional and uses the GitHub CLI. | Yes |
+
+Features that need Azure ask you to **Sign in to Azure** when you use them, so you can leave it until then.
 
 **Accounts** also has **Model providers**, where you add API keys for Anthropic, OpenAI, xAI and Google. See [Use your own API keys](/docs/build/your-own-api-keys).
 
@@ -34,7 +36,7 @@ If Fabric and the Azure CLI are signed in to different organizations, **Accounts
 
 ## Use more than one Fabric account
 
-You can stay signed in to several Fabric accounts, for example your work account and an account in a client's organization. Fabricator uses one of them at a time, marked **In use**. Deploying, listing workspaces, sharing and secrets all use that account.
+You can stay signed in to several Fabric accounts, for example your work account and an account in a client's organization. Fabricator uses one of them at a time, marked **In use**. Publishing, listing workspaces, sharing and secrets all use that account.
 
 To add a Fabric account:
 
@@ -51,13 +53,17 @@ The first Fabric account you sign in to is the Rayfin CLI's own sign-in, so `ray
 > [!NOTE]
 > On macOS, the Rayfin CLI keeps every Fabric account's sign-in in one keychain item. Signing out of one Fabric account signs all of them out until you sign in again.
 
-## See which account deploys
+## See which account publishes
 
-In the app bar, select the deployment control. Under **Account**, its panel names the account that deploys, for example "alice@contoso.com · Contoso". Select **Change** to open **Accounts**.
+In the app bar, select the publish control. Under **Account**, its panel names the account that publishes, for example "alice@contoso.com · Contoso". Select **Change** to open **Accounts**.
+
+## Which account your app uses on this computer
+
+While you build, your app runs on this computer and signs you in by itself. It signs you in as the Azure CLI's account in use or, when the Azure CLI isn't signed in, as the Fabric account in use. Its functions and connectors reach Azure and Fabric data as that account too. When neither is signed in, the app signs you in as a local account, `developer@example.com`, and can't reach that data. See [How Fabricator works](/docs/reference/how-it-works#the-local-backend).
 
 ## Use more than one Azure CLI account
 
-The Azure CLI can stay signed in to several accounts, for example the same person in two organizations. The account marked **In use** is the one the Azure CLI uses now.
+Signing in to the Azure CLI is optional. When it isn't signed in, **Azure CLI** offers **Sign in**, or **Install from setup** when the Azure CLI isn't installed. The Azure CLI can stay signed in to several accounts, for example the same person in two organizations. The account marked **In use** is the one the Azure CLI uses now.
 
 - To add an account, under **Azure CLI**, select **Add account**. Optionally enter an organization, select **Continue**, and finish signing in in your browser. The account you added becomes the one in use.
 - To switch accounts, select **Use** next to the account.

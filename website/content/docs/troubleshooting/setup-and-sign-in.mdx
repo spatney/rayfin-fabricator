@@ -7,18 +7,19 @@ Use this page for the first-run setup screen and account problems. Fabricator ve
 
 ## A tool shows as missing or failed
 
-You see **Getting your environment ready**, a tool row such as **Node.js**, **npm**, **Git**, **Azure CLI**, or **GitHub CLI (gh)** is not **Installed**, or the row has a **Re-check** button. A failed version check can say a tool "was found, but its version check failed".
+In setup, a tool row such as **Node.js**, **npm**, **Git**, **GitHub CLI (gh)** or **Local backend**, or **Azure CLI** under **Sign in to Azure**, shows **Install**, **Update**, **Get it** or **Re-check** instead of **Ready**. A failed version check can say a tool "was found, but its version check failed".
 
-Fabricator needs Node.js 22.12 or newer, npm, Git, and Azure CLI. **GitHub CLI (gh)** is optional repository tooling. It is separate from the bundled GitHub Copilot engine, so installing Copilot with pnpm does not satisfy the **GitHub CLI (gh)** check.
+Fabricator needs Node.js 22.12 or newer, npm, and Git. The Azure CLI and **GitHub CLI (gh)** are optional. **GitHub CLI (gh)** is repository tooling, separate from the bundled GitHub Copilot engine, so installing Copilot with pnpm does not satisfy the **GitHub CLI (gh)** check. **Local backend** comes with Fabricator: setup only checks that it runs.
 
-A row that says **Needs updating** found an older version than Fabricator supports, for example "Version 20.10.0 — Fabricator needs 22.12 or newer". On macOS, when an older Node.js comes first on your PATH, such as the default version of a version manager like nvm, Fabricator uses a newer Node.js it finds further along your PATH, such as one installed by Homebrew. The **Node.js** row then shows that newer version.
+A row that says, for example, "Version 20.10.0 — Fabricator needs 22.12 or newer" found an older version than Fabricator supports. On macOS, when an older Node.js comes first on your PATH, such as the default version of a version manager like nvm, Fabricator uses a newer Node.js it finds further along your PATH, such as one installed by Homebrew. The **Node.js** row then shows that newer version.
 
 1. If Fabricator offers **Install** or **Install all**, use it.
 2. If setup says **Almost there.** and shows **Restart now**, select **Restart now**. Installed tools are often not visible to the running app until restart.
 3. If a tool was installed outside Fabricator, restart Fabricator and select **Re-check**.
 4. On Windows, use **Re-check** before installing a second copy. Fabricator refreshes PATH from the saved user and machine PATH and common Scoop, pnpm, and Azure CLI locations.
 5. If a found tool's version check fails, open a terminal and run the command shown in the setup row, such as `az version`, to repair that existing installation.
-6. Do not install a global Rayfin CLI just to satisfy setup. Fabric sign-in and deploy use the Rayfin CLI pinned by each project.
+6. If the **Local backend** row says Windows blocked it, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local). If it says the local backend is missing or too old, reinstall Fabricator from [the latest release](https://github.com/spatney/rayfin-fabricator/releases/latest).
+7. Do not install a global Rayfin CLI just to satisfy setup. Fabric sign-in and publishing use the Rayfin CLI pinned by each project.
 
 If a required tool still cannot be verified, [Report a problem](/docs/troubleshooting/report-a-problem) and include the setup row text.
 
@@ -52,6 +53,24 @@ Copilot credentials can expire or the engine can lose a saved session handle. Cu
 
 If the notice returns immediately after sign-in, [Report a problem](/docs/troubleshooting/report-a-problem).
 
+## A feature asks you to sign in to Azure
+
+A feature shows **Sign in to Azure**, or **Sign in to Azure & retry**, with a message such as:
+
+- "Your app reads Fabric data with your Azure sign-in while you build it." in **Add Fabric data**.
+- "Fabricator reads your Power BI reports with your Azure sign-in. Sign in to Azure to pick one." in **Migrate a Power BI report**.
+- "Azure CLI sign-in is required to look up recipients in your directory." when you share an app.
+- "Sign in to Azure to view the semantic model" in Blueprint.
+
+Signing in to Azure is optional at setup, so these features ask for it when they need it. The message also appears when your Azure CLI sign-in has expired.
+
+1. Select **Sign in to Azure** or **Sign in to Azure & retry**.
+2. Finish signing in in the browser window that opens. The feature carries on once you're signed in.
+3. If you see "The Azure CLI isn't installed, so Fabricator can't sign you in to Azure. Install it from setup (open Settings and select Open setup), then try again.", open **Settings**, select **Open setup**, and install the Azure CLI under **Sign in to Azure**. Then try again.
+4. If you signed in with the wrong account or organization, see [Azure CLI is signed in to the wrong account](/docs/troubleshooting/setup-and-sign-in#azure-cli-is-signed-in-to-the-wrong-account).
+
+If the sign-in doesn't finish, [Report a problem](/docs/troubleshooting/report-a-problem).
+
 ## Azure CLI is signed in to the wrong account
 
 **Accounts** or setup shows **Azure CLI** signed in as the wrong user or tenant, or Azure sign-in works but sharing or connecting data looks in the wrong organization. **Accounts** may also warn that Microsoft Fabric and the Azure CLI are signed in to different organizations.
@@ -63,13 +82,13 @@ The Azure CLI can be signed in to several accounts and uses one of them at a tim
 3. Otherwise, if the account you need is listed under **Azure CLI**, select **Use** next to it.
 4. If it isn't listed, under **Azure CLI**, select **Add account**. In **Organization (optional)**, enter the organization you need, such as `contoso.onmicrosoft.com`, select **Continue**, and complete the browser sign-in.
 5. To remove an account you don't need, select **Sign out** next to it.
-6. If you also need a different Fabric account for deploying, change it under **Microsoft Fabric** the same way. See [Manage your accounts](/docs/start/accounts).
+6. If you also need a different Fabric account for publishing, change it under **Microsoft Fabric** the same way. See [Manage your accounts](/docs/start/accounts).
 
 If Azure still reports the wrong account, [Report a problem](/docs/troubleshooting/report-a-problem).
 
 ## Fabric sign-in doesn't complete
 
-You select **Sign in to Fabric**, **Refresh Fabric authentication**, or a deploy triggers sign-in, but no browser appears, the button returns to normal, or workspace listing does not continue. You may see a Rayfin CLI line such as "❌ Login failed: OS keychain is not available and plaintext token storage is not enabled."
+You select **Sign in to Fabric**, **Refresh Fabric authentication**, or a publish triggers sign-in, but no browser appears, the button returns to normal, or workspace listing does not continue. You may see a Rayfin CLI line such as "❌ Login failed: OS keychain is not available and plaintext token storage is not enabled."
 
 Fabricator runs the project's Rayfin CLI with `rayfin login --select` outside the project folder, then verifies the credential against Fabric. Running outside the project means a setting your app's `rayfin.yml` can't resolve doesn't stop you signing in. On locked-down machines the OS keychain can block token storage; current Fabricator versions allow Rayfin's plaintext fallback so sign-in can finish. On macOS, some passwordless SSO flows can still be limited by the embedded browser and system account setup.
 
@@ -79,6 +98,6 @@ Fabricator runs the project's Rayfin CLI with `rayfin login --select` outside th
 4. If the sign-in button returns with an error, copy the exact message.
 5. In the project folder, run `npx rayfin login` only to reveal the full Rayfin CLI error. Return to Fabricator after sign-in succeeds.
 6. In Fabricator, open the account menu and choose **Refresh Fabric authentication**. The dialog runs `rayfin logout`, then `rayfin login`, and verifies the credential. It does not clear Copilot, Azure CLI, or preview-browser sessions.
-7. After a successful refresh, deploy again from the app bar, where the button says **Try again** after a failed deploy. Fabricator does not redeploy automatically after a credential refresh.
+7. After a successful refresh, publish again from the app bar, where the button says **Try again** after a failed publish. Fabricator does not publish automatically after a credential refresh.
 
 If you are using a client tenant, confirm that your account can access the target Fabric workspace and capacity. If sign-in still does nothing, [Report a problem](/docs/troubleshooting/report-a-problem) with diagnostics.

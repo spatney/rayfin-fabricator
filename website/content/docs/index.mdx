@@ -1,21 +1,22 @@
 ---
 title: "What is Fabricator?"
-description: "Fabricator is a desktop workbench for building Rayfin apps with Copilot, live preview, and Microsoft Fabric deploys."
+description: "Fabricator is a desktop workbench for building Rayfin apps with Copilot. Apps run on your computer while you build them, and you publish them to Microsoft Fabric when you're ready."
 ---
 
-Fabricator helps you build [Rayfin](https://rayfin.ai/docs) apps in one desktop window. You describe the app you want, watch GitHub Copilot edit the project, preview the running app, deploy it to Microsoft Fabric, and keep refining from chat.
+Fabricator helps you build [Rayfin](https://rayfin.ai/docs) apps in one desktop window. You describe the app you want, watch GitHub Copilot build it, and try it as it changes: the app and its backend run on this computer from the moment you create it. When it's ready for other people, you publish it to Microsoft Fabric, and keep refining it from chat.
 
-![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the live preview shows the deployed app with a monthly total and a spending chart.](/screenshots/workbench.webp)
+![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the preview shows the running app with a monthly total and a spending chart.](/screenshots/workbench.webp)
 
 ## The build loop
 
-1. Create or open a project, then deploy it to a Fabric workspace if it is not deployed yet.
+1. Create or open a project. Fabricator starts the app on this computer.
 2. Describe the app in plain language.
 3. Watch the work log while Copilot changes files and runs checks.
-4. Preview the app in the same window. After each successful turn, Fabricator redeploys the changes to Fabric.
+4. Try the app in the preview while Copilot works. Its data, sign-in and functions run on this computer too.
 5. Refine the app with another prompt, a visual Design change, or an Advisor finding.
+6. Publish the app to a Fabric workspace when you want other people to use it.
 
-Rayfin is the app platform your project uses. Fabricator creates and edits Rayfin projects, then runs the project's Rayfin tooling for deploys. Microsoft Fabric is where the app is hosted and shared; see Rayfin's [Fabric app deploy docs](https://rayfin.ai/docs/deploy/fabric-apps) for the platform background.
+Rayfin is the app platform your project uses. While you build, Fabricator runs your app on rayfin-local, a local Rayfin backend that comes with Fabricator. The app's data starts empty and stays on this computer. When you publish, Fabricator runs the project's Rayfin tooling to put the app in Microsoft Fabric, where it's hosted and shared; see Rayfin's [Fabric app deploy docs](https://rayfin.ai/docs/deploy/fabric-apps) for the platform background, and [How Fabricator works](/docs/reference/how-it-works) for the details.
 
 ## Who Fabricator is for
 
@@ -23,10 +24,10 @@ Fabricator is for people who want to make Rayfin apps without living in a termin
 
 - Trying Rayfin for the first time.
 - Turning a business workflow into a small app.
-- Iterating on a data model, UI, or deployment with Copilot.
+- Iterating on a data model or UI with Copilot, and publishing it to Fabric.
 - Reviewing generated code, history, and app health in one place.
 
-You do not need to pick a template for a new app. **New project** asks for a name, creates the app from the Rayfin CLI's default Universal App template, then moves to the Deploy step. For local projects, chat stays locked until the app has a Fabric deployment.
+You do not need to pick a template for a new app. **New project** asks for a name, creates the app from the Rayfin CLI's default Universal App template, and opens it with chat ready. The app runs on this computer right away, so you don't need a Fabric workspace until you publish it.
 
 > [!NOTE]
 > Fabricator is a personal project by Sachin Patney. It is not a Microsoft product and is not affiliated with, endorsed by, sponsored by, or supported by Microsoft.
@@ -36,9 +37,10 @@ You do not need to pick a template for a new app. **New project** asks for a nam
 Before you start, check the [system requirements](/docs/reference/requirements). In short, you need:
 
 - Windows 10/11, or macOS on Apple Silicon.
-- Node.js 22.12 or newer, npm, Git, and the Azure CLI.
+- Node.js 22.12 or newer, npm, and Git.
 - A GitHub Copilot account.
-- Microsoft Fabric access and an eligible Fabric or Power BI Premium capacity for deploys.
+- Optional: the Azure CLI, to share apps, add Fabric data and migrate Power BI reports. You can sign in to it later.
+- To publish: Microsoft Fabric access and a Fabric workspace on an eligible Fabric or Power BI Premium capacity.
 - Optional GitHub CLI (`gh`) for repository browsing and cloning.
 
 ## Next steps
@@ -48,7 +50,7 @@ Before you start, check the [system requirements](/docs/reference/requirements).
     Download the current desktop app for Windows or macOS.
   </Card>
   <Card href="/docs/start/first-app" title="Build your first app">
-    Create a project, deploy it, and send your first prompt.
+    Create a project, describe it to Copilot, and try it on this computer.
   </Card>
   <Card href="/docs/start/tour" title="Tour the workbench">
     Learn where Home, chat, preview, code, model, Advisor, and settings live.
@@ -57,6 +59,6 @@ Before you start, check the [system requirements](/docs/reference/requirements).
     Find out why something failed, in plain language, without leaving the app.
   </Card>
   <Card href="/docs/troubleshooting" title="Troubleshooting">
-    Find fixes for setup, sign-in, chat, preview, deploy, and team workspace problems.
+    Find fixes for setup, sign-in, chat, preview, publishing, and team workspace problems.
   </Card>
 </Cards>
