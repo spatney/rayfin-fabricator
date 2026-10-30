@@ -45,12 +45,13 @@ describe('setupAttention', () => {
     expect(setupAttention(null, CHECKING_AUTH, null)).toBeNull()
   })
 
-  it('lists missing required tools and signed-out setup accounts, never Fabric or optional tools', () => {
+  it('lists missing required tools and a signed-out Copilot, never Azure, Fabric or optional tools', () => {
     const doctor: DoctorReport = {
       ready: false,
       tools: [
         tool({ name: 'Node.js', satisfied: false }),
         tool({ id: 'gh', name: 'GitHub CLI (gh)', satisfied: false, required: false }),
+        tool({ id: 'az', name: 'Azure CLI', found: false, satisfied: false, required: false }),
         tool({ id: 'git', name: 'Git' })
       ]
     }
@@ -61,9 +62,14 @@ describe('setupAttention', () => {
     }
     expect(setupAttention(doctor, auth, null)).toEqual({
       tools: ['Node.js'],
-      signIns: ['GitHub Copilot', 'the Azure CLI'],
+      signIns: ['GitHub Copilot'],
       error: undefined
     })
+  })
+
+  it('has nothing to raise when only the optional Azure sign-in is missing', () => {
+    const auth: AuthStatus = { ...signedIn, az: { signedIn: false, error: 'Sign-in expired' } }
+    expect(setupAttention({ ready: true, tools: [tool({})] }, auth, null)).toBeNull()
   })
 
   it('reports a tool check that could not run', () => {
@@ -104,7 +110,7 @@ describe('listText', () => {
 describe('startupStage', () => {
   const ready: DoctorReport = { ready: true, tools: [tool({})] }
 
-  it('follows the checks: tools, then the setup sign-ins, then the outcome', () => {
+  it('follows the checks: tools, then the Copilot sign-in, then the outcome', () => {
     expect(startupStage(null, null, false)).toBe('tools')
     expect(startupStage(null, signedIn, false)).toBe('tools')
     expect(startupStage(ready, null, false)).toBe('accounts')
@@ -112,9 +118,13 @@ describe('startupStage', () => {
     expect(startupStage(ready, signedIn, false)).toBe('ready')
   })
 
-  it('heads to setup when a tool or a setup sign-in is missing, whatever Fabric says', () => {
+  it('heads to setup when a tool or Copilot is missing, whatever Azure and Fabric say', () => {
     expect(startupStage({ ready: false, tools: [tool({ satisfied: false })] }, signedIn, false)).toBe('setup')
-    expect(startupStage(ready, { ...signedIn, az: { signedIn: false } }, false)).toBe('setup')
+    expect(startupStage(ready, { ...signedIn, copilot: { signedIn: false } }, false)).toBe('setup')
+    expect(startupStage(ready, { ...signedIn, az: { signedIn: false } }, false)).toBe('ready')
+    expect(
+      startupStage(ready, { ...signedIn, az: { signedIn: false, checking: true } }, false)
+    ).toBe('ready')
     expect(startupStage(ready, { ...signedIn, rayfin: { signedIn: false } }, false)).toBe('ready')
   })
 

@@ -3,6 +3,7 @@ import type { FabricWorkspace, StudioProject, WorkspaceDataItem } from '@shared/
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { authErrorMessage } from '../authErrors'
+import { useAzureSignIn } from '../azureAuth'
 import type { WorkspaceUse } from '../fabric'
 import {
   DATA_KINDS,
@@ -76,6 +77,28 @@ export default function ConnectDataModal({
   const requested = useRef(new Set<string>())
   const loginSeqRef = useRef(0)
   const loginBusyRef = useRef(false)
+  /** The Azure CLI is known to be signed out. Azure is optional, so this only asks. */
+  const [azureSignedOut, setAzureSignedOut] = useState(false)
+  const azure = useAzureSignIn(async () => {
+    await onSignedIn?.()
+    setAzureSignedOut(false)
+  })
+
+  // While you build, your app reads the data you add with your Azure sign-in.
+  useEffect(() => {
+    let alive = true
+    Promise.resolve()
+      .then(() => window.api.auth.check(['az']))
+      .then(
+        (status) => {
+          if (alive) setAzureSignedOut(status.az?.signedIn === false)
+        },
+        () => {}
+      )
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // Your workspaces, the one this app deploys to, and what the app already connects to.
   useEffect(() => {
@@ -311,6 +334,27 @@ export default function ConnectDataModal({
               onClick={() => void reauthAndReload()}
             >
               {reauthing ? 'Signing in…' : 'Sign in & retry'}
+            </button>
+          </div>
+        )}
+
+        {azureSignedOut && (
+          <div
+            className={`share-banner cd-banner${azure.error ? ' share-banner--bad' : ''}`}
+            role={azure.error ? 'alert' : 'status'}
+          >
+            <span>
+              {azure.signingIn
+                ? 'Finish signing in to Azure in your browser.'
+                : (azure.error ??
+                  'Your app reads Fabric data with your Azure sign-in while you build it.')}
+            </span>
+            <button
+              className="btn btn--sm"
+              disabled={azure.signingIn}
+              onClick={() => void azure.signIn()}
+            >
+              {azure.signingIn ? 'Signing in…' : 'Sign in to Azure'}
             </button>
           </div>
         )}

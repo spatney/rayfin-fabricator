@@ -10,6 +10,7 @@ import type {
 } from '@shared/ipc'
 import { useSuppressPreview } from '../../overlay'
 import { authErrorMessage } from '../../authErrors'
+import { useAzureSignIn, type AzureSignIn } from '../../azureAuth'
 import { openDocs } from '../../docsLinks'
 import { Codicon } from '../icons'
 import './migrate.css'
@@ -25,9 +26,13 @@ interface Props {
   recentWorkspaces?: readonly string[]
   onCancel: () => void
   onPicked: (pick: ReportPick) => void
+  /** Refresh the app's accounts after signing in to Azure here; rejecting stops the retry. */
+  onSignedIn?: () => Promise<void> | void
 }
 
 type Load<T> = { status: 'idle' } | { status: 'loading' } | { status: 'error'; error: string; needsAz?: boolean } | { status: 'ready'; value: T }
+
+type InspectRequest = { target?: string; workspaceId?: string; reportId?: string }
 
 const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
 
@@ -89,9 +94,15 @@ const failure = (result: { error?: string; needsAz?: boolean }, fallback: string
 /**
  * Migrate a Power BI report: pick one (search, browse your workspaces, or paste
  * a link), see what Fabricator can read of it, and continue to name the new app.
- * Everything is read with the Azure CLI's sign-in.
+ * Everything is read with the Azure CLI's sign-in, which is asked for here when
+ * it's missing.
  */
-export default function MigrateReportScreen({ recentWorkspaces = [], onCancel, onPicked }: Props): JSX.Element {
+export default function MigrateReportScreen({
+  recentWorkspaces = [],
+  onCancel,
+  onPicked,
+  onSignedIn
+}: Props): JSX.Element {
   useSuppressPreview()
   const [workspaces, setWorkspaces] = useState<Load<MigrationWorkspacesResult>>({ status: 'loading' })
   const [selectedWs, setSelectedWs] = useState<string | null>(null)
@@ -101,7 +112,21 @@ export default function MigrateReportScreen({ recentWorkspaces = [], onCancel, o
   const [chosen, setChosen] = useState<string | null>(null)
   const [inspection, setInspection] = useState<Load<ReportInspection>>({ status: 'idle' })
   const [reload, setReload] = useState(0)
+  const [searchTick, setSearchTick] = useState(0)
   const inspectSeq = useRef(0)
+  const lastInspect = useRef<{ request: InspectRequest; key: string } | null>(null)
+  const inspectionRef = useRef(inspection)
+  inspectionRef.current = inspection
+
+  // Signed in to Azure: read again whatever needed the sign-in.
+  const azure = useAzureSignIn(async () => {
+    await onSignedIn?.()
+    setReload((n) => n + 1)
+    setSearchTick((n) => n + 1)
+    const last = lastInspect.current
+    const read = inspectionRef.current
+    if (last && read.status === 'error' && read.needsAz) inspect(last.request, last.key)
+  })
 
   useEffect(() => {
     let alive = true
@@ -162,10 +187,11 @@ export default function MigrateReportScreen({ recentWorkspaces = [], onCancel, o
       stale = true
       window.clearTimeout(timer)
     }
-  }, [trimmed, searching])
+  }, [trimmed, searching, searchTick])
 
-  function inspect(request: { target?: string; workspaceId?: string; reportId?: string }, key: string): void {
+  function inspect(request: InspectRequest, key: string): void {
     const seq = ++inspectSeq.current
+    lastInspect.current = { request, key }
     setChosen(key)
     setInspection({ status: 'loading' })
     window.api.migration.inspect(request).then(
@@ -240,7 +266,15 @@ export default function MigrateReportScreen({ recentWorkspaces = [], onCancel, o
           </label>
 
           {workspaces.status === 'error' ? (
-            <LoadError error={workspaces.error} needsAz={workspaces.needsAz} onRetry={() => setReload((n) => n + 1)} />
+            workspaces.needsAz ? (
+              <AzurePrompt
+                message="Fabricator reads your Power BI reports with your Azure sign-in. Sign in to Azure to pick one."
+                azure={azure}
+                onRetry={() => setReload((n) => n + 1)}
+              />
+            ) : (
+              <LoadError error={workspaces.error} onRetry={() => setReload((n) => n + 1)} />
+            )
           ) : (
             <div className="mig-panes">
               {!searching && (
@@ -272,13 +306,14 @@ export default function MigrateReportScreen({ recentWorkspaces = [], onCancel, o
                   chosen={chosen}
                   showWorkspace={searching}
                   empty={searching ? 'No reports match.' : 'This workspace has no reports.'}
+                  azure={azure}
                   onChoose={(r) => inspect({ workspaceId: r.workspaceId, reportId: r.id }, r.id)}
                 />
               </section>
             </div>
           )}
 
-          <Inspection load={inspection} />
+          <Inspection load={inspection} azure={azure} />
         </div>
 
         <footer className="create-foot mig-foot-bar">
@@ -294,13 +329,45 @@ export default function MigrateReportScreen({ recentWorkspaces = [], onCancel, o
   )
 }
 
-function LoadError({ error, needsAz, onRetry }: { error: string; needsAz?: boolean; onRetry: () => void }): JSX.Element {
+function LoadError({ error, onRetry }: { error: string; onRetry: () => void }): JSX.Element {
   return (
     <div className="mig-error" role="alert">
-      <p>{needsAz ? 'Sign in to the Azure CLI again (run az login), then try again.' : error}</p>
+      <p>{error}</p>
       <button type="button" className="btn btn--sm" onClick={onRetry}>
         Try again
       </button>
+    </div>
+  )
+}
+
+/** Reading needs an Azure sign-in, which is optional until now: ask for it, then carry on. */
+function AzurePrompt({
+  message,
+  azure,
+  onRetry
+}: {
+  message: string
+  azure: AzureSignIn
+  onRetry?: () => void
+}): JSX.Element {
+  return (
+    <div className="mig-error" role="alert">
+      <p>
+        {azure.signingIn ? 'Finish signing in to Azure in your browser.' : (azure.error ?? message)}
+      </p>
+      <button
+        type="button"
+        className="btn btn--sm btn--primary"
+        disabled={azure.signingIn}
+        onClick={() => void azure.signIn()}
+      >
+        {azure.signingIn ? 'Signing in…' : 'Sign in to Azure'}
+      </button>
+      {onRetry && (
+        <button type="button" className="btn btn--sm" disabled={azure.signingIn} onClick={onRetry}>
+          Try again
+        </button>
+      )}
     </div>
   )
 }
@@ -310,18 +377,24 @@ function ReportList({
   chosen,
   showWorkspace,
   empty,
+  azure,
   onChoose
 }: {
   load: Load<MigrationReportItem[]>
   chosen: string | null
   showWorkspace: boolean
   empty: string
+  azure: AzureSignIn
   onChoose: (report: MigrationReportItem) => void
 }): JSX.Element | null {
   if (load.status === 'idle') return null
   if (load.status === 'loading') return <p className="mig-state">Loading reports…</p>
   if (load.status === 'error') {
-    return <p className="mig-state mig-state--bad">{load.needsAz ? 'Sign in to the Azure CLI again (run az login).' : load.error}</p>
+    return load.needsAz ? (
+      <AzurePrompt message="Sign in to Azure to see the reports." azure={azure} />
+    ) : (
+      <p className="mig-state mig-state--bad">{load.error}</p>
+    )
   }
   if (load.value.length === 0) return <p className="mig-state">{empty}</p>
   return (
@@ -350,7 +423,13 @@ const CHECKS: ReadonlyArray<['definition' | 'model' | 'images', string]> = [
   ['images', 'Page images']
 ]
 
-function Inspection({ load }: { load: Load<ReportInspection> }): JSX.Element | null {
+function Inspection({
+  load,
+  azure
+}: {
+  load: Load<ReportInspection>
+  azure: AzureSignIn
+}): JSX.Element | null {
   if (load.status === 'idle') return null
   if (load.status === 'loading') {
     return (
@@ -360,10 +439,13 @@ function Inspection({ load }: { load: Load<ReportInspection> }): JSX.Element | n
     )
   }
   if (load.status === 'error') {
+    if (load.needsAz) {
+      return <AzurePrompt message="Sign in to Azure to read this report." azure={azure} />
+    }
     return (
       <section className="mig-inspect">
         <p className="mig-state mig-state--bad" role="alert">
-          {load.needsAz ? 'Sign in to the Azure CLI again (run az login), then pick the report again.' : load.error}
+          {load.error}
         </p>
       </section>
     )

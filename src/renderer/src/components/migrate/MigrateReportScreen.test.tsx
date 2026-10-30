@@ -122,17 +122,68 @@ describe('MigrateReportScreen', () => {
     expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('asks for an Azure CLI sign-in when it has lapsed', async () => {
+  it('asks you to sign in to Azure when it isn’t, then carries on', async () => {
     const workspaces = vi
       .fn()
       .mockResolvedValueOnce({ ok: false, needsAz: true, error: 'AADSTS70043', workspaces: [] })
       .mockResolvedValueOnce({ ok: true, workspaces: [{ id: 'ws-fin', name: 'Finance', personal: false }] })
     installApi({ workspaces })
-    render(<MigrateReportScreen onCancel={vi.fn()} onPicked={vi.fn()} />)
-    expect((await screen.findByRole('alert')).textContent).toContain('az login')
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    const loginAz = vi.fn(async () => ({ ok: true, exitCode: 0 }))
+    Object.assign(window.api, { auth: { loginAz } })
+    const onSignedIn = vi.fn()
+    render(<MigrateReportScreen onCancel={vi.fn()} onPicked={vi.fn()} onSignedIn={onSignedIn} />)
+    expect((await screen.findByRole('alert')).textContent).toContain('Sign in to Azure to pick one')
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in to Azure' }))
     await waitFor(() => expect(workspaces).toHaveBeenCalledTimes(2))
+    expect(loginAz).toHaveBeenCalledTimes(1)
+    expect(onSignedIn).toHaveBeenCalledTimes(1)
     expect(await screen.findByRole('button', { name: 'Finance' })).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('says why an Azure sign-in didn’t finish, and can still try again', async () => {
+    const workspaces = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, needsAz: true, workspaces: [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        workspaces: [{ id: 'ws-fin', name: 'Finance', personal: false }]
+      })
+    installApi({ workspaces })
+    const loginAz = vi.fn(async () => ({
+      ok: false,
+      exitCode: null,
+      error: 'The Azure CLI isn’t installed, so Fabricator can’t sign you in to Azure.'
+    }))
+    Object.assign(window.api, { auth: { loginAz } })
+    render(<MigrateReportScreen onCancel={vi.fn()} onPicked={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in to Azure' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('isn’t installed'))
+    expect(workspaces).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('button', { name: 'Finance' })).toBeTruthy()
+  })
+
+  it('asks for Azure again when reading a picked report needs it', async () => {
+    const inspect = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, needsAz: true, pages: [] })
+      .mockResolvedValueOnce(INSPECTION)
+    installApi({ inspect })
+    Object.assign(window.api, { auth: { loginAz: vi.fn(async () => ({ ok: true, exitCode: 0 })) } })
+    render(
+      <MigrateReportScreen recentWorkspaces={['ws-fin']} onCancel={vi.fn()} onPicked={vi.fn()} />
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Sales overview' }))
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Sign in to Azure to read this report'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in to Azure' }))
+
+    expect(await screen.findByRole('region', { name: 'About Sales overview' })).toBeTruthy()
+    expect(inspect).toHaveBeenCalledTimes(2)
+    expect(inspect).toHaveBeenLastCalledWith({ workspaceId: 'ws-fin', reportId: 'r1' })
   })
 
   it('leaves on Cancel and Escape', async () => {

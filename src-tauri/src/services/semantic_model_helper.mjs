@@ -34,9 +34,9 @@ const DEFAULT_TYPES = ['Report', 'SemanticModel']
 // The Fabric OneLake catalog search endpoint requires the delegated
 // `Catalog.Read.All` scope, which the Rayfin CLI app registration is not
 // preauthorized for (so MSAL cannot mint it silently). The Azure CLI's
-// first-party client *is* preauthorized, and `az` is a required, signed-in tool
-// in Fabricator — so the catalog token comes from `az` (or a pre-supplied
-// FABRIC_CATALOG_TOKEN env var). Power BI calls still use the MSAL token.
+// first-party client *is* preauthorized, so the catalog token comes from `az`
+// (an optional sign-in in Fabricator: without it this throws NeedsAz) or a
+// pre-supplied FABRIC_CATALOG_TOKEN env var. Power BI calls still use the MSAL token.
 async function fabricCatalogToken() {
   const env = (process.env.FABRIC_CATALOG_TOKEN || '').trim()
   return env

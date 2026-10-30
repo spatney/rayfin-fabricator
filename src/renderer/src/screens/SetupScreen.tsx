@@ -5,7 +5,8 @@ import type {
   HelpAction,
   InstallResult,
   ProcLogEvent,
-  ProcResult
+  ProcResult,
+  ToolStatus
 } from '@shared/ipc'
 import { FabricatorMark } from '../components/FabricatorMark'
 import nodeSvg from '../assets/brands/node.svg'
@@ -24,6 +25,7 @@ import { openDocs } from '../docsLinks'
 import { reportIssue } from './reportIssue'
 import { progressLine, toolLine, toolState } from './setupCopy'
 import { setupProblem } from './setupProblems'
+import { setupReady } from '../startup'
 
 /** Official product logo (as an <img> src) for each tool, keyed by the doctor's tool id. */
 const TOOL_LOGOS: Record<string, string> = {
@@ -32,6 +34,9 @@ const TOOL_LOGOS: Record<string, string> = {
   git: gitSvg,
   az: azureSvg
 }
+
+/** The optional Azure step's actions: a failure is shown, but never blocks entry. */
+const OPTIONAL_ACTIONS = new Set(['install:az', 'login:az', 'logout:az'])
 
 interface Props {
   doctor: DoctorReport | null
@@ -51,13 +56,15 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
   const [finalizing, setFinalizing] = useState(false)
   const [showLog, setShowLog] = useState(false)
   const [needsRelaunch, setNeedsRelaunch] = useState(false)
-  const [actionError, setActionError] = useState<string | null>(null)
+  /** Why the last action failed, and whether it was one of the optional Azure step's. */
+  const [failure, setFailure] = useState<{ message: string; optional: boolean } | null>(null)
+  const actionError = failure?.message ?? null
   /** Setup is where people get stuck, so Help has to be reachable from here. */
   const [showHelp, setShowHelp] = useState(false)
   const [showHelpOffline, setShowHelpOffline] = useState(false)
   const [online, setOnline] = useState(() => navigator.onLine)
   /** Which finished steps the user has opened to see the detail. */
-  const [open, setOpen] = useState({ copilot: false, tools: false, microsoft: false })
+  const [open, setOpen] = useState({ copilot: false, tools: false, azure: false })
   const toggle = (key: keyof typeof open): void =>
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }))
   const logRef = useRef<HTMLPreElement>(null)
@@ -93,20 +100,20 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
     if (activeProc.current || refreshing) return
     activeProc.current = key
     setBusy(key)
-    setActionError(null)
+    setFailure(null)
     setShowLog(true)
     setLog(`\u203a ${label}\n`)
     try {
       const result = await fn()
       if (!result.ok) {
         const detail = result.error ?? `${label} did not complete. Please try again.`
-        setActionError(detail)
+        setFailure({ message: detail, optional: OPTIONAL_ACTIONS.has(key) })
         setLog((p) => `${p}\n[error] ${detail}\n`)
       } else {
         reportEvent('auth', 'auth.signed_in', `${label}: done.`, { operation: key })
       }
     } catch (err) {
-      setActionError(String(err))
+      setFailure({ message: String(err), optional: OPTIONAL_ACTIONS.has(key) })
       setLog((p) => `${p}\n[error] ${String(err)}\n`)
     } finally {
       // Keep the sign-in overlay up through the auth re-check and the screen swap
@@ -116,7 +123,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
       try {
         await onRefresh()
       } catch (err) {
-        setActionError(`Could not verify account status: ${String(err)}`)
+        setFailure({ message: `Could not verify account status: ${String(err)}`, optional: false })
       } finally {
         activeProc.current = null
         setBusy(null)
@@ -133,14 +140,14 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
   ): Promise<void> {
     activeProc.current = key
     setBusy(key)
-    setActionError(null)
+    setFailure(null)
     setShowLog(true)
     setLog((p) => `${p}\n\u203a ${label}\n`)
     try {
       const res = await fn()
       if (!res.ok && !res.manual) {
         const detail = res.error ?? `${label} did not complete. Check the process output.`
-        setActionError(detail)
+        setFailure({ message: detail, optional: OPTIONAL_ACTIONS.has(key) })
         setLog((p) => `${p}\n[error] ${detail}\n`)
       } else if (res.ok) {
         reportEvent('setup', 'tool.installed', `${label}: done.`, { operation: key })
@@ -150,7 +157,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
         setLog((p) => `${p}\nFinish the install in the page that opened, then click “Restart”.\n`)
       }
     } catch (err) {
-      setActionError(String(err))
+      setFailure({ message: String(err), optional: OPTIONAL_ACTIONS.has(key) })
       setLog((p) => `${p}\n[error] ${String(err)}\n`)
     } finally {
       activeProc.current = null
@@ -158,17 +165,30 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
       try {
         await onRefresh()
       } catch (err) {
-        setActionError(`Could not re-check the environment: ${String(err)}`)
+        setFailure({
+          message: `Could not re-check the environment: ${String(err)}`,
+          optional: false
+        })
       }
     }
   }
 
+  /** Install or update one tool. */
+  function install(t: ToolStatus): void {
+    void runInstall(`install:${t.id}`, `${t.found ? 'Update' : 'Install'} ${t.name}`, () =>
+      window.api.doctor.install(t.id)
+    )
+  }
+
   async function recheck(): Promise<void> {
-    setActionError(null)
+    setFailure(null)
     try {
       await onRefresh()
     } catch (error) {
-      setActionError(`Could not re-check the environment: ${String(error)}`)
+      setFailure({
+        message: `Could not re-check the environment: ${String(error)}`,
+        optional: false
+      })
     }
   }
 
@@ -209,27 +229,32 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
   }
 
   const tools = doctor?.tools ?? []
-  const needsAuto = tools.filter((t) => t.required && !t.satisfied && !t.checkError && t.autoInstallable)
-  const hasToolCheckErrors = tools.some((t) => t.required && t.checkError)
-  const toolsSatisfied = tools.filter((t) => t.satisfied).length
+  const required = tools.filter((t) => t.required)
+  const requiredReady = required.filter((t) => t.satisfied).length
+  const needsAuto = required.filter((t) => !t.satisfied && !t.checkError && t.autoInstallable)
+  const hasToolCheckErrors = required.some((t) => t.checkError)
 
   // Azure sign-in shells out to the global `az` CLI, so it can't work until that
-  // CLI is installed. Gate the card on that.
+  // CLI is installed. Both live in the optional Azure step.
   const azTool = tools.find((t) => t.id === 'az')
   const azReady = azTool?.satisfied ?? false
+  const azSignedIn = auth?.az.signedIn ?? false
+  const setupTools = tools.filter((t) => t !== azTool)
 
-  const providers = [
-    auth?.copilot.signedIn ?? false,
-    auth?.az.signedIn ?? false
-  ]
-  const signedInCount = providers.filter(Boolean).length
+  /** Copilot is bundled, so it can be connected before anything is installed —
+   *  which is what makes Help available for the rest of setup. */
+  const copilotReady = auth?.copilot.signedIn ?? false
 
-  const allReady = busy === null && !refreshing && !error && !actionError && (doctor?.ready ?? false) && signedInCount === providers.length
-
-  const totalSteps = tools.length + providers.length
-  const doneSteps = toolsSatisfied + signedInCount
-  const pct = totalSteps ? Math.round((doneSteps / totalSteps) * 100) : 0
+  // Progress counts only what entry needs: the required tools (one item while
+  // they're still unknown) and Copilot.
+  const totalSteps = (doctor ? required.length : 1) + 1
+  const doneSteps = requiredReady + (copilotReady ? 1 : 0)
+  const pct = Math.round((doneSteps / totalSteps) * 100)
   const remaining = totalSteps - doneSteps
+
+  // A failed optional Azure action is still shown, but doesn't keep you out.
+  const blocked = Boolean(error) || Boolean(failure && !failure.optional)
+  const allReady = busy === null && !refreshing && !blocked && setupReady(doctor, auth)
 
   const loginProvider =
     busy === 'login:copilot'
@@ -237,10 +262,6 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
       : busy === 'login:az'
         ? 'Azure'
         : null
-
-  /** Copilot is bundled, so it can be connected before anything is installed —
-   *  which is what makes Help available for the rest of setup. */
-  const copilotReady = auth?.copilot.signedIn ?? false
 
   /** The one problem worth showing, translated out of CLI-speak. */
   const problem = setupProblem(error || actionError)
@@ -379,9 +400,13 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
               n={2}
               title="Install the tools"
               note="Free tools Fabricator uses behind the scenes. It can install them for you."
-              done={tools.length > 0 && toolsSatisfied === tools.length}
-              summary={`All ${tools.length} installed`}
-              count={`${toolsSatisfied}/${tools.length}`}
+              done={doctor !== null && requiredReady === required.length}
+              summary={
+                setupTools.every((t) => t.satisfied)
+                  ? `All ${setupTools.length} installed`
+                  : `All ${required.length} required tools installed`
+              }
+              count={`${requiredReady}/${required.length}`}
               open={open.tools}
               onToggle={() => toggle('tools')}
               action={
@@ -415,123 +440,63 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
               )}
 
               <ul className="setup-rows">
-                {tools.map((t) => {
-                  const logoSrc = TOOL_LOGOS[t.id]
-                  const state = t.satisfied ? 'ok' : t.found ? 'warn' : 'bad'
-                  const status = toolState(t)
-                  return (
-                    <li key={t.id} className="setup-row" data-state={state}>
-                      <span className="setup-row-ico">
-                        {logoSrc ? (
-                          <img className="brand-glyph" src={logoSrc} alt="" />
-                        ) : (
-                          <TerminalIcon />
-                        )}
-                      </span>
-                      <div className="setup-row-main">
-                        <span className="setup-row-name">{t.name}</span>
-                        <span
-                          className="setup-row-meta"
-                          role={t.checkError ? 'alert' : undefined}
-                          title={t.checkError}
-                        >
-                          {t.checkError ? t.checkError : toolLine(t)}
-                        </span>
-                      </div>
-                      <div className="setup-row-action">
-                        {t.satisfied ? (
-                          <span className="setup-state is-ok">
-                            <span className="setup-state-dot" aria-hidden="true" />
-                            {status.word}
-                          </span>
-                        ) : t.checkError ? (
-                          <button
-                            className="btn btn--sm"
-                            disabled={busy !== null || refreshing}
-                            aria-label={`Re-check ${t.name}`}
-                            onClick={() => void recheck()}
-                          >
-                            <ReloadIcon className={`btn-ico ${refreshing ? 'icon-spin' : ''}`} />
-                            Re-check
-                          </button>
-                        ) : t.autoInstallable ? (
-                          <button
-                            className="btn btn--sm"
-                            disabled={busy !== null || !online}
-                            title={!online ? 'Installing needs an internet connection' : undefined}
-                            onClick={() =>
-                              runInstall(
-                                `install:${t.id}`,
-                                `${t.found ? 'Update' : 'Install'} ${t.name}`,
-                                () => window.api.doctor.install(t.id)
-                              )
-                            }
-                          >
-                            {busy === `install:${t.id}` ? (
-                              t.found ? (
-                                'Updating…'
-                              ) : (
-                                'Installing…'
-                              )
-                            ) : (
-                              <>
-                                <DownloadIcon className="btn-ico" />
-                                {t.found ? 'Update' : 'Install'}
-                              </>
-                            )}
-                          </button>
-                        ) : (
-                          <a
-                            className="btn btn--sm"
-                            href={t.installUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Get it
-                          </a>
-                        )}
-                      </div>
-                    </li>
-                  )
-                })}
+                {setupTools.map((t) => (
+                  <ToolRow
+                    key={t.id}
+                    tool={t}
+                    busy={busy}
+                    refreshing={refreshing}
+                    online={online}
+                    onInstall={() => install(t)}
+                    onRecheck={() => void recheck()}
+                  />
+                ))}
               </ul>
             </SetupSection>
 
             <SetupSection
               n={3}
-              title="Sign in to Microsoft"
-              note="So Fabricator can publish your app where your team can use it"
-              done={auth?.az.signedIn ?? false}
+              title="Sign in to Azure"
+              note="Optional. Lets you share apps, add Fabric data and migrate Power BI reports. You can also sign in later."
+              done={azSignedIn}
               summary={auth?.az.user ?? 'Signed in'}
-              count={auth?.az.signedIn ? '1/1' : '0/1'}
-              open={open.microsoft}
-              onToggle={() => toggle('microsoft')}
+              count={azSignedIn ? '1/1' : 'Optional'}
+              open={open.azure}
+              onToggle={() => toggle('azure')}
             >
               <ul className="setup-rows">
-                <AuthRow
-                  icon={<img className="brand-glyph" src={azureSvg} alt="" />}
-                  title="Azure CLI"
-                  subtitle="Access your Azure resources"
-                  signedIn={auth?.az.signedIn ?? false}
-                  detail={auth?.az.user}
-                  extra={auth?.az.tenant}
-                  error={auth?.az.error}
-                  checking={refreshing}
-                  disabled={busy !== null || refreshing || !azReady}
-                  disabledReason={!azReady
-                    ? azTool?.checkError
-                      ? 'Resolve the Azure CLI check error first'
-                      : 'Install the Azure CLI first'
-                    : undefined}
-                  busy={busy === 'login:az'}
-                  signingOut={busy === 'logout:az'}
-                  onSignIn={() =>
-                    runAction('login:az', 'Sign in to Azure', () => window.api.auth.loginAz())
-                  }
-                  onSignOut={() =>
-                    runAction('logout:az', 'Sign out of Azure', () => window.api.auth.logoutAz())
-                  }
-                />
+                {azTool && !azReady ? (
+                  <ToolRow
+                    tool={azTool}
+                    busy={busy}
+                    refreshing={refreshing}
+                    online={online}
+                    onInstall={() => install(azTool)}
+                    onRecheck={() => void recheck()}
+                  />
+                ) : (
+                  <AuthRow
+                    icon={<img className="brand-glyph" src={azureSvg} alt="" />}
+                    title="Azure CLI"
+                    subtitle="Access your Azure resources"
+                    optional
+                    signedIn={azSignedIn}
+                    detail={auth?.az.user}
+                    extra={auth?.az.tenant}
+                    error={auth?.az.error}
+                    checking={refreshing}
+                    disabled={busy !== null || refreshing || !azReady}
+                    disabledReason={!azReady && doctor ? 'Install the Azure CLI first' : undefined}
+                    busy={busy === 'login:az'}
+                    signingOut={busy === 'logout:az'}
+                    onSignIn={() =>
+                      runAction('login:az', 'Sign in to Azure', () => window.api.auth.loginAz())
+                    }
+                    onSignOut={() =>
+                      runAction('logout:az', 'Sign out of Azure', () => window.api.auth.logoutAz())
+                    }
+                  />
+                )}
               </ul>
             </SetupSection>
           </ol>
@@ -549,7 +514,9 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
                 {needsRelaunch
                   ? 'Restart Fabricator to finish setting up the tools that were just installed.'
                   : allReady
-                    ? 'Your tools are installed and your accounts are connected.'
+                    ? azSignedIn
+                      ? 'Your tools are installed and your accounts are connected.'
+                      : 'Your tools are installed and GitHub Copilot is connected. Sign in to Azure whenever you need it.'
                     : `Finish the ${remaining === 1 ? 'step' : `${remaining} steps`} above to continue.`}
               </p>
             </div>
@@ -607,7 +574,7 @@ export default function SetupScreen({ doctor, auth, refreshing, error, onRefresh
                   ? 'Checking...'
                   : busy?.startsWith('logout:')
                     ? 'Signing out...'
-                    : error || actionError
+                    : blocked
                       ? 'Re-check required'
                       : `${remaining} ${remaining === 1 ? 'step' : 'steps'} left`}
               </span>
@@ -738,9 +705,92 @@ function SetupSection({
   )
 }
 
+/** One tool: what it's for (or what's wrong with it), and how to get it. */
+function ToolRow({
+  tool: t,
+  busy,
+  refreshing,
+  online,
+  onInstall,
+  onRecheck
+}: {
+  tool: ToolStatus
+  /** The running action, if any (`install:<id>` while this tool installs). */
+  busy: string | null
+  refreshing: boolean
+  online: boolean
+  onInstall: () => void
+  onRecheck: () => void
+}): JSX.Element {
+  const logoSrc = TOOL_LOGOS[t.id]
+  const state = t.satisfied ? 'ok' : t.found ? 'warn' : 'bad'
+  const status = toolState(t)
+  return (
+    <li className="setup-row" data-state={state}>
+      <span className="setup-row-ico">
+        {logoSrc ? <img className="brand-glyph" src={logoSrc} alt="" /> : <TerminalIcon />}
+      </span>
+      <div className="setup-row-main">
+        <span className="setup-row-name">{t.name}</span>
+        <span
+          className="setup-row-meta"
+          role={t.checkError ? 'alert' : undefined}
+          title={t.checkError}
+        >
+          {t.checkError ? t.checkError : toolLine(t)}
+        </span>
+      </div>
+      <div className="setup-row-action">
+        {t.satisfied ? (
+          <span className="setup-state is-ok">
+            <span className="setup-state-dot" aria-hidden="true" />
+            {status.word}
+          </span>
+        ) : t.checkError ? (
+          <button
+            className="btn btn--sm"
+            disabled={busy !== null || refreshing}
+            aria-label={`Re-check ${t.name}`}
+            onClick={onRecheck}
+          >
+            <ReloadIcon className={`btn-ico ${refreshing ? 'icon-spin' : ''}`} />
+            Re-check
+          </button>
+        ) : t.autoInstallable ? (
+          <button
+            className="btn btn--sm"
+            disabled={busy !== null || !online}
+            title={!online ? 'Installing needs an internet connection' : undefined}
+            onClick={onInstall}
+          >
+            {busy === `install:${t.id}` ? (
+              t.found ? (
+                'Updating…'
+              ) : (
+                'Installing…'
+              )
+            ) : (
+              <>
+                <DownloadIcon className="btn-ico" />
+                {t.found ? 'Update' : 'Install'}
+              </>
+            )}
+          </button>
+        ) : (
+          <a className="btn btn--sm" href={t.installUrl} target="_blank" rel="noreferrer">
+            Get it
+          </a>
+        )}
+      </div>
+    </li>
+  )
+}
+
 interface AuthRowProps {  icon: JSX.Element
   title: string
   subtitle: string
+  /** An optional account: signing in to it is never the next thing setup needs. */
+  optional?: boolean
   signedIn: boolean
   detail?: string
   extra?: string
@@ -802,7 +852,7 @@ function AuthRow(props: AuthRowProps): JSX.Element {
           </>
         ) : (
           <button
-            className="btn btn--primary btn--sm"
+            className={`btn btn--sm${props.optional ? '' : ' btn--primary'}`}
             disabled={props.disabled}
             onClick={props.onSignIn}
           >

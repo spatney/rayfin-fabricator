@@ -17,7 +17,8 @@
 //! - **search** — description / keywords → model. The Fabric OneLake catalog
 //!   search needs the delegated `Catalog.Read.All` scope, which the Rayfin app
 //!   registration cannot mint silently, so the catalog token comes from the
-//!   **Azure CLI** (`az` — already a required, signed-in Fabricator tool). Each
+//!   **Azure CLI** (`az`, an optional sign-in: without it the result is
+//!   `needs_az`, and the agent asks the user to sign in). Each
 //!   matched report is then resolved to its model with the Power BI token.
 
 use std::path::PathBuf;

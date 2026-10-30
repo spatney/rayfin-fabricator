@@ -10,7 +10,7 @@ const PURPOSE: Record<string, string> = {
   node: 'Runs your app on this computer while you build it',
   npm: 'Fetches the building blocks your app is made from',
   git: 'Keeps a history of your app so you can always go back',
-  az: 'Signs you in to Microsoft so your app can be published',
+  az: 'Lets Fabricator sign you in to Azure',
   gh: 'Lets Fabricator work with your code on GitHub'
 }
 

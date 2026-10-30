@@ -586,7 +586,7 @@ export default function AccountsModal({
           <AccountCard
             icon={<img className="brand-glyph" src={azureSvg} alt="" />}
             title="Azure CLI"
-            purpose="Finds people when you share an app, connects Fabric data, and sets up team workspaces. Shared with your terminal."
+            purpose="Optional. Finds people when you share an app, reads the Power BI reports you migrate, sets up team workspaces, and lets your app read Fabric data while you build it. Shared with your terminal."
             state={azureState}
             action={
               azMissing ? (
@@ -600,7 +600,7 @@ export default function AccountsModal({
                   <AddButton disabled={busy} onClick={() => setAdding({ service: 'az' })} />
                 ) : (
                   <button
-                    className="btn btn--sm btn--primary"
+                    className="btn btn--sm"
                     disabled={busy}
                     aria-label="Sign in to the Azure CLI"
                     onClick={() => setAdding({ service: 'az' })}
