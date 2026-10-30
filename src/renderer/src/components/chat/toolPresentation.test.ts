@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatToolCall } from '@shared/ipc'
-import { describeStep, isHiddenTool, stepLabel, summarizeKinds, toolKind } from './toolPresentation'
+import {
+  describeStep,
+  isHiddenTool,
+  phaseLabel,
+  stepLabel,
+  summarizeKinds,
+  toolKind
+} from './toolPresentation'
 
 const ROOT = 'C:\\Users\\sachi\\RayfinProjects\\df55-app'
 const tool = (name: string, title: string, extra: Partial<ChatToolCall> = {}): ChatToolCall => ({
@@ -38,6 +45,8 @@ describe('toolKind', () => {
       fabricator_navigate: 'navigate',
       fabricator_deploy_and_wait: 'deploy',
       fabricator_console: 'console',
+      fabricator_local_status: 'local-status',
+      fabricator_local_call: 'local-call',
       mystery_tool: 'other'
     }
     for (const [name, kind] of Object.entries(cases))
@@ -114,7 +123,7 @@ describe('describeStep', () => {
       stepLabel(
         describeStep(tool('fabricator_deploy_and_wait', 'fabricator_deploy_and_wait'), ROOT)
       )
-    ).toBe('Deployed the app')
+    ).toBe('Published the app')
     expect(stepLabel(describeStep(tool('mystery_tool', 'mystery_tool'), ROOT))).toBe(
       'Used mystery tool'
     )
@@ -123,6 +132,38 @@ describe('describeStep', () => {
         describeStep(tool('write_powershell', 'write_powershell', { state: 'running' }), ROOT)
       )
     ).toBe('Sending input to a command')
+  })
+
+  it('describes the local backend tools in plain words', () => {
+    expect(
+      stepLabel(describeStep(tool('fabricator_local_status', 'fabricator_local_status'), ROOT))
+    ).toBe('Checked the local backend')
+    expect(
+      stepLabel(
+        describeStep(
+          tool('fabricator_local_status', 'fabricator_local_status', { state: 'running' }),
+          ROOT
+        )
+      )
+    ).toBe('Checking the local backend')
+    expect(
+      stepLabel(describeStep(tool('fabricator_local_call', 'the getBacklog function as you'), ROOT))
+    ).toBe('Called the getBacklog function as you')
+    expect(
+      stepLabel(
+        describeStep(
+          tool('fabricator_local_call', 'the app’s data API while signed out', {
+            state: 'running'
+          }),
+          ROOT
+        )
+      )
+    ).toBe('Calling the app’s data API while signed out')
+    expect(
+      stepLabel(describeStep(tool('fabricator_local_call', 'fabricator_local_call'), ROOT))
+    ).toBe('Called the app')
+    expect(phaseLabel('fabricator_local_status')).toBe('Checking the local backend')
+    expect(phaseLabel('fabricator_local_call')).toBe('Calling the app')
   })
 
   it('reports step durations from renderer timestamps', () => {

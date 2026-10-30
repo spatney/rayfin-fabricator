@@ -35,6 +35,7 @@ use regex::Regex;
 use tauri::AppHandle;
 use tokio::sync::{Mutex, OnceCell};
 
+use crate::services::agent_skills::{self, Guidance};
 use crate::services::emit::emit_chat_event;
 use crate::services::exec;
 use crate::state::PlanGate;
@@ -63,6 +64,9 @@ struct Entry {
   /// Revision of the provider registry (Your own API keys) the session was
   /// opened with; a different one (a key replaced, a model added) reopens it.
   registry_rev: Option<String>,
+  /// The guidance the session was opened with; a different one (the app's
+  /// backend moved between this computer and Fabric) reopens it.
+  guidance: Option<Guidance>,
 }
 
 /// Context window tiers (SDK `ContextTier`).
@@ -347,10 +351,12 @@ pub struct SessionOptions {
   pub user_input: Option<Arc<dyn UserInputHandler>>,
   /// Client-defined tools (Fabricator's in-process `fabricator_*` capabilities).
   pub tools: Vec<Tool>,
-  /// Register the product-scoped skill/instruction directories (materialized
-  /// under app-data, never in the repo) so Fabricator's build guidance only ever
-  /// appears in Fabricator-driven Build chat sessions.
-  pub guidance: bool,
+  /// Fabricator's build guidance for the session, as the set that fits the app
+  /// (see `agent_skills::guidance_for`): the product-scoped skill and
+  /// instruction directories, materialized under app-data and never in the
+  /// repo, so it only ever appears in Fabricator-driven Build chat sessions.
+  /// `None` for every other session.
+  pub guidance: Option<Guidance>,
   /// Answers tool permission requests; `None` approves everything.
   pub permission: Option<Arc<dyn PermissionHandler>>,
   /// Built-in tools the agent must not use.
@@ -385,11 +391,11 @@ async fn open_session(
       .with_client_name(CLIENT_NAME)
       .with_working_directory(cwd_pb.clone())
       .with_permission_handler(handler.clone());
-    if opts.guidance {
+    if let Some(guidance) = opts.guidance {
       cfg = cfg
         .with_enable_skills(true)
-        .with_skill_directories([crate::services::agent_skills::skills_dir()])
-        .with_instruction_directories([crate::services::agent_skills::instructions_dir()]);
+        .with_skill_directories([agent_skills::skills_dir(guidance)])
+        .with_instruction_directories([agent_skills::instructions_dir(guidance)]);
     }
     if !opts.tools.is_empty() {
       cfg = cfg.with_tools(opts.tools.clone());
@@ -435,11 +441,11 @@ async fn open_session(
     .with_client_name(CLIENT_NAME)
     .with_working_directory(cwd_pb)
     .with_permission_handler(handler);
-  if opts.guidance {
+  if let Some(guidance) = opts.guidance {
     cfg = cfg
       .with_enable_skills(true)
-      .with_skill_directories([crate::services::agent_skills::skills_dir()])
-      .with_instruction_directories([crate::services::agent_skills::instructions_dir()]);
+      .with_skill_directories([agent_skills::skills_dir(guidance)])
+      .with_instruction_directories([agent_skills::instructions_dir(guidance)]);
   }
   if !opts.tools.is_empty() {
     cfg = cfg.with_tools(opts.tools.clone());
@@ -850,9 +856,10 @@ impl CopilotManager {
 
   /// Get the persistent, cached session for a project turn, creating or
   /// resuming it as needed and reconciling the current model choice. `byok` is
-  /// the registry of providers on the user's own keys; a cached session opened
-  /// with a different one is reopened, since the runtime only takes the
-  /// registry when a session is created or resumed.
+  /// the registry of providers on the user's own keys, and `guidance` the set
+  /// of Fabricator's guidance that fits the app; a cached session opened with a
+  /// different one of either is reopened, since the runtime only takes them
+  /// (with `tools`) when a session is created or resumed.
   #[allow(clippy::too_many_arguments)]
   pub async fn turn_session(
     &self,
@@ -863,6 +870,7 @@ impl CopilotManager {
     exit_plan: Option<Arc<dyn ExitPlanModeHandler>>,
     user_input: Option<Arc<dyn UserInputHandler>>,
     tools: Vec<Tool>,
+    guidance: Option<Guidance>,
     byok: Option<crate::services::byok::registry::ByokRegistry>,
   ) -> Result<TurnSession, String> {
     let key = project_id.to_string();
@@ -878,7 +886,12 @@ impl CopilotManager {
       Reopen,
     }
     let action = match engine.sessions.get(&key) {
-      Some(e) if e.cwd == cwd && e.session.id().as_str() == session_id && e.registry_rev == registry_rev => {
+      Some(e)
+        if e.cwd == cwd
+          && e.session.id().as_str() == session_id
+          && e.registry_rev == registry_rev
+          && e.guidance == guidance =>
+      {
         match session_sync(&e.choice, &choice) {
           // The choice changed — apply it on the live session. `set_model`
           // switches back to the "auto" router too, so returning to Auto takes
@@ -914,7 +927,7 @@ impl CopilotManager {
     let opts = SessionOptions {
       exit_plan,
       user_input,
-      guidance: !tools.is_empty(),
+      guidance,
       tools,
       // Team projects may not deploy, push or merge from chat (see team::guard).
       permission: crate::services::team::guard::chat_policy(project_id),
@@ -941,6 +954,7 @@ impl CopilotManager {
         cwd: cwd.to_string(),
         choice,
         registry_rev,
+        guidance,
       },
     );
     Ok(opened)
@@ -1306,7 +1320,7 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
     });
     manager.reload_auth().await;
     let engine = manager.engine.lock().await;
@@ -1347,7 +1361,7 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
     });
     assert!(manager.list_models().await.is_err());
     let engine = manager.engine.lock().await;
@@ -1374,7 +1388,7 @@ mod tests {
     ).await.unwrap());
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
     });
     manager.invalidate_transport("project", &stale).await;
     assert!(manager.engine.lock().await.client.is_some());
@@ -1414,10 +1428,10 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
     });
     let opened = manager.turn_session(
-      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None,
+      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None, None,
     ).await.unwrap();
     assert_eq!(opened.session.id().as_str(), "new-session");
     assert!(!opened.recreated);
@@ -1445,7 +1459,7 @@ mod tests {
     let choice = ModelChoice::of(m("anthropic/claude-opus-5-5"), None);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: choice.clone(),
-      registry_rev: Some("before-the-new-key".into()),
+      registry_rev: Some("before-the-new-key".into()), guidance: None,
     });
     let mut settings = crate::types::ByokSettings::default();
     settings.providers.insert("anthropic".into(), crate::types::ByokProviderSettings {
@@ -1459,7 +1473,7 @@ mod tests {
     let keys = HashMap::from([("anthropic".to_string(), "sk-ant-test".to_string())]);
     let registry = crate::services::byok::registry::build(&settings, &keys);
     manager.turn_session(
-      "project", ".", "thread", choice, None, None, Vec::new(), Some(registry.clone()),
+      "project", ".", "thread", choice, None, None, Vec::new(), None, Some(registry.clone()),
     ).await.unwrap();
     let requests = server.await.unwrap();
     let resume = &requests[3]["params"];
@@ -1470,6 +1484,39 @@ mod tests {
     assert!(switch.contains_key("reasoningEffort") && switch["reasoningEffort"].is_null());
     assert!(!switch.contains_key("autoTier") && !switch.contains_key("contextTier"));
     assert_eq!(manager.engine.lock().await.sessions["project"].registry_rev, Some(registry.revision));
+    client.force_stop();
+  }
+
+  /// The guidance follows where the app's backend runs (see
+  /// `agent_skills::guidance_for`). When that changes, the cached session is
+  /// resumed again with the other set's skills and instructions.
+  #[tokio::test]
+  async fn a_changed_guidance_reopens_the_session_with_its_directories() {
+    let (client, server) = fake_client(vec![
+      ("session.create", json!({ "result": { "sessionId": "thread" } })),
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": true } })),
+      ("session.detach", json!({ "result": {} })),
+      ("session.resume", json!({ "result": { "sessionId": "thread" } })),
+      ("session.skills.reload", json!({ "result": {} })),
+      ("session.model.switchTo", json!({ "result": {} })),
+    ]);
+    let cached = client.create_session(SessionConfig::default().with_session_id(SessionId::new("thread"))).await.unwrap();
+    let manager = manager_with(client.clone());
+    manager.engine.lock().await.sessions.insert("project".into(), Entry {
+      session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
+      guidance: Some(Guidance::Local),
+    });
+    manager.turn_session(
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::FabricBacked), None,
+    ).await.unwrap();
+    let requests = server.await.unwrap();
+    let resume = &requests[3]["params"];
+    let dirs = |key: &str| -> Vec<PathBuf> {
+      resume[key].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(PathBuf::from)).collect()).unwrap_or_default()
+    };
+    assert_eq!(dirs("instructionDirectories"), [agent_skills::instructions_dir(Guidance::FabricBacked)], "{resume}");
+    assert_eq!(dirs("skillDirectories"), [agent_skills::skills_dir(Guidance::FabricBacked)], "{resume}");
+    assert_eq!(manager.engine.lock().await.sessions["project"].guidance, Some(Guidance::FabricBacked));
     client.force_stop();
   }
 
@@ -1584,7 +1631,7 @@ mod tests {
     ]);
     let manager = manager_with(client);
     let result = manager.turn_session(
-      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None,
+      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None, None,
     ).await;
     assert!(result.err().unwrap().contains("Sign in to Copilot"));
     assert!(manager.engine.lock().await.sessions.is_empty());
