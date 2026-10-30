@@ -7,9 +7,9 @@ Use this page for the first-run setup screen and account problems. Fabricator ve
 
 ## A tool shows as missing or failed
 
-In setup, a tool row such as **Node.js**, **npm**, **Git**, **GitHub CLI (gh)** or **Local backend**, or **Azure CLI** under **Sign in to Azure**, shows **Install**, **Update**, **Get it** or **Re-check** instead of **Ready**. A failed version check can say a tool "was found, but its version check failed".
+In setup, a tool row such as **Node.js**, **npm**, **Git** or **GitHub CLI (gh)**, **Azure CLI** under **Sign in to Azure**, or, with the **Local development** experiment on, **Local backend**, shows **Install**, **Update**, **Get it** or **Re-check** instead of **Ready**. A failed version check can say a tool "was found, but its version check failed".
 
-Fabricator needs Node.js 22.12 or newer, npm, and Git. The Azure CLI and **GitHub CLI (gh)** are optional. **GitHub CLI (gh)** is repository tooling, separate from the bundled GitHub Copilot engine, so installing Copilot with pnpm does not satisfy the **GitHub CLI (gh)** check. **Local backend** comes with Fabricator: setup only checks that it runs.
+Fabricator needs Node.js 22.12 or newer, npm, and Git. The Azure CLI and **GitHub CLI (gh)** are optional. **GitHub CLI (gh)** is repository tooling, separate from the bundled GitHub Copilot engine, so installing Copilot with pnpm does not satisfy the **GitHub CLI (gh)** check. **Local backend** comes with Fabricator. Setup lists it only while the **Local development** experiment is on, and only checks that it runs.
 
 A row that says, for example, "Version 20.10.0 — Fabricator needs 22.12 or newer" found an older version than Fabricator supports. On macOS, when an older Node.js comes first on your PATH, such as the default version of a version manager like nvm, Fabricator uses a newer Node.js it finds further along your PATH, such as one installed by Homebrew. The **Node.js** row then shows that newer version.
 
@@ -18,7 +18,7 @@ A row that says, for example, "Version 20.10.0 — Fabricator needs 22.12 or new
 3. If a tool was installed outside Fabricator, restart Fabricator and select **Re-check**.
 4. On Windows, use **Re-check** before installing a second copy. Fabricator refreshes PATH from the saved user and machine PATH and common Scoop, pnpm, and Azure CLI locations.
 5. If a found tool's version check fails, open a terminal and run the command shown in the setup row, such as `az version`, to repair that existing installation.
-6. If the **Local backend** row says Windows blocked it, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local). If it says the local backend is missing or too old, reinstall Fabricator from [the latest release](https://github.com/spatney/rayfin-fabricator/releases/latest).
+6. If the **Local backend** row says Windows blocked it, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local). If it says the local backend is missing or too old, reinstall Fabricator from [the latest release](https://github.com/spatney/rayfin-fabricator/releases/latest). The row doesn't stop you entering Fabricator, but your apps can't run on this computer until it's fixed. Meanwhile, you can turn off **Local development** in **Settings → Experiments** and build your apps against their published copies.
 7. Do not install a global Rayfin CLI just to satisfy setup. Fabric sign-in and publishing use the Rayfin CLI pinned by each project.
 
 If a required tool still cannot be verified, [Report a problem](/docs/troubleshooting/report-a-problem) and include the setup row text.
@@ -88,7 +88,7 @@ If Azure still reports the wrong account, [Report a problem](/docs/troubleshooti
 
 ## Fabric sign-in doesn't complete
 
-You select **Sign in to Fabric**, **Refresh Fabric authentication**, or a publish triggers sign-in, but no browser appears, the button returns to normal, or workspace listing does not continue. You may see a Rayfin CLI line such as "❌ Login failed: OS keychain is not available and plaintext token storage is not enabled."
+You select **Sign in to Fabric**, **Refresh Fabric authentication**, or a publish triggers sign-in, but no browser appears, the button returns to normal, or workspace listing does not continue. In a new project's **Publish your app** step, the workspace list keeps saying "Sign in to Microsoft Fabric to list your workspaces." You may see a Rayfin CLI line such as "❌ Login failed: OS keychain is not available and plaintext token storage is not enabled."
 
 Fabricator runs the project's Rayfin CLI with `rayfin login --select` outside the project folder, then verifies the credential against Fabric. Running outside the project means a setting your app's `rayfin.yml` can't resolve doesn't stop you signing in. On locked-down machines the OS keychain can block token storage; current Fabricator versions allow Rayfin's plaintext fallback so sign-in can finish. On macOS, some passwordless SSO flows can still be limited by the embedded browser and system account setup.
 

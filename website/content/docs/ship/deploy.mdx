@@ -1,61 +1,70 @@
 ---
-title: "Deploy to Microsoft Fabric"
-description: "Deploy your app to a Fabric workspace with one click, understand automatic redeploys after chat turns, and manage deployments across workspaces."
+title: "Publish to Microsoft Fabric"
+description: "Publish your app to a Fabric workspace, choose whether chat turns publish it automatically, and manage the workspaces it's published to."
 ---
 
-Deploying publishes the app in your current project to Microsoft Fabric. Fabricator runs the project's own `rayfin up`, records the deployment that Rayfin creates, and then loads the app in the preview.
+Publishing puts the app in your current project into a Fabric workspace, where the people you share it with can use it. Fabricator runs the project's own `rayfin up`, records the published app that Rayfin creates, and shows it in the preview. Earlier versions of Fabricator called this deploying.
 
-Rayfin apps deploy as Fabric apps in a Fabric workspace. For Rayfin's platform details, see [Deploy Fabric apps](https://rayfin.ai/docs/deploy/fabric-apps). Deployment uses your Fabric capacity; see [Rayfin pricing and capacity notes](https://rayfin.ai/docs/deploy/pricing).
+Rayfin apps are published as Fabric apps in a Fabric workspace. For Rayfin's platform details, see [Deploy Fabric apps](https://rayfin.ai/docs/deploy/fabric-apps). Publishing uses your Fabric capacity; see [Rayfin pricing and capacity notes](https://rayfin.ai/docs/deploy/pricing).
 
-![The deployment panel for the Development deployment: deployed 2 hours ago, with a green dot for live, its app address, its workspace with region and capacity, the Fabric account that deploys, Deploy after each chat turn turned on, and New deployment.](/screenshots/deployments.webp)
+How publishing fits in depends on the **Local development** experiment:
+
+- **Off**, the default: you develop each app against its published copy. A new app is published before you chat about it, and Fabricator publishes your changes after each chat turn.
+- **On**: your app runs on this computer, and you publish it when you choose. See [Develop on this computer](/docs/build/local-development).
+
+![The Published apps panel for the Development published app: published 2 hours ago, with a green dot for live, its app address, its workspace with region and capacity, the Fabric account that publishes, Publish after each chat turn turned on, and Publish to another workspace.](/screenshots/deployments.webp)
 
 ## Sign in to Fabric
 
-Fabricator uses the Rayfin CLI credentials for Fabric deployment. You can sign in from the account control in the top-right app bar:
+Fabricator publishes with the Rayfin CLI's Fabric sign-in. You can sign in from the account control in the top-right app bar:
 
 1. Select **Sign in to Fabric**.
 2. Finish the browser sign-in that Rayfin opens.
-3. Return to Fabricator and deploy again if needed.
+3. Return to Fabricator and publish again if needed.
 
-The deployments picker also prompts you when Fabricator needs Fabric credentials to list workspaces. If credentials expire, it may show "Sign in to Microsoft Fabric to list your workspaces."
+The workspace picker also prompts you when Fabricator needs Fabric credentials to list workspaces. If credentials expire, it may show "Sign in to Microsoft Fabric to list your workspaces."
 
-You can stay signed in to more than one Fabric account, for example one per organization, and choose which one deploys. The deployment panel names the account that deploys under **Account**, such as "alice@contoso.com · Contoso". Select **Change** to switch accounts. See [Manage your accounts](/docs/start/accounts).
+You can stay signed in to more than one Fabric account, for example one per organization, and choose which one publishes. The **Published apps** panel names the account that publishes under **Account**, such as "alice@contoso.com · Contoso". Select **Change** to switch accounts. See [Manage your accounts](/docs/start/accounts).
 
-## Deploy for the first time
+## Publish for the first time
 
-New projects ask for their first deployment right after you name them. In **Deploy your app**, pick a workspace and choose **Deploy app**; see [Build your first app](/docs/start/first-app#create-the-first-deployment). Chat stays locked until the app has its first Fabric deployment.
+With Local development off, new projects ask to be published right after you name them. In **Publish your app**, pick a workspace and select **Publish app**. Chat stays locked until the app is published. See [Build your first app](/docs/start/first-app#publish-your-app).
 
-![The Deploy your app step of a new project, with a deployment name, a list of Fabric workspaces with their region and capacity, and the Deploy app button.](/screenshots/first-deploy.webp)
+![The Publish your app step of a new project, with Development as the name, a list of Fabric workspaces with their region and capacity, the Publish app button, and Continue without publishing.](/screenshots/first-deploy.webp)
 
-If you chose **Continue without deploying →**, or opened a project that has never been deployed, deploy it from the app bar:
+**Continue without publishing →** skips the step: "You can publish any time, but chat stays locked until your app is published." To come back to it, select **Publish now** in the chat.
+
+With Local development on, a new app has no publish step: it runs on this computer from the start. A project you opened from a folder or cloned has none either. Publish these from the app bar:
 
 1. Open the project.
-2. In the app bar, select **Deploy**.
-3. In **New deployment**, enter a friendly **Name** if you want one, such as `Production`.
-4. Under **Deploy to workspace**, choose a Fabric workspace.
-5. Select **Create & deploy**.
+2. In the app bar, select **Publish**.
+3. In **Publish to a Fabric workspace**, enter a **Name** if you want one, such as `Production`.
+4. Under **Publish to workspace**, choose a Fabric workspace.
+5. Select **Publish**.
+
+Above the form, "Publishes as" names the Fabric account that publishes. Select **Change** to use another.
 
 Eligible workspaces are on a Fabric **F-SKU** capacity, a Power BI Premium **P-SKU** capacity, or a dedicated capacity whose SKU Fabricator cannot see. Workspaces without an eligible capacity are listed under **Not eligible** with the reason. If Fabricator cannot find an eligible workspace, it offers **Start a free trial** and **Buy a capacity** links.
 
-When your apps already use some eligible workspaces, the list starts with up to five of them under **Recent**, the workspace of the app you deployed or opened most recently first. The rest follow under **Other workspaces**.
+When your apps already use some eligible workspaces, the list starts with up to five of them under **Recent**, the workspace of the app you published or opened most recently first. The rest follow under **Other workspaces**.
 
 To create a workspace from Fabricator, select **+ New workspace**, choose an active F-SKU or P-SKU capacity, enter a name, and select **Create workspace**. The new workspace uses the selected capacity's region.
 
 ## Same-name warning
 
-Before a first deploy into a workspace, Fabricator checks whether that workspace already has a Rayfin app with the same item name from `rayfin/rayfin.yml`.
+Before a first publish into a workspace, Fabricator checks whether that workspace already has a Rayfin app with the same item name from `rayfin/rayfin.yml`.
 
-If it finds one, you see a warning that deploying there would replace that app. Choose another workspace, or select **Replace it anyway** to confirm.
+If it finds one, you see a warning that publishing there would replace that app, for example "Operations already has an app named “Contoso Expenses”. Publishing here would replace it, so pick another workspace." Choose another workspace, or select **Replace it anyway** to confirm.
 
-## What happens during deploy
+## What happens while your app publishes
 
-The first time an app deploys, the preview shows the deploy screen. Ray talks you through it, and below him a list shows the steps the deploy has been through, the one in progress, and the steps still to come.
+When the preview has no app to show yet, such as during an app's first publish with Local development off, it shows the publish screen. Ray talks you through it, and below him a list shows the steps publishing has been through, the one in progress, and the steps still to come.
 
-When the app is already deployed, it stays in the preview while the deploy runs, so you can keep looking at it. A strip above the preview shows the deployment it's going to, the step in progress, a progress bar and how long the deploy has taken. Select **Watch** to follow the deploy on the deploy screen, and **Back to your app** to return. Select **Logs** to see the deploy's output. **Design** and the **Fabric** view wait until the deploy ends. When the new version is live, the preview reloads.
+Otherwise, the app stays in the preview while it publishes, so you can keep looking at it: your published app, or with Local development on, your app on this computer. A strip above the preview shows where it's publishing to, such as "Publishing to Production", the step in progress, a progress bar and how long it has taken. Select **Watch** to follow it on the publish screen, and **Back to your app** to return. Select **Logs** to see the publish log. When the published app is in the preview, **Design** and the **Fabric** view wait until publishing ends, and the preview reloads when the new version is live.
 
-The deployment control in the app bar shows the deploy's progress too, so you can follow it from the Code, Blueprint and Advisor tabs.
+The publish control in the app bar shows the progress too, so you can follow it from the Code, Blueprint and Advisor tabs.
 
-With Rayfin CLI 1.35 or newer, the steps come from the CLI's own progress reports, and the step in progress shows the CLI's words for what it's doing. A typical deploy goes through:
+With Rayfin CLI 1.35 or newer, the steps come from the CLI's own progress reports, and the step in progress shows the CLI's words for what it's doing. A typical publish goes through:
 
 1. **Connecting to Fabric**
 2. **Finding your workspace**
@@ -65,90 +74,96 @@ With Rayfin CLI 1.35 or newer, the steps come from the CLI's own progress report
 6. **Building and uploading your app**
 7. **Going live**
 
-Some deploys have other steps, such as **Installing packages** when the project's packages are missing, **Getting Fabric capacity ready**, **Setting up file storage**, **Connecting your data sources** or **Deploying your functions**. If the CLI reports a step Fabricator doesn't know, the list shows it in the CLI's own words.
+Some publishes have other steps, such as **Installing packages** when the project's packages are missing, **Getting Fabric capacity ready**, **Setting up file storage**, **Connecting your data sources** or **Publishing your functions**. If the CLI reports a step Fabricator doesn't know, the list shows it in the CLI's own words.
 
-Projects on Rayfin CLI 1.34 or older show **Connecting to Fabric**, **Preparing deployment**, **Building your app**, **Packaging assets**, **Uploading to Fabric** and **Going live** instead. To get the detailed steps, update the project's Rayfin. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
+Projects on Rayfin CLI 1.34 or older show **Connecting to Fabric**, **Preparing to publish**, **Building your app**, **Packaging assets**, **Uploading to Fabric** and **Going live** instead. To get the detailed steps, update the project's Rayfin. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
 
-If Fabric asks you to sign in again, the deploy waits for you to finish in your browser. If you've [sent Ray away](/docs/start/tour#ray), the Fabricator logo takes his place.
+If Fabric asks you to sign in again, publishing waits for you to finish in your browser. If you've [sent Ray away](/docs/start/tour#ray), the Fabricator logo takes his place.
 
-![The deploy screen: Ray says "Building your app. Fins crossed!" above a list of steps. Five are checked off, Building and uploading your app is in progress with the CLI's words "Deploying static content" under it, and Going live is still to come.](/screenshots/deploy-progress.webp)
+![The publish screen: Ray says "Building your app. Fins crossed!" above Publishing Contoso Expenses and a list of steps. Five are checked off, Building and uploading your app is in progress with the CLI's words "Deploying static content" under it, and Going live is still to come.](/screenshots/deploy-progress.webp)
 
-During the deploy you can select **View logs** in the deploy screen. If the deploy fails, Ray stays above the preview and offers **Find out why**, which opens Help to explain what went wrong, and **View logs** for the deploy's output. See [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
+During publishing you can select **View logs** on the publish screen. If publishing fails, Ray stays above the preview and says "Your app didn’t make it to Fabric. Want me to find out why?" He offers **Find out why**, which opens Help to explain what went wrong, and **View logs** for the publish log. When Fabric wants you to sign in again, he offers **Refresh Fabric authentication** too. See [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
 
-## Redeploy changes
+## Publish changes
 
-After the first successful deployment, the deployment control in the app bar names the deployment, with its state as a dot: green while it's live, red after a deploy that didn't finish. The button beside it says what a deploy would do now:
+After the first publish, the publish control in the app bar names the published app, with its state as a dot: green while it's live, red after a publish that didn't finish. Before that, it says **Not published**. The button beside it says what publishing would do now:
 
 | Button | When it shows |
 | --- | --- |
-| **Redeploy** | Everything is deployed. The button is quiet, and selecting it runs `rayfin up` again for the active deployment. |
-| **Deploy 3 changes** | Files changed since the app was last deployed; the number counts them. When Fabricator can't tell which version is deployed, it says **Deploy changes**. |
-| **Try again** | The last deploy didn't finish, and the deployment control says **Failed**. Open it to see what went wrong, and select **Find out why** to ask Help. |
-| **Deploying…** | A deploy is running, with how far it has got. Select it to see the step in progress. |
+| **Publish** | Before the first publish, the button is highlighted and opens the publish form. Once everything is published, it's quiet, and selecting it runs `rayfin up` again for the active published app. |
+| **Publish 3 changes** | Files changed since the app was last published; the number counts them. When Fabricator can't tell which version is published, it says **Publish changes**. |
+| **Try again** | The last publish didn't finish, and the publish control says **· Failed** after the name. Open it to see what went wrong, and select **Find out why** to ask Help. |
+| **Publishing…** | Publishing is running, with how far it has got, such as **Publishing… 40%**. Select it to see the step in progress. |
 
-While Copilot is working on a turn, the button is turned off: a deploy then would publish a half-finished change. Its tooltip says "Copilot is working on this app. Deploys wait until the turn finishes."
+While Copilot is working on a turn, the button is turned off: publishing then would send a half-finished change. Its tooltip says "Copilot is working on this app. Publishing waits until the turn finishes."
 
-Fabricator also redeploys automatically after a successful Copilot turn when the project has undeployed changes. This includes edits that Copilot already committed to the project's git history. It does not redeploy when:
+## Publish after each chat turn
 
-- the Copilot turn failed or was cancelled,
-- you turned off **Deploy after each chat turn** (see [Deploy manually](/docs/ship/deploy#deploy-manually)),
-- there are no content changes since the last deployed revision,
-- a team workspace pipeline owns the app's deployment,
-- Fabricator cannot check whether changes are undeployed.
+**Publish after each chat turn** decides whether Fabricator publishes your changes when a successful chat turn ends. Until you change it, it's on with Local development off, and off with Local development on. Your choice applies to all your apps, and Fabricator remembers it.
 
-While an automatic redeploy runs, the preview keeps showing what it showed during the turn: the local preview with your changes, when the turn had one. When the deploy ends, the preview shows your deployed app.
+1. In the app bar, select the publish control, which shows the published app's name.
+2. Turn **Publish after each chat turn** on or off.
 
-If change detection fails, Fabricator shows "Could not check for undeployed changes." followed by "Use Redeploy to publish your changes." Use **Redeploy** to publish explicitly.
+When your choice isn't the default, the publish control says so after the name: **· Manual** while it's off with Local development off, for example **Prod · Manual**, and **· Auto** while it's on with Local development on. You can also use [Search](/docs/start/search): **Turn on Publish after each chat turn** or **Turn off Publish after each chat turn**.
 
-When Fabricator switches to another deployment or cannot identify the deployed git baseline, the next successful turn deploys once to establish a new baseline.
+### While it's on
 
-## Deploy manually
+Fabricator publishes after a successful chat turn when the app has changes that aren't published. This includes edits that Copilot already committed to the project's git history. It doesn't publish when:
 
-Fabricator deploys your app after each chat turn. To make several changes in chat before you deploy, turn that off: your changes then stay on this computer until you deploy them. Because the deployed app falls behind your code, the preview shows your app from a local Vite server whenever the app is open, not only while Copilot is working.
+- the chat turn failed or was cancelled,
+- there are no changes since the last published version,
+- a team workspace pipeline publishes the app,
+- with Local development on, the app hasn't been published yet: an app's first publish is yours to start,
+- Fabricator can't check for changes. It says "Could not check for changes to publish. Select Publish to publish your changes." Select **Publish** to publish them yourself.
 
-1. In the app bar, select the deployment control, which shows the deployment's name.
-2. Turn off **Deploy after each chat turn**. The deployment control now says **Manual** after the deployment's name, for example **Prod · Manual**.
-3. Keep chatting. The preview shows your app running on this computer, at a `localhost` address. Changes show there as Copilot makes them, and the button in the app bar counts them, for example **Deploy 3 changes**.
-4. When you're ready, select that button. Your local app stays in the preview while the deploy runs.
+With Local development off, a turn also publishes an app that has never been published, such as a project you opened from a folder. The preview then asks you to **Choose where to publish**: select **Publish** in the app bar to name the published app and pick its workspace. See [The preview says Choose where to publish](/docs/troubleshooting/deploy#the-preview-says-choose-where-to-publish).
 
-To deploy after each turn again, turn **Deploy after each chat turn** back on. Your choice applies to all your apps, and Fabricator remembers it.
+While an after-turn publish runs, the preview keeps showing what it showed during the turn. With Local development off, that's the local preview with your changes, when the turn had one, and once publishing ends, the preview shows your published app. With Local development on, your app on this computer stays in the preview.
 
-While **Deploy after each chat turn** is off:
+When Fabricator switches to another published app or can't tell which version is published, the next successful turn publishes once to set a new baseline.
 
-- The local preview uses your deployed app's backend. Frontend changes show as Copilot makes them, but changes to data, permissions or functions work only after you deploy them. Fabricator asks Copilot to tell you when a change needs a deploy.
+### While it's off
+
+Your changes stay on this computer until you publish them. The button in the app bar counts them, for example **Publish 3 changes**: select it when you're ready. Your app stays in the preview while it publishes.
+
+With Local development on, that's the only difference: your app on this computer shows your changes either way.
+
+With Local development off, the published app falls behind your code, so the preview shows your app from a local Vite server whenever the app is open, at a `localhost` address, not only while Copilot is working:
+
+- The local preview uses your published app's backend. Frontend changes show as Copilot makes them, but changes to data, permissions or functions work only after you publish them. Fabricator asks Copilot to tell you when a change needs a publish.
 - When a turn that changed your app ends, the preview reloads once, so it shows the finished app from a fresh start, not only the live updates made while Copilot worked. A turn that changed nothing, such as a question, leaves the page as it is.
-- **Design** works on the local preview between turns, so you can queue visual changes and send them to Copilot without deploying first. It turns off when a turn starts, because Copilot's changes show in the preview as it makes them. The **Fabric** view works on the deployed app, so it's unavailable.
-- The local preview stops when you switch to another app or close Fabricator, and the app you open next gets its own. If you switch your app to another deployment, its local preview starts again with that deployment's settings.
-- If the project has no local Vite installation, there's no local preview. The preview keeps showing the deployed app, without your latest changes, until you deploy them.
+- **Design** works on the local preview between turns, so you can queue visual changes and send them to Copilot without publishing first. It turns off when a turn starts, because Copilot's changes show in the preview as it makes them. The **Fabric** view works on the published app, so it's unavailable.
+- The local preview stops when you switch to another app or close Fabricator, and the app you open next gets its own. If you switch your app to another published app, its local preview starts again with that one's settings.
+- If the project has no local Vite installation, there's no local preview. The preview keeps showing the published app, without your latest changes, until you publish them.
 - Team apps aren't affected. They still save to GitHub after each turn, and the team pipeline deploys your preview.
 
-Turning **Deploy after each chat turn** back on closes the local preview and doesn't deploy anything. Your changes are still on this computer: the next successful chat turn deploys them, or you can deploy them from the app bar.
+Turning **Publish after each chat turn** back on closes the local preview and doesn't publish anything. Your changes are still on this computer: the next successful chat turn publishes them, or you can publish them from the app bar.
 
-## Work with multiple deployments
+## Work with more than one published app
 
-In the app bar, select the deployment control, which shows the deployment's name, to open its panel. The panel opens straight away and doesn't sign you in to Fabric. It shows:
+In the app bar, select the publish control, which shows the published app's name, to open the **Published apps** panel. It opens straight away and doesn't sign you in to Fabric. It shows:
 
-- the deployment's name and state, as a dot and words, for example "Deployed 2 h ago". Select the pencil, **Rename this deployment**, to rename it.
-- what's waiting to deploy, with **See what changed**, which opens **History** in the Code tab,
+- the published app's name and state, as a dot and words, for example "Published 2 h ago". Select the pencil, **Rename this published app**, to rename it.
+- what's waiting to publish, with **See what changed**, which opens **History** in the Code tab,
 - **App**, the app's address. Select **Copy link** to copy it, or **Open in your browser**.
 - **Workspace**, the Fabric workspace, with its region and capacity. Select **Open the workspace in Fabric** to open it in the Fabric portal. The region and capacity show once you're signed in to Fabric.
-- **Account**, the Fabric account that deploys. Select **Change** to use another, or **Sign in** when you're signed out.
-- **Other deployments**, the project's other recorded deployments. Select **Switch** on one to make it the active deployment: the preview shows it, and deploys go to it. Point at a deployment to rename it.
-- **Deploy after each chat turn**, on to start with. Turn it off to keep chat changes on this computer until you deploy them. See [Deploy manually](/docs/ship/deploy#deploy-manually).
-- **New deployment…**, to deploy the same project to another workspace.
+- **Account**, the Fabric account that publishes. Select **Change** to use another, or **Sign in** when you're signed out.
+- **Other published apps**, the project's other published apps. Select **Switch** on one to make it the active published app: the preview shows it, and publishing goes to it. Point at one to rename it.
+- **Publish after each chat turn**. See [Publish after each chat turn](/docs/ship/deploy#publish-after-each-chat-turn).
+- **Publish to another workspace…**, to publish the same project to another workspace.
 
-**Share** is next to the deployment control once the app has a deployment. See [Share your app](/docs/ship/share).
+**Share** is next to the publish control once the app is published. See [Share your app](/docs/ship/share).
 
-Switching uses Rayfin's recorded deployments for the project. Each deployment points to a Fabric workspace.
+Switching uses Rayfin's recorded deployments for the project. Each published app is in its own Fabric workspace.
 
-Fabricator does not show a per-deployment delete action in this panel.
+Fabricator doesn't delete published apps from this panel.
 
 ## Refresh Fabric authentication
 
-If deployment repeatedly fails even though you recently signed in, use **Refresh Fabric authentication** from the account menu. When a deploy fails because Fabric wants you to sign in again, the notice above the preview offers it too. Fabricator runs the selected project's `rayfin logout`, then `rayfin login`, verifies the new Fabric credential, and does not redeploy automatically. After it succeeds, deploy again from the app bar.
+If publishing repeatedly fails even though you recently signed in, use **Refresh Fabric authentication** from the account menu. When publishing fails because Fabric wants you to sign in again, the notice above the preview offers it too. Fabricator runs the selected project's `rayfin logout`, then `rayfin login`, verifies the new Fabric credential, and doesn't publish your app again by itself. After it succeeds, publish again from the app bar.
 
-See [setup and sign-in troubleshooting](/docs/troubleshooting/setup-and-sign-in) and [deploy troubleshooting](/docs/troubleshooting/deploy) for recovery steps.
+See [setup and sign-in troubleshooting](/docs/troubleshooting/setup-and-sign-in) and [publishing troubleshooting](/docs/troubleshooting/deploy) for recovery steps.
 
 ## Redirect URIs for live preview
 
-When a chat turn starts, Fabricator may run the project's local Vite preview on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next normal deploy publishes the app code.
+A local preview of a published app runs against the published backend: with Local development off, for team apps, and for a published app this computer can't run. Fabricator runs the project's own Vite dev server on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next publish includes the app code. See [When every preview port is busy](/docs/build/preview#when-every-preview-port-is-busy).

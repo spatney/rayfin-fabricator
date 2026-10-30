@@ -88,8 +88,14 @@ Fabricator switches back to **Build** and places the context in the composer so 
 
 1. Select an older timeline entry.
 2. Select **Restore this version**.
-3. Confirm **Restore & redeploy**.
+3. Confirm **Restore**. For a published app with the **Local development** experiment off, the button says **Restore & publish**.
 
-Fabricator saves your current work first if there are uncommitted changes, restores the project to the selected snapshot, records the restore as a new git commit, and then redeploys so the live app matches.
+Fabricator saves your current work first if there are uncommitted changes, restores the project to the selected snapshot, and records the restore as a new git commit. What happens next depends on the app:
+
+- A team app's restore is saved, and the team pipeline updates your preview.
+- A published app with Local development off is published again, so your published app matches. That's **Restore & publish**.
+- Any other app's restore stays on this computer. For a published app, the dialog says "Your published app doesn’t change until you publish." With Local development on, your app on this computer shows the restored version.
 
 Your current version stays in the timeline, so you can restore it again later. For team apps, restore is scoped to that app's folder; other apps and shared files in the team workspace repository are not restored.
+
+When your published app is on an earlier version than your code, History says "Your published app doesn’t match your current code." Select **Publish current version** to go back to **Build** and publish it.

@@ -43,11 +43,24 @@ Quick checks run automatically when the project changes. They do not use Copilot
 
 Use the refresh icon in the Advisor bar to re-run quick checks.
 
+## Checks for apps that run on this computer
+
+With the **Local development** experiment on, Fabricator runs your app on this computer, and some quick checks are about what works there but not when published, or the other way round:
+
+| Check | What it finds |
+| --- | --- |
+| **Local backend folder isn't git-ignored** | Git could commit the project's `.rayfin-local` folder, where the local backend keeps the app's local database, its signing keys and the local values of your secrets. It checks any project that has the folder. |
+| **Connector runs only on Fabric** | A connector of a type that doesn't run on this computer, such as a KQL database (Kusto) connector. Until the app is published, its calls fail in the preview. |
+| **Rayfin packages aren't pinned to a release Fabricator runs locally** | A `@microsoft/rayfin-*` package outside the line of releases Fabricator runs, such as 1.36.x, or declared with a range that lets the next install leave it. |
+| **Anonymous data access may block publishing** | Entities that grant the `anonymous` role. Publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps, even though they work in the local preview. This check runs with Local development off too. |
+
+With Local development on, **Rayfin CLI is out of date** and **Rayfin SDK is out of date** count only the releases Fabricator runs on this computer. See [Develop on this computer](/docs/build/local-development).
+
 ## Run a deep review
 
 Select **Run deep review** to have Copilot review the app against rules that need judgment. If a review already exists, the button becomes **Re-run deep review**.
 
-Deep reviews use Copilot requests. They run in a separate read-only session: Copilot can read the project and fetch rayfin.ai documentation, but Fabricator denies file edits, shell commands, deployment commands, non-read-only tools, and `.env` file reads.
+Deep reviews use Copilot requests. They run in a separate read-only session: Copilot can read the project and fetch rayfin.ai documentation, but Fabricator denies file edits, shell commands (so it can't publish), tools that aren't read-only, and reading `.env` files or the app's `.rayfin-local` folder.
 
 To choose the model for deep reviews, explanations and **Verify**, open the model pill in the Advisor bar. It works like the [chat's model picker](/docs/build/chat#choose-a-model-and-reasoning-effort), and Fabricator remembers your choice on this computer. You can also choose a model on [your own API key](/docs/build/your-own-api-keys).
 
@@ -80,7 +93,7 @@ Select **Fix with Copilot** on one finding, or use a summary action such as **Fi
 
 These actions also apply to note-level findings under **Suggestions**. Suggestions do not lower your health score.
 
-Copilot receives the issue, location, suggested fix, relevant code excerpt, and Rayfin guidance links. It is instructed not to run `rayfin up`; Fabricator handles redeploys.
+Copilot receives the issue, location, suggested fix, relevant code excerpt, and Rayfin guidance links. It's asked not to publish the app or run `rayfin up`: the fix reaches your published app after the turn when **Publish after each chat turn** is on, and otherwise when you publish. See [Publish after each chat turn](/docs/ship/deploy#publish-after-each-chat-turn).
 
 ```prompt title="Ask for a careful Advisor fix"
 Fix the Advisor findings shown in the chat. Keep the app building, use the installed Rayfin docs before changing Rayfin APIs, and explain any finding you cannot safely fix.

@@ -89,12 +89,12 @@ New projects use the Rayfin CLI's Universal App template, which ships with skill
 | `functions-capability` | Add server-side functions for secrets, external APIs and other trusted logic. |
 | `external-api-workflows` | Call a third-party API or custom model endpoint through a server-side function. |
 | `fabric-data-agent` | Call a published Fabric data agent from the app through a function. |
-| `app-validation` | Check the app before calling it done. In Fabricator, Copilot runs the static checks and you try the deployed app in the preview. |
-| `app-deployment` | Deploy from a terminal with the Rayfin CLI. In Fabricator, Copilot skips it because Fabricator deploys the app. |
+| `app-validation` | Check the app before calling it done. In Fabricator, Copilot runs the static checks. With the Local development experiment on, it also checks the app running on this computer with Fabricator's own tools instead of a browser; otherwise you try the published app in the preview. |
+| `app-deployment` | Deploy from a terminal with the Rayfin CLI. In Fabricator, Copilot skips it, because Fabricator publishes the app. |
 
 Projects created by earlier Fabricator versions keep the skills their starter came with.
 
-These skills are project files, so they travel with the app. They appear in **Added in this app**. Fabricator also injects Fabricator-specific operating instructions during chat. For example, Copilot doesn't run `rayfin up` or follow a template's own deployment steps, because Fabricator deploys after a turn.
+These skills are project files, so they travel with the app. They appear in **Added in this app**. Fabricator also injects Fabricator-specific operating instructions during chat. For example, Copilot doesn't run `rayfin up` or follow a template's own deployment steps, because publishing is Fabricator's job: after a turn when **Publish after each chat turn** is on, and otherwise when you select **Publish**. See [How Copilot checks its work](/docs/build/chat#how-copilot-checks-its-work).
 
 ## Add a custom skill
 

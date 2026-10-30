@@ -17,7 +17,7 @@ Fabricator ships a Windows NSIS installer. The installer mode is current-user, s
 
 The Windows release workflow signs the installer when the signing configuration is available. The expected publisher is Sachin Patney. SmartScreen can still warn for new or low-reputation downloads.
 
-The installer also puts rayfin-local, the local backend that runs your apps on this computer, next to Fabricator in its install folder, `%LOCALAPPDATA%\Rayfin Fabricator` by default. The release workflow signs it with the same certificate as the installer, and there's nothing else to install for it. On a PC your organization manages, Windows can block it; see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local).
+The installer also puts rayfin-local next to Fabricator in its install folder, `%LOCALAPPDATA%\Rayfin Fabricator` by default. rayfin-local is the local backend that runs your apps on this computer when the **Local development** experiment is on; see [Develop on this computer](/docs/build/local-development). The release workflow signs it with the same certificate as the installer, and there's nothing else to install for it. On a PC your organization manages, Windows can block it; see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local).
 
 ## macOS
 
@@ -32,7 +32,7 @@ Fabricator's macOS build is for Apple Silicon.
    xattr -dr com.apple.quarantine "/Applications/Rayfin Fabricator.app"
    ```
 
-The release workflow builds an Apple Silicon DMG. When Apple notarization is not configured, macOS can quarantine the downloaded app even though it is the expected release artifact. Removing the quarantine flag lets macOS open the app. rayfin-local, the local backend that runs your apps on this computer, is inside the app, so the same command clears its flag too.
+The release workflow builds an Apple Silicon DMG. When Apple notarization is not configured, macOS can quarantine the downloaded app even though it is the expected release artifact. Removing the quarantine flag lets macOS open the app. rayfin-local, the local backend that runs your apps on this computer when the **Local development** experiment is on, is inside the app, so the same command clears its flag too.
 
 ## First launch
 
@@ -44,7 +44,7 @@ Fabricator checks GitHub Releases for signed updater artifacts when the app star
 
 When the check at startup finds an update, Fabricator shows **Update available** with **Update now** and **Later**. If you choose **Later**, Fabricator opens normally and keeps the ready-update banner visible. An update found while you work goes straight to the banner.
 
-While an update is downloading or ready to install, the banner can show a `Downloading update <version>…` status, an `Update <version> is ready to install` status, **Later**, and **Restart & update**. Installing an update stops the apps running on this computer, then restarts Fabricator. Selecting **Later** on the banner puts the update off until Fabricator starts again.
+While an update is downloading or ready to install, the banner can show a `Downloading update <version>…` status, an `Update <version> is ready to install` status, **Later**, and **Restart & update**. Installing an update restarts Fabricator. With the **Local development** experiment on, it first stops the apps running on this computer. Selecting **Later** on the banner puts the update off until Fabricator starts again.
 
 A required-update screen exists in the app, but the normal startup check is optional.
 
@@ -55,4 +55,4 @@ Uninstall **Rayfin Fabricator** with your operating system's app removal flow:
 - On Windows, use **Installed apps** or **Apps & features**.
 - On macOS, remove **Rayfin Fabricator.app** from **Applications**.
 
-Uninstalling the app does not necessarily remove projects, settings, logs, or CLI credentials. Your projects stay where they are, each with its app's local data in its `.rayfin-local` folder. See [Files and folders](/docs/reference/files) for leftover data locations.
+Uninstalling the app does not necessarily remove projects, settings, logs, or CLI credentials. Your projects stay where they are. An app that ran on this computer with the **Local development** experiment keeps its local data in its project's `.rayfin-local` folder. See [Files and folders](/docs/reference/files) for leftover data locations.

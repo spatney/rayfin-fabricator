@@ -44,8 +44,8 @@ Every page needs `title` and `description`. `npm run check:docs` enforces both.
 
 ```yaml
 ---
-title: Deploy to Microsoft Fabric
-description: Deploy your app to a Fabric workspace with one click, understand automatic redeploys after chat turns, and manage deployments across workspaces.
+title: Publish to Microsoft Fabric
+description: Publish your app to a Fabric workspace, choose whether chat turns publish it automatically, and manage the workspaces it's published to.
 ---
 ```
 
@@ -129,7 +129,7 @@ one that matches the reader's theme, and `npm run check:docs` fails when a light
 missing. The alt text describes what the image shows for someone who can't see it:
 
 ```md
-![The deployment panel for the Development deployment, with its address, workspace and account, Deploy after each chat turn, and New deployment](/screenshots/deployments.webp)
+![The publish control's panel for the Development published app, with its address, workspace and account, Publish after each chat turn, and Publish to another workspace](/screenshots/deployments.webp)
 ```
 
 When a page needs a screenshot that doesn't exist yet, mark the spot with an MDX comment on
@@ -142,15 +142,16 @@ in `.md`.
 
 | Image | What it shows | Used on |
 | --- | --- | --- |
-| `workbench` | Build view: a finished chat turn and the running sample app in the preview | `/docs`, `/docs/start/tour`, `/docs/start/first-app`, landing page |
-| `setup` | Setup screen with all three steps complete and the `You're all set` block | `/docs/start/setup` |
-| `help` | The Help assistant answering a failed deploy, with its action button and citation | `/docs/troubleshooting/help` |
-| `search` | Search with "deploy" typed, over the workbench: one ranked list of actions and docs, Use "deploy" with…, and the action bar (sample data) | `/docs/start/search` |
+| `workbench` | Build view: a finished chat turn and the published sample app in the preview | `/docs`, `/docs/start/tour`, `/docs/start/first-app`, landing page |
+| `setup` | Setup with all three steps complete, including the optional **Sign in to Azure**, and the `You're all set` block (sample data) | `/docs/start/setup` |
+| `accounts` | **Accounts** with the sample accounts signed in to each service (sample data) | `/docs/start/accounts` |
+| `help` | The Help assistant answering why publishing failed, with its action button and citation (sample data) | `/docs/troubleshooting/help` |
+| `search` | Search with "deploy" typed, over the workbench: one ranked list of actions and docs led by **Publish 3 changes**, Use "deploy" with…, and the action bar (sample data) | `/docs/start/search` |
 | `home` | Home with the project actions and recent projects | `/docs/start/tour`, `/docs/build/projects` |
 | `new-project` | New project screen with a name entered | `/docs/start/first-app`, `/docs/build/projects` |
-| `first-deploy` | The Deploy your app step of a new project | `/docs/start/first-app`, `/docs/ship/deploy` |
-| `deploy-progress` | The deploy screen during a deploy: Ray and the steps so far (sample data) | `/docs/ship/deploy` |
-| `chat-working` | Chat during a turn, with the live work log | `/docs/build/chat`, `/docs/start/first-app` |
+| `first-deploy` | The **Publish your app** step of a new project, with a workspace picked | `/docs/start/first-app`, `/docs/ship/deploy` |
+| `deploy-progress` | The publish screen during a publish: Ray and the steps so far (sample data) | `/docs/ship/deploy` |
+| `chat-working` | Chat during a turn, with the live work log and the live preview | `/docs/build/chat`, `/docs/start/first-app` |
 | `chat-done` | A finished turn with the "Worked for …" summary and changed-file chips | `/docs/build/chat` |
 | `chat-diff` | The diff for one changed file, opened from its chip | `/docs/build/chat` |
 | `model-picker` | The chat composer's model picker with **Auto** off and the model list open, including **Your API keys** (sample data) | `/docs/build/chat`, `/docs/build/your-own-api-keys` |
@@ -160,6 +161,8 @@ in `.md`.
 | `data-chips` | The chat composer with the two items picked in `connect-data` waiting as chips for the next message (sample data) | `/docs/build/data-model` |
 | `plan` | A proposed plan waiting for approval | `/docs/build/chat` |
 | `preview-toolbar` | The preview toolbar above the running app | `/docs/build/preview` |
+| `preview-local` | The sample app's preview with Local development on: **Local** and **Published**, the local backend's status and its output open below the app (sample data) | `/docs/build/local-development`, `/docs/build/preview` |
+| `preview-as` | The **Preview as** menu open over the sample app on this computer: **You**, a test user, **Signed out** and **Add test user…** (sample data) | `/docs/build/preview` |
 | `design` | Design mode with an element selected and its change card open | `/docs/build/design` |
 | `design-theme` | Design mode's Theme panel | `/docs/build/design` |
 | `code` | Code view with the file tree and the editor | `/docs/build/code-and-history` |
@@ -168,20 +171,21 @@ in `.md`.
 | `model` | Blueprint's Data model view with the entity diagram | `/docs/build/data-model` |
 | `model-relations` | Blueprint's Data model view with four related entities and a join entity (sample data) | `/docs/build/data-model` |
 | `model-access` | The same Data model view with one entity left without a permission decorator: its amber access dot and **Harden** (sample data) | `/docs/build/data-model` |
+| `local-data` | Blueprint's **Data** view of the sample app's local data, with Local development on (sample data) | `/docs/build/data-model` |
 | `skills` | The Skills view | `/docs/build/skills` |
 | `secrets` | The Secrets view with a secret selected | `/docs/build/secrets` |
-| `deployments` | The deployment panel, open on the sample app's deployment, with **Deploy after each chat turn** on (sample data) | `/docs/ship/deploy` |
+| `deployments` | The publish control's panel, open on the sample app's published app, with **Publish after each chat turn** on (sample data) | `/docs/ship/deploy` |
 | `share` | The share dialog | `/docs/ship/share` |
 | `advisor` | The Advisor: grade, check strip, summary and issues | `/docs/ship/advisor` |
 | `advisor-finding` | An open Advisor issue with its fix actions | `/docs/ship/advisor` |
 | `rayfin-version` | The Rayfin version control with an update available | `/docs/ship/rayfin-versions` |
 | `settings` | The Settings dialog: General (with **API keys**), Appearance and the start of Diagnostics (sample data) | `/docs/reference/settings` |
-| `settings-experiments` | Settings' Experiments section with **Team workspaces** and **Migrate Power BI reports** (sample data) | `/docs/team`, `/docs/build/migrate-power-bi` |
+| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports** and **Local development** (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/local-development` |
 | `migrate-report` | **Migrate a Power BI report** with a report picked: its workspace, semantic model, pages and the three checks, all passing (sample data) | `/docs/build/migrate-power-bi` |
 | `migration-card` | The Migration card above the chat composer after the first page, with **Migrate next page** and **Migrate the rest** (sample data) | `/docs/build/migrate-power-bi` |
-| `account-menu` | The account menu with **Refresh Fabric authentication** and **Settings** (sample data) | `/docs/start/tour`, `/docs/troubleshooting/deploy` |
-| `deploy-error` | Ray above the preview after a failed deploy, offering **Find out why** and **View logs** (sample data) | `/docs/troubleshooting/deploy` |
-| `port-conflict` | The dialog shown when the preview's port is in use | `/docs/troubleshooting/preview` |
+| `account-menu` | The account menu with **Refresh Fabric authentication** and **Settings**, beside the publish control (sample data) | `/docs/start/tour`, `/docs/troubleshooting/deploy` |
+| `deploy-error` | Ray above the preview after a failed publish, offering **Find out why** and **View logs** (sample data) | `/docs/troubleshooting/deploy` |
+| `port-conflict` | The dialog shown when the live preview's port is in use | `/docs/troubleshooting/preview` |
 | `team-home` | Home's team workspaces section | `/docs/team` |
 | `team-create` | The create team workspace dialog | `/docs/team/create` |
 | `team-overview` | The workspace overview (sample data) | `/docs/team/overview` |
@@ -213,7 +217,11 @@ Don't write "ask Copilot to do X" in prose. Write the prompt instead.
 - **Stable anchors.** The app links to pages and headings listed in
   `src/shared/docs-links.json`, and the troubleshooting overview links to every heading
   below. Don't rename these headings; if you must, update `src/shared/docs-links.json` in
-  the same change (`npm run verify:app-links` fails the build otherwise):
+  the same change (`npm run verify:app-links` fails the build otherwise). Fabricator's Rust
+  core also links to `windows-blocked-rayfin-local` directly (`BLOCKED_DOCS_URL` in
+  `src-tauri/src/services/local_backend/binary.rs`), so renaming that heading means changing
+  it there too. Releases of the app already installed keep linking to these headings, so a
+  heading such as "A deploy failed" keeps its wording even though the app now says Publish:
 
   | Page | Heading |
   | --- | --- |
@@ -222,6 +230,7 @@ Don't write "ask Copilot to do X" in prose. Write the prompt instead.
   | `/docs/troubleshooting/setup-and-sign-in` | Copilot asks you to sign in again |
   | `/docs/troubleshooting/setup-and-sign-in` | Fabric sign-in doesn't complete |
   | `/docs/troubleshooting/preview` | All preview ports are busy |
+  | `/docs/troubleshooting/preview` | Windows blocked rayfin-local |
   | `/docs/troubleshooting/deploy` | A deploy failed |
   | `/docs/troubleshooting/deploy` | Automatic redeploy stopped |
   | `/docs/troubleshooting/team` | Setup needs an administrator |

@@ -1,92 +1,124 @@
 ---
-title: "Deploy and Fabric problems"
-description: "Fix failed deploys, stopped automatic redeploys, Fabric authentication, semantic model reads, Rayfin CLI errors, and sharing access."
+title: "Publishing and Fabric problems"
+description: "Fix failed publishes, a locked chat, publishing after each chat turn, Fabric authentication, semantic model reads, Rayfin CLI errors, and sharing access."
 ---
 
-Use this page when Fabricator cannot publish your app to Microsoft Fabric or the deployed app is not the version you expect.
+Use this page when Fabricator can't publish your app to Microsoft Fabric, or the published app isn't the version you expect. Fabricator used to call publishing "deploying", and a few headings on this page keep that word.
 
 ## A deploy failed
 
-You see a **Deploy failed** toast, the deployment control in the app bar says **Failed**, and Ray swims in above the preview to say "That deploy didn’t make it to Fabric. Want me to find out why?" If you've sent Ray away, the notice says "The deploy didn’t finish. Help can find out why." A build failure's log can say "❌ Deployment failed: Static build command failed. Fix the build errors and re-run, or use 'rayfin up staticapp deploy --skip-build' to deploy existing content."
+You see a "Couldn’t publish" message, the publish control in the app bar says "Failed" next to the published app's name and offers **Try again**, and Ray swims in above the preview to say "Your app didn’t make it to Fabric. Want me to find out why?" If you've sent Ray away, the notice says "Couldn’t publish this app. Help can find out why." A build failure's log can say "❌ Deployment failed: Static build command failed. Fix the build errors and re-run, or use 'rayfin up staticapp deploy --skip-build' to deploy existing content."
 
-![Ray above the preview after a failed deploy, saying the deploy didn't make it to Fabric, with Find out why and View logs beside him.](/screenshots/deploy-error.webp)
+{/* screenshot: deploy-error */}
 
-Fabricator runs the project's pinned Rayfin CLI with `rayfin up -y --force`. The log is the source of truth: it includes Rayfin CLI output, dependency recovery, build errors, Fabric authentication failures, workspace targeting errors, and Fabric API failures.
+Fabricator publishes with the project's pinned Rayfin CLI, running `rayfin up -y --force`. The log is the source of truth: it includes Rayfin CLI output, dependency recovery, build errors, Fabric authentication failures, workspace targeting errors, and Fabric API failures.
 
-1. Select **Find out why**, or select Ray. Help opens and asks "Why did my last deploy fail?" for you. It reads the end of the deploy's log, explains the cause in plain language, and offers the fix as a button when there is one.
-2. To read the log yourself, select **View logs**. Read the first real error near the end. Ignore a final generic "Deploy failed" line if a more specific line appears above it. The `Details:` line under the error usually says why, such as "Details: The PostgreSQLDatabase feature is not enabled."
-3. If the log says the project has no workspace or asks for a workspace, choose a deployment workspace and deploy again.
+1. Select **Find out why**, or select Ray. Help opens and asks "Why did my last publish fail?" for you. It reads the end of the publish log, explains the cause in plain language, and offers the fix as a button when there is one.
+2. To read the log yourself, select **View logs**. Read the first real error near the end. Ignore a final generic "Deployment failed" line if a more specific line appears above it. The `Details:` line under the error usually says why, such as "Details: The PostgreSQLDatabase feature is not enabled."
+3. If the log says "This project has no Fabric workspace yet — choose one to publish to.", select **Publish** in the app bar and pick a workspace.
 4. If the log mentions authentication, expired credentials, a token-cache lock, `HTTP 401`, or `unauthorized`, use **Refresh Fabric authentication**, then select **Try again** in the app bar.
-5. If the log mentions a build or TypeScript error, ask Copilot to fix that error, then deploy again.
+5. If the log mentions a build or TypeScript error, send the prompt below in chat, then publish again.
 6. If the log says "Environment variable '…' referenced in rayfin.yml (…) is not defined.", your app's `rayfin/rayfin.yml` uses a setting that isn't set on this computer. Add that variable to the project's `rayfin/.env`, then select **Try again**.
 7. If the log mentions Fabric capacity, permissions, a workspace conflict, or a Fabric API failure, fix that Fabric workspace issue and select **Try again**.
-8. If the log mentions destructive data-model changes, note that Fabricator already runs deploy with `--force`; the failure is coming from the CLI or Fabric after that forced deploy attempt.
+8. If the log mentions destructive data-model changes, note that Fabricator already publishes with `--force`; the failure is coming from the CLI or Fabric after that forced attempt.
 
-To put the notice away, select the **×** beside it. It comes back if the next deploy fails.
+```prompt title="Fix the build errors"
+Publishing my app failed because it doesn't build. Find and fix the build and TypeScript errors, and check that the app builds without errors.
+```
+
+To put the notice away, select the **×** beside it. It comes back if the next publish fails.
 
 If the log is unclear, [Report a problem](/docs/troubleshooting/report-a-problem) and attach diagnostics.
 
+## Chat is locked until the app is published
+
+Above the chat box, you see "Publish your app to start building" and "Chat is locked until `<name>` is published.", with **Publish now**. The chat box says "Publish your app to start chatting…".
+
+Fabricator builds a new app against its copy in Fabric, so it publishes a new app before chat opens for it. Chat stays locked when you skipped that step with **Continue without publishing →**, or the first publish didn't finish. See [When chat waits for the first publish](/docs/build/chat#when-chat-waits-for-the-first-publish).
+
+1. Select **Publish now**.
+2. In **Publish your app**, sign in to Fabric if it asks, pick a workspace, and select **Publish app**. See [Build your first app](/docs/start/first-app#publish-your-app).
+3. Wait for the app to publish. Chat says "Chat unlocks as soon as `<name>` is live." meanwhile.
+4. If the publish fails, see [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
+
+If you don't have a Fabric workspace on an eligible capacity, you can build on this computer instead with the **Local development** experiment. Turn it on in **Settings → Experiments**: chat then opens without a publish. See [Develop on this computer](/docs/build/local-development).
+
+If chat stays locked after the app is published, [Report a problem](/docs/troubleshooting/report-a-problem).
+
+## The preview says Choose where to publish
+
+After a chat turn, the preview says "Choose where to publish" and "`<name>` hasn’t been published yet. Select Publish in the header above to name it and pick the Fabric workspace to publish it to."
+
+**Publish after each chat turn** tried to publish an app that has no Fabric workspace yet, such as a project you opened from a folder. Fabricator asks where to publish it instead of choosing a workspace for you.
+
+1. In the app bar, select **Publish**.
+2. Optionally enter a **Name** for the published app.
+3. Under **Publish to workspace**, pick a workspace, and select **Publish**.
+
+If publishing fails, see [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
+
 ## Automatic redeploy stopped
 
-After a successful chat turn, the app no longer redeploys automatically and you have to deploy from the app bar.
+After a successful chat turn, your app isn't published any more, and you have to publish it from the app bar.
 
-Fabricator auto-deploys only after a successful, non-team chat turn when it can confirm there are changes since the last deployed revision. It does not auto-deploy failed or cancelled turns. If the last deployed revision is unknown, the next successful turn deploys once to establish a baseline. If the change check fails, Fabricator shows "Auto-deploy check failed" and tells you to use **Redeploy**.
+Fabricator publishes after a turn only while **Publish after each chat turn** is on. It's on by default, and off by default with the **Local development** experiment on; your own choice in the publish control's panel wins either way. With the experiment on, it also publishes only an app you've already published yourself. When it's on, Fabricator publishes after a successful turn when it can confirm there are changes since the last published version. If the last published version is unknown, the next successful turn publishes once to establish it. If the check for changes fails, you see "Couldn’t publish automatically", with a message that ends "Select Publish to publish your changes."
 
-1. Confirm the chat turn finished successfully. Failed, stopped, or cancelled turns do not auto-deploy.
-2. Look for a toast saying "Auto-deploy check failed" or "Could not check for undeployed changes." If you see it, select **Redeploy**.
-3. If you switched deployments or workspaces, deploy once from the app bar, where the button says **Deploy changes**, to establish the deployed revision for that target.
-4. If a deploy is already running, wait for it to finish before sending another turn.
-5. If deploying from the app bar works but automatic redeploy keeps stopping, keep deploying from the app bar as a workaround and [Report a problem](/docs/troubleshooting/report-a-problem).
+1. In the app bar, select the publish control, and check **Publish after each chat turn** in its panel. Turn it on if you want each turn to publish.
+2. Confirm the chat turn finished successfully. Failed, stopped, or cancelled turns don't publish.
+3. If you see "Couldn’t publish automatically", select **Publish** in the app bar.
+4. If you switched to another published app, publish once from the app bar, where the button says **Publish changes** or **Publish**, to record its published version.
+5. If a publish is already running, wait for it to finish before sending another turn.
+6. If publishing from the app bar works but publishing after each turn keeps stopping, keep publishing from the app bar as a workaround and [Report a problem](/docs/troubleshooting/report-a-problem).
 
 This is an open reliability issue for some long sessions.
 
-## Fabric authentication blocks deploy
+## Fabric authentication blocks publishing
 
-A deploy repeatedly fails even though setup shows you signed in, or the notice above the preview says Fabric wants you to sign in again and offers **Refresh Fabric authentication**.
+A publish repeatedly fails even though setup shows you signed in, or the notice above the preview says "Fabric wants you to sign in again before you can publish this app." and offers **Refresh Fabric authentication**.
 
 ![The account menu opened from the avatar in the top-right corner, showing the signed-in Fabric account with Manage accounts, Refresh Fabric authentication, Sign out and Settings.](/screenshots/account-menu.webp)
 
-Fabricator deploys with the Rayfin CLI credentials for the project. **Refresh Fabric authentication** runs the selected project's `rayfin logout`, then `rayfin login`, and verifies the refreshed credential against Fabric. It does not clear Copilot, Azure CLI, or preview-browser sessions.
+Fabricator publishes with the Rayfin CLI credentials for the project. **Refresh Fabric authentication** runs the selected project's `rayfin logout`, then `rayfin login`, and verifies the refreshed credential against Fabric. It does not clear Copilot, Azure CLI, or preview-browser sessions.
 
 1. Select **Refresh Fabric authentication** in the notice above the preview, or open the account menu in the app bar and select it there.
 2. In the dialog, select **Clear credentials and sign in**.
 3. Complete the browser sign-in.
-4. Wait for Fabricator to show that authentication is verified.
-5. Select **Try again** in the app bar. Authentication refresh does not redeploy automatically.
+4. Wait for Fabricator to say "Fabric authentication is verified. Publish again to retry."
+5. Select **Try again** in the app bar. Refreshing authentication doesn't publish by itself.
 
 If refresh fails, update the app's Rayfin packages to Rayfin 1.35.1 or newer from the Rayfin version control, then try again. If it still fails, [Report a problem](/docs/troubleshooting/report-a-problem).
 
 ## Couldn't read the semantic model
 
-In the Model view or semantic-model connection flow, you see "Couldn’t read the semantic model" or "The API returned a URL outside the authenticated service."
+In Blueprint, a semantic model shows "Couldn’t read the semantic model", sometimes with "The API returned a URL outside the authenticated service."
 
 Fabricator reads semantic model metadata live from Fabric and Power BI APIs. The URL validation error was fixed after earlier releases by allowing Fabric, Power BI, and regional `analysis.windows.net` continuation hosts while still rejecting unrelated URLs.
 
 1. Update to the latest Fabricator version.
 2. Use **Refresh Fabric authentication** for the project.
-3. If the dialog offers **Sign in & retry**, select it and complete sign-in.
+3. If the view offers **Sign in to Fabric**, **Sign in to Azure** or **Sign in & retry**, select it and complete sign-in.
 4. Confirm you have access to the workspace and edit or write access when the semantic model definition requires it.
-5. Retry the Model view or semantic-model connection.
+5. Select **Try again** in the semantic model view.
 
 If the same exact message appears on the latest version, [Report a problem](/docs/troubleshooting/report-a-problem).
 
-## The workspace or capacity blocks deploy
+## The workspace or capacity blocks publishing
 
-The workspace picker or deploy log indicates that a workspace has no eligible Fabric capacity, the capacity is unavailable, or you do not have permission.
+The workspace list or the publish log says a workspace has no eligible Fabric capacity, the capacity is unavailable, or you do not have permission.
 
-Rayfin apps deploy to a Fabric workspace backed by an eligible Fabric capacity. Fabricator can list workspaces and capacity metadata, but the deploy still depends on your tenant permissions and Fabric capacity state.
+Rayfin apps are published to a Fabric workspace backed by an eligible Fabric capacity. Fabricator can list workspaces and capacity metadata, but publishing still depends on your tenant permissions and Fabric capacity state.
 
 1. Choose a workspace backed by an active Fabric capacity.
 2. If the capacity is paused or unavailable, resume it in Fabric or choose another workspace.
-3. Confirm your account can deploy to the workspace.
+3. Confirm your account can publish to the workspace.
 4. If you are in a client tenant, make sure you completed Fabric sign-in for that tenant.
 5. Select **Try again** in the app bar.
 
-If you cannot see the right workspace or capacity, contact your Fabric administrator or [Report a problem](/docs/troubleshooting/report-a-problem) with the deploy log.
+If you cannot see the right workspace or capacity, contact your Fabric administrator or [Report a problem](/docs/troubleshooting/report-a-problem) with the publish log.
 
 ## Rayfin CLI or npm package resolution failed
 
-The deploy log says the Rayfin CLI could not be found, npm reports `ETARGET`, or project dependency installation fails before `rayfin up` starts.
+The publish log says the Rayfin CLI could not be found, npm reports `ETARGET`, or project dependency installation fails before `rayfin up` starts.
 
 Current Fabricator versions use the Rayfin CLI pinned in each project, and refresh npm's package information when they create a project. Older releases had global Rayfin CLI checks and a stale npm metadata problem that could produce `ETARGET` even when the package existed.
 
@@ -94,20 +126,20 @@ Current Fabricator versions use the Rayfin CLI pinned in each project, and refre
 2. Open the project and let dependency installation finish.
 3. Select **Try again** in the app bar.
 4. If npm still reports missing or unresolved packages, repair project dependencies with `npm ci` when `package-lock.json` exists, or `npm install` otherwise.
-5. Do not install a global Rayfin CLI as the primary fix; Fabricator deploys through the project-pinned CLI.
+5. Do not install a global Rayfin CLI as the primary fix; Fabricator publishes through the project-pinned CLI.
 
 If package resolution keeps failing, [Report a problem](/docs/troubleshooting/report-a-problem) and include the npm error.
 
 ## Recipients can't open the shared app
 
-You shared a deployed app, but another person cannot open it.
+You shared a published app, but another person cannot open it.
 
-Deploying and sharing are separate. Fabricator's share flow grants app access in the target tenant, and for semantic models in other workspaces it grants Build access to those models.
+Publishing and sharing are separate. Fabricator's share flow grants app access in the target tenant, and for semantic models in other workspaces it grants Build access to those models.
 
-1. Confirm the app is deployed and live.
+1. Confirm the app is published and live.
 2. Use the share flow again for the recipient's work email.
 3. Confirm the recipient belongs to the same Microsoft Entra tenant or has the required guest access.
 4. For semantic-model apps, confirm they also have access to the model's workspace or Build permission on the model.
-5. See [Share a deployed app](/docs/ship/share) for the normal flow.
+5. See [Share your app](/docs/ship/share) for the normal flow.
 
 If sharing still fails, [Report a problem](/docs/troubleshooting/report-a-problem).

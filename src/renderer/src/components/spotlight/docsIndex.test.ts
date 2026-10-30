@@ -15,7 +15,7 @@ describe('the docs index Search reads', () => {
 
   it('gives each page its title and the section it sits in', () => {
     const deploy = index.pages.find((p) => p.path === '/docs/ship/deploy')
-    expect(deploy).toMatchObject({ title: 'Deploy to Microsoft Fabric', section: 'Ship' })
+    expect(deploy).toMatchObject({ title: 'Publish to Microsoft Fabric', section: 'Ship' })
     expect(deploy!.description).not.toBe('')
   })
 

@@ -1,34 +1,103 @@
 ---
 title: "Live preview"
-description: "Use the preview pane to watch local changes during Copilot turns, check the deployed app, switch Fabric shell views, and handle busy preview ports."
+description: "Use the preview pane to watch your app change as Copilot works, see it on this computer or as published, preview it as other people, and handle busy preview ports."
 ---
 
-The preview pane shows your Rayfin app while you build. During a Copilot turn, Fabricator may show a local Vite preview so frontend changes appear as they are made. After the turn finishes, the pane returns to the deployed app.
+The preview pane shows your Rayfin app while you build. What it shows depends on the **Local development** experiment. With it off, the default, the preview shows your published app, and your changes while Copilot works. With it on, the preview shows your app running on this computer, with its own backend and data.
 
-![The preview toolbar above the running app: back, forward and reload, the Live status with the app’s address, and the Fabric, Design and full-screen buttons.](/screenshots/preview-toolbar.webp)
+![The preview toolbar above the running app: back, forward and reload, the app's address, and the Fabric, Design and focus buttons.](/screenshots/preview-toolbar.webp)
 
 ## What the preview shows
 
-Fabricator uses two preview sources:
+With Local development off, Fabricator uses two preview sources:
 
-1. The local preview, at a `localhost` address, appears while Copilot is working, when the project has Vite installed under `node_modules`. Fabricator starts the project's own local Vite server directly. It does not require an `npm run dev` script.
-2. The deployed app shows the rest of the time. After a successful turn, Fabricator redeploys eligible changes and reloads the deployed preview. Its state, such as live, deploying or failed, is on the deployment control in the app bar.
+1. The published app shows most of the time. After a successful turn, Fabricator publishes the changes when **Publish after each chat turn** is on, and reloads the preview. The app's state, such as live, publishing or failed, is on the publish control in the app bar.
+2. The local preview, at a `localhost` address, appears while Copilot is working, when the project has Vite installed under `node_modules`. Fabricator starts the project's own Vite server directly. It doesn't need an `npm run dev` script.
 
-The local preview uses the existing Fabric deployment's `VITE_*` configuration. It does not start a local Fabric backend. If the project has no local Vite installation, Fabricator keeps showing the deployed preview instead.
+The local preview uses the published app's `VITE_*` configuration, so it runs against the published app's backend: frontend changes show as Copilot makes them, and changes to data, permissions or functions work once you publish them. If the project has no local Vite installation, Fabricator keeps showing the published app instead.
 
-With **Deploy after each chat turn** off (see [Deploy manually](/docs/ship/deploy#deploy-manually)), the local preview runs whenever the app is open, not only during a turn, and reloads when a turn that changed your app ends.
+With **Publish after each chat turn** off (see [Publish after each chat turn](/docs/ship/deploy#publish-after-each-chat-turn)), the local preview runs whenever the app is open, not only during a turn, and reloads when a turn that changed your app ends.
+
+With Local development on, the preview shows your app on this computer instead. See [Your app on this computer](/docs/build/preview#your-app-on-this-computer).
 
 Team app previews are handled by the team pipeline and local preview behavior. See [Work on a team app](/docs/team/work-on-an-app).
+
+## Your app on this computer
+
+> [!WARNING]
+> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
+
+With Local development on, the preview shows your app as it runs on this computer, at a `localhost` address, with its own backend and data. Copilot's edits show up as it saves them. When the backend rebuilds something the page uses, such as the data model or the functions, the page loads again, after Copilot's turn when one is running. See [Develop on this computer](/docs/build/local-development).
+
+{/* screenshot: preview-local */}
+
+The toolbar adds:
+
+- The local backend's state: **Starting…**, **Running**, **Restarting…**, **Error** or **Stopped**. Select it to open or close **Output**.
+- **Preview as**, to choose who the app signs in as. See [Preview as someone else](/docs/build/preview#preview-as-someone-else).
+- **Local** and **Published**, once the app is published. See [Switch between Local and Published](/docs/build/preview#switch-between-local-and-published).
+
+**Output**, under the preview, shows the latest output of your app's backend, Vite and functions, with the time and source of each line and the newest at the bottom. It follows new lines unless you scroll up. Select **Copy** to copy it, for example for a bug report.
+
+While the app starts, the preview says what it's doing, such as "Reading your app’s data model", "Updating its database" or "Building its functions". If the app stopped, select **Start**.
+
+**Design** works whenever no chat turn is running. The **Fabric** button shows the app inside a local Fabric host, the way the Fabric portal shows it, for apps that sign in with Fabric.
+
+## When your app doesn't start
+
+When a problem stops your app on this computer, the preview says what went wrong and offers what helps:
+
+| You see | What helps |
+| --- | --- |
+| "Your app’s packages aren’t installed" | **Install dependencies** installs them, with npm's output in **Output**, and starts your app again. |
+| "This app is already running" | Another program runs the app on this computer, such as rayfin-local in a terminal. **Stop the other one** stops it and runs your app here. |
+| "Node.js isn’t installed" or "Node.js needs an update" | **Set up Node.js** opens setup. |
+| "This change would delete local data" | **Review the change** opens the dialog. See [When a data model change would delete local data](/docs/build/local-development#when-a-data-model-change-would-delete-local-data). |
+| "Your app couldn’t start on this computer", because Windows or macOS blocked the local backend | **Learn how to allow it** opens the steps. |
+
+Every problem also offers **Try again**, **View output**, and **Find out why**, which opens Help to explain what happened. See [Your app doesn't start on this computer](/docs/troubleshooting/preview#your-app-doesnt-start-on-this-computer).
+
+## Switch between Local and Published
+
+With Local development on, once an app is published, the toolbar has **Local** and **Published**:
+
+- **Local** shows your app on this computer, with its local data. The preview starts here.
+- **Published** shows your published app on Microsoft Fabric, with its data. Your changes reach it when you publish them.
+
+To switch while Design is on, finish designing with **Done** first. In **Published**, the **Fabric** button shows the published app in the Fabric portal shell, and Design works on the published app.
+
+An app you published before it ran on this computer starts with empty local data. The first time, the preview says that it "now runs on this computer" and that "Its local data starts empty. Your published app and its data are unchanged." Select **Show published app** to switch to **Published**.
+
+When this computer can't run a published app, for example because it uses a KQL database connector, its preview uses the published app's backend and says why, and there's no **Local** and **Published** switch. See [What runs only on Fabric](/docs/build/local-development#what-runs-only-on-fabric).
+
+## Preview as someone else
+
+With Local development on, **Preview as** chooses who your app signs in as in the preview: you, a test user, or no one. Use it to check what each person can see and do.
+
+{/* screenshot: preview-as */}
+
+1. In the preview toolbar, select **Preview as**. The button shows who the app signs in as now: **You**, a test user's name, or **Signed out**.
+2. Choose who to sign in as:
+   - **You**: your Microsoft Entra account from the Azure CLI or, when the Azure CLI isn't signed in, the Fabric account in use. When neither is signed in, a local account, `developer@example.com`.
+   - A test user, under **Test users**.
+   - **Signed out**: no one is signed in.
+3. To add a test user, select **Add test user…**, type an email address in **Test user’s email**, and select **Add**. The preview signs in as the new user.
+
+Switching clears the preview's browser storage and reloads it, so the app signs in again as the person you chose.
+
+Test users have no password: they sign in only here, through **Preview as**. They're local users of your app on this computer, so Blueprint's **Data** view lists them under **Local users**, where you can delete them. See [See your app's local data](/docs/build/data-model#see-your-apps-local-data).
+
+**Preview as** is there in **Local** while your app runs and no chat turn is running. It's turned off in the **Fabric** view, where the local Fabric host signs the app in with its own form, and while Design is on.
 
 ## Use the toolbar
 
 The preview toolbar gives you browser-like controls and Fabricator-specific tools:
 
 - **Back**, **Forward** and **Reload** navigate the preview history.
-- The address shows what the preview is showing: your deployed app's, or `localhost` for the local preview. Select it to open the page in your default browser.
-- For a team app, a status label names the deployment you're looking at, **My preview** or **Published**, and says **Deploying…** while the pipeline updates it. Its local preview is marked **Published data** while it uses the published app's data, and **No data yet** before anything is deployed.
-- **Fabric** switches between the direct app view and the app embedded in the Fabric portal shell, when the deployment has a portal link. If the Fabric shell is unavailable, the button is disabled.
-- **Design** opens Design mode. On the local preview, it's available only between turns, with **Deploy after each chat turn** off. While a deploy runs, it waits until the deploy ends.
+- The address shows what the preview is showing: your published app's, or `localhost` for an app running on this computer. Select it to open the page in your default browser.
+- For a team app, a status label names the deployment you're looking at, **My preview** or **Published**, and says **Publishing…** while the pipeline updates it. Its local preview is marked **Published data** while it uses the published app's data, and **No data yet** before anything is published.
+- **Fabric** switches between the direct app view and the app embedded in a Fabric shell: the Fabric portal shell for a published app that has a portal link, or a local Fabric host for your app on this computer. When neither is available, the button is turned off.
+- **Design** opens Design mode. On a preview at a `localhost` address, it works only between turns: always for your app on this computer, and with **Publish after each chat turn** off for the local preview of a published app. While the published app in the preview is publishing, Design waits until it's done.
 - **Focus** hides the chat and gives the preview more room. **Exit focus** shows the chat again.
 
 When Design mode is on, the extra preview-width buttons are **Desktop**, **Tablet** and **Phone**. **Desktop** fills the pane, **Tablet** previews at 820 CSS pixels, and **Phone** previews at 390 CSS pixels.
@@ -44,9 +113,14 @@ In Design mode, device widths account for Fabricator's UI scale, so **Tablet** a
 
 ## Sign in inside the preview
 
-Signing in to the deployed app is separate from Fabricator's Fabric CLI session. The app preview has its own browser session and cookies. If the app opens a Fabric or Microsoft Entra sign-in popup, Fabricator lets the preview browser handle that popup.
+Signing in to the published app is separate from Fabricator's Fabric CLI session. The app preview has its own browser session and cookies. If the app opens a Fabric or Microsoft Entra sign-in popup, Fabricator lets the preview browser handle that popup.
 
-In apps created from the Universal App template, the local preview signs you in automatically when the app uses sign-in. It uses the Fabric account that Fabricator deploys with, so a chat turn doesn't stop at the app's sign-in page. The deployed app doesn't include this and still asks you to sign in. Rayfin describes how it works in [Local automatic sign-in](https://rayfin.ai/docs/start/develop-locally#local-automatic-sign-in).
+In apps created from the Universal App template, a preview at a `localhost` address signs you in automatically when the app uses sign-in, so a chat turn doesn't stop at the app's sign-in page:
+
+- With Local development on, your app on this computer signs in as the person you chose in [Preview as](/docs/build/preview#preview-as-someone-else): you, to start with.
+- With Local development off, the local preview signs in with the Fabric account that Fabricator publishes with.
+
+The published app doesn't include this and still asks you to sign in. Rayfin describes how it works in [Local automatic sign-in](https://rayfin.ai/docs/start/develop-locally#local-automatic-sign-in).
 
 Older apps need Rayfin 1.36 or newer for this. See [Rayfin versions](/docs/ship/rayfin-versions). To add it to an older app, paste this prompt:
 
@@ -54,19 +128,19 @@ Older apps need Rayfin 1.36 or newer for this. See [Rayfin versions](/docs/ship/
 Make the local preview sign me in automatically with my Rayfin CLI account. Add @microsoft/rayfin-local-dev at the same version as the app's other Rayfin packages, register rayfinLocalDev({ autoLogin: true }) in vite.config.ts, and set externalEntraExchange: true under services.auth.fabric in rayfin/rayfin.yml. When the app starts in development without a saved session, get the local session token and sign in with signInWithBrokeredToken(). Keep that code behind import.meta.env.DEV with a dynamic import so production builds don't include it.
 ```
 
-Refreshing Fabricator's Fabric authentication affects Rayfin CLI deployment credentials. It does not sign the preview browser in or out.
+Refreshing Fabricator's Fabric authentication affects the Rayfin CLI credentials Fabricator publishes with. It does not sign the preview browser in or out.
 
 ## When every preview port is busy
 
-The live local preview must use a `localhost` port your app accepts for sign-in. Fabricator first tries the registered `http://localhost:N` ports from `rayfin/rayfin.yml`. If all registered ports are busy, you see a dialog titled like `localhost:5173 is in use`.
+A local preview of a published app runs against the published backend: with Local development off, for team apps, and for a published app that this computer can't run. It must use a `localhost` port your app accepts for sign-in. Fabricator first tries the registered `http://localhost:N` ports from `rayfin/rayfin.yml`. If all registered ports are busy, you see a dialog titled like `localhost:5173 is in use`.
 
 Depending on the situation, the dialog can offer:
 
-1. **Use port N**. Fabricator adds `http://localhost:N` to `rayfin/rayfin.yml`. If the app is already deployed, it also pushes the sign-in setting to Fabric without rebuilding the app.
+1. **Use port N**. Fabricator adds `http://localhost:N` to `rayfin/rayfin.yml`. If the app is already published, it also pushes the sign-in setting to Fabric without rebuilding the app. Otherwise, the port is registered for sign-in the next time you publish.
 2. a **Stop node.exe**-style button. Fabricator stops the specific process it identified, then uses the original port. The dialog warns that unsaved work in that process is lost.
-3. **Skip live preview**. Fabricator skips the local Vite preview for this turn. You can keep chatting, and the deployed preview takes over after the turn.
+3. **Skip live preview**. Fabricator skips the local Vite preview for this turn. You can keep chatting, and the published app shows in the preview after the turn.
 
 If switching ports would require a push while Copilot is already working, the dialog explains that it cannot happen during the turn and asks you to skip for now.
 
-For recovery steps, see [Preview problems](/docs/troubleshooting/preview), especially the "All preview ports are busy" section.
+For recovery steps, see [All preview ports are busy](/docs/troubleshooting/preview#all-preview-ports-are-busy).
 
