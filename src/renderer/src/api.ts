@@ -288,7 +288,9 @@ export const api: RayfinStudioApi = {
     list: (projectId: string) => invoke('secrets_list', { projectId }),
     set: (projectId: string, name: string, value: string, description?: string) =>
       invoke('secrets_set', { projectId, name, value, description }),
-    remove: (projectId: string, name: string) => invoke('secrets_delete', { projectId, name })
+    remove: (projectId: string, name: string) => invoke('secrets_delete', { projectId, name }),
+    declare: (projectId: string, name: string, description?: string) =>
+      invoke('secrets_declare', { projectId, name, description })
   },
 
   advisor: {
@@ -601,7 +603,14 @@ export const api: RayfinStudioApi = {
       localInvoke('local_stop_external', { projectId, pid }),
     onState: (cb: (status: LocalStatus) => void) =>
       subscribe<LocalStatus>(IpcChannels.localState, cb),
-    onLog: (cb: (line: LocalLogEvent) => void) => subscribe<LocalLogEvent>(IpcChannels.localLog, cb)
+    onLog: (cb: (line: LocalLogEvent) => void) =>
+      subscribe<LocalLogEvent>(IpcChannels.localLog, cb),
+    installPackages: (projectId: string) => localInvoke('local_install_packages', { projectId }),
+    reportFallback: (
+      projectId: string,
+      code: 'sdk-unsupported' | 'connector-unsupported',
+      reason: string
+    ) => localInvoke('local_report_fallback', { projectId, code, reason })
   }
 }
 

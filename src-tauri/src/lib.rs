@@ -126,6 +126,10 @@ pub fn run() {
       // is never mistaken for a hang.
       services::watchdog::start(app.handle().clone());
 
+      // Journal the local backends' problems that their supervisor only reports
+      // in its status, so Help can see them (see commands::help::local_journal).
+      commands::help::watch_local_backends(app.handle());
+
       // The main window starts hidden; the renderer shows it once its first
       // screen is painted (see `window_reveal`). Should the page never get that
       // far, show it anyway rather than leave the app invisible. (`get_window`:
@@ -342,6 +346,7 @@ pub fn run() {
       commands::secrets::secrets_list,
       commands::secrets::secrets_set,
       commands::secrets::secrets_delete,
+      commands::secrets::secrets_declare,
       // advisor
       commands::advisor::advisor_collect,
       commands::advisor::advisor_run,
@@ -435,6 +440,8 @@ pub fn run() {
       commands::local::local_set_secret,
       commands::local::local_delete_secret,
       commands::local::local_stop_external,
+      commands::local::local_install_packages,
+      commands::local::local_report_fallback,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

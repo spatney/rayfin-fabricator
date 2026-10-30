@@ -17,6 +17,8 @@ import type {
   ChatTurnResult,
   DeployResult,
   DevServerResult,
+  LocalReady,
+  LocalStatus,
   PortConflict,
   ProcLogEvent,
   ProcResult,
@@ -26,10 +28,14 @@ import type {
 import { ToastProvider } from '../toast'
 import { OverlayProvider } from '../overlay'
 import { deferred } from '../../test/deferred'
+import { localBackendStore } from '../localBackend'
+import { LOCAL_QUESTION } from '../components/local/problems'
+import { DEPLOY_QUESTION } from '../components/help/parts'
 import type PreviewPane from '../components/PreviewPane'
 import type ChatPanel from '../components/ChatPanel'
 import type AdvisorView from '../components/advisor/AdvisorView'
 import type DeploymentsControl from '../components/DeploymentsControl'
+import type MigrateReportScreen from '../components/migrate/MigrateReportScreen'
 import type { HelpView } from '../components/help/HelpView'
 import type Spotlight from '../components/spotlight/Spotlight'
 import type { AdvisorFixLinks } from '../components/advisor/AdvisorFixSummary'
@@ -44,6 +50,9 @@ const deploymentsProps = vi.hoisted(() =>
 )
 const helpProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof HelpView>) => void>())
 const searchProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof Spotlight>) => void>())
+const migrateProps = vi.hoisted(() =>
+  vi.fn<(props: ComponentProps<typeof MigrateReportScreen>) => void>()
+)
 /** The Advisor state the mocked `useAdvisor` reports, and what the chat's fix cards see. */
 const advisorMock = vi.hoisted(() => ({
   derived: { badge: null, items: [], open: [], resolved: [] } as Pick<
@@ -115,6 +124,13 @@ vi.mock('../components/spotlight/Spotlight', () => ({
     return <div role="dialog" aria-label="Search" />
   }
 }))
+vi.mock('../components/migrate/MigrateReportScreen', () => ({
+  default: (props: ComponentProps<typeof MigrateReportScreen>) => {
+    migrateProps(props)
+    return <div role="dialog" aria-label="Migrate a Power BI report" />
+  },
+  describePick: () => ''
+}))
 vi.mock('../components/PreviewPane', () => ({
   default: (props: ComponentProps<typeof PreviewPane>) => {
     previewProps(props)
@@ -160,6 +176,78 @@ const project: StudioProject = {
   lastDeploy: { url: 'https://project.example.com', status: 'success' }
 }
 const manualSettings: AppSettings = { theme: 'system', deployMode: 'manual' }
+/** "Publish after each chat turn" is on (it's off unless the user turns it on). */
+const autoSettings: AppSettings = { theme: 'system', deployMode: 'auto' }
+
+const localReady: LocalReady = {
+  appUrl: 'http://localhost:5173/',
+  apiUrl: 'http://localhost:7171',
+  embedUrl: null,
+  portalUrl: 'http://localhost:7171/.rayfin-local/portal',
+  dataDir: null,
+  signInAs: { kind: 'developer' },
+  sdk: { version: '1.36.2', supported: true },
+  features: {
+    data: { enabled: true, entities: ['Note'] },
+    functions: { enabled: false, names: [] },
+    storage: { enabled: false, folders: [] },
+    auth: { enabled: true, fabric: true, password: false },
+    connectors: []
+  },
+  time: '2026-10-30T03:00:00.000Z'
+}
+/** What a published app's backend says when this computer can't run its Rayfin version. */
+const tooNew: Partial<LocalStatus> = {
+  analysis: {
+    ok: true,
+    sdk: { version: '1.40.0', supported: false },
+    entities: [],
+    storageFolders: [],
+    message: null,
+    time: '2026-10-30T03:00:00.000Z'
+  }
+}
+
+/** Each project's local backend, as the fake `window.api.local` reports it. */
+let localStatuses = new Map<string, LocalStatus>()
+let localRevision = 0
+let emitLocalState: ((status: LocalStatus) => void) | null = null
+
+/** The project's local backend status becomes `patch` (on a stopped default). */
+function nextLocal(projectId: string, patch: Partial<LocalStatus> = {}): LocalStatus {
+  localRevision += 1
+  const status: LocalStatus = {
+    projectId,
+    state: 'stopped',
+    phase: null,
+    pid: null,
+    version: null,
+    projectRoot: null,
+    signInAs: null,
+    ready: null,
+    analysis: null,
+    schema: null,
+    functions: null,
+    vite: null,
+    config: null,
+    warnings: [],
+    error: null,
+    stopped: null,
+    crashes: 0,
+    startedAt: null,
+    updatedAt: null,
+    ...patch,
+    revision: localRevision
+  }
+  localStatuses.set(projectId, status)
+  return status
+}
+
+/** The local backend reports a new status (`local:state`). */
+function emitLocal(patch: Partial<LocalStatus>, projectId = project.id): void {
+  const status = nextLocal(projectId, patch)
+  act(() => emitLocalState?.(status))
+}
 
 function installApi(active = false) {
   const state = {
@@ -202,6 +290,40 @@ function installApi(active = false) {
         ok: true, outcome: 'success'
       }),
       onState: vi.fn<RayfinStudioApi['dev']['onState']>(() => () => {})
+    },
+    local: {
+      status: vi.fn<RayfinStudioApi['local']['status']>(
+        async (id) => localStatuses.get(id) ?? nextLocal(id)
+      ),
+      start: vi.fn<RayfinStudioApi['local']['start']>(async (id) =>
+        nextLocal(id, { state: 'starting', phase: 'starting' })
+      ),
+      restart: vi.fn<RayfinStudioApi['local']['restart']>(async (id) =>
+        nextLocal(id, { state: 'starting', phase: 'starting' })
+      ),
+      stop: vi.fn<RayfinStudioApi['local']['stop']>(async (id) =>
+        nextLocal(id, { ...localStatuses.get(id), state: 'stopped', ready: null })
+      ),
+      reload: vi.fn<RayfinStudioApi['local']['reload']>().mockResolvedValue({
+        schema: null,
+        config: null
+      }),
+      resetData: vi.fn<RayfinStudioApi['local']['resetData']>().mockResolvedValue(undefined),
+      installPackages: vi
+        .fn<RayfinStudioApi['local']['installPackages']>()
+        .mockResolvedValue(undefined),
+      stopExternal: vi.fn<RayfinStudioApi['local']['stopExternal']>().mockResolvedValue(undefined),
+      logs: vi.fn<RayfinStudioApi['local']['logs']>().mockResolvedValue([]),
+      onState: vi.fn<RayfinStudioApi['local']['onState']>((callback) => {
+        emitLocalState = callback
+        return () => {
+          if (emitLocalState === callback) emitLocalState = null
+        }
+      }),
+      onLog: vi.fn<RayfinStudioApi['local']['onLog']>(() => () => {}),
+      reportFallback: vi
+        .fn<RayfinStudioApi['local']['reportFallback']>()
+        .mockResolvedValue(undefined)
     },
     getVersions: vi.fn().mockResolvedValue(null),
     github: {
@@ -287,14 +409,19 @@ beforeEach(() => {
   deploymentsProps.mockClear()
   helpProps.mockClear()
   searchProps.mockClear()
+  migrateProps.mockClear()
   advisorMock.derived = { badge: null, items: [], open: [], resolved: [] }
   advisorMock.handOff.mockClear()
   advisorMock.links = null
   guardState.ready = true
+  localBackendStore.clear()
+  localStatuses = new Map()
+  emitLocalState = null
 })
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   localStorage.clear()
   delete (window as unknown as { api?: unknown }).api
 })
@@ -330,7 +457,9 @@ describe('Workbench authentication recovery', () => {
     act(() => api.onProcLog.mock.calls[0][0]({ channel: 'refresh:rayfin', stream: 'stderr', data: log }))
     expect(screen.getByLabelText('Authentication refresh log').textContent).toBe(log)
     fireEvent.click(screen.getByRole('button', { name: 'Test deploy' }))
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Deployment paused'))
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('Publishing paused')
+    )
     expect(api.deploy.run).not.toHaveBeenCalled()
     await act(async () => refreshed.resolve({ ok: true, exitCode: 0 }))
 
@@ -375,7 +504,7 @@ describe('Workbench authentication recovery', () => {
     const deploying = deferred<DeployResult>()
     api.deploy.hasChanges.mockResolvedValue(true)
     api.deploy.run.mockReturnValueOnce(deploying.promise)
-    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: autoSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     await act(async () => completeTurn())
     await act(async () => completeTurn())
@@ -692,8 +821,8 @@ describe('Workbench app bar', () => {
     act(() => previewProps.mock.lastCall![0].onDiagnoseDeploy?.())
     expect(screen.getByRole('dialog', { name: 'Help' })).toBeTruthy()
     const props = helpProps.mock.lastCall![0]
-    expect(props.initialQuestion).toBe('Why did my last deploy fail?')
-    expect(props.facts?.some((f) => f.includes('most recent deploy of "Project One" failed'))).toBe(true)
+    expect(props.initialQuestion).toBe(DEPLOY_QUESTION)
+    expect(props.facts?.some((f) => /most recent \w+ of "Project One" failed/.test(f))).toBe(true)
   })
 
   it('forgets the question once Help closes, so opening it later asks nothing', async () => {
@@ -819,11 +948,15 @@ describe('Workbench app bar', () => {
   })
 })
 
-describe('Workbench after-turn deployment', () => {
-  it('keeps every turn local once the user deploys manually, and deploys on Redeploy', async () => {
+describe('Workbench after-turn publishing', () => {
+  it.each<{ label: string; settings: AppSettings | null }>([
+    { label: 'while settings load', settings: null },
+    { label: 'by default', settings: { theme: 'system' } },
+    { label: 'once turned off', settings: manualSettings }
+  ])('keeps every turn on this computer $label, and publishes on Publish', async ({ settings }) => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
-    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on).toBe(false)
 
@@ -838,31 +971,31 @@ describe('Workbench after-turn deployment', () => {
     expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined)
   })
 
-  it('switches back to deploying after each turn from the deployment panel', async () => {
+  it('turns on publishing after each turn from the published apps panel', async () => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
-    const props = makeProps({ settings: manualSettings })
+    const props = makeProps({ settings: { theme: 'system' } })
     const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     expect(screen.queryByRole('combobox', { name: /deploy/i }), 'not in the status bar').toBeNull()
 
     act(() => deploymentsProps.mock.lastCall?.[0].autoDeploy?.onChange(true))
     expect(props.onSettingsChange).toHaveBeenCalledWith({ deployMode: 'auto' })
-    rerender(<Workbench {...props} settings={{ ...manualSettings, deployMode: 'auto' }} />)
+    rerender(<Workbench {...props} settings={autoSettings} />)
     expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on).toBe(true)
 
     await act(async () => completeTurn())
     expect(api.deploy.run).toHaveBeenCalledTimes(1)
   })
 
-  it('deploys after each turn by default, and not once that is turned off while changes are checked', async () => {
+  it('publishes after each turn while that’s on, and not once it’s turned off while changes are checked', async () => {
     const api = installApi(true)
     const changed = deferred<boolean>()
     api.deploy.hasChanges.mockReturnValueOnce(changed.promise)
-    const props = makeProps({ settings: { theme: 'system' } })
+    const props = makeProps({ settings: autoSettings })
     const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
-    expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on, 'Auto unless the user chose Manual').toBe(true)
+    expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on).toBe(true)
 
     act(() => deploymentsProps.mock.lastCall?.[0].autoDeploy?.onChange(false))
     expect(props.onSettingsChange).toHaveBeenCalledWith({ deployMode: 'manual' })
@@ -872,7 +1005,7 @@ describe('Workbench after-turn deployment', () => {
     await act(async () => changed.resolve(true))
     expect(api.deploy.run).not.toHaveBeenCalled()
 
-    // Turning it back on deploys after the next turn, not straight away.
+    // Turning it back on publishes after the next turn, not straight away.
     rerender(<Workbench {...props} />)
     expect(api.deploy.run).not.toHaveBeenCalled()
     api.deploy.hasChanges.mockResolvedValue(true)
@@ -880,10 +1013,10 @@ describe('Workbench after-turn deployment', () => {
     expect(api.deploy.run).toHaveBeenCalledTimes(1)
   })
 
-  it('redeploys undeployed changes even without file-edit events from the agent', async () => {
+  it('publishes unpublished changes even without file-edit events from the agent', async () => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
-    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: autoSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
 
     await act(async () => completeTurn())
@@ -894,9 +1027,9 @@ describe('Workbench after-turn deployment', () => {
     expect(api.projects.git.divergence).not.toHaveBeenCalled()
   })
 
-  it('does not redeploy when the deployed content is unchanged', async () => {
+  it('does not publish again when the published content is unchanged', async () => {
     const api = installApi(true)
-    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: autoSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
 
     await act(async () => completeTurn())
@@ -905,12 +1038,28 @@ describe('Workbench after-turn deployment', () => {
     expect(api.deploy.run).not.toHaveBeenCalled()
   })
 
+  it('leaves the first publish of a new app to the user, even with publishing after each turn on', async () => {
+    const api = installApi(true)
+    const fresh = { ...project, lastDeploy: undefined }
+    const state = { workspaceRoot: 'C:\\projects', activeProjectId: fresh.id, projects: [fresh] }
+    api.projects.state.mockResolvedValue(state)
+    api.deploy.reconcile.mockResolvedValue(state)
+    api.deploy.hasChanges.mockResolvedValue(true)
+    render(<Workbench {...makeProps({ settings: autoSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    await act(async () => completeTurn())
+
+    expect(api.deploy.hasChanges).not.toHaveBeenCalled()
+    expect(api.deploy.run).not.toHaveBeenCalled()
+  })
+
   it.each([undefined, 'Coding failed'])(
-    'does not auto-deploy an unsuccessful turn (%s)',
+    'does not publish after an unsuccessful turn (%s)',
     async (error) => {
       const api = installApi(true)
       api.deploy.hasChanges.mockResolvedValue(true)
-      render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+      render(<Workbench {...makeProps({ settings: autoSettings })} />, { wrapper: Wrapper })
       await screen.findByLabelText('Chat draft')
 
       await act(async () =>
@@ -923,11 +1072,11 @@ describe('Workbench after-turn deployment', () => {
   )
 
   it.each(['project refresh', 'history save', 'version check'])(
-    'still redeploys and reports a failed %s',
+    'still publishes and reports a failed %s',
     async (failure) => {
       const api = installApi(true)
       api.deploy.hasChanges.mockResolvedValue(true)
-      render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+      render(<Workbench {...makeProps({ settings: autoSettings })} />, { wrapper: Wrapper })
       await screen.findByLabelText('Chat draft')
       await act(async () => {})
       const operation =
@@ -947,28 +1096,29 @@ describe('Workbench after-turn deployment', () => {
   )
 
   it.each(['Git unavailable', new Error('Git unavailable')])(
-    'surfaces a failed change check (%s) instead of silently skipping deployment',
+    'surfaces a failed change check (%s) instead of silently skipping the publish',
     async (error) => {
       const api = installApi(true)
       api.deploy.hasChanges.mockRejectedValueOnce(error)
-      render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+      render(<Workbench {...makeProps({ settings: autoSettings })} />, { wrapper: Wrapper })
       await screen.findByLabelText('Chat draft')
 
       await act(async () => completeTurn())
 
-      expect(screen.getByRole('alert').textContent).toContain('Auto-deploy check failed')
-      expect(screen.getByRole('alert').textContent).toContain('Git unavailable')
-      expect(screen.getByRole('alert').textContent).toContain('Use Redeploy')
+      const alert = screen.getByRole('alert').textContent
+      expect(alert).toContain('Couldn’t publish automatically')
+      expect(alert).toContain('Git unavailable')
+      expect(alert).toContain('Select Publish to publish your changes.')
       expect(api.deploy.run).not.toHaveBeenCalled()
     }
   )
 
-  it('queues a new deployment when another turn finishes during deployment', async () => {
+  it('queues another publish when another turn finishes during one', async () => {
     const api = installApi(true)
     const deploying = deferred<DeployResult>()
     api.deploy.hasChanges.mockResolvedValue(true)
     api.deploy.run.mockReturnValueOnce(deploying.promise)
-    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: autoSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
 
     await act(async () => completeTurn())
@@ -1010,11 +1160,13 @@ describe('Workbench after-turn deployment', () => {
     expect(previewProps.mock.lastCall?.[0].watching).toBe(false)
   })
 
-  it('does not start an auto-deploy after the workbench is unmounted', async () => {
+  it('does not start a publish after the workbench is unmounted', async () => {
     const api = installApi(true)
     const changed = deferred<boolean>()
     api.deploy.hasChanges.mockReturnValueOnce(changed.promise)
-    const view = render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    const view = render(<Workbench {...makeProps({ settings: autoSettings })} />, {
+      wrapper: Wrapper
+    })
     await screen.findByLabelText('Chat draft')
 
     await act(async () => completeTurn())
@@ -1027,11 +1179,12 @@ describe('Workbench after-turn deployment', () => {
 })
 
 /**
- * Live local preview ports: a turn starts Vite on a port the app's sign-in
- * accepts. When every such port is taken, the turn waits while the user
- * registers another port (rayfin.yml + a settings push) or stops the process.
+ * A published app this computer can't run previews on its published backend:
+ * a turn starts Vite on a port the app's sign-in accepts. When every such port
+ * is taken, the turn waits while the user registers another port (rayfin.yml +
+ * a settings push) or stops the process.
  */
-describe('Workbench live preview ports', () => {
+describe('Workbench live preview on the published backend', () => {
   const conflict: PortConflict = {
     port: 5173,
     occupant: { pid: 4321, name: 'node.exe', commandLine: 'node C:\\other-app\\node_modules\\vite\\bin\\vite.js' },
@@ -1040,12 +1193,22 @@ describe('Workbench live preview ports', () => {
     needsPush: true
   }
 
-  async function mount(settings: AppSettings | null = { theme: 'system' }) {
+  /** The app falls back: its Rayfin version is newer than this computer runs. */
+  async function waitForFallback(): Promise<void> {
+    await waitFor(() =>
+      expect(previewProps.mock.lastCall?.[0].fallbackReason).toContain('Rayfin 1.40.0')
+    )
+    await act(async () => {})
+  }
+
+  async function mount(settings: AppSettings | null = autoSettings) {
     const api = installApi(true)
+    nextLocal(project.id, tooNew)
     const dev = api.dev
     dev.plan.mockResolvedValue({ conflict })
     const view = render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
+    await waitForFallback()
     return { api, dev, view }
   }
 
@@ -1173,12 +1336,12 @@ describe('Workbench live preview ports', () => {
 
   it.each<{ label: string; settings: AppSettings | null }>([
     { label: 'settings are still loading', settings: null },
-    { label: 'experiments are absent', settings: { theme: 'system' } },
-    { label: 'experiments are empty', settings: { theme: 'system', experiments: {} } },
+    { label: 'experiments are absent', settings: autoSettings },
+    { label: 'experiments are empty', settings: { ...autoSettings, experiments: {} } },
     ...[false, true].map((localDevPreview) => ({
       label: `the retired preview flag is ${localDevPreview}`,
       settings: {
-        theme: 'system' as const,
+        ...autoSettings,
         experiments: { localDevPreview, teamWorkspaces: false }
       }
     }))
@@ -1229,7 +1392,7 @@ describe('Workbench live preview ports', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Test deploy' }))
     await waitFor(() => expect(chatProps.mock.lastCall?.[0].deploying).toBe(true))
     expect(chatProps.mock.lastCall?.[0].blockSubmitWhileDeploying).toBe(true)
-    expect(previewProps.mock.lastCall?.[0].designSendBlocked).toMatch(/Deploying/)
+    expect(previewProps.mock.lastCall?.[0].designSendBlocked).toMatch(/^Publishing/)
 
     const { turn } = await beginTurn()
     await act(async () => turn)
@@ -1305,9 +1468,10 @@ describe('Workbench live preview ports', () => {
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
   })
 
-  /** Manual deploy, with a free port, so the open app's preview starts. */
+  /** Turns don't publish, with a free port, so the open app's live preview starts. */
   async function mountManual() {
     const api = installApi(true)
+    nextLocal(project.id, tooNew)
     api.dev.plan.mockResolvedValue({ port: 5174 })
     const view = render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
@@ -1315,7 +1479,7 @@ describe('Workbench live preview ports', () => {
     return { api, dev: api.dev, view }
   }
 
-  it.each([true, false])('runs the local preview whenever the app is open while the user deploys manually (turn success: %s)', async (ok) => {
+  it.each([true, false])('keeps the live preview while turns don’t publish (%s)', async (ok) => {
     const { api, dev } = await mountManual()
     expect(dev.start).toHaveBeenCalledWith(project.id, 5174)
     expect(previewProps.mock.lastCall?.[0].manualDeploy).toBe(true)
@@ -1380,9 +1544,11 @@ describe('Workbench live preview ports', () => {
     expect(dev.stop.mock.invocationCallOrder[0]).toBeLessThan(dev.start.mock.invocationCallOrder[1])
   })
 
-  it('moves the local preview to the app you switch to, once the old one has stopped', async () => {
+  it('moves the live preview to the app you switch to, once the old one has stopped', async () => {
     const api = installApi(true)
     const other: StudioProject = { ...project, id: 'p2', name: 'Project Two', path: 'C:\\projects\\p2' }
+    nextLocal(project.id, tooNew)
+    nextLocal(other.id, tooNew)
     let current = {
       workspaceRoot: 'C:\\projects',
       activeProjectId: project.id as string | null,
@@ -1411,9 +1577,9 @@ describe('Workbench live preview ports', () => {
     await waitFor(() => expect(api.dev.start).toHaveBeenCalledWith('p2', 5174))
   })
 
-  it('closes the local preview when deploying after each turn is turned back on', async () => {
+  it('closes the live preview when publishing after each turn is turned on', async () => {
     const { dev, view } = await mountManual()
-    view.rerender(<Workbench {...makeProps({ settings: { theme: 'system', deployMode: 'auto' } })} />)
+    view.rerender(<Workbench {...makeProps({ settings: autoSettings })} />)
     expect(dev.stop).toHaveBeenCalledWith(project.id)
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
   })
@@ -1436,6 +1602,345 @@ describe('Workbench live preview ports', () => {
 
     await act(async () => started.resolve({ ok: true, outcome: 'running', url: 'http://localhost:5174' }))
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
+  })
+})
+
+/**
+ * A personal app runs on its local backend from the moment it opens, through
+ * every turn: no Vite of Fabricator's own, no port prompts, nothing published
+ * unless the user asks.
+ */
+describe('Workbench local backend', () => {
+  const setTurnRunning = (pending: boolean): void =>
+    act(() => {
+      chatProps.mock.lastCall?.[0].onChange(
+        () => [{ id: 'a1', role: 'assistant', text: '', tools: [], pending }] as never
+      )
+    })
+  const preview = (): ComponentProps<typeof PreviewPane> => {
+    const props = previewProps.mock.lastCall?.[0]
+    if (!props) throw new Error('The preview is not mounted')
+    return props
+  }
+
+  async function mountLocal(settings: AppSettings | null = null) {
+    const api = installApi(true)
+    const props = makeProps({ settings })
+    const view = render(<Workbench {...props} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledTimes(1))
+    return { api, props, view }
+  }
+
+  it('starts a personal app’s backend once its packages are ready, and keeps it through turns', async () => {
+    guardState.ready = false
+    const api = installApi(true)
+    const props = makeProps()
+    const view = render(<Workbench {...props} />, { wrapper: Wrapper })
+    await screen.findByText('Preparing Project One')
+    await act(async () => {})
+    expect(api.local.start, 'not before its packages are installed').not.toHaveBeenCalled()
+
+    guardState.ready = true
+    view.rerender(<Workbench {...props} />)
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledWith(project.id, undefined))
+    emitLocal({ state: 'running', ready: localReady })
+    expect(preview().local?.ready?.appUrl).toBe('http://localhost:5173/')
+    expect(preview().fallbackReason).toBeNull()
+
+    const { turn } = await beginTurn()
+    await act(async () => turn)
+    await act(async () =>
+      completeTurn({ ok: true, filesModified: ['src/App.tsx'], ranDeploy: false })
+    )
+    expect(api.dev.plan, 'its own Vite shows the turn').not.toHaveBeenCalled()
+    expect(api.dev.start).not.toHaveBeenCalled()
+    expect(api.local.stop).not.toHaveBeenCalled()
+    expect(api.local.start).toHaveBeenCalledTimes(1)
+    expect(api.deploy.hasChanges, 'publishing waits for the user').not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('starts the backend of the app you switch to, and doesn’t restart one that runs', async () => {
+    const api = installApi(true)
+    const other: StudioProject = {
+      ...project,
+      id: 'p2',
+      name: 'Project Two',
+      path: 'C:\\projects\\p2'
+    }
+    let current = {
+      workspaceRoot: 'C:\\projects',
+      activeProjectId: project.id as string | null,
+      projects: [project, other]
+    }
+    api.projects.state.mockImplementation(async () => current)
+    api.deploy.reconcile.mockImplementation(async () => current)
+    api.projects.setActive.mockImplementation(async (id) => {
+      current = { ...current, activeProjectId: id }
+      return current
+    })
+    nextLocal(other.id, { state: 'running', ready: localReady })
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledWith(project.id, undefined))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Project One — Switch projects' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Project Two' }))
+    await screen.findByRole('button', { name: 'Project Two — Switch projects' })
+    await waitFor(() => expect(preview().local?.status?.projectId).toBe(other.id))
+    await act(async () => {})
+    expect(api.local.start).not.toHaveBeenCalledWith(other.id, undefined)
+    expect(api.local.stop, 'the one you came from keeps running').not.toHaveBeenCalled()
+  })
+
+  it('never starts a team app’s local backend', async () => {
+    const api = installApi(true)
+    const teamApp: StudioProject = {
+      ...project,
+      lastDeploy: undefined,
+      team: { workspaceId: 'w1', folder: 'team-app', worktree: 'C:\\team\\team-app', branch: 'b' }
+    }
+    const state = {
+      workspaceRoot: 'C:\\projects',
+      activeProjectId: teamApp.id,
+      projects: [teamApp]
+    }
+    api.projects.state.mockResolvedValue(state)
+    api.deploy.reconcile.mockResolvedValue(state)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await act(async () => {})
+    expect(api.local.status).not.toHaveBeenCalled()
+    expect(api.local.start).not.toHaveBeenCalled()
+    expect(preview().local).toBeUndefined()
+  })
+
+  it('reloads the page once the backend rebuilds what it uses, after the turn that changed it', async () => {
+    await mountLocal()
+    emitLocal({ state: 'running', ready: localReady })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const rebuilt = (
+      time: string,
+      functions: 'building' | 'ready' = 'ready'
+    ): Partial<LocalStatus> => ({
+      state: 'running',
+      ready: localReady,
+      schema: {
+        result: 'applied',
+        changes: ['changed Note'],
+        losses: [],
+        message: null,
+        live: true,
+        time
+      },
+      functions: { state: functions, names: [], errors: [], message: null, time }
+    })
+
+    setTurnRunning(true)
+    emitLocal(rebuilt('2026-10-30T03:01:00.000Z'))
+    act(() => vi.advanceTimersByTime(1000))
+    expect(preview().localReload, 'not mid-turn').toBe(0)
+    setTurnRunning(false)
+    act(() => vi.advanceTimersByTime(1000))
+    expect(preview().localReload).toBe(1)
+
+    // Outside turns too, once its functions have built.
+    emitLocal(rebuilt('2026-10-30T03:02:00.000Z', 'building'))
+    act(() => vi.advanceTimersByTime(1000))
+    expect(preview().localReload).toBe(1)
+    emitLocal(rebuilt('2026-10-30T03:02:05.000Z'))
+    act(() => vi.advanceTimersByTime(1000))
+    expect(preview().localReload).toBe(2)
+    // A status that changes nothing the page uses leaves it be.
+    emitLocal({ ...rebuilt('2026-10-30T03:02:05.000Z'), warnings: [] })
+    act(() => vi.advanceTimersByTime(1000))
+    expect(preview().localReload).toBe(2)
+  })
+
+  it('starts the backend again after a turn when a problem in the app stopped it', async () => {
+    const { api } = await mountLocal()
+    emitLocal({
+      state: 'error',
+      error: {
+        code: 'analysis-failed',
+        message: 'Note.ts has an error.',
+        hint: null,
+        fatal: true,
+        details: null,
+        time: null
+      }
+    })
+    await act(async () => completeTurn())
+    expect(api.local.start).toHaveBeenCalledTimes(2)
+
+    emitLocal({
+      state: 'error',
+      error: {
+        code: 'already-serving',
+        message: 'Another serve runs it.',
+        hint: null,
+        fatal: true,
+        details: { pid: 42 },
+        time: null
+      }
+    })
+    await act(async () => completeTurn())
+    expect(api.local.start, 'a turn can’t stop the other one').toHaveBeenCalledTimes(2)
+  })
+
+  it('asks about a data model change that would delete local data once the turn ends', async () => {
+    const { api } = await mountLocal()
+    const refused = (time: string): Partial<LocalStatus> => ({
+      state: 'running',
+      ready: localReady,
+      schema: {
+        result: 'refused',
+        changes: ['changed Note'],
+        losses: ['Note.title (3 values)'],
+        message: null,
+        live: true,
+        time
+      }
+    })
+    setTurnRunning(true)
+    emitLocal(refused('2026-10-30T03:01:00.000Z'))
+    expect(screen.queryByRole('dialog'), 'Copilot may change it again').toBeNull()
+    setTurnRunning(false)
+    const dialog = screen.getByRole('dialog', { name: 'This change would delete local data' })
+    expect(within(dialog).getByText('Note.title (3 values)')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep the current version' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await act(async () => completeTurn())
+    expect(screen.queryByRole('dialog'), 'kept: not asked again for the same change').toBeNull()
+
+    act(() => preview().onReviewSchema?.())
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this data and apply' }))
+    await waitFor(() => expect(api.local.reload).toHaveBeenCalledWith(project.id, true))
+
+    // Refused as it started, the app waits: resetting its data starts it from empty.
+    emitLocal({
+      state: 'error',
+      error: {
+        code: 'schema-refused',
+        message: 'The change would delete data.',
+        hint: null,
+        fatal: true,
+        details: { losses: ['Tag (2 rows)'] },
+        time: '2026-10-30T03:03:00.000Z'
+      }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Reset local data' }))
+    await waitFor(() => expect(api.local.restart).toHaveBeenCalledWith(project.id, { reset: true }))
+    emitLocal({ state: 'starting', phase: 'starting' })
+    expect(screen.queryByRole('dialog'), 'the change is no longer waiting').toBeNull()
+  })
+
+  it('falls back to the published backend when this computer can’t run the app, and says why', async () => {
+    const api = installApi(true)
+    api.dev.plan.mockResolvedValue({ port: 5174 })
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledTimes(1))
+    emitLocal({
+      state: 'running',
+      ready: {
+        ...localReady,
+        features: {
+          ...localReady.features,
+          connectors: [{ name: 'logs', type: 'kusto', supported: false }]
+        }
+      }
+    })
+    const reason =
+      'The logs connector runs only on Fabric, so the preview uses your published app’s backend.'
+    expect(preview().fallbackReason).toBe(reason)
+    expect(preview().local, 'no local view').toBeUndefined()
+    await waitFor(() => expect(api.local.stop).toHaveBeenCalledWith(project.id))
+    expect(api.local.reportFallback).toHaveBeenCalledWith(
+      project.id,
+      'connector-unsupported',
+      reason
+    )
+    expect(api.dev.plan, 'its ports are still taken').not.toHaveBeenCalled()
+
+    // Stopped, it lets go of its ports, and the live preview on the published backend starts.
+    emitLocal({ state: 'stopped' })
+    await waitFor(() => expect(api.dev.start).toHaveBeenCalledWith(project.id, 5174))
+    expect(preview().fallbackReason, 'it stays fallen back').toBe(reason)
+    expect(api.local.reportFallback).toHaveBeenCalledTimes(1)
+  })
+
+  it('checks again after a turn changes the app’s packages, and runs it here once it can', async () => {
+    const api = installApi(true)
+    nextLocal(project.id, tooNew)
+    api.dev.plan.mockResolvedValue({ port: 5174 })
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(preview().localPreviewUrl).toBe('http://localhost:5174'))
+    expect(api.local.start, 'known to fall back').not.toHaveBeenCalled()
+
+    await act(async () =>
+      completeTurn({ ok: true, filesModified: ['src/App.tsx'], ranDeploy: false })
+    )
+    expect(api.local.start).not.toHaveBeenCalled()
+    await act(async () =>
+      completeTurn({ ok: true, filesModified: ['package.json'], ranDeploy: false })
+    )
+    expect(api.local.start).toHaveBeenCalledWith(project.id)
+    emitLocal({ state: 'starting', phase: 'analysis' })
+    expect(preview().fallbackReason, 'the preview stays put while it checks').toContain(
+      'Rayfin 1.40.0'
+    )
+
+    emitLocal({ state: 'running', ready: localReady })
+    await waitFor(() => expect(preview().local?.state).toBe('running'))
+    expect(preview().fallbackReason).toBeNull()
+    expect(api.dev.stop).toHaveBeenCalledWith(project.id)
+  })
+
+  it('runs an unpublished app here even when it can’t fully, with nothing to fall back to', async () => {
+    const api = installApi(true)
+    const fresh = { ...project, lastDeploy: undefined }
+    const state = { workspaceRoot: 'C:\\projects', activeProjectId: fresh.id, projects: [fresh] }
+    api.projects.state.mockResolvedValue(state)
+    api.deploy.reconcile.mockResolvedValue(state)
+    nextLocal(project.id, tooNew)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledTimes(1))
+    expect(preview().local).toBeDefined()
+    expect(preview().fallbackReason).toBeNull()
+    expect(api.local.reportFallback).not.toHaveBeenCalled()
+  })
+
+  it('asks Help why the app didn’t start, opens setup, and remembers which app the preview shows', async () => {
+    const { props } = await mountLocal()
+    act(() => preview().onDiagnoseLocal?.())
+    expect(helpProps.mock.lastCall?.[0].initialQuestion).toBe(LOCAL_QUESTION)
+    act(() => helpProps.mock.lastCall?.[0].onClose())
+
+    preview().onOpenSetup?.()
+    expect(props.onReviewSetup).toHaveBeenCalledTimes(1)
+
+    expect(preview().view).toBe('local')
+    act(() => preview().onViewChange?.('published'))
+    expect(preview().view).toBe('published')
+  })
+
+  it('lets the Power BI migration refresh the accounts after signing in there', async () => {
+    const api = installApi(false)
+    Object.assign(api, { migration: { onState: vi.fn(() => () => {}) } })
+    const props = makeProps({
+      settings: { theme: 'system', experiments: { reportMigration: true } }
+    })
+    render(<Workbench {...props} />, { wrapper: Wrapper })
+    await screen.findByTestId('home')
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const migrate = searchProps.mock.lastCall![0].items.find((item) => item.id === 'action:migrate')
+    act(() => migrate!.run())
+    expect(migrateProps.mock.lastCall?.[0].onSignedIn).toBe(props.onAuthChanged)
   })
 })
 

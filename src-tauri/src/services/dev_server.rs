@@ -1,8 +1,12 @@
-//! Automatic live local preview: run a project's **Vite dev server** while
-//! an agent turn is in flight so edits show live (HMR) at `localhost`, then stop
-//! it at turn end and let the normal after-turn deploy take over. Team apps keep
-//! theirs until the pipeline has deployed the saved change, and run against
-//! their pipeline deployment's settings (see [`team::local_preview`]).
+//! Live local preview against a Fabric backend: run a project's **Vite dev
+//! server** while an agent turn is in flight so edits show live (HMR) at
+//! `localhost`, then stop it at turn end. Personal apps run on their local
+//! backend instead (`local_backend`, rayfin-local, with its own Vite); this is
+//! for team apps, and for a published app the local backend can't run (an SDK
+//! outside its range, a connector that runs only on Fabric), whose preview falls
+//! back to its published backend. Team apps keep theirs until the pipeline has
+//! deployed the saved change, and run against their pipeline deployment's
+//! settings (see [`team::local_preview`]).
 //!
 //! Unlike a deploy, this does NOT run `rayfin up` — it spawns Vite *directly*
 //! (`node …/node_modules/vite/bin/vite.js`) for a fast preview, after a
@@ -126,8 +130,20 @@ fn has_backend(project: &StudioProject) -> bool {
         .is_some_and(|active| json.get("deployments").and_then(|all| all.get(active)).is_some())
 }
 
+/// Ports other projects hold in this window, with their ids: their live
+/// previews, and the app and API of their local backends. A preview never takes
+/// one, or offers to stop what holds it.
+fn held_by_others(app: &AppHandle, servers: &DevServers, project_id: &str) -> Vec<(u16, String)> {
+    let mut held = servers.ports_held_by_others(project_id);
+    if let Some(backends) = app.try_state::<crate::services::local_backend::LocalBackends>() {
+        held.extend(backends.held_ports(project_id));
+    }
+    held
+}
+
 /// Where this project's preview can start, probing ports but starting nothing.
-fn plan_for(servers: &DevServers, project: &StudioProject) -> DevPortPlan {
+/// `others` are the ports other projects hold ([`held_by_others`]).
+fn plan_for(servers: &DevServers, project: &StudioProject, others: &[(u16, String)]) -> DevPortPlan {
     let dir = Path::new(&project.path);
     if !dev_supported(dir) {
         return DevPortPlan::default();
@@ -136,7 +152,6 @@ fn plan_for(servers: &DevServers, project: &StudioProject) -> DevPortPlan {
         return DevPortPlan { port: Some(port), conflict: None };
     }
     let choice = port_choice(dir);
-    let others = servers.ports_held_by_others(&project.id);
     let taken: Vec<u16> = others.iter().map(|(port, _)| *port).collect();
     if let Some(port) = pick_port(&choice, &taken, local_ports::is_free) {
         return DevPortPlan { port: Some(port), conflict: None };
@@ -165,9 +180,14 @@ fn plan_for(servers: &DevServers, project: &StudioProject) -> DevPortPlan {
 
 /// The port [`start_server`] should use: an explicit `requested` one must still
 /// be free and sign-in-ready (just registered, or just freed by the user).
-fn resolve_port(servers: &DevServers, project: &StudioProject, requested: Option<u16>) -> Result<u16, DevServerResult> {
+fn resolve_port(
+    servers: &DevServers,
+    project: &StudioProject,
+    requested: Option<u16>,
+    others: &[(u16, String)],
+) -> Result<u16, DevServerResult> {
     let Some(port) = requested else {
-        let plan = plan_for(servers, project);
+        let plan = plan_for(servers, project, others);
         return match plan.port {
             Some(port) => Ok(port),
             None => Err(DevServerResult {
@@ -189,7 +209,7 @@ fn resolve_port(servers: &DevServers, project: &StudioProject, requested: Option
             "localhost:{port} isn't in rayfin.yml's allowed redirect URIs, so sign-in wouldn't work there."
         )));
     }
-    let held = servers.ports_held_by_others(&project.id).iter().any(|(other, _)| *other == port);
+    let held = others.iter().any(|(other, _)| *other == port);
     if held || !local_ports::is_free(port) {
         return Err(failed(&format!("localhost:{port} is in use again. Send your message again to pick another port.")));
     }
@@ -465,7 +485,8 @@ async fn start_server(app: AppHandle, state: DevServers, project_id: String, req
     let renderer = emit::proc_streamer(&app, DEV_CHANNEL);
     let resolved = {
         let (servers, project) = (state.clone(), project.clone());
-        tokio::task::spawn_blocking(move || resolve_port(&servers, &project, requested))
+        let others = held_by_others(&app, &state, &project_id);
+        tokio::task::spawn_blocking(move || resolve_port(&servers, &project, requested, &others))
             .await
             .map_err(|e| AppError::Msg(format!("Local preview port check failed: {e}")))?
     };
@@ -769,12 +790,13 @@ pub async fn dev_stop(state: State<'_, DevServers>, project_id: String) -> AppRe
 /// Where the project's live preview would start: a free, sign-in-ready port, or
 /// the conflict to put to the user. Probes ports; starts and stops nothing.
 #[tauri::command]
-pub async fn dev_port_plan(state: State<'_, DevServers>, project_id: String) -> AppResult<DevPortPlan> {
+pub async fn dev_port_plan(app: AppHandle, state: State<'_, DevServers>, project_id: String) -> AppResult<DevPortPlan> {
     let servers = state.inner().clone();
     let Some(project) = store::find_project(&project_id) else {
         return Ok(DevPortPlan::default());
     };
-    tokio::task::spawn_blocking(move || plan_for(&servers, &project))
+    let others = held_by_others(&app, &servers, &project_id);
+    tokio::task::spawn_blocking(move || plan_for(&servers, &project, &others))
         .await
         .map_err(|e| AppError::Msg(format!("Local preview port check failed: {e}")))
 }
@@ -1166,13 +1188,11 @@ setInterval(() => {}, 1000)
         )
         .unwrap();
         let servers = DevServers::default();
-        let error = resolve_port(&servers, &project_at(&dir), Some(5199)).unwrap_err();
+        let error = resolve_port(&servers, &project_at(&dir), Some(5199), &[]).unwrap_err();
         assert!(error.error.unwrap().contains("isn't in rayfin.yml"));
 
-        servers.inner.lock().unwrap().insert("other".into(), DevHandle {
-            pid: None, cancel: CancelToken::new(), port: 5173, url: None,
-        });
-        let error = resolve_port(&servers, &project_at(&dir), Some(5173)).unwrap_err();
+        // Another project's preview, or its local backend, holds the port.
+        let error = resolve_port(&servers, &project_at(&dir), Some(5173), &[(5173, "other".into())]).unwrap_err();
         assert!(error.error.unwrap().contains("in use again"));
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -750,11 +750,11 @@ pub struct AppSettings {
   /// Settings → Diagnostics.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub full_diagnostics: Option<bool>,
-  /// How chat turns deploy personal apps, set by the deployment panel's
-  /// "Deploy after each chat turn" switch: "auto" (the default, also when unset)
-  /// deploys as each turn finishes; "manual" keeps the changes on this machine,
-  /// with the live local preview kept between turns, until the user deploys.
-  /// Team projects aren't affected.
+  /// How chat turns publish personal apps, set by the published apps panel's
+  /// "Publish after each chat turn" switch: "auto" publishes as each turn
+  /// finishes; "manual" (the default, also when unset) keeps the changes on this
+  /// computer, running locally, until the user publishes. Team projects aren't
+  /// affected.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub deploy_mode: Option<String>,
   /// Your own API keys: each provider's models and which of them the model
@@ -3085,6 +3085,11 @@ pub struct AdvisorProjectSnapshot {
   pub truncated: Option<bool>,
   pub is_git_repo: bool,
   pub packages: Vec<AdvisorPackage>,
+  /// The Rayfin releases the bundled local backend runs, as an npm range
+  /// (`rayfin-local.json` `sdk.supported`). Absent for apps it doesn't run,
+  /// such as team apps.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub local_sdk_range: Option<String>,
 }
 
 /// `advisor_load` result: the saved deep review and the renderer-owned

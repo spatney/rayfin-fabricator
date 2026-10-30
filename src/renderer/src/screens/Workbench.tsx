@@ -42,7 +42,24 @@ import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../component
 import { segmentsForStorage, segmentsFromStorage } from '../components/chat/storage'
 import { planForStorage, planFromStorage } from '../chatPlan'
 import { useChatEventStore } from '../chatEventStore'
-import PreviewPane, { type DeployUiState, type PendingShot } from '../components/PreviewPane'
+import PreviewPane, {
+  type DeployUiState,
+  type PendingShot,
+  type PreviewView
+} from '../components/PreviewPane'
+import SchemaChangeDialog from '../components/local/SchemaChangeDialog'
+import { LOCAL_QUESTION } from '../components/local/problems'
+import {
+  backendStamp,
+  changesLocalSupport,
+  isLocalBackendActive,
+  localBackendStore,
+  localFallbackCode,
+  localFallbackReason,
+  refusedSchemaLosses,
+  retriesAfterTurn,
+  useLocalBackend
+} from '../localBackend'
 import DeploymentsControl from '../components/DeploymentsControl'
 import GitControl from '../components/GitControl'
 import TeamPublishControl from '../components/team/TeamPublishControl'
@@ -109,6 +126,9 @@ const HELP_ACTIONS_ELSEWHERE = new Set<HelpAction['id']>([
 ])
 /** The model a report migration's turns use, chosen before it starts and kept for the next one. */
 const MIGRATION_MODEL_KEY = 'fabricator.migration.model'
+/** How long the local backend's rebuild has to settle (an analysis, then the schema
+ *  and functions it leads to) before the open page loads again, once. */
+const LOCAL_RELOAD_SETTLE_MS = 500
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
@@ -381,11 +401,13 @@ export default function Workbench({
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
   useChatEventStore(setChats)
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
-  /** Live local preview: per-project Vite dev-server state. Present while a turn
-   *  runs — started at turn start, cleared/stopped at turn end. A team app's
-   *  `lingers` after its turn until the pipeline has deployed the saved change,
-   *  and with manual deploy, the open app's preview is `kept` running while
-   *  the app is open. */
+  /** Live preview against a Fabric backend, for team apps and for published apps
+   *  their local backend can't run (other personal apps run on their local
+   *  backend, `useLocalBackend`): per-project Vite dev-server state. Present
+   *  while a turn runs — started at turn start, cleared/stopped at turn end. A
+   *  team app's `lingers` after its turn until the pipeline has published the
+   *  saved change, and while turns don't publish, the open app's preview is
+   *  `kept` running while the app is open. */
   const [devServers, setDevServers] = useState<
     Record<
       string,
@@ -395,15 +417,36 @@ export default function Workbench({
         backend?: DevServerResult['backend']
         lingerSince?: number
         kept?: boolean
-        /** Kept on screen through the after-turn deploy (beside it), and closed when it ends. */
+        /** Kept on screen through the after-turn publish (beside it), and closed when it ends. */
         untilDeployed?: boolean
-        /** The deployment it took its backend settings from (see deploymentKey). */
+        /** The published app it took its backend settings from (see deploymentKey). */
         target?: string
       }
     >
   >({})
   const devServersRef = useRef(devServers)
   devServersRef.current = devServers
+  /** Published apps their local backend can't run (see `localFallbackReason`), by
+   *  project: why their preview uses the published backend instead, through the
+   *  dev server above. Kept until the local backend runs the app, so opening one
+   *  again doesn't start its backend only to stop it. */
+  const [fallbacks, setFallbacks] = useState<Record<string, string>>({})
+  const fallbacksRef = useRef(fallbacks)
+  fallbacksRef.current = fallbacks
+  /** A published app its local backend can't run, so it previews on its published
+   *  backend: known, or just reported by its backend. (Called after render.) */
+  const fallsBack = useCallback((projectId: string): boolean => {
+    if (fallbacksRef.current[projectId]) return true
+    const published = Boolean(
+      projectsRef.current?.projects.find((p) => p.id === projectId)?.lastDeploy?.url
+    )
+    return published && localFallbackReason(localBackendStore.get(projectId)) !== null
+  }, [])
+  /** Local backends stopping because their app falls back, so a dev server waits for their ports. */
+  const localStoppingRef = useRef<Map<string, Promise<unknown>>>(new Map())
+  /** Which app each published personal app's preview shows: the one on this
+   *  computer (the default) or the published one. */
+  const [previewViews, setPreviewViews] = useState<Record<string, PreviewView>>({})
   /** Live local preview: a port conflict waiting on the user's choice. */
   const [portPrompt, setPortPrompt] = useState<{
     projectId: string
@@ -549,9 +592,9 @@ export default function Workbench({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      deployQueueRef.current.cancelPending('The workbench closed before this deployment started.')
-      // Nothing else closes a preview manual deploy kept (or an after-turn
-      // deploy kept on screen) once the workbench is gone.
+      deployQueueRef.current.cancelPending('The workbench closed before publishing started.')
+      // Nothing else closes a live preview kept while turns don't publish (or
+      // kept on screen through an after-turn publish) once the workbench is gone.
       for (const [projectId, server] of Object.entries(devServersRef.current)) {
         if (server.kept || server.untilDeployed) void window.api.dev.stop(projectId).catch(() => {})
       }
@@ -592,12 +635,14 @@ export default function Workbench({
 
   /** Team workspaces (experimental): the backend hides them while this is off. */
   const teamEnabled = Boolean(settings?.experiments?.teamWorkspaces)
-  /** Chat turns deploy personal apps as they finish unless the user turned off
-   *  "Deploy after each chat turn" in the deployment panel. */
-  const manualDeploy = settings?.deployMode === 'manual'
+  /** Chat turns don't publish personal apps unless the user turned on "Publish
+   *  after each chat turn" in the published apps panel: the changes stay on this
+   *  computer, running locally, until the user publishes them. */
+  const manualDeploy = settings?.deployMode !== 'auto'
   const manualDeployRef = useRef(manualDeploy)
   manualDeployRef.current = manualDeploy
-  // Previews manual deploy kept close when it's turned off; turns start their own.
+  // Live previews kept while turns don't publish close when publishing after
+  // each turn is turned on; turns start their own.
   useEffect(() => {
     if (manualDeploy) return
     for (const [projectId, server] of Object.entries(devServersRef.current)) {
@@ -650,14 +695,19 @@ export default function Workbench({
     if (teamMap && projects && !mapWorkspace) setTeamMap(null)
   }, [teamMap, projects, mapWorkspace])
 
-  // A team app's local preview stays up after its turn while the change is
-  // saved and the pipeline deploys it. It ends once your preview has that
-  // change (or the deploy finished with an error), when there's nothing to
-  // deploy, when you leave the app, or after 20 minutes. A preview Deploy
-  // manually kept ends when you leave the app, as does one kept on screen
-  // through an after-turn deploy.
+  // A team app's live preview stays up after its turn while the change is
+  // saved and the pipeline publishes it. It ends once your preview has that
+  // change (or publishing finished with an error), when there's nothing to
+  // publish, when you leave the app, or after 20 minutes. A preview kept while
+  // turns don't publish ends when you leave the app, as does one kept on screen
+  // through an after-turn publish. A published app's ends once its local
+  // backend runs the app.
   useEffect(() => {
     for (const [projectId, server] of Object.entries(devServers)) {
+      if (!isTeamProject(projectId) && !fallsBack(projectId)) {
+        stopDevServer(projectId)
+        continue
+      }
       if ((server.kept || server.untilDeployed) && projectId !== active?.id) stopDevServer(projectId)
       if (!server.lingerSince) continue
       const status = teamWork.status(projectId)
@@ -670,7 +720,7 @@ export default function Workbench({
       const stale = Date.now() - server.lingerSince > 20 * 60_000
       if (projectId !== active?.id || settled || stale) stopDevServer(projectId)
     }
-  }, [devServers, teamWork, active?.id, stopDevServer])
+  }, [devServers, teamWork, active?.id, stopDevServer, isTeamProject, fallsBack, fallbacks])
 
   // Showing or hiding team workspaces changes which projects the backend lists.
   // The first value seen is the one the projects were just loaded with.
@@ -733,8 +783,8 @@ export default function Workbench({
     return off
   }, [])
 
-  // A local preview that stopped serving and couldn't be started again: drop it,
-  // so the preview shows the deployed app (or its placeholder), and say why.
+  // A live preview that stopped serving and couldn't be started again: drop it,
+  // so the preview shows the published app (or its placeholder), and say why.
   // (When it's started again, Fabricator reloads the preview itself.)
   useEffect(
     () =>
@@ -785,8 +835,8 @@ export default function Workbench({
   const executeDeploy = useCallback(
     async (projectId: string, workspace?: string): Promise<DeployResult> => {
       if (authActionRef.current) {
-        const error = 'Wait for Fabric authentication to finish, then use Redeploy.'
-        toast.error(error, { title: 'Deployment paused' })
+        const error = 'Wait for Fabric authentication to finish, then publish again.'
+        toast.error(error, { title: 'Publishing paused' })
         return { ok: false, outcome: 'error', error }
       }
       deployingIdRef.current = projectId
@@ -821,43 +871,43 @@ export default function Workbench({
           result = {
             ok: false,
             outcome: result.outcome,
-            error: authErrorMessage(reason, 'The deployment did not complete. Please try again.')
+            error: authErrorMessage(reason, 'Publishing didn’t finish. Please try again.')
           }
         }
         if (
           !result.ok &&
           (result.outcome === 'not-signed-in' || result.outcome === 'auth-cache-error')
         ) {
-          // Don't open more sign-in flows for deploys queued behind a failed login.
-          deployQueueRef.current.cancelPending('Sign in to Fabric before retrying this deployment.')
+          // Don't open more sign-in flows for publishes queued behind a failed login.
+          deployQueueRef.current.cancelPending('Sign in to Fabric before publishing again.')
         }
-        // A local preview kept on screen through this deploy closes with it, in
-        // the same render, so the deployed app (now with the changes) replaces it.
+        // A live preview kept on screen through this publish closes with it, in
+        // the same render, so the published app (now with the changes) replaces it.
         if (devServersRef.current[projectId]?.untilDeployed) stopDevServer(projectId)
         setDeploys((all) => {
           const cur = all[projectId] ?? { running: false, log: [] }
           return { ...all, [projectId]: { ...cur, running: false, result } }
         })
         setWatchDeploy((watching) => (watching === projectId ? null : watching))
-        // A new deployment, once deployed, is named by the project's records.
+        // A new published app, once published, is named by the project's records.
         setNewTargets((all) => {
           if (!all[projectId] || all[projectId].workspace !== workspace) return all
           const next = { ...all }
           delete next[projectId]
           return next
         })
-        // Deploys are long and the user may be on another tab, so still surface
-        // failures wherever they are. Success needs no toast — it's already
-        // reflected in the preview pane and deploy status.
+        // Publishing takes a while and the user may be on another tab, so still
+        // surface failures wherever they are. Success needs no toast — it's
+        // already reflected in the preview pane and the publish status.
         if (!result.ok) {
-          toast.error(result.error ?? 'The deployment did not complete.', {
-            title: 'Deploy failed'
+          toast.error(result.error ?? 'Publishing didn’t finish.', {
+            title: 'Couldn’t publish'
           })
         }
         try {
           await refreshProjects()
         } catch (reason) {
-          toast.error(authErrorMessage(reason, 'Could not refresh the project after deploying.'), {
+          toast.error(authErrorMessage(reason, 'Could not refresh the project after publishing.'), {
             title: 'Project refresh failed'
           })
         }
@@ -879,21 +929,21 @@ export default function Workbench({
   )
 
   /**
-   * User-initiated deploy funnel: warn first when the remote has changes the user
-   * hasn't pulled (a fast, non-fetching divergence check), otherwise deploy straight
-   * away. Automatic deploys (post-turn) call runDeploy directly and skip this guard
-   * so they never stall on a modal.
+   * User-initiated publish funnel: warn first when the remote has changes the
+   * user hasn't pulled (a fast, non-fetching divergence check), otherwise publish
+   * straight away. Automatic publishes (post-turn) call runDeploy directly and
+   * skip this guard so they never stall on a modal.
    */
   const requestUserDeploy = useCallback(
     async (projectId: string, workspace?: string): Promise<void> => {
-      // A chat turn holds the project's source until it finishes: a deploy now could only fail.
+      // A chat turn holds the project's source until it finishes: publishing now could only fail.
       if ((chatsRef.current[projectId] ?? []).some((m) => m.role === 'assistant' && m.pending)) {
-        toast.info('Copilot is still working on this app. Deploy once the turn finishes.', {
-          title: 'Deploy waits for Copilot'
+        toast.info('Copilot is still working on this app. Publish it once the turn finishes.', {
+          title: 'Publishing waits for Copilot'
         })
         return
       }
-      // Team apps are deployed by their pipeline: save to the working branch instead.
+      // Team apps are published by their pipeline: save to the working branch instead.
       if (isTeamProject(projectId)) {
         void teamWorkRef.current.afterTurn(projectId, 'Restore an earlier version')
         return
@@ -906,7 +956,7 @@ export default function Workbench({
           return
         }
       } catch {
-        /* divergence is best-effort — fall through and deploy */
+        /* divergence is best-effort — fall through and publish */
       }
       void runDeploy(projectId, workspace)
     },
@@ -958,7 +1008,7 @@ export default function Workbench({
       if (!conflict) return null
       if (!hasPortChoice(conflict, context)) {
         toast.info(
-          `localhost:${conflict.port} is in use, so this turn shows your deployed app. Fabricator will ask again with your next message.`,
+          `localhost:${conflict.port} is in use, so this turn shows your published app. Fabricator will ask again with your next message.`,
           { title: 'Live preview skipped' }
         )
         return null
@@ -1026,19 +1076,29 @@ export default function Workbench({
     settlePortPrompt(prompt.conflict.port)
   }, [settlePortPrompt])
 
-  // Kick off the live local preview when a turn starts: run the
-  // project's Vite dev server so edits show live at localhost for the turn's
-  // duration. No-op when the project has no locally installed Vite. A
-  // fresh turn waits for this (ChatPanel awaits `onTurnStart`) so a port
-  // conflict is settled — and any new port pushed — before Copilot starts;
-  // `plan` runs mid-turn, when nothing can be pushed.
+  /** The project previews through a dev server against a Fabric backend: a team
+   *  app, or a published app its local backend can't run. */
+  const usesDevServer = useCallback(
+    (projectId: string): boolean => isTeamProject(projectId) || fallsBack(projectId),
+    [isTeamProject, fallsBack]
+  )
+
+  // Kick off the live preview of a team app, or of a published app on its
+  // published backend, when a turn starts: run the project's Vite dev server so
+  // edits show live at localhost for the turn's duration. No-op when the project
+  // has no locally installed Vite, and for an app that runs on its local
+  // backend, whose own Vite shows the edits. A fresh turn waits for this
+  // (ChatPanel awaits `onTurnStart`) so a port conflict is settled — and any new
+  // port pushed — before Copilot starts; `plan` runs mid-turn, when nothing can
+  // be pushed.
   const handleTurnStart = useCallback(
     async (projectId: string, context: PortPromptContext = 'turn'): Promise<void> => {
-      if (deployingIdRef.current === projectId) return // a deploy owns the surface
+      if (!usesDevServer(projectId)) return
+      if (deployingIdRef.current === projectId) return // a publish owns the surface
       const existing = devServersRef.current[projectId]
       if (existing) {
         // Already starting / running; a team app's lingering preview, or one
-        // manual deploy kept (or an after-turn deploy did), carries on.
+        // kept while turns don't publish (or through an after-turn publish), carries on.
         if (existing.lingerSince || existing.kept || existing.untilDeployed) {
           setDevServers((all) =>
             all[projectId]
@@ -1052,6 +1112,9 @@ export default function Workbench({
         return
       }
       if (previewSkippedRef.current.has(projectId)) return // skipped for this turn
+      // A local backend stopping for this app's fallback still holds its ports.
+      const stopping = localStoppingRef.current.get(projectId)
+      if (stopping) await stopping
       let port: number | null
       try {
         port = await resolveLocalPort(projectId, context)
@@ -1102,19 +1165,22 @@ export default function Workbench({
         })
       })()
     },
-    [toast, resolveLocalPort, onDevServerError]
+    [toast, resolveLocalPort, onDevServerError, usesDevServer]
   )
 
-  /** The last app and deployment manual deploy started a local preview for. */
+  /** The last app and published app a kept live preview was started for. */
   const keptAttemptRef = useRef<string | null>(null)
-  /** Bumped to reload the open app's local preview after a manual-deploy turn
-   *  that changed files (see PreviewPane's `localReload`). */
+  /** Bumped to load the open app's local page again (see PreviewPane's
+   *  `localReload`): after its local backend rebuilt what the page uses, or, on
+   *  the published backend, after a turn that changed files while turns don't
+   *  publish. */
   const [localReload, setLocalReload] = useState(0)
   /**
-   * Manual deploy: the deployed app falls behind your code, so the open app's
-   * local preview runs whenever the app is open, not only during turns. One
-   * started for another deployment is stopped, and the next run starts it again
-   * with that deployment's backend settings.
+   * A published app on its published backend, while turns don't publish: the
+   * published app falls behind your code, so the open app's live preview runs
+   * whenever the app is open, not only during turns. One started for another
+   * published app is stopped, and the next run starts it again with that
+   * published app's backend settings.
    */
   const keepLocalPreview = useCallback(
     async (projectId: string, target: string): Promise<void> => {
@@ -1123,8 +1189,8 @@ export default function Workbench({
         if (existing.target !== target) stopDevServer(projectId)
         return
       }
-      // Once per app and deployment, so a preview that can't start isn't retried
-      // in a loop; the next turn tries again.
+      // Once per app and published app, so a preview that can't start isn't
+      // retried in a loop; the next turn tries again.
       const attempt = `${projectId}|${target}`
       if (keptAttemptRef.current === attempt) return
       keptAttemptRef.current = attempt
@@ -1140,34 +1206,63 @@ export default function Workbench({
     [handleTurnStart, isTurnRunning, stopDevServer]
   )
 
-  // After a chat turn, persist the transcript and auto-deploy when the agent left
-  // undeployed changes (unless the user deploys manually).
+  // After a chat turn, persist the transcript and, when the user turned on
+  // "Publish after each chat turn", publish what the agent changed.
   const afterTurn = useCallback(
     async (projectId: string, result: ChatTurnResult): Promise<void> => {
       previewSkippedRef.current.delete(projectId)
       const prompt = portPromptRef.current
       if (prompt?.projectId === projectId && prompt.context === 'plan' && !prompt.busy) settlePortPrompt(null)
-      const manual = manualDeployRef.current && !isTeamProject(projectId)
-      // An after-turn deploy may follow. A redeploy runs beside the app, so the
-      // local preview, which already shows this turn's changes, stays on screen
-      // until the deploy ends (see executeDeploy). A first deploy takes the stage.
-      const deployed = Boolean(projectsRef.current?.projects.find((p) => p.id === projectId)?.lastDeploy?.url)
-      const mayDeploy = result.ok && !manual && !isTeamProject(projectId) && deployed
-      if (devServersRef.current[projectId] && manual && activeIdRef.current === projectId) {
-        // Manual deploy: the open app's preview stays up while the app is open,
-        // and reloads once when the turn changed files.
-        setDevServers((all) =>
-          all[projectId] ? { ...all, [projectId]: { ...all[projectId], kept: true } } : all
-        )
-        if (result.filesModified.length > 0) setLocalReload((n) => n + 1)
-      } else if (devServersRef.current[projectId] && mayDeploy) {
-        setDevServers((all) =>
-          all[projectId] ? { ...all, [projectId]: { ...all[projectId], untilDeployed: true } } : all
-        )
-      } else if (devServersRef.current[projectId] && !(result.ok && isTeamProject(projectId))) {
-        // Stop the live local preview, so the surface returns to the deployed app.
-        // (A team app keeps its preview while its change is saved and deployed.)
-        stopDevServer(projectId)
+      const team = isTeamProject(projectId)
+      const manual = manualDeployRef.current && !team
+      // Publishing after a turn updates the published app. A first publish is the
+      // user's to start: it chooses where the app goes.
+      const published = Boolean(
+        projectsRef.current?.projects.find((p) => p.id === projectId)?.lastDeploy?.url
+      )
+      const fallback = fallsBack(projectId)
+      if (!team && !fallback) {
+        // It runs on its local backend: the page took the turn's edits as they
+        // came, and the backend rebuilt what they changed (the page loads again
+        // for that, see below). A problem in the app that stopped the open app's
+        // backend may be fixed now; another app's starts when it opens again.
+        const open = activeIdRef.current === projectId
+        if (open && retriesAfterTurn(localBackendStore.get(projectId))) {
+          void window.api.local.start(projectId).catch(() => {})
+        }
+      } else {
+        // An after-turn publish may follow. It runs beside the app, so the live
+        // preview, which already shows this turn's changes, stays on screen
+        // until the publish ends (see executeDeploy).
+        const mayDeploy = result.ok && !manual && !team && published
+        if (devServersRef.current[projectId] && manual && activeIdRef.current === projectId) {
+          // Turns don't publish: the open app's preview stays up while the app
+          // is open, and reloads once when the turn changed files.
+          setDevServers((all) =>
+            all[projectId] ? { ...all, [projectId]: { ...all[projectId], kept: true } } : all
+          )
+          if (result.filesModified.length > 0) setLocalReload((n) => n + 1)
+        } else if (devServersRef.current[projectId] && mayDeploy) {
+          setDevServers((all) =>
+            all[projectId]
+              ? { ...all, [projectId]: { ...all[projectId], untilDeployed: true } }
+              : all
+          )
+        } else if (devServersRef.current[projectId] && !(result.ok && team)) {
+          // Stop the live preview, so the surface returns to the published app.
+          // (A team app keeps its preview while its change is saved and published.)
+          stopDevServer(projectId)
+        }
+        // A change to its packages or rayfin.yml may let this computer run the
+        // open app: its local backend starts to find out, while the preview
+        // stays as it is.
+        if (
+          fallback &&
+          activeIdRef.current === projectId &&
+          changesLocalSupport(result.filesModified)
+        ) {
+          void window.api.local.start(projectId).catch(() => {})
+        }
       }
       try {
         await refreshProjects()
@@ -1191,38 +1286,47 @@ export default function Workbench({
         })
       })
       if (!result.ok || !mountedRef.current) return
-      // Team apps: save the turn to the working branch; the pipeline deploys the preview.
-      if (isTeamProject(projectId)) {
+      // Team apps: save the turn to the working branch; the pipeline publishes the preview.
+      if (team) {
         const lastUser = [...(chatsRef.current[projectId] ?? [])].reverse().find((m) => m.role === 'user')
         void teamWorkRef.current.afterTurn(projectId, lastUser?.text ?? '').finally(() => {
-          // The local preview stays until the pipeline has deployed this save.
+          // The local preview stays until the pipeline has published this save.
           setDevServers((all) =>
             all[projectId] ? { ...all, [projectId]: { ...all[projectId], lingerSince: Date.now() } } : all
           )
         })
         return
       }
-      // Manual deploy: the changes stay on this computer until you deploy them.
-      if (manual) return
-      // A preview kept for a deploy that doesn't happen (or has ended) closes.
+      // The changes stay on this computer until the user publishes them.
+      if (manual || !published) return
+      // A preview kept for a publish that doesn't happen (or has ended) closes.
       const release = (): void => {
         if (devServersRef.current[projectId]?.untilDeployed) stopDevServer(projectId)
       }
       try {
         const changed = await window.api.deploy.hasChanges(projectId)
-        // Deploying after each turn may have been turned off while that was checked.
+        // Publishing after each turn may have been turned off while that was checked.
         if (changed && mountedRef.current && !manualDeployRef.current) void runDeploy(projectId).finally(release)
         else release()
       } catch (reason) {
         release()
         if (!mountedRef.current) return
         toast.error(
-          `${authErrorMessage(reason, 'Could not check for undeployed changes.')} Use Redeploy to publish your changes.`,
-          { title: 'Auto-deploy check failed' }
+          `${authErrorMessage(reason, 'Could not check for changes to publish.')} Select Publish to publish your changes.`,
+          { title: 'Couldn’t publish automatically' }
         )
       }
     },
-    [refreshProjects, refreshRayfinVer, runDeploy, stopDevServer, toast, settlePortPrompt, isTeamProject]
+    [
+      refreshProjects,
+      refreshRayfinVer,
+      runDeploy,
+      stopDevServer,
+      toast,
+      settlePortPrompt,
+      isTeamProject,
+      fallsBack
+    ]
   )
 
   // A report migration follows every turn: its page turns end here, and the
@@ -1280,7 +1384,8 @@ export default function Workbench({
       "new CLI version exactly (they ship in lockstep with the CLI; npm's `latest` tag lags).\n\n" +
       'After installing, check `node_modules/@microsoft/rayfin-guide/assets/docs/deprecations.md` ' +
       'and `known-limitations.md` for changes between these versions and update the app code so it ' +
-      'still builds and runs. Do not run `rayfin up` or deploy — Rayfin Fabricator redeploys automatically.'
+      'still builds and runs. Do not run `rayfin up` or publish the app: Fabricator runs it on this ' +
+      'computer, and the user publishes it when they choose.'
     setViewMode('build')
     setFocusPane(null)
     setChatOutbound({
@@ -1665,7 +1770,7 @@ export default function Workbench({
     const target = authRefreshTarget
     if (!target) return
     if (authActionRef.current || deployingIdRef.current) {
-      setAuthRefreshError('Wait for the current deployment or sign-in to finish, then retry.')
+      setAuthRefreshError('Wait for publishing or the current sign-in to finish, then retry.')
       return
     }
     authActionRef.current = true
@@ -1686,7 +1791,7 @@ export default function Workbench({
       await onAuthChanged()
       if (!mountedRef.current) return
       setAuthRefreshTarget(null)
-      toast.info('Fabric authentication is verified. Use Redeploy to retry your deployment.', {
+      toast.info('Fabric authentication is verified. Publish again to retry.', {
         title: 'Fabric authentication refreshed'
       })
     } catch (reason) {
@@ -1899,7 +2004,7 @@ export default function Workbench({
   const migrationWaiting = !active
     ? undefined
     : active && deploys[active.id]?.running
-      ? 'Waiting for the deploy to finish.'
+      ? 'Waiting for publishing to finish.'
       : activeSyncing
         ? 'Waiting for the save to GitHub.'
         : activeChatBusy
@@ -1955,13 +2060,153 @@ export default function Workbench({
     },
     [toast, refreshProjects]
   )
-  // Manual deploy keeps the open app's local preview running (see keepLocalPreview).
+  // ── The open app's local backend ──────────────────────────────────────────
+  // A personal app runs on its local backend (rayfin-local) from the moment it
+  // opens, and it stays up between turns: its own Vite takes Copilot's edits as
+  // they come, and the backend rebuilds the data model and functions as they
+  // change. The one you came from keeps running too; the supervisor stops older
+  // ones. A published app it can't run falls back to its published backend,
+  // through the live preview team apps use.
   const activeId = active?.id
+  const personalId = active && !active.team ? active.id : null
+  const local = useLocalBackend(personalId)
+  const localRef = useRef(local)
+  localRef.current = local
+  const localStatus = local.status
+  const localActive = isLocalBackendActive(localStatus)
+  const activePublished = Boolean(active?.lastDeploy?.url)
+  /** Why this computer can't run the open app, when its preview has a published backend to use instead. */
+  const fallbackNow = personalId && activePublished ? localFallbackReason(localStatus) : null
+  const fallbackCode = personalId && activePublished ? localFallbackCode(localStatus) : null
+  const activeFallback = personalId ? (fallbacks[personalId] ?? fallbackNow) : null
+  /** The open app runs on its local backend. */
+  const runsLocally = Boolean(personalId) && !activeFallback
+  /** Fallbacks already journaled (and counted), once per app and session. */
+  const reportedFallbacksRef = useRef(new Set<string>())
+  useEffect(() => {
+    if (!personalId) return
+    if (fallbackNow) {
+      setFallbacks((all) =>
+        all[personalId] === fallbackNow ? all : { ...all, [personalId]: fallbackNow }
+      )
+      if (fallbackCode && !reportedFallbacksRef.current.has(personalId)) {
+        reportedFallbacksRef.current.add(personalId)
+        void window.api.local.reportFallback(personalId, fallbackCode, fallbackNow).catch(() => {})
+      }
+      return
+    }
+    // It runs on this computer after all, or there's no published app anymore.
+    if (localStatus?.state === 'running' || !activePublished) {
+      setFallbacks((all) => {
+        if (!(personalId in all)) return all
+        const next = { ...all }
+        delete next[personalId]
+        return next
+      })
+    }
+  }, [personalId, fallbackNow, fallbackCode, activePublished, localStatus?.state])
+  // Falling back, the local backend stops: its ports go to the live preview on
+  // the published backend.
+  useEffect(() => {
+    if (!personalId || !fallbackNow || !localActive || localStoppingRef.current.has(personalId))
+      return
+    const stopping = window.api.local
+      .stop(personalId)
+      .catch(() => {})
+      .finally(() => localStoppingRef.current.delete(personalId))
+    localStoppingRef.current.set(personalId, stopping)
+  }, [personalId, fallbackNow, localActive])
+  // Start it once the app's packages are ready, unless it runs already or is
+  // known to fall back. Opening the app again starts one that stopped on a problem.
+  const depsReady = Boolean(active && depsReadyId === active.id)
+  const localKnown = localStatus !== null
+  const localStartedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!personalId) {
+      localStartedRef.current = null
+      return
+    }
+    if (!depsReady || !localKnown || localStartedRef.current === personalId) return
+    localStartedRef.current = personalId
+    if (fallbacksRef.current[personalId] || fallbackNow) return
+    if (!isLocalBackendActive(localBackendStore.get(personalId))) void localRef.current.start()
+  }, [personalId, depsReady, localKnown, fallbackNow])
+
+  // The page takes the app's code through hot updates. When the backend rebuilds
+  // what the page uses (its data model, functions or services) it loads again,
+  // once things settle: not while functions build, nor mid-turn, when Copilot
+  // may change more (once the turn ends instead).
+  const pageSeenRef = useRef<{ projectId: string; stamp: string } | null>(null)
+  const reloadTimerRef = useRef<number | null>(null)
+  const localRunning = localStatus?.state === 'running'
+  const pageStamp =
+    runsLocally && localRunning && localStatus?.functions?.state !== 'building'
+      ? backendStamp(localStatus)
+      : null
+  useEffect(() => {
+    // Not running: a page whose backend restarted loads afresh anyway (PreviewPane).
+    if (!personalId || !localRunning) {
+      pageSeenRef.current = null
+      return
+    }
+    if (pageStamp === null || activeChatBusy) return
+    const seen = pageSeenRef.current
+    pageSeenRef.current = { projectId: personalId, stamp: pageStamp }
+    if (!seen || seen.projectId !== personalId || seen.stamp === pageStamp) return
+    if (reloadTimerRef.current !== null) window.clearTimeout(reloadTimerRef.current)
+    reloadTimerRef.current = window.setTimeout(() => {
+      reloadTimerRef.current = null
+      setLocalReload((n) => n + 1)
+    }, LOCAL_RELOAD_SETTLE_MS)
+  }, [personalId, localRunning, pageStamp, activeChatBusy])
+  useEffect(
+    () => () => {
+      if (reloadTimerRef.current !== null) window.clearTimeout(reloadTimerRef.current)
+      reloadTimerRef.current = null
+    },
+    [personalId]
+  )
+
+  // A data model change that would delete local data waits for the user: the
+  // dialog asks once no turn runs (Copilot may change the model again), on the
+  // app's own screen. Keeping the current version is remembered for that change.
+  const refusal = runsLocally ? refusedSchemaLosses(localStatus) : null
+  const refusalKey =
+    refusal && personalId
+      ? `${personalId}|${localStatus?.state}|${
+          (localStatus?.state === 'error' ? localStatus.error?.time : localStatus?.schema?.time) ??
+          localStatus?.startedAt ??
+          ''
+        }`
+      : null
+  const [schemaDialog, setSchemaDialog] = useState<{ key: string; tried: boolean } | null>(null)
+  const keptSchemasRef = useRef(new Set<string>())
+  useEffect(() => {
+    if (
+      !refusalKey ||
+      activeChatBusy ||
+      !onProjectScreen ||
+      keptSchemasRef.current.has(refusalKey)
+    ) {
+      return
+    }
+    setSchemaDialog((open) => (open?.key === refusalKey ? open : { key: refusalKey, tried: false }))
+  }, [refusalKey, activeChatBusy, onProjectScreen])
+  const showSchemaDialog = Boolean(refusal && refusalKey && schemaDialog?.key === refusalKey)
+  const reviewSchema = refusalKey
+    ? (): void => setSchemaDialog({ key: refusalKey, tried: false })
+    : undefined
+
+  // While turns don't publish, a published app on its published backend keeps
+  // its live preview running (see keepLocalPreview), once its local backend has
+  // let go of the ports.
   const activeTarget = active ? deploymentKey(active) : ''
   const activeDeploying = Boolean(activeId && deploys[activeId]?.running)
-  // Re-run when the open app's preview comes or goes, or changes deployment.
+  // Re-run when the open app's preview comes or goes, or changes published app.
   const activePreviewTarget = activeId ? (devServers[activeId]?.target ?? '') : null
-  const keepLocal = Boolean(manualDeploy && active && !active.team && projectToolsReady)
+  const keepLocal = Boolean(
+    settings && manualDeploy && personalId && activeFallback && projectToolsReady && !localActive
+  )
   useEffect(() => {
     if (!keepLocal || !activeId) {
       keptAttemptRef.current = null
@@ -2010,6 +2255,9 @@ export default function Workbench({
         active && devServers[active.id]?.status === 'running'
           ? (devServers[active.id]?.url ?? null)
           : null,
+      local: runsLocally ? localStatus : null,
+      view: active ? (previewViews[active.id] ?? 'local') : undefined,
+      fallbackReason: activeFallback,
       deploying: Boolean(active && deploys[active.id]?.running),
       deployFailed: Boolean(active && lastDeployFailed(active, deploys[active.id]))
     })
@@ -2314,6 +2562,7 @@ export default function Workbench({
       {showMigrate ? (
         <MigrateReportScreen
           recentWorkspaces={recentDeployWorkspaces}
+          onSignedIn={onAuthChanged}
           onCancel={() => setShowMigrate(false)}
           onPicked={(pick) => {
             setMigrationPick(pick)
@@ -2518,6 +2767,15 @@ export default function Workbench({
                           onRefreshAuth={active.team ? undefined : () => openAuthRefresh(active)}
                           authBusy={fabricAuthBusy}
                           onDiagnoseDeploy={() => openHelp(DEPLOY_QUESTION)}
+                          local={runsLocally ? local : undefined}
+                          view={previewViews[active.id] ?? 'local'}
+                          onViewChange={(view) =>
+                            setPreviewViews((all) => ({ ...all, [active.id]: view }))
+                          }
+                          fallbackReason={activeFallback}
+                          onDiagnoseLocal={() => openHelp(LOCAL_QUESTION)}
+                          onOpenSetup={onReviewSetup}
+                          onReviewSchema={reviewSchema}
                           localPreviewUrl={
                             devServers[active.id]?.status === 'running'
                               ? (devServers[active.id]?.url ?? null)
@@ -2544,7 +2802,7 @@ export default function Workbench({
                             activeChatBusy
                               ? 'Copilot is working — send when this turn finishes'
                               : deploys[active.id]?.running
-                                ? 'Deploying — send when it goes live'
+                                ? 'Publishing — send when it finishes'
                                 : null
                           }
                           onDesignSend={() => {
@@ -2856,13 +3114,36 @@ export default function Workbench({
         />
       )}
 
+      {showSchemaDialog && active && refusal && (
+        <SchemaChangeDialog
+          projectName={active.name}
+          losses={refusal}
+          atStart={localStatus?.state === 'error'}
+          published={activePublished}
+          busy={local.busy}
+          error={schemaDialog?.tried ? (local.actionError?.message ?? null) : null}
+          onApply={() => {
+            setSchemaDialog((open) => open && { ...open, tried: true })
+            void local.applySchemaChange()
+          }}
+          onReset={() => {
+            setSchemaDialog((open) => open && { ...open, tried: true })
+            void local.resetData()
+          }}
+          onKeep={() => {
+            if (refusalKey) keptSchemasRef.current.add(refusalKey)
+            setSchemaDialog(null)
+          }}
+        />
+      )}
+
       {confirmDeploy && (
         <ConfirmModal
           title="You have changes to get first"
           confirmLabel="Get latest first"
           busyLabel="Getting latest…"
           busy={deployGuardBusy}
-          secondaryLabel="Deploy anyway"
+          secondaryLabel="Publish anyway"
           cancelLabel="Cancel"
           onConfirm={() => {
             void (async () => {
@@ -2897,8 +3178,7 @@ export default function Workbench({
                 <strong>
                   {confirmDeploy.behind} change{confirmDeploy.behind === 1 ? '' : 's'}
                 </strong>{' '}
-                you haven’t downloaded yet. Deploying now publishes your current version without
-                them.
+                you haven’t downloaded yet. Publishing now sends your current version without them.
               </p>
               {deployGuardError && <p className="confirm-error">{deployGuardError}</p>}
             </>
@@ -2923,7 +3203,7 @@ export default function Workbench({
               </p>
               <p>
                 Rayfin CLI credentials are shared across projects. This does not sign out of
-                Copilot, Azure CLI, or the preview browser, and it does not redeploy automatically.
+                Copilot, Azure CLI, or the preview browser, and it doesn’t publish your app again.
                 Update older projects to Rayfin 1.35.1 or newer using the Rayfin version control.
               </p>
               {authRefreshError && (

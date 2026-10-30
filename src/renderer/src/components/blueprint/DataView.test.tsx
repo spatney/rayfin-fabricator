@@ -1,0 +1,495 @@
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type {
+  LocalColumn,
+  LocalEntity,
+  LocalReady,
+  LocalRows,
+  LocalStatus,
+  LocalUser,
+  StudioProject
+} from '@shared/ipc'
+import { makeProject } from '../../../test/harness'
+import { emptyDataModel, type DataModel } from '../../model/parseSchema'
+import { LocalBackendError, localBackendStore } from '../../localBackend'
+import DataView from './DataView'
+
+/**
+ * The Data view shows an app's local data through `window.api.local`: its
+ * entities and rows, typed and paged, and its local users; it clears and resets
+ * that data only after saying what goes; and it says why it can't show any when
+ * the backend isn't running, can't be read, or the app's data lives in Fabric.
+ */
+
+function status(patch: Partial<LocalStatus> = {}): LocalStatus {
+  return {
+    projectId: 'p1',
+    state: 'stopped',
+    revision: 1,
+    phase: null,
+    pid: null,
+    version: '0.2.0',
+    projectRoot: null,
+    signInAs: 'developer',
+    ready: null,
+    analysis: null,
+    schema: null,
+    functions: null,
+    vite: null,
+    config: null,
+    warnings: [],
+    error: null,
+    stopped: null,
+    crashes: 0,
+    startedAt: null,
+    updatedAt: null,
+    ...patch
+  }
+}
+
+const READY: LocalReady = {
+  appUrl: 'http://localhost:5173/',
+  apiUrl: 'http://localhost:7171',
+  embedUrl: null,
+  portalUrl: null,
+  dataDir: null,
+  signInAs: { kind: 'developer' },
+  sdk: { version: '1.36.2', supported: true },
+  features: {
+    data: { enabled: true, entities: ['Expense', 'Receipt', 'Tag'] },
+    functions: { enabled: false, names: [] },
+    storage: { enabled: true, folders: ['receipts'] },
+    auth: { enabled: true, fabric: true, password: false },
+    connectors: []
+  },
+  time: '2026-10-30T04:00:00Z'
+}
+
+const EXPENSE_COLUMNS: LocalColumn[] = [
+  { name: 'id', type: 'UUID', key: true },
+  { name: 'title', type: 'String', key: false },
+  { name: 'amount', type: 'Decimal', key: false },
+  { name: 'approved', type: 'Boolean', key: false },
+  { name: 'submitted_at', type: 'DateTime', key: false },
+  { name: 'details', type: 'String', key: false },
+  { name: 'note', type: 'String', key: false }
+]
+
+const LONG_TITLE = `Team offsite dinner, ${'with a long explanation of who came and why '.repeat(12)}`
+
+function expense(i: number): Record<string, unknown> {
+  return {
+    id: `0b5f6c1e-0000-4000-8000-${String(i).padStart(12, '0')}`,
+    title: i === 0 ? LONG_TITLE : `Expense ${i}`,
+    amount: 1250.5,
+    approved: i % 2 === 0,
+    submitted_at: '2026-10-29T16:05:00Z',
+    details: { source: 'ocr', pages: 2 },
+    note: null
+  }
+}
+
+/** Receipt rows refer to Expense rows. */
+const MODEL: DataModel = {
+  ...emptyDataModel(),
+  hasSchema: true,
+  relations: [{ from: 'Receipt', to: 'Expense', kind: 'fk', via: 'expense_id', explicit: false }]
+}
+
+let current: LocalStatus
+let entities: LocalEntity[]
+let users: LocalUser[]
+let local: Record<string, Mock>
+let record: Mock
+let emitState: (status: LocalStatus) => void
+
+function page(entity: string, offset: number, limit: number): LocalRows {
+  const total = entities.find((e) => e.name === entity)?.rows ?? 0
+  const count = Math.max(0, Math.min(limit, total - offset))
+  if (entity === 'Expense') {
+    return {
+      columns: EXPENSE_COLUMNS,
+      rows: Array.from({ length: count }, (_, i) => expense(offset + i)),
+      total
+    }
+  }
+  return {
+    columns: [
+      { name: 'id', type: 'UUID', key: true },
+      { name: 'expense_id', type: 'UUID', key: false }
+    ],
+    rows: Array.from({ length: count }, (_, i) => ({ id: `r${offset + i}`, expense_id: 'e1' })),
+    total
+  }
+}
+
+beforeEach(() => {
+  localBackendStore.clear()
+  current = status({ state: 'running', ready: READY })
+  entities = [
+    { name: 'Expense', rows: 120 },
+    { name: 'Receipt', rows: 2 },
+    { name: 'Tag', rows: 0 }
+  ]
+  users = [
+    {
+      id: 'u1',
+      username: 'avery.chen@contoso.com',
+      email: 'avery.chen@contoso.com',
+      createdAt: '2026-10-28T09:00:00Z',
+      signIn: ['entra'],
+      developer: true
+    },
+    {
+      id: 'u2',
+      username: 'ana@example.com',
+      email: 'ana@example.com',
+      createdAt: '2026-10-29T10:30:00Z',
+      signIn: [],
+      developer: false
+    }
+  ]
+  record = vi.fn(async () => {})
+  local = {
+    status: vi.fn(async () => current),
+    start: vi.fn(async () => {
+      current = status({ state: 'starting', revision: current.revision + 1 })
+      return current
+    }),
+    onState: vi.fn((cb: (status: LocalStatus) => void) => {
+      emitState = cb
+      return () => {}
+    }),
+    entities: vi.fn(async () => entities),
+    users: vi.fn(async () => users),
+    rows: vi.fn(async (_id: string, entity: string, offset: number, limit: number) =>
+      page(entity, offset, limit)
+    ),
+    clearRows: vi.fn(async (_id: string, entity: string) => {
+      const deleted = entities.find((e) => e.name === entity)?.rows ?? 0
+      entities = entities.map((e) => (e.name === entity ? { ...e, rows: 0 } : e))
+      return deleted
+    }),
+    resetData: vi.fn(async () => {
+      entities = entities.map((e) => ({ ...e, rows: 0 }))
+      users = []
+    }),
+    deleteUser: vi.fn(async (_id: string, user: string) => {
+      users = users.filter((u) => u.id !== user)
+    }),
+    reload: vi.fn(async () => ({ schema: null, config: null }))
+  }
+  ;(window as unknown as { api: unknown }).api = { local, diagnostics: { record } }
+})
+
+afterEach(() => {
+  cleanup()
+  delete (window as unknown as { api?: unknown }).api
+})
+
+function renderView(project: StudioProject = makeProject('p1')): ReturnType<typeof render> {
+  return render(<DataView project={project} refreshKey={0} dataModel={MODEL} />)
+}
+
+describe('DataView', () => {
+  it('lists the entities with their row counts and shows a page of rows, formatted by type', async () => {
+    renderView()
+    const list = await screen.findByRole('navigation', { name: 'Local data' })
+    expect(
+      within(list).getByRole('button', { name: 'Expense, 120 rows' }).getAttribute('aria-current')
+    ).toBe('true')
+    expect(within(list).getByRole('button', { name: 'Tag, 0 rows' })).toBeTruthy()
+    expect(within(list).getByRole('button', { name: /Local users/ }).textContent).toContain('2')
+    expect(screen.getByText('3 entities · 122 rows')).toBeTruthy()
+    expect(screen.getByText('Running')).toBeTruthy()
+    expect(
+      screen.getByText('Local data on this computer, separate from the published app’s data.')
+    ).toBeTruthy()
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({ area: 'preview', event: 'local.data_view_opened', projectId: 'p1' })
+    )
+
+    const table = await screen.findByRole('table')
+    expect(local.rows).toHaveBeenCalledWith('p1', 'Expense', 0, 50, undefined, undefined)
+    expect(within(table).getByRole('columnheader', { name: /^id/ }).textContent).toContain(
+      'UUID · key'
+    )
+    const cells = within(within(table).getAllByRole('row')[1]).getAllByRole('cell')
+    const [id, title, amount, approved, submitted, details, note] = cells
+    const hover = (cell: HTMLElement): string | null =>
+      cell.querySelector('[title]')?.getAttribute('title') ?? null
+    expect(id.className).toContain('key')
+    // Long text is cut short, with all of it on hover.
+    expect(title.textContent!.length).toBeLessThan(LONG_TITLE.length)
+    expect(hover(title)).toBe(LONG_TITLE)
+    expect(amount.textContent).toBe('1250.5')
+    expect(amount.className).toContain('number')
+    expect(approved.textContent).toBe('true')
+    expect(submitted.textContent).toContain('2026')
+    expect(submitted.textContent).not.toBe('2026-10-29T16:05:00Z')
+    expect(hover(submitted)).toBe('2026-10-29T16:05:00Z')
+    expect(details.textContent).toBe('{"source":"ocr","pages":2}')
+    expect(hover(details)).toContain('"pages": 2')
+    expect(note.textContent).toBe('null')
+    expect(note.className).toContain('null')
+  })
+
+  it('sorts by a column and pages through the rows', async () => {
+    renderView()
+    const table = await screen.findByRole('table')
+    fireEvent.click(within(table).getByRole('button', { name: /^amount/ }))
+    await waitFor(() =>
+      expect(local.rows).toHaveBeenLastCalledWith('p1', 'Expense', 0, 50, 'amount', false)
+    )
+    expect(screen.getByRole('columnheader', { name: /^amount/ }).getAttribute('aria-sort')).toBe(
+      'ascending'
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^amount/ }))
+    await waitFor(() =>
+      expect(local.rows).toHaveBeenLastCalledWith('p1', 'Expense', 0, 50, 'amount', true)
+    )
+    expect(await screen.findByText('1–50 of 120')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(await screen.findByText('51–100 of 120')).toBeTruthy()
+    expect(local.rows).toHaveBeenLastCalledWith('p1', 'Expense', 50, 50, 'amount', true)
+    expect(screen.getByRole('button', { name: 'Previous page' })).toHaveProperty('disabled', false)
+  })
+
+  it('offers to clear a sort the local backend can’t apply', async () => {
+    renderView()
+    const table = await screen.findByRole('table')
+    local.rows.mockRejectedValueOnce(
+      new LocalBackendError({
+        code: 'invalid-order',
+        message: 'Rows can’t be sorted by details.',
+        status: 400
+      })
+    )
+    fireEvent.click(within(table).getByRole('button', { name: /^details/ }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Couldn’t read the rows')
+    expect(alert.textContent).toContain('Rows can’t be sorted by details.')
+    fireEvent.click(within(alert).getByRole('button', { name: 'Clear sorting' }))
+    expect(await screen.findByRole('table')).toBeTruthy()
+    expect(local.rows).toHaveBeenLastCalledWith('p1', 'Expense', 0, 50, undefined, undefined)
+  })
+
+  it('clears an entity’s rows after saying what goes, and explains rows that still refer to them', async () => {
+    local.clearRows.mockRejectedValueOnce(
+      new LocalBackendError({
+        code: 'rows-referenced',
+        message: 'Receipt rows refer to Expense rows.',
+        status: 409
+      })
+    )
+    renderView()
+    await screen.findByRole('table')
+    fireEvent.click(screen.getByRole('button', { name: 'Clear rows' }))
+    let dialog = screen.getByRole('dialog', { name: 'Clear all Expense rows?' })
+    expect(dialog.textContent).toContain(
+      'This deletes all 120 rows of Expense from the app’s local data on this computer.'
+    )
+    expect(dialog.textContent).toContain('The published app’s data isn’t affected.')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear rows' }))
+    const refused = await within(dialog).findByRole('alert')
+    expect(refused.textContent).toContain(
+      'Rows of Receipt still refer to these rows, so they can’t be cleared on their own. Clear Receipt first, or reset all local data.'
+    )
+    expect(refused.textContent).toContain('Receipt rows refer to Expense rows.')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Receipt, 2 rows' }))
+    await screen.findByText('1–2 of 2')
+    fireEvent.click(screen.getByRole('button', { name: 'Clear rows' }))
+    dialog = screen.getByRole('dialog', { name: 'Clear all Receipt rows?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Clear rows' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(local.clearRows).toHaveBeenLastCalledWith('p1', 'Receipt')
+    expect(await screen.findByText('No rows yet')).toBeTruthy()
+    expect(
+      screen.getByText('The app’s own pages add data. Use the app in the preview, then refresh.')
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Receipt, 0 rows' })).toBeTruthy()
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ event: 'local.rows_cleared' }))
+  })
+
+  it('resets the local data after listing everything it deletes', async () => {
+    renderView()
+    await screen.findByRole('table')
+    fireEvent.click(screen.getByRole('button', { name: 'Reset local data' }))
+    const dialog = screen.getByRole('dialog', { name: 'Reset local data?' })
+    expect(
+      within(dialog)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent)
+    ).toEqual([
+      'All 122 rows of its 3 entities',
+      'Its 2 local users and their sessions',
+      'The files it stored'
+    ])
+    expect(dialog.textContent).not.toContain('data model change')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reset local data' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(local.resetData).toHaveBeenCalledWith('p1')
+    expect(local.reload).not.toHaveBeenCalled()
+    expect(await screen.findByText('3 entities · 0 rows')).toBeTruthy()
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ event: 'local.data_reset' }))
+  })
+
+  it('applies a data model change that waits for a decision once a reset leaves no data to lose', async () => {
+    current = status({
+      state: 'running',
+      ready: READY,
+      schema: {
+        result: 'refused',
+        changes: ['Drop Expense.note'],
+        losses: ['Expense.note (120 values)'],
+        message: null,
+        live: true,
+        time: '2026-10-30T04:05:00Z'
+      }
+    })
+    renderView()
+    await screen.findByRole('table')
+    fireEvent.click(screen.getByRole('button', { name: 'Reset local data' }))
+    const dialog = screen.getByRole('dialog', { name: 'Reset local data?' })
+    expect(dialog.textContent).toContain(
+      'Then the data model change waiting for your decision applies.'
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reset local data' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(local.resetData).toHaveBeenCalledWith('p1')
+    expect(local.reload).toHaveBeenCalledWith('p1', false)
+    expect(local.resetData.mock.invocationCallOrder[0]).toBeLessThan(
+      local.reload.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('lists the local users and deletes one after confirming', async () => {
+    renderView()
+    fireEvent.click(await screen.findByRole('button', { name: /Local users/ }))
+    const pane = screen.getByRole('region', { name: 'Local users' })
+    expect(within(pane).getByText('Developer')).toBeTruthy()
+    expect(within(pane).getByText('Microsoft Entra ID')).toBeTruthy()
+    expect(within(pane).getByText('Fabricator only')).toBeTruthy()
+    fireEvent.click(within(pane).getByRole('button', { name: 'Delete ana@example.com' }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete ana@example.com?' })
+    expect(dialog.textContent).toContain(
+      'This deletes ana@example.com from the app’s local users and signs them out of the app on this computer.'
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete user' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(local.deleteUser).toHaveBeenCalledWith('p1', 'u2')
+    await waitFor(() => expect(within(pane).queryByText('ana@example.com')).toBeNull())
+  })
+
+  it('offers to start a backend that isn’t running, and says why it stopped', async () => {
+    current = status({ state: 'stopped' })
+    renderView()
+    expect(await screen.findByText('The local backend isn’t running')).toBeTruthy()
+    expect(screen.getAllByText('Stopped')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Reset local data' })).toHaveProperty(
+      'disabled',
+      true
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(await screen.findByText('The local backend is starting')).toBeTruthy()
+    expect(local.start.mock.calls[0][0]).toBe('p1')
+    expect(local.entities).not.toHaveBeenCalled()
+
+    act(() =>
+      emitState(
+        status({
+          state: 'error',
+          revision: 9,
+          error: {
+            code: 'vite-failed',
+            message: 'Vite exited before it was ready.',
+            hint: null,
+            fatal: true,
+            details: null,
+            time: null
+          }
+        })
+      )
+    )
+    expect(screen.getByText('Vite exited before it was ready.')).toBeTruthy()
+    expect(screen.getAllByText('Error')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Start' })).toBeTruthy()
+  })
+
+  it('explains when the local backend or its data can’t be read, and tries again', async () => {
+    local.status.mockRejectedValue(
+      new LocalBackendError({ code: 'unreachable', message: 'Fabricator couldn’t reach it.' })
+    )
+    local.entities.mockRejectedValueOnce(
+      new LocalBackendError({
+        code: 'not-found',
+        message: 'The local backend doesn’t know that.',
+        status: 404
+      })
+    )
+    renderView()
+    let alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Couldn’t reach the local backend')
+    expect(alert.textContent).toContain('Fabricator couldn’t reach it.')
+    expect(screen.getByText('Unknown')).toBeTruthy()
+
+    local.status.mockImplementation(async () => current)
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    await screen.findByText('Couldn’t read the local data')
+    alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain(
+      'This version of the local backend doesn’t share its data with Fabricator.'
+    )
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('button', { name: 'Expense, 120 rows' })).toBeTruthy()
+  })
+
+  it('says it shows local data only for a team app', () => {
+    renderView(
+      makeProject('p1', { team: { workspaceId: 'w1', folder: 'expenses', worktree: 'x' } })
+    )
+    expect(screen.getByText('Local data only', { selector: '.model-empty-title' })).toBeTruthy()
+    expect(
+      screen.getByText(
+        'The Data view shows data stored on this computer. This team app runs on its Fabric deployment, so its data lives in Fabric.'
+      )
+    ).toBeTruthy()
+    expect(local.status).not.toHaveBeenCalled()
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'local.data_view_opened' })
+    )
+  })
+
+  it('says it shows local data only while the preview uses the published app’s backend', async () => {
+    current = status({
+      state: 'running',
+      ready: {
+        ...READY,
+        features: {
+          ...READY.features,
+          connectors: [{ name: 'telemetry', type: 'kusto', supported: false }]
+        }
+      }
+    })
+    const { rerender } = renderView()
+    const note = await screen.findByRole('note')
+    expect(note.textContent).toContain('telemetry')
+    expect(note.textContent).toMatch(/The Data view shows local data only\.$/)
+    // Without a published app there's nothing to fall back to.
+    rerender(
+      <DataView
+        project={makeProject('p1', { lastDeploy: undefined })}
+        refreshKey={0}
+        dataModel={MODEL}
+      />
+    )
+    expect(screen.queryByRole('note')).toBeNull()
+    expect(
+      screen.getByText('Local data on this computer. Publishing doesn’t copy it to Fabric.')
+    ).toBeTruthy()
+  })
+})

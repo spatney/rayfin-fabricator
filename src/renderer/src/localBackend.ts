@@ -105,8 +105,12 @@ export function isLocalBackendActive(status: LocalStatus | null | undefined): bo
   )
 }
 
-/** A short label for a status pill: Starting…, Running, Restarting…, Error or Stopped. */
-export function localStateLabel(status: LocalStatus | null | undefined): string {
+/**
+ * A short label for a status pill: Starting…, Running, Restarting…, Error or
+ * Stopped. `pending` (a start is on its way, or the status isn't known yet)
+ * makes a stopped one Starting….
+ */
+export function localStateLabel(status: LocalStatus | null | undefined, pending = false): string {
   switch (status?.state) {
     case 'starting':
       return 'Starting…'
@@ -117,7 +121,7 @@ export function localStateLabel(status: LocalStatus | null | undefined): string 
     case 'error':
       return 'Error'
     default:
-      return 'Stopped'
+      return pending ? 'Starting…' : 'Stopped'
   }
 }
 
@@ -145,6 +149,121 @@ export function refusedSchemaLosses(status: LocalStatus | null | undefined): str
   return null
 }
 
+/** Join names the way a person would: "a, b and c". */
+function sentenceList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? ''
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+function detailText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/** The Rayfin version the app uses when rayfin-local can't run it, or `null`. */
+function unsupportedSdk(status: LocalStatus): { version: string | null } | null {
+  const warning = status.warnings.find((w) => w.code === 'sdk-unsupported')
+  const sdk = status.ready?.sdk ?? status.analysis?.sdk ?? null
+  // Without a version the packages aren't installed: that's another problem.
+  const version = sdk && !sdk.supported && sdk.version ? sdk.version : null
+  if (!version && !warning) return null
+  return { version: version ?? detailText(warning?.details?.version) }
+}
+
+/** The connectors that run only on Fabric, by name. */
+function unsupportedConnectors(status: LocalStatus): string[] {
+  const names = new Set<string>()
+  for (const connector of status.ready?.features.connectors ?? []) {
+    if (!connector.supported) names.add(connector.name)
+  }
+  for (const warning of status.warnings) {
+    const name = warning.code === 'connector-unsupported' ? detailText(warning.details?.name) : null
+    if (name) names.add(name)
+  }
+  return [...names]
+}
+
+/**
+ * Why a published app's preview uses its published backend instead of this
+ * computer's, as a sentence; `null` when the local backend can run the app.
+ * rayfin-local says so in `analysis` and `ready` (the SDK, and each
+ * connector's `supported`) and with `sdk-unsupported` and
+ * `connector-unsupported` warnings.
+ */
+export function localFallbackReason(status: LocalStatus | null | undefined): string | null {
+  if (!status) return null
+  const sdk = unsupportedSdk(status)
+  if (sdk) {
+    return sdk.version
+      ? `This app uses Rayfin ${sdk.version}, which Fabricator can’t run on this computer yet, so the preview uses your published app’s backend.`
+      : 'This app’s Rayfin version can’t run on this computer yet, so the preview uses your published app’s backend.'
+  }
+  const names = unsupportedConnectors(status)
+  if (names.length === 0) return null
+  return names.length === 1
+    ? `The ${names[0]} connector runs only on Fabric, so the preview uses your published app’s backend.`
+    : `The ${sentenceList(names)} connectors run only on Fabric, so the preview uses your published app’s backend.`
+}
+
+/** The code behind {@link localFallbackReason}: `sdk-unsupported` or `connector-unsupported`. */
+export function localFallbackCode(
+  status: LocalStatus | null | undefined
+): 'sdk-unsupported' | 'connector-unsupported' | null {
+  if (!status) return null
+  if (unsupportedSdk(status)) return 'sdk-unsupported'
+  return unsupportedConnectors(status).length > 0 ? 'connector-unsupported' : null
+}
+
+/**
+ * What the backend last reported about the app: the times of its latest
+ * analysis, schema, functions, configuration and `ready` events. A change
+ * between two moments means it rebuilt something in between.
+ */
+export function backendStamp(status: LocalStatus | null | undefined): string {
+  return [
+    status?.analysis?.time,
+    status?.schema?.time,
+    status?.functions?.time,
+    status?.config?.time,
+    status?.ready?.time
+  ]
+    .map((time) => time ?? '')
+    .join('|')
+}
+
+/**
+ * Whether changed files can change whether this computer runs the app: its
+ * packages (`package.json` holds the Rayfin SDK's version) or `rayfin.yml`
+ * (its connectors).
+ */
+export function changesLocalSupport(files: string[]): boolean {
+  return files.some((file) =>
+    /(^|\/)(package\.json|rayfin\.ya?ml)$/.test(file.replace(/\\/g, '/').toLowerCase())
+  )
+}
+
+/** Problems outside the app's code, which a chat turn can't fix. */
+const OUTSIDE_THE_APP = new Set([
+  'already-serving',
+  'node-missing',
+  'node-too-old',
+  'project-not-found',
+  'binary-missing',
+  'binary-too-old',
+  'binary-incompatible',
+  'binary-blocked',
+  'binary-failed',
+  'spawn-failed'
+])
+
+/**
+ * The backend stopped on a problem in the app (a compile error, its packages,
+ * a refused schema change…), which a chat turn may have fixed: worth starting
+ * again once one ends.
+ */
+export function retriesAfterTurn(status: LocalStatus | null | undefined): boolean {
+  return status?.state === 'error' && !OUTSIDE_THE_APP.has(status.error?.code ?? '')
+}
+
 /** One project's local backend, live, with the actions a UI offers. */
 export interface LocalBackend {
   /** The latest status; `null` until the first one arrives. */
@@ -167,10 +286,15 @@ export interface LocalBackend {
   refresh: () => Promise<LocalStatus | null>
   /** Apply a refused schema change and lose the data it drops: reload with `forceSchema` while running, else restart with it. */
   applySchemaChange: () => Promise<LocalStatus | null>
-  /** Delete the local data: through the control API while running, else restart with `reset`. */
+  /**
+   * Delete the local data: through the control API while running (then apply
+   * a refused schema change, which loses nothing now), else restart with `reset`.
+   */
   resetData: () => Promise<LocalStatus | null>
   /** Stop the other `serve` behind `already-serving`, then start this one. */
   stopOtherServe: () => Promise<LocalStatus | null>
+  /** Install the npm packages behind `packages-missing`, then start it again. */
+  installPackages: () => Promise<LocalStatus | null>
 }
 
 /**
@@ -210,6 +334,7 @@ export function useLocalBackend(projectId: string | null | undefined): LocalBack
 
   const state = status?.state ?? 'stopped'
   const pid = alreadyServing(status)?.pid
+  const schemaWaiting = refusedSchemaLosses(status) !== null
 
   return useMemo<LocalBackend>(
     () => ({
@@ -230,18 +355,24 @@ export function useLocalBackend(projectId: string | null | undefined): LocalBack
             : window.api.local.restart(id, { forceSchema: true })
         ),
       resetData: () =>
-        run((id) =>
-          state === 'running'
-            ? window.api.local.resetData(id)
-            : window.api.local.restart(id, { reset: true })
-        ),
+        run(async (id) => {
+          if (state !== 'running') return window.api.local.restart(id, { reset: true })
+          await window.api.local.resetData(id)
+          // A change refused for the data it would lose applies now there's none.
+          if (schemaWaiting) await window.api.local.reload(id, false)
+        }),
       stopOtherServe: () =>
         run(async (id) => {
           if (pid !== undefined) await window.api.local.stopExternal(id, pid)
           return window.api.local.start(id)
+        }),
+      installPackages: () =>
+        run(async (id) => {
+          await window.api.local.installPackages(id)
+          return window.api.local.restart(id)
         })
     }),
-    [status, state, busy, actionError, run, pid]
+    [status, state, busy, actionError, run, pid, schemaWaiting]
   )
 }
 

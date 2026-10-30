@@ -44,7 +44,7 @@ const SELECTION_CROP_PAD = 24
 const INTRO_KEY = 'rayfin.design.introSeen'
 const EMPTY: DesignItem[] = []
 
-/** The preview surface Design can run on (deployed or manual-deploy local app). */
+/** The preview surface Design can run on: the app on this computer, or the published one. */
 export interface DesignSurface {
   /** The URL the preview shows; switching it ends the session. */
   url: string

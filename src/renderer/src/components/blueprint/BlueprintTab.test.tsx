@@ -11,8 +11,8 @@ import { clearFabricInfo } from './fabricInfo'
  * connects to, and who each connection signs in as. These tests feed it a
  * project's files through a mocked `window.api` and protect what people rely on:
  * the identities and whose credentials the app uses, the details panel and its
- * Copilot hand-offs, and moving between the Architecture, Data model and Fabric
- * data views.
+ * Copilot hand-offs, and moving between the Architecture, Data model, Data and
+ * Fabric data views.
  */
 
 const WS = '5d1c2a9e-1b7f-4c3d-9e21-8a64f0c2b7d1'
@@ -436,6 +436,43 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
     fireEvent.click(screen.getByRole('tab', { name: /Architecture/ }))
     expect(localStorage.getItem('rayfin.model.view.p1')).toBe('architecture')
     await screen.findByText('Contoso Expenses')
+  })
+
+  it('shows the app’s local data in the Data view, with its summary in the header', async () => {
+    const running = {
+      projectId: 'p1',
+      state: 'running',
+      revision: 1,
+      ready: {
+        features: {
+          data: { enabled: true, entities: ['Expense'] },
+          storage: { enabled: false, folders: [] },
+          auth: { enabled: true, fabric: true, password: false },
+          connectors: []
+        }
+      },
+      warnings: [],
+      error: null
+    }
+    Object.assign((window as unknown as { api: object }).api, {
+      local: {
+        status: vi.fn(async () => running),
+        onState: vi.fn(() => () => {}),
+        entities: vi.fn(async () => [{ name: 'Expense', rows: 1 }]),
+        users: vi.fn(async () => []),
+        rows: vi.fn(async () => ({
+          columns: [{ name: 'id', type: 'UUID', key: true }],
+          rows: [{ id: 'e1' }],
+          total: 1
+        }))
+      }
+    })
+    renderTab()
+    fireEvent.click(screen.getByRole('tab', { name: 'Data' }))
+    expect(await screen.findByRole('button', { name: 'Expense, 1 row' })).toBeTruthy()
+    expect(localStorage.getItem('rayfin.model.view.p1')).toBe('local-data')
+    expect(document.querySelector('.bp-head-slot')!.textContent).toContain('1 entity · 1 row')
+    expect(await screen.findByText('1–1 of 1')).toBeTruthy()
   })
 
   it('explains an unreadable rayfin.yml instead of drawing nothing', async () => {

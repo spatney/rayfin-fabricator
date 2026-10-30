@@ -1545,10 +1545,9 @@ export interface StudioProject {
    */
   deploymentNames?: Record<string, string>
   /**
-   * Set when a project is freshly created in-app and has never been deployed.
-   * Drives the onboarding "deploy first" gate — the chat composer is disabled
-   * until a deployment exists. Cleared on the first successful deploy. Never set
-   * for projects opened from disk, so opening an existing app is never gated.
+   * Set by earlier releases on a project created in-app, which kept chat locked
+   * until its first deploy. New projects run on this computer from the start, so
+   * nothing sets it now, and listing the projects clears a stored one.
    */
   awaitingFirstDeploy?: boolean
   /** Copilot model id for this project's chat (`--model`); undefined = auto. */
@@ -3358,6 +3357,12 @@ export interface RayfinStudioApi {
     set: (projectId: string, name: string, value: string, description?: string) => Promise<SecretActionResult>
     /** Delete a secret from the deployed app and `rayfin.yml`. */
     remove: (projectId: string, name: string) => Promise<SecretActionResult>
+    /**
+     * Add a secret to `rayfin.yml` (with `description`) and commit it, with no
+     * value and no published app needed. Its value on this computer is
+     * `local.setSecret`'s; a name that's already declared stays as it is.
+     */
+    declare: (projectId: string, name: string, description?: string) => Promise<SecretActionResult>
   }
 
   /**
@@ -4276,4 +4281,20 @@ export interface LocalBackendApi {
   onState: (cb: (status: LocalStatus) => void) => () => void
   /** Every project's output lines; returns an unsubscribe function. */
   onLog: (cb: (line: LocalLogEvent) => void) => () => void
+  /**
+   * Install the npm packages the backend reported missing (`packages-missing`),
+   * with npm's output in the project's output. It doesn't start the backend:
+   * start it again once this resolves.
+   */
+  installPackages: (projectId: string) => Promise<void>
+  /**
+   * A published app's preview uses its published backend because this computer
+   * can't run the app: journal it (`local.fallback`, for Help) and count it.
+   * `reason` is what the preview says.
+   */
+  reportFallback: (
+    projectId: string,
+    code: 'sdk-unsupported' | 'connector-unsupported',
+    reason: string
+  ) => Promise<void>
 }

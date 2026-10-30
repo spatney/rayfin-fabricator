@@ -5,7 +5,9 @@
 
 use tauri::AppHandle;
 
+use crate::services::journal::{self, Area, Level};
 use crate::services::local_backend::{self, error, project_dir, sign_in_flag, valid_sign_in, DEFAULT_LOG_LINES};
+use crate::services::telemetry;
 use crate::types::{
   LocalCommandError, LocalEntity, LocalIdentity, LocalIdentityRequest, LocalLogEvent, LocalReloadResult, LocalRows,
   LocalSecret, LocalStartOptions, LocalStatus, LocalUser,
@@ -174,6 +176,34 @@ pub async fn local_delete_secret(app: AppHandle, project_id: String, name: Strin
 #[tauri::command]
 pub async fn local_stop_external(app: AppHandle, project_id: String, pid: u32) -> LocalResult<()> {
   local_backend::state(&app).stop_external(&project_id, pid).await
+}
+
+/// Install the npm packages the project's backend reported missing
+/// (`packages-missing`), with npm's output in the project's output. It doesn't
+/// start the backend: the caller starts it again once this succeeds.
+#[tauri::command]
+pub async fn local_install_packages(app: AppHandle, project_id: String) -> LocalResult<()> {
+  let dir = project_dir(&project_id)?;
+  local_backend::state(&app).install_packages(&project_id, &dir).await
+}
+
+/// The preview of a published app uses its published backend, because this
+/// computer can't run the app (`code`: `sdk-unsupported` or
+/// `connector-unsupported`; `reason` is what the preview says). Journals it as
+/// `local.fallback` for Help, and counts it.
+#[tauri::command]
+pub fn local_report_fallback(project_id: String, code: String, reason: String) -> LocalResult<()> {
+  if !matches!(code.as_str(), "sdk-unsupported" | "connector-unsupported") {
+    return Err(error("invalid", format!("{code:?} isn't a reason to use the published backend."), None));
+  }
+  journal::entry(Level::Warn, Area::Preview, "local.fallback", reason.trim())
+    .operation("local_backend")
+    .surface(journal::Surface::Inline)
+    .detail(Some(format!("code: {code}")))
+    .project(Some(project_id))
+    .write();
+  telemetry::track_local(crate::commands::auth::get_cached_identity().as_ref(), "fallback", Some(&code));
+  Ok(())
 }
 
 #[cfg(test)]

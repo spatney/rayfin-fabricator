@@ -722,6 +722,9 @@ pub async fn remove_project(
   // goes away.
   state.cancel_chat(&id);
   history::clear_history(&id);
+  // Its local backend holds files in the folder (the database, the logs), so it
+  // stops first, and doesn't outlive a project that's only forgotten either.
+  crate::services::local_backend::state(app).forget(&id).await;
 
   if delete_files {
     if let Some(project) = store::find_project(&id) {

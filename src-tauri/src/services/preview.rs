@@ -1,7 +1,9 @@
 //! Embedded preview pane.
 //!
 //! A single native WebView2 **child webview** (label [`PREVIEW_LABEL`]) overlaid
-//! on the main window, rendering the user's *deployed* Rayfin app. It replaces the
+//! on the main window, rendering the user's Rayfin app: by default the one running
+//! on this computer (its local backend's Vite, or the local Fabric host that
+//! embeds it), else the published app on Fabric. It replaces the
 //! Electron `<webview>` (see the former `src/main/index.ts`). The child webview is
 //! a real OS surface that always paints above the HTML layout, so the renderer
 //! reports the host element's bounds and we keep the webview positioned over it;

@@ -63,8 +63,8 @@ const CLI_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) enum Emit {
   State(LocalStatus),
   Log(LocalLogEvent),
-  /// A line for the activity journal Help reads.
-  Milestone { level: Level, event: &'static str, message: String, project_id: String },
+  /// A line for the activity journal Help reads, with the problem's code when it's a failure.
+  Milestone { level: Level, event: &'static str, message: String, project_id: String, code: Option<String> },
 }
 
 pub(crate) type Sink = Arc<dyn Fn(Emit) + Send + Sync>;
@@ -174,8 +174,8 @@ impl Runtime {
     result
   }
 
-  fn milestone(&self, level: Level, event: &'static str, message: String) {
-    self.emit(Emit::Milestone { level, event, message, project_id: self.id.clone() });
+  fn milestone(&self, level: Level, event: &'static str, message: String, code: Option<&str>) {
+    self.emit(Emit::Milestone { level, event, message, project_id: self.id.clone(), code: code.map(str::to_string) });
   }
 
   /// Record one line of output.
@@ -233,11 +233,16 @@ impl Runtime {
         if outcome.ready {
           let status = self.snapshot();
           let at = status.ready.as_ref().map(|r| r.app_url.clone().unwrap_or_else(|| r.api_url.clone())).unwrap_or_default();
-          self.milestone(Level::Info, "local.started", format!("The local backend is running at {at}"));
+          self.milestone(Level::Info, "local.started", format!("The local backend is running at {at}"), None);
         }
         if outcome.fatal {
           if let events::Event::Error(problem) = &event {
-            self.milestone(Level::Error, "local.failed", format!("The local backend stopped ({}): {}", problem.code, problem.message));
+            self.milestone(
+              Level::Error,
+              "local.failed",
+              format!("The local backend stopped ({}): {}", problem.code, problem.message),
+              Some(&problem.code),
+            );
           }
         }
         outcome
@@ -255,7 +260,12 @@ impl Runtime {
       Some(hint) => format!("{} {hint}", problem.message),
       None => problem.message.clone(),
     }, None);
-    self.milestone(Level::Error, "local.failed", format!("The local backend didn't start ({}): {}", problem.code, problem.message));
+    self.milestone(
+      Level::Error,
+      "local.failed",
+      format!("The local backend didn't start ({}): {}", problem.code, problem.message),
+      Some(&problem.code),
+    );
     self.update(|m| m.fail(problem));
   }
 
@@ -270,7 +280,7 @@ impl Runtime {
       Next::Fail if status.error.as_ref().is_some_and(|e| e.code == "crashed") => {
         let message = status.error.map(|e| e.message).unwrap_or_default();
         self.log("fabricator", "error", &message, None);
-        self.milestone(Level::Error, "local.crashed", message);
+        self.milestone(Level::Error, "local.crashed", message, Some("crashed"));
       }
       Next::Stop => self.log("fabricator", "info", "The local backend stopped.", None),
       _ => {}
@@ -397,7 +407,8 @@ impl LocalBackends {
     *self.inner.sink.write().unwrap() = Some(sink);
   }
 
-  /// Send state and output to the renderer, and milestones to the activity journal.
+  /// Send state and output to the renderer, and milestones to the activity
+  /// journal and telemetry (started, or failed with the problem's code).
   pub fn attach_app(&self, app: &AppHandle) {
     if self.inner.sink.read().unwrap().is_some() {
       return;
@@ -410,8 +421,19 @@ impl LocalBackends {
       Emit::Log(line) => {
         let _ = app.emit(LOCAL_LOG, line);
       }
-      Emit::Milestone { level, event, message, project_id } => {
-        let mut entry = journal::entry(level, Area::Preview, event, &message).operation("local_backend").project(Some(project_id));
+      Emit::Milestone { level, event, message, project_id, code } => {
+        let outcome = match event {
+          "local.started" => Some("started"),
+          "local.failed" | "local.crashed" => Some("failed"),
+          _ => None,
+        };
+        if let Some(outcome) = outcome {
+          crate::services::telemetry::track_local(crate::commands::auth::get_cached_identity().as_ref(), outcome, code.as_deref());
+        }
+        let mut entry = journal::entry(level, Area::Preview, event, &message)
+          .operation("local_backend")
+          .detail(code.map(|code| format!("code: {code}")))
+          .project(Some(project_id));
         if level != Level::Info {
           entry = entry.surface(journal::Surface::Backend);
         }
@@ -576,6 +598,62 @@ impl LocalBackends {
     }
   }
 
+  /// Stop the project's backend and forget it, before the project goes away
+  /// (its folder trashed, or removed from Fabricator's list). Its output file stays.
+  pub async fn forget(&self, project_id: &str) {
+    let Some(rt) = self.existing(project_id) else {
+      return;
+    };
+    {
+      let _lifecycle = rt.lifecycle.lock().await;
+      self.stop_runtime(&rt).await;
+    }
+    let mut runtimes = self.inner.runtimes.lock().unwrap();
+    if runtimes.get(project_id).is_some_and(|known| Arc::ptr_eq(known, &rt) && !known.is_live()) {
+      runtimes.remove(project_id);
+    }
+  }
+
+  /// Install the npm packages the project's backend reported missing
+  /// (`packages-missing`): `npm install` in the folder it named, or, without
+  /// one, what Fabricator installs when a project opens (the project's packages
+  /// with its pinned Rayfin CLI, and the functions folder's). npm's output goes
+  /// to the project's output.
+  pub async fn install_packages(&self, project_id: &str, project: &Path) -> Result<(), LocalCommandError> {
+    let rt = self.runtime(project_id);
+    let output = install_output(rt.clone());
+    let reported = rt
+      .snapshot()
+      .error
+      .filter(|e| e.code == "packages-missing")
+      .and_then(|e| e.details)
+      .and_then(|details| details.get("dir").and_then(|dir| dir.as_str()).map(PathBuf::from))
+      .and_then(|dir| folder_within(project, &dir));
+    let result = match reported {
+      Some(dir) => {
+        rt.log("fabricator", "info", &format!("Installing the npm packages in {}…", dir.display()), None);
+        npm_install(&dir, output).await
+      }
+      None => {
+        rt.log("fabricator", "info", "Installing the app's npm packages…", None);
+        match crate::services::exec::ensure_project_dependencies(project, Some(output.clone())).await {
+          Ok(()) => crate::commands::projects_impl::ensure_functions_dependencies(project, Some(output)).await,
+          Err(message) => Err(message),
+        }
+      }
+    };
+    match result {
+      Ok(()) => {
+        rt.log("fabricator", "info", "Installed the npm packages.", None);
+        Ok(())
+      }
+      Err(message) => {
+        rt.log("fabricator", "error", &message, None);
+        Err(error("install-failed", message, Some("Check the output for npm's messages, then try again.")))
+      }
+    }
+  }
+
   /// A client for the project's control API, while its backend runs.
   pub fn control(&self, project_id: &str) -> Result<ControlClient, LocalCommandError> {
     let Some(rt) = self.existing(project_id) else {
@@ -600,6 +678,18 @@ impl LocalBackends {
   /// The processes of every backend Fabricator runs.
   pub fn owned_pids(&self) -> Vec<u32> {
     self.all().iter().filter_map(|rt| rt.pid()).collect()
+  }
+
+  /// The ports other projects' backends serve their app and API on, with the
+  /// project's id, so a live preview of a team or published app keeps off them.
+  pub fn held_ports(&self, except: &str) -> Vec<(u16, String)> {
+    let mut held = Vec::new();
+    for rt in self.all().into_iter().filter(|rt| rt.id != except && rt.is_live()) {
+      let Some(ready) = rt.snapshot().ready else { continue };
+      let urls = ready.app_url.iter().chain(std::iter::once(&ready.api_url));
+      held.extend(urls.filter_map(|url| tauri::Url::parse(url).ok()?.port_or_known_default()).map(|port| (port, rt.id.clone())));
+    }
+    held
   }
 
   /// Stop a rayfin-local that Fabricator didn't start (the `already-serving`
@@ -729,6 +819,53 @@ fn not_running(status: &LocalStatus) -> LocalCommandError {
 
 pub(crate) fn problem_error(problem: LocalProblem) -> LocalCommandError {
   LocalCommandError { code: problem.code, message: problem.message, hint: problem.hint, status: None }
+}
+
+/// npm's output, line by line, into the project's output.
+fn install_output(rt: Arc<Runtime>) -> crate::services::exec::OnData {
+  use crate::services::exec::Stream as Out;
+  Arc::new(move |stream, text| {
+    let (source, level) = match stream {
+      Out::System => ("fabricator", "info"),
+      Out::Stderr => ("npm", "warn"),
+      Out::Stdout => ("npm", "info"),
+    };
+    for line in text.lines().map(str::trim_end).filter(|line| !line.trim().is_empty()) {
+      rt.log(source, level, line, None);
+    }
+  })
+}
+
+/// `npm install` in `dir`, streaming its output.
+async fn npm_install(dir: &Path, output: crate::services::exec::OnData) -> Result<(), String> {
+  let result = crate::services::exec::run(
+    "npm",
+    &["install", "--no-audit", "--no-fund"],
+    crate::services::exec::RunOptions {
+      cwd: Some(dir.to_path_buf()),
+      env: crate::services::npm_env::fresh_registry_env(),
+      on_data: Some(output),
+      timeout_ms: Some(600_000),
+      ..Default::default()
+    },
+  )
+  .await;
+  if result.ok {
+    return Ok(());
+  }
+  if result.not_found {
+    return Err("npm wasn't found. Install Node.js, which includes npm, then try again.".into());
+  }
+  let code = result.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
+  Err(format!("npm install failed in {} (exit code {code}).", dir.display()))
+}
+
+/// `dir` (absolute, or relative to `project`) when it's a folder of the project
+/// with a `package.json`.
+fn folder_within(project: &Path, dir: &Path) -> Option<PathBuf> {
+  let dir = if dir.is_absolute() { dir.to_path_buf() } else { project.join(dir) };
+  let inside = dir.canonicalize().ok()?.starts_with(project.canonicalize().ok()?);
+  (inside && dir.join("package.json").is_file()).then_some(dir)
 }
 
 /// `developer`, `none` or `user:<username>`.

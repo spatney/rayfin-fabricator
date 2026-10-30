@@ -1,8 +1,10 @@
 import { useEffect, useId, useState, type JSX } from 'react'
 import type { SecretInfo } from '@shared/ipc'
+import { toLocalBackendError } from '../../localBackend'
 import { useModalFocus } from '../../modalFocus'
 import { useSuppressPreview } from '../../overlay'
 import { Codicon } from '../icons'
+import type { SecretEntry } from './entries'
 
 /** Rayfin's secret names: what functions write after `ctx.Secrets.` */
 const NAME_RE = /^[A-Za-z][A-Za-z0-9_]*$/
@@ -22,30 +24,63 @@ export function nameProblem(name: string): string | null {
   return NAME_RE.test(name) ? null : 'Start the name with a letter.'
 }
 
+/** What the dialog sets. */
+export type SecretDialogTarget =
+  /** A new secret: added to `rayfin.yml`, with its value on this computer. */
+  | { kind: 'new' }
+  /** A secret's value on this computer. `replacing`: it has one now. */
+  | { kind: 'local'; name: string; replacing: boolean }
+  /** A secret's value on the published app. */
+  | { kind: 'published'; secret: SecretInfo }
+
+/** What was saved: a new secret, a value on this computer, or one on the published app. */
+export type SecretSaved = 'added' | 'local' | 'published'
+
 interface Props {
   projectId: string
-  /** The secret whose value to set; absent to add a new one. */
-  replacing?: SecretInfo | null
-  /** Secrets the app already has, to say when a name replaces one. */
-  existing: SecretInfo[]
+  target: SecretDialogTarget
+  /** The app's secrets, to say when a new name is one of them. */
+  existing: SecretEntry[]
   onClose: () => void
-  /** The value was stored. `added` is false when an existing secret got a new value. */
-  onSaved: (name: string, added: boolean) => void
+  /** The value was stored. */
+  onSaved: (name: string, saved: SecretSaved) => void
+  /** A new secret went into `rayfin.yml`, though its value wasn't stored yet. */
+  onDeclared?: (name: string) => void
+}
+
+const LOCAL_VALUE_HINT =
+  'Saved on this computer, where your app runs while you build it. It never goes into your code or History.'
+
+/** A failed call's message, with its hint when there is one. */
+function failure(reason: unknown): string {
+  const error = toLocalBackendError(reason)
+  return error.hint ? `${error.message} ${error.hint}` : error.message
 }
 
 /**
- * Add a secret, or set a secret's value. The value goes straight to the Rayfin
- * CLI (`rayfin secret set --stdin`) and is never stored by Fabricator; it lives
- * only in this dialog until it's sent.
+ * Add a secret, or set a secret's value on this computer or on the published
+ * app. A value on this computer goes to rayfin-local (`rayfin-local secret
+ * set`), one for the published app to the Rayfin CLI (`rayfin secret set
+ * --stdin`); either way through stdin, and Fabricator keeps no copy. The value
+ * lives only in this dialog until it's sent.
  */
-export default function SecretDialog({ projectId, replacing, existing, onClose, onSaved }: Props): JSX.Element {
+export default function SecretDialog({
+  projectId,
+  target,
+  existing,
+  onClose,
+  onSaved,
+  onDeclared
+}: Props): JSX.Element {
   useSuppressPreview()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const titleId = useId()
   const nameId = useId()
   const valueId = useId()
   const describeId = useId()
-  const [name, setName] = useState(replacing?.name ?? '')
+  const fixedName =
+    target.kind === 'local' ? target.name : target.kind === 'published' ? target.secret.name : null
+  const [name, setName] = useState(fixedName ?? '')
   const [value, setValue] = useState('')
   const [description, setDescription] = useState('')
   const [reveal, setReveal] = useState(false)
@@ -61,10 +96,34 @@ export default function SecretDialog({ projectId, replacing, existing, onClose, 
     return () => window.removeEventListener('keydown', onKey)
   }, [busy, onClose])
 
-  const problem = replacing ? null : nameProblem(name)
-  const match = replacing ?? existing.find((s) => s.name === name) ?? null
+  const problem = fixedName ? null : nameProblem(name)
+  const match = target.kind === 'new' ? (existing.find((s) => s.name === name) ?? null) : null
+  const declared =
+    target.kind === 'published'
+      ? target.secret.declared
+      : target.kind === 'local' || Boolean(match?.declared)
   const canSave = Boolean(name) && !problem && value.trim().length > 0 && !busy
-  const action = match?.stored ? 'Replace value' : match ? 'Set value' : 'Add secret'
+
+  let title: string
+  let subtitle: string
+  let action: string
+  let valueHint = LOCAL_VALUE_HINT
+  if (target.kind === 'published') {
+    const stored = target.secret.stored
+    title = stored ? 'Replace published value' : 'Set published value'
+    subtitle = `A new value for ${name} on your published app. Functions get it from their next run.`
+    action = stored ? 'Replace value' : 'Set value'
+    valueHint =
+      'Sent straight to your published app. Fabricator doesn’t keep it, and nobody can read it back.'
+  } else if (target.kind === 'local') {
+    title = target.replacing ? 'Change local value' : 'Set local value'
+    subtitle = `A value for ${name} on this computer. Functions get it from their next run.`
+    action = target.replacing ? 'Change value' : 'Set value'
+  } else {
+    title = 'New secret'
+    subtitle = 'An API key, password or connection string your functions need.'
+    action = match?.declared ? 'Set value' : 'Add secret'
+  }
 
   const save = async (): Promise<void> => {
     if (!canSave) return
@@ -72,22 +131,42 @@ export default function SecretDialog({ projectId, replacing, existing, onClose, 
     setError(null)
     setSignIn(false)
     try {
-      const result = await window.api.secrets.set(
-        projectId,
-        name,
-        value,
-        match?.declared ? undefined : description.trim() || undefined
-      )
-      if (result.ok) {
-        setValue('')
-        onSaved(name, !match)
-        onClose()
-        return
+      let saved: SecretSaved
+      if (target.kind === 'published') {
+        const result = await window.api.secrets.set(
+          projectId,
+          name,
+          value,
+          declared ? undefined : description.trim() || undefined
+        )
+        if (!result.ok) {
+          setError(result.error ?? 'Couldn’t save the secret.')
+          setSignIn(Boolean(result.signIn))
+          return
+        }
+        saved = 'published'
+      } else {
+        saved = 'local'
+        if (!declared) {
+          const result = await window.api.secrets.declare(
+            projectId,
+            name,
+            description.trim() || undefined
+          )
+          if (!result.ok) {
+            setError(result.error ?? 'Couldn’t add the secret.')
+            return
+          }
+          onDeclared?.(name)
+          saved = 'added'
+        }
+        await window.api.local.setSecret(projectId, name, value)
       }
-      setError(result.error ?? 'Couldn’t save the secret.')
-      setSignIn(Boolean(result.signIn))
+      setValue('')
+      onSaved(name, saved)
+      onClose()
     } catch (err) {
-      setError(String(err))
+      setError(failure(err))
     } finally {
       setBusy(false)
     }
@@ -105,12 +184,8 @@ export default function SecretDialog({ projectId, replacing, existing, onClose, 
       >
         <div className="modal-header">
           <div>
-            <h2 id={titleId}>{replacing ? action : 'New secret'}</h2>
-            <p className="modal-sub">
-              {replacing
-                ? `A new value for ${replacing.name}. Functions get it from their next run.`
-                : 'An API key, password or connection string your functions need.'}
-            </p>
+            <h2 id={titleId}>{title}</h2>
+            <p className="modal-sub">{subtitle}</p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close" disabled={busy}>
             ✕
@@ -133,7 +208,7 @@ export default function SecretDialog({ projectId, replacing, existing, onClose, 
               </div>
             )}
 
-            {!replacing && (
+            {!fixedName && (
               <div className="sec-field">
                 <label htmlFor={nameId}>Name</label>
                 <input
@@ -149,10 +224,15 @@ export default function SecretDialog({ projectId, replacing, existing, onClose, 
                   aria-invalid={Boolean(problem)}
                   aria-describedby={`${nameId}-hint`}
                 />
-                <span id={`${nameId}-hint`} className={`sec-hint${problem ? ' sec-hint--error' : ''}`}>
+                <span
+                  id={`${nameId}-hint`}
+                  className={`sec-hint${problem ? ' sec-hint--error' : ''}`}
+                >
                   {problem ??
                     (match
-                      ? `This app already has ${match.name}. Saving replaces its value.`
+                      ? match.declared
+                        ? `This app already has ${match.name}. Saving sets its value on this computer.`
+                        : `rayfin.yml doesn’t list ${match.name} yet. Saving adds it and sets its value on this computer.`
                       : 'Letters, numbers and underscores. Functions read it by this name.')}
                 </span>
               </div>
@@ -169,7 +249,7 @@ export default function SecretDialog({ projectId, replacing, existing, onClose, 
                   onChange={(e) => setValue(e.target.value)}
                   autoComplete="new-password"
                   spellCheck={false}
-                  autoFocus={Boolean(replacing)}
+                  autoFocus={Boolean(fixedName)}
                   disabled={busy}
                   aria-describedby={`${valueId}-hint`}
                 />
@@ -185,11 +265,11 @@ export default function SecretDialog({ projectId, replacing, existing, onClose, 
                 </button>
               </div>
               <span id={`${valueId}-hint`} className="sec-hint">
-                Sent straight to your deployed app. Fabricator doesn’t keep it, and nobody can read it back.
+                {valueHint}
               </span>
             </div>
 
-            {!match?.declared && (
+            {!declared && (
               <div className="sec-field">
                 <label htmlFor={describeId}>
                   What it’s for <span className="sec-optional">(optional)</span>

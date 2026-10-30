@@ -92,6 +92,14 @@ impl Harness {
       _ => None,
     }).collect()
   }
+
+  /// The journal entries, as `(event, code)`.
+  fn milestones(&self, id: &str) -> Vec<(&'static str, Option<String>)> {
+    self.emitted.lock().unwrap().iter().filter_map(|e| match e {
+      Emit::Milestone { event, project_id, code, .. } if project_id == id => Some((*event, code.clone())),
+      _ => None,
+    }).collect()
+  }
 }
 
 fn starts(dir: &Path) -> u32 {
@@ -188,6 +196,7 @@ async fn a_fatal_error_waits_for_the_user() {
   assert!(error.fatal);
   assert_eq!(error.details.unwrap()["losses"][0], "Note.title (3 values)");
   assert_eq!(status.schema.unwrap().losses, ["Note.title (3 values)"]);
+  assert!(h.milestones("p").contains(&("local.failed", Some("schema-refused".into()))), "the journal has the code");
   tokio::time::sleep(Duration::from_millis(300)).await;
   assert_eq!(starts(&dir), 1, "no automatic restart");
 
@@ -281,6 +290,44 @@ async fn a_config_change_that_needs_a_restart_gets_one() {
   assert_eq!(status.crashes, 0);
   let states = h.states("p");
   assert_eq!(states, [State::Starting, State::Running, State::Restarting, State::Starting, State::Running]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn other_projects_keep_off_a_running_backends_ports_until_it_is_forgotten() {
+  let Some(h) = harness(fast()) else { return };
+  let dir = h.project("notes", "ok");
+  h.backends.start("a", dir, LocalStartOptions::default()).await;
+  let status = h.running("a").await;
+  assert_eq!(h.milestones("a"), [("local.started", None)]);
+  let api_port = tauri::Url::parse(&status.ready.unwrap().api_url).unwrap().port().unwrap();
+  assert!(h.backends.held_ports("b").contains(&(api_port, "a".to_string())));
+  assert!(h.backends.held_ports("a").is_empty(), "its own ports are its own");
+
+  // Removing the project stops its backend and forgets it.
+  let pid = status.pid.unwrap();
+  h.backends.forget("a").await;
+  assert!(process::wait_for_exit(&[pid], Duration::from_secs(5)).is_empty());
+  assert!(h.backends.existing("a").is_none());
+  assert_eq!(h.backends.status("a").state, State::Stopped);
+  assert!(h.backends.held_ports("b").is_empty());
+  h.backends.forget("never-started").await;
+}
+
+#[test]
+fn packages_install_only_in_folders_of_the_project() {
+  let root = std::env::temp_dir().join(format!("fab-local-install-{}", uuid::Uuid::new_v4()));
+  let project = root.join("app");
+  std::fs::create_dir_all(project.join("rayfin").join("functions")).unwrap();
+  std::fs::create_dir_all(root.join("elsewhere")).unwrap();
+  std::fs::write(project.join("rayfin").join("functions").join("package.json"), "{}").unwrap();
+  std::fs::write(root.join("elsewhere").join("package.json"), "{}").unwrap();
+  let functions = project.join("rayfin").join("functions");
+  assert_eq!(folder_within(&project, &functions), Some(functions.clone()));
+  assert_eq!(folder_within(&project, Path::new("rayfin/functions")), Some(functions));
+  assert_eq!(folder_within(&project, &root.join("elsewhere")), None, "outside the project");
+  assert_eq!(folder_within(&project, &project.join("..").join("elsewhere")), None);
+  assert_eq!(folder_within(&project, &project.join("rayfin")), None, "no package.json");
+  let _ = std::fs::remove_dir_all(&root);
 }
 
 #[tokio::test(flavor = "multi_thread")]

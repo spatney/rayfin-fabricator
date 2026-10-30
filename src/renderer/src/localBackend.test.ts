@@ -6,9 +6,13 @@ import { api } from './api'
 import {
   LocalBackendError,
   alreadyServing,
+  changesLocalSupport,
   localBackendStore,
+  localFallbackCode,
+  localFallbackReason,
   localStateLabel,
   refusedSchemaLosses,
+  retriesAfterTurn,
   useLocalBackend,
   useLocalBackendLogs
 } from './localBackend'
@@ -88,6 +92,7 @@ beforeEach(() => {
     status: vi.fn(async (id: string) => status({ projectId: id })),
     reload: vi.fn(async () => ({ schema: null, config: null })),
     resetData: vi.fn(async () => undefined),
+    installPackages: vi.fn(async () => undefined),
     stopExternal: vi.fn(async () => undefined),
     logs: vi.fn(async () => []),
     onState: vi.fn((cb: (status: LocalStatus) => void) => {
@@ -151,6 +156,45 @@ describe('useLocalBackend', () => {
     expect(local.reload).toHaveBeenCalledWith('p1', true)
     expect(local.resetData).toHaveBeenCalledWith('p1')
     expect(local.restart).toHaveBeenCalledTimes(2)
+  })
+
+  it('resets the data under a refused change, which then applies, and installs missing packages before starting again', async () => {
+    const { result } = renderHook(() => useLocalBackend('p1'))
+    const schema = {
+      result: 'refused' as const,
+      changes: ['changed Note'],
+      losses: ['Note.title (3 values)'],
+      message: null,
+      live: true,
+      time: '2026-10-30T03:12:09.512Z'
+    }
+    act(() => emitState(status({ state: 'running', revision: 3, ready, schema })))
+    await act(async () => {
+      await result.current.resetData()
+    })
+    expect(local.resetData).toHaveBeenCalledWith('p1')
+    expect(local.reload).toHaveBeenCalledWith('p1', false)
+    expect(local.resetData.mock.invocationCallOrder[0]).toBeLessThan(
+      local.reload.mock.invocationCallOrder[0]
+    )
+
+    act(() =>
+      emitState(
+        status({
+          state: 'error',
+          revision: 4,
+          error: problem('packages-missing', { dir: 'rayfin/functions' })
+        })
+      )
+    )
+    await act(async () => {
+      await result.current.installPackages()
+    })
+    expect(local.installPackages).toHaveBeenCalledWith('p1')
+    expect(local.restart).toHaveBeenCalledWith('p1')
+    expect(local.installPackages.mock.invocationCallOrder[0]).toBeLessThan(
+      local.restart.mock.invocationCallOrder[0]
+    )
   })
 
   it('stops the other serve that holds the project, then starts', async () => {
@@ -238,6 +282,78 @@ describe('local backend helpers', () => {
     expect(refusedSchemaLosses(status({ state: 'running', schema }))).toEqual(['Tag'])
     expect(refusedSchemaLosses(status({ state: 'running' }))).toBeNull()
     expect(alreadyServing(status({ state: 'error', error: problem('crashed') }))).toBeNull()
+  })
+
+  it('says why a published app previews on its published backend, and only when it must', () => {
+    const analysis = (version: string | null, supported: boolean): LocalStatus['analysis'] => ({
+      ok: true,
+      sdk: { version, supported },
+      entities: [],
+      storageFolders: [],
+      message: null,
+      time: null
+    })
+    const tooNew = status({ state: 'starting', analysis: analysis('1.40.1', false) })
+    expect(localFallbackReason(tooNew)).toBe(
+      'This app uses Rayfin 1.40.1, which Fabricator can’t run on this computer yet, so the preview uses your published app’s backend.'
+    )
+    expect(localFallbackCode(tooNew)).toBe('sdk-unsupported')
+    const warned = status({
+      warnings: [{ ...problem('sdk-unsupported', { version: '1.37.0' }), fatal: false }]
+    })
+    expect(localFallbackReason(warned)).toContain('Rayfin 1.37.0')
+    // Packages that aren't installed have no version: another problem, not a fallback.
+    expect(localFallbackReason(status({ analysis: analysis(null, false) }))).toBeNull()
+
+    const connectors = status({
+      state: 'running',
+      ready: {
+        ...ready,
+        features: {
+          ...ready.features,
+          connectors: [
+            { name: 'sales', type: 'fabric-semanticmodel', supported: true },
+            { name: 'logs', type: 'kusto', supported: false }
+          ]
+        }
+      }
+    })
+    expect(localFallbackReason(connectors)).toBe(
+      'The logs connector runs only on Fabric, so the preview uses your published app’s backend.'
+    )
+    expect(localFallbackCode(connectors)).toBe('connector-unsupported')
+    // A stopped backend keeps its warnings, so the reason outlives the run.
+    const stopped = status({
+      warnings: ['logs', 'events', 'audit'].map((name) => ({
+        ...problem('connector-unsupported', { name, type: 'kusto' }),
+        fatal: false
+      }))
+    })
+    expect(localFallbackReason(stopped)).toBe(
+      'The logs, events and audit connectors run only on Fabric, so the preview uses your published app’s backend.'
+    )
+    expect(localFallbackReason(status({ state: 'running', ready }))).toBeNull()
+    expect(localFallbackCode(status({ state: 'running', ready }))).toBeNull()
+  })
+
+  it('tells which changed files can change whether this computer runs the app', () => {
+    expect(changesLocalSupport(['package.json'])).toBe(true)
+    expect(changesLocalSupport(['C:\\apps\\notes\\rayfin\\rayfin.yml'])).toBe(true)
+    expect(changesLocalSupport(['web/Package.json'])).toBe(true)
+    expect(changesLocalSupport(['src/App.tsx', 'rayfin/data/Note.ts', 'package-lock.json'])).toBe(
+      false
+    )
+  })
+
+  it('starts again after a turn only a backend a problem in the app stopped', () => {
+    const failed = (code: string): LocalStatus => status({ state: 'error', error: problem(code) })
+    for (const code of ['analysis-failed', 'packages-missing', 'schema-refused', 'crashed']) {
+      expect(retriesAfterTurn(failed(code)), code).toBe(true)
+    }
+    for (const code of ['already-serving', 'node-missing', 'binary-blocked']) {
+      expect(retriesAfterTurn(failed(code)), code).toBe(false)
+    }
+    expect(retriesAfterTurn(status({ state: 'running', ready }))).toBe(false)
   })
 })
 
