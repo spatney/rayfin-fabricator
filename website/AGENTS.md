@@ -142,7 +142,7 @@ in `.md`.
 
 | Image | What it shows | Used on |
 | --- | --- | --- |
-| `workbench` | Build view: a finished chat turn and the published sample app in the preview | `/docs`, `/docs/start/tour`, `/docs/start/first-app`, landing page |
+| `workbench` | Build view: a finished chat turn and the published sample app in the preview (sample data) | `/docs`, `/docs/start/tour`, `/docs/start/first-app`, landing page |
 | `setup` | Setup with all three steps complete, including the optional **Sign in to Azure**, and the `You're all set` block (sample data) | `/docs/start/setup` |
 | `accounts` | **Accounts** with the sample accounts signed in to each service (sample data) | `/docs/start/accounts` |
 | `help` | The Help assistant answering why publishing failed, with its action button and citation (sample data) | `/docs/troubleshooting/help` |
@@ -160,20 +160,20 @@ in `.md`.
 | `connect-data` | **Add Fabric data** on the Finance analytics workspace: recent workspaces first, three items already connected and two picked (sample data) | `/docs/build/data-model` |
 | `data-chips` | The chat composer with the two items picked in `connect-data` waiting as chips for the next message (sample data) | `/docs/build/data-model` |
 | `plan` | A proposed plan waiting for approval | `/docs/build/chat` |
-| `preview-toolbar` | The preview toolbar above the running app | `/docs/build/preview` |
+| `preview-toolbar` | The default preview toolbar above the published sample app (sample data) | `/docs/build/preview` |
 | `preview-local` | The sample app's preview with Local development on: **Local** and **Published**, the local backend's status and its output open below the app (sample data) | `/docs/build/local-development`, `/docs/build/preview` |
-| `preview-as` | The **Preview as** menu open over the sample app on this computer: **You**, a test user, **Signed out** and **Add test user…** (sample data) | `/docs/build/preview` |
+| `preview-as` | The **Preview as** menu open over the sample app on this computer: **You**, two test users, **Signed out** and **Add test user…** (sample data) | `/docs/build/preview` |
 | `design` | Design mode with an element selected and its change card open | `/docs/build/design` |
 | `design-theme` | Design mode's Theme panel | `/docs/build/design` |
 | `code` | Code view with the file tree and the editor | `/docs/build/code-and-history` |
-| `history` | The History tab with a version selected | `/docs/build/code-and-history` |
+| `history` | The History tab with a version per request, one selected and a file's diff open | `/docs/build/code-and-history` |
 | `blueprint` | Blueprint's Architecture view of the sample app (sample data) | `/docs/build/data-model` |
 | `model` | Blueprint's Data model view with the entity diagram | `/docs/build/data-model` |
 | `model-relations` | Blueprint's Data model view with four related entities and a join entity (sample data) | `/docs/build/data-model` |
 | `model-access` | The same Data model view with one entity left without a permission decorator: its amber access dot and **Harden** (sample data) | `/docs/build/data-model` |
 | `local-data` | Blueprint's **Data** view of the sample app's local data, with Local development on (sample data) | `/docs/build/data-model` |
 | `skills` | The Skills view | `/docs/build/skills` |
-| `secrets` | The Secrets view with a secret selected | `/docs/build/secrets` |
+| `secrets` | The Secrets view with Local development on: **Local value** and **Published value**, and a secret selected (sample data) | `/docs/build/secrets` |
 | `deployments` | The publish control's panel, open on the sample app's published app, with **Publish after each chat turn** on (sample data) | `/docs/ship/deploy` |
 | `share` | The share dialog | `/docs/ship/share` |
 | `advisor` | The Advisor: grade, check strip, summary and issues | `/docs/ship/advisor` |

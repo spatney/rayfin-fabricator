@@ -9,7 +9,7 @@ Use this page when Fabricator can't publish your app to Microsoft Fabric, or the
 
 You see a "Couldn’t publish" message, the publish control in the app bar says "Failed" next to the published app's name and offers **Try again**, and Ray swims in above the preview to say "Your app didn’t make it to Fabric. Want me to find out why?" If you've sent Ray away, the notice says "Couldn’t publish this app. Help can find out why." A build failure's log can say "❌ Deployment failed: Static build command failed. Fix the build errors and re-run, or use 'rayfin up staticapp deploy --skip-build' to deploy existing content."
 
-{/* screenshot: deploy-error */}
+![Ray above the preview after a failed publish, saying "Your app didn't make it to Fabric. Want me to find out why?", with Find out why and View logs beside him.](/screenshots/deploy-error.webp)
 
 Fabricator publishes with the project's pinned Rayfin CLI, running `rayfin up -y --force`. The log is the source of truth: it includes Rayfin CLI output, dependency recovery, build errors, Fabric authentication failures, workspace targeting errors, and Fabric API failures.
 
