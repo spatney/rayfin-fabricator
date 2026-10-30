@@ -182,8 +182,8 @@ describe('Search', () => {
 
   it('opens a docs page in the browser', async () => {
     const props = setup()
-    type('deploy to microsoft fabric')
-    fireEvent.click(await screen.findByRole('option', { name: /^Deploy to Microsoft Fabric/ }))
+    type('publish to microsoft fabric')
+    fireEvent.click(await screen.findByRole('option', { name: /^Publish to Microsoft Fabric/ }))
     expect(props.openUrl).toHaveBeenCalledWith(
       'https://spatney.github.io/rayfin-fabricator/docs/ship/deploy'
     )
@@ -194,9 +194,9 @@ describe('Search', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     const notify = vi.fn()
     const props = setup({ notify })
-    type('deploy to microsoft fabric')
+    type('publish to microsoft fabric')
     fireEvent.pointerMove(
-      await screen.findByRole('option', { name: /^Deploy to Microsoft Fabric/ })
+      await screen.findByRole('option', { name: /^Publish to Microsoft Fabric/ })
     )
     press('k', { ctrlKey: true })
 

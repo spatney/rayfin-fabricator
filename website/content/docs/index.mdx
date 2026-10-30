@@ -1,21 +1,29 @@
 ---
 title: "What is Fabricator?"
-description: "Fabricator is a desktop workbench for building Rayfin apps with Copilot, live preview, and Microsoft Fabric deploys."
+description: "Fabricator is a desktop workbench for building Rayfin apps with GitHub Copilot: describe an app in chat, try it in the preview, and publish it to Microsoft Fabric."
 ---
 
-Fabricator helps you build [Rayfin](https://rayfin.ai/docs) apps in one desktop window. You describe the app you want, watch GitHub Copilot edit the project, preview the running app, deploy it to Microsoft Fabric, and keep refining from chat.
+Fabricator helps you build [Rayfin](https://rayfin.ai/docs) apps in one desktop window. You describe the app you want, watch GitHub Copilot build it, try it in the preview, and publish it to Microsoft Fabric, where people in your organization can use it. Then you keep refining it from chat.
 
-![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the live preview shows the deployed app with a monthly total and a spending chart.](/screenshots/workbench.webp)
+![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the preview shows the published app with a monthly total and a spending chart.](/screenshots/workbench.webp)
 
 ## The build loop
 
-1. Create or open a project, then deploy it to a Fabric workspace if it is not deployed yet.
+1. Create a project and publish it to a Fabric workspace. Chat opens for the app once it's published.
 2. Describe the app in plain language.
-3. Watch the work log while Copilot changes files and runs checks.
-4. Preview the app in the same window. After each successful turn, Fabricator redeploys the changes to Fabric.
+3. Watch the work log while Copilot changes files and runs checks. The preview shows the changes to the app's pages as Copilot makes them.
+4. When the turn finishes, Fabricator publishes the changes, and the preview shows the published app.
 5. Refine the app with another prompt, a visual Design change, or an Advisor finding.
 
-Rayfin is the app platform your project uses. Fabricator creates and edits Rayfin projects, then runs the project's Rayfin tooling for deploys. Microsoft Fabric is where the app is hosted and shared; see Rayfin's [Fabric app deploy docs](https://rayfin.ai/docs/deploy/fabric-apps) for the platform background.
+Rayfin is the app platform your project uses. Fabricator creates and edits Rayfin projects, and runs the project's Rayfin tooling to publish them. Microsoft Fabric is where the app is hosted and shared; see Rayfin's [Fabric app deploy docs](https://rayfin.ai/docs/deploy/fabric-apps) for the platform background, and [How Fabricator works](/docs/reference/how-it-works) for the details.
+
+## Build on this computer instead
+
+> [!WARNING]
+> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be
+> removed in a future update.
+
+With **Local development** on, your apps and their backend run on this computer while you build. A new app opens with chat ready, without a publish step, and its data, sign-in and functions run on this computer too. You publish it to Fabric when you choose, so you don't need a Fabric workspace until then. See [Develop on this computer](/docs/build/local-development).
 
 ## Who Fabricator is for
 
@@ -23,10 +31,10 @@ Fabricator is for people who want to make Rayfin apps without living in a termin
 
 - Trying Rayfin for the first time.
 - Turning a business workflow into a small app.
-- Iterating on a data model, UI, or deployment with Copilot.
+- Iterating on a data model or UI with Copilot, and publishing it to Fabric.
 - Reviewing generated code, history, and app health in one place.
 
-You do not need to pick a template for a new app. **New project** asks for a name, creates the app from the Rayfin CLI's default Universal App template, then moves to the Deploy step. For local projects, chat stays locked until the app has a Fabric deployment.
+You do not need to pick a template for a new app. **New project** asks for a name, creates the app from the Rayfin CLI's default Universal App template, then asks you to publish it to a Fabric workspace. Chat stays locked until the app is published.
 
 > [!NOTE]
 > Fabricator is a personal project by Sachin Patney. It is not a Microsoft product and is not affiliated with, endorsed by, sponsored by, or supported by Microsoft.
@@ -36,9 +44,10 @@ You do not need to pick a template for a new app. **New project** asks for a nam
 Before you start, check the [system requirements](/docs/reference/requirements). In short, you need:
 
 - Windows 10/11, or macOS on Apple Silicon.
-- Node.js 22.12 or newer, npm, Git, and the Azure CLI.
+- Node.js 22.12 or newer, npm, and Git.
 - A GitHub Copilot account.
-- Microsoft Fabric access and an eligible Fabric or Power BI Premium capacity for deploys.
+- Microsoft Fabric access and a Fabric workspace on an eligible Fabric or Power BI Premium capacity. Fabricator publishes a new app there before you build it with chat. With the **Local development** experiment on, you need them only to publish.
+- Optional: the Azure CLI, to share apps, add Fabric data and migrate Power BI reports. You can sign in to it later.
 - Optional GitHub CLI (`gh`) for repository browsing and cloning.
 
 ## Next steps
@@ -48,15 +57,15 @@ Before you start, check the [system requirements](/docs/reference/requirements).
     Download the current desktop app for Windows or macOS.
   </Card>
   <Card href="/docs/start/first-app" title="Build your first app">
-    Create a project, deploy it, and send your first prompt.
+    Create a project, publish it, and send your first prompt.
   </Card>
   <Card href="/docs/start/tour" title="Tour the workbench">
-    Learn where Home, chat, preview, code, model, Advisor, and settings live.
+    Learn where Home, chat, preview, code, Blueprint, Advisor, and settings live.
   </Card>
   <Card href="/docs/troubleshooting/help" title="Ask Help">
     Find out why something failed, in plain language, without leaving the app.
   </Card>
   <Card href="/docs/troubleshooting" title="Troubleshooting">
-    Find fixes for setup, sign-in, chat, preview, deploy, and team workspace problems.
+    Find fixes for setup, sign-in, chat, preview, publishing, and team workspace problems.
   </Card>
 </Cards>

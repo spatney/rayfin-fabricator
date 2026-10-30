@@ -5,7 +5,7 @@ description: "Press Ctrl+K to find a project, an action, a docs page or a file i
 
 Search finds anything in Fabricator from one box: your projects, the things you can do, the documentation, and the files in the open project. It also asks Help, and shows the answer right in the box.
 
-![Search with "deploy" typed: one list of results led by the Deploy 3 changes action, then documentation pages and sections and the Turn off Deploy after each chat turn action, with Ask Help "deploy" below. The bar at the bottom shows Run action and Actions.](/screenshots/search.webp)
+![Search with "deploy" typed: one list of results led by the Publish 3 changes action, then documentation pages and sections and the Turn off Publish after each chat turn action, with Use "deploy" with… and Ask Help below. The bar at the bottom shows Run action and Actions.](/screenshots/search.webp)
 
 ## Open Search
 
@@ -28,22 +28,22 @@ If you come back within a minute and a half, Search opens where you left it, wit
 | --- | --- |
 | Projects | Opens the project, as it would from Home. A project whose folder is missing opens its management dialog instead. |
 | Team workspaces | Opens the workspace overview. They show when **Team workspaces** is turned on in **Settings → Experiments**. |
-| Actions | Does what the matching control does: switch to **Build**, **Code**, **Blueprint** or **Advisor**, open **History**, **Skills** or **Secrets**, deploy, **Share**, change the theme or text size, open **Settings**, manage accounts or API keys, open setup, and more. |
+| Actions | Does what the matching control does: switch to **Build**, **Code**, **Blueprint** or **Advisor**, open **History**, **Skills** or **Secrets**, publish, **Share**, turn **Publish after each chat turn** on or off, change the theme or text size, open **Settings**, manage accounts or API keys, open setup, and more. |
 | Documentation | Opens the page, or the section of it, in your browser. |
 | Files | Opens the file in **Code**. Search lists the open project's files once its packages are ready, leaving out what git ignores. |
 
 Search ranks everything in one list, best match first, and shows a few of each kind. The end of each row says what the result is: **Project**, **Workspace**, **Action**, **Docs** or **File**. Under the results, **Use “…” with…** offers to ask Help, or to search only projects, actions, the docs or files, with how many of each match.
 
-You don't have to type whole words. The start of a word works, and so do the first letters of several: `np` finds **New project**. Search also remembers what you open, so the things you use most rise to the top.
+You don't have to type whole words. The start of a word works, and so do the first letters of several: `np` finds **New project**. Search also knows the names some actions used to have: once the open app is published, `deploy` finds the action that publishes it, such as **Publish** or **Publish 3 changes**, and `deploy after each chat turn` finds **Turn on Publish after each chat turn** or **Turn off Publish after each chat turn**. Search also remembers what you open, so the things you use most rise to the top.
 
 ## Before you type
 
 With nothing typed, Search offers:
 
-- **Suggestions** for what's going on, such as **Deploy 3 changes** when your app has changes it doesn't have yet, or **Review 2 Advisor issues**.
+- **Suggestions** for what's going on, such as **Publish 3 changes** when your published app doesn't have your latest changes yet, or **Review 2 Advisor issues**.
 - **Recent projects**. A green dot marks the one that's open.
 - **Search**: **Search projects**, **Search actions**, **Search the docs** and **Search files**.
-- **Ask Help**: questions to ask. After a deploy fails, the first one is **Find out why the deploy failed**.
+- **Ask Help**: questions to ask. After a publish fails, the first one is **Find out why publishing failed**.
 
 ## Search one kind of thing
 
@@ -70,7 +70,7 @@ Press `Ctrl+K` (`Cmd+K` on macOS) in Search, or select **Actions** at the bottom
 
 Ask Help the way you would in Help itself, without leaving what you're doing.
 
-1. Type your question, such as "why did my last deploy fail?".
+1. Type your question, such as "why did my last publish fail?".
 2. Press `Tab`. When what you typed reads as a question, **Ask Help** is also the first result, so `Enter` asks too. `Ctrl+Enter` (`Cmd+Enter` on macOS) asks Help whatever you typed.
 3. Read the answer as it arrives. Help shows what it checked, the answer, and buttons for the steps it suggests. To scroll it, press `↑` and `↓`, or `Page Up` and `Page Down`.
 4. To follow up, type your next question and press `Enter`.
