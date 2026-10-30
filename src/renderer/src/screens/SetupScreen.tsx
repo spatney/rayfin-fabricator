@@ -252,6 +252,12 @@ export default function SetupScreen({
   const azReady = azTool?.satisfied ?? false
   const azSignedIn = auth?.az.signedIn ?? false
   const setupTools = tools.filter((t) => t !== azTool)
+  // The tools step counts what entry needs, the required tools, until every
+  // tool it lists is installed, optional ones too; its summary says the same.
+  const allToolsReady = setupTools.every((t) => t.satisfied)
+  const toolsCount = allToolsReady
+    ? `${setupTools.length}/${setupTools.length}`
+    : `${requiredReady}/${required.length}`
 
   /** Copilot is bundled, so it can be connected before anything is installed —
    *  which is what makes Help available for the rest of setup. */
@@ -414,11 +420,11 @@ export default function SetupScreen({
               note="Free tools Fabricator uses behind the scenes. It can install them for you."
               done={doctor !== null && requiredReady === required.length}
               summary={
-                setupTools.every((t) => t.satisfied)
+                allToolsReady
                   ? `All ${setupTools.length} installed`
                   : `All ${required.length} required tools installed`
               }
-              count={`${requiredReady}/${required.length}`}
+              count={toolsCount}
               open={open.tools}
               onToggle={() => toggle('tools')}
               action={

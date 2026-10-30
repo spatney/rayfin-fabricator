@@ -14,6 +14,7 @@ import type {
   AdvisorFinding,
   AppSettings,
   AuthStatus,
+  ChatToolCall,
   ChatTurnResult,
   DeployResult,
   DevServerResult,
@@ -23,6 +24,7 @@ import type {
   ProcLogEvent,
   ProcResult,
   RayfinStudioApi,
+  SavedTurn,
   StudioProject
 } from '@shared/ipc'
 import { ToastProvider } from '../toast'
@@ -268,7 +270,10 @@ function installApi(active = false) {
     projects: {
       state: vi.fn().mockResolvedValue(state),
       setActive: vi.fn<RayfinStudioApi['projects']['setActive']>(),
-      git: { divergence: vi.fn().mockResolvedValue({ behind: 0 }) }
+      git: {
+        divergence: vi.fn().mockResolvedValue({ behind: 0 }),
+        saveTurn: vi.fn<RayfinStudioApi['projects']['git']['saveTurn']>().mockResolvedValue({})
+      }
     },
     deploy: {
       reconcile: vi.fn().mockResolvedValue(state),
@@ -1218,6 +1223,96 @@ describe('Workbench after-turn publishing', () => {
     await act(async () => changed.resolve(true))
 
     expect(api.deploy.run).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * With Local development, a personal app's turn that changed files becomes a
+ * version in its history, named after what was asked, so History and Restore
+ * go turn by turn even while turns don't publish.
+ */
+describe('Workbench versions per chat turn', () => {
+  /** The conversation so far: the user's message, and Copilot's answer with its steps. */
+  function asked(text: string, tools: ChatToolCall[] = []): void {
+    act(() => {
+      chatProps.mock.lastCall?.[0].onChange(
+        () =>
+          [
+            { id: 'u1', role: 'user', text, tools: [], pending: false },
+            { id: 'a1', role: 'assistant', text: 'Done.', tools, pending: false }
+          ] as never
+      )
+    })
+  }
+
+  it('saves a turn that changed files, named after the request, and nothing else', async () => {
+    const api = installApi(true)
+    render(<Workbench {...makeProps({ settings: localDevSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    asked('Add a task list')
+    await act(async () =>
+      completeTurn({ ok: true, filesModified: ['packages/data/src/Task.ts'], ranDeploy: false })
+    )
+    expect(api.projects.git.saveTurn).toHaveBeenCalledWith(project.id, 'Add a task list')
+
+    // A turn that changed nothing, or didn't finish, saves no version.
+    await act(async () => completeTurn())
+    await act(async () =>
+      completeTurn({
+        ok: false,
+        error: 'Stopped',
+        filesModified: ['src/App.tsx'],
+        ranDeploy: false
+      })
+    )
+    expect(api.projects.git.saveTurn).toHaveBeenCalledTimes(1)
+    expect(api.deploy.hasChanges, 'publishing waits for the user').not.toHaveBeenCalled()
+  })
+
+  it('saves a turn whose answer shows edits, without Copilot’s file events', async () => {
+    const api = installApi(true)
+    render(<Workbench {...makeProps({ settings: localDevSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    const app = `${project.path}\\src\\App.tsx`
+    asked('make the header blue.', [
+      { id: 't1', name: 'view', title: app, state: 'success' },
+      { id: 't2', name: 'edit', title: app, paths: [app], state: 'success', added: 1, removed: 1 }
+    ])
+    await act(async () => completeTurn())
+    expect(api.projects.git.saveTurn).toHaveBeenCalledWith(project.id, 'make the header blue.')
+  })
+
+  it('saves the version before a turn publishes the app', async () => {
+    const api = installApi(true)
+    const saving = deferred<SavedTurn>()
+    api.projects.git.saveTurn.mockReturnValueOnce(saving.promise)
+    api.deploy.hasChanges.mockResolvedValue(true)
+    render(<Workbench {...makeProps({ settings: localAutoSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    await act(async () =>
+      completeTurn({ ok: true, filesModified: ['src/App.tsx'], ranDeploy: false })
+    )
+    expect(api.projects.git.saveTurn).toHaveBeenCalledWith(project.id, '')
+    expect(api.deploy.hasChanges).not.toHaveBeenCalled()
+
+    await act(async () => saving.resolve({ commit: 'abc123' }))
+    expect(api.deploy.hasChanges).toHaveBeenCalledWith(project.id)
+    expect(api.deploy.run).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a turn to its publish without Local development, as before', async () => {
+    const api = installApi(true)
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    asked('Add a task list')
+    await act(async () =>
+      completeTurn({ ok: true, filesModified: ['src/App.tsx'], ranDeploy: false })
+    )
+    expect(api.projects.git.saveTurn).not.toHaveBeenCalled()
   })
 })
 
@@ -2236,6 +2331,23 @@ describe('Workbench team workspaces', () => {
     expect(team.sync).not.toHaveBeenCalled()
   })
 
+  it('saves a team app’s turns to its working branch, never as versions on this computer', async () => {
+    const { api, team } = installTeamApi()
+    const settings: AppSettings = {
+      theme: 'system',
+      experiments: { teamWorkspaces: true, localDevelopment: true }
+    }
+    render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    await act(async () =>
+      completeTurn({ ok: true, filesModified: ['src/App.tsx'], ranDeploy: false })
+    )
+
+    expect(team.sync).toHaveBeenCalledWith('t1', '')
+    expect(api.projects.git.saveTurn).not.toHaveBeenCalled()
+  })
+
   it('still saves after each turn when the user deploys manually', async () => {
     const { api, team } = installTeamApi()
     const settings: AppSettings = { theme: 'system', experiments: { teamWorkspaces: true }, deployMode: 'manual' }
@@ -2490,6 +2602,9 @@ describe('Workbench before the first publish', () => {
     expect(chat.project.id).toBe(fresh.id)
     expect(chat.deployLock).toBe(true)
     expect(previewProps.mock.lastCall?.[0].designSendBlocked).toBe('Publish your app first')
+    expect(previewProps.mock.lastCall?.[0].awaitingPublish, 'the preview points at Publish').toBe(
+      true
+    )
 
     // The lock's Publish now opens the Publish your app step on its own.
     act(() => chat.onRequestDeploy?.())
@@ -2529,6 +2644,7 @@ describe('Workbench before the first publish', () => {
     expect(chat.project.id).toBe(fresh.id)
     expect(chat.deployLock).toBe(false)
     expect(previewProps.mock.lastCall?.[0].designSendBlocked).toBeNull()
+    expect(previewProps.mock.lastCall?.[0].awaitingPublish).toBe(false)
   })
 
   it('opens a new app in the workbench as soon as it’s created with Local development', async () => {

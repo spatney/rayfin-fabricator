@@ -921,8 +921,8 @@ fn signed_in_as(status: &LocalStatus) -> Option<String> {
   })
 }
 
-/// What to do about what the status shows.
-fn advice(status: &LocalStatus) -> Vec<String> {
+/// What to do about what the status shows, with the newest output lines.
+fn advice(status: &LocalStatus, output: &[LocalLogEvent]) -> Vec<String> {
   let mut out = Vec::new();
   let code = status.error.as_ref().map(|e| e.code.as_str());
   let stopped = status.state == State::Error;
@@ -987,9 +987,12 @@ fn advice(status: &LocalStatus) -> Vec<String> {
          ask for the value in chat."
       ),
       "azure-sign-in" if !seen.contains(&"azure-sign-in") => {
-        "No Azure sign-in is available, so connectors, functions' `ctx.Tokens` and the developer's identity that \
-         need one fail. Ask the user to sign in to the Azure CLI in Fabricator's **Accounts**."
-          .to_string()
+        // Only worth a word when something the app uses needs a token: the
+        // developer's own identity falls back to a local account without one.
+        match azure_advice(runs_connectors(status), missed_a_token(output)) {
+          Some(text) => text,
+          None => continue,
+        }
       }
       "connector-unsupported" => format!("The {name} connector runs only on Microsoft Fabric, so you can't call it here."),
       "sdk-unsupported" if !seen.contains(&"sdk-unsupported") => {
@@ -1004,6 +1007,46 @@ fn advice(status: &LocalStatus) -> Vec<String> {
     out.push(text);
   }
   out
+}
+
+/// The app has connectors that run on this computer: they reach their data as
+/// the developer, with an Azure token.
+fn runs_connectors(status: &LocalStatus) -> bool {
+  status.ready.as_ref().is_some_and(|ready| ready.features.connectors.iter().any(|c| c.supported))
+}
+
+/// A function ran without the token its `ctx.Tokens` asked for: rayfin-local
+/// says so when it calls it, and reading the token throws in the function.
+fn missed_a_token(output: &[LocalLogEvent]) -> bool {
+  output.iter().any(|event| missed_token_text(&event.line))
+}
+
+fn missed_token_text(text: &str) -> bool {
+  text.contains("runs without ctx.Tokens") || text.contains("No token available for audience")
+}
+
+/// That an Azure sign-in is the user's choice, for the agent to pass on.
+fn sign_in_is_optional(them: &str) -> String {
+  format!(
+    "The rest of the app works without one. Signing in is optional: if the user wants {them} to work here, tell them \
+     they can sign in to the Azure CLI in Fabricator's **Accounts**."
+  )
+}
+
+/// What a missing Azure sign-in means for the agent, when the app's connectors
+/// or one of its functions need a token. `None` when nothing does.
+fn azure_advice(connectors: bool, functions: bool) -> Option<String> {
+  let (what, them) = match (connectors, functions) {
+    (false, false) => return None,
+    (true, false) => ("the app's connectors can't reach their data here", "the connectors"),
+    (false, true) => ("a function that reads `ctx.Tokens` ran without its token (`recentOutput`)", "that function"),
+    (true, true) => (
+      "the app's connectors can't reach their data here, and a function that reads `ctx.Tokens` ran without its \
+       token (`recentOutput`)",
+      "them",
+    ),
+  };
+  Some(format!("No Azure sign-in is available on this computer, so {what}. {}", sign_in_is_optional(them)))
 }
 
 /// One line of output: its time (UTC), source, level and text.
@@ -1076,7 +1119,7 @@ fn status_report(status: &LocalStatus, output: &[LocalLogEvent], notes: &[String
   if status.crashes > 0 {
     put("crashes", json!(status.crashes));
   }
-  let advice = advice(status);
+  let advice = advice(status, output);
   if !advice.is_empty() {
     put("advice", json!(advice));
   }
@@ -1302,6 +1345,12 @@ fn call_report(request: &CallRequest, response: &AppResponse, notes: &[String]) 
   if let Some(note) = status_note(&request.call_as, response.status) {
     out.push_str(&note);
     out.push('\n');
+  }
+  if request.path.starts_with("/functions/") && missed_token_text(&response.body) {
+    out.push_str(&format!(
+      "The function read `ctx.Tokens`, but no Azure sign-in is available on this computer, so it got no token. {}\n",
+      sign_in_is_optional("this function")
+    ));
   }
   let content_type = response.content_type.as_deref().unwrap_or_default().to_ascii_lowercase();
   let body = response.body.trim();
@@ -1559,6 +1608,59 @@ mod tests {
     assert_eq!(never["state"], "stopped");
     assert_eq!(never["summary"], "The local backend isn't running.");
     assert!(never.get("advice").is_none() && never.get("recentOutput").is_none());
+  }
+
+  #[test]
+  fn a_missing_azure_sign_in_is_mentioned_only_when_the_app_needs_a_token() {
+    let advice_of = |status: &LocalStatus, output: &[LocalLogEvent]| -> String {
+      serde_json::from_str::<Value>(&status_report(status, output, &[])).unwrap()["advice"].to_string()
+    };
+    // Signed in as the local developer account: nothing the app uses needs Azure.
+    let mut plain = eventful();
+    plain.schema = None;
+    plain.functions = None;
+    plain.warnings.retain(|w| w.code == "azure-sign-in");
+    plain.ready.as_mut().unwrap().features.connectors.clear();
+    assert_eq!(advice_of(&plain, &[line(1, "built")]), "null");
+
+    // A function ran without the token its ctx.Tokens asked for.
+    let missed = [line(1, "function 'countOpenTasks' runs without ctx.Tokens.Fabric: no Azure CLI sign-in. Run az login.")];
+    let functions = advice_of(&plain, &missed);
+    assert!(functions.contains("a function that reads `ctx.Tokens` ran without its token"), "{functions}");
+    assert!(functions.contains("Signing in is optional") && functions.contains("**Accounts**"), "{functions}");
+
+    // Connectors run as the developer; one that runs only on Fabric needs no sign-in here.
+    let mut kusto = plain.clone();
+    kusto.ready.as_mut().unwrap().features.connectors = vec![crate::types::LocalConnector {
+      name: "logs".into(),
+      kind: "kusto".into(),
+      supported: false,
+    }];
+    assert!(!advice_of(&kusto, &[]).contains("Azure"));
+    let connectors = advice_of(&eventful(), &[]);
+    assert!(connectors.contains("the app's connectors can't reach their data here"), "{connectors}");
+    assert!(connectors.contains("Signing in is optional"), "{connectors}");
+    assert!(!connectors.contains("Ask the user to sign in"), "{connectors}");
+  }
+
+  #[test]
+  fn a_function_without_its_token_says_signing_in_is_optional() {
+    let answer = AppResponse {
+      status: 500,
+      content_type: Some("application/json".into()),
+      body: r#"{"errors":[{"message":"No token available for audience 'Fabric'."}]}"#.into(),
+    };
+    let function = CallRequest {
+      name: Some("countOpenTasks".into()),
+      path: "/functions/countOpenTasks/invoke".into(),
+      body: json!({}),
+      call_as: CallAs::Developer,
+    };
+    let report = call_report(&function, &answer, &[]);
+    assert!(report.contains("no Azure sign-in is available on this computer"), "{report}");
+    assert!(report.contains("Signing in is optional: if the user wants this function to work here"), "{report}");
+    let graphql = CallRequest { name: None, path: "/graphql".into(), ..function };
+    assert!(!call_report(&graphql, &answer, &[]).contains("Signing in"));
   }
 
   #[test]

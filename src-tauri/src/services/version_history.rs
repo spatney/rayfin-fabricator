@@ -1,9 +1,13 @@
-//! Starting a version history for an app that git doesn't track yet.
+//! Starting a version history for an app that git doesn't track yet, and saving
+//! a version after each chat turn.
 //!
 //! Fabricator keeps every app's versions in git: History lists them, Restore
 //! brings one back, each deploy records which one is live, and the check after
 //! a chat turn compares the code with that live version to decide whether to
-//! redeploy. Apps Fabricator creates get a repository right away, but a folder
+//! redeploy. With the Local development experiment on, a chat turn that
+//! changes a personal app also saves a version of it ([`save_version`]), named
+//! after what the user asked ([`turn_message`]), so History can go back turn
+//! by turn. Apps Fabricator creates get a repository right away, but a folder
 //! opened from disk may have none, and then all of that fails — the after-turn
 //! check with "fatal: not a git repository" after every single turn.
 //!
@@ -370,6 +374,92 @@ fn started_message(started: &Started) -> String {
   message
 }
 
+/* ------------------------- a version per chat turn ------------------------- */
+
+/// A saved version never takes the local backend's state (the app's local
+/// database, its signing keys and the local values of its secrets), even when
+/// nothing ignores it.
+const NEVER_SAVED: &str = ":(glob,exclude)**/.rayfin-local/**";
+
+/// The longest message a turn's version gets: a commit subject's usual limit.
+const SUBJECT_CHARS: usize = 72;
+
+/// Words a period ends without ending the sentence.
+const ABBREVIATIONS: &[&str] = &["e.g", "i.e", "eg", "ie", "etc", "vs", "incl", "approx", "mr", "mrs", "ms", "dr", "st"];
+
+/// Where the first sentence of `text` ends: after its `?` or `!`, before its `.`.
+fn first_sentence(text: &str) -> &str {
+  let chars: Vec<(usize, char)> = text.char_indices().collect();
+  for (i, &(at, c)) in chars.iter().enumerate() {
+    if !matches!(c, '.' | '?' | '!') || !chars.get(i + 1).is_some_and(|&(_, next)| next.is_whitespace()) {
+      continue;
+    }
+    let word = text[..at].rsplit(char::is_whitespace).next().unwrap_or("");
+    let abbreviation = c == '.'
+      && (text[..at].ends_with('.') || word.chars().count() <= 1 || ABBREVIATIONS.contains(&word.to_lowercase().as_str()));
+    if !abbreviation {
+      return if c == '.' { &text[..at] } else { &text[..at + c.len_utf8()] };
+    }
+  }
+  text
+}
+
+/// The message of the version a chat turn saves: the first sentence of what
+/// the user asked (`request`), in the repository's commit style: sentence case,
+/// no closing period, at most [`SUBJECT_CHARS`] characters. `fallback` when the
+/// request has no words, such as Design changes sent without a note.
+pub fn turn_message(request: &str, fallback: &str) -> String {
+  let line = request.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+  let line = line.trim_start_matches(|c: char| matches!(c, '#' | '-' | '*' | '>') || c.is_whitespace());
+  let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
+  let mut subject = first_sentence(&line).trim_end().to_string();
+  if subject.ends_with('.') && !subject.ends_with("..") {
+    subject.pop();
+  }
+  if subject.chars().count() > SUBJECT_CHARS {
+    let clipped: String = subject.chars().take(SUBJECT_CHARS - 1).collect();
+    let cut = match clipped.rfind(' ') {
+      Some(space) if space >= SUBJECT_CHARS / 2 => &clipped[..space],
+      _ => clipped.as_str(),
+    };
+    subject = format!("{}…", cut.trim_end_matches(|c: char| c.is_whitespace() || matches!(c, ',' | ';' | ':' | '-')));
+  }
+  let mut chars = subject.chars();
+  match chars.next() {
+    None => fallback.to_string(),
+    Some(first) => first.to_uppercase().chain(chars).collect(),
+  }
+}
+
+/// Save the app in `dir` as a new version with `message`: every change in its
+/// folder that git doesn't ignore, committed by the user's git identity
+/// (Fabricator's when git has none). Changes elsewhere in a repository the app
+/// shares stay as they are. `Ok(None)` when nothing changed.
+pub async fn save_version(dir: &Path, message: &str) -> Result<Option<String>, String> {
+  let status = run(dir, &["status", "--porcelain", "--untracked-files=all", "--", ".", NEVER_SAVED], 30_000).await;
+  if !status.ok {
+    return Err(failure("Couldn't read the app's changes", &status));
+  }
+  if status.stdout.trim().is_empty() {
+    return Ok(None);
+  }
+  let add = run(dir, &["add", "-A", "--", ".", NEVER_SAVED], 300_000).await;
+  if !add.ok {
+    return Err(failure("Couldn't add the app's changes to its history", &add));
+  }
+  ensure_identity(dir).await;
+  let commit = run(dir, &["commit", "--quiet", "-m", message, "--", ".", NEVER_SAVED], 120_000).await;
+  if !commit.ok {
+    let said = format!("{}\n{}", commit.stdout, commit.stderr).to_lowercase();
+    if said.contains("nothing to commit") || said.contains("no changes added") {
+      return Ok(None);
+    }
+    return Err(failure("Couldn't save the version", &commit));
+  }
+  let head = run(dir, &["rev-parse", "HEAD"], 30_000).await;
+  Ok(head.ok.then(|| head.stdout.trim().to_string()).filter(|sha| !sha.is_empty()))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -503,5 +593,87 @@ mod tests {
     assert_eq!(pattern_for("public/video [1].mp4"), "/public/video \\[1\\].mp4");
     assert_eq!(pattern_for("a*b?/#c!"), "/a\\*b\\?/\\#c\\!");
     assert_eq!(pattern_for("notes  "), "/notes\\ \\ ");
+  }
+
+  #[test]
+  fn a_turns_version_is_named_after_what_the_user_asked() {
+    let message = |request: &str| turn_message(request, "Update Team Tasks");
+    assert_eq!(message("add a kanban board"), "Add a kanban board");
+    assert_eq!(message("  \n- make the header blue.\nAnd the footer too."), "Make the header blue");
+    assert_eq!(
+      message("Build a task tracker for my team. Each task has a title and an assignee."),
+      "Build a task tracker for my team"
+    );
+    assert_eq!(message("Why is the list empty? It worked yesterday."), "Why is the list empty?");
+    assert_eq!(message("Add a status field, e.g. open or done"), "Add a status field, e.g. open or done");
+    assert_eq!(message("Update Rayfin to 1.36.3"), "Update Rayfin to 1.36.3");
+    assert_eq!(message("Fix: Unbounded text column"), "Fix: Unbounded text column");
+    assert_eq!(message("## Hmm... the chart is blank"), "Hmm... the chart is blank");
+    assert_eq!(message(""), "Update Team Tasks");
+    assert_eq!(message(" \n  \n"), "Update Team Tasks");
+
+    let long = message(
+      "please add a dashboard page that shows this month's expenses by category, with a bar chart and a table under it",
+    );
+    assert!(long.chars().count() <= SUBJECT_CHARS, "{long}");
+    assert_eq!(long, "Please add a dashboard page that shows this month's expenses by…");
+  }
+
+  #[tokio::test]
+  async fn a_turns_version_saves_the_apps_changes_but_never_its_local_state() {
+    if !can_test() {
+      return;
+    }
+    let app = TempDir::new();
+    app.git(&app.0, &["init", "--quiet"]);
+    app.git(&app.0, &["config", "user.name", "Ana"]);
+    app.git(&app.0, &["config", "user.email", "ana@example.com"]);
+    app.git(&app.0, &["config", "core.autocrlf", "false"]);
+    app.write("src/App.tsx", "export default 1\n");
+    app.write(".rayfin-local/db.sqlite", "rows");
+
+    // A first version, in a repository without one.
+    let first = save_version(&app.0, "Start the app").await.unwrap().expect("a version");
+    assert_eq!(app.git(&app.0, &["ls-files"]).trim(), "src/App.tsx");
+
+    app.write("src/App.tsx", "export default 2\n");
+    app.write("src/Task.ts", "export class Task {}\n");
+    app.write(".rayfin-local/secrets.json", "{\"API_KEY\":\"secret\"}");
+    let saved = save_version(&app.0, "Add a task list").await.unwrap().expect("a version");
+    assert_ne!(saved, first);
+    assert_eq!(app.git(&app.0, &["log", "-1", "--format=%s|%an"]).trim(), "Add a task list|Ana");
+    let changed = app.git(&app.0, &["show", "--name-only", "--pretty=format:", "HEAD"]);
+    assert_eq!(changed.trim().lines().collect::<Vec<_>>(), vec!["src/App.tsx", "src/Task.ts"]);
+    assert!(
+      app.git(&app.0, &["status", "--porcelain", "--untracked-files=all"]).lines().all(|l| l.contains(".rayfin-local/")),
+      "only the local state is left out"
+    );
+
+    // Nothing else changed: no empty version.
+    assert_eq!(save_version(&app.0, "Explain the app").await.unwrap(), None);
+    assert_eq!(app.git(&app.0, &["rev-parse", "HEAD"]).trim(), saved);
+  }
+
+  #[tokio::test]
+  async fn a_turns_version_leaves_the_rest_of_a_shared_repository_alone() {
+    if !can_test() {
+      return;
+    }
+    let repo = TempDir::new();
+    repo.git(&repo.0, &["init", "--quiet"]);
+    repo.git(&repo.0, &["config", "core.autocrlf", "false"]);
+    repo.write("apps/notes/src/App.tsx", "v1\n");
+    repo.write("other/README.md", "v1\n");
+    repo.git(&repo.0, &["add", "-A"]);
+    repo.git(&repo.0, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "First"]);
+    repo.write("other/README.md", "v2\n");
+    repo.git(&repo.0, &["add", "other/README.md"]);
+    repo.write("apps/notes/src/App.tsx", "v2\n");
+
+    let app = repo.0.join("apps").join("notes");
+    save_version(&app, "Rename the notes").await.unwrap().expect("a version");
+    let changed = repo.git(&repo.0, &["show", "--name-only", "--pretty=format:", "HEAD"]);
+    assert_eq!(changed.trim(), "apps/notes/src/App.tsx");
+    assert_eq!(repo.git(&repo.0, &["diff", "--cached", "--name-only"]).trim(), "other/README.md", "still staged, not saved");
   }
 }

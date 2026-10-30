@@ -13,6 +13,7 @@ import {
   localStateLabel,
   refusedSchemaLosses,
   retriesAfterTurn,
+  runningProblems,
   useLocalBackend,
   useLocalBackendLogs
 } from './localBackend'
@@ -276,6 +277,79 @@ describe('local backend helpers', () => {
     expect(localStateLabel(status({ state: 'starting' }))).toBe('Starting…')
     expect(localStateLabel(status({ state: 'restarting' }))).toBe('Restarting…')
     expect(localStateLabel(status({ state: 'error' }))).toBe('Error')
+  })
+
+  it('tells a running app with a problem from one without', () => {
+    const at = '2026-10-30T17:18:08.000Z'
+    const unread: LocalStatus['analysis'] = {
+      ok: false,
+      sdk: null,
+      entities: [],
+      storageFolders: [],
+      message: 'The data package packages/data has not been built.',
+      time: at
+    }
+    const running = status({ state: 'running', ready })
+    expect(runningProblems(running)).toEqual([])
+    expect(localStateLabel(running)).toBe('Running')
+
+    const stuck = status({ state: 'running', ready, analysis: unread })
+    expect(runningProblems(stuck)).toEqual([
+      {
+        kind: 'analysis',
+        summary:
+          'Your app’s latest data model change couldn’t be read, so it still uses the previous data model.',
+        detail: 'The data package packages/data has not been built.'
+      }
+    ])
+    expect(localStateLabel(stuck)).toBe('Running · problem')
+
+    const worse = status({
+      state: 'running',
+      ready,
+      analysis: unread,
+      schema: {
+        result: 'failed',
+        changes: [],
+        losses: [],
+        message: 'SQLITE_BUSY',
+        live: true,
+        time: at
+      },
+      functions: {
+        state: 'failed',
+        names: [],
+        errors: ['src/index.ts(3,1): error TS2304'],
+        message: null,
+        time: at
+      },
+      vite: { state: 'failed', url: null, version: null, message: 'Vite kept exiting.', time: at }
+    })
+    expect(runningProblems(worse).map((p) => [p.kind, p.detail])).toEqual([
+      ['analysis', 'The data package packages/data has not been built.'],
+      ['schema', 'SQLITE_BUSY'],
+      ['functions', 'src/index.ts(3,1): error TS2304'],
+      ['vite', 'Vite kept exiting.']
+    ])
+    expect(localStateLabel(worse)).toBe('Running · 4 problems')
+
+    // A change waiting for a decision has its own note; a Vite restarting on its own isn't one.
+    const waiting = status({
+      state: 'running',
+      ready,
+      schema: {
+        result: 'refused',
+        changes: [],
+        losses: ['Tag'],
+        message: null,
+        live: true,
+        time: at
+      },
+      vite: { state: 'restarting', url: null, version: null, message: null, time: at }
+    })
+    expect(runningProblems(waiting)).toEqual([])
+    // A stopped backend says why elsewhere.
+    expect(runningProblems(status({ state: 'error', analysis: unread }))).toEqual([])
   })
 
   it('finds a live refused schema change, and nothing otherwise', () => {

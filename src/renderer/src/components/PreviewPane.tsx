@@ -188,6 +188,9 @@ interface Props {
    *  preview on the published backend runs whenever the app is open, instead
    *  of only during turns. */
   manualDeploy?: boolean
+  /** Without Local development, a new app's chat stays locked until its first
+   *  publish, so the preview points at Publish instead of at chat. */
+  awaitingPublish?: boolean
   /** Changes when the local page should load again: a chat turn ended that
    *  changed what hot updates don't bring, or the backend rebuilt. */
   localReload?: number
@@ -317,6 +320,7 @@ export default function PreviewPane({
   onReviewSchema,
   localPreviewUrl,
   manualDeploy = false,
+  awaitingPublish = false,
   localReload = 0,
   turnRunning = false,
   team = false,
@@ -977,14 +981,14 @@ export default function PreviewPane({
     void window.api.preview.forward()
   }, [])
   // The address the toolbar shows. A local preview's says so (localhost) from
-  // the start, before its page reports where it is; one that isn't running yet
-  // has none.
-  const shownUrl =
-    localView && !localPageUrl
-      ? ''
-      : isLocal && previewUrl && !sameOrigin(displayUrl, previewUrl)
-        ? previewUrl
-        : displayUrl || deployedUrl || ''
+  // the start, before its page reports where it is. Nothing to show has none,
+  // such as a local app that isn't running yet, or an app that's no longer on
+  // this computer (Local development turned off) and isn't published.
+  const shownUrl = !previewUrl
+    ? ''
+    : isLocal && !sameOrigin(displayUrl, previewUrl)
+      ? previewUrl
+      : displayUrl || deployedUrl || ''
   const openExternal = (): void => {
     if (shownUrl) void window.api.openExternal(shownUrl)
   }
@@ -1463,6 +1467,11 @@ export default function PreviewPane({
               </p>
             ) : localMode ? (
               <p>Your published app shows here once you publish it.</p>
+            ) : awaitingPublish ? (
+              <p>
+                Your published app will render here once you publish it. Select{' '}
+                <strong>Publish</strong> to publish it and start building.
+              </p>
             ) : (
               <p>
                 Your published app will render here after a full <code>rayfin up</code>. Ask Copilot
@@ -1474,7 +1483,7 @@ export default function PreviewPane({
       </div>
 
       {outputOpen && localView && local && (
-        <LocalOutput projectId={project.id} onClose={() => setOutputOpen(false)} />
+        <LocalOutput projectId={project.id} local={local} onClose={() => setOutputOpen(false)} />
       )}
     </div>
   )

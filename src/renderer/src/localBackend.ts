@@ -113,16 +113,83 @@ export function isLocalBackendActive(status: LocalStatus | null | undefined): bo
 }
 
 /**
+ * Something wrong with an app whose backend runs: it carries on with what it
+ * had before. A data model change that would delete data isn't one of them: it
+ * waits for a decision ({@link refusedSchemaLosses}).
+ */
+export interface LocalRunningProblem {
+  kind: 'analysis' | 'schema' | 'functions' | 'vite'
+  /** What it means for the app, in a sentence. */
+  summary: string
+  /** rayfin-local's own words: the compiler's errors, or why Vite stopped. */
+  detail: string | null
+}
+
+function problemDetail(...texts: (string | null | undefined)[]): string | null {
+  return texts.map((text) => text?.trim()).find((text) => Boolean(text)) ?? null
+}
+
+/**
+ * What's wrong while the backend runs, as it last reported: its latest data
+ * model change couldn't be read or applied, the functions don't build, or the
+ * app's Vite stopped for good. Empty unless it runs.
+ */
+export function runningProblems(status: LocalStatus | null | undefined): LocalRunningProblem[] {
+  if (status?.state !== 'running') return []
+  const problems: LocalRunningProblem[] = []
+  if (status.analysis && !status.analysis.ok) {
+    problems.push({
+      kind: 'analysis',
+      summary:
+        'Your app’s latest data model change couldn’t be read, so it still uses the previous data model.',
+      detail: problemDetail(status.analysis.message)
+    })
+  }
+  if (status.schema?.result === 'failed') {
+    problems.push({
+      kind: 'schema',
+      summary:
+        'Your app’s latest data model change couldn’t be applied to its local database, so it still uses the previous one.',
+      detail: problemDetail(status.schema.message)
+    })
+  }
+  if (status.functions?.state === 'failed') {
+    problems.push({
+      kind: 'functions',
+      summary:
+        'Your app’s functions didn’t build, so calling them fails or runs their previous build.',
+      detail: problemDetail(status.functions.errors.join('\n'), status.functions.message)
+    })
+  }
+  if (status.vite?.state === 'failed') {
+    problems.push({
+      kind: 'vite',
+      summary:
+        'Your app’s Vite dev server stopped and couldn’t start again, so the preview can’t show it.',
+      detail: problemDetail(status.vite.message)
+    })
+  }
+  return problems
+}
+
+/**
  * A short label for a status pill: Starting…, Running, Restarting…, Error or
- * Stopped. `pending` (a start is on its way, or the status isn't known yet)
- * makes a stopped one Starting….
+ * Stopped, and Running · problem while it runs with one ({@link runningProblems}).
+ * `pending` (a start is on its way, or the status isn't known yet) makes a
+ * stopped one Starting….
  */
 export function localStateLabel(status: LocalStatus | null | undefined, pending = false): string {
   switch (status?.state) {
     case 'starting':
       return 'Starting…'
-    case 'running':
-      return 'Running'
+    case 'running': {
+      const problems = runningProblems(status).length
+      return problems === 0
+        ? 'Running'
+        : problems === 1
+          ? 'Running · problem'
+          : `Running · ${problems} problems`
+    }
     case 'restarting':
       return 'Restarting…'
     case 'error':

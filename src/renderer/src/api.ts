@@ -239,6 +239,7 @@ export const api: RayfinStudioApi = {
     git: {
       status: (id: string) => invoke('projects_git_status', { id }),
       commit: (id: string, message: string) => invoke('projects_git_commit', { id, message }),
+      saveTurn: (id: string, request: string) => invoke('projects_git_save_turn', { id, request }),
       log: (id: string) => invoke('projects_git_log', { id }),
       changes: (id: string, ref: string) => invoke('projects_git_changes', { id, ref }),
       fileDiff: (id: string, ref: string, path: string, oldPath?: string) =>

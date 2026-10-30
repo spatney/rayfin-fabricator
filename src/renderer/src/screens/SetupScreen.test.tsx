@@ -499,3 +499,38 @@ describe('the Local backend check', () => {
     expect(screen.getByText("You're all set")).toBeTruthy()
   })
 })
+
+describe('the Install the tools step', () => {
+  const copilotOnly: AuthStatus = { ...auth, copilot: { signedIn: true, user: 'octocat' } }
+  const tools = (ghInstalled: boolean): ToolStatus[] => [
+    tool({ id: 'node', name: 'Node.js' }),
+    tool({ id: 'npm', name: 'npm' }),
+    tool({ id: 'git', name: 'Git' }),
+    tool({
+      id: 'gh',
+      name: 'GitHub CLI (gh)',
+      found: ghInstalled,
+      satisfied: ghInstalled,
+      required: false
+    }),
+    tool({ id: 'az', name: 'Azure CLI', required: false })
+  ]
+
+  it.each([
+    ['every tool', true, 'All 4 installed', '4/4'],
+    ['the required tools', false, 'All 3 required tools installed', '3/3']
+  ] as const)('counts %s the way its summary says', (_, ghInstalled, summary, count) => {
+    render(
+      <SetupScreen
+        doctor={{ ready: true, tools: tools(ghInstalled) }}
+        auth={copilotOnly}
+        refreshing={false}
+        onRefresh={() => {}}
+        onEnter={() => {}}
+      />
+    )
+    const step = screen.getByText(summary).closest('li') as HTMLElement
+    expect(within(step).getByRole('heading', { name: 'Install the tools' })).toBeTruthy()
+    expect(within(step).getByText(count)).toBeTruthy()
+  })
+})

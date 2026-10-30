@@ -176,9 +176,11 @@ const DIFF_OPTIONS = {
 
 /**
  * The "History" view: a vibe-coder-friendly timeline of everything that changed
- * in the project. Studio commits on the user's behalf (scaffold + every publish),
- * so the git log reads as a plain-English list of "what happened". Picking an
- * entry lists its changed files; picking a file shows a clear before/after diff.
+ * in the project. Studio commits on the user's behalf (scaffold, every publish,
+ * and with Local development each chat turn that changes a personal app, named
+ * after what was asked), so the git log reads as a plain-English list of "what
+ * happened". Picking an entry lists its changed files; picking a file shows a
+ * clear before/after diff.
  *
  * Beyond browsing, it can hand a commit, a single file's change, or a comparison
  * of two snapshots to the Build chat as context, search/group the timeline, show

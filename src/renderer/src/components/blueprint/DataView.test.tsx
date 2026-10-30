@@ -499,4 +499,44 @@ describe('DataView', () => {
       screen.getByText('Local data on this computer. Publishing doesn’t copy it to Fabric.')
     ).toBeTruthy()
   })
+
+  it('says why no entities show while the backend keeps a data model change it couldn’t read', async () => {
+    entities = []
+    current = status({
+      state: 'running',
+      ready: { ...READY, features: { ...READY.features, data: { enabled: false, entities: [] } } },
+      analysis: {
+        ok: false,
+        sdk: null,
+        entities: [],
+        storageFolders: [],
+        message: 'The data package packages/data has not been built.',
+        time: '2026-10-30T17:18:08Z'
+      }
+    })
+    renderView()
+    expect(await screen.findByText('0 entities · 0 rows')).toBeTruthy()
+    const note = screen.getByRole('note', { name: 'Data model change not read' })
+    expect(note.textContent).toContain(
+      'No entities show because the app’s latest data model change couldn’t be read. Its local backend still uses the previous data model, which has none.'
+    )
+    expect(note.textContent).toContain('The data package packages/data has not been built.')
+    expect(screen.getByText('Running · problem')).toBeTruthy()
+
+    // Read at last: the note goes.
+    entities = [{ name: 'Task', rows: 0 }]
+    await act(async () =>
+      emitState(
+        status({
+          state: 'running',
+          revision: 2,
+          ready: READY,
+          analysis: { ...current.analysis!, ok: true, message: null, time: '2026-10-30T17:19:05Z' }
+        })
+      )
+    )
+    expect(await screen.findByText('1 entity · 0 rows')).toBeTruthy()
+    expect(screen.queryByRole('note', { name: 'Data model change not read' })).toBeNull()
+    expect(screen.getByText('Running')).toBeTruthy()
+  })
 })

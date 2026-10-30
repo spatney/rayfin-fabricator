@@ -314,6 +314,7 @@ pub fn run() {
       commands::projects::projects_remove,
       commands::projects::projects_git_status,
       commands::projects::projects_git_commit,
+      commands::projects::projects_git_save_turn,
       commands::projects::projects_git_log,
       commands::projects::projects_git_changes,
       commands::projects::projects_git_file_diff,

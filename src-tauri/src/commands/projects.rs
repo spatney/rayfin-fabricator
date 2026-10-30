@@ -10,7 +10,7 @@ use crate::state::AppState;
 use crate::types::{
   CommunityGalleryResult, CreateProjectInput, FileContent, FileNode, GitChange, GitCommitResult,
   GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus, GitSyncResult,
-  ProjectActionResult, ProjectNameCheck, ProjectsState, RevertResult,
+  ProjectActionResult, ProjectNameCheck, ProjectsState, RevertResult, SavedTurn,
 };
 
 /// Show a native folder picker, returning the chosen absolute path (or None).
@@ -191,6 +191,11 @@ pub async fn projects_git_status(id: String) -> GitStatus {
 #[tauri::command]
 pub async fn projects_git_commit(id: String, message: String) -> GitCommitResult {
   crate::commands::git::git_commit(id, message).await
+}
+
+#[tauri::command]
+pub async fn projects_git_save_turn(id: String, request: String) -> SavedTurn {
+  crate::commands::git::git_save_turn(id, request).await
 }
 
 #[tauri::command]

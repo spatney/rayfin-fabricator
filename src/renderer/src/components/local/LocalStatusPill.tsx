@@ -1,13 +1,17 @@
 import type { JSX } from 'react'
 import type { LocalStatus } from '@shared/ipc'
-import { localStateLabel } from '../../localBackend'
+import { localStateLabel, runningProblems, type LocalRunningProblem } from '../../localBackend'
 import './local.css'
 
-/** The pill's look for a state. */
-function tone(status: LocalStatus | null, pending: boolean): 'ok' | 'busy' | 'err' | 'idle' {
+/** The pill's look for a state: a running app with a problem gets a warning dot. */
+function tone(
+  status: LocalStatus | null,
+  pending: boolean,
+  problems: LocalRunningProblem[]
+): 'ok' | 'warn' | 'busy' | 'err' | 'idle' {
   switch (status?.state) {
     case 'running':
-      return 'ok'
+      return problems.length > 0 ? 'warn' : 'ok'
     case 'starting':
     case 'restarting':
       return 'busy'
@@ -18,10 +22,27 @@ function tone(status: LocalStatus | null, pending: boolean): 'ok' | 'busy' | 'er
   }
 }
 
-function explain(status: LocalStatus | null, pending: boolean): string {
+/** The first line of a problem's detail, kept short for a tooltip, as a sentence. */
+function firstLine(detail: string | null): string {
+  const line =
+    detail
+      ?.split('\n')
+      .find((l) => l.trim())
+      ?.trim() ?? ''
+  const short = line.length > 200 ? `${line.slice(0, 199).trimEnd()}…` : line
+  return !short || /[.!?…:]$/.test(short) ? short : `${short}.`
+}
+
+function explain(
+  status: LocalStatus | null,
+  pending: boolean,
+  problems: LocalRunningProblem[]
+): string {
   switch (status?.state) {
     case 'running':
-      return 'Your app runs on this computer, with its own backend and data.'
+      return problems.length > 0
+        ? problems.map((p) => [p.summary, firstLine(p.detail)].filter(Boolean).join(' ')).join(' ')
+        : 'Your app runs on this computer, with its own backend and data.'
     case 'starting':
     case 'restarting':
       return 'Your app is starting on this computer.'
@@ -49,13 +70,14 @@ export default function LocalStatusPill({
   onToggle: () => void
 }): JSX.Element {
   const label = localStateLabel(status, pending)
+  const problems = runningProblems(status)
   return (
     <button
       type="button"
-      className={`local-pill local-pill--${tone(status, pending)}`}
+      className={`local-pill local-pill--${tone(status, pending, problems)}`}
       aria-pressed={open}
       aria-label={`${label} on this computer. ${open ? 'Hide' : 'View'} output`}
-      title={`${explain(status, pending)} Select to ${open ? 'hide' : 'view'} its output.`}
+      title={`${explain(status, pending, problems)} Select to ${open ? 'hide' : 'view'} its output.`}
       onClick={onToggle}
     >
       <span className="local-pill-dot" aria-hidden="true" />

@@ -14,6 +14,7 @@ import {
   localFallbackReason,
   localStateLabel,
   refusedSchemaLosses,
+  runningProblems,
   toLocalBackendError,
   useLocalBackend,
   type LocalBackend,
@@ -126,6 +127,10 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
   const fallback = published ? localFallbackReason(status) : null
   // A data model change that would delete data waits for a decision; a reset leaves none to lose.
   const schemaWaiting = running && refusedSchemaLosses(status) !== null
+  // It runs with a problem, such as a data model change it couldn't read: it
+  // keeps the previous model, entities and all.
+  const problems = runningProblems(status)
+  const unread = problems.find((problem) => problem.kind === 'analysis')
   const note = published
     ? 'Local data on this computer, separate from the published app’s data.'
     : 'Local data on this computer. Publishing doesn’t copy it to Fabric.'
@@ -270,7 +275,9 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
         <div className="model-legend">
           <span className="model-legend-label">Local backend</span>
           <span className="model-legend-item">
-            <span className={`bp-dot bp-dot--${status ? STATE_DOT[state] : 'off'}`} />
+            <span
+              className={`bp-dot bp-dot--${status ? (problems.length > 0 ? 'warn' : STATE_DOT[state]) : 'off'}`}
+            />
             {status ? localStateLabel(status) : statusError ? 'Unknown' : 'Checking…'}
           </span>
         </div>
@@ -403,6 +410,21 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
         <div className="bp-data-notice" role="note">
           <Codicon name="info" />
           <span>{fallback} The Data view shows local data only.</span>
+        </div>
+      )}
+      {unread && (
+        <div className="bp-data-notice" role="note" aria-label="Data model change not read">
+          <span className="bp-dot bp-dot--warn bp-data-notice-dot" aria-hidden="true" />
+          <span className="bp-data-notice-text">
+            {overview && entities.length === 0
+              ? 'No entities show because the app’s latest data model change couldn’t be read. Its local backend still uses the previous data model, which has none.'
+              : 'The app’s latest data model change couldn’t be read, so its local backend still uses the previous data model.'}
+            {unread.detail && (
+              <code className="bp-data-notice-detail" title={unread.detail}>
+                {unread.detail}
+              </code>
+            )}
+          </span>
         </div>
       )}
       {body}

@@ -13,7 +13,7 @@
 //! separate global install — users sign in through Fabricator.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -515,6 +515,21 @@ fn build_chat_policy(project_id: &str, tools: &[Tool]) -> Arc<dyn PermissionHand
   Arc::new(BuildChatPolicy { inner, local_tools: tools.iter().any(|t| t.name == LOCAL_STATUS_TOOL) })
 }
 
+/// The project folders that hold its own skills (`<skill>/SKILL.md`): the
+/// templates' `.agents/skills`, and `.github/skills`.
+const PROJECT_SKILL_DIRS: [&str; 2] = [".agents/skills", ".github/skills"];
+
+/// The skill directories of a Build chat session in `cwd`: Fabricator's set
+/// first, so its guidance comes before a project skill of the same name, then
+/// the project's own that exist. A session that names its skill directories
+/// loads only those, so without them the project's skills (such as the
+/// templates' capability router) aren't found.
+fn skill_directories(guidance: Guidance, cwd: &Path) -> Vec<PathBuf> {
+  let mut dirs = vec![agent_skills::skills_dir(guidance)];
+  dirs.extend(PROJECT_SKILL_DIRS.iter().map(|dir| cwd.join(dir)).filter(|dir| dir.is_dir()));
+  dirs
+}
+
 /// Ask the runtime to resume, or create a session bound to `session_id`,
 /// streaming enabled, scoped to `cwd`, with the extras in `opts`.
 async fn open_session(
@@ -539,7 +554,7 @@ async fn open_session(
     if let Some(guidance) = opts.guidance {
       cfg = cfg
         .with_enable_skills(true)
-        .with_skill_directories([agent_skills::skills_dir(guidance)])
+        .with_skill_directories(skill_directories(guidance, &cwd_pb))
         .with_instruction_directories([agent_skills::instructions_dir(guidance)]);
     }
     if !opts.tools.is_empty() {
@@ -589,7 +604,7 @@ async fn open_session(
   if let Some(guidance) = opts.guidance {
     cfg = cfg
       .with_enable_skills(true)
-      .with_skill_directories([agent_skills::skills_dir(guidance)])
+      .with_skill_directories(skill_directories(guidance, Path::new(cwd)))
       .with_instruction_directories([agent_skills::instructions_dir(guidance)]);
   }
   if !opts.tools.is_empty() {
@@ -1491,6 +1506,45 @@ mod tests {
     let requests = server.await.unwrap();
     assert_eq!(requests[1]["params"]["sessionId"], "saved-session");
     client.force_stop();
+  }
+
+  /// A session that names its skill directories loads only those, so the
+  /// project's own skills go after Fabricator's, on resume and create alike.
+  #[tokio::test]
+  async fn a_build_chat_also_gets_the_projects_own_skills_after_fabricators() {
+    let project = std::env::temp_dir().join(format!("fab-skills-{}", uuid::Uuid::new_v4()));
+    for skill in [".agents/skills/capability-router", ".github/skills/release-notes"] {
+      std::fs::create_dir_all(project.join(skill)).unwrap();
+      std::fs::write(project.join(skill).join("SKILL.md"), "---\nname: x\n---\n").unwrap();
+    }
+    let fabricator = agent_skills::skills_dir(Guidance::Local);
+    let expected = vec![fabricator.clone(), project.join(".agents/skills"), project.join(".github/skills")];
+    assert_eq!(skill_directories(Guidance::Local, &project), expected);
+    std::fs::remove_dir_all(project.join(".github")).unwrap();
+    assert_eq!(skill_directories(Guidance::Local, &project), expected[..2]);
+    std::fs::remove_dir_all(project.join(".agents")).unwrap();
+    std::fs::write(project.join(".agents"), "not a folder").unwrap();
+    assert_eq!(skill_directories(Guidance::Local, &project), [fabricator.clone()]);
+    std::fs::remove_file(project.join(".agents")).unwrap();
+    std::fs::create_dir_all(project.join(".agents/skills")).unwrap();
+
+    let (client, server) = fake_client(vec![
+      ("session.resume", rpc_error("Session not found s")),
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+    ]);
+    let opts = SessionOptions { guidance: Some(Guidance::Local), ..Default::default() };
+    open_session(&client, project.to_str().unwrap(), "s", &ModelChoice::default(), &opts, true).await.unwrap();
+    let requests = server.await.unwrap();
+    for request in &requests {
+      let dirs: Vec<PathBuf> = request["params"]["skillDirectories"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(PathBuf::from)).collect())
+        .unwrap_or_default();
+      assert_eq!(dirs, [fabricator.clone(), project.join(".agents/skills")], "{request}");
+      assert_eq!(request["params"]["instructionDirectories"][0], json!(agent_skills::instructions_dir(Guidance::Local)));
+    }
+    client.force_stop();
+    let _ = std::fs::remove_dir_all(&project);
   }
 
   #[tokio::test]

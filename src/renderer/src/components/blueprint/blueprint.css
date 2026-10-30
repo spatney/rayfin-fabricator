@@ -1400,6 +1400,29 @@
   font-size: 11px;
 }
 
+/* The backend runs on the previous data model: a change couldn't be read. */
+.bp-data-notice-dot {
+  flex: none;
+  margin-top: 5px;
+}
+
+.bp-data-notice-text {
+  min-width: 0;
+}
+
+.bp-data-notice-detail {
+  display: block;
+  max-height: 4.8em;
+  margin-top: 3px;
+  padding: 0;
+  overflow: hidden;
+  line-height: 1.6;
+  color: var(--text-faint);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: none;
+}
+
 /* A stopped backend: a hollow dot. */
 .bp-dot--off {
   background: transparent;

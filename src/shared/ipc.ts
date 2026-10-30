@@ -1828,6 +1828,14 @@ export interface RevertResult {
   error?: string
 }
 
+/** A chat turn's changes, saved as a version (`projects.git.saveTurn`). */
+export interface SavedTurn {
+  /** The new version's commit; absent when nothing was saved. */
+  commit?: string
+  /** Why the changes couldn't be saved: they stay as uncommitted changes. */
+  error?: string
+}
+
 /**
  * Sync state of the current branch against its remote-tracking branch.
  * `ahead` = local commits not yet pushed; `behind` = remote commits not yet pulled.
@@ -3266,6 +3274,14 @@ export interface RayfinStudioApi {
       status: (id: string) => Promise<GitStatus>
       /** Stage everything and commit; resolves with the post-commit status. */
       commit: (id: string, message: string) => Promise<GitCommitResult>
+      /**
+       * With the Local development experiment on, after a chat turn that
+       * changed a personal app: save its changes as a version named after what
+       * the user asked (`request`, trimmed to a commit subject), never the
+       * local backend's `.rayfin-local`. Does nothing for team apps, and
+       * without Local development, where a publish saves the changes.
+       */
+      saveTurn: (id: string, request: string) => Promise<SavedTurn>
       /** The project's commit timeline + uncommitted-change count (History view). */
       log: (id: string) => Promise<GitHistory>
       /**

@@ -1051,6 +1051,24 @@ describe('PreviewPane before an app is published', () => {
       'Your published app will render here after a full rayfin up. Ask Copilot to build something, or select Publish.'
     )
   })
+
+  it('points at Publish, not at chat, while chat waits for the first publish', async () => {
+    render(
+      <OverlayProvider>
+        <PreviewPane
+          project={makeProject('p1', { lastDeploy: undefined, awaitingFirstDeploy: true })}
+          deploy={undefined}
+          awaitingPublish
+          focused={false}
+          onToggleFocus={() => {}}
+        />
+      </OverlayProvider>
+    )
+    await settle(e)
+    expect(screen.getByText(/Your published app will render here/).textContent).toBe(
+      'Your published app will render here once you publish it. Select Publish to publish it and start building.'
+    )
+  })
 })
 
 /** A Fabric-view project fixture: a direct app URL plus the portal deep link. */
@@ -1427,7 +1445,8 @@ function OnThisComputer({
   turnRunning
 }: {
   project: StudioProject
-  local: LocalBackend
+  /** Absent once Local development is turned off. */
+  local?: LocalBackend
   view?: PreviewView
   onViewChange?: (view: PreviewView) => void
   deploy?: DeployUiState
@@ -1653,6 +1672,59 @@ describe('PreviewPane on this computer', () => {
     expect(window.api.local.logs).toHaveBeenCalledWith('p1', 500)
     fireEvent.click(pill)
     expect(screen.queryByRole('region', { name: 'Output' })).toBeNull()
+  })
+
+  it('says when the app runs with a problem, and restarts it from its output', async () => {
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const healthy = runningLocally()
+    const { rerender } = render(<OnThisComputer project={project} local={healthy} />)
+    await settle(e)
+    fireEvent.click(screen.getByRole('button', { name: /^Running on this computer/ }))
+    await act(async () => {})
+    const output = (): HTMLElement => screen.getByRole('region', { name: 'Output' })
+    expect(within(output()).queryByRole('list', { name: 'Problems' })).toBeNull()
+    expect(within(output()).getByRole('button', { name: 'Restart' })).toBeTruthy()
+
+    // A rayfin.yml change turned data on before the data package was built.
+    const stuck = runningLocally({
+      analysis: {
+        ok: false,
+        sdk: null,
+        entities: [],
+        storageFolders: [],
+        message: 'The data package packages/data has not been built',
+        time: null
+      }
+    })
+    rerender(<OnThisComputer project={project} local={stuck} />)
+    const pill = screen.getByRole('button', { name: /^Running · problem on this computer/ })
+    expect(pill.className).toContain('local-pill--warn')
+    expect(pill.title).toBe(
+      'Your app’s latest data model change couldn’t be read, so it still uses the previous data model. The data package packages/data has not been built. Select to hide its output.'
+    )
+    const problems = within(output()).getByRole('list', { name: 'Problems' })
+    expect(problems.textContent).toContain(
+      'Your app’s latest data model change couldn’t be read, so it still uses the previous data model.'
+    )
+    expect(problems.textContent).toContain('The data package packages/data has not been built')
+
+    fireEvent.click(within(output()).getByRole('button', { name: 'Restart' }))
+    await act(async () => {})
+    expect(stuck.restart).toHaveBeenCalledTimes(1)
+    expect(healthy.restart).not.toHaveBeenCalled()
+  })
+
+  it('drops the app’s local address once Local development is turned off', async () => {
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const { rerender } = render(<OnThisComputer project={project} local={runningLocally()} />)
+    await settle(e)
+    expect(screen.getByRole('button', { name: 'localhost:5173' })).toBeTruthy()
+
+    rerender(<OnThisComputer project={project} />)
+    await settle(e)
+    expect(screen.getByText(/Your published app will render here/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'localhost:5173' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /on this computer/ })).toBeNull()
   })
 
   it('switches between the app on this computer, in the local Fabric host, and the published one', async () => {

@@ -48,6 +48,11 @@
   background: var(--ok);
 }
 
+/* Running, with a problem it carries on through (see `runningProblems`). */
+.local-pill--warn .local-pill-dot {
+  background: var(--pending);
+}
+
 .local-pill--busy .local-pill-dot {
   background: var(--pending);
   animation: local-blink 1.2s ease-in-out infinite;
@@ -259,6 +264,70 @@
   color: var(--text-faint);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A running app's problems, above its output lines. */
+.local-output-problems {
+  flex: none;
+  max-height: 50%;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.local-output-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.local-output-problem + .local-output-problem {
+  border-top: 1px solid var(--border);
+}
+
+.local-output-problem-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  background: var(--pending);
+  border-radius: 50%;
+}
+
+.local-output-problem-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.local-output-problem-summary {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.local-output-problem-detail {
+  max-height: 4.8em;
+  margin: 2px 0 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.local-output-failed {
+  flex: none;
+  margin: 0;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--danger);
+  border-bottom: 1px solid var(--border);
 }
 
 .local-output-body {

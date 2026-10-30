@@ -40,6 +40,7 @@ import SettingsModal from '../components/SettingsModal'
 import { applyUiScale, UI_SCALES } from '../theme'
 import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../components/ChatPanel'
 import { segmentsForStorage, segmentsFromStorage } from '../components/chat/storage'
+import { filesChanged } from '../components/chat/turnLayout'
 import { planForStorage, planFromStorage } from '../chatPlan'
 import { useChatEventStore } from '../chatEventStore'
 import PreviewPane, {
@@ -225,6 +226,17 @@ function deploymentKey(project: StudioProject): string {
 function lastDeployFailed(project: StudioProject, deploy: DeployUiState | undefined): boolean {
   if (deploy?.running) return false
   return deploy?.result ? !deploy.result.ok : project.lastDeploy?.status === 'error'
+}
+
+/**
+ * What a chat turn asked for, to name the version it saves: the user's words,
+ * or the Design changes it carried when they came without a note.
+ */
+function turnRequest(message: UIChatMessage | undefined): string {
+  const text = message?.text.trim() ?? ''
+  if (text || !message?.design) return text
+  const n = message.design.items.length
+  return `Apply ${n} design change${n === 1 ? '' : 's'}`
 }
 
 /**
@@ -1262,7 +1274,8 @@ export default function Workbench({
     [handleTurnStart, isTurnRunning, stopDevServer]
   )
 
-  // After a chat turn, persist the transcript and, when chat turns publish
+  // After a chat turn, persist the transcript, save what a personal app's turn
+  // changed as a version (with Local development), and, when chat turns publish
   // (see `publishesAfterTurn`), publish what the agent changed.
   const afterTurn = useCallback(
     async (projectId: string, result: ChatTurnResult): Promise<void> => {
@@ -1272,6 +1285,27 @@ export default function Workbench({
       const team = isTeamProject(projectId)
       const manual = manualDeployRef.current && !team
       const localDevelopment = localDevRef.current
+      const messages = [...(chatsRef.current[projectId] ?? [])].reverse()
+      const lastUser = messages.find((m) => m.role === 'user')
+      const answer = messages.find((m) => m.role === 'assistant')
+      const projectPath = projectsRef.current?.projects.find((p) => p.id === projectId)?.path ?? ''
+      // The turn changed files: Copilot reported them, or its transcript shows
+      // the edits (the "Changed" files under the answer).
+      const changedFiles =
+        result.filesModified.length > 0 ||
+        (answer ? filesChanged(answer.tools, projectPath).length > 0 : false)
+      // With Local development, a personal app's turn that changed files is
+      // saved as a version, named after what was asked, so History goes back
+      // turn by turn: while turns don't publish, nothing else saves it. (A team
+      // app saves each turn to its working branch, below; without Local
+      // development a publish saves the changes, as before.)
+      const saving =
+        result.ok && localDevelopment && !team && changedFiles
+          ? window.api.projects.git.saveTurn(projectId, turnRequest(lastUser)).then(
+              () => undefined,
+              () => undefined
+            )
+          : Promise.resolve()
       // Publishing after a turn updates the published app. With Local
       // development, a first publish is the user's to start: it chooses where
       // the app goes. Without it, a turn publishes an app that never was too,
@@ -1330,6 +1364,8 @@ export default function Workbench({
           title: 'Project refresh failed'
         })
       }
+      // History and the published app's check read the version this turn saved.
+      await saving
       setGitRefresh((n) => n + 1)
       void window.api.chat
         .saveHistory(projectId, toStored(chatsRef.current[projectId] ?? []))
@@ -1347,7 +1383,6 @@ export default function Workbench({
       if (!result.ok || !mountedRef.current) return
       // Team apps: save the turn to the working branch; the pipeline publishes the preview.
       if (team) {
-        const lastUser = [...(chatsRef.current[projectId] ?? [])].reverse().find((m) => m.role === 'user')
         void teamWorkRef.current.afterTurn(projectId, lastUser?.text ?? '').finally(() => {
           // The local preview stays until the pipeline has published this save.
           setDevServers((all) =>
@@ -2930,6 +2965,7 @@ export default function Workbench({
                               : null
                           }
                           manualDeploy={manualDeploy && !active.team}
+                          awaitingPublish={awaitingPublish}
                           localReload={localReload}
                           turnRunning={activeChatBusy}
                           watching={watchDeploy === active.id}

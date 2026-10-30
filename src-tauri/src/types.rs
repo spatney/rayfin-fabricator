@@ -2042,6 +2042,18 @@ pub struct RevertResult {
   pub error: Option<String>,
 }
 
+/// A chat turn's changes, saved as a version of the app (`projects_git_save_turn`).
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedTurn {
+  /// The new version's commit; absent when nothing was saved.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub commit: Option<String>,
+  /// Why the changes couldn't be saved: they stay as uncommitted changes.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GitChange {

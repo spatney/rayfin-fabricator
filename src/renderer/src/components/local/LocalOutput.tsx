@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import type { LocalLogEvent } from '@shared/ipc'
-import { useLocalBackendLogs } from '../../localBackend'
+import { runningProblems, useLocalBackendLogs, type LocalBackend } from '../../localBackend'
 import { Codicon } from '../icons'
 import './local.css'
 
@@ -22,19 +22,27 @@ function asText(lines: LocalLogEvent[]): string {
 /**
  * The app's output on this computer, under the preview: rayfin-local, Vite, the
  * functions and builds, newest at the bottom. It follows new lines unless
- * you've scrolled up to read.
+ * you've scrolled up to read. A problem the running app has (a data model
+ * change it couldn't read, say) shows above the lines, and Restart starts the
+ * backend again, which builds and reads everything from the start.
  */
 export default function LocalOutput({
   projectId,
+  local,
   onClose
 }: {
   projectId: string
+  local: LocalBackend
   onClose: () => void
 }): JSX.Element {
   const lines = useLocalBackendLogs(projectId, LINES)
   const bodyRef = useRef<HTMLDivElement>(null)
   const followRef = useRef(true)
   const [copied, setCopied] = useState(false)
+  const [restarting, setRestarting] = useState(false)
+  /** Restart was asked for here, so its failure shows here. */
+  const [restartAsked, setRestartAsked] = useState(false)
+  const problems = runningProblems(local.status)
 
   useLayoutEffect(() => {
     const body = bodyRef.current
@@ -54,6 +62,12 @@ export default function LocalOutput({
       .catch(() => undefined)
   }
 
+  const restart = (): void => {
+    setRestarting(true)
+    setRestartAsked(true)
+    void local.restart().finally(() => setRestarting(false))
+  }
+
   return (
     <section className="local-output" aria-label="Output">
       <div className="local-output-head">
@@ -61,6 +75,18 @@ export default function LocalOutput({
         <span className="local-output-sub">
           Your app’s backend, Vite and functions on this computer
         </span>
+        {(local.state === 'running' || restarting) && (
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost"
+            onClick={restart}
+            disabled={restarting || local.busy}
+            title="Stop your app’s backend and Vite on this computer and start them again"
+          >
+            <Codicon name="debug-restart" />
+            {restarting ? 'Restarting…' : 'Restart'}
+          </button>
+        )}
         <button
           type="button"
           className="btn btn--sm btn--ghost"
@@ -80,6 +106,28 @@ export default function LocalOutput({
           <Codicon name="close" />
         </button>
       </div>
+      {problems.length > 0 && (
+        <ul className="local-output-problems" aria-label="Problems">
+          {problems.map((problem) => (
+            <li key={problem.kind} className="local-output-problem">
+              <span className="local-output-problem-dot" aria-hidden="true" />
+              <div className="local-output-problem-text">
+                <p className="local-output-problem-summary">{problem.summary}</p>
+                {problem.detail && (
+                  <pre className="local-output-problem-detail" title={problem.detail}>
+                    {problem.detail}
+                  </pre>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {restartAsked && local.actionError && (
+        <p className="local-output-failed" role="alert">
+          {local.actionError.message}
+        </p>
+      )}
       <div
         className="local-output-body"
         ref={bodyRef}
