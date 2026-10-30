@@ -1,14 +1,19 @@
 //! A project's recent local backend output: a ring of lines in memory for the
 //! UI, Help and agents, and a rolling file under Fabricator's logs folder for
-//! diagnostics. Lines never carry the control token (see [`redact`]).
+//! diagnostics. Lines are masked as they're recorded: the run's control token
+//! (see [`redact`]), and credentials such as bearer tokens, JWTs, `pk-local-…`
+//! keys and 64-character hex secrets (see [`sanitize`]).
 
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use crate::services::diagnostics::redact_secrets;
 use crate::types::LocalLogEvent;
 
+/// The folder under Fabricator's logs folder that keeps each project's output.
+pub const LOG_DIR: &str = "local-backend";
 /// Lines kept in memory per project.
 pub const RING_CAPACITY: usize = 2000;
 /// Size at which a project's log file rolls over to `<id>.log.1`, so each
@@ -45,16 +50,18 @@ impl LogRing {
   }
 }
 
-/// `<dir>/<project id>.log`, rolled over at [`FILE_LIMIT`].
+/// `<dir>/<project id>.log`, rolled over to `<project id>.log.1` at [`FILE_LIMIT`].
 pub struct LogFile {
   path: PathBuf,
+  rolled: PathBuf,
   file: Option<std::fs::File>,
   size: u64,
 }
 
 impl LogFile {
   pub fn new(dir: &Path, project_id: &str) -> Self {
-    Self { path: dir.join(format!("{}.log", safe_name(project_id))), file: None, size: 0 }
+    let [rolled, path] = log_files(dir, project_id);
+    Self { path, rolled, file: None, size: 0 }
   }
 
   #[cfg(test)]
@@ -67,7 +74,7 @@ impl LogFile {
     let text = format!("{} {} {} {}\n", line.time, line.source, line.level, line.line);
     if self.file.is_some() && self.size + text.len() as u64 > FILE_LIMIT {
       self.file = None;
-      let _ = std::fs::rename(&self.path, self.path.with_extension("log.1"));
+      let _ = std::fs::rename(&self.path, &self.rolled);
     }
     if self.file.is_none() {
       if let Some(dir) = self.path.parent() {
@@ -87,6 +94,13 @@ impl LogFile {
   }
 }
 
+/// A project's log files in `dir` (the logs folder's [`LOG_DIR`]), oldest
+/// first: the rolled over `<id>.log.1`, then the current `<id>.log`.
+pub fn log_files(dir: &Path, project_id: &str) -> [PathBuf; 2] {
+  let name = safe_name(project_id);
+  [dir.join(format!("{name}.log.1")), dir.join(format!("{name}.log"))]
+}
+
 /// A project id as a file name: ids are UUIDs, but never trust a path segment.
 fn safe_name(id: &str) -> String {
   let name: String = id.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
@@ -100,6 +114,12 @@ pub fn redact<'a>(line: &'a str, secret: &str) -> Cow<'a, str> {
   } else {
     Cow::Owned(line.replace(secret, "***"))
   }
+}
+
+/// `line` as the ring and the file keep it: credentials masked, then cut to
+/// [`MAX_LINE_CHARS`] without its line break.
+pub fn sanitize(line: &str) -> String {
+  clip(&redact_secrets(line))
 }
 
 /// `line` cut to [`MAX_LINE_CHARS`], without its line break.
@@ -164,5 +184,28 @@ mod tests {
     assert_eq!(clip("short\r\n"), "short");
     let long = "é".repeat(MAX_LINE_CHARS + 10);
     assert_eq!(clip(&long).chars().count(), MAX_LINE_CHARS + 1);
+  }
+
+  #[test]
+  fn credentials_never_reach_the_ring_or_the_file() {
+    let jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJkZXZlbG9wZXIifQ.c2lnbmF0dXJl";
+    let hex = "0123456789abcdef".repeat(4);
+    let key = "pk-local-AbC123dEf456GhI789jKl012";
+    let line = format!("[fn] GET /me Authorization: Bearer {jwt} key={key} control={hex}\r\n");
+    let kept = sanitize(&line);
+    for secret in [jwt, hex.as_str(), key] {
+      assert!(!kept.contains(secret), "{kept}");
+    }
+    assert!(kept.starts_with("[fn] GET /me Authorization: ") && kept.contains("pk-local-***"), "{kept}");
+    assert_eq!(sanitize("  ➜  Local:   http://localhost:5173/\n"), "  ➜  Local:   http://localhost:5173/");
+    assert_eq!(sanitize(&"x".repeat(MAX_LINE_CHARS + 5)).chars().count(), MAX_LINE_CHARS + 1);
+  }
+
+  #[test]
+  fn names_the_files_oldest_first_inside_the_folder() {
+    let dir = Path::new("logs").join(LOG_DIR);
+    assert_eq!(log_files(&dir, "p-1"), [dir.join("p-1.log.1"), dir.join("p-1.log")]);
+    let [_, escape] = log_files(&dir, "../escape");
+    assert_eq!(escape, dir.join("___escape.log"), "a project id can't leave the folder");
   }
 }

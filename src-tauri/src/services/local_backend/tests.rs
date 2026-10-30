@@ -387,6 +387,23 @@ async fn local_secret_values_go_through_stdin_only() {
   assert_eq!(h.backends.secrets(&dir).await.unwrap()[0].source, "none");
 }
 
+#[test]
+fn output_is_masked_before_the_ring_and_the_file_keep_it() {
+  let dir = std::env::temp_dir().join(format!("fab-local-backend-{}", uuid::Uuid::new_v4()));
+  let rt = Runtime::new("p", Some(&dir), Arc::new(RwLock::new(None)));
+  let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl";
+  rt.log("functions", "info", &format!("calling Fabric with Bearer {jwt}"), None);
+  rt.log("rayfin-local", "info", "publishable key pk-local-AbC123dEf456GhI789jKl012", None);
+  rt.log("vite", "info", "ready in 412 ms", None);
+  let kept: Vec<String> = rt.recent(10).into_iter().map(|l| l.line).collect();
+  assert_eq!(kept, ["calling Fabric with Bearer [redacted]", "publishable key pk-local-***", "ready in 412 ms"]);
+  let [_, current] = log_files(&dir, "p");
+  let file = std::fs::read_to_string(current).unwrap();
+  assert!(file.contains("calling Fabric with Bearer [redacted]") && file.contains("pk-local-***"), "{file}");
+  assert!(!file.contains(jwt) && !file.contains("AbC123"), "{file}");
+  let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_missing_or_incompatible_binary_is_an_error_state() {
   let root = std::env::temp_dir().join(format!("fab-local-backend-{}", uuid::Uuid::new_v4()));

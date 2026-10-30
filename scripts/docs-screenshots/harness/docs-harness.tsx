@@ -8,6 +8,7 @@ import './assets/main.css'
 import { useEffect, useState, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import type {
+  AppSettings,
   AuthStatus,
   ByokModelInfo,
   ByokStatus,
@@ -17,6 +18,14 @@ import type {
   FabricCapacitiesResult,
   FabricWorkspace,
   FileNode,
+  LocalColumn,
+  LocalEntity,
+  LocalIdentity,
+  LocalLogEvent,
+  LocalRows,
+  LocalSecret,
+  LocalStatus,
+  LocalUser,
   MigrationInspectedPage,
   MigrationPage,
   MigrationReportItem,
@@ -39,6 +48,8 @@ import type {
 import { OverlayProvider } from './overlay'
 import { ToastProvider } from './toast'
 import { applyTheme } from './theme'
+import { LocalDevelopmentContext } from './localDevelopment'
+import { useLocalBackend } from './localBackend'
 import SetupScreen from './screens/SetupScreen'
 import { HelpView } from './components/help/HelpView'
 import TeamMapView from './components/team/map/TeamMapView'
@@ -73,6 +84,12 @@ import workbenchDark from '../../../website/public/screenshots/workbench.webp'
 import workbenchLight from '../../../website/public/screenshots/workbench.light.webp'
 
 const ok = <T,>(value: T) => (): Promise<T> => Promise.resolve(value)
+
+/** The sample settings: the capture's theme, with the Local development experiment on. */
+function sampleSettings(): AppSettings {
+  const theme = new URLSearchParams(location.search).get('theme') === 'light' ? 'light' : 'dark'
+  return { theme, experiments: { teamWorkspaces: false, localDevelopment: true } }
+}
 
 /** A Copilot model for the pickers. */
 const copilotModel = (
@@ -238,7 +255,7 @@ const inApp = (id: string, title: string, description: string, promotable = true
 
 /** The Skills tab of the sample app (a Universal App project). */
 const skills: SkillInfo[] = [
-  { id: 'rayfin', title: 'Rayfin essentials', description: 'Core Rayfin knowledge: data models, sign-in, deploys and the CLI.', icon: '◆', base: true, active: true },
+  { id: 'rayfin', title: 'Rayfin essentials', description: 'Core Rayfin knowledge: data models, sign-in, publishing and the CLI.', icon: '◆', base: true, active: true },
   { id: 'rayfin-functions', title: 'Rayfin Functions', description: 'Server-side functions your app can call.', icon: 'λ', base: true, active: true },
   { id: 'rayfin-connectors', title: 'Rayfin Connectors', description: 'Use existing Fabric data: lakehouses, warehouses, SQL databases, semantic models and KQL.', icon: '⇄', base: true, active: true },
   builtIn('polished-ui', 'Polished, modern UI', 'A clean, consistent look: spacing, type, color and components that match.', 'Look & feel', true),
@@ -267,7 +284,7 @@ name: secure-by-default
 description: "Keep the app's data and users safe by default. Use when adding sign-in, entities, permissions, sharing or admin features, or anything that reads or writes people's data. Triggers: security, secure, permissions, access control, row-level security, RLS, policy, private data, owner, sign in, authentication, authorization, secrets, API key, admin, sharing, roles"
 metadata:
   author: Fabricator
-  version: 1.0.0
+  version: 1.1.0
 ---
 # Secure by default
 
@@ -336,6 +353,230 @@ function SelectSecret({ name, children }: { name: string; children: ReactNode })
   }, [name])
   return <>{children}</>
 }
+
+/*
+ * Local development: the sample app running on this computer on the bundled local backend
+ * (rayfin-local), for the local preview, Blueprint's Data view, Preview as and the Secrets
+ * view's local values. Every person here is made up.
+ */
+
+const LOCAL_APP_URL = 'http://localhost:5173/'
+const LOCAL_API_URL = 'http://localhost:7171'
+const LOCAL_PROJECT_DIR = 'C:\\Users\\avery\\RayfinProjects\\contoso-expenses'
+const minutesAgo = (minutes: number): string => new Date(Date.now() - minutes * 60_000).toISOString()
+const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString()
+
+const LOCAL_ENTITIES = ['Expense', 'Report', 'Receipt', 'Category']
+const LOCAL_FUNCTIONS = ['summarizeReport', 'syncBudgets', 'archiveReceipts', 'readReceipt']
+
+/** The sample app's local backend, running for a while with the developer signed in. */
+function localStatus(projectId: string): LocalStatus {
+  const started = minutesAgo(42)
+  return {
+    projectId,
+    state: 'running',
+    revision: 7,
+    phase: null,
+    pid: 18244,
+    version: '0.2.0',
+    projectRoot: LOCAL_PROJECT_DIR,
+    signInAs: 'developer',
+    ready: {
+      appUrl: LOCAL_APP_URL,
+      apiUrl: LOCAL_API_URL,
+      embedUrl: `${LOCAL_API_URL}/.rayfin-local/portal/embed`,
+      portalUrl: `${LOCAL_API_URL}/.rayfin-local/portal`,
+      dataDir: `${LOCAL_PROJECT_DIR}\\.rayfin-local`,
+      signInAs: { kind: 'developer' },
+      sdk: { version: '1.36.2', supported: true },
+      features: {
+        data: { enabled: true, entities: LOCAL_ENTITIES },
+        functions: { enabled: true, names: LOCAL_FUNCTIONS },
+        storage: { enabled: true, folders: ['receipts'] },
+        auth: { enabled: true, fabric: true, password: false },
+        connectors: [
+          { name: 'finance-warehouse', type: 'fabric-warehouse', supported: true },
+          { name: 'spend-model', type: 'fabric-semanticmodel', supported: true }
+        ]
+      },
+      time: started
+    },
+    analysis: {
+      ok: true,
+      sdk: { version: '1.36.2', supported: true },
+      entities: LOCAL_ENTITIES,
+      storageFolders: ['receipts'],
+      message: null,
+      time: started
+    },
+    schema: { result: 'unchanged', changes: [], losses: [], message: null, live: false, time: started },
+    functions: { state: 'ready', names: LOCAL_FUNCTIONS, errors: [], message: null, time: started },
+    vite: { state: 'ready', url: LOCAL_APP_URL, version: '7.1.3', message: null, time: started },
+    config: null,
+    warnings: [],
+    error: null,
+    stopped: null,
+    crashes: 0,
+    startedAt: started,
+    updatedAt: minutesAgo(3)
+  }
+}
+
+/** Its recent output, as the supervisor records it. */
+const LOCAL_OUTPUT: Array<[minutes: number, source: string, line: string]> = [
+  [42, 'rayfin-local', 'rayfin-local 0.2.0 is starting Contoso Expenses.'],
+  [42, 'rayfin-local', 'Analyzed the app (Rayfin 1.36.2): 4 entities.'],
+  [42, 'rayfin-local', 'The database is up to date.'],
+  [42, 'rayfin-local', 'Building the functions…'],
+  [41, 'rayfin-local', `Functions ready: ${LOCAL_FUNCTIONS.join(', ')}.`],
+  [41, 'vite', '  VITE v7.1.3  ready in 612 ms'],
+  [41, 'vite', `  ➜  Local:   ${LOCAL_APP_URL}`],
+  [41, 'rayfin-local', `Vite is serving ${LOCAL_APP_URL}.`],
+  [41, 'rayfin-local', `Ready: the app at ${LOCAL_APP_URL}, the backend at ${LOCAL_API_URL}.`],
+  [26, 'functions', 'summarizeReport: completed in 840 ms'],
+  [12, 'vite', '[vite] hmr update /src/pages/Expenses.tsx, /src/index.css'],
+  [3, 'vite', '[vite] hmr update /src/components/ExpenseTable.tsx']
+]
+
+function localLogs(projectId: string): LocalLogEvent[] {
+  return LOCAL_OUTPUT.map(([minutes, source, line], i) => ({
+    projectId,
+    seq: i + 1,
+    source,
+    level: 'info',
+    line,
+    time: minutesAgo(minutes)
+  }))
+}
+
+/** The developer (the sample user's own account) and two local test users. */
+const localUsers: LocalUser[] = [
+  {
+    id: 'f2c4a7e1-5b3d-4c8e-9a61-7d2e8b4f0c13',
+    username: 'avery.chen@contoso.com',
+    email: 'avery.chen@contoso.com',
+    createdAt: daysAgo(6),
+    signIn: ['entra'],
+    developer: true
+  },
+  {
+    id: '8d1e6b2a-3f4c-4a9d-b7e5-0c6a2f9d1e48',
+    username: 'jordan.lee@example.com',
+    email: 'jordan.lee@example.com',
+    createdAt: daysAgo(2),
+    signIn: [],
+    developer: false
+  },
+  {
+    id: '4b7f0e93-2c1a-4d6b-8e5f-9a3c7d1b2e60',
+    username: 'sam.rivera@example.com',
+    email: 'sam.rivera@example.com',
+    createdAt: daysAgo(1),
+    signIn: ['password'],
+    developer: false
+  }
+]
+
+const localIdentity: LocalIdentity = { kind: 'developer', user: localUsers[0] }
+
+const AVERY = localUsers[0].id
+const JORDAN = localUsers[1].id
+const CATEGORY_IDS = ['3a9c1f42-7e2b-4d8a-9c5e-1b6f0d4a8e21', '9e4b2c71-0a5d-4f3e-8b6c-2d7a1e9f5c34', 'c7d1e8a3-4b9f-4e2c-a6d5-8f3b0e1c9a47', '5f2a9d6e-8c1b-4a7e-9d3f-6e0b4c2a1d58']
+const REPORT_IDS = ['2b8e5c1d-9f4a-4c3e-b7d2-0a6e1f8c5b39', 'e6a3f9c2-1d7b-4e8a-9c4f-3b5d0e2a7f16', '7c0d4b8e-2a5f-4d1c-8e9b-6f3a1c7d0e82']
+
+/** Sample rows per entity: the columns rayfin-local reports, and the rows it formats. */
+const localTables: Record<string, { columns: LocalColumn[]; rows: Record<string, unknown>[] }> = {
+  Category: {
+    columns: [
+      { name: 'id', type: 'uuid', key: true },
+      { name: 'name', type: 'text', key: false }
+    ],
+    rows: ['Travel', 'Meals', 'Software', 'Office'].map((name, i) => ({ id: CATEGORY_IDS[i], name }))
+  },
+  Report: {
+    columns: [
+      { name: 'id', type: 'uuid', key: true },
+      { name: 'title', type: 'text', key: false }
+    ],
+    rows: ['October travel', 'Team offsite', 'Q4 software'].map((title, i) => ({ id: REPORT_IDS[i], title }))
+  },
+  Expense: {
+    columns: [
+      { name: 'id', type: 'uuid', key: true },
+      { name: 'owner_id', type: 'text', key: false },
+      { name: 'amount', type: 'decimal', key: false },
+      { name: 'spentAt', type: 'date', key: false },
+      { name: 'category_id', type: 'uuid', key: false },
+      { name: 'report_id', type: 'uuid', key: false }
+    ],
+    rows: [
+      [412.6, '2026-10-02', 0, 0],
+      [38.4, '2026-10-02', 1, 0],
+      [129.99, '2026-10-05', 2, 2],
+      [64.2, '2026-10-07', 1, 1],
+      [18.75, '2026-10-09', 3, 1],
+      [256.0, '2026-10-12', 0, 0],
+      [42.5, '2026-10-14', 1, 1],
+      [19.0, '2026-10-16', 2, 2],
+      [88.3, '2026-10-19', 3, null],
+      [23.1, '2026-10-21', 1, null],
+      [540.0, '2026-10-24', 0, 0],
+      [12.4, '2026-10-27', 3, null]
+    ].map(([amount, spentAt, category, report], i) => ({
+      id: `a${i.toString(16)}5e1c9d-4b2f-4c8a-9e7d-${(0x3f1b2c4d5e60 + i * 0x1111).toString(16)}`,
+      owner_id: i % 4 === 3 ? JORDAN : AVERY,
+      amount,
+      spentAt,
+      category_id: CATEGORY_IDS[category as number],
+      report_id: report === null ? null : REPORT_IDS[report as number]
+    }))
+  },
+  Receipt: {
+    columns: [
+      { name: 'id', type: 'uuid', key: true },
+      { name: 'owner_id', type: 'text', key: false },
+      { name: 'fileName', type: 'text', key: false },
+      { name: 'expense_id', type: 'uuid', key: false }
+    ],
+    rows: ['hotel-folio.pdf', 'team-lunch.jpg', 'design-tool-invoice.pdf', 'taxi-airport.jpg', 'monitor-stand.jpg'].map(
+      (fileName, i) => ({
+        id: `b${i}7d2e4a-8c1f-4b6e-9a3d-${(0x5c2e7a9b1d40 + i * 0x2222).toString(16)}`,
+        owner_id: AVERY,
+        fileName,
+        expense_id: null
+      })
+    )
+  }
+}
+
+const localEntities: LocalEntity[] = LOCAL_ENTITIES.map((name) => ({ name, rows: localTables[name].rows.length }))
+
+/** A page of an entity's sample rows, sorted the way the Data view asks. */
+function localRows(entity: string, offset: number, limit: number, orderBy?: string, desc?: boolean): LocalRows {
+  const table = localTables[entity] ?? { columns: [], rows: [] }
+  const rows = [...table.rows]
+  if (orderBy) {
+    const rank = (a: unknown, b: unknown): number =>
+      a === b
+        ? 0
+        : a === null || a === undefined
+          ? -1
+          : b === null || b === undefined
+            ? 1
+            : typeof a === 'number' && typeof b === 'number'
+              ? a - b
+              : String(a).localeCompare(String(b))
+    rows.sort((a, b) => (desc ? -1 : 1) * rank(a[orderBy], b[orderBy]))
+  }
+  return { columns: table.columns, rows: rows.slice(offset, offset + limit), total: rows.length }
+}
+
+/** Where each of the Secrets view's sample secrets gets its value on this computer. */
+const localSecrets: LocalSecret[] = [
+  { name: 'OPENAI_API_KEY', declared: true, description: 'Summarizes expense notes', source: 'local' },
+  { name: 'SLACK_WEBHOOK_URL', declared: true, description: 'Posts approved expenses to #finance', source: 'none' },
+  { name: 'STRIPE_SECRET_KEY', declared: true, description: 'Reimburses approved expenses', source: 'local' }
+]
 
 /* Blueprint: the sample app's files, as Blueprint reads them, and what Fabric says about them. */
 
@@ -929,6 +1170,23 @@ function installApi(): void {
     secrets: {
       list: ok(secrets)
     },
+    // The sample app's local backend, running (Local development is on).
+    local: {
+      status: (projectId: string) => Promise.resolve(localStatus(projectId)),
+      start: (projectId: string) => Promise.resolve(localStatus(projectId)),
+      restart: (projectId: string) => Promise.resolve(localStatus(projectId)),
+      logs: (projectId: string, limit = 500) => Promise.resolve(localLogs(projectId).slice(-limit)),
+      users: ok(localUsers),
+      identity: ok(localIdentity),
+      entities: ok(localEntities),
+      rows: (_projectId: string, entity: string, offset: number, limit: number, orderBy?: string, desc?: boolean) =>
+        Promise.resolve(localRows(entity, offset, limit, orderBy, desc)),
+      secrets: ok(localSecrets)
+    },
+    // What the app reads at launch: the sample settings, with Local development on.
+    settings: {
+      get: () => Promise.resolve(sampleSettings())
+    },
     projects: {
       // Settings shows where new projects go.
       state: ok({ workspaceRoot: 'C:\\Users\\avery\\RayfinProjects', activeProjectId: null, projects: [] }),
@@ -1178,8 +1436,10 @@ const setupDoctor: DoctorReport = {
     tool('node', 'Node.js', '24.13.0'),
     tool('npm', 'npm', '11.16.0'),
     tool('git', 'Git', '2.49.0'),
-    tool('az', 'Azure CLI', '2.83.0'),
-    { ...tool('gh', 'GitHub CLI (gh)', '2.95.0'), required: false }
+    { ...tool('az', 'Azure CLI', '2.83.0'), required: false },
+    { ...tool('gh', 'GitHub CLI (gh)', '2.95.0'), required: false },
+    // Setup lists the bundled local backend while Local development is on.
+    { ...tool('rayfin-local', 'Local backend', '0.2.0'), required: false }
   ]
 }
 
@@ -1342,8 +1602,9 @@ function ConnectDataShot(): JSX.Element {
 }
 
 /**
- * Settings, with its Theme set to the capture's theme. `experiments` opens Experiments and
- * scrolls it into view, the way the Team workspaces docs show it.
+ * Settings, with the sample settings: its Theme set to the capture's theme, and Local
+ * development on. `experiments` opens Experiments and scrolls it into view, the way the Team
+ * workspaces docs show it.
  */
 function SettingsShot({ experiments = false }: { experiments?: boolean }): JSX.Element {
   useEffect(() => {
@@ -1373,10 +1634,9 @@ function SettingsShot({ experiments = false }: { experiments?: boolean }): JSX.E
       resized.disconnect()
     }
   }, [experiments])
-  const theme = new URLSearchParams(location.search).get('theme') === 'light' ? 'light' : 'dark'
   return (
     <SettingsModal
-      settings={{ theme, experiments: { teamWorkspaces: false } }}
+      settings={sampleSettings()}
       versions={{ app: '1.21.0', tauri: '2.11.3', webview2: '154.0.4258.62', copilot: '1.0.96' }}
       onChange={noop}
       onClose={noop}
@@ -1650,9 +1910,10 @@ function AccountMenuShot(): JSX.Element {
 
 /**
  * Blueprint, filling the window as it fills the Build area: the Architecture view of the sample
- * app, or with `view="data"` its Data model view.
+ * app, with `view="data"` its Data model view, or with `view="local-data"` its Data view of the
+ * sample app's local data.
  */
-function Blueprint({ view = 'architecture' }: { view?: 'architecture' | 'data' }): JSX.Element {
+function Blueprint({ view = 'architecture' }: { view?: 'architecture' | 'data' | 'local-data' }): JSX.Element {
   // Blueprint opens on the view last chosen for the project.
   localStorage.setItem(`rayfin.model.view.${expensesApp.id}`, view)
   return (
@@ -1673,8 +1934,48 @@ function Blueprint({ view = 'architecture' }: { view?: 'architecture' | 'data' }
   )
 }
 
+/**
+ * The preview of the sample app running on this computer, in a preview-sized frame: its
+ * toolbar with Local and Published and the running local backend, whose output is open.
+ */
+function LocalPreview(): JSX.Element {
+  const local = useLocalBackend(expensesApp.id)
+  return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        style={{
+          width: 900,
+          height: 560,
+          display: 'flex',
+          flexDirection: 'column',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          overflow: 'hidden'
+        }}
+      >
+        <Steps clicks={['.local-pill']}>
+          <PreviewPane
+            project={expensesApp}
+            deploy={undefined}
+            local={local}
+            view="local"
+            onViewChange={noop}
+            onDiagnoseLocal={noop}
+            focused={false}
+            onToggleFocus={noop}
+          />
+        </Steps>
+      </div>
+    </div>
+  )
+}
+
 function Shot({ id }: { id: string | null }): JSX.Element {
   switch (id) {
+    case 'local-data':
+      return <Blueprint view="local-data" />
+    case 'preview-local':
+      return <LocalPreview />
     case 'team-overview': {
       const map = sampleMap()
       // Started a minute and a half ago, so the run's timer reads like a live deploy.
@@ -1875,9 +2176,11 @@ applyTheme(params.get('theme') === 'light' ? 'light' : 'dark')
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <OverlayProvider>
     <ToastProvider>
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <Shot id={params.get('shot')} />
-      </div>
+      <LocalDevelopmentContext.Provider value={Boolean(sampleSettings().experiments?.localDevelopment)}>
+        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <Shot id={params.get('shot')} />
+        </div>
+      </LocalDevelopmentContext.Provider>
     </ToastProvider>
   </OverlayProvider>
 )

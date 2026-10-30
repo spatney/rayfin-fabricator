@@ -210,7 +210,7 @@ async function run(authPath, req) {
   const models = Array.isArray(req.models) ? req.models : []
   const right = String(req.modelAccessRight || DEFAULT_MODEL_RIGHT)
 
-  if (!appWorkspaceId) return { ok: false, error: 'This deployment has no Fabric workspace id yet — deploy it before sharing.' }
+  if (!appWorkspaceId) return { ok: false, error: 'This published app has no Fabric workspace ID yet. Publish it before you share it.' }
   if (!recipients.length) return { ok: false, error: 'Enter at least one email to share with.' }
 
   const token = await makeRayfinTokens(authPath)

@@ -135,6 +135,24 @@ export function ToolKindIcon({
           <circle cx="12" cy="13" r="3" />
         </svg>
       )
+    case 'local-status':
+      return (
+        <svg {...p}>
+          <rect x="4" y="4.5" width="16" height="6.5" rx="1.6" />
+          <rect x="4" y="13" width="16" height="6.5" rx="1.6" />
+          <path d="M7.5 7.75h.01M7.5 16.25h.01" />
+          <path d="M11 7.75h5.5M11 16.25h5.5" />
+        </svg>
+      )
+    case 'local-call':
+      return (
+        <svg {...p}>
+          <rect x="12.5" y="4.5" width="8" height="15" rx="1.8" />
+          <path d="M15.5 8.5h2M15.5 12h2" />
+          <path d="M3.5 14h6.5" />
+          <path d="M7.5 11.5 10 14l-2.5 2.5" />
+        </svg>
+      )
     default:
       return (
         <svg {...p}>

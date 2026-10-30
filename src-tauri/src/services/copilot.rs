@@ -20,18 +20,21 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use github_copilot_sdk::handler::{
-  ApproveAllHandler, ExitPlanModeHandler, ExitPlanModeResult, PermissionHandler, UserInputHandler,
+  ApproveAllHandler, ExitPlanModeHandler, ExitPlanModeResult, PermissionHandler, PermissionResult, UserInputHandler,
   UserInputResponse,
 };
-use github_copilot_sdk::rpc::{AccountLogoutRequest, AuthInfo, AutoTierMetadata};
+use github_copilot_sdk::rpc::{
+  AccountLogoutRequest, AuthInfo, AutoTierMetadata, PermissionDecision, PermissionDecisionDeniedByPermissionRequestHook,
+};
 use github_copilot_sdk::session::Session;
 use github_copilot_sdk::types::GetAuthStatusResponse;
 use github_copilot_sdk::{
-  CliProgram, Client, ClientOptions, Error as SdkError, ExitPlanModeData, Model, ResumeSessionConfig,
-  SessionConfig, SessionId, Tool, Transport,
+  CliProgram, Client, ClientOptions, Error as SdkError, ExitPlanModeData, Model, PermissionRequestData,
+  PermissionRequestKind, RequestId, ResumeSessionConfig, SessionConfig, SessionId, Tool, Transport,
 };
 use once_cell::sync::Lazy;
 use regex::Regex;
+use serde_json::Value;
 use tauri::AppHandle;
 use tokio::sync::{Mutex, OnceCell};
 
@@ -368,6 +371,148 @@ pub struct SessionOptions {
   /// switch to. The runtime doesn't persist them, so they are re-supplied on
   /// every resume.
   pub byok: Option<crate::services::byok::registry::ByokRegistry>,
+}
+
+/* ----------------------------- Build chat sandbox ----------------------------- */
+
+/// The folder where a project's local backend (rayfin-local) keeps its state:
+/// the app's local database, its signing keys and the local values of its secrets.
+const LOCAL_STATE_DIR: &str = ".rayfin-local";
+
+/// The Build chat's local backend tool the denial points the agent at (see `agent_tools`).
+const LOCAL_STATUS_TOOL: &str = "fabricator_local_status";
+
+/// Git commands that only inspect or change the index, never a file's contents:
+/// `git rm --cached` is how a tracked `.rayfin-local` leaves git (an Advisor fix).
+static GIT_INDEX_ONLY: Lazy<Regex> = Lazy::new(|| {
+  Regex::new(
+    r"(?i)^\s*git(?:\.exe)?(?:\s+-[cC]\s+\S+|\s+--?[a-z][\w-]*(?:=\S+)?)*\s+(?:rm\s(?:.*\s)?--cached(?:\s|$)|check-ignore\b|ls-files\b|status\b)",
+  )
+  .unwrap()
+});
+
+/// Where one command of a shell line ends and the next begins.
+static COMMAND_BREAK: Lazy<Regex> = Lazy::new(|| Regex::new(r"&&|\|\||[;|\r\n]").unwrap());
+
+/// Whether `path` is in a `.rayfin-local` folder (the Advisor's and Help's
+/// read-only sandboxes keep out of it the same way).
+pub(crate) fn in_local_state(path: &str) -> bool {
+  path.split(['/', '\\']).any(|part| part.eq_ignore_ascii_case(LOCAL_STATE_DIR))
+}
+
+/// Whether a command's text names something in a `.rayfin-local` folder.
+fn names_local_state(command: &str) -> bool {
+  command
+    .split(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | '`' | '=' | '(' | ')' | '<' | '>' | ',' | '{' | '}'))
+    .any(in_local_state)
+}
+
+/// The permission request itself: nested under `permissionRequest` by current
+/// runtimes, flat in older ones.
+fn request_body(data: &PermissionRequestData) -> &Value {
+  data.extra.get("permissionRequest").filter(|v| v.is_object()).unwrap_or(&data.extra)
+}
+
+fn request_kind(data: &PermissionRequestData) -> Option<String> {
+  if let Some(kind) = request_body(data).get("kind").and_then(Value::as_str) {
+    return Some(kind.to_string());
+  }
+  let kind = match data.kind.as_ref()? {
+    PermissionRequestKind::Read => "read",
+    PermissionRequestKind::Write => "write",
+    PermissionRequestKind::Shell => "shell",
+    _ => "other",
+  };
+  Some(kind.to_string())
+}
+
+/// Whether a shell command reaches into a `.rayfin-local` folder, by its text or
+/// by the paths the runtime found in it (a glob, say). Git commands that only
+/// touch the index may name the folder.
+fn shell_reaches_local_state(body: &Value) -> bool {
+  let full = body.get("fullCommandText").and_then(Value::as_str).unwrap_or_default();
+  let parsed: Vec<&str> = body
+    .get("commandSegments")
+    .and_then(Value::as_array)
+    .map(|segments| segments.iter().filter_map(|s| s.get("fullCommandText").and_then(Value::as_str)).collect())
+    .unwrap_or_default();
+  let segments: Vec<&str> = if parsed.is_empty() { COMMAND_BREAK.split(full).collect() } else { parsed };
+  let (index_only, others): (Vec<&str>, Vec<&str>) = segments.into_iter().partition(|s| GIT_INDEX_ONLY.is_match(s));
+  if others.iter().any(|s| names_local_state(s)) {
+    return true;
+  }
+  let strings = |key: &str| -> Vec<String> {
+    match body.get(key) {
+      Some(Value::Array(items)) => items.iter().filter_map(Value::as_str).map(str::to_string).collect(),
+      Some(Value::Object(map)) => {
+        map.iter().flat_map(|(k, v)| std::iter::once(k.clone()).chain(v.as_str().map(str::to_string))).collect()
+      }
+      _ => Vec::new(),
+    }
+  };
+  let paths = strings("possiblePaths").into_iter().chain(strings("resolvedPaths"));
+  paths.into_iter().any(|p| in_local_state(&p)) && !index_only.iter().any(|s| names_local_state(s))
+}
+
+/// Whether a permission request reads, writes or runs a command on something in
+/// a `.rayfin-local` folder.
+fn reaches_local_state(data: &PermissionRequestData) -> bool {
+  let body = request_body(data);
+  let text = |key: &str| body.get(key).and_then(Value::as_str);
+  match request_kind(data).as_deref() {
+    Some("read") => [text("path"), text("resolvedPath")].into_iter().flatten().any(in_local_state),
+    Some("write") => [text("fileName"), text("resolvedPath")].into_iter().flatten().any(in_local_state),
+    Some("shell") => shell_reaches_local_state(body),
+    _ => false,
+  }
+}
+
+/// What the agent is told when it reaches into `.rayfin-local`.
+fn local_state_denial(local_tools: bool) -> PermissionResult {
+  let mut message = String::from(
+    "Fabricator keeps this app's local data in `.rayfin-local`: its database, signing keys and the local values of \
+     its secrets. That folder is off limits, so don't read, change or delete anything in it.",
+  );
+  if local_tools {
+    message.push_str(
+      " Use `fabricator_local_status` for the local backend's state, errors and output, and `fabricator_local_call` \
+       to read or change the app's data through its own API.",
+    );
+  }
+  PermissionDecision::DeniedByPermissionRequestHook(PermissionDecisionDeniedByPermissionRequestHook {
+    // Fails only this call: the turn carries on.
+    interrupt: Some(false),
+    message: Some(message),
+    ..Default::default()
+  })
+  .into()
+}
+
+/// The Build chat's permission policy. The chat never reads or changes the
+/// local backend's state in `.rayfin-local`, which Fabricator manages; every
+/// other request goes to `inner`: a team project's guardrails, or approval.
+struct BuildChatPolicy {
+  inner: Arc<dyn PermissionHandler>,
+  /// The session has the local backend tools, for the denial to point at.
+  local_tools: bool,
+}
+
+#[async_trait]
+impl PermissionHandler for BuildChatPolicy {
+  async fn handle(&self, session_id: SessionId, request_id: RequestId, data: PermissionRequestData) -> PermissionResult {
+    if reaches_local_state(&data) {
+      log::info!("Build chat: declined a {} request in .rayfin-local", request_kind(&data).unwrap_or_else(|| "unknown".into()));
+      return local_state_denial(self.local_tools);
+    }
+    self.inner.handle(session_id, request_id, data).await
+  }
+}
+
+/// The permission policy of a project's Build chat session with `tools`.
+fn build_chat_policy(project_id: &str, tools: &[Tool]) -> Arc<dyn PermissionHandler> {
+  // Team projects may not deploy, push or merge from chat (see team::guard).
+  let inner = crate::services::team::guard::chat_policy(project_id).unwrap_or_else(|| Arc::new(ApproveAllHandler));
+  Arc::new(BuildChatPolicy { inner, local_tools: tools.iter().any(|t| t.name == LOCAL_STATUS_TOOL) })
 }
 
 /// Ask the runtime to resume, or create a session bound to `session_id`,
@@ -924,13 +1069,13 @@ impl CopilotManager {
       disconnect_session(&old.session).await;
     }
 
+    let permission = Some(build_chat_policy(project_id, &tools));
     let opts = SessionOptions {
       exit_plan,
       user_input,
       guidance,
       tools,
-      // Team projects may not deploy, push or merge from chat (see team::guard).
-      permission: crate::services::team::guard::chat_policy(project_id),
+      permission,
       byok,
       ..Default::default()
     };
@@ -1784,5 +1929,94 @@ mod tests {
     }))
     .unwrap();
     assert!(map_model(&plain).unwrap().context_tiers.is_empty());
+  }
+
+  /// A `permission.requested` payload as the runtime sends it: the request nested.
+  fn permission(body: Value) -> PermissionRequestData {
+    serde_json::from_value(json!({ "requestId": "r1", "permissionRequest": body })).unwrap()
+  }
+
+  #[test]
+  fn the_build_chat_never_reaches_into_the_local_backends_state() {
+    let read = |path: &str| reaches_local_state(&permission(json!({ "kind": "read", "path": path })));
+    for state in [".rayfin-local", ".rayfin-local/secrets.json", "C:\\apps\\notes\\.rayfin-local\\db.sqlite", ".Rayfin-Local/keys/signing.json"] {
+      assert!(read(state), "{state} must be blocked");
+    }
+    for fine in ["rayfin-local.toml", "src/App.tsx", "rayfin/rayfin.yml", "C:\\apps\\notes\\.gitignore"] {
+      assert!(!read(fine), "{fine} must stay readable");
+    }
+    let write = |file: &str| reaches_local_state(&permission(json!({ "kind": "write", "fileName": file })));
+    assert!(write(".rayfin-local/.gitignore"));
+    assert!(!write(".gitignore"));
+    let typed = PermissionRequestData {
+      kind: Some(PermissionRequestKind::Write),
+      extra: json!({ "fileName": "C:/apps/notes/.rayfin-local/secrets.json" }),
+      ..Default::default()
+    };
+    assert!(reaches_local_state(&typed), "older runtimes send the request flat");
+
+    let shell = |command: &str, paths: Value| {
+      reaches_local_state(&permission(json!({ "kind": "shell", "fullCommandText": command, "possiblePaths": paths })))
+    };
+    for blocked in [
+      "Get-Content .rayfin-local\\secrets.json",
+      "sqlite3 ./.rayfin-local/db.sqlite \"select * from Note\"",
+      "rm -rf .rayfin-local",
+      "npm run build && type \".\\.rayfin-local\\keys\\signing.json\"",
+      "git rm .rayfin-local/secrets.json",
+    ] {
+      assert!(shell(blocked, json!([])), "{blocked} must be blocked");
+    }
+    assert!(shell("cat .rayfin*/secrets.json", json!([".rayfin-local/secrets.json"])), "the paths the runtime found count");
+    for fine in ["npm run build", "npx vitest run", "git status", "node scripts/check.mjs rayfin-local.toml"] {
+      assert!(!shell(fine, json!([])), "{fine} must run");
+    }
+    // Untracking the folder only changes git's index, as the Advisor's fix asks.
+    for untrack in ["git rm -r --cached .rayfin-local", "git rm -r --cached .rayfin-local && git add .gitignore"] {
+      assert!(!shell(untrack, json!([".rayfin-local"])), "{untrack} must run");
+    }
+    let segments = json!({
+      "kind": "shell",
+      "fullCommandText": "git status; Get-Content .rayfin-local/secrets.json",
+      "commandSegments": [
+        { "fullCommandText": "git status", "identifier": "git" },
+        { "fullCommandText": "Get-Content .rayfin-local/secrets.json", "identifier": "Get-Content" }
+      ]
+    });
+    assert!(reaches_local_state(&permission(segments)));
+    assert!(!reaches_local_state(&permission(json!({ "kind": "url", "url": "https://rayfin.ai/.rayfin-local" }))));
+  }
+
+  #[tokio::test]
+  async fn a_denial_says_what_to_do_instead_and_fails_only_the_call() {
+    async fn decide(policy: &dyn PermissionHandler, body: Value) -> PermissionResult {
+      policy.handle(SessionId::from("s"), RequestId::new("1"), permission(body)).await
+    }
+    let message = |result: PermissionResult| match result {
+      PermissionResult::Decision { decision: PermissionDecision::DeniedByPermissionRequestHook(denied), .. } => {
+        assert_eq!(denied.interrupt, Some(false), "the turn carries on");
+        denied.message.unwrap()
+      }
+      other => panic!("expected a denial, got {other:?}"),
+    };
+    let read_secrets = json!({ "kind": "read", "path": ".rayfin-local/secrets.json" });
+    let local = build_chat_policy("a-personal-project", &[Tool::new(LOCAL_STATUS_TOOL), Tool::new("fabricator_local_call")]);
+    let said = message(decide(local.as_ref(), read_secrets.clone()).await);
+    assert!(said.contains("Fabricator keeps this app's local data in `.rayfin-local`"), "{said}");
+    assert!(said.contains("`fabricator_local_status`") && said.contains("`fabricator_local_call`"), "{said}");
+    // Without the local backend tools (a Fabric-backed session), it doesn't point at them.
+    let fabric_backed = build_chat_policy("a-personal-project", &[Tool::new("fabricator_locate_semantic_model")]);
+    assert!(!message(decide(fabric_backed.as_ref(), read_secrets).await).contains("fabricator_local"));
+    assert!(matches!(
+      decide(local.as_ref(), json!({ "kind": "write", "fileName": "src/App.tsx" })).await,
+      PermissionResult::Decision { decision: PermissionDecision::ApproveOnce(_), .. }
+    ));
+    // A team project keeps its own guardrails as well.
+    let team = BuildChatPolicy { inner: Arc::new(crate::services::team::guard::TeamChatPolicy), local_tools: false };
+    assert!(matches!(
+      decide(&team, json!({ "kind": "shell", "fullCommandText": "npx rayfin up --yes" })).await,
+      PermissionResult::Decision { decision: PermissionDecision::UserNotAvailable(_), .. }
+    ));
+    message(decide(&team, json!({ "kind": "shell", "fullCommandText": "del .rayfin-local\\db.sqlite" })).await);
   }
 }

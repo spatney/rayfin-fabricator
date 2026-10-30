@@ -7,13 +7,13 @@
 //! [`LocalBackends`] (Tauri managed state) supervises one `serve` per project:
 //! it builds a status from the process's events and emits it on `local:state`,
 //! streams its output on `local:log` (and keeps it in a ring and a rolling file
-//! under the logs folder), restarts it after a crash or a configuration change
-//! that needs one, and stops it by closing its stdin. At most two projects run
-//! at once: the one in use and the previous one. Every run gets a fresh
-//! control token, which never appears in a log.
+//! under the logs folder, credentials masked), restarts it after a crash or a
+//! configuration change that needs one, and stops it by closing its stdin. At
+//! most two projects run at once: the one in use and the previous one. Every
+//! run gets a fresh control token, which never appears in a log.
 //!
-//! Other modules use [`snapshot`], [`recent_logs`], [`control`] and
-//! [`ensure_running`]; the IPC is `commands::local`.
+//! Other modules use [`snapshot`], [`recent_logs`] and [`control`]; the IPC is
+//! `commands::local`. The output files are named by [`log_files`].
 
 mod binary;
 mod control;
@@ -42,6 +42,7 @@ pub use binary::{doctor_status, Binary, VersionInfo, BIN_ENV, BLOCKED_DOCS_URL};
 #[allow(unused_imports)]
 pub use control::{error, AccessToken, AppCall, AppResponse, CallAs, ControlClient, ControlToken, MAX_ROWS};
 use logs::{LogFile, LogRing};
+pub use logs::{log_files, LOG_DIR};
 use machine::{CrashPolicy, Machine, Next, Outcome};
 use supervisor::{Command, HostEnv, Stream, Supervisor};
 
@@ -99,7 +100,7 @@ impl Default for Policy {
 pub(crate) struct Settings {
   /// `None`: the bundled rayfin-local (or [`BIN_ENV`]).
   pub binary: Option<Binary>,
-  /// `None`: `local-backend` under Fabricator's logs folder.
+  /// `None`: [`LOG_DIR`] under Fabricator's logs folder.
   pub log_dir: Option<PathBuf>,
   pub policy: Policy,
   /// Pass Fabricator's `PATH`, Node.js and Fabric account to rayfin-local.
@@ -178,7 +179,7 @@ impl Runtime {
     self.emit(Emit::Milestone { level, event, message, project_id: self.id.clone(), code: code.map(str::to_string) });
   }
 
-  /// Record one line of output.
+  /// Record one line of output, credentials masked (see [`logs::sanitize`]).
   fn log(&self, source: &str, level: &str, line: &str, time: Option<String>) {
     let event = {
       let mut ring = self.ring.lock().unwrap();
@@ -188,7 +189,7 @@ impl Runtime {
         seq: ring.1,
         source: source.to_string(),
         level: level.to_string(),
-        line: logs::clip(line),
+        line: logs::sanitize(line),
         time: time.filter(|t| t.contains('T')).unwrap_or_else(crate::commands::util::now_iso),
       };
       ring.0.push(event.clone());
@@ -463,7 +464,7 @@ impl LocalBackends {
     runtimes
       .entry(project_id.to_string())
       .or_insert_with(|| {
-        let dir = self.inner.settings.log_dir.clone().unwrap_or_else(|| crate::services::paths::logs_dir().join("local-backend"));
+        let dir = self.inner.settings.log_dir.clone().unwrap_or_else(|| crate::services::paths::logs_dir().join(LOG_DIR));
         Arc::new(Runtime::new(project_id, Some(&dir), self.inner.sink.clone()))
       })
       .clone()
@@ -918,14 +919,6 @@ pub fn recent_logs(app: &AppHandle, project_id: &str, n: usize) -> Vec<LocalLogE
 /// while its backend runs.
 pub fn control(app: &AppHandle, project_id: &str) -> Result<ControlClient, LocalCommandError> {
   state(app).control(project_id)
-}
-
-/// Start a project's local backend unless it runs; its status either way.
-/// Doesn't wait for it to be ready: watch the status for that.
-#[allow(dead_code)] // For the Copilot tools (agent_tools).
-pub async fn ensure_running(app: &AppHandle, project_id: &str) -> Result<LocalStatus, LocalCommandError> {
-  let dir = project_dir(project_id)?;
-  Ok(state(app).start(project_id, dir, LocalStartOptions::default()).await)
 }
 
 /// Stop every local backend as Fabricator exits.

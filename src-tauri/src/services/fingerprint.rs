@@ -9,7 +9,8 @@ use std::time::UNIX_EPOCH;
 use sha2::{Digest, Sha256};
 
 /// Directories that never affect a code-derived artifact and would be expensive
-/// to walk.
+/// to walk. `.rayfin-local` is the local backend's state (its database changes
+/// whenever the app runs), never a change to the app.
 const SKIP_DIRS: &[&str] = &[
   "node_modules",
   ".git",
@@ -20,6 +21,7 @@ const SKIP_DIRS: &[&str] = &[
   ".next",
   "coverage",
   ".rayfin",
+  ".rayfin-local",
   ".turbo",
   ".cache",
 ];
@@ -84,4 +86,49 @@ pub fn fingerprint(project_path: &str) -> String {
     hash_dir(&mut hasher, root, root);
   }
   hex::encode(hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  struct TempDir(std::path::PathBuf);
+
+  impl TempDir {
+    fn new() -> Self {
+      let dir = std::env::temp_dir().join(format!("fabricator-fingerprint-{}", uuid::Uuid::new_v4()));
+      std::fs::create_dir_all(&dir).unwrap();
+      Self(dir)
+    }
+
+    fn write(&self, rel: &str, content: &str) {
+      let path = self.0.join(rel);
+      std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+      std::fs::write(path, content).unwrap();
+    }
+
+    fn fingerprint(&self) -> String {
+      fingerprint(&self.0.to_string_lossy())
+    }
+  }
+
+  impl Drop for TempDir {
+    fn drop(&mut self) {
+      let _ = std::fs::remove_dir_all(&self.0);
+    }
+  }
+
+  #[test]
+  fn the_local_backends_state_is_never_a_change() {
+    // No `rayfin/` or `src/`, so the whole folder is walked.
+    let app = TempDir::new();
+    app.write("index.html", "<h1>Hi</h1>");
+    let before = app.fingerprint();
+    app.write(".rayfin-local/db.sqlite", "rows");
+    app.write(".rayfin-local/secrets.json", "{}");
+    app.write("web/.rayfin-local/state.json", "{}");
+    assert_eq!(app.fingerprint(), before);
+    app.write("app.js", "console.log(1)");
+    assert_ne!(app.fingerprint(), before, "a change to the app still counts");
+  }
 }

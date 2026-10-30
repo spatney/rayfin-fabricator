@@ -17,7 +17,7 @@ impl Owner {
   fn busy_message(self) -> &'static str {
     match self {
       Owner::Chat => "Copilot is still working on this project. Wait for the turn to finish (or stop it), then try again.",
-      Owner::Deploy => "This project is deploying. Wait for the deployment to finish, then try again.",
+      Owner::Deploy => "Fabricator is publishing this project. Wait for it to finish, then try again.",
       Owner::Team => "Fabricator is saving or publishing this project. Wait for it to finish, then try again.",
       Owner::Secrets => "Fabricator is updating this app's secrets. Wait for it to finish, then try again.",
     }
@@ -101,7 +101,7 @@ mod tests {
     assert!(state.chat("p").is_err());
     drop(chat);
     let deploy = state.deploy("p").unwrap();
-    assert!(state.chat("p").err().unwrap().contains("deploying"));
+    assert!(state.chat("p").err().unwrap().contains("is publishing"));
     drop(deploy);
     assert!(!state.busy("p"));
   }
@@ -138,7 +138,7 @@ mod tests {
     assert!(state.chat("p").err().unwrap().contains("secrets"));
     drop(secrets);
     let deploy = state.deploy("p").unwrap();
-    assert!(state.secrets("p").err().unwrap().contains("deploying"));
+    assert!(state.secrets("p").err().unwrap().contains("is publishing"));
     drop(deploy);
   }
 }

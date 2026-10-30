@@ -355,7 +355,7 @@ pub async fn ensure_project_tracked(project: &StudioProject) -> Result<(), Strin
 
 fn started_message(started: &Started) -> String {
   let mut message = format!(
-    "Started a version history for this app with git, so History, Restore and automatic redeploys work. \
+    "Started a version history for this app with git, so History, Restore and publishing after each chat turn work. \
      The first version has {} {}.",
     started.files,
     if started.files == 1 { "file" } else { "files" }
@@ -365,7 +365,7 @@ fn started_message(started: &Started) -> String {
     message.push_str(&format!(" Kept out: {}.", list.join(", ")));
   }
   if started.commit_error.is_some() {
-    message.push_str(" The first version couldn't be saved yet; Fabricator saves it with the next deploy.");
+    message.push_str(" The first version couldn't be saved yet; it's saved the next time you publish or commit.");
   }
   message
 }

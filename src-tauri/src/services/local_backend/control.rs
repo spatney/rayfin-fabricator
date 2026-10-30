@@ -55,17 +55,11 @@ impl fmt::Debug for ControlToken {
   }
 }
 
-// Calling the app's own routes as a user is for the Copilot tools (agent_tools),
-// which come next; until then only the tests call it.
-
 /// An access token for calls made as one of the app's users (`POST /token`).
-#[allow(dead_code)]
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccessToken {
   pub access_token: String,
-  #[serde(default)]
-  pub token_type: Option<String>,
   #[serde(default)]
   pub expires_in: Option<u64>,
   #[serde(default)]
@@ -79,7 +73,6 @@ impl fmt::Debug for AccessToken {
 }
 
 /// Who a call to the app's own backend is made as.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CallAs {
   /// No `Authorization`: an anonymous user.
@@ -91,7 +84,6 @@ pub enum CallAs {
 }
 
 /// A call to the app's own backend, such as `POST /graphql`.
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct AppCall {
   pub method: Method,
@@ -102,7 +94,6 @@ pub struct AppCall {
 }
 
 /// What the app answered, whatever the status.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppResponse {
   pub status: u16,
@@ -132,11 +123,6 @@ impl ControlClient {
       return Err(error("invalid", format!("The backend address {api_url} isn't on this computer."), None));
     }
     Ok(Self { base, token })
-  }
-
-  #[allow(dead_code)]
-  pub fn api_url(&self) -> &Url {
-    &self.base
   }
 
   /// `{apiUrl}/.rayfin-local/control/<segments>`, each segment escaped.
@@ -173,12 +159,6 @@ impl ControlClient {
     serde_json::from_str(&body).map_err(|e| error("bad-response", format!("The local backend sent an answer Fabricator couldn't read: {e}"), None))
   }
 
-  /// `GET /status`: the `ready` payload plus `state` and the last `schema`, `functions` and `vite` events.
-  #[allow(dead_code)]
-  pub async fn status(&self) -> Result<Value, LocalCommandError> {
-    Self::json(self.request(Method::GET, &["status"])).await
-  }
-
   pub async fn identity(&self) -> Result<LocalIdentity, LocalCommandError> {
     Self::json(self.request(Method::GET, &["identity"])).await
   }
@@ -212,7 +192,6 @@ impl ControlClient {
   }
 
   /// An access token for calls made as `user` (`None`: the developer identity).
-  #[allow(dead_code)]
   pub async fn token(&self, user: Option<&str>, create: bool) -> Result<AccessToken, LocalCommandError> {
     let body = json!({ "user": user, "create": create });
     Self::json(self.request(Method::POST, &["token"]).json(&body)).await
@@ -265,7 +244,6 @@ impl ControlClient {
   }
 
   /// The app's publishable key, from `{apiUrl}/rayfin.config.json`.
-  #[allow(dead_code)]
   pub async fn publishable_key(&self) -> Result<String, LocalCommandError> {
     let url = self.base.join("/rayfin.config.json").map_err(|e| error("invalid", e.to_string(), None))?;
     let (_, body) = Self::send(HTTP.get(url).timeout(TIMEOUT)).await?;
@@ -279,7 +257,6 @@ impl ControlClient {
 
   /// Call the app's own backend as `call.call_as`, the way its frontend does:
   /// with the publishable key, and a bearer token unless anonymous.
-  #[allow(dead_code)]
   pub async fn call_app(&self, call: AppCall) -> Result<AppResponse, LocalCommandError> {
     if !call.path.starts_with('/') || call.path.starts_with("//") || call.path.starts_with("/.rayfin-local") {
       return Err(error("invalid", format!("{} isn't one of the app's routes.", call.path), None));

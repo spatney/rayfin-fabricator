@@ -609,7 +609,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
       deleted: 0,
       failures: vec![],
       needs_login: None,
-      error: Some("Some recorded deployments have no Fabric workspace/item ID. Nothing was deleted.".into()),
+      error: Some("Some of this project's published apps have no Fabric workspace or item ID recorded. Nothing was deleted.".into()),
     };
   }
 
@@ -885,7 +885,7 @@ pub async fn fabric_share_app(
   let ws = workspace_id.trim().to_string();
   if ws.is_empty() {
     return FabricShareResult::failure(
-      "This deployment has no Fabric workspace id yet — deploy it before sharing.".to_string(),
+      "This published app has no Fabric workspace ID yet. Publish it before you share it.".to_string(),
     );
   }
 

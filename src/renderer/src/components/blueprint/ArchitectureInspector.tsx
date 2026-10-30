@@ -375,8 +375,8 @@ function AppDetails({ arch, project, deploy, workspaceName, onClose, onOpenFile,
       <Facts
         rows={[
           ['Workspace', workspaceName],
-          ['Address', deploy.url ? host(deploy.url) : 'Not deployed yet'],
-          ['Last deploy', project.lastDeploy?.at && relativeTime(project.lastDeploy.at)],
+          ['Address', deploy.url ? host(deploy.url) : 'Not published yet'],
+          ['Last published', project.lastDeploy?.at && relativeTime(project.lastDeploy.at)],
           ['Project', project.path]
         ]}
       />
@@ -451,8 +451,8 @@ function IdentityDetails({
             <SecretsLink arch={arch} onSelect={onSelect} />
           ) : (
             <p className="bp-insp-note">
-              None. Store keys with <code>rayfin secret set</code> and read them from <code>ctx.Secrets</code>, so
-              they never sit in the code.
+              None. Add keys in Code → <strong>Secrets</strong> and read them from <code>ctx.Secrets</code>, so they
+              never sit in the code.
             </p>
           )}
         </Section>
@@ -511,9 +511,9 @@ function IdentityDetails({
             <strong>{appIdentityName(appIdentity, Boolean(deploy.url))}</strong>
             <span>
               {appIdentity.kind === 'service-principal'
-                ? 'Service principal that deploys the published app'
+                ? 'Service principal that publishes the app'
                 : appIdentity.kind === 'account'
-                  ? 'Your Fabric account, which deploys this app'
+                  ? 'Your Fabric account, which publishes this app'
                   : 'Owner of the Fabric app item'}
             </span>
           </div>
@@ -526,7 +526,7 @@ function IdentityDetails({
         )}
         {appIdentity.kind === 'account' && (
           <p className="bp-insp-note">
-            The owner is the account that created the app with its first deploy. If someone else deployed it
+            The owner is the account that created the app by publishing it first. If someone else published it
             first, it runs as them.
           </p>
         )}
@@ -536,8 +536,8 @@ function IdentityDetails({
       </Section>
       {arch.functions && sources.some((s) => s.audience) && (
         <p className="bp-insp-note">
-          While you test locally with <code>rayfin dev</code>, functions use your own sign-in instead, so a call
-          that works on your computer can still fail once deployed.
+          When the app runs on your computer, functions use your own sign-in instead, so a call that works there can
+          still fail once the app is published.
         </p>
       )}
       <DocLink href={DOCS.identities}>Delegated and application access</DocLink>
@@ -757,7 +757,7 @@ function ServiceDetails(props: Props & { svc: ServiceNode }): JSX.Element {
   }
 }
 
-/** What the deployed app holds, for the Secrets panel: by name, or why it can't say. */
+/** What the published app holds, for the Secrets panel: by name, or why it can't say. */
 type StoredValues = { status: 'loading' } | { status: SecretsState['status'] | 'unavailable'; byName: Map<string, SecretInfo>; signIn?: boolean }
 
 function useStoredSecrets(projectId: string): StoredValues {
@@ -808,7 +808,7 @@ function SecretsDetails({
   const stored = useStoredSecrets(project.id)
   const known = stored.status === 'ready' || stored.status === 'team'
   const byName = stored.status === 'loading' ? new Map<string, SecretInfo>() : stored.byName
-  // Values the deployed app holds that neither rayfin.yml nor the code mention.
+  // Values the published app holds that neither rayfin.yml nor the code mention.
   const extra = known
     ? [...byName.values()].filter((s) => !arch.keys.secrets.some((k) => k.name === s.name))
     : []
@@ -851,9 +851,9 @@ function SecretsDetails({
       }
     >
       <p className="bp-insp-lead">
-        API keys, passwords and connection strings for the functions. Values are stored on the deployed Fabric app,
-        never in the code: <code>rayfin.yml</code> keeps only their names and descriptions, and functions read them
-        as <code>ctx.Secrets.NAME</code>.
+        API keys, passwords and connection strings for the functions. Their values stay out of the code: the published
+        app keeps its own, and so does your computer when the app runs there. <code>rayfin.yml</code> keeps only their
+        names and descriptions, and functions read them as <code>ctx.Secrets.NAME</code>.
       </p>
       <Issues
         issues={[
@@ -863,7 +863,7 @@ function SecretsDetails({
             ? [
                 {
                   tone: 'warn' as const,
-                  text: `The deployed app has no value for ${missing.map((s) => `\`${s.name}\``).join(', ')}, so a function that reads ${missing.length === 1 ? 'it' : 'them'} fails.`
+                  text: `The published app has no value for ${missing.map((s) => `\`${s.name}\``).join(', ')}, so a function that reads ${missing.length === 1 ? 'it' : 'them'} fails there.`
                 }
               ]
             : [])
@@ -917,7 +917,7 @@ function SecretsDetails({
                 </span>
                 <span className="bp-list-text">
                   <strong className="bp-mono">{s.name}</strong>
-                  <span className="bp-list-sub">Stored on the app only</span>
+                  <span className="bp-list-sub">On the published app only</span>
                 </span>
                 <SecretStatus secret={s} />
               </div>
@@ -926,17 +926,17 @@ function SecretsDetails({
         </ul>
         <p className="bp-insp-note">
           {stored.status === 'loading'
-            ? 'Checking which values the deployed app has…'
+            ? 'Checking which values the published app has…'
             : stored.status === 'not-deployed'
-              ? 'Values are stored with the deployed app, so they can be added once it’s deployed.'
+              ? 'Values for the published app can be added once it’s published.'
               : stored.status === 'team'
-                ? 'Shows the published app’s values. Each deployment of a team app keeps its own.'
+                ? 'Shows the published app’s values. The published app and each person’s preview keep their own.'
                 : stored.status === 'update-rayfin'
                   ? 'Update the app’s Rayfin version to see which values are set.'
                   : stored.status === 'error'
                     ? stored.signIn
-                      ? 'Couldn’t check the deployed app’s values. Your Fabric sign-in may have expired.'
-                      : 'Couldn’t check the deployed app’s values.'
+                      ? 'Couldn’t check the published app’s values. Your Fabric sign-in may have expired.'
+                      : 'Couldn’t check the published app’s values.'
                     : stored.status === 'ready'
                       ? 'Values are write-only: Fabricator shows whether one is set, never what it is.'
                       : null}
@@ -948,8 +948,7 @@ function SecretsDetails({
         </Section>
       )}
       <p className="bp-insp-note">
-        While you test with <code>rayfin dev</code>, functions read values from{' '}
-        <code>rayfin/functions/local.settings.json</code> instead.
+        When the app runs on your computer, its functions read local values instead of the published app’s.
       </p>
       <DocLink href={DOCS.secrets}>Secrets in functions</DocLink>
     </Panel>

@@ -532,7 +532,7 @@ async fn start_server(app: AppHandle, state: DevServers, project_id: String, req
             if !result.ok {
                 let detail: String = result.stderr.trim().chars().take(600).collect();
                 env_renderer(Stream::System, &format!(
-                    "\nLocal Vite is independent of deployment, but backend environment refresh failed. The app may need sign-in or a first deployment. {detail}\n"
+                    "\nThe app's Vite runs anyway, but refreshing its backend settings failed. The app may need a Fabric sign-in, or to be published first. {detail}\n"
                 ));
             }
         });
@@ -865,7 +865,7 @@ async fn register_port(app: AppHandle, project_id: String, port: u16) -> DeployR
         renderer(Stream::System, &format!("Added {origin} to rayfin/rayfin.yml.\n"));
     }
     if !has_backend(&project) {
-        renderer(Stream::System, "This app isn't deployed yet; its first deploy registers the new port.\n");
+        renderer(Stream::System, "This app isn't published yet; publishing it registers the new port.\n");
         return register_result(true, "success", None);
     }
     renderer(Stream::System, "Pushing sign-in settings to Fabric (the app isn't rebuilt)…\n");

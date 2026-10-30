@@ -262,7 +262,7 @@ static CATALOG: &[SkillDef] = &[
     description: "Well-shaped Rayfin entities, relationships and queries.",
     icon: "🗃️",
     category: DATA,
-    version: "2.1.0",
+    version: "2.2.0",
     trigger: r#"Design the app's data as well-shaped Rayfin entities with clear relationships, ownership and efficient queries. Use when adding or changing entities, fields, relationships or queries. Triggers: data model, schema, entity, table, field, relationship, foreign key, query, Rayfin data, migration, normalization, one-to-many, many-to-many, schema.ts, rayfin/data, packages/data"#,
     body: r#"The app's data lives in Rayfin: decorated entity classes registered in the app's schema. Most apps keep them in `rayfin/data/`, registered in `rayfin/data/schema.ts`. When `rayfin/rayfin.yml` names a data package (`services.data.path`, such as `packages/data`), they live in that package's `src/` and are registered in its `src/index.ts`. Follow the `rayfin` skill for the exact decorators and client calls; this skill covers the design.
 
@@ -286,7 +286,7 @@ static CATALOG: &[SkillDef] = &[
 - There's no `count()`. Keep counted lists small, or store a running total when a count is needed often.
 
 ## Changing the model
-- Prefer adding fields to renaming or removing them. Renames and removals can delete data in the deployed app, so call them out in your summary.
+- Prefer adding fields to renaming or removing them. Renames and removals can delete the app's data, so call them out in your summary.
 
 ## Before you finish
 - Review: every entity is registered, every text field has a `max`, relationships use `@one` and `@many`, and every list query is bounded or paged."#,
@@ -394,7 +394,7 @@ static CATALOG: &[SkillDef] = &[
     description: "Per-user data rules, signed-in pages and no secrets in the browser.",
     icon: "🔒",
     category: QUALITY,
-    version: "1.0.0",
+    version: "1.1.0",
     trigger: r#"Keep the app's data and users safe by default. Use when adding sign-in, entities, permissions, sharing or admin features, or anything that reads or writes people's data. Triggers: security, secure, permissions, access control, row-level security, RLS, policy, private data, owner, sign in, authentication, authorization, secrets, API key, admin, sharing, roles"#,
     body: r#"Assume any request can come from anyone. The browser can't enforce security; Rayfin's data rules can.
 
@@ -406,11 +406,11 @@ static CATALOG: &[SkillDef] = &[
 
 ## Sign-in
 - Pages that show or change personal data require sign-in. Gate them on the session and show a friendly sign-in prompt instead of an empty page.
-- Use Rayfin auth; never build your own password storage or tokens. Deployed Fabric apps sign people in with Microsoft Entra ID.
+- Use Rayfin auth; never build your own password storage or tokens. Published Fabric apps sign people in with Microsoft Entra ID.
 - Never trust identity sent from the browser, such as a user id, email or role in a form field. Rely on the claims in the session.
 
 ## Secrets
-- Anything in frontend code, `VITE_` variables or the repository is public. Keys belong on the server: Rayfin functions can read secrets set with `npx rayfin secret set` (functions aren't available in every Fabric region or tenant).
+- Anything in frontend code, `VITE_` variables or the repository is public. Keys belong on the server, in Rayfin functions (functions aren't available in every Fabric region or tenant). Declare each key under `secrets:` in `rayfin/rayfin.yml` with a description, and read it as `ctx.Secrets.<NAME>`. Ask the user to add its value in Fabricator's **Secrets** view; never ask for a value in chat or write one into a file.
 
 ## Input and output
 - Validate input against the data model. Render user content as text; never inject it as HTML (`dangerouslySetInnerHTML`, `innerHTML`) without sanitizing it.
@@ -460,7 +460,7 @@ fn managed_presentation(id: &str) -> Option<(&'static str, &'static str, &'stati
   match id {
     "rayfin" => Some((
       "Rayfin essentials",
-      "Core Rayfin knowledge: data models, sign-in, deploys and the CLI.",
+      "Core Rayfin knowledge: data models, sign-in, publishing and the CLI.",
       "◆",
     )),
     "rayfin-functions" => Some(("Rayfin Functions", "Server-side functions your app can call.", "λ")),
@@ -479,22 +479,22 @@ const AGENT_INSTRUCTIONS: &str = r#"# Fabricator — agent guidance
 
 This is a **Rayfin app** (a Microsoft Fabric Backend-as-a-Service app). You are the
 coding agent running inside **Fabricator**, a desktop app that drives you plus the
-Rayfin CLI to build and deploy this app.
+Rayfin CLI to build this app and publish it to Microsoft Fabric.
 
 ## Rules
 - **Make the requested code changes only.** Edit files to implement what the user asks.
 - **Do NOT run `rayfin up` or otherwise deploy**, even when the user, `AGENTS.md` or a skill
-  (such as `app-deployment` or `rayfin`) says to deploy. Fabricator runs the full `rayfin up`
-  automatically after your changes and shows the deployed app in its preview, so don't ask the
-  user which workspace to deploy to either.
-- Do **not** start dev servers or run the app locally — it is only ever run via deploy.
+  (such as `app-deployment` or `rayfin`) says to deploy. Fabricator publishes the app itself
+  with the full `rayfin up`, so don't ask the user which workspace to publish to either.
+- Do **not** start dev servers or run the app yourself — Fabricator runs it and shows it in its
+  preview.
 - Keep the project building; prefer small, correct changes.
 - Only use what Rayfin natively provides (data, auth, file storage, functions, static
   hosting). Do **not** add external services like payment processors or email senders.
 - Detailed Rayfin SDK/CLI guidance lives in the `rayfin` skill (`.agents/skills/rayfin`);
   additional enabled skills live alongside it under `.agents/skills/`.
 
-When you finish editing, briefly summarize what you changed — Fabricator handles the deploy.
+When you finish editing, briefly summarize what you changed — Fabricator handles publishing.
 "#;
 
 const GENERATED_MARKER: &str = "Generated by Rayfin Fabricator";
@@ -1267,7 +1267,7 @@ mod tests {
     assert_eq!(written, AGENT_INSTRUCTIONS);
     // Templates (like the Rayfin CLI's Universal App) and the `rayfin` skill
     // describe a terminal deploy; the contract overrides them.
-    for marker in ["Do NOT run `rayfin up`", "`AGENTS.md`", "`app-deployment`", "which workspace to deploy to"] {
+    for marker in ["Do NOT run `rayfin up`", "`AGENTS.md`", "`app-deployment`", "which workspace to publish to"] {
       assert!(written.contains(marker), "operating contract should mention {marker}");
     }
     // A file the user wrote themselves is kept.

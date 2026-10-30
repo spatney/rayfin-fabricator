@@ -42,8 +42,8 @@ const EXPORT_LOCAL_PROJECTS: usize = 6;
 
 /// The folder under the logs directory where the local backend supervisor
 /// (`services::local_backend`) keeps each project's output, as `<id>.log`
-/// rolled over to `<id>.log.1`.
-pub const LOCAL_LOG_DIR: &str = "local-backend";
+/// rolled over to `<id>.log.1` (see [`local_log_files`]).
+pub use super::local_backend::LOG_DIR as LOCAL_LOG_DIR;
 
 /* ----------------------------- redaction ----------------------------- */
 
@@ -107,28 +107,15 @@ fn mask_home(text: &str, home: &Path) -> String {
 
 /* ----------------------------- local backend logs ----------------------------- */
 
-/// A project id as the supervisor names its log file: ids are UUIDs, and
-/// anything else is made safe as `services::local_backend` does.
-fn local_log_name(project_id: &str) -> String {
-  let name: String =
-    project_id.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
-  if name.is_empty() {
-    "_".into()
-  } else {
-    name
-  }
-}
-
 /// A project's local backend log files under `logs`, oldest first: the rolled
-/// over `<id>.log.1`, then the current `<id>.log`.
+/// over `<id>.log.1`, then the current `<id>.log`, as the supervisor names them.
 pub fn local_log_files(logs: &Path, project_id: &str) -> [PathBuf; 2] {
-  let dir = logs.join(LOCAL_LOG_DIR);
-  let name = local_log_name(project_id);
-  [dir.join(format!("{name}.log.1")), dir.join(format!("{name}.log"))]
+  super::local_backend::log_files(&logs.join(LOCAL_LOG_DIR), project_id)
 }
 
 /// The last `max_lines` lines of a project's local backend log, oldest first,
-/// exactly as written (`<time> <source> <level> <line>`), not yet redacted.
+/// exactly as written (`<time> <source> <level> <line>`): credentials are
+/// masked as lines are written, but nothing else is redacted yet.
 pub fn local_log_lines(logs: &Path, project_id: &str, max_lines: usize) -> Vec<String> {
   let mut lines: Vec<String> = Vec::new();
   for path in local_log_files(logs, project_id) {

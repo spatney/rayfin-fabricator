@@ -13,13 +13,13 @@ export const PORT_LABEL: Record<Identity, string> = {
 }
 
 /** The app identity in a few words: who it is, or how it will be decided. */
-export function appIdentityName(identity: AppIdentityInfo, deployed: boolean): string {
-  return identity.who ?? (deployed ? 'The account that first deployed it' : 'Whoever deploys it first')
+export function appIdentityName(identity: AppIdentityInfo, published: boolean): string {
+  return identity.who ?? (published ? 'The account that first published it' : 'Whoever publishes it first')
 }
 
 export const IDENTITY_ICON: Record<Identity, string> = { user: 'person', app: 'robot', key: 'key' }
 
-/** A deployed app's links: its own address, and its item in the Fabric portal. */
+/** A published app's links: its own address, and its item in the Fabric portal. */
 export interface DeployState {
   url?: string
   portalUrl?: string
@@ -54,7 +54,7 @@ export function hueOf(text: string): number {
   return h
 }
 
-/** The Fabric workspace the app is deployed to, as a lowercase id, when known. */
+/** The Fabric workspace the app is published to, as a lowercase id, when known. */
 export function appWorkspaceId(project: StudioProject): string | undefined {
   const fromPortal = /\/groups\/([0-9a-f-]{36})/i.exec(project.lastDeploy?.portalUrl ?? '')?.[1]
   if (fromPortal) return fromPortal.toLowerCase()

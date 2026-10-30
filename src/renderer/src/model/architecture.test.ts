@@ -437,7 +437,7 @@ udf.func('openai', async () => fetch('https://api.openai.com/v1/responses'), [])
     const secrets = arch.services.find((s) => s.kind === 'secrets')!
     expect(secrets).toMatchObject({ summary: '2 secrets, stored with the app', tone: 'danger' })
     expect(secrets.issues.map((i) => i.text)).toEqual([
-      '`REDDIT_SECRET` is read as `ctx.Secrets` but not declared in rayfin.yml, which is a TypeScript error. Declare it with `rayfin secret set`.'
+      '`REDDIT_SECRET` is read as `ctx.Secrets` but not declared in rayfin.yml, which is a TypeScript error. Add it in Code → Secrets, which declares it in rayfin.yml.'
     ])
   })
 
