@@ -7821,9 +7821,8 @@ button.deploy-trouble-ray:focus-visible {
 
 .update-modal__notes {
   margin: 0 0 10px;
-  max-height: 160px;
+  max-height: 240px;
   overflow-y: auto;
-  white-space: pre-wrap;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text-dim);
@@ -7831,6 +7830,19 @@ button.deploy-trouble-ray:focus-visible {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px;
+}
+
+/* Release notes' headings stay close to the notes' own size. */
+.update-modal__notes .md h1,
+.update-modal__notes .md h2,
+.update-modal__notes .md h3,
+.update-modal__notes .md h4 {
+  margin: 12px 0 6px;
+  font-size: 13.5px;
+}
+
+.update-modal__notes .md > :first-child {
+  margin-top: 0;
 }
 
 .update-modal__hint {

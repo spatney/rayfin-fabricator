@@ -1,5 +1,6 @@
 import { useUpdates } from '../update'
 import ConfirmModal from './ConfirmModal'
+import Markdown from './Markdown'
 
 import type { JSX } from 'react'
 
@@ -28,7 +29,12 @@ export default function UpdateModal(): JSX.Element | null {
           {info.currentVersion} → {version}
         </p>
       )}
-      {info?.notes && <div className="update-modal__notes">{info.notes}</div>}
+      {/* The release's notes are the GitHub release's Markdown. */}
+      {info?.notes && (
+        <div className="update-modal__notes">
+          <Markdown>{info.notes}</Markdown>
+        </div>
+      )}
       <p className="update-modal__hint">
         You can install now, or choose Later to keep using this version and update anytime.
       </p>
