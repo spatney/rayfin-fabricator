@@ -3,7 +3,7 @@ title: "Blueprint: architecture and data models"
 description: "Use Blueprint to see what your app is made of, what it connects to and which identity each connection uses, its Rayfin data model, the Fabric data it reads, and its local data."
 ---
 
-Use **Blueprint** to see how your app is put together. The **Architecture** view shows what the app is made of, what it connects to, and which identity each connection uses. The **Data model** view shows the Rayfin data model, and the **Fabric data** view shows the Fabric data the app connects to: its semantic models, and the tables of its SQL databases, warehouses and lakehouses. With the **Local development** experiment on, the **Data** view shows the data your app stores on this computer.
+Use **Blueprint** to see how your app is put together. The **Architecture** view shows what the app is made of, what it connects to, and which identity each connection uses. The **Data model** view shows the Rayfin data model, and the **Fabric data** view shows the Fabric data the app connects to: its semantic models, and the tables of its SQL databases, warehouses and lakehouses. The **Data** view shows the data your app stores on this computer.
 
 ![The Architecture view of the Contoso Expenses sample app. People on the left connect to the app in the middle, which lists its app identity and its pieces: Website, Sign-in, Database, File storage, Connectors, Functions and Secrets. Lines run from the Connectors and Functions ports to the semantic models, warehouse, Azure services and web API on the right, grouped by where they live.](/screenshots/blueprint.webp)
 
@@ -11,7 +11,7 @@ Use **Blueprint** to see how your app is put together. The **Architecture** view
 
 1. Open a project.
 2. Select **Blueprint** in the project tabs.
-3. Choose **Architecture**, **Data model**, **Data** or **Fabric data**. **Data** appears with the Local development experiment on. **Fabric data** appears when the app connects to a semantic model, SQL database, warehouse or lakehouse.
+3. Choose **Architecture**, **Data model**, **Data** or **Fabric data**. **Fabric data** appears when the app connects to a semantic model, SQL database, warehouse or lakehouse.
 
 Fabricator remembers the view you chose for the project.
 
@@ -48,7 +48,7 @@ The app identity is the owner of the app's Fabric item:
 
 Select **App identity** to see which sources the app identity needs access to, and select **Ask Copilot what to grant** to ask which role to give it on each one.
 
-While your app runs on this computer, with the Local development experiment on, these connections run as you instead, so a call that works there can still fail once the app is published. See [Who the app runs as](/docs/build/local-development#who-the-app-runs-as).
+While your app runs on this computer, these connections run as you instead, so a call that works there can still fail once the app is published. See [Who the app runs as](/docs/build/local-development#who-the-app-runs-as).
 
 ## When the website's pages load
 
@@ -156,10 +156,7 @@ Add Project and Task entities. A project has many tasks. Tasks have a title, due
 
 ## See your app's local data
 
-> [!WARNING]
-> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
-
-With the **Local development** experiment on, your app runs on this computer with its own data. The **Data** view shows that data as the app's local backend stores it. You can't edit rows there, but you can delete them: see [Clear or reset local data](/docs/build/data-model#clear-or-reset-local-data). For how the app runs on this computer, see [Develop on this computer](/docs/build/local-development).
+Your app runs on this computer with its own data. The **Data** view shows that data as the app's local backend stores it. You can't edit rows there, but you can delete them: see [Clear or reset local data](/docs/build/data-model#clear-or-reset-local-data). For how the app runs on this computer, see [Develop on this computer](/docs/build/local-development).
 
 ![Blueprint's Data view of the sample app's local data: 4 entities · 24 rows and the running local backend in the header, the note that local data is separate from the published app's, the Expense entity's 12 rows with each column's name and type, the other entities and Local users with their counts, and Refresh, Reset local data and Clear rows.](/screenshots/local-data.webp)
 
@@ -261,8 +258,8 @@ each request connected.
 Copilot adds each one with `rayfin connector add` and wires it into the app. Data the app
 already connects to is marked **Connected**. The dialog starts in the workspace this app
 is published to, when it has one, but the app doesn't need to be published to connect data.
-With the Local development experiment on, your app reads the data you connect with your
-Azure sign-in while it runs on this computer. See
+While your app runs on this computer, it reads the data you connect with your
+Azure sign-in. See
 [Who the app runs as](/docs/build/local-development#who-the-app-runs-as).
 
 Fabricator doesn't offer KQL databases: Rayfin 1.36 can't add new KQL database connectors.

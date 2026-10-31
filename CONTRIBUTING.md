@@ -6,14 +6,11 @@ Repository: https://github.com/spatney/rayfin-fabricator
 
 ## What this project is
 
-Fabricator is a desktop app for Windows and macOS (Apple Silicon) for building "Rayfin apps" via chat. It uses Tauri v2 with a Rust backend and a React 19 + TypeScript renderer built with Vite. It wraps the GitHub Copilot CLI for authoring, can run apps on your computer with rayfin-local, a local Rayfin backend it bundles, and uses each project's Rayfin CLI (`rayfin up`) to publish apps to Microsoft Fabric.
+Fabricator is a desktop app for Windows and macOS (Apple Silicon) for building "Rayfin apps" via chat. It uses Tauri v2 with a Rust backend and a React 19 + TypeScript renderer built with Vite. It wraps the GitHub Copilot CLI for authoring, runs apps on your computer with rayfin-local, a local Rayfin backend it bundles, and uses each project's Rayfin CLI (`rayfin up`) to publish apps to Microsoft Fabric.
 
-You author locally. How an app runs while you build it depends on the **Local development** experiment (**Settings → Experiments**, off by default):
+You author locally. Each personal app runs on this computer from the moment it's created. The bundled rayfin-local serves its whole backend (the data API with its policies, sign-in, functions, connectors and storage) and the app's own Vite, and keeps the app's local data in the project's `.rayfin-local/` folder. The preview shows that app, and Copilot checks its work against it with Fabricator's `fabricator_local_status` and `fabricator_local_call` tools. Publishing to Microsoft Fabric is optional: select **Publish**, or turn on **Publish after each chat turn**.
 
-- **On:** each personal app runs on this computer from the moment it's created. The bundled rayfin-local serves its whole backend (the data API with its policies, sign-in, functions, connectors and storage) and the app's own Vite, and keeps the app's local data in the project's `.rayfin-local/` folder. The preview shows that app, and Copilot checks its work against it with Fabricator's `fabricator_local_status` and `fabricator_local_call` tools. Publishing to Microsoft Fabric is optional: select **Publish**, or turn on **Publish after each chat turn**.
-- **Off:** apps are developed against their Fabric deployment. A new app is published before chat unlocks, chat turns publish it again unless you turn **Publish after each chat turn** off, and the preview shows the published app. When the project has Vite installed, Fabricator runs the app's Vite locally during chat turns, against the published backend.
-
-Team apps (the **Team workspaces** experiment) work the same either way: the team's pipeline publishes each member's preview to Fabric. A published app the local backend can't run, such as one with a Kusto connector, previews against its published backend too.
+Team apps (the **Team workspaces** experiment) work differently: the team's pipeline publishes each member's preview to Fabric, and during chat turns Fabricator runs the app's Vite locally against that backend. A published app the local backend can't run, such as one with a Kusto connector, previews against its published backend the same way.
 
 ## Prerequisites
 
@@ -119,7 +116,7 @@ flowchart TD
   subgraph Local["This computer"]
     Files["Project files under workspace/"]
     Git["Git history"]
-    Backend["rayfin-local sidecar<br/>local Rayfin backend (Local development)"]
+    Backend["rayfin-local sidecar<br/>local Rayfin backend"]
     Vite["The app's Vite dev server"]
     State[".rayfin-local/<br/>local database, keys, secret values"]
   end
@@ -161,7 +158,7 @@ flowchart TD
 
 A React renderer drives the workbench, chat, editor, Blueprint, preview, publishing, advisor, settings, skills, and history. A Tauri v2 Rust core owns the IPC handlers in `src-tauri/src/commands/` and the services in `src-tauri/src/services/` for running external tools, supervising each project's local backend, persistence, preview hosting, telemetry, history, crash logs, auto-updates, and path management.
 
-Fabricator wraps the tools you'd otherwise run by hand. It drives the GitHub Copilot CLI to author, runs each app on this computer with rayfin-local while you build (with Local development on), shells out to the Rayfin CLI to publish to Microsoft Fabric, tracks your project with git, and loads the running app — on this computer, or published to Fabric — into the embedded preview. Copilot checks the app through Fabricator's `fabricator_local_status` and `fabricator_local_call` tools, and its chat sandbox keeps it out of `.rayfin-local/`. The Advisor closes the loop: instant rule checks plus an on-demand, read-only Copilot review flag issues like unguarded routes, loose database policies, or unbounded text columns, and it tells you when a review has gone stale.
+Fabricator wraps the tools you'd otherwise run by hand. It drives the GitHub Copilot CLI to author, runs each app on this computer with rayfin-local while you build, shells out to the Rayfin CLI to publish to Microsoft Fabric, tracks your project with git, and loads the running app — on this computer, or published to Fabric — into the embedded preview. Copilot checks the app through Fabricator's `fabricator_local_status` and `fabricator_local_call` tools, and its chat sandbox keeps it out of `.rayfin-local/`. The Advisor closes the loop: instant rule checks plus an on-demand, read-only Copilot review flag issues like unguarded routes, loose database policies, or unbounded text columns, and it tells you when a review has gone stale.
 
 ## Documentation site
 
@@ -202,7 +199,7 @@ npm run check:docs   # content lint
 
 ## The rayfin-local sidecar
 
-With the **Local development** experiment on, Fabricator runs [rayfin-local](https://github.com/spatney/rayfin-local) for each open personal project: it serves a Rayfin app and its whole backend locally, and keeps the app's local state in the project's `.rayfin-local/` folder. Fabricator supervises it (`src-tauri/src/services/local_backend/`), keeps its output in memory and under the logs folder with credentials masked, and controls it through its loopback-only control API. It ships inside the app as a Tauri sidecar (`bundle.externalBin` in `src-tauri/tauri.conf.json`): Cargo builds of `src-tauri` copy `src-tauri/binaries/rayfin-local-<target triple>[.exe]` next to the app's executable (for example to `src-tauri/target/debug/rayfin-local.exe`), and the Windows installer and the macOS app bundle install it there too.
+Fabricator runs [rayfin-local](https://github.com/spatney/rayfin-local) for each open personal project: it serves a Rayfin app and its whole backend locally, and keeps the app's local state in the project's `.rayfin-local/` folder. Fabricator supervises it (`src-tauri/src/services/local_backend/`), keeps its output in memory and under the logs folder with credentials masked, and controls it through its loopback-only control API. It ships inside the app as a Tauri sidecar (`bundle.externalBin` in `src-tauri/tauri.conf.json`): Cargo builds of `src-tauri` copy `src-tauri/binaries/rayfin-local-<target triple>[.exe]` next to the app's executable (for example to `src-tauri/target/debug/rayfin-local.exe`), and the Windows installer and the macOS app bundle install it there too.
 
 - `rayfin-local.json` pins the release and the SHA-256 of each platform's archive. `scripts/rayfin-local/fetch.mjs` downloads the archive, checks it against the pin and unpacks the binary with the system `tar`. A stamp file next to the binary skips the download until the pin changes.
 - `npm ci` runs the fetch but only warns when it can't, for example offline, or on Linux, which Fabricator doesn't ship for. `npm run dev`, `npm run build` and `npm run rayfin-local:fetch` fail instead. Add `-- --target <triple>` to fetch for another target, or `-- --force` to download again.

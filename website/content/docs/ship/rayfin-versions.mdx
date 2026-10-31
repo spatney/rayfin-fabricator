@@ -3,13 +3,13 @@ title: "Keep Rayfin up to date"
 description: "Know when a project's Rayfin CLI and SDK are out of date, and let Copilot upgrade them together while keeping the app building."
 ---
 
-Each Rayfin app pins its own Rayfin CLI and SDK packages. Fabricator reads those installed package versions and, when a newer Rayfin release is available, offers the update in the status bar. With the **Local development** experiment on, it offers updates only up to the newest release it runs on this computer, so your app keeps running here.
+Each Rayfin app pins its own Rayfin CLI and SDK packages. Fabricator reads those installed package versions and, when a newer Rayfin release is available, offers the update in the status bar. For an app other than a team app, it offers updates only up to the newest release it runs on this computer, so your app keeps running here.
 
 ![The Rayfin version control in the status bar, opened to show that the Rayfin CLI and SDK can be updated from 1.35.1 to 1.36.2 with Update with Copilot.](/screenshots/rayfin-version.webp)
 
 ## Read the Rayfin status
 
-When a newer Rayfin release is on npm, the status bar shows the project's version as `Rayfin v<version>`, followed by the latest version, such as `↑ 1.36.2`. With Local development on, it counts only the releases Fabricator runs on this computer. When the project is up to date, the status bar shows nothing for Rayfin.
+When a newer Rayfin release is on npm, the status bar shows the project's version as `Rayfin v<version>`, followed by the latest version, such as `↑ 1.36.2`. For an app other than a team app, it counts only the releases Fabricator runs on this computer. When the project is up to date, the status bar shows nothing for Rayfin.
 
 Open it to see separate rows for:
 
@@ -40,10 +40,10 @@ The update reaches your published app the way any chat change does: when the tur
 
 ## Updates stop at the release Fabricator runs locally
 
-With Local development on, Fabricator runs your app on this computer with a local backend that runs one line of Rayfin releases, such as 1.36.x. So:
+Fabricator runs your app on this computer with a local backend that runs one line of Rayfin releases, such as 1.36.x. So:
 
-- **Update with Copilot** offers the newest release on that line, and asks Copilot to upgrade to "the newest version Fabricator runs on this computer".
-- New projects pin every `@microsoft/rayfin-*` package to that line with a `~` range, such as `~1.36.0`, so a later `npm install` doesn't move them to a release Fabricator can't run yet.
+- **Update with Copilot** offers the newest release on that line, and asks Copilot to upgrade to "the newest version Fabricator runs on this computer". For a team app, which doesn't run on this computer, it offers the latest release.
+- New projects, team apps included, pin every `@microsoft/rayfin-*` package to that line with a `~` range, such as `~1.36.0`, so a later `npm install` doesn't move them to a release Fabricator can't run yet.
 - The Advisor flags **Rayfin packages aren't pinned to a release Fabricator runs locally** when a package is outside that line, or declared with a range that lets the next install leave it.
 
 An app on another release can misbehave on this computer. Once it's published, its preview uses the published app's backend instead. See [What runs only on Fabric](/docs/build/local-development#what-runs-only-on-fabric).
@@ -56,10 +56,7 @@ The CLI and SDK version independently, but newer releases carry fixes and match 
 
 ## Minimum version for current Fabricator features
 
-Team workspaces require Rayfin **1.36.2 or newer**. New projects start on:
-
-- the latest Rayfin release, with Local development off, because Fabricator creates them with the latest Rayfin CLI,
-- the newest release Fabricator runs on this computer, pinned to that line, with Local development on. New team apps always start that way.
+Team workspaces require Rayfin **1.36.2 or newer**. New projects, team apps included, start on the newest release Fabricator runs on this computer, pinned to that line.
 
 Older existing projects keep their pinned dependencies until you update them.
 
@@ -71,14 +68,14 @@ When you open a project, Fabricator checks that the project's Rayfin CLI and the
 
 If installation fails, Fabricator shows **Couldn't install project dependencies** with **Retry installation** and **Switch projects**.
 
-With Local development on, when your app's packages, or its functions' packages, aren't installed, the preview says "Your app’s packages aren’t installed" and offers **Install dependencies**. See [When your app doesn't start](/docs/build/preview#when-your-app-doesnt-start).
+When your app's packages, or its functions' packages, aren't installed, the preview says "Your app’s packages aren’t installed" and offers **Install dependencies**. See [When your app doesn't start](/docs/build/preview#when-your-app-doesnt-start).
 
 ## Manual upgrade prompt
 
-Use this if you want to start the upgrade yourself from the chat instead of the status-bar button:
+Use this for a team app if you want to start the upgrade yourself from the chat instead of the status-bar button:
 
 ```prompt title="Upgrade Rayfin packages"
 Upgrade this app to the latest Rayfin release. Keep all Rayfin SDK packages on the same exact version, update the Rayfin CLI package too, run npm install, then check the installed Rayfin docs for deprecations or known limitations and update the app so it still builds.
 ```
 
-With Local development on, use **Update with Copilot** instead: the latest release may be one Fabricator can't run on this computer yet.
+For other apps, use **Update with Copilot** instead: the latest release may be one Fabricator can't run on this computer yet.

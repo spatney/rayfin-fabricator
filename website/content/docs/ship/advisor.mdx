@@ -45,16 +45,16 @@ Use the refresh icon in the Advisor bar to re-run quick checks.
 
 ## Checks for apps that run on this computer
 
-With the **Local development** experiment on, Fabricator runs your app on this computer, and some quick checks are about what works there but not when published, or the other way round:
+Fabricator runs your app on this computer, so some quick checks are about what works there but not when published, or the other way round. Except where the table says so, they don't apply to team apps, which run on their pipeline's backend:
 
 | Check | What it finds |
 | --- | --- |
 | **Local backend folder isn't git-ignored** | Git could commit the project's `.rayfin-local` folder, where the local backend keeps the app's local database, its signing keys and the local values of your secrets. It checks any project that has the folder. |
 | **Connector runs only on Fabric** | A connector of a type that doesn't run on this computer, such as a KQL database (Kusto) connector. Until the app is published, its calls fail in the preview. |
 | **Rayfin packages aren't pinned to a release Fabricator runs locally** | A `@microsoft/rayfin-*` package outside the line of releases Fabricator runs, such as 1.36.x, or declared with a range that lets the next install leave it. |
-| **Anonymous data access may block publishing** | Entities that grant the `anonymous` role. Publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps, even though they work in the local preview. This check runs with Local development off too. |
+| **Anonymous data access may block publishing** | Entities that grant the `anonymous` role. Publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps, even though they work in the local preview. This check runs for team apps too. |
 
-With Local development on, **Rayfin CLI is out of date** and **Rayfin SDK is out of date** count only the releases Fabricator runs on this computer. See [Develop on this computer](/docs/build/local-development).
+For an app other than a team app, **Rayfin CLI is out of date** and **Rayfin SDK is out of date** count only the releases Fabricator runs on this computer. See [Develop on this computer](/docs/build/local-development).
 
 ## Run a deep review
 

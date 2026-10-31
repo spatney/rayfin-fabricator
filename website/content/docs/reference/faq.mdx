@@ -15,11 +15,11 @@ The app uses your GitHub Copilot plan for chat, deep Advisor reviews, and design
 
 ## Which accounts do I need?
 
-You need a GitHub Copilot account for chat, and a Microsoft account in a Fabric tenant with a workspace on an eligible Fabric or Power BI Premium capacity, because Fabricator publishes a new app before you build it. Signing in to the Azure CLI is optional; features that need it, such as sharing an app, ask for it. Team workspaces also use the GitHub CLI and Azure CLI. See [System requirements](/docs/reference/requirements) for the full list.
+You need a GitHub Copilot account for chat. To publish your apps, you also need a Microsoft account in a Fabric tenant with a workspace on an eligible Fabric or Power BI Premium capacity; your apps run on this computer while you build them, so you need it only when you publish. Signing in to the Azure CLI is optional; features that need it, such as sharing an app, ask for it. Team workspaces also use the GitHub CLI and Azure CLI. See [System requirements](/docs/reference/requirements) for the full list.
 
 ## Can I build an app without Microsoft Fabric?
 
-Yes, with the **Local development** experiment. Turn it on in **Settings → Experiments**, and your apps and their backend run on this computer while you build: a new app opens with chat ready, and you need Fabric only when you publish. It's an experiment, so it may change or be removed in a future update. See [Develop on this computer](/docs/build/local-development).
+Yes. Your apps and their backend run on this computer while you build: a new app opens with chat ready, and you need Fabric only when you publish. See [Develop on this computer](/docs/build/local-development).
 
 ## Does it work with GitHub Enterprise?
 
@@ -31,7 +31,7 @@ GitHub Enterprise Server is not supported by this Copilot login flow.
 
 Your project files live in your local workspace folder. New projects are created there, and existing projects can be opened or cloned into it.
 
-When you publish, Rayfin puts the app in your selected Fabric workspace, where it keeps its data. With the **Local development** experiment on, the data your app stores while you build stays on this computer, in the project's `.rayfin-local` folder; see [Files and folders](/docs/reference/files#your-apps-local-data). Chat content goes to GitHub Copilot because Copilot is the agent that reads and edits the project.
+When you publish, Rayfin puts the app in your selected Fabric workspace, where it keeps its data. The data your app stores while you build stays on this computer, in the project's `.rayfin-local` folder; see [Files and folders](/docs/reference/files#your-apps-local-data). Chat content goes to GitHub Copilot because Copilot is the agent that reads and edits the project.
 
 ## What does Fabricator send to the developer?
 
@@ -55,7 +55,7 @@ No global Rayfin CLI install is required for normal use. Fabricator runs the pro
 
 ## Can I work offline?
 
-Not for the normal build-and-publish loop. Chat needs GitHub Copilot, publishing and the preview of a published app need Microsoft Fabric, clone and team workflows need GitHub, creating a project needs the npm registry, and update checks use GitHub Releases. With the **Local development** experiment on, an app on this computer runs without Fabric, but chat still needs Copilot.
+Not for the normal build-and-publish loop. Chat needs GitHub Copilot, publishing and the preview of a published app need Microsoft Fabric, clone and team workflows need GitHub, creating a project needs the npm registry, and update checks use GitHub Releases. Your app on this computer runs without Fabric, but chat still needs Copilot.
 
 You can still inspect files that are already on your computer, but Fabricator is designed for connected work.
 

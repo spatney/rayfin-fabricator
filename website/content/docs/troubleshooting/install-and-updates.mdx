@@ -3,7 +3,7 @@ title: "Install and update problems"
 description: "Fix Windows SmartScreen warnings, macOS quarantine errors, and in-app update prompts or failures."
 ---
 
-Use this page when Fabricator will not open, the installer is blocked, or an update cannot be applied. If Windows blocks rayfin-local, the local backend that the installer puts next to Fabricator for the **Local development** experiment, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local).
+Use this page when Fabricator will not open, the installer is blocked, or an update cannot be applied. If Windows blocks rayfin-local, the local backend that the installer puts next to Fabricator to run your apps on this computer, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local).
 
 ## Windows says the installer is uncommon
 
@@ -44,7 +44,7 @@ If the app still will not open, [Report a problem](/docs/troubleshooting/report-
 
 You may see **Update available**, a `Fabricator <version> is ready to install.` prompt, an `Update <version> is ready to install` banner, a `Downloading update <version>…` banner, or "Installing update…".
 
-Fabricator checks GitHub Releases when it starts, every 4 hours while it's open, and as soon as your connection comes back after a check failed. It downloads a signed update in the background. An update found at startup offers **Update now** or **Later**. Choosing **Later** keeps the app open and leaves the banner available with **Restart & update**. An update found while you work goes straight to the banner. Installing an update restarts Fabricator. With the **Local development** experiment on, it first stops the apps running on this computer, because the update replaces rayfin-local.
+Fabricator checks GitHub Releases when it starts, every 4 hours while it's open, and as soon as your connection comes back after a check failed. It downloads a signed update in the background. An update found at startup offers **Update now** or **Later**. Choosing **Later** keeps the app open and leaves the banner available with **Restart & update**. An update found while you work goes straight to the banner. Installing an update restarts Fabricator. It first stops the apps running on this computer, because the update replaces rayfin-local.
 
 1. If you see **Update available**, select **Update now**. Fabricator restarts to apply the update.
 2. If you chose **Later**, use the update banner and select **Restart & update** when you are ready.

@@ -21,12 +21,6 @@ Use `Shift+Enter` for a new line. If you type `@`, Fabricator opens **Reference 
 
 ![The composer's + menu: Image, File, and Fabric data open beside it, listing Semantic model, Warehouse, SQL database and Lakehouse, and Browse all Fabric data](/screenshots/add-menu.webp)
 
-## When chat waits for the first publish
-
-With the **Local development** experiment off, the default, a new app is published before you chat about it. Until it is, the chat says **Publish your app to start building** and, for an app named Contoso Expenses, "Chat is locked until Contoso Expenses is published." Select **Publish now** to choose a Fabric workspace and publish it. While it publishes, the chat says "Chat unlocks as soon as Contoso Expenses is live." See [Publish for the first time](/docs/ship/deploy#publish-for-the-first-time), and if chat stays locked, [Chat is locked until the app is published](/docs/troubleshooting/deploy#chat-is-locked-until-the-app-is-published).
-
-With Local development on, a new app runs on this computer, so its chat is ready right away. See [Develop on this computer](/docs/build/local-development).
-
 ## Choose a model and reasoning effort
 
 Open the model pill in the composer to choose the model Copilot uses.
@@ -47,7 +41,7 @@ Fabricator uses the GitHub Copilot account you signed in with. The models shown 
 
 ## What happens during a turn
 
-When a turn starts, Fabricator shows a live work log. It can include notes, reasoning when the model shares it, file reads, searches, commands, command output, and edits. With Local development on, it also shows Copilot checking your app as it runs on this computer. See [How Copilot checks its work](/docs/build/chat#how-copilot-checks-its-work).
+When a turn starts, Fabricator shows a live work log. It can include notes, reasoning when the model shares it, file reads, searches, commands, command output, and edits. It also shows Copilot checking your app as it runs on this computer. See [How Copilot checks its work](/docs/build/chat#how-copilot-checks-its-work).
 
 You may also see a status line such as `Thinking…`, `Working…`, or `Writing the answer…` with an elapsed timer.
 
@@ -99,17 +93,15 @@ Use **Review full plan** to open the full plan. You can **Request changes**, edi
 
 ## How Copilot checks its work
 
-Copilot doesn't start your app or publish it: Fabricator does. How Copilot checks its work depends on the **Local development** experiment.
-
-With Local development off, Copilot checks without running the app: type-checking, the build, lint and the project's offline validators, and for charts, Fabricator's headless chart preview when the app has it. While **Publish after each chat turn** is off, Copilot ends by saying what to try in the preview, and whether it needs a publish first.
-
-With Local development on, your app runs on this computer while Copilot works, so Copilot can try it:
+Copilot doesn't start your app or publish it: Fabricator runs your app, and publishing is your choice. Your app runs on this computer while Copilot works, so Copilot can try it:
 
 - It runs static checks, and unit tests once, never in watch mode.
 - After it changes entities, functions, connectors or `rayfin/rayfin.yml`, it checks the local backend: whether the data model applied, whether the functions built, and any recent errors. It fixes what that check reports before it finishes.
 - It calls the app's data API, functions and connectors the way the app's pages do: as you, as a test user such as `ana@example.com`, or signed out. That's how it shows that an access rule refuses the people it should.
 
 These checks show in the work log as steps such as **Checked the local backend**, "Called the app's data API while signed out" or "Called the getBacklog function as you". If a change to the data model would delete data stored on this computer, Copilot tells you what it would delete instead of working around it. See [When a data model change would delete local data](/docs/build/local-development#when-a-data-model-change-would-delete-local-data).
+
+For a team app, or a published app that this computer can't run, Copilot checks without running the app: type-checking, the build, lint and the project's offline validators, and for charts, Fabricator's headless chart preview when the app has it. For such a published app, while **Publish after each chat turn** is off, Copilot ends by saying what to try in the preview, and whether it needs a publish first.
 
 ## Design and Advisor cards in chat
 
@@ -119,12 +111,12 @@ Advisor fixes appear as a card when you send findings to Copilot. See [Check app
 
 ## After a successful turn
 
-After a successful turn, Fabricator saves the chat history. What happens next depends on **Publish after each chat turn**, which is on by default with Local development off, and off by default with it on:
+After a successful turn, Fabricator saves the chat history and, when the turn changed your app, a version in **Code → History**, named after your request. What happens next depends on **Publish after each chat turn**, which is off until you turn it on:
 
-- **On**: Fabricator checks whether Copilot changed files that aren't published yet, and publishes them. See [Publish changes](/docs/ship/deploy#publish-changes). With Local development on, it does this once the app has been published: an app's first publish is yours to start.
 - **Off**: nothing is published. Your changes stay on this computer until you publish them. See [Publish after each chat turn](/docs/ship/deploy#publish-after-each-chat-turn).
+- **On**: Fabricator checks whether Copilot changed files that aren't published yet, and publishes them. See [Publish changes](/docs/ship/deploy#publish-changes). It does this only for an app that has been published: an app's first publish is yours to start.
 
-With Local development on, your app on this computer already shows the turn's changes. If the app had stopped on a problem in its code, Fabricator starts it again after the turn, in case Copilot fixed it.
+Your app on this computer already shows the turn's changes. If the app had stopped on a problem in its code, Fabricator starts it again after the turn, in case Copilot fixed it.
 
 For team apps, Fabricator saves the change to the working branch and the team pipeline deploys the preview. See [Work on an app](/docs/team/work-on-an-app).
 

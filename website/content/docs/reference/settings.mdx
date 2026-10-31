@@ -1,6 +1,6 @@
 ---
 title: "Settings"
-description: "Every option in Fabricator's Settings: accounts, API keys, setup, workspace folder, theme, text size, diagnostics, experiments such as Local development, and About."
+description: "Every option in Fabricator's Settings: accounts, API keys, setup, workspace folder, theme, text size, diagnostics, experiments, and About."
 ---
 
 Open **Settings** to manage your accounts, change how Fabricator looks, where new projects are created, how diagnostics are captured, and which experiments are on.
@@ -67,7 +67,7 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 ### Export diagnostics
 
-**Export diagnostics** creates a Markdown diagnostics bundle in the logs folder and opens that folder. The bundle includes environment details, recent chat-turn diagnostics, recent crash or hang log entries and, with the **Local development** experiment, the last lines of your apps' local backend output. You decide whether to attach it to a bug report.
+**Export diagnostics** creates a Markdown diagnostics bundle in the logs folder and opens that folder. The bundle includes environment details, recent chat-turn diagnostics, recent crash or hang log entries, and the last lines of your apps' local backend output. You decide whether to attach it to a bug report.
 
 ### Open logs folder
 
@@ -75,7 +75,7 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 ## Experiments
 
-**Experiments** is collapsed by default. It includes features that are off by default and may change or be removed.
+**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has two experiments: **Team workspaces** and **Migrate Power BI reports**.
 
 ### Team workspaces
 
@@ -91,30 +91,11 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 > [!WARNING]
 > Migrating Power BI reports is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
 
-### Local development
-
-**Local development** says "Run your apps and their backend on this computer while you build, and publish to Microsoft Fabric when you choose." It's off by default.
-
-| | Off (the default) | On |
-| --- | --- | --- |
-| A new app | Opens on **Publish your app**. Chat stays locked until the app is published. | Opens in the workbench with chat ready. There's no publish step. |
-| Where the app runs while you build | Against its published copy in Fabric. While Copilot works, the preview shows the app's pages from this computer with the published app's backend. | On this computer, on rayfin-local, the local backend that comes with Fabricator, with its own data in the project's `.rayfin-local` folder. |
-| The preview | Your published app. | Your app on this computer. Once it's published, **Local** and **Published** switch between the two, and **Preview as** chooses who the app signs in as. |
-| **Publish after each chat turn** | On by default. | Off by default. |
-| A new app's Rayfin version | Rayfin's latest release. | The newest release the local backend runs, with the app's Rayfin packages kept on that release line, such as `~1.36.0`. Rayfin updates stop at that line too. |
-| Also | | Setup lists **Local backend**, Blueprint has a **Data** view of the local data, and **Secrets** has a **Local value** for each secret. |
-
-Turning it on starts the open app on this computer. An app you created with it off that isn't published yet opens with chat ready while it's on. Turning it off stops every app running on this computer, and leaves their local data in their project folders. Team apps work the same either way. See [Develop on this computer](/docs/build/local-development).
-
-> [!WARNING]
-> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be
-> removed in a future update.
-
 ## Publish after each chat turn
 
 **Publish after each chat turn** isn't in Settings: it's in the publish control's panel in the app bar, next to the published app's details. When it's on, a chat turn that changes your app publishes it as the turn finishes. When it's off, your changes wait until you publish them.
 
-Your choice applies to every project on this computer. Until you choose, it follows **Local development**: on while the experiment is off, and off while it's on. With the experiment on, it publishes only an app you've already published yourself. When your choice differs from the default, the publish control says so after the published app's name, with "· Auto" or "· Manual". See [Publish to Microsoft Fabric](/docs/ship/deploy#publish-after-each-chat-turn).
+It's off until you turn it on, and your choice applies to every project on this computer. It publishes only an app you've already published: an app's first publish is yours to start. While it's on, the publish control says so after the published app's name, with **· Auto**. See [Publish to Microsoft Fabric](/docs/ship/deploy#publish-after-each-chat-turn).
 
 ## About
 

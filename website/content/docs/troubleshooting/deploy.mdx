@@ -1,6 +1,6 @@
 ---
 title: "Publishing and Fabric problems"
-description: "Fix failed publishes, a locked chat, publishing after each chat turn, Fabric authentication, semantic model reads, Rayfin CLI errors, and sharing access."
+description: "Fix failed publishes, publishing after each chat turn, Fabric authentication, semantic model reads, Rayfin CLI errors, and sharing access."
 ---
 
 Use this page when Fabricator can't publish your app to Microsoft Fabric, or the published app isn't the version you expect. Fabricator used to call publishing "deploying", and a few headings on this page keep that word.
@@ -30,26 +30,11 @@ To put the notice away, select the **×** beside it. It comes back if the next p
 
 If the log is unclear, [Report a problem](/docs/troubleshooting/report-a-problem) and attach diagnostics.
 
-## Chat is locked until the app is published
-
-Above the chat box, you see "Publish your app to start building" and "Chat is locked until `<name>` is published.", with **Publish now**. The chat box says "Publish your app to start chatting…".
-
-Fabricator builds a new app against its copy in Fabric, so it publishes a new app before chat opens for it. Chat stays locked when you skipped that step with **Continue without publishing →**, or the first publish didn't finish. See [When chat waits for the first publish](/docs/build/chat#when-chat-waits-for-the-first-publish).
-
-1. Select **Publish now**.
-2. In **Publish your app**, sign in to Fabric if it asks, pick a workspace, and select **Publish app**. See [Build your first app](/docs/start/first-app#publish-your-app).
-3. Wait for the app to publish. Chat says "Chat unlocks as soon as `<name>` is live." meanwhile.
-4. If the publish fails, see [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
-
-If you don't have a Fabric workspace on an eligible capacity, you can build on this computer instead with the **Local development** experiment. Turn it on in **Settings → Experiments**: chat then opens without a publish. See [Develop on this computer](/docs/build/local-development).
-
-If chat stays locked after the app is published, [Report a problem](/docs/troubleshooting/report-a-problem).
-
 ## The preview says Choose where to publish
 
-After a chat turn, the preview says "Choose where to publish" and "`<name>` hasn’t been published yet. Select Publish in the header above to name it and pick the Fabric workspace to publish it to."
+The preview says "Choose where to publish" and "`<name>` hasn’t been published yet. Select Publish in the header above to name it and pick the Fabric workspace to publish it to."
 
-**Publish after each chat turn** tried to publish an app that has no Fabric workspace yet, such as a project you opened from a folder. Fabricator asks where to publish it instead of choosing a workspace for you.
+A publish found no Fabric workspace for the app, and the publish log says "This project has no Fabric workspace yet — choose one to publish to." Fabricator asks where to publish it instead of choosing a workspace for you.
 
 1. In the app bar, select **Publish**.
 2. Optionally enter a **Name** for the published app.
@@ -61,7 +46,7 @@ If publishing fails, see [A deploy failed](/docs/troubleshooting/deploy#a-deploy
 
 After a successful chat turn, your app isn't published any more, and you have to publish it from the app bar.
 
-Fabricator publishes after a turn only while **Publish after each chat turn** is on. It's on by default, and off by default with the **Local development** experiment on; your own choice in the publish control's panel wins either way. With the experiment on, it also publishes only an app you've already published yourself. When it's on, Fabricator publishes after a successful turn when it can confirm there are changes since the last published version. If the last published version is unknown, the next successful turn publishes once to establish it. If the check for changes fails, you see "Couldn’t publish automatically", with a message that ends "Select Publish to publish your changes."
+Fabricator publishes after a turn only while **Publish after each chat turn** is on. It's off until you turn it on in the publish control's panel, and it publishes only an app you've already published yourself. If an earlier version of Fabricator published your apps after each turn without you turning this on, it's off now. When it's on, Fabricator publishes after a successful turn when it can confirm there are changes since the last published version. If the last published version is unknown, the next successful turn publishes once to establish it. If the check for changes fails, you see "Couldn’t publish automatically", with a message that ends "Select Publish to publish your changes."
 
 1. In the app bar, select the publish control, and check **Publish after each chat turn** in its panel. Turn it on if you want each turn to publish.
 2. Confirm the chat turn finished successfully. Failed, stopped, or cancelled turns don't publish.

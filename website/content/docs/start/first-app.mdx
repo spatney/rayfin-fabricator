@@ -1,9 +1,9 @@
 ---
 title: "Build your first app"
-description: "Create a project, publish it to a Fabric workspace, describe the app to Copilot, and watch it change in the preview."
+description: "Create a project, describe the app to Copilot, watch it change in the preview on this computer, and publish it to a Fabric workspace when you're ready."
 ---
 
-This quickstart takes you from an empty Fabricator install to a published Rayfin app that you can refine in chat. You need a Fabric workspace on an eligible capacity to publish it. To build on this computer without one, see [Build on this computer instead](/docs/start/first-app#build-on-this-computer-instead).
+This quickstart takes you from an empty Fabricator install to a Rayfin app that you can refine in chat. The app runs on this computer while you build it, so you don't need a Fabric workspace to start. When you want other people to use it, you publish it to a Fabric workspace on an eligible capacity.
 
 ## Create a project
 
@@ -15,29 +15,11 @@ New projects start from the Rayfin CLI's default Universal App template; there's
 
 ![The New project screen with Contoso Expenses typed as the project name, the folder name below it, the Details and Publish steps, and the Create project button.](/screenshots/new-project.webp)
 
-Fabricator creates the project with Rayfin's latest release, installs its packages, and starts its version history with git. Then it moves to **Publish your app**.
-
-## Publish your app
-
-Fabricator builds your app against its copy in Microsoft Fabric, so a new app is published before chat opens for it. **Publish your app** says "Publish `<name>` to a Fabric workspace to start building with chat."
-
-1. If the step asks you to, select **Sign in to Fabric** and finish signing in in your browser.
-2. In **Name**, keep `Development` or enter another name for this published app. The name is optional.
-3. Under **Publish to workspace**, select a workspace. Rayfin apps need a workspace on a Fabric **F-SKU** or Power BI Premium **P-SKU** capacity. Workspaces without one are listed under **Not eligible**.
-4. To use a new workspace, select **+ New workspace**, enter its name, pick a capacity, and select **Create workspace**.
-5. Select **Publish app**.
-
-![The Publish your app step of a new project, with Development as the name, a list of Fabric workspaces with their region and capacity, the Publish app button, and Continue without publishing.](/screenshots/first-deploy.webp)
-
-Fabricator publishes the app with the project's Rayfin CLI, and Ray talks you through it. Chat unlocks as soon as the app is live.
-
-If no eligible workspace is listed, Fabricator offers **Start a free trial** and **Buy a capacity**. If the workspace you pick already has an app with the same name, pick another workspace, or select **Replace it anyway** to publish over that app. See [Same-name warning](/docs/ship/deploy#same-name-warning).
-
-You can select **Continue without publishing →** instead. The project opens, but chat stays locked until the app is published: above the chat box, it says "Publish your app to start building" and "Chat is locked until `<name>` is published." Select **Publish now** to come back to this step, or **Publish** in the app bar.
+Fabricator creates the project with the newest Rayfin release it can run on this computer, installs its packages, and starts its version history with git. Then it opens the project in the **Build** view with chat ready. The app runs on this computer from the start, on the local backend that comes with Fabricator: its pages, data, sign-in and functions. Ray, Fabricator's stingray, says "Your app is ready! It runs right here on your computer. Let’s build."
 
 ## Describe the app
 
-When chat opens, type a prompt. Start with the outcome, the people using the app, and the data they need to track.
+In chat, type a prompt. Start with the outcome, the people using the app, and the data they need to track.
 
 ```prompt title="Track equipment requests"
 Build an equipment request app for an operations team. Employees request a laptop, monitor, phone, or accessory with a reason and needed-by date. Managers review requests, approve or reject them with a comment, and see a dashboard of open requests by type and priority.
@@ -53,15 +35,15 @@ Build a simple team task tracker. Each task has a title, owner, due date, status
 
 ![A chat turn in progress: the work log lists the files Copilot edited and the command it's running, while the live preview shows the app from localhost:5173 as it changes.](/screenshots/chat-working.webp)
 
-While a turn runs, the chat shows a live work log with steps such as file reads, searches, commands, and edits. Meanwhile, the preview runs the app's pages on this computer, at a `localhost` address, with your published app's backend, so new screens appear as Copilot saves them. Changes to the app's data model, permissions and functions reach the app when it's published.
+While a turn runs, the chat shows a live work log with steps such as file reads, searches, commands, and edits. Meanwhile, the preview shows your app running on this computer, at a `localhost` address, so new screens appear as Copilot saves them. Changes to the app's data model, permissions and functions work there as soon as Copilot saves them, and Copilot checks them against the running app. See [How Copilot checks its work](/docs/build/chat#how-copilot-checks-its-work).
 
-When the turn finishes, Fabricator saves the chat history, checks the project's Rayfin version and, if the turn changed the app, publishes it: **Publish after each chat turn** is on by default. Failed or cancelled turns don't publish. Once the publish finishes, the preview shows the published app with the changes.
+When the turn finishes, Fabricator saves the chat history, checks the project's Rayfin version and, if the turn changed the app, saves a version in **Code → History**, named after your request. Nothing is published: your changes stay on this computer until you publish them.
 
 ## Try the app
 
 ![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the preview shows the published app with a monthly total and a spending chart.](/screenshots/workbench.webp)
 
-The right side of the **Build** view shows your published app, with its data in Fabric, so you can add records and try each page. Use **Reload** to refresh it, the address in the toolbar to open it in your browser, **Fabric** to see it inside the Fabric portal, and **Design** to change it by clicking it. See [Live preview](/docs/build/preview) and [Design mode](/docs/build/design).
+The right side of the **Build** view shows your app running on this computer, with its own data, so you can add records and try each page. Its data starts empty and stays on this computer. Use **Reload** to refresh it, the address in the toolbar to open it in your browser, **Preview as** to try it as someone else, and **Design** to change it by clicking it. See [Live preview](/docs/build/preview) and [Design mode](/docs/build/design).
 
 ## Iterate
 
@@ -73,27 +55,25 @@ Good next prompts are specific:
 Add a reporting page that shows requests by status, requests by equipment type, and average approval time. Keep the dashboard readable on a laptop screen.
 ```
 
-## Choose when to publish
+## Publish your app
 
-To publish only when you choose, open the publish control in the app bar and turn off **Publish after each chat turn**. Your changes then stay on this computer, showing in the preview, until you publish them with the button next to the publish control, such as **Publish 3 changes**. See [Publish to Microsoft Fabric](/docs/ship/deploy#publish-after-each-chat-turn).
+Your app doesn't need to be published to run, so publishing is up to you. When you want other people to use it, publish it to a Fabric workspace. You need a workspace on a Fabric **F-SKU** or Power BI Premium **P-SKU** capacity.
+
+1. In the app bar, select **Publish**.
+2. If it asks you to, select **Sign in to Fabric** and finish signing in in your browser.
+3. Optionally, in **Name**, enter a name for this published app, such as `Production`.
+4. Under **Publish to workspace**, select a workspace. Workspaces without an eligible capacity are listed under **Not eligible**. To use a new workspace, select **+ New workspace**, enter its name, pick a capacity, and select **Create workspace**.
+5. Select **Publish**.
+
+Fabricator publishes the app with the project's Rayfin CLI, and your app stays in the preview while it publishes. Once it's published, **Local** and **Published** in the preview toolbar switch between your app on this computer and the published app, which has its own data.
+
+If no eligible workspace is listed, Fabricator offers **Start a free trial** and **Buy a capacity**. If the workspace you pick already has an app with the same name, pick another workspace, or select **Replace it anyway** to publish over that app. See [Same-name warning](/docs/ship/deploy#same-name-warning).
+
+After that, the button next to the publish control says what's waiting, such as **Publish 3 changes**: select it to publish your latest changes. To publish after every chat turn instead, turn on **Publish after each chat turn** in the publish control's panel. See [Publish to Microsoft Fabric](/docs/ship/deploy).
 
 ## Share the app
 
 Once the app is published, select **Share** in the app bar to share it with people in your organization. See [Share your app](/docs/ship/share).
-
-## Build on this computer instead
-
-> [!WARNING]
-> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be
-> removed in a future update.
-
-With **Local development** on, a new app runs on this computer from the moment you create it, on the local backend that comes with Fabricator. There's no publish step: chat is ready right away, and the app's data, sign-in and functions run on this computer too. You publish the app to a Fabric workspace when you choose, so you don't need one to start.
-
-1. In the app bar, open the account menu and select **Settings**. If you aren't signed in to Fabric, the menu is the arrow next to **Sign in to Fabric**.
-2. Open **Experiments**, and turn on **Local development**.
-3. On Home, select **New project**, enter a **Project name**, and select **Create project**.
-
-The project opens in the **Build** view with chat ready for your first prompt. See [Develop on this computer](/docs/build/local-development).
 
 ## Next steps
 
@@ -101,4 +81,5 @@ The project opens in the **Build** view with chat ready for your first prompt. S
 - Learn more about [Chat with Copilot](/docs/build/chat).
 - Use [Design mode](/docs/build/design) for visual changes.
 - Check app health with [Advisor](/docs/ship/advisor).
+- See how your app runs here in [Develop on this computer](/docs/build/local-development).
 - See how Fabricator builds and publishes your app in [How Fabricator works](/docs/reference/how-it-works).

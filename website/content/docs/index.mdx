@@ -9,21 +9,17 @@ Fabricator helps you build [Rayfin](https://rayfin.ai/docs) apps in one desktop 
 
 ## The build loop
 
-1. Create a project and publish it to a Fabric workspace. Chat opens for the app once it's published.
+1. Create a project. It opens with chat ready, running on this computer.
 2. Describe the app in plain language.
-3. Watch the work log while Copilot changes files and runs checks. The preview shows the changes to the app's pages as Copilot makes them.
-4. When the turn finishes, Fabricator publishes the changes, and the preview shows the published app.
-5. Refine the app with another prompt, a visual Design change, or an Advisor finding.
+3. Watch the work log while Copilot changes files and runs checks. The preview shows your app running on this computer, and takes the changes as Copilot makes them.
+4. When the turn finishes, Fabricator saves the changes as a version you can go back to.
+5. Refine the app with another prompt, a visual Design change, or an Advisor finding, and publish it to a Fabric workspace when you want other people to use it.
 
 Rayfin is the app platform your project uses. Fabricator creates and edits Rayfin projects, and runs the project's Rayfin tooling to publish them. Microsoft Fabric is where the app is hosted and shared; see Rayfin's [Fabric app deploy docs](https://rayfin.ai/docs/deploy/fabric-apps) for the platform background, and [How Fabricator works](/docs/reference/how-it-works) for the details.
 
-## Build on this computer instead
+## Your app runs on this computer
 
-> [!WARNING]
-> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be
-> removed in a future update.
-
-With **Local development** on, your apps and their backend run on this computer while you build. A new app opens with chat ready, without a publish step, and its data, sign-in and functions run on this computer too. You publish it to Fabric when you choose, so you don't need a Fabric workspace until then. See [Develop on this computer](/docs/build/local-development).
+Your apps and their backend run on this computer while you build: their pages, data, sign-in and functions. You publish an app to Fabric when you choose, so you don't need a Fabric workspace until then. See [Develop on this computer](/docs/build/local-development).
 
 ## Who Fabricator is for
 
@@ -34,7 +30,7 @@ Fabricator is for people who want to make Rayfin apps without living in a termin
 - Iterating on a data model or UI with Copilot, and publishing it to Fabric.
 - Reviewing generated code, history, and app health in one place.
 
-You do not need to pick a template for a new app. **New project** asks for a name, creates the app from the Rayfin CLI's default Universal App template, then asks you to publish it to a Fabric workspace. Chat stays locked until the app is published.
+You do not need to pick a template for a new app. **New project** asks for a name, creates the app from the Rayfin CLI's default Universal App template, and opens it with chat ready.
 
 > [!NOTE]
 > Fabricator is a personal project by Sachin Patney. It is not a Microsoft product and is not affiliated with, endorsed by, sponsored by, or supported by Microsoft.
@@ -46,7 +42,7 @@ Before you start, check the [system requirements](/docs/reference/requirements).
 - Windows 10/11, or macOS on Apple Silicon.
 - Node.js 22.12 or newer, npm, and Git.
 - A GitHub Copilot account.
-- Microsoft Fabric access and a Fabric workspace on an eligible Fabric or Power BI Premium capacity. Fabricator publishes a new app there before you build it with chat. With the **Local development** experiment on, you need them only to publish.
+- To publish apps: Microsoft Fabric access and a Fabric workspace on an eligible Fabric or Power BI Premium capacity. You don't need them to build and try an app.
 - Optional: the Azure CLI, to share apps, add Fabric data and migrate Power BI reports. You can sign in to it later.
 - Optional GitHub CLI (`gh`) for repository browsing and cloning.
 
@@ -57,7 +53,7 @@ Before you start, check the [system requirements](/docs/reference/requirements).
     Download the current desktop app for Windows or macOS.
   </Card>
   <Card href="/docs/start/first-app" title="Build your first app">
-    Create a project, publish it, and send your first prompt.
+    Create a project, send your first prompt, and publish it when you're ready.
   </Card>
   <Card href="/docs/start/tour" title="Tour the workbench">
     Learn where Home, chat, preview, code, Blueprint, Advisor, and settings live.

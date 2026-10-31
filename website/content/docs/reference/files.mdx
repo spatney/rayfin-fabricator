@@ -23,7 +23,7 @@ Fabricator creates this folder when it needs to save app-owned files.
 | `advisor/` | Saved Advisor reports and Advisor UI state for projects. | Yes, if you are comfortable losing saved findings, dismissals, and baselines. |
 | `suggestions/` | Cached starter suggestion sets for projects. | Yes. Fabricator can recreate suggestions. |
 | `logs/` | Diagnostics JSONL files, exported diagnostics bundles, and crash or hang logs. | Yes, if you no longer need them for bug reports. |
-| `logs/local-backend/` | With the **Local development** experiment on, each project's recent local backend output, in files named for the project's ID, up to about 2 MB per project. | Yes. Fabricator starts new files as your apps run. |
+| `logs/local-backend/` | Each project's recent local backend output, in files named for the project's ID, up to about 2 MB per project. | Yes. Fabricator starts new files as your apps run. |
 | `fabric-accounts.json`, `fabric-accounts/` | The Fabric accounts you added after the first, each in its own Rayfin CLI config folder, and which one is in use. | Only to sign out of those accounts. Use **Accounts** instead; see [Manage your accounts](/docs/start/accounts). |
 
 Diagnostics files older than the retention window are pruned at startup. An exported diagnostics bundle includes the last lines of each project's local backend output, when there is any, with secrets, email addresses and your home folder masked.
@@ -38,11 +38,7 @@ Your workspace folder contains the actual app source code, git repository, Rayfi
 
 ## Your app's local data
 
-> [!WARNING]
-> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be
-> removed in a future update.
-
-Without the **Local development** experiment, your app keeps its data with the published app, in Fabric. With the experiment on, each app runs on this computer with its own backend while you build, and keeps its state in a `.rayfin-local` folder in its project folder:
+Each app other than a team app runs on this computer with its own backend while you build, and keeps its state in a `.rayfin-local` folder in its project folder:
 
 - The app's local database: its data, its local users and their sessions.
 - Files the app stored.
@@ -51,7 +47,7 @@ Without the **Local development** experiment, your app keeps its data with the p
 
 The folder has its own `.gitignore`, so git ignores it: it isn't in History, and it doesn't go to GitHub with the app. Copilot's chat can't read or change it. Its data starts empty and stays on this computer. Nothing is copied from your published app, and publishing doesn't copy it to Fabric.
 
-To see or clear the data, use Blueprint's **Data** view; see [See your app's local data](/docs/build/data-model#see-your-apps-local-data). Moving a project folder to the trash takes its local data with it. Turning the experiment off leaves the folder as it is. Team apps run on their Fabric deployment, so their data lives in Fabric instead.
+To see or clear the data, use Blueprint's **Data** view; see [See your app's local data](/docs/build/data-model#see-your-apps-local-data). Moving a project folder to the trash takes its local data with it. Team apps run on their Fabric deployment, so their data lives in Fabric instead.
 
 ## Report migration material
 
@@ -63,7 +59,7 @@ Fabricator stores temporary screenshot attachments under the operating system te
 
 ## Credentials
 
-Fabricator does not store Copilot, Azure, or Rayfin credentials in `studio.json`. Those credentials are owned by the tools and services that sign you in, such as the bundled Copilot engine, Azure CLI, GitHub CLI, Rayfin CLI, and platform credential stores. With the **Local development** experiment on, the local backend keeps the tokens it gets from them in memory only.
+Fabricator does not store Copilot, Azure, or Rayfin credentials in `studio.json`. Those credentials are owned by the tools and services that sign you in, such as the bundled Copilot engine, Azure CLI, GitHub CLI, Rayfin CLI, and platform credential stores. The local backend that runs your apps keeps the tokens it gets from them in memory only.
 
 ## What to keep for bug reports
 

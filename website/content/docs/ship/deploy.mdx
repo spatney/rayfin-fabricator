@@ -7,12 +7,9 @@ Publishing puts the app in your current project into a Fabric workspace, where t
 
 Rayfin apps are published as Fabric apps in a Fabric workspace. For Rayfin's platform details, see [Deploy Fabric apps](https://rayfin.ai/docs/deploy/fabric-apps). Publishing uses your Fabric capacity; see [Rayfin pricing and capacity notes](https://rayfin.ai/docs/deploy/pricing).
 
-How publishing fits in depends on the **Local development** experiment:
+Your app runs on this computer while you build it, so you don't need to publish it to try it: publish it when you want other people to use it. Until you turn on **Publish after each chat turn**, your changes stay on this computer until you publish them. See [Develop on this computer](/docs/build/local-development).
 
-- **Off**, the default: you develop each app against its published copy. A new app is published before you chat about it, and Fabricator publishes your changes after each chat turn.
-- **On**: your app runs on this computer, and you publish it when you choose. See [Develop on this computer](/docs/build/local-development).
-
-![The Published apps panel for the Development published app: published 2 hours ago, with a green dot for live, its app address, its workspace with region and capacity, the Fabric account that publishes, Publish after each chat turn turned on, and Publish to another workspace.](/screenshots/deployments.webp)
+![The Published apps panel for the Development published app: published 2 hours ago, with a green dot for live, its app address, its workspace with region and capacity, the Fabric account that publishes, Publish after each chat turn turned off, and Publish to another workspace.](/screenshots/deployments.webp)
 
 ## Sign in to Fabric
 
@@ -28,13 +25,7 @@ You can stay signed in to more than one Fabric account, for example one per orga
 
 ## Publish for the first time
 
-With Local development off, new projects ask to be published right after you name them. In **Publish your app**, pick a workspace and select **Publish app**. Chat stays locked until the app is published. See [Build your first app](/docs/start/first-app#publish-your-app).
-
-![The Publish your app step of a new project, with Development as the name, a list of Fabric workspaces with their region and capacity, the Publish app button, and Continue without publishing.](/screenshots/first-deploy.webp)
-
-**Continue without publishing →** skips the step: "You can publish any time, but chat stays locked until your app is published." To come back to it, select **Publish now** in the chat.
-
-With Local development on, a new app has no publish step: it runs on this computer from the start. A project you opened from a folder or cloned has none either. Publish these from the app bar:
+A new app runs on this computer from the start, so creating it doesn't publish it. Publish it from the app bar when you're ready, like a project you opened from a folder or cloned:
 
 1. Open the project.
 2. In the app bar, select **Publish**.
@@ -58,9 +49,9 @@ If it finds one, you see a warning that publishing there would replace that app,
 
 ## What happens while your app publishes
 
-When the preview has no app to show yet, such as during an app's first publish with Local development off, it shows the publish screen. Ray talks you through it, and below him a list shows the steps publishing has been through, the one in progress, and the steps still to come.
+Your app stays in the preview while it publishes, so you can keep looking at it: your app on this computer, or your published app. A strip above the preview shows where it's publishing to, such as "Publishing to Production", the step in progress, a progress bar and how long it has taken. Select **Watch** to follow it on the publish screen, and **Back to your app** to return. Select **Logs** to see the publish log. When the published app is in the preview, **Design** and the **Fabric** view wait until publishing ends, and the preview reloads when the new version is live.
 
-Otherwise, the app stays in the preview while it publishes, so you can keep looking at it: your published app, or with Local development on, your app on this computer. A strip above the preview shows where it's publishing to, such as "Publishing to Production", the step in progress, a progress bar and how long it has taken. Select **Watch** to follow it on the publish screen, and **Back to your app** to return. Select **Logs** to see the publish log. When the published app is in the preview, **Design** and the **Fabric** view wait until publishing ends, and the preview reloads when the new version is live.
+On the publish screen, Ray talks you through it, and below him a list shows the steps publishing has been through, the one in progress, and the steps still to come.
 
 The publish control in the app bar shows the progress too, so you can follow it from the Code, Blueprint and Advisor tabs.
 
@@ -99,12 +90,12 @@ While Copilot is working on a turn, the button is turned off: publishing then wo
 
 ## Publish after each chat turn
 
-**Publish after each chat turn** decides whether Fabricator publishes your changes when a successful chat turn ends. Until you change it, it's on with Local development off, and off with Local development on. Your choice applies to all your apps, and Fabricator remembers it.
+**Publish after each chat turn** decides whether Fabricator publishes your changes when a successful chat turn ends. It's off until you turn it on. Your choice applies to all your apps, and Fabricator remembers it.
 
 1. In the app bar, select the publish control, which shows the published app's name.
 2. Turn **Publish after each chat turn** on or off.
 
-When your choice isn't the default, the publish control says so after the name: **· Manual** while it's off with Local development off, for example **Prod · Manual**, and **· Auto** while it's on with Local development on. You can also use [Search](/docs/start/search): **Turn on Publish after each chat turn** or **Turn off Publish after each chat turn**.
+While it's on, the publish control says so after the name with **· Auto**, for example **Prod · Auto**. Point at the publish control to see "Publish after each chat turn is on: chat changes publish as each turn finishes." or, while it's off, "Publish after each chat turn is off: chat changes wait for you to publish them." You can also use [Search](/docs/start/search): **Turn on Publish after each chat turn** or **Turn off Publish after each chat turn**.
 
 ### While it's on
 
@@ -113,31 +104,27 @@ Fabricator publishes after a successful chat turn when the app has changes that 
 - the chat turn failed or was cancelled,
 - there are no changes since the last published version,
 - a team workspace pipeline publishes the app,
-- with Local development on, the app hasn't been published yet: an app's first publish is yours to start,
+- the app hasn't been published yet: an app's first publish is yours to start,
 - Fabricator can't check for changes. It says "Could not check for changes to publish. Select Publish to publish your changes." Select **Publish** to publish them yourself.
 
-With Local development off, a turn also publishes an app that has never been published, such as a project you opened from a folder. The preview then asks you to **Choose where to publish**: select **Publish** in the app bar to name the published app and pick its workspace. See [The preview says Choose where to publish](/docs/troubleshooting/deploy#the-preview-says-choose-where-to-publish).
-
-While an after-turn publish runs, the preview keeps showing what it showed during the turn. With Local development off, that's the local preview with your changes, when the turn had one, and once publishing ends, the preview shows your published app. With Local development on, your app on this computer stays in the preview.
+While an after-turn publish runs, the preview keeps showing what it showed during the turn: your app on this computer. For a published app that this computer can't run, that's the local preview with your changes, when the turn had one, and once publishing ends, the preview shows your published app.
 
 When Fabricator switches to another published app or can't tell which version is published, the next successful turn publishes once to set a new baseline.
 
 ### While it's off
 
-Your changes stay on this computer until you publish them. The button in the app bar counts them, for example **Publish 3 changes**: select it when you're ready. Your app stays in the preview while it publishes.
+Your changes stay on this computer until you publish them. The button in the app bar counts them, for example **Publish 3 changes**: select it when you're ready. Your app stays in the preview while it publishes, and your app on this computer shows your changes either way.
 
-With Local development on, that's the only difference: your app on this computer shows your changes either way.
-
-With Local development off, the published app falls behind your code, so the preview shows your app from a local Vite server whenever the app is open, at a `localhost` address, not only while Copilot is working:
+A published app that this computer can't run previews against its published backend, which falls behind your code, so the preview shows your app from a local Vite server whenever the app is open, at a `localhost` address, not only while Copilot is working:
 
 - The local preview uses your published app's backend. Frontend changes show as Copilot makes them, but changes to data, permissions or functions work only after you publish them. Fabricator asks Copilot to tell you when a change needs a publish.
 - When a turn that changed your app ends, the preview reloads once, so it shows the finished app from a fresh start, not only the live updates made while Copilot worked. A turn that changed nothing, such as a question, leaves the page as it is.
-- **Design** works on the local preview between turns, so you can queue visual changes and send them to Copilot without publishing first. It turns off when a turn starts, because Copilot's changes show in the preview as it makes them. The **Fabric** view works on the published app, so it's unavailable.
+- **Design** works on the local preview between turns, so you can queue visual changes and send them to Copilot without publishing first. It turns off when a turn starts, because Copilot's changes show in the preview as it makes them. The **Fabric** view, for an app that has one, works on the published app, so it's unavailable.
 - The local preview stops when you switch to another app or close Fabricator, and the app you open next gets its own. If you switch your app to another published app, its local preview starts again with that one's settings.
 - If the project has no local Vite installation, there's no local preview. The preview keeps showing the published app, without your latest changes, until you publish them.
 - Team apps aren't affected. They still save to GitHub after each turn, and the team pipeline deploys your preview.
 
-Turning **Publish after each chat turn** back on closes the local preview and doesn't publish anything. Your changes are still on this computer: the next successful chat turn publishes them, or you can publish them from the app bar.
+Turning **Publish after each chat turn** on closes that local preview and doesn't publish anything. Your changes are still on this computer: the next successful chat turn publishes them, or you can publish them from the app bar.
 
 ## Work with more than one published app
 
@@ -166,4 +153,4 @@ See [setup and sign-in troubleshooting](/docs/troubleshooting/setup-and-sign-in)
 
 ## Redirect URIs for live preview
 
-A local preview of a published app runs against the published backend: with Local development off, for team apps, and for a published app this computer can't run. Fabricator runs the project's own Vite dev server on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next publish includes the app code. See [When every preview port is busy](/docs/build/preview#when-every-preview-port-is-busy).
+A local preview of a published app runs against the published backend: for team apps, and for a published app this computer can't run. Fabricator runs the project's own Vite dev server on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next publish includes the app code. See [When every preview port is busy](/docs/build/preview#when-every-preview-port-is-busy).

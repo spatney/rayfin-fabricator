@@ -28,7 +28,7 @@ Fabricator uses a few free tools behind the scenes, and can install them for you
 | Git | Yes | Any installed version | Keeps a history of your app so you can always go back. |
 | GitHub CLI (gh) | No | Any installed version | Lets Fabricator work with your code on GitHub. |
 
-With the **Local development** experiment on, this step also lists **Local backend**: rayfin-local, which comes with Fabricator and runs your apps and their data on this computer, so there's nothing to install. Setup checks that it runs. It doesn't stop you entering Fabricator, but your apps can't run on this computer without it. If Windows blocks it, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local). For the experiment, see [Develop on this computer](/docs/build/local-development).
+This step also lists **Local backend**: rayfin-local, which comes with Fabricator and runs your apps and their data on this computer, so there's nothing to install. Setup checks that it runs. It doesn't stop you entering Fabricator, but your apps can't run on this computer without it. If Windows blocks it, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local). See [Develop on this computer](/docs/build/local-development).
 
 For missing tools, choose **Install** on one row, or **Install all** to install the missing required tools in one go. On Windows, Fabricator tries `winget`. On macOS, it tries Homebrew. If that is not available or an install cannot run automatically, Fabricator opens the tool's official installer and shows **Get it**.
 
@@ -48,7 +48,7 @@ Choose **Show details** to see the original message, or **Ask Help** to have the
 
 ## Step 3: Sign in to Azure
 
-This step is marked **Optional**, and doesn't stop you entering Fabricator. It says "Optional. Lets you share apps, add Fabric data and migrate Power BI reports. You can also sign in later." If you skip it, those features ask you to sign in when you use them, for example with a **Sign in to Azure** button. Team workspaces need an Azure sign-in too. With the **Local development** experiment on, apps that run on this computer also reach Azure and Fabric data with your Azure sign-in.
+This step is marked **Optional**, and doesn't stop you entering Fabricator. It says "Optional. Lets you share apps, add Fabric data and migrate Power BI reports. You can also sign in later." If you skip it, those features ask you to sign in when you use them, for example with a **Sign in to Azure** button. Team workspaces need an Azure sign-in too. Apps that run on this computer also reach Azure and Fabric data with your Azure sign-in.
 
 1. If the Azure CLI isn't installed, choose **Install** in this step. Where Fabricator can't install it for you, the step shows **Get it**, which opens the Azure CLI's install page.
 2. Choose **Sign in**, then complete `az login` in the browser.
@@ -58,8 +58,8 @@ If the sign-in fails, setup says why, but you can still enter Fabricator.
 ## What each account is for
 
 - GitHub Copilot writes code, edits files, answers chat prompts, and powers **Help**. It's the only account setup requires.
-- The Azure CLI, when you sign in to it, finds people to share with, connects Fabric data, reads the Power BI reports you migrate, and sets up team workspaces. With the **Local development** experiment on, apps that run on this computer read Fabric data with it too.
-- Fabric sign-in is separate. Fabricator asks you to **Sign in to Fabric** when it needs the project's Rayfin CLI to list workspaces, publish, share, or refresh Fabric credentials. A new app is published before you build it with chat, so that's usually in the **Publish your app** step of your first project.
+- The Azure CLI, when you sign in to it, finds people to share with, connects Fabric data, reads the Power BI reports you migrate, and sets up team workspaces. Apps that run on this computer read Fabric data with it too.
+- Fabric sign-in is separate. Fabricator asks you to **Sign in to Fabric** when it needs the project's Rayfin CLI to list workspaces, publish, share, or refresh Fabric credentials. Your apps run on this computer without it, so that's usually when you first publish an app.
 
 You can see and change all of these later, including adding more Fabric and Azure CLI accounts. See [Manage your accounts](/docs/start/accounts).
 

@@ -1,50 +1,20 @@
 ---
 title: "Develop on this computer"
-description: "Run your apps and their backend on this computer while you build, with the Local development experiment, and publish them to Microsoft Fabric when you choose."
+description: "Run your apps and their backend on this computer while you build, and publish them to Microsoft Fabric when you choose."
 ---
 
-> [!WARNING]
-> Local development is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
-
-With the **Local development** experiment on, each app you build, other than a team app, runs on this computer while you build it: its pages, its data, sign-in, functions, connectors and file storage. You can build and try an app without a Fabric workspace, and Copilot checks its work against the running app. When you want other people to use the app, you publish it to Microsoft Fabric.
+Each app you build, other than a team app, runs on this computer from the moment you create or open it: its pages, its data, sign-in, functions, connectors and file storage. You can build and try an app without a Fabric workspace, and Copilot checks its work against the running app. When you want other people to use the app, you publish it to Microsoft Fabric.
 
 ![The preview of Contoso Expenses running on this computer: the toolbar with Local and Published, the Running status, Preview as You and localhost:5173, and Output open below the app with Restart, Copy and the latest lines from rayfin-local and Vite.](/screenshots/preview-local.webp)
 
-## What changes when it's on
+> [!NOTE]
+> Earlier versions of Fabricator ran apps this way only with the **Local development** experiment on in **Settings → Experiments**. Now every app other than a team app runs on this computer, and the setting is gone. **Publish after each chat turn** is now off unless you turned it on yourself: until you turn it on, chat turns don't publish your apps. See [Publish after each chat turn](/docs/ship/deploy#publish-after-each-chat-turn).
 
-With the experiment off, Fabricator develops each app against its published copy in Fabric, as it always has. With it on:
-
-| | Local development off (the default) | Local development on |
-| --- | --- | --- |
-| A new app | Asks you to publish it in **Publish your app**. Chat is locked until it's published. | Opens with chat ready, running on this computer. |
-| The preview | Your published app. During a chat turn, your app's frontend runs on this computer against the published app's backend. | Your app on this computer, with its own backend and data. Once the app is published, **Local** and **Published** switch between the two. |
-| Changes to data, permissions and functions | Work once the app is published. | Work on this computer as soon as Copilot saves them. |
-| Your app's data | The published app's data, in Fabric. | Local data on this computer, separate from the published app's. |
-| **Publish after each chat turn** | On until you turn it off. | Off until you turn it on. |
-| Secrets | A value on the published app. | A value on this computer, and one on the published app once it's published. |
-| Blueprint | **Architecture**, **Data model** and **Fabric data**. | Also **Data**, with the local data. |
-| Rayfin version of a new app | The latest release. | The newest release Fabricator runs on this computer. Updates stop there too. |
-| Restoring an earlier version in **History** | Publishes it again, for a published app. | Stays on this computer until you publish. |
-
-Team apps aren't affected either way: the team pipeline publishes them, and their preview runs against their deployment in Fabric. See [Work on a team app](/docs/team/work-on-an-app).
-
-## Turn Local development on or off
-
-1. Open **Settings** from the account menu.
-2. Open **Experiments**.
-3. Turn on **Local development**. Settings describes it as "Run your apps and their backend on this computer while you build, and publish to Microsoft Fabric when you choose."
-
-![The Experiments section of Settings, with a warning that experiments may change, and the Team workspaces, Migrate Power BI reports and Local development switches, with Local development turned on.](/screenshots/settings-experiments.webp)
-
-The app you have open starts on this computer, and the preview shows it. Setup now lists **Local backend** with your tools, which checks that the local backend that comes with Fabricator runs. If Windows or your antivirus blocks it, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local). For your first app built this way, see [Build on this computer instead](/docs/start/first-app#build-on-this-computer-instead), and for the setting itself, [Local development](/docs/reference/settings#local-development) in Settings.
-
-An app you published before it ran on this computer starts with empty local data. The first time it runs here, the preview says that it "now runs on this computer" and that "Its local data starts empty. Your published app and its data are unchanged." Select **Show published app** to look at the published one.
-
-To turn the experiment off, turn off **Local development** in the same place. Fabricator stops the apps that run on this computer, and the preview goes back to your published apps, with your changes on the published backend during chat turns. Turning it off doesn't delete any local data. An app you haven't published yet has no published app for the preview to show: publish it to see it again.
+Team apps work differently: the team pipeline publishes them, and their preview runs against their deployment in Fabric. See [Work on a team app](/docs/team/work-on-an-app).
 
 ## What runs on this computer
 
-When you open an app, Fabricator starts its local backend, rayfin-local, which comes with Fabricator. The local backend runs:
+When you open an app, Fabricator starts its local backend, rayfin-local, which comes with Fabricator. Setup lists it as **Local backend** with your tools, and checks that it runs. If Windows or your antivirus blocks it, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local). The local backend runs:
 
 - The app's own Vite dev server, which the preview shows. Copilot's edits show up as it saves them.
 - The app's data API, with the access rules of its entities, over a local database that starts empty.
@@ -70,7 +40,7 @@ A few things don't run on this computer:
 - **KQL database (Kusto) connectors.** Until the app is published, its calls to them fail in the preview.
 - **Rayfin releases outside the line Fabricator runs**, such as 1.36.x. An app on another release can misbehave here. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
 
-When a published app needs one of these, its preview uses the published app's backend instead, and says why, for example "The logs connector runs only on Fabric, so the preview uses your published app’s backend." The preview then works as it does with Local development off: during a chat turn, your app's frontend runs on this computer against the published backend, and changes to data, permissions or functions reach that backend when you publish. There's no **Local** and **Published** switch, and the **Data** view still shows only the local data. After a chat turn that changes the app's packages or `rayfin/rayfin.yml`, Fabricator checks again whether this computer can run it. See [The preview uses your published app's backend](/docs/troubleshooting/preview#the-preview-uses-your-published-apps-backend).
+When a published app needs one of these, its preview uses the published app's backend instead, and says why, for example "The logs connector runs only on Fabric, so the preview uses your published app’s backend." The preview then runs your app's frontend on this computer against the published backend, so changes to data, permissions or functions reach that backend when you publish. While **Publish after each chat turn** is on, it does that only during chat turns, and shows your published app the rest of the time. There's no **Local** and **Published** switch, and the **Data** view still shows only the local data. After a chat turn that changes the app's packages or `rayfin/rayfin.yml`, Fabricator checks again whether this computer can run it. An app that was never published has no published backend to use, so it runs on this computer anyway. See [The preview uses your published app's backend](/docs/troubleshooting/preview#the-preview-uses-your-published-apps-backend).
 
 Some things work on this computer but can fail once the app is published:
 
@@ -81,7 +51,7 @@ The [Advisor](/docs/ship/advisor#checks-for-apps-that-run-on-this-computer) flag
 
 ## Watch your app in the preview
 
-The preview shows your app at a `localhost` address. Its toolbar shows the local backend's state, **Starting…**, **Running**, **Restarting…**, **Error** or **Stopped**, and **Running · problem** when a change didn't apply, such as a data model that couldn't be read: select it to open **Output**, the output of your app's backend, Vite and functions, with **Restart**. When the app can't start, the preview says why and offers a fix, such as **Install dependencies** or **Stop the other one**, with **Try again**, **View output** and **Find out why**, which asks Help. See [Your app on this computer](/docs/build/preview#your-app-on-this-computer) and [Your app doesn't start on this computer](/docs/troubleshooting/preview#your-app-doesnt-start-on-this-computer).
+The preview shows your app at a `localhost` address. While it starts, the preview says what it's doing. **Output**, in the preview toolbar, opens the output of your app's backend, Vite and functions, with **Restart**. It shows a dot only when your app needs a look, and the number of problems, such as **1 problem**, when a change didn't apply, such as a data model that couldn't be read. When the app can't start, the preview says why and offers a fix, such as **Install dependencies** or **Stop the other one**, with **Try again**, **View output** and **Find out why**, which asks Help. See [Your app on this computer](/docs/build/preview#your-app-on-this-computer) and [Your app doesn't start on this computer](/docs/troubleshooting/preview#your-app-doesnt-start-on-this-computer).
 
 After each chat turn that changes your app, Fabricator saves a version in **Code → History**, named after your request, so you can restore an earlier one.
 
@@ -124,7 +94,7 @@ Copilot sees the same refusal when it checks its work, and tells you what the ch
 
 ## How Copilot checks its work
 
-With Local development on, Copilot doesn't start the app, run a dev server or publish: Fabricator runs the app, and publishing is your choice. Copilot checks its work with static checks, such as type-checking and the build, and unit tests that run once. After it changes entities, functions, connectors or `rayfin/rayfin.yml`, it checks the local backend for problems, then calls the app's data API, functions and connectors as you, as a test user or signed out. That's how it shows that an access rule refuses the people it should.
+Copilot doesn't start the app, run a dev server or publish: Fabricator runs the app, and publishing is your choice. Copilot checks its work with static checks, such as type-checking and the build, and unit tests that run once. After it changes entities, functions, connectors or `rayfin/rayfin.yml`, it checks the local backend for problems, then calls the app's data API, functions and connectors as you, as a test user or signed out. That's how it shows that an access rule refuses the people it should.
 
 These checks show in the work log as steps such as **Checked the local backend** and "Called the app's data API while signed out". See [Chat with Copilot](/docs/build/chat#how-copilot-checks-its-work).
 
@@ -137,7 +107,9 @@ Your app doesn't need to be published to run, so publishing is up to you:
 
 Your app stays in the preview while it publishes. Once it's published, the preview toolbar has **Local** and **Published**.
 
-The published app has its own data: publishing doesn't copy the local data to Fabric. Its secrets need published values too. **Publish after each chat turn** is off: turn it on to have Fabricator publish your changes after each successful chat turn. See [Publish to Microsoft Fabric](/docs/ship/deploy).
+The published app has its own data: publishing doesn't copy the local data to Fabric. Its secrets need published values too. **Publish after each chat turn** is off until you turn it on in the publish control's panel: then Fabricator publishes your changes after each successful chat turn. See [Publish to Microsoft Fabric](/docs/ship/deploy).
+
+An app you published before it ran on this computer starts with empty local data, and its published app keeps its data. Until you select it or look at **Published**, the info button beside **Local** and **Published** in the preview toolbar is blue: select it for a short note on how the two differ.
 
 ## Where its files are
 

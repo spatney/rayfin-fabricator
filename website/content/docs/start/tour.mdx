@@ -11,7 +11,7 @@ Fabricator has two main places: Home, where you choose a project, and the projec
 
 Home is titled **Your projects**. Use it to start or open work:
 
-- **New project** creates a Rayfin app, then asks you to publish it to a Fabric workspace. With the **Local development** experiment on, the app opens with chat ready instead.
+- **New project** creates a Rayfin app and opens it with chat ready, running on this computer.
 - **Open folder** opens an existing local project.
 - **Clone from GitHub** brings a repository into Fabricator.
 - **Recent projects** lists projects you have opened before. A project can show **Open now** or **Missing**.
@@ -23,7 +23,7 @@ If **Team workspaces** is turned on in **Settings → Experiments**, Home also s
 
 ![The Fabricator workbench. On the left, the chat shows a finished Copilot turn that built an expense tracker; on the right, the preview shows the published app with a monthly total and a spending chart.](/screenshots/workbench.webp)
 
-When a project is open, the app bar starts with the project switcher. Choose the project name to open a menu of your recent projects, then choose one to switch to it. Choose **All projects** to see every project on Home while the current project keeps running, and choose the `Back to <project name>` button to return to it.
+When a project is open, the app bar starts with the project switcher, followed by **Search**. Choose the project name to open a menu of your recent projects, then choose one to switch to it. Choose **All projects** to see every project on Home while the current project keeps running, and choose the `Back to <project name>` button to return to it.
 
 The center of the app bar has project tabs:
 
@@ -42,23 +42,23 @@ The app bar also has the account menu, set apart from the project's controls. It
 
 ## Search
 
-**Search**, at the right of the app bar, finds your projects, the things you can do, the documentation and the open project's files, and asks Help. Select it, or press `Ctrl+K` (`Cmd+K` on macOS) from anywhere in the workbench. See [Search Fabricator](/docs/start/search).
+**Search**, at the left of the app bar after the project, finds your projects, the things you can do, the documentation and the open project's files, and asks Help. Select it, or press `Ctrl+K` (`Cmd+K` on macOS) from anywhere in the workbench. See [Search Fabricator](/docs/start/search).
 
 ## Build view
 
 **Build** is where you spend most of your time. Chat is on the left. The preview is on the right. During a turn, the chat work log shows what Copilot is doing.
 
-The preview shows your published app. While Copilot works, it shows the app's pages from this computer instead, at a `localhost` address with the published app's backend, so changes appear as Copilot makes them. It goes back to the published app once the turn's changes are published. With **Publish after each chat turn** off, it keeps showing your latest changes from this computer while the app is open.
+The preview shows your app running on this computer, with its own backend and data, so changes appear as Copilot makes them, and **Output** in the toolbar opens its output. Once that app is published, **Local** and **Published** switch between the two. See [Develop on this computer](/docs/build/local-development).
 
-With the **Local development** experiment on, the preview shows your app running on this computer, with its own backend and data, and its status, such as **Running**, in the toolbar. Once that app is published, **Local** and **Published** switch between the two. See [Develop on this computer](/docs/build/local-development).
+For a published app that this computer can't run, the preview shows the published app instead. While Copilot works, it shows that app's pages from this computer, at a `localhost` address with the published app's backend, and it goes back to the published app once the turn's changes are published. With **Publish after each chat turn** off, it keeps showing your latest changes from this computer while the app is open.
 
-The preview toolbar includes **Back**, **Forward**, **Reload**, the app's address, **Fabric**, **Design**, and **Focus**. With the **Local development** experiment on, it also has **Preview as**, which chooses who the app on this computer signs in as; see [Preview as someone else](/docs/build/preview#preview-as-someone-else). **Design** lets you click your app, queue visual changes, and send them to Copilot. See [Live preview](/docs/build/preview) and [Design mode](/docs/build/design).
+The preview toolbar includes **Back**, **Forward**, **Reload**, the app's address, **Design**, and **Focus**, plus **Fabric** for an app that works only inside the Fabric portal. It also has **Preview as**, which chooses who the app on this computer signs in as; see [Preview as someone else](/docs/build/preview#preview-as-someone-else). **Design** lets you click your app, queue visual changes, and send them to Copilot. See [Live preview](/docs/build/preview) and [Design mode](/docs/build/design).
 
 ## Code, Blueprint, and Advisor
 
 **Code** has four sub-tabs: **Files**, **History**, **Skills**, and **Secrets**. **Files** opens a read-only code viewer. **History** shows a timeline of changes. **Skills** manages reusable Copilot instructions. **Secrets** holds the values your app's functions read, such as API keys. See [Code and history](/docs/build/code-and-history), [Skills](/docs/build/skills) and [Secrets](/docs/build/secrets).
 
-**Blueprint** shows what the app is made of, what it connects to and which identity each connection uses, along with its Rayfin data model and the Fabric data it connects to: semantic models, and the tables of SQL databases, warehouses and lakehouses. With the **Local development** experiment on, its **Data** view shows the data your app stores on this computer. See [Blueprint](/docs/build/data-model).
+**Blueprint** shows what the app is made of, what it connects to and which identity each connection uses, along with its Rayfin data model and the Fabric data it connects to: semantic models, and the tables of SQL databases, warehouses and lakehouses. Its **Data** view shows the data your app stores on this computer. See [Blueprint](/docs/build/data-model).
 
 **Advisor** checks app health. The tab can show a badge for open high or medium issues. See [Check app health with the Advisor](/docs/ship/advisor).
 
@@ -68,7 +68,7 @@ The preview toolbar includes **Back**, **Forward**, **Reload**, the app's addres
 
 When you are signed in to Fabric, the account menu shows your account initials, and opening it shows your account and its organization. It has **Manage accounts…**, which opens **Accounts** for every account Fabricator uses, plus **Refresh Fabric authentication**, **Sign out** and **Settings**. When you are not signed in, it shows **Sign in to Fabric**, with **Manage accounts…** and **Settings** behind the arrow next to it. See [Manage your accounts](/docs/start/accounts).
 
-Open **Settings** from the account menu. Settings groups its options into **General** (**Accounts**, **API keys**, **Setup**, and **Workspace folder**), **Appearance** (**Theme** and **Text size**), **Diagnostics** (including **Usage stats**), **Experiments** (**Team workspaces**, **Migrate Power BI reports** and **Local development**), and **About** (the versions Fabricator runs on, and links to these docs). See [Settings](/docs/reference/settings).
+Open **Settings** from the account menu. Settings groups its options into **General** (**Accounts**, **API keys**, **Setup**, and **Workspace folder**), **Appearance** (**Theme** and **Text size**), **Diagnostics** (including **Usage stats**), **Experiments** (**Team workspaces** and **Migrate Power BI reports**), and **About** (the versions Fabricator runs on, and links to these docs). See [Settings](/docs/reference/settings).
 
 ## Status bar
 
@@ -83,7 +83,7 @@ The footer shows project and app status:
 
 ## Ray
 
-Ray is Fabricator's stingray. He keeps you company while an app installs its packages: when you create a project, clone one, or open one whose packages are missing. He shares facts about Rayfin and tips for Fabricator, and greets you in Help. The first time Fabricator starts on a computer, he's on the loading screen too, telling you in his own words how it's going. After that, he welcomes you back each time Fabricator opens, and he talks you through an app's first publish, and any publish you choose to watch.
+Ray is Fabricator's stingray. He keeps you company while an app installs its packages: when you create a project, clone one, or open one whose packages are missing. He shares facts about Rayfin and tips for Fabricator, and greets you in Help. The first time Fabricator starts on a computer, he's on the loading screen too, telling you in his own words how it's going. After that, he welcomes you back each time Fabricator opens, and he talks you through any publish you choose to watch.
 
 While Ray is on screen, you can:
 
