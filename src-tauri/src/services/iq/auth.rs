@@ -51,7 +51,7 @@ const TURNED_DOWN_WITHIN: Duration = Duration::from_secs(60);
 const EXPIRY_MARGIN: Duration = Duration::from_secs(120);
 
 const NOT_SIGNED_IN: &str =
-  "the user hasn't signed in to Work IQ. Turning Work IQ off and on in Settings → Experiments asks again";
+  "the user hasn't signed in to Work IQ. Turning the Work IQ plugin off and on in the chat asks again";
 
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::URL_SAFE_NO_PAD;
 

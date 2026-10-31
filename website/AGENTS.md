@@ -157,6 +157,7 @@ in `.md`.
 | `model-picker` | The chat composer's model picker with **Auto** off and the model list open, including **Your API keys** (sample data) | `/docs/build/chat`, `/docs/build/your-own-api-keys` |
 | `model-providers` | **Accounts → Model providers** with an Anthropic key saved and an OpenAI key being added (sample data) | `/docs/build/your-own-api-keys` |
 | `add-menu` | The chat composer's **+** menu with **Fabric data** open beside it, listing the kinds of data (sample data) | `/docs/build/chat` |
+| `plugins` | The chat composer's **Plugins** menu with **Fabric IQ** on and **Work IQ**, marked **Experiment**, off; the **Plugins** button names Fabric IQ (sample data) | `/docs/build/fabric-iq-and-work-iq` |
 | `connect-data` | **Add Fabric data** on the Finance analytics workspace: recent workspaces first, three items already connected and two picked (sample data) | `/docs/build/data-model` |
 | `data-chips` | The chat composer with the two items picked in `connect-data` waiting as chips for the next message (sample data) | `/docs/build/data-model` |
 | `plan` | A proposed plan waiting for approval | `/docs/build/chat` |
@@ -180,7 +181,7 @@ in `.md`.
 | `advisor-finding` | An open Advisor issue with its fix actions | `/docs/ship/advisor` |
 | `rayfin-version` | The Rayfin version control with an update available | `/docs/ship/rayfin-versions` |
 | `settings` | The Settings dialog: General (with **API keys**), Appearance and the start of Diagnostics (sample data) | `/docs/reference/settings` |
-| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports**, **App gallery**, **Fabric IQ** and **Work IQ**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq` |
+| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports**, **App gallery** and **Work IQ**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq` |
 | `migrate-report` | **Migrate a Power BI report** with a report picked: its workspace, semantic model, pages and the three checks, all passing (sample data) | `/docs/build/migrate-power-bi` |
 | `migration-card` | The Migration card above the chat composer after the first page, with **Migrate next page** and **Migrate the rest** (sample data) | `/docs/build/migrate-power-bi` |
 | `app-gallery` | The **App gallery** with the sample user's apps, and the sample app's details open beside them (sample data) | `/docs/build/app-gallery` |

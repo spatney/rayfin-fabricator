@@ -2236,6 +2236,41 @@ button.thinking-head:hover {
   font-family: var(--font-mono, monospace);
 }
 
+/* Plugins: the trigger names the ones that are on, and the menu (the model picker's)
+   switches each one, with its logo and what it looks up. */
+.pl-pill {
+  max-width: 200px;
+  color: var(--text);
+}
+
+.pl-pill .codicon[class*='codicon-'] {
+  flex: none;
+  font-size: 14px;
+}
+
+@container (max-width: 380px) {
+  .pl-pill-label {
+    display: none;
+  }
+}
+
+.mp-panel.pl-panel {
+  width: 300px;
+}
+
+.pl-item {
+  align-items: flex-start;
+}
+
+.pl-item .am-icon,
+.pl-item .switch {
+  margin-top: 1px;
+}
+
+.pl-item .mp-item-label {
+  white-space: normal;
+}
+
 /* Fabric data: chips waiting in the composer, and on the message that sent them.
    Flat, like the rest of the composer: a solid surface and a neutral border. */
 .data-tray,

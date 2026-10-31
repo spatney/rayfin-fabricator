@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { AddMenu } from './ComposerMenus'
+import { AddMenu, PluginsMenu } from './ComposerMenus'
+import { offeredPlugins } from './plugins'
 
 afterEach(cleanup)
 
@@ -53,5 +54,63 @@ describe('AddMenu', () => {
     expect(onImage).not.toHaveBeenCalled()
     fireEvent.click(within(menu).getByRole('menuitem', { name: /File/ }))
     expect(onReferenceFile).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('PluginsMenu', () => {
+  function renderPlugins(over: { on?: string[]; workIq?: boolean; disabled?: boolean } = {}) {
+    const onToggle = vi.fn()
+    const onLearnMore = vi.fn()
+    render(
+      <PluginsMenu
+        plugins={offeredPlugins({ workIq: over.workIq })}
+        on={over.on ?? []}
+        disabled={over.disabled}
+        onToggle={onToggle}
+        onLearnMore={onLearnMore}
+      />
+    )
+    return { onToggle, onLearnMore }
+  }
+
+  it('offers Fabric IQ, off to start, and Work IQ only while its experiment is on', () => {
+    const { onToggle } = renderPlugins()
+    fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
+    const fabric = screen.getByRole('menuitemcheckbox', { name: /Fabric IQ/ })
+    expect(screen.getAllByRole('menuitemcheckbox')).toEqual([fabric])
+    expect(fabric.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(fabric)
+    expect(onToggle).toHaveBeenLastCalledWith('fabric-iq', true)
+    // Switching a plugin leaves the menu open for the next one.
+    expect(screen.getByRole('menu', { name: 'Plugins' })).toBeTruthy()
+
+    cleanup()
+    renderPlugins({ workIq: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
+    const work = screen.getByRole('menuitemcheckbox', { name: /Work IQ/ })
+    expect(work.textContent).toContain('Experiment')
+  })
+
+  it('names the plugins that are on, which turn off from the menu', () => {
+    const { onToggle, onLearnMore } = renderPlugins({ on: ['work-iq', 'fabric-iq'], workIq: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Plugins: Fabric IQ, Work IQ' }))
+    const work = screen.getByRole('menuitemcheckbox', { name: /Work IQ/ })
+    expect(work.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(work)
+    expect(onToggle).toHaveBeenLastCalledWith('work-iq', false)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Learn about plugins' }))
+    expect(onLearnMore).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    // Without its experiment, Work IQ is neither named nor offered, even when it was on.
+    cleanup()
+    renderPlugins({ on: ['work-iq'] })
+    expect(screen.getByRole('button', { name: 'Plugins' })).toBeTruthy()
+  })
+
+  it('can’t be changed while the assistant is working', () => {
+    renderPlugins({ on: ['fabric-iq'], disabled: true })
+    const trigger = screen.getByRole('button', { name: 'Plugins: Fabric IQ' }) as HTMLButtonElement
+    expect(trigger.disabled).toBe(true)
   })
 })

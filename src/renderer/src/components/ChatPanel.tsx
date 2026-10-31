@@ -17,11 +17,14 @@ import {
   type ChatMigrationRef,
   type ChatMode,
   type ChatPlanArtifact,
+  type ChatPluginId,
   type ChatTurnResult,
   type CopilotAuthStatus,
+  type ExperimentFlags,
   type StudioProject
 } from '@shared/ipc'
 import { isCopilotAuthError } from '../copilotAuth'
+import { openDocs } from '../docsLinks'
 import type { WorkspaceUse } from '../fabric'
 import {
   dataTurnPrompt,
@@ -48,7 +51,8 @@ import {
 import type { OutboundPrompt, UIChatMessage } from './chat/types'
 import { suggestionsFor, useGeneratedSuggestions } from './chat/suggestions'
 import { SendIcon } from './chat/icons'
-import { AddMenu } from './chat/ComposerMenus'
+import { AddMenu, PluginsMenu } from './chat/ComposerMenus'
+import { offeredPlugins } from './chat/plugins'
 import { ModelPicker } from './models/ModelPicker'
 import { selectionArgs, selectionOf, type ModelSelection } from '../modelSelection'
 import { useCopilotModels } from '../copilotModels'
@@ -135,7 +139,7 @@ interface Props {
   onAttachmentsConsumed?: () => void
   /** Called when the user starts a new chat (parent clears persisted history). */
   onClearHistory?: () => void
-  /** Called after the model / effort options change (parent refreshes project). */
+  /** Called after the model / effort options or the plugins change (parent refreshes project). */
   onOptionsChanged?: () => void
   /** Open Accounts at Model providers (your own API keys). */
   onManageKeys?: () => void
@@ -188,6 +192,8 @@ interface Props {
   recentWorkspaces?: readonly WorkspaceUse[]
   /** Shown above the composer, such as a report migration's progress card. */
   banner?: ReactNode
+  /** The experiments that are on, for the plugins they add to chat (Work IQ). */
+  experiments?: ExperimentFlags
 }
 
 export default function ChatPanel({
@@ -226,7 +232,8 @@ export default function ChatPanel({
   copilotAuth,
   onCopilotAuthChanged,
   recentWorkspaces,
-  banner
+  banner,
+  experiments
 }: Props): JSX.Element {
   // The composer draft is seeded from — and mirrored back to — the parent so a
   // typed-but-unsent prompt survives this panel unmounting. Switching to the Code
@@ -458,6 +465,18 @@ export default function ChatPanel({
     setSelection(next)
     void window.api.chat.setOptions(project.id, selectionArgs(next))
     onOptionsChanged?.()
+  }
+
+  // The plugins on in this chat. A switch flips at once and flips back if it can't be saved.
+  const [plugins, setPlugins] = useState<readonly string[]>(() => project.plugins ?? [])
+  function togglePlugin(plugin: ChatPluginId, on: boolean): void {
+    const turn = (value: boolean) => (ids: readonly string[]) =>
+      value ? [...ids.filter((id) => id !== plugin), plugin] : ids.filter((id) => id !== plugin)
+    setPlugins(turn(on))
+    window.api.chat.setPlugin(project.id, plugin, on).then(
+      () => onOptionsChanged?.(),
+      () => setPlugins(turn(!on))
+    )
   }
 
   // Coalesce high-frequency streamed events (text / reasoning deltas and live tool
@@ -1680,6 +1699,13 @@ export default function ChatPanel({
                 onImage={() => fileRef.current?.click()}
                 onConnectData={(kind) => setConnect({ kind })}
                 onReferenceFile={insertMention}
+              />
+              <PluginsMenu
+                plugins={offeredPlugins(experiments)}
+                on={plugins}
+                disabled={sending}
+                onToggle={togglePlugin}
+                onLearnMore={() => openDocs('plugins')}
               />
               <ModelPicker
                 value={selection}

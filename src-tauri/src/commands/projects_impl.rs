@@ -221,6 +221,7 @@ pub(crate) fn register_project(dir: &Path, display_name: Option<&str>) -> Studio
     effort: None,
     auto_tier: None,
     context_tier: None,
+    plugins: Vec::new(),
     preview_mode: None,
     fabric_preview_defaulted: None,
     needs_fabric_portal: None,

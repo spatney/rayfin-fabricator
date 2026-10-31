@@ -341,18 +341,18 @@
   gap: 1px;
 }
 
-/* Auto's switch: the app's switch, a size smaller. */
-.mp-auto .switch.switch--sm {
+/* A menu item's switch (Auto, a plugin): the app's switch, a size smaller. */
+.mp-item .switch.switch--sm {
   width: 30px;
   height: 18px;
 }
 
-.mp-auto .switch.switch--sm .switch-knob {
+.mp-item .switch.switch--sm .switch-knob {
   width: 12px;
   height: 12px;
 }
 
-.mp-auto .switch.switch--sm.switch--on .switch-knob {
+.mp-item .switch.switch--sm.switch--on .switch-knob {
   transform: translateX(12px);
 }
 

@@ -2847,6 +2847,7 @@ export default function Workbench({
                             onClearHistory={() => void window.api.chat.saveHistory(active.id, [])}
                             onOptionsChanged={() => void refreshProjects()}
                             onManageKeys={openModelProviders}
+                            experiments={settings?.experiments}
                             outbound={chatOutbound?.projectId === active.id ? chatOutbound : null}
                             onOutboundConsumed={() => setChatOutbound(null)}
                             onAdvisorRerun={rerunAdvisorFix}

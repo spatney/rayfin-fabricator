@@ -395,14 +395,8 @@ export default function SettingsModal({
                       onChange={(v) => onChange({ experiments: { appGallery: v } })}
                     />
                     <ToggleRow
-                      label="Fabric IQ"
-                      hint="Let chat look up the Power BI reports and semantic models you can open, with Microsoft's Fabric IQ, and use what it finds while it builds. Read-only. Needs the Azure CLI."
-                      checked={Boolean(settings.experiments?.fabricIq)}
-                      onChange={(v) => onChange({ experiments: { fabricIq: v } })}
-                    />
-                    <ToggleRow
                       label="Work IQ"
-                      hint="Let chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. Read-only. You sign in with your work account in your browser. Needs a Microsoft 365 Copilot license and your organization's approval."
+                      hint="Add Work IQ to chat's plugins. Turned on in a chat, it lets chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. Read-only. You sign in with your work account in your browser. Needs a Microsoft 365 Copilot license and your organization's approval."
                       checked={Boolean(settings.experiments?.workIq)}
                       onChange={(v) => onChange({ experiments: { workIq: v } })}
                     />

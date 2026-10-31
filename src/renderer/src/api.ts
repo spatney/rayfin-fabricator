@@ -24,6 +24,7 @@ import {
   type ChatMessage,
   type ChatMode,
   type ChatOptions,
+  type ChatPluginId,
   type CreateProjectInput,
   type CustomSkillSaveInput,
   type DevStateEvent,
@@ -359,6 +360,8 @@ export const api: RayfinStudioApi = {
       invoke('chat_save_history', { projectId, messages }),
     setOptions: (projectId: string, options: ChatOptions) =>
       invoke('chat_set_options', { projectId, options }),
+    setPlugin: (projectId: string, plugin: ChatPluginId, on: boolean) =>
+      invoke('chat_set_plugin', { projectId, plugin, on }),
     listModels: () => invoke('chat_models'),
     autoTiers: () => invoke('chat_auto_tiers'),
     suggest: (projectId: string) => invoke('chat_suggest', { projectId }),

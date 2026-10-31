@@ -75,7 +75,7 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 ## Experiments
 
-**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has five experiments: **Team workspaces**, **Migrate Power BI reports**, **App gallery**, **Fabric IQ** and **Work IQ**.
+**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has four experiments: **Team workspaces**, **Migrate Power BI reports**, **App gallery** and **Work IQ**.
 
 ### Team workspaces
 
@@ -98,16 +98,9 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 > [!WARNING]
 > The app gallery is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
 
-### Fabric IQ
-
-**Fabric IQ** lets chat look up the Power BI reports and semantic models you can open, with Microsoft's Fabric IQ, and use what it finds while it builds. It only reads. It uses the Azure CLI's sign-in, so this experiment needs the Azure CLI. See [Research with Fabric IQ and Work IQ](/docs/build/fabric-iq-and-work-iq).
-
-> [!WARNING]
-> Fabric IQ is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
-
 ### Work IQ
 
-**Work IQ** lets chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. It only reads: chat can't send, change or delete anything. You sign in with your work account in your browser the first time chat uses it. It needs a Microsoft 365 Copilot license and your organization's approval. See [Research with Fabric IQ and Work IQ](/docs/build/fabric-iq-and-work-iq).
+**Work IQ** adds Work IQ to the chat composer's **Plugins**. Turned on in an app's chat, it lets chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. It only reads: chat can't send, change or delete anything. You sign in with your work account in your browser the first time chat uses it. It needs a Microsoft 365 Copilot license and your organization's approval. Turning the experiment off takes Work IQ out of every chat and signs you out of it. See [Add Work IQ](/docs/build/fabric-iq-and-work-iq#add-work-iq).
 
 > [!WARNING]
 > Work IQ is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.

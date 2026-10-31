@@ -381,6 +381,7 @@ pub fn run() {
       commands::chat::chat_history,
       commands::chat::chat_save_history,
       commands::chat::chat_set_options,
+      commands::chat::chat_set_plugin,
       commands::chat::chat_models,
       commands::chat::chat_auto_tiers,
       // suggestions

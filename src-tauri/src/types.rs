@@ -693,6 +693,10 @@ pub struct StudioProject {
   /// `"long_context"`).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub context_tier: Option<String>,
+  /// The plugins on in this project's Build chat (`"fabric-iq"`, `"work-iq"`).
+  /// Each is off until the user turns it on in the chat.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub plugins: Vec<String>,
   /// Preview pane view selection: `"fabric"` shows the app embedded in the Fabric
   /// portal shell (`last_deploy.portal_url`); absent / `"direct"` shows the app
   /// URL directly. Persisted so the Fabricator agent's screenshot/navigate tools
@@ -749,14 +753,10 @@ pub struct ExperimentFlags {
   /// with the Azure CLI's sign-in. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub app_gallery: Option<bool>,
-  /// Fabric IQ: Build chat can look up the Power BI reports and semantic
-  /// models the user can open, read-only, through Microsoft's Fabric IQ MCP
-  /// server. Opt-in (off by default).
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub fabric_iq: Option<bool>,
-  /// Work IQ: Build chat can look up the user's Microsoft 365 email, meetings,
-  /// files, Teams messages and people, read-only, through Microsoft's Work IQ
-  /// MCP server. Opt-in (off by default).
+  /// Work IQ: Build chat offers the Work IQ plugin, which looks up the user's
+  /// Microsoft 365 email, meetings, files, Teams messages and people,
+  /// read-only, through Microsoft's Work IQ MCP server. Opt-in (off by
+  /// default); each chat still has the plugin off until it's turned on there.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub work_iq: Option<bool>,
 }

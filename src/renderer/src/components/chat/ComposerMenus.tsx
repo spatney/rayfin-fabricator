@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
+import type { ChatPluginId } from '@shared/ipc'
 import { DATA_KINDS, type DataKind } from '@renderer/fabricData'
 import { moveMenuFocus } from '@renderer/menuFocus'
 import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
 import { useSuppressPreview } from '@renderer/overlay'
 import { Codicon, ImageIcon } from '../icons'
+import type { ChatPlugin } from './plugins'
 import fabricSvg from '../../assets/brands/fabric.svg'
 import '../models/modelPicker.css'
 
 const MAIN_WIDTH = 236
 const FLY_WIDTH = 236
 const GAP = 6
+const PLUGINS_WIDTH = 300
 
 /** What each kind of Fabric data lets the app do, in a word or two. */
 const DATA_HINT: Record<DataKind, string> = {
@@ -234,6 +237,185 @@ export function AddMenu({
                 </button>
               </div>
             )}
+          </div>,
+          document.body
+        )}
+    </div>
+  )
+}
+
+/**
+ * The composer's plugins, beside the "+" menu: services chat can look things up
+ * with while it builds, such as Fabric IQ. Each is off until turned on, and changes
+ * from the chat's next message; the trigger names the ones that are on.
+ */
+export function PluginsMenu({
+  plugins,
+  on,
+  disabled = false,
+  onToggle,
+  onLearnMore
+}: {
+  /** The plugins chat offers. */
+  plugins: readonly ChatPlugin[]
+  /** The ids of the plugins on in this chat. */
+  on: readonly string[]
+  /** While the assistant is working: plugins change between messages. */
+  disabled?: boolean
+  onToggle: (plugin: ChatPluginId, on: boolean) => void
+  onLearnMore?: () => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [layout, setLayout] = useState<MenuLayout>({ side: 'right', style: {} })
+  const rootRef = useRef<HTMLDivElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  // Wider than the narrowest chat pane, so it can reach over the preview.
+  useSuppressPreview(open)
+
+  const names = plugins
+    .filter((p) => on.includes(p.id))
+    .map((p) => p.name)
+    .join(', ')
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent): void => {
+      const target = event.target as Node
+      if (!rootRef.current?.contains(target) && !popRef.current?.contains(target)) setOpen(false)
+    }
+    const resize = (): void => setOpen(false)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('resize', resize)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('resize', resize)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const id = requestAnimationFrame(() =>
+      panelRef.current?.querySelector<HTMLElement>('[role^="menuitem"]:not(:disabled)')?.focus()
+    )
+    return () => cancelAnimationFrame(id)
+  }, [open])
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
+  function openMenu(): void {
+    const r = triggerRef.current?.getBoundingClientRect()
+    if (r) setLayout(menuLayout(r, 'up', PLUGINS_WIDTH + 12))
+    setOpen(true)
+  }
+
+  function closeMenu(focusTrigger = true): void {
+    setOpen(false)
+    if (focusTrigger) requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className="composer-menu plugins-menu"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !open) return
+        event.preventDefault()
+        event.stopPropagation()
+        closeMenu()
+      }}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`${names ? 'composer-pill pl-pill' : 'composer-icon-btn'}${open ? ' is-open' : ''}`}
+        onClick={() => (open ? closeMenu(false) : openMenu())}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={names ? `Plugins: ${names}` : 'Plugins'}
+        title={
+          disabled
+            ? 'Plugins can’t be changed while the assistant is working'
+            : names
+              ? `Plugins: ${names}`
+              : 'Plugins'
+        }
+      >
+        <Codicon name="plug" />
+        {names && <span className="composer-pill-label pl-pill-label">{names}</span>}
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={popRef}
+            className={`mp-pop mp-pop--up mp-pop--${layout.side}`}
+            style={layout.style}
+          >
+            <div
+              ref={panelRef}
+              className="mp-panel pl-panel"
+              role="menu"
+              aria-label="Plugins"
+              onKeyDown={(event) => moveMenuFocus(event, '[role^="menuitem"]')}
+            >
+              <div className="mp-heading" aria-hidden="true">
+                Plugins
+              </div>
+              {plugins.map((p) => {
+                const isOn = on.includes(p.id)
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={isOn}
+                    className="mp-item pl-item"
+                    onClick={() => onToggle(p.id, !isOn)}
+                  >
+                    <img src={p.logo} alt="" draggable={false} className="am-icon" />
+                    <span className="mp-item-text">
+                      <span className="mp-item-label">
+                        {p.name}
+                        {p.experiment && (
+                          <span className="mp-badge mp-badge--inline">Experiment</span>
+                        )}
+                      </span>
+                      <span className="mp-item-desc">{p.description}</span>
+                    </span>
+                    <span
+                      className={`switch switch--sm${isOn ? ' switch--on' : ''}`}
+                      aria-hidden="true"
+                    >
+                      <span className="switch-knob" />
+                    </span>
+                  </button>
+                )
+              })}
+              <p className="mp-note">
+                Chat looks things up with a plugin only when a request needs it. Plugins only read.
+              </p>
+              {onLearnMore && (
+                <>
+                  <div className="mp-sep" role="separator" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="mp-item mp-quiet"
+                    onClick={() => {
+                      closeMenu(false)
+                      onLearnMore()
+                    }}
+                  >
+                    <Codicon name="book" className="am-icon" />
+                    <span className="mp-item-label am-label">Learn about plugins</span>
+                  </button>
+                </>
+              )}
+            </div>
           </div>,
           document.body
         )}

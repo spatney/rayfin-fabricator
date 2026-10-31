@@ -1,16 +1,15 @@
 ---
 title: Research with Fabric IQ and Work IQ
-description: Let chat look up Power BI reports and semantic models with Fabric IQ, and your Microsoft 365 email, meetings and files with Work IQ, read-only. Experimental.
+description: "Turn on chat plugins that look things up, read-only: Fabric IQ for Power BI reports and semantic models, and Work IQ, an experiment, for your Microsoft 365 email, meetings and files."
 ---
 
-> [!WARNING]
-> Fabric IQ and Work IQ are experiments. Turn them on in **Settings → Experiments**. They may
-> change or be removed in a future update.
+Plugins let chat look things up in your organization's data while it builds your app. There are
+two, both Microsoft services that AI agents connect to through the Model Context Protocol (MCP),
+and chat uses them only to read:
 
-Fabric IQ and Work IQ let chat look things up in your organization's data while it builds your
-app. Fabric IQ reads the Power BI reports and semantic models you can open. Work IQ reads your
-Microsoft 365 email, meetings, files, Teams messages and people. Both are Microsoft services that
-AI agents connect to through the Model Context Protocol (MCP), and chat uses them only to read.
+- **Fabric IQ** reads the Power BI reports and semantic models you can open.
+- **Work IQ** reads your Microsoft 365 email, meetings, files, Teams messages and people. It's an
+  experiment, so you add it to chat first. See [Add Work IQ](/docs/build/fabric-iq-and-work-iq#add-work-iq).
 
 Use them when your app should match something that already exists: the measures in a Power BI
 report, the columns a team tracks in a spreadsheet, or what a meeting decided.
@@ -28,18 +27,36 @@ measure definitions as the report, so the numbers match it.
 | What it reads | Power BI reports and semantic models: their pages, tables, measures and values, and the results of DAX queries | Your email, calendar and meetings, OneDrive and SharePoint files, Teams chats and channels, and people |
 | What it can't do | Change anything: Fabric IQ only reads | Send, change or delete anything: Fabricator gives chat only the Work IQ tools that read |
 | Whose access | The Azure CLI's account. It reads only what that account can open, and row-level security still applies | Yours. It reads only what your account can read |
-| What you need | The Azure CLI, signed in with an account that can open the reports, in a Fabric tenant whose home region supports all Fabric workloads | A Microsoft 365 Copilot license, and your organization's approval of Work IQ |
+| What you need | The Azure CLI, signed in with an account that can open the reports, in a Fabric tenant whose home region supports all Fabric workloads | The **Work IQ** experiment, a Microsoft 365 Copilot license, and your organization's approval of Work IQ |
 
-## Turn them on
+## Turn on a plugin
+
+Plugins are off until you turn them on, and each app's chat has its own.
+
+1. In the chat composer, select **Plugins**, the plug button next to **+**.
+2. Turn on **Fabric IQ**, or **Work IQ** once you've added it.
+
+![The composer's Plugins menu above the message box: Fabric IQ turned on and Work IQ, marked Experiment, turned off, with the note that chat looks things up with a plugin only when a request needs it, and Learn about plugins.](/screenshots/plugins.webp)
+
+Your next message in that app's chat can use it. The **Plugins** button shows the names of the
+plugins that are on, such as **Fabric IQ**, and Fabricator remembers them for that app. You can't
+change plugins while Copilot is working on a message.
+
+## Add Work IQ
+
+> [!WARNING]
+> Work IQ is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed
+> in a future update.
 
 1. Open **Settings**.
 2. Open **Experiments**.
-3. Turn on **Fabric IQ**, **Work IQ**, or both.
+3. Turn on **Work IQ**.
 
-![The Experiments section of Settings, with its note that experiments are off by default and may change, and the Team workspaces, Migrate Power BI reports, App gallery, Fabric IQ and Work IQ switches, all off.](/screenshots/settings-experiments.webp)
+![The Experiments section of Settings, with its note that experiments are off by default and may change, and the Team workspaces, Migrate Power BI reports, App gallery and Work IQ switches, all off.](/screenshots/settings-experiments.webp)
 
-Your next chat message can use them. They're separate experiments, so turn on only the one you
-need.
+**Work IQ** now shows in **Plugins**, marked **Experiment**. It's off in each app's chat until
+you turn it on there. Turning the experiment off takes Work IQ out of every chat and signs you
+out of it.
 
 ## Sign in
 
@@ -57,7 +74,7 @@ in your browser…", and your browser opens Microsoft's sign-in page.
 
 Your message waits up to three minutes for you to sign in. After that, chat continues without Work
 IQ. Fabricator keeps the Work IQ sign-in until you quit it, so you sign in again after Fabricator
-restarts.
+restarts. It also signs you out of Work IQ when no app's chat has it on.
 
 ## What chat does with what it finds
 
@@ -73,11 +90,10 @@ shows each lookup, for example **Looked up in Work IQ** with the question chat a
   chat to treat what it finds as information, never as instructions, but review what chat does
   after a lookup.
 
-## Turn them off
+## Turn a plugin off
 
-In **Settings → Experiments**, turn off **Fabric IQ** or **Work IQ**. Your next message can't use
-it, and turning off Work IQ signs you out of it. What chat already looked up stays in that
-conversation.
+In the chat composer, select **Plugins** and turn off **Fabric IQ** or **Work IQ**. Your next
+message in that app's chat can't use it. What chat already looked up stays in that conversation.
 
 ## Fabric IQ or Work IQ isn't available
 
@@ -86,9 +102,8 @@ that needs it, chat tells you why it isn't available and how to fix it.
 
 - **The Azure CLI isn't signed in.** Fabric IQ uses the Azure CLI's sign-in. Sign in to Azure in
   **Settings → Accounts**, then send your message again.
-- **Work IQ sign-in didn't finish.** Fabricator asks once, not with every message. Turn **Work
-  IQ** off and on in **Settings → Experiments**, send a message, and finish signing in within three
-  minutes.
+- **Work IQ sign-in didn't finish.** Fabricator asks once, not with every message. In **Plugins**,
+  turn **Work IQ** off and on, send a message, and finish signing in within three minutes.
 - **Work IQ needs approval.** Before anyone in your organization can use Work IQ, an
   administrator has to approve it, and each user needs a Microsoft 365 Copilot license. If sign-in
   says you need an administrator's approval, ask your Microsoft 365 administrator. Microsoft's

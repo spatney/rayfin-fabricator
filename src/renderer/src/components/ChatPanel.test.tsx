@@ -1070,6 +1070,44 @@ describe('ChatPanel images and the chosen model', () => {
   })
 })
 
+describe('ChatPanel plugins', () => {
+  it('saves a plugin for this app’s chat, and turns it back when that fails', async () => {
+    const api = (window as unknown as { api: { chat: Record<string, ReturnType<typeof vi.fn>> } })
+      .api
+    api.chat.setPlugin = vi
+      .fn()
+      .mockResolvedValueOnce(['fabric-iq'])
+      .mockRejectedValueOnce(new Error('Project not found.'))
+    const onOptionsChanged = vi.fn()
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[]}
+        onChange={() => {}}
+        onOptionsChanged={onOptionsChanged}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Fabric IQ/ }))
+    expect(api.chat.setPlugin).toHaveBeenLastCalledWith('p1', 'fabric-iq', true)
+    await waitFor(() => expect(onOptionsChanged).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: 'Plugins: Fabric IQ' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Fabric IQ/ }))
+    expect(api.chat.setPlugin).toHaveBeenLastCalledWith('p1', 'fabric-iq', false)
+    expect(
+      screen.getByRole('menuitemcheckbox', { name: /Fabric IQ/ }).getAttribute('aria-checked')
+    ).toBe('false')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitemcheckbox', { name: /Fabric IQ/ }).getAttribute('aria-checked')
+      ).toBe('true')
+    )
+    expect(onOptionsChanged).toHaveBeenCalledOnce()
+  })
+})
+
 /**
  * Perf guard (P1): streamed `delta` events must be coalesced. The SDK emits one
  * IPC event per token; applying each individually re-parsed the growing markdown

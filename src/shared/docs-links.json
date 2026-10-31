@@ -13,6 +13,7 @@
     "secrets": "/docs/build/secrets",
     "apiKeys": "/docs/build/your-own-api-keys",
     "migrate": "/docs/build/migrate-power-bi",
+    "plugins": "/docs/build/fabric-iq-and-work-iq",
     "teamAdmins": "/docs/team/administrators"
   }
 }

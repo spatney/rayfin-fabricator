@@ -1,5 +1,7 @@
-//! Fabric IQ and Work IQ (experiments): Microsoft's hosted MCP servers for
-//! Power BI and Microsoft 365, which Build chat can use for read-only research.
+//! Fabric IQ and Work IQ: Build chat's plugins, Microsoft's hosted MCP servers
+//! for Power BI and Microsoft 365, which chat can use for read-only research.
+//! Each is off in a project's chat until the user turns it on there; Work IQ
+//! is offered only while its experiment is on.
 //!
 //! The servers belong to the chat's Copilot session, never to the project or
 //! the user's own Copilot CLI settings. The runtime connects to them with the
@@ -25,7 +27,7 @@ use tokio::time::Instant;
 pub use auth::IqAuth;
 
 use crate::services::exec::CancelToken;
-use crate::types::AppSettings;
+use crate::types::{AppSettings, StudioProject};
 
 /// Work IQ's tools that only read. Its others send, change or delete things.
 /// `call_function` runs OData functions (searches, deltas), which change
@@ -63,6 +65,18 @@ impl Iq {
 
   fn from_server(name: &str) -> Option<Iq> {
     Iq::ALL.into_iter().find(|iq| iq.server() == name)
+  }
+
+  /// Its id among a project's chat plugins.
+  pub fn plugin(self) -> &'static str {
+    match self {
+      Iq::Fabric => "fabric-iq",
+      Iq::Work => "work-iq",
+    }
+  }
+
+  pub fn from_plugin(id: &str) -> Option<Iq> {
+    Iq::ALL.into_iter().find(|iq| iq.plugin() == id)
   }
 
   /// What it is, for the agent.
@@ -116,7 +130,7 @@ impl Iq {
   }
 }
 
-/// Which of them a Build chat has: the ones whose experiment is on.
+/// Which of them a Build chat has: the plugins that are on in its project.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct IqConfig {
   pub fabric: bool,
@@ -124,12 +138,20 @@ pub struct IqConfig {
 }
 
 impl IqConfig {
-  pub fn from_settings(settings: &AppSettings) -> Self {
-    let flags = settings.experiments.as_ref();
-    IqConfig {
-      fabric: flags.and_then(|f| f.fabric_iq).unwrap_or(false),
-      work: flags.and_then(|f| f.work_iq).unwrap_or(false),
-    }
+  /// The plugins that are on in `project`'s chat. Work IQ counts only while
+  /// its experiment is on.
+  pub fn for_project(project: &StudioProject, settings: &AppSettings) -> Self {
+    let on = |iq: Iq| project.plugins.iter().any(|id| id == iq.plugin());
+    let work_offered = settings.experiments.as_ref().and_then(|f| f.work_iq).unwrap_or(false);
+    IqConfig { fabric: on(Iq::Fabric), work: work_offered && on(Iq::Work) }
+  }
+
+  /// The plugins that are on in any of `projects`' chats.
+  pub fn in_use(projects: &[StudioProject], settings: &AppSettings) -> Self {
+    projects.iter().map(|p| Self::for_project(p, settings)).fold(Self::default(), |all, one| IqConfig {
+      fabric: all.fabric || one.fabric,
+      work: all.work || one.work,
+    })
   }
 
   pub fn any(self) -> bool {
@@ -161,8 +183,8 @@ impl IqConfig {
   }
 
   /// Whether a chat may call `tool` on the MCP server `server`, or `None` when
-  /// that's neither Fabric IQ nor Work IQ. A server whose experiment is off
-  /// allows nothing, in case a session still runs it.
+  /// that's neither Fabric IQ nor Work IQ. A server whose plugin is off allows
+  /// nothing, in case a session still runs it.
   pub fn permits(self, server: &str, tool: &str) -> Option<bool> {
     let iq = Iq::from_server(server)?;
     Some(self.has(iq) && iq.allows(tool))
@@ -210,8 +232,8 @@ struct Remembered {
   down: HashMap<Iq, String>,
 }
 
-/// What Fabricator found about each server since it started, or since the
-/// experiments last changed.
+/// What Fabricator found about each server since it started, or since its
+/// plugin was last turned on or off.
 #[derive(Default)]
 pub struct Memory(Mutex<Remembered>);
 
@@ -230,24 +252,25 @@ impl Memory {
   }
 
   fn connected(&self, iq: Iq) {
+    self.reset(iq);
+  }
+
+  /// Forgets what it found about `iq`, so the next message tries it again.
+  pub fn reset(&self, iq: Iq) {
     let mut remembered = self.0.lock().unwrap();
     remembered.asked.remove(&iq);
     remembered.down.remove(&iq);
-  }
-
-  /// Forgets everything, so the next message tries again.
-  pub fn reset(&self) {
-    *self.0.lock().unwrap() = Remembered::default();
   }
 }
 
 pub static MEMORY: Lazy<Memory> = Lazy::new(Memory::default);
 
-/// The experiments changed: try again from scratch, and drop the sign-in of
-/// any that was turned off.
-pub fn settings_changed(now: IqConfig) {
-  MEMORY.reset();
-  for iq in Iq::ALL.into_iter().filter(|iq| !now.has(*iq)) {
+/// `iq`'s plugin was turned on or off in a chat, or Work IQ's experiment
+/// changed (`in_use`: the plugins on in any chat now). The next message tries
+/// it again from scratch, and once no chat has it on, its sign-in is dropped.
+pub fn toggled(iq: Iq, in_use: IqConfig) {
+  MEMORY.reset(iq);
+  if !in_use.has(iq) {
     auth::forget(iq);
   }
 }
@@ -395,8 +418,8 @@ pub async fn prepare(
             match credentials.sign_in(iq, ui.open, cancel, waits.sign_in).await {
               SignIn::Done => attempt.signed_in = true,
               SignIn::Unfinished => {
-                let why = "the sign-in in the browser didn't finish. Turning Work IQ off and on in Settings → \
-                           Experiments asks again";
+                let why = "the sign-in in the browser didn't finish. Turning the Work IQ plugin off and on in \
+                           the chat asks again";
                 left_out(&mut prepared, memory, iq, why);
                 continue;
               }
@@ -505,7 +528,7 @@ mod tests {
   }
 
   #[test]
-  fn chat_may_only_read_and_only_while_an_experiment_is_on() {
+  fn chat_may_only_read_and_only_while_a_plugin_is_on() {
     assert_eq!(BOTH.permits("FabricIQ", "ExecuteQuery"), Some(true));
     for tool in WORK_IQ_READ_TOOLS {
       assert_eq!(BOTH.permits("workiq", tool), Some(true), "{tool}");
@@ -531,12 +554,35 @@ mod tests {
   }
 
   #[test]
-  fn turning_an_experiment_off_and_on_asks_again() {
+  fn turning_a_plugin_off_and_on_asks_again_for_it_alone() {
     let memory = Memory::default();
     assert!(memory.first_ask(Iq::Work) && !memory.first_ask(Iq::Work));
     memory.set_down(Iq::Fabric, "why");
-    memory.reset();
-    assert!(memory.first_ask(Iq::Work) && memory.down(Iq::Fabric).is_none());
+    memory.reset(Iq::Work);
+    assert!(memory.first_ask(Iq::Work));
+    assert_eq!(memory.down(Iq::Fabric).as_deref(), Some("why"));
+    memory.reset(Iq::Fabric);
+    assert!(memory.down(Iq::Fabric).is_none());
+  }
+
+  #[test]
+  fn a_chat_has_the_plugins_on_in_its_project_and_work_iq_only_with_its_experiment() {
+    let project = |plugins: Value| -> StudioProject {
+      serde_json::from_value(json!({
+        "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z", "plugins": plugins
+      }))
+      .unwrap()
+    };
+    let settings = |work_iq: bool| -> AppSettings {
+      serde_json::from_value(json!({ "theme": "dark", "experiments": { "workIq": work_iq } })).unwrap()
+    };
+    let both = project(json!(["work-iq", "fabric-iq", "a-later-plugin"]));
+    assert_eq!(IqConfig::for_project(&both, &settings(true)), BOTH);
+    assert_eq!(IqConfig::for_project(&both, &settings(false)), FABRIC);
+    assert_eq!(IqConfig::for_project(&project(json!([])), &settings(true)), IqConfig::default());
+    let projects = [project(json!(["fabric-iq"])), project(json!(["work-iq"]))];
+    assert_eq!(IqConfig::in_use(&projects, &settings(true)), BOTH);
+    assert_eq!(IqConfig::in_use(&projects, &settings(false)), FABRIC);
   }
 
   /// Hands out tokens as told, and records what it was asked.

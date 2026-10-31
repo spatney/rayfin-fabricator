@@ -215,31 +215,27 @@ describe('SettingsModal app gallery experiment', () => {
   })
 })
 
-describe('SettingsModal Fabric IQ and Work IQ experiments', () => {
+describe('SettingsModal Work IQ experiment', () => {
   function checkbox(label: string): HTMLInputElement {
     const row = screen.getByText(label).closest('label')
     if (!row) throw new Error(`${label} label not found`)
     return row.querySelector('input[type="checkbox"]') as HTMLInputElement
   }
 
-  it.each([
-    ['Fabric IQ', 'fabricIq'],
-    ['Work IQ', 'workIq']
-  ])('%s is off by default and turns on through its own flag', async (label, flag) => {
+  it('is off by default and turns on through its own flag', async () => {
     installApi()
     const { onChange } = await renderModal()
     fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
-    expect(checkbox(label).checked).toBe(false)
-    fireEvent.click(checkbox(label))
-    expect(onChange).toHaveBeenCalledWith({ experiments: { [flag]: true } })
+    expect(checkbox('Work IQ').checked).toBe(false)
+    fireEvent.click(checkbox('Work IQ'))
+    expect(onChange).toHaveBeenCalledWith({ experiments: { workIq: true } })
   })
 
-  it('reflects each persisted flag on its own', async () => {
+  it('reflects the persisted flag', async () => {
     installApi()
     await renderModal({ settings: { theme: 'system', experiments: { workIq: true } } })
     fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
     expect(checkbox('Work IQ').checked).toBe(true)
-    expect(checkbox('Fabric IQ').checked).toBe(false)
   })
 })
 
@@ -257,6 +253,7 @@ describe('SettingsModal retired controls', () => {
           manualDeploy: enabled,
           byok: enabled,
           localDevelopment: enabled,
+          fabricIq: enabled,
           teamWorkspaces: true
         }
       }
@@ -270,6 +267,7 @@ describe('SettingsModal retired controls', () => {
         'Deploy manually',
         'Your own API keys',
         'Local development',
+        'Fabric IQ',
         'Performance',
         'Ray',
         'Check for updates'
@@ -277,11 +275,10 @@ describe('SettingsModal retired controls', () => {
         expect(screen.queryByText(label)).toBeNull()
       }
       expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-      expect(screen.getAllByRole('checkbox')).toHaveLength(6)
+      expect(screen.getAllByRole('checkbox')).toHaveLength(5)
       expect(screen.getByText('Team workspaces')).toBeTruthy()
       expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
       expect(screen.getByText('App gallery')).toBeTruthy()
-      expect(screen.getByText('Fabric IQ')).toBeTruthy()
       expect(screen.getByText('Work IQ')).toBeTruthy()
       expect(screen.getByText('Full diagnostics')).toBeTruthy()
     }

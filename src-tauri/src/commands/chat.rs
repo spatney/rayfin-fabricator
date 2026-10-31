@@ -768,8 +768,8 @@ pub(crate) async fn run_turn(
   // on a provider's model first checks it can run, so it never quietly runs on
   // another model.
   let byok_registry = state.byok.session_registry();
-  // Fabric IQ and Work IQ (experiments): the MCP servers this chat can research with.
-  let iq = IqConfig::from_settings(&store::get_settings());
+  // The plugins on in this chat: the Fabric IQ and Work IQ servers it can research with.
+  let iq = IqConfig::for_project(&project, &store::get_settings());
   let provider_model = project.model.clone().filter(|m| byok::is_provider_selection(m));
   let provider = provider_model.as_deref().and_then(byok::describe);
   let choice = ModelChoice::new(
@@ -1474,6 +1474,24 @@ pub fn chat_set_options(project_id: String, options: ChatOptions) {
     p.auto_tier = choice.auto_tier;
     p.context_tier = choice.context_tier;
   });
+}
+
+/// Turns a plugin on or off in a project's chat, from its next message, and
+/// returns the plugins now on there.
+#[tauri::command]
+pub fn chat_set_plugin(project_id: String, plugin: String, on: bool) -> Result<Vec<String>, String> {
+  let iq = iq::Iq::from_plugin(&plugin).ok_or_else(|| format!("Fabricator doesn't have the plugin {plugin}."))?;
+  if store::find_project(&project_id).is_none() {
+    return Err("Project not found.".into());
+  }
+  let state = store::mutate_project(&project_id, |p| {
+    p.plugins.retain(|id| *id != plugin);
+    if on {
+      p.plugins.push(plugin.clone());
+    }
+  });
+  iq::toggled(iq, IqConfig::in_use(&state.projects, &store::get_settings()));
+  Ok(state.projects.into_iter().find(|p| p.id == project_id).map(|p| p.plugins).unwrap_or_default())
 }
 
 /// List the Copilot models available to the signed-in user, for the chat model

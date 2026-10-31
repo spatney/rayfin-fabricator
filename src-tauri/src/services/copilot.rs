@@ -75,8 +75,8 @@ struct Entry {
   /// The guidance the session was opened with; a different one (the app's
   /// backend moved between this computer and Fabric) reopens it.
   guidance: Option<Guidance>,
-  /// Fabric IQ and Work IQ (experiments), as the session was opened with them;
-  /// turning one on or off reopens it.
+  /// The Fabric IQ and Work IQ plugins the session was opened with; turning one
+  /// on or off reopens it.
   iq: IqConfig,
 }
 
@@ -379,8 +379,8 @@ pub struct SessionOptions {
   /// switch to. The runtime doesn't persist them, so they are re-supplied on
   /// every resume.
   pub byok: Option<crate::services::byok::registry::ByokRegistry>,
-  /// Fabric IQ and Work IQ (experiments), Build chat's only: the MCP servers
-  /// the session gets. Like the providers, they're re-supplied on every resume.
+  /// The Fabric IQ and Work IQ plugins on in a Build chat: the MCP servers the
+  /// session gets. Like the providers, they're re-supplied on every resume.
   pub iq: IqConfig,
 }
 
@@ -505,8 +505,8 @@ fn iq_denial() -> PermissionResult {
     // Fails only this call: the turn carries on.
     interrupt: Some(false),
     message: Some(
-      "Fabricator lets this chat use Fabric IQ and Work IQ only to read, and only while they're on in Settings → \
-       Experiments, so this tool isn't available. Don't try to do this another way."
+      "Fabricator lets this chat use Fabric IQ and Work IQ only to read, and only while their plugins are on in \
+       the chat, so this tool isn't available. Don't try to do this another way."
         .into(),
     ),
     ..Default::default()
@@ -1588,10 +1588,10 @@ pub(crate) mod tests {
     client.force_stop();
   }
 
-  /// Resuming replaces a session's MCP servers, so turning an experiment off
+  /// Resuming replaces a session's MCP servers, so turning a plugin off
   /// reopens the session without its server.
   #[tokio::test]
-  async fn turning_an_iq_experiment_off_reopens_the_session_without_its_server() {
+  async fn turning_an_iq_plugin_off_reopens_the_session_without_its_server() {
     let (client, server) = fake_client(vec![
       ("session.create", json!({ "result": { "sessionId": "thread" } })),
       ("auth.getStatus", json!({ "result": { "isAuthenticated": true } })),

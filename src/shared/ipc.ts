@@ -1565,6 +1565,11 @@ export interface StudioProject {
   /** With a model that offers several, its context window; undefined = the standard one. */
   contextTier?: ContextTier
   /**
+   * The plugins on in this project's chat ({@link ChatPluginId}s). Each is off
+   * until turned on in the chat. May list plugins this version doesn't know.
+   */
+  plugins?: string[]
+  /**
    * Preview pane view selection. `'fabric'` shows the app embedded in the Fabric
    * portal shell ({@link DeployInfo.portalUrl}); absent / `'direct'` shows the
    * direct app URL. Persisted (rather than kept in the renderer alone) so the
@@ -1716,16 +1721,20 @@ export interface ExperimentFlags {
    */
   appGallery?: boolean
   /**
-   * Fabric IQ: Build chat can look up the Power BI reports and semantic models
-   * you can open, read-only, through Microsoft's Fabric IQ MCP server.
-   */
-  fabricIq?: boolean
-  /**
-   * Work IQ: Build chat can look up your Microsoft 365 email, meetings, files,
-   * Teams messages and people, read-only, through Microsoft's Work IQ MCP server.
+   * Work IQ: chat offers the Work IQ plugin, which looks up your Microsoft 365
+   * email, meetings, files, Teams messages and people, read-only, through
+   * Microsoft's Work IQ MCP server. Each chat still has it off until it's
+   * turned on there.
    */
   workIq?: boolean
 }
+
+/**
+ * A chat plugin: a Microsoft MCP server chat can look things up with, read-only.
+ * Fabric IQ reads the Power BI reports and semantic models you can open; Work IQ
+ * (an experiment) reads your Microsoft 365 data.
+ */
+export type ChatPluginId = 'fabric-iq' | 'work-iq'
 
 export interface CreateProjectInput {
   name: string
@@ -3650,6 +3659,11 @@ export interface RayfinStudioApi {
     saveHistory: (projectId: string, messages: ChatMessage[]) => Promise<void>
     /** Set the model, reasoning effort and tiers used for this project's chat. */
     setOptions: (projectId: string, options: ChatOptions) => Promise<void>
+    /**
+     * Turn a plugin on or off in this project's chat, from its next message.
+     * Resolves to the plugins now on there.
+     */
+    setPlugin: (projectId: string, plugin: ChatPluginId, on: boolean) => Promise<string[]>
     /** List the Copilot models available to the signed-in user (for the picker). */
     listModels: () => Promise<CopilotModel[]>
     /**

@@ -70,7 +70,8 @@ import AccountsModal from './components/AccountsModal'
 import SettingsModal from './components/SettingsModal'
 import BlueprintTab from './components/blueprint/BlueprintTab'
 import { ModelPicker } from './components/models/ModelPicker'
-import { AddMenu } from './components/chat/ComposerMenus'
+import { AddMenu, PluginsMenu } from './components/chat/ComposerMenus'
+import { offeredPlugins } from './components/chat/plugins'
 import { DataTray } from './components/chat/DataTray'
 import ConnectDataModal from './components/ConnectDataModal'
 import MigrateReportScreen from './components/migrate/MigrateReportScreen'
@@ -1603,21 +1604,26 @@ function Steps({ clicks, children }: { clicks: string[]; children: ReactNode }):
   return <>{children}</>
 }
 
-/** The Build chat's composer, chat-wide beside an empty preview, with its model picker
- *  (and any Fabric data waiting to go with the next message, or a banner above it, such as
- *  a report migration's card). */
+/** The Build chat's composer, chat-wide beside an empty preview, with its plugins and model
+ *  picker (and any Fabric data waiting to go with the next message, or a banner above it, such
+ *  as a report migration's card). `plugins` are on; `workIq` offers Work IQ, as its experiment does. */
 function ComposerPicker({
   value,
   data,
   banner,
+  plugins = [],
+  workIq = false,
   project = 'Contoso Expenses'
 }: {
   value: ModelSelection
   data?: DataSource[]
   banner?: ReactNode
+  plugins?: string[]
+  workIq?: boolean
   project?: string
 }): JSX.Element {
   const [selection, setSelection] = useState(value)
+  const [on, setOn] = useState(plugins)
   return (
     <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '720px 1fr' }}>
       <div className="chat" style={{ justifyContent: 'flex-end' }}>
@@ -1644,6 +1650,14 @@ function ComposerPicker({
                   onImage={noop}
                   onConnectData={noop}
                   onReferenceFile={noop}
+                />
+                <PluginsMenu
+                  plugins={offeredPlugins({ workIq })}
+                  on={on}
+                  onToggle={(id, value) =>
+                    setOn((ids) => (value ? [...ids, id] : ids.filter((i) => i !== id)))
+                  }
+                  onLearnMore={noop}
                 />
                 <ModelPicker value={selection} disabled={false} onChange={setSelection} tiers onManageKeys={noop} />
               </div>
@@ -2228,6 +2242,17 @@ function Shot({ id }: { id: string | null }): JSX.Element {
       return (
         <Steps clicks={['.add-menu .composer-icon-btn', '[data-sub="data"]']}>
           <ComposerPicker value={{ model: 'claude-opus-5.5', effort: 'high', autoTier: '', contextTier: '' }} />
+        </Steps>
+      )
+    case 'plugins':
+      // Fabric IQ is on in the sample app's chat, and the Work IQ experiment offers Work IQ.
+      return (
+        <Steps clicks={['.plugins-menu button']}>
+          <ComposerPicker
+            value={{ model: '', effort: '', autoTier: '', contextTier: '' }}
+            plugins={['fabric-iq']}
+            workIq
+          />
         </Steps>
       )
     case 'connect-data':
