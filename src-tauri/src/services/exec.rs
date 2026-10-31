@@ -91,7 +91,7 @@ impl CancelToken {
   }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct RunOptions {
   pub cwd: Option<PathBuf>,
   pub env: Vec<(String, String)>,
@@ -671,12 +671,134 @@ fn npm_install_args(subcommand: &str) -> [&str; 4] {
   ]
 }
 
+const LEGACY_PEER_DEPS: &str = "--legacy-peer-deps";
+
+/// What npm printed after `npm error` (`npm ERR!` before npm 9), in order.
+fn npm_error_lines(result: &RunResult) -> Vec<&str> {
+  [result.stderr.as_str(), result.stdout.as_str()]
+    .into_iter()
+    .flat_map(str::lines)
+    .filter_map(|line| {
+      let line = line.trim();
+      line.strip_prefix("npm error").or_else(|| line.strip_prefix("npm ERR!")).map(str::trim)
+    })
+    .collect()
+}
+
+/// Whether npm couldn't work out the packages' peer dependencies: it found a
+/// conflict (`ERESOLVE`), or its resolver crashed. npm 10, the npm that comes
+/// with Node.js 22, crashes with "Cannot read properties of null (reading
+/// 'edgesOut')" on a package whose optional peers were published out of step,
+/// as vitest 4.1.12's were, and every new Universal App depends on vitest.
+fn peer_resolution_failed(result: &RunResult) -> bool {
+  npm_error_lines(result)
+    .iter()
+    .any(|line| line.contains("ERESOLVE") || line.starts_with("Cannot read properties of"))
+}
+
+/// Run an npm install with `run_npm`, and when npm couldn't work out the
+/// packages' peer dependencies, once more with `--legacy-peer-deps`, which is
+/// what npm itself suggests. That installs the packages a working npm installs,
+/// and a plain `npm ci` accepts the lockfile it writes.
+async fn retry_with_legacy_peers<F, Fut>(args: &[&str], on_data: Option<&OnData>, mut run_npm: F) -> RunResult
+where
+  F: FnMut(Vec<String>) -> Fut,
+  Fut: std::future::Future<Output = RunResult>,
+{
+  let mut args: Vec<String> = args.iter().map(|arg| arg.to_string()).collect();
+  let first = run_npm(args.clone()).await;
+  if first.ok || first.not_found || args.iter().any(|arg| arg == LEGACY_PEER_DEPS) || !peer_resolution_failed(&first) {
+    return first;
+  }
+  if let Some(on) = on_data {
+    on(
+      Stream::System,
+      "\nnpm couldn't work out the packages' peer dependencies; retrying with --legacy-peer-deps...\n",
+    );
+  }
+  args.push(LEGACY_PEER_DEPS.to_string());
+  run_npm(args).await
+}
+
+/// `npm <args>` for an install (`install` or `ci`), retried with
+/// `--legacy-peer-deps` when npm couldn't work out the packages' peer
+/// dependencies. Every npm install Fabricator runs in a project goes through it.
+pub async fn npm_install(args: &[&str], options: RunOptions) -> RunResult {
+  let on_data = options.on_data.clone();
+  retry_with_legacy_peers(args, on_data.as_ref(), |args| {
+    let options = options.clone();
+    async move {
+      let args: Vec<&str> = args.iter().map(String::as_str).collect();
+      run("npm", &args, options).await
+    }
+  })
+  .await
+}
+
+/// Lines npm prints with every failure that don't say what went wrong.
+const NPM_BOOKKEEPING: [&str; 10] = [
+  "code ",
+  "errno ",
+  "syscall ",
+  "path ",
+  "dest ",
+  "command ",
+  "signal ",
+  "A complete log of this run",
+  "For a full report see",
+  "Log files were not written",
+];
+
+/// npm's own words for why it failed: the first line of its error that isn't
+/// bookkeeping, such as "Cannot read properties of null (reading 'edgesOut')",
+/// or else the last line it printed.
+pub fn npm_error_summary(result: &RunResult) -> Option<String> {
+  let lines = npm_error_lines(result);
+  let cause = lines
+    .iter()
+    .position(|line| !line.is_empty() && !NPM_BOOKKEEPING.iter().any(|skip| line.starts_with(skip)))
+    .map(|at| {
+      // A line that ends in a colon introduces the next one.
+      let next = lines[at + 1..].iter().find(|line| !line.is_empty()).filter(|_| lines[at].ends_with(':'));
+      next.map_or_else(|| lines[at].to_string(), |next| format!("{} {next}", lines[at]))
+    })
+    .or_else(|| {
+      let output = if result.stderr.trim().is_empty() { &result.stdout } else { &result.stderr };
+      output.lines().map(str::trim).rfind(|line| !line.is_empty()).map(String::from)
+    })?;
+  Some(cause.chars().take(300).collect())
+}
+
+/// Why an npm install failed, with npm's error and where its full log is:
+/// "npm install failed in packages/api (exit code 1): Cannot read properties of
+/// null (reading 'edgesOut'). npm's full log: C:\…\debug-0.log".
+pub fn npm_install_failure(result: &RunResult, folder: Option<&str>) -> String {
+  let code = result.exit_code.map(|code| code.to_string()).unwrap_or_else(|| "unknown".to_string());
+  let place = folder.map(|folder| format!(" in {folder}")).unwrap_or_default();
+  let mut message = format!("npm install failed{place} (exit code {code})");
+  if let Some(cause) = npm_error_summary(result) {
+    message.push_str(": ");
+    message.push_str(&cause);
+  }
+  if !message.ends_with(['.', '!', '?']) {
+    message.push('.');
+  }
+  let log = npm_error_lines(result)
+    .into_iter()
+    .find_map(|line| line.strip_prefix("A complete log of this run can be found in:"))
+    .map(str::trim)
+    .filter(|path| !path.is_empty());
+  if let Some(log) = log {
+    message.push_str(&format!(" npm's full log: {log}"));
+  }
+  message
+}
+
 /// Reuse npm's cache for both install modes, but only skip metadata freshness
 /// checks when `ci` installs a locked tree. `install` may need published versions
 /// that a cached packument doesn't know about yet.
 async fn run_npm_install(project_dir: &Path, subcommand: &str, on_data: Option<OnData>) -> RunResult {
-  run(
-    "npm",
+  npm_install(
     &npm_install_args(subcommand),
     RunOptions {
       cwd: Some(project_dir.to_path_buf()),
@@ -762,28 +884,7 @@ pub async fn ensure_project_dependencies(project_dir: &Path, on_data: Option<OnD
     return Err("npm was not found on PATH. Install Node.js (which includes npm), then retry.".to_string());
   }
   if !result.ok {
-    let code = result
-      .exit_code
-      .map(|code| code.to_string())
-      .unwrap_or_else(|| "unknown".to_string());
-    let detail = if result.stderr.trim().is_empty() {
-      result.stdout.trim()
-    } else {
-      result.stderr.trim()
-    };
-    let tail = detail
-      .lines()
-      .rev()
-      .find(|line| !line.trim().is_empty())
-      .map(str::trim)
-      .unwrap_or_default();
-    let tail: String = tail.chars().take(300).collect();
-    let suffix = if tail.is_empty() {
-      String::new()
-    } else {
-      format!(": {tail}")
-    };
-    return Err(format!("npm install failed (exit code {code}){suffix}"));
+    return Err(npm_install_failure(&result, None));
   }
   if !project_rayfin_cli_installed(project_dir) {
     return Err(
@@ -1409,5 +1510,100 @@ mod tests {
       npm_install_args("install"),
       ["install", "--prefer-offline=false", "--no-audit", "--no-fund"]
     );
+  }
+
+  fn npm_failed(stderr: &str) -> RunResult {
+    RunResult { ok: false, exit_code: Some(1), stdout: String::new(), stderr: stderr.to_string(), not_found: false }
+  }
+
+  fn npm_ok() -> RunResult {
+    RunResult { ok: true, exit_code: Some(0), stdout: "added 661 packages in 22s".into(), stderr: String::new(), not_found: false }
+  }
+
+  fn strings(args: &[&str]) -> Vec<String> {
+    args.iter().map(|arg| arg.to_string()).collect()
+  }
+
+  /// What npm 10.9.7, the npm that comes with Node.js 22, prints when it
+  /// installs a new Universal App (issue #66).
+  const EDGES_OUT: &str = "npm error Cannot read properties of null (reading 'edgesOut')\n\
+    npm error A complete log of this run can be found in: C:\\Users\\avery\\AppData\\Local\\npm-cache\\_logs\\2026-10-31T07_55_17_080Z-debug-0.log\n";
+
+  /// Run `retry_with_legacy_peers` against canned npm results: what it returned,
+  /// the arguments of each npm run, and what it said.
+  async fn install_with(results: Vec<RunResult>, args: &[&str]) -> (RunResult, Vec<Vec<String>>, String) {
+    let calls = std::sync::Mutex::new(Vec::new());
+    let results = std::sync::Mutex::new(std::collections::VecDeque::from(results));
+    let said = Arc::new(std::sync::Mutex::new(String::new()));
+    let capture = said.clone();
+    let on_data: OnData = Arc::new(move |_: Stream, chunk: &str| capture.lock().unwrap().push_str(chunk));
+    let result = retry_with_legacy_peers(args, Some(&on_data), |args| {
+      calls.lock().unwrap().push(args);
+      let next = results.lock().unwrap().pop_front().expect("one npm run too many");
+      async move { next }
+    })
+    .await;
+    let said = said.lock().unwrap().clone();
+    (result, calls.into_inner().unwrap(), said)
+  }
+
+  #[tokio::test]
+  async fn npm_installs_retry_with_legacy_peers_when_npm_cannot_resolve_peers() {
+    // npm 10's resolver crash, and a peer conflict npm reports, are tried once more
+    // with --legacy-peer-deps, saying so.
+    let conflict = "npm error code ERESOLVE\nnpm error ERESOLVE unable to resolve dependency tree\n";
+    for failure in [EDGES_OUT, conflict] {
+      let (result, calls, said) = install_with(vec![npm_failed(failure), npm_ok()], &["install", "--no-audit"]).await;
+      assert!(result.ok);
+      assert_eq!(calls, [strings(&["install", "--no-audit"]), strings(&["install", "--no-audit", "--legacy-peer-deps"])]);
+      assert!(said.contains("retrying with --legacy-peer-deps"), "{said}");
+    }
+
+    // A retry that fails too reports the retry's error.
+    let (result, calls, _) = install_with(vec![npm_failed(EDGES_OUT), npm_failed(conflict)], &["install"]).await;
+    assert_eq!((result.ok, calls.len()), (false, 2));
+    assert!(result.stderr.contains("ERESOLVE"));
+
+    // Anything else runs once: another failure, a success, no npm at all, and an
+    // install that already used the legacy resolver.
+    let missing = "npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/nope - Not found\n";
+    let not_found = RunResult { not_found: true, ..npm_failed(EDGES_OUT) };
+    let once: [(RunResult, &[&str]); 4] = [
+      (npm_failed(missing), &["install"]),
+      (npm_ok(), &["install"]),
+      (not_found, &["install"]),
+      (npm_failed(EDGES_OUT), &["install", "--legacy-peer-deps"]),
+    ];
+    for (result, args) in once {
+      let (_, calls, said) = install_with(vec![result], args).await;
+      assert_eq!(calls.len(), 1, "{args:?}");
+      assert!(said.is_empty(), "{said}");
+    }
+  }
+
+  #[test]
+  fn npm_install_failures_quote_npms_error_and_its_log() {
+    assert_eq!(
+      npm_install_failure(&npm_failed(EDGES_OUT), None),
+      "npm install failed (exit code 1): Cannot read properties of null (reading 'edgesOut'). npm's full log: \
+       C:\\Users\\avery\\AppData\\Local\\npm-cache\\_logs\\2026-10-31T07_55_17_080Z-debug-0.log"
+    );
+    // The line that says what went wrong, past npm's bookkeeping.
+    let locked = "npm error code EPERM\nnpm error syscall rename\nnpm error path C:\\app\\node_modules\\.esbuild-x\n\
+      npm error dest C:\\app\\node_modules\\esbuild\nnpm error errno -4048\n\
+      npm error Error: EPERM: operation not permitted, rename 'a' -> 'b'\n";
+    assert_eq!(
+      npm_install_failure(&npm_failed(locked), Some("packages/api")),
+      "npm install failed in packages/api (exit code 1): Error: EPERM: operation not permitted, rename 'a' -> 'b'."
+    );
+    // npm before 9 said `npm ERR!`.
+    let old = "npm ERR! code E404\nnpm ERR! 404 Not Found - GET https://registry.npmjs.org/nope - Not found\n";
+    assert_eq!(
+      npm_error_summary(&npm_failed(old)).as_deref(),
+      Some("404 Not Found - GET https://registry.npmjs.org/nope - Not found")
+    );
+    // Without an npm error, its last line, or nothing.
+    assert_eq!(npm_install_failure(&npm_failed("resolving\nkilled\n"), None), "npm install failed (exit code 1): killed.");
+    assert_eq!(npm_install_failure(&npm_failed(""), None), "npm install failed (exit code 1).");
   }
 }

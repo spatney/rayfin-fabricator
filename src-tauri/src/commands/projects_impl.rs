@@ -520,8 +520,7 @@ pub(crate) async fn scaffold_project(
 
 /// `npm install` in `dir`, streaming its output.
 async fn npm_install(dir: &Path, on: Option<OnData>) -> RunResult {
-  run(
-    "npm",
+  crate::services::exec::npm_install(
     &["install", "--no-audit", "--no-fund"],
     RunOptions {
       cwd: Some(dir.to_path_buf()),
@@ -534,27 +533,12 @@ async fn npm_install(dir: &Path, on: Option<OnData>) -> RunResult {
   .await
 }
 
-/// Why an `npm install` in `folder` failed, with npm's last word on it.
+/// Why an `npm install` in `folder` failed, in npm's own words.
 fn install_failure(folder: &str, result: &RunResult) -> String {
   if result.not_found {
     return "npm was not found on PATH. Install Node.js (which includes npm), then retry.".into();
   }
-  let code = result.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
-  let detail = if result.stderr.trim().is_empty() { &result.stdout } else { &result.stderr };
-  let last: String = detail
-    .lines()
-    .rev()
-    .map(str::trim)
-    .find(|l| !l.is_empty())
-    .unwrap_or_default()
-    .chars()
-    .take(300)
-    .collect();
-  if last.is_empty() {
-    format!("npm install failed in {folder} (exit code {code}).")
-  } else {
-    format!("npm install failed in {folder} (exit code {code}): {last}")
-  }
+  crate::services::exec::npm_install_failure(result, Some(folder))
 }
 
 /// Install a new project's packages: the root's, with its workspaces, then the

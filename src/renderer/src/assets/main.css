@@ -679,6 +679,8 @@ code {
 
 .project-dependency-guard-error {
   color: var(--danger);
+  /* npm's errors can end with its log's path, a single long word. */
+  overflow-wrap: anywhere;
 }
 
 .project-dependency-guard-actions {

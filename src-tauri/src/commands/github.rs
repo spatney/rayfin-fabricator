@@ -478,8 +478,7 @@ pub async fn github_clone(app: AppHandle, input: String) -> ProjectActionResult 
 
   // A fresh clone has no node_modules; install deps now so preview/deploy work.
   say(&on, "\nInstalling dependencies (npm install)…\n");
-  let install = exec::run(
-    "npm",
+  let install = exec::npm_install(
     &["install"],
     RunOptions {
       cwd: Some(dir.clone()),
@@ -500,12 +499,14 @@ pub async fn github_clone(app: AppHandle, input: String) -> ProjectActionResult 
     // Keep the clone: the checkout is valid and re-cloning is wasteful (a dep
     // failure is often a transient registry/policy issue). Point the user at
     // finishing the install manually, then opening the folder.
-    let code = install
-      .exit_code
-      .map(|c| c.to_string())
-      .unwrap_or_else(|| "unknown".into());
+    let why = exec::npm_error_summary(&install)
+      .map(|cause| format!(": {}", cause.trim_end_matches('.')))
+      .unwrap_or_else(|| {
+        let code = install.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
+        format!(" (npm install exited {code})")
+      });
     return err(format!(
-      "Cloned to {dir_str}, but installing dependencies failed (npm install exited {code}). \
+      "Cloned to {dir_str}, but installing dependencies failed{why}. \
        See details below, then run \"npm install\" in that folder and use Open existing → Browse folder to open it."
     ));
   }

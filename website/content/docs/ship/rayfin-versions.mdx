@@ -66,7 +66,7 @@ If you move an app into a team workspace, update older apps first with **Update 
 
 When you open a project, Fabricator checks that the project's Rayfin CLI and the rest of its packages are fully installed, and installs any that are missing or incomplete before enabling the project tools. The check usually takes a moment. If it takes longer, you see a `Preparing <project name>` status and "Checking the project's Rayfin CLI and installing missing dependencies..." It checks again before it publishes or signs in to Fabric.
 
-If installation fails, Fabricator shows **Couldn't install project dependencies** with **Retry installation** and **Switch projects**.
+If installation fails, Fabricator shows **Couldn't install project dependencies** with npm's error, **Retry installation** and **Switch projects**. When npm can't work out the packages' peer dependencies, Fabricator installs them again with npm's `--legacy-peer-deps` option first. See [A new app's packages won't install](/docs/troubleshooting/deploy#a-new-apps-packages-wont-install).
 
 When your app's packages, or its functions' packages, aren't installed, the preview says "Your app’s packages aren’t installed" and offers **Install dependencies**. See [When your app doesn't start](/docs/build/preview#when-your-app-doesnt-start).
 

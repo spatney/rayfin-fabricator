@@ -839,8 +839,7 @@ fn install_output(rt: Arc<Runtime>) -> crate::services::exec::OnData {
 
 /// `npm install` in `dir`, streaming its output.
 async fn npm_install(dir: &Path, output: crate::services::exec::OnData) -> Result<(), String> {
-  let result = crate::services::exec::run(
-    "npm",
+  let result = crate::services::exec::npm_install(
     &["install", "--no-audit", "--no-fund"],
     crate::services::exec::RunOptions {
       cwd: Some(dir.to_path_buf()),
@@ -857,8 +856,7 @@ async fn npm_install(dir: &Path, output: crate::services::exec::OnData) -> Resul
   if result.not_found {
     return Err("npm wasn't found. Install Node.js, which includes npm, then try again.".into());
   }
-  let code = result.exit_code.map(|c| c.to_string()).unwrap_or_else(|| "unknown".into());
-  Err(format!("npm install failed in {} (exit code {code}).", dir.display()))
+  Err(crate::services::exec::npm_install_failure(&result, Some(&dir.display().to_string())))
 }
 
 /// `dir` (absolute, or relative to `project`) when it's a folder of the project

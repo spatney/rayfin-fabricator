@@ -115,6 +115,20 @@ Current Fabricator versions use the Rayfin CLI pinned in each project, and refre
 
 If package resolution keeps failing, [Report a problem](/docs/troubleshooting/report-a-problem) and include the npm error.
 
+## A new app's packages won't install
+
+You create or open a new app and see **Couldn't install project dependencies**, or Fabric sign-in or a publish fails, with "npm install failed (exit code 1): Cannot read properties of null (reading 'edgesOut')".
+
+This is a bug in npm 10, the npm that comes with Node.js 22. Since vitest 4.1.12 was published, npm 10 stops with this error when it installs a new app's packages. Apps whose packages are already installed aren't affected.
+
+Fabricator 1.27.1 and later work around it: when npm can't work out an app's packages like this, Fabricator installs them again with npm's `--legacy-peer-deps` option. The output says "npm couldn't work out the packages' peer dependencies; retrying with --legacy-peer-deps...".
+
+1. Update to the latest Fabricator version.
+2. Open the app. If it shows **Couldn't install project dependencies**, select **Retry installation**.
+3. If it still fails, install the current LTS release of Node.js from [nodejs.org](https://nodejs.org). It comes with npm 11, which doesn't have this bug. Then restart Fabricator, open the app and select **Retry installation**.
+
+If it keeps failing, [Report a problem](/docs/troubleshooting/report-a-problem) and include npm's error and the log it names.
+
 ## Recipients can't open the shared app
 
 You shared a published app, but another person cannot open it.
