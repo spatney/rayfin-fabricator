@@ -28,11 +28,18 @@ pub struct SettingsPatch {
 
 #[tauri::command]
 pub fn settings_set(patch: SettingsPatch) -> AppSettings {
-  store::set_settings(
+  // Turning Fabric IQ or Work IQ off and on is how the user retries; turning
+  // one off also drops its sign-in.
+  let iq_changed = patch.experiments.as_ref().is_some_and(|e| e.fabric_iq.is_some() || e.work_iq.is_some());
+  let settings = store::set_settings(
     patch.theme,
     patch.ui_scale,
     patch.experiments,
     patch.full_diagnostics,
     patch.deploy_mode,
-  )
+  );
+  if iq_changed {
+    crate::services::iq::settings_changed(crate::services::iq::IqConfig::from_settings(&settings));
+  }
+  settings
 }

@@ -215,6 +215,34 @@ describe('SettingsModal app gallery experiment', () => {
   })
 })
 
+describe('SettingsModal Fabric IQ and Work IQ experiments', () => {
+  function checkbox(label: string): HTMLInputElement {
+    const row = screen.getByText(label).closest('label')
+    if (!row) throw new Error(`${label} label not found`)
+    return row.querySelector('input[type="checkbox"]') as HTMLInputElement
+  }
+
+  it.each([
+    ['Fabric IQ', 'fabricIq'],
+    ['Work IQ', 'workIq']
+  ])('%s is off by default and turns on through its own flag', async (label, flag) => {
+    installApi()
+    const { onChange } = await renderModal()
+    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
+    expect(checkbox(label).checked).toBe(false)
+    fireEvent.click(checkbox(label))
+    expect(onChange).toHaveBeenCalledWith({ experiments: { [flag]: true } })
+  })
+
+  it('reflects each persisted flag on its own', async () => {
+    installApi()
+    await renderModal({ settings: { theme: 'system', experiments: { workIq: true } } })
+    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
+    expect(checkbox('Work IQ').checked).toBe(true)
+    expect(checkbox('Fabric IQ').checked).toBe(false)
+  })
+})
+
 describe('SettingsModal retired controls', () => {
   it.each([false, true])(
     'does not show retired controls with legacy flags set to %s',
@@ -249,10 +277,12 @@ describe('SettingsModal retired controls', () => {
         expect(screen.queryByText(label)).toBeNull()
       }
       expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-      expect(screen.getAllByRole('checkbox')).toHaveLength(4)
+      expect(screen.getAllByRole('checkbox')).toHaveLength(6)
       expect(screen.getByText('Team workspaces')).toBeTruthy()
       expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
       expect(screen.getByText('App gallery')).toBeTruthy()
+      expect(screen.getByText('Fabric IQ')).toBeTruthy()
+      expect(screen.getByText('Work IQ')).toBeTruthy()
       expect(screen.getByText('Full diagnostics')).toBeTruthy()
     }
   )

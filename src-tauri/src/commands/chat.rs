@@ -25,6 +25,7 @@ use regex::Regex;
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 
 use crate::commands::chat_tools;
@@ -37,6 +38,8 @@ use crate::services::journal;
 use crate::services::history;
 use crate::services::byok;
 use crate::services::copilot::ModelChoice;
+use crate::services::exec::CancelToken;
+use crate::services::iq::{self, IqConfig};
 use crate::services::store;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
@@ -70,10 +73,15 @@ const FALLBACK_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft F
 const FALLBACK_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric, because the local backend can't run all of it. Publish after each chat turn is on, so Fabricator publishes the app when this turn ends, and the preview then shows the result.]";
 
 /// The text sent to Copilot for a chat message in `project`, with the note on
-/// how its changes go live.
-fn turn_text(project: &StudioProject, text: &str, guidance: Guidance, manual_publish: bool) -> String {
+/// how its changes go live, and on the Fabric IQ and Work IQ servers it can
+/// research with (`iq`).
+fn turn_text(project: &StudioProject, text: &str, guidance: Guidance, manual_publish: bool, iq: &iq::Prepared) -> String {
+  let text = match iq.note() {
+    Some(iq_note) => format!("{iq_note}\n\n{text}"),
+    None => text.to_string(),
+  };
   if project.team.is_some() {
-    return crate::services::team::chat_text(&project.id, text);
+    return crate::services::team::chat_text(&project.id, &text);
   }
   let note = match (guidance, manual_publish) {
     (Guidance::Local, true) => LOCAL_NOTE,
@@ -83,6 +91,27 @@ fn turn_text(project: &StudioProject, text: &str, guidance: Guidance, manual_pub
     (Guidance::FabricBacked, false) => FALLBACK_AUTO_PUBLISH_NOTE,
   };
   format!("{note}\n\n{text}")
+}
+
+/// Connects a turn's session to the Fabric IQ and Work IQ servers that are on,
+/// asking the user to sign in when one needs it.
+async fn prepare_iq(
+  app: &AppHandle,
+  project_id: &str,
+  turn_id: &str,
+  session: &Session,
+  iq: IqConfig,
+  cancel: &CancelToken,
+) -> iq::Prepared {
+  if !iq.any() {
+    return iq::Prepared::default();
+  }
+  let notice = |text: String| emit_chat_event(app, project_id, turn_id, ChatEvent::Notice { text });
+  let open = |url: &str| {
+    app.opener().open_url(url, None::<&str>).map_err(|e| format!("Fabricator couldn't open the browser ({e})"))
+  };
+  let ui = iq::Ui { notice: &notice, open: &open };
+  iq::prepare(session, iq, &ui, &iq::Microsoft, &iq::MEMORY, cancel, iq::Waits::default()).await
 }
 
 /// Stderr signatures that indicate a transient, safe-to-retry failure.
@@ -739,6 +768,8 @@ pub(crate) async fn run_turn(
   // on a provider's model first checks it can run, so it never quietly runs on
   // another model.
   let byok_registry = state.byok.session_registry();
+  // Fabric IQ and Work IQ (experiments): the MCP servers this chat can research with.
+  let iq = IqConfig::from_settings(&store::get_settings());
   let provider_model = project.model.clone().filter(|m| byok::is_provider_selection(m));
   let provider = provider_model.as_deref().and_then(byok::describe);
   let choice = ModelChoice::new(
@@ -759,6 +790,7 @@ pub(crate) async fn run_turn(
       fab_tools.clone(),
       Some(guidance),
       byok_registry.clone(),
+      iq,
     );
   let first_open = match &provider_model {
     Some(model) => match state.byok.ensure_ready(model) {
@@ -808,6 +840,8 @@ pub(crate) async fn run_turn(
   if let Err(e) = session.rpc().mode().set(ModeSetRequest { mode: session_mode.clone(), ..Default::default() }).await {
     log::warn!("failed to set session mode {session_mode:?}: {e}");
   }
+  // Fabric IQ and Work IQ connect (and sign in) before the message goes, so their tools are there for it.
+  let mut iq_ready = prepare_iq(&app, &project_id, &turn_id, &session, iq, &token).await;
 
   // Point the plan handler at this turn's UI for the duration of the turn.
   // `plan_context` records whether this turn was started in Plan mode:
@@ -885,6 +919,7 @@ pub(crate) async fn run_turn(
           if let Err(e) = session.rpc().mode().set(ModeSetRequest { mode: session_mode.clone(), ..Default::default() }).await {
             log::warn!("failed to set recovered session mode {session_mode:?}: {e}");
           }
+          iq_ready = prepare_iq(&app, &project_id, &turn_id, &session, iq, &token).await;
         }
         Err(error) => {
           send_error = Some(error);
@@ -905,7 +940,7 @@ pub(crate) async fn run_turn(
     let opts = match continuation {
       Some(prompt) => MessageOptions::new(prompt.to_string()),
       None => {
-        let opts = MessageOptions::new(turn_text(&project, &text, guidance, store::manual_deploy_enabled()));
+        let opts = MessageOptions::new(turn_text(&project, &text, guidance, store::manual_deploy_enabled(), &iq_ready));
         if attach.is_empty() { opts } else { opts.with_attachments(attach.clone()) }
       }
     };
@@ -1481,15 +1516,15 @@ mod tests {
     }))
     .unwrap();
     // The app runs here, or falls back to its published backend.
-    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true), format!("{LOCAL_NOTE}\n\nAdd a list"));
-    assert!(turn_text(&project, "x", Guidance::Local, false).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, true).starts_with(FALLBACK_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, false).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
+    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true, &iq::Prepared::default()), format!("{LOCAL_NOTE}\n\nAdd a list"));
+    assert!(turn_text(&project, "x", Guidance::Local, false, &iq::Prepared::default()).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, &iq::Prepared::default()).starts_with(FALLBACK_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, false, &iq::Prepared::default()).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
     // Never published: no turn publishes it, even with publishing after each turn on.
     let mut unpublished = project.clone();
     unpublished.last_deploy = None;
-    assert!(turn_text(&unpublished, "x", Guidance::Local, false).starts_with(LOCAL_UNPUBLISHED_NOTE));
-    assert!(turn_text(&unpublished, "x", Guidance::Local, true).starts_with(LOCAL_NOTE));
+    assert!(turn_text(&unpublished, "x", Guidance::Local, false, &iq::Prepared::default()).starts_with(LOCAL_UNPUBLISHED_NOTE));
+    assert!(turn_text(&unpublished, "x", Guidance::Local, true, &iq::Prepared::default()).starts_with(LOCAL_NOTE));
     assert!(LOCAL_NOTE.contains("runs on this computer") && LOCAL_NOTE.contains("Publish after each chat turn is off"));
     assert!(LOCAL_UNPUBLISHED_NOTE.contains("hasn't been published yet") && !LOCAL_UNPUBLISHED_NOTE.contains("when this turn ends"));
     assert!(FALLBACK_NOTE.contains("published backend") && FALLBACK_NOTE.contains("whether it needs a publish first"));
@@ -1498,6 +1533,17 @@ mod tests {
       // Publishing is what the UI calls it: no note talks about deploying.
       assert!(!note.to_lowercase().contains("deploy"), "{note}");
     }
+  }
+
+  #[test]
+  fn a_message_names_the_iq_servers_it_can_research_with() {
+    let project: StudioProject = serde_json::from_value(json!({
+      "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z"
+    }))
+    .unwrap();
+    let work = iq::Prepared { ready: IqConfig { fabric: false, work: true }, unavailable: vec![] };
+    let note = work.note().unwrap();
+    assert_eq!(turn_text(&project, "Who owns billing?", Guidance::Local, true, &work), format!("{LOCAL_NOTE}\n\n{note}\n\nWho owns billing?"));
   }
 
   #[test]

@@ -21,6 +21,7 @@
     "build/data-model",
     "build/migrate-power-bi",
     "build/app-gallery",
+    "build/fabric-iq-and-work-iq",
     "build/skills",
     "build/secrets",
     "---Ship---",

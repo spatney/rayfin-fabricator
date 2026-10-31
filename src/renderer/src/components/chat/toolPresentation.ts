@@ -24,6 +24,8 @@ export type ToolKind =
   | 'model'
   | 'local-status'
   | 'local-call'
+  | 'fabric-iq'
+  | 'work-iq'
   | 'other'
 
 /** Tools whose UI lives elsewhere (question cards, the plan card, the status line). */
@@ -35,6 +37,10 @@ export function isHiddenTool(name: string): boolean {
 
 export function toolKind(name: string): ToolKind {
   const n = name.toLowerCase()
+  // Fabric IQ's and Work IQ's tools, named after their MCP servers
+  // (FabricIQ-ValueSearch, workiq-fetch): not project searches or web reads.
+  if (n.startsWith('fabriciq-')) return 'fabric-iq'
+  if (n.startsWith('workiq-')) return 'work-iq'
   // Fabricator's own tools first: their names contain substrings ("cat", "read")
   // that would otherwise be misread.
   if (n.startsWith('fabricator_')) {
@@ -87,6 +93,8 @@ const VERBS: Record<ToolKind, [running: string, done: string]> = {
   model: ['Looking up a semantic model', 'Looked up a semantic model'],
   'local-status': ['Checking the local backend', 'Checked the local backend'],
   'local-call': ['Calling', 'Called'],
+  'fabric-iq': ['Looking up in Fabric IQ', 'Looked up in Fabric IQ'],
+  'work-iq': ['Looking up in Work IQ', 'Looked up in Work IQ'],
   other: ['Using', 'Used']
 }
 
@@ -129,6 +137,8 @@ const PHASES: Record<ToolKind, string> = {
   model: 'Looking up a semantic model',
   'local-status': 'Checking the local backend',
   'local-call': 'Calling the app',
+  'fabric-iq': 'Looking up Power BI data',
+  'work-iq': 'Looking up Microsoft 365',
   other: 'Working'
 }
 
@@ -205,6 +215,8 @@ export function describeStep(tool: ChatToolCall, projectPath: string): StepView 
     case 'search':
     case 'find':
     case 'web-search':
+    case 'fabric-iq':
+    case 'work-iq':
       if (hasTitle) target = { kind: 'quote', text: title }
       break
     case 'web':

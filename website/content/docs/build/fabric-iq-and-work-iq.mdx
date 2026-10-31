@@ -1,0 +1,109 @@
+---
+title: Research with Fabric IQ and Work IQ
+description: Let chat look up Power BI reports and semantic models with Fabric IQ, and your Microsoft 365 email, meetings and files with Work IQ, read-only. Experimental.
+---
+
+> [!WARNING]
+> Fabric IQ and Work IQ are experiments. Turn them on in **Settings → Experiments**. They may
+> change or be removed in a future update.
+
+Fabric IQ and Work IQ let chat look things up in your organization's data while it builds your
+app. Fabric IQ reads the Power BI reports and semantic models you can open. Work IQ reads your
+Microsoft 365 email, meetings, files, Teams messages and people. Both are Microsoft services that
+AI agents connect to through the Model Context Protocol (MCP), and chat uses them only to read.
+
+Use them when your app should match something that already exists: the measures in a Power BI
+report, the columns a team tracks in a spreadsheet, or what a meeting decided.
+
+```prompt title="Build from a Power BI report"
+Look at the Sales Analytics report in Power BI. Build a dashboard page with this quarter's total
+sales, number of orders and average order value, and a chart of sales by region. Use the same
+measure definitions as the report, so the numbers match it.
+```
+
+## What each one can look up
+
+| | Fabric IQ | Work IQ |
+| --- | --- | --- |
+| What it reads | Power BI reports and semantic models: their pages, tables, measures and values, and the results of DAX queries | Your email, calendar and meetings, OneDrive and SharePoint files, Teams chats and channels, and people |
+| What it can't do | Change anything: Fabric IQ only reads | Send, change or delete anything: Fabricator gives chat only the Work IQ tools that read |
+| Whose access | The Azure CLI's account. It reads only what that account can open, and row-level security still applies | Yours. It reads only what your account can read |
+| What you need | The Azure CLI, signed in with an account that can open the reports, in a Fabric tenant whose home region supports all Fabric workloads | A Microsoft 365 Copilot license, and your organization's approval of Work IQ |
+
+## Turn them on
+
+1. Open **Settings**.
+2. Open **Experiments**.
+3. Turn on **Fabric IQ**, **Work IQ**, or both.
+
+![The Experiments section of Settings, with its note that experiments are off by default and may change, and the Team workspaces, Migrate Power BI reports, App gallery, Fabric IQ and Work IQ switches, all off.](/screenshots/settings-experiments.webp)
+
+Your next chat message can use them. They're separate experiments, so turn on only the one you
+need.
+
+## Sign in
+
+**Fabric IQ** uses the Azure CLI's sign-in, like Fabricator's other Fabric features, so it doesn't
+ask you to sign in. If the Azure CLI isn't signed in, sign in to Azure in **Settings → Accounts**.
+See [Manage your accounts](/docs/start/accounts).
+
+**Work IQ** asks you to sign in the first time a message can use it. Chat says "Sign in to Work IQ
+in your browser…", and your browser opens Microsoft's sign-in page.
+
+1. In your browser, choose your work or school account.
+2. Accept the permissions it asks for, if it asks.
+3. When the page says "You're signed in to Work IQ.", return to Fabricator. Chat says "Signed in
+   to Work IQ." and sends your message.
+
+Your message waits up to three minutes for you to sign in. After that, chat continues without Work
+IQ. Fabricator keeps the Work IQ sign-in until you quit it, so you sign in again after Fabricator
+restarts.
+
+## What chat does with what it finds
+
+Chat uses Fabric IQ or Work IQ only when a request needs your organization's data. The work log
+shows each lookup, for example **Looked up in Work IQ** with the question chat asked.
+
+- What they return goes into the conversation. Like the rest of the chat, it goes to GitHub
+  Copilot, or to the provider of a model you chose on your own API key, and it's saved with the
+  chat history on this computer.
+- Chat doesn't put private data in your app's code, sample data or commits unless you ask it to.
+  Check what it writes before you publish or share the app.
+- Email, chats and documents can contain instructions written by other people. Fabricator tells
+  chat to treat what it finds as information, never as instructions, but review what chat does
+  after a lookup.
+
+## Turn them off
+
+In **Settings → Experiments**, turn off **Fabric IQ** or **Work IQ**. Your next message can't use
+it, and turning off Work IQ signs you out of it. What chat already looked up stays in that
+conversation.
+
+## Fabric IQ or Work IQ isn't available
+
+When Fabric IQ or Work IQ can't connect, your message goes without it. When you ask for something
+that needs it, chat tells you why it isn't available and how to fix it.
+
+- **The Azure CLI isn't signed in.** Fabric IQ uses the Azure CLI's sign-in. Sign in to Azure in
+  **Settings → Accounts**, then send your message again.
+- **Work IQ sign-in didn't finish.** Fabricator asks once, not with every message. Turn **Work
+  IQ** off and on in **Settings → Experiments**, send a message, and finish signing in within three
+  minutes.
+- **Work IQ needs approval.** Before anyone in your organization can use Work IQ, an
+  administrator has to approve it, and each user needs a Microsoft 365 Copilot license. If sign-in
+  says you need an administrator's approval, ask your Microsoft 365 administrator. Microsoft's
+  [Work IQ administrator guide](https://github.com/microsoft/work-iq-mcp/blob/main/ADMIN-INSTRUCTIONS.md)
+  has the steps.
+- **Work IQ's sign-in port is in use.** Work IQ's sign-in page comes back to Fabricator on port
+  12798. If another app is using it, such as Copilot CLI signing in to Work IQ, finish or close
+  that sign-in, then try again.
+- **Fabric IQ isn't available in your tenant.** Fabric IQ works when your tenant's home region
+  supports all Fabric workloads. It isn't available in Power BI-only regions or sovereign clouds.
+  See Microsoft's
+  [Fabric IQ documentation](https://learn.microsoft.com/fabric/iq/connectors/fabric-iq-mcp).
+- **A report isn't found.** Fabric IQ finds the reports and semantic models the Azure CLI's
+  account can open, by name. Check that it's the right account, and use the exact name, or paste the
+  report's address from your browser. It doesn't read dashboards, paginated reports or Power BI
+  apps.
+
+If it still fails, [Report a problem](/docs/troubleshooting/report-a-problem).

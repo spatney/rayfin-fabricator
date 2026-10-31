@@ -1715,6 +1715,16 @@ export interface ExperimentFlags {
    * Azure CLI's sign-in.
    */
   appGallery?: boolean
+  /**
+   * Fabric IQ: Build chat can look up the Power BI reports and semantic models
+   * you can open, read-only, through Microsoft's Fabric IQ MCP server.
+   */
+  fabricIq?: boolean
+  /**
+   * Work IQ: Build chat can look up your Microsoft 365 email, meetings, files,
+   * Teams messages and people, read-only, through Microsoft's Work IQ MCP server.
+   */
+  workIq?: boolean
 }
 
 export interface CreateProjectInput {

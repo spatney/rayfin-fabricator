@@ -180,7 +180,7 @@ in `.md`.
 | `advisor-finding` | An open Advisor issue with its fix actions | `/docs/ship/advisor` |
 | `rayfin-version` | The Rayfin version control with an update available | `/docs/ship/rayfin-versions` |
 | `settings` | The Settings dialog: General (with **API keys**), Appearance and the start of Diagnostics (sample data) | `/docs/reference/settings` |
-| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports** and **App gallery**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi` |
+| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports**, **App gallery**, **Fabric IQ** and **Work IQ**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq` |
 | `migrate-report` | **Migrate a Power BI report** with a report picked: its workspace, semantic model, pages and the three checks, all passing (sample data) | `/docs/build/migrate-power-bi` |
 | `migration-card` | The Migration card above the chat composer after the first page, with **Migrate next page** and **Migrate the rest** (sample data) | `/docs/build/migrate-power-bi` |
 | `app-gallery` | The **App gallery** with the sample user's apps, and the sample app's details open beside them (sample data) | `/docs/build/app-gallery` |

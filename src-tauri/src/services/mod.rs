@@ -21,6 +21,7 @@ pub mod grounding;
 pub mod help_session;
 pub mod history;
 pub mod journal;
+pub mod iq;
 pub mod local_ports;
 pub mod npm_env;
 pub mod paths;

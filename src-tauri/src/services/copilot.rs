@@ -41,6 +41,7 @@ use tokio::sync::{Mutex, OnceCell};
 use crate::services::agent_skills::{self, Guidance};
 use crate::services::emit::emit_chat_event;
 use crate::services::exec;
+use crate::services::iq::IqConfig;
 use crate::state::PlanGate;
 use crate::types::{ChatEvent, CopilotAuthStatus};
 
@@ -54,6 +55,10 @@ const AUTO_MODEL_ID: &str = "auto";
 const AUTH_TIMEOUT: Duration = Duration::from_secs(30);
 const AUTH_RETRY_DELAY: Duration = Duration::from_millis(600);
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The runtime keeps the Fabric IQ and Work IQ tokens Fabricator hands it in
+/// memory only (see `iq::IqAuth`).
+const IQ_TOKEN_STORAGE: &str = "in-memory";
 
 pub const COPILOT_SIGN_IN_REQUIRED: &str =
   "GitHub Copilot is not signed in. Sign in to Copilot in Fabricator, then retry your message.";
@@ -70,6 +75,9 @@ struct Entry {
   /// The guidance the session was opened with; a different one (the app's
   /// backend moved between this computer and Fabric) reopens it.
   guidance: Option<Guidance>,
+  /// Fabric IQ and Work IQ (experiments), as the session was opened with them;
+  /// turning one on or off reopens it.
+  iq: IqConfig,
 }
 
 /// Context window tiers (SDK `ContextTier`).
@@ -371,6 +379,9 @@ pub struct SessionOptions {
   /// switch to. The runtime doesn't persist them, so they are re-supplied on
   /// every resume.
   pub byok: Option<crate::services::byok::registry::ByokRegistry>,
+  /// Fabric IQ and Work IQ (experiments), Build chat's only: the MCP servers
+  /// the session gets. Like the providers, they're re-supplied on every resume.
+  pub iq: IqConfig,
 }
 
 /* ----------------------------- Build chat sandbox ----------------------------- */
@@ -488,18 +499,43 @@ fn local_state_denial(local_tools: bool) -> PermissionResult {
   .into()
 }
 
+/// What the agent is told when it calls a Fabric IQ or Work IQ tool it may not use.
+fn iq_denial() -> PermissionResult {
+  PermissionDecision::DeniedByPermissionRequestHook(PermissionDecisionDeniedByPermissionRequestHook {
+    // Fails only this call: the turn carries on.
+    interrupt: Some(false),
+    message: Some(
+      "Fabricator lets this chat use Fabric IQ and Work IQ only to read, and only while they're on in Settings → \
+       Experiments, so this tool isn't available. Don't try to do this another way."
+        .into(),
+    ),
+    ..Default::default()
+  })
+  .into()
+}
+
 /// The Build chat's permission policy. The chat never reads or changes the
-/// local backend's state in `.rayfin-local`, which Fabricator manages; every
-/// other request goes to `inner`: a team project's guardrails, or approval.
+/// local backend's state in `.rayfin-local`, which Fabricator manages, and uses
+/// Fabric IQ and Work IQ only to read; every other request goes to `inner`: a
+/// team project's guardrails, or approval.
 struct BuildChatPolicy {
   inner: Arc<dyn PermissionHandler>,
   /// The session has the local backend tools, for the denial to point at.
   local_tools: bool,
+  iq: IqConfig,
 }
 
 #[async_trait]
 impl PermissionHandler for BuildChatPolicy {
   async fn handle(&self, session_id: SessionId, request_id: RequestId, data: PermissionRequestData) -> PermissionResult {
+    if request_kind(&data).as_deref() == Some("mcp") {
+      let body = request_body(&data);
+      let field = |key: &str| body.get(key).and_then(Value::as_str).unwrap_or_default();
+      if self.iq.permits(field("serverName"), field("toolName")) == Some(false) {
+        log::info!("Build chat: declined {} tool {}", field("serverName"), field("toolName"));
+        return iq_denial();
+      }
+    }
     if reaches_local_state(&data) {
       log::info!("Build chat: declined a {} request in .rayfin-local", request_kind(&data).unwrap_or_else(|| "unknown".into()));
       return local_state_denial(self.local_tools);
@@ -509,10 +545,10 @@ impl PermissionHandler for BuildChatPolicy {
 }
 
 /// The permission policy of a project's Build chat session with `tools`.
-fn build_chat_policy(project_id: &str, tools: &[Tool]) -> Arc<dyn PermissionHandler> {
+fn build_chat_policy(project_id: &str, tools: &[Tool], iq: IqConfig) -> Arc<dyn PermissionHandler> {
   // Team projects may not deploy, push or merge from chat (see team::guard).
   let inner = crate::services::team::guard::chat_policy(project_id).unwrap_or_else(|| Arc::new(ApproveAllHandler));
-  Arc::new(BuildChatPolicy { inner, local_tools: tools.iter().any(|t| t.name == LOCAL_STATUS_TOOL) })
+  Arc::new(BuildChatPolicy { inner, local_tools: tools.iter().any(|t| t.name == LOCAL_STATUS_TOOL), iq })
 }
 
 /// The project folders that hold its own skills (`<skill>/SKILL.md`): the
@@ -551,6 +587,12 @@ async fn open_session(
       .with_client_name(CLIENT_NAME)
       .with_working_directory(cwd_pb.clone())
       .with_permission_handler(handler.clone());
+    if opts.iq.any() {
+      cfg = cfg
+        .with_mcp_servers(opts.iq.servers())
+        .with_mcp_oauth_token_storage(IQ_TOKEN_STORAGE)
+        .with_mcp_auth_handler(Arc::new(crate::services::iq::IqAuth));
+    }
     if let Some(guidance) = opts.guidance {
       cfg = cfg
         .with_enable_skills(true)
@@ -601,6 +643,12 @@ async fn open_session(
     .with_client_name(CLIENT_NAME)
     .with_working_directory(cwd_pb)
     .with_permission_handler(handler);
+  if opts.iq.any() {
+    cfg = cfg
+      .with_mcp_servers(opts.iq.servers())
+      .with_mcp_oauth_token_storage(IQ_TOKEN_STORAGE)
+      .with_mcp_auth_handler(Arc::new(crate::services::iq::IqAuth));
+  }
   if let Some(guidance) = opts.guidance {
     cfg = cfg
       .with_enable_skills(true)
@@ -1016,10 +1064,11 @@ impl CopilotManager {
 
   /// Get the persistent, cached session for a project turn, creating or
   /// resuming it as needed and reconciling the current model choice. `byok` is
-  /// the registry of providers on the user's own keys, and `guidance` the set
-  /// of Fabricator's guidance that fits the app; a cached session opened with a
-  /// different one of either is reopened, since the runtime only takes them
-  /// (with `tools`) when a session is created or resumed.
+  /// the registry of providers on the user's own keys, `guidance` the set of
+  /// Fabricator's guidance that fits the app, and `iq` the Fabric IQ and Work
+  /// IQ servers it gets; a cached session opened with a different one of these
+  /// is reopened, since the runtime only takes them (with `tools`) when a
+  /// session is created or resumed.
   #[allow(clippy::too_many_arguments)]
   pub async fn turn_session(
     &self,
@@ -1032,6 +1081,7 @@ impl CopilotManager {
     tools: Vec<Tool>,
     guidance: Option<Guidance>,
     byok: Option<crate::services::byok::registry::ByokRegistry>,
+    iq: IqConfig,
   ) -> Result<TurnSession, String> {
     let key = project_id.to_string();
     let registry_rev = byok.as_ref().map(|r| r.revision.clone());
@@ -1050,6 +1100,7 @@ impl CopilotManager {
         if e.cwd == cwd
           && e.session.id().as_str() == session_id
           && e.registry_rev == registry_rev
+          && e.iq == iq
           && e.guidance == guidance =>
       {
         match session_sync(&e.choice, &choice) {
@@ -1084,7 +1135,7 @@ impl CopilotManager {
       disconnect_session(&old.session).await;
     }
 
-    let permission = Some(build_chat_policy(project_id, &tools));
+    let permission = Some(build_chat_policy(project_id, &tools, iq));
     let opts = SessionOptions {
       exit_plan,
       user_input,
@@ -1092,6 +1143,7 @@ impl CopilotManager {
       tools,
       permission,
       byok,
+      iq,
       ..Default::default()
     };
     let opened = match open_session(&client, cwd, session_id, &choice, &opts, true).await {
@@ -1115,6 +1167,7 @@ impl CopilotManager {
         choice,
         registry_rev,
         guidance,
+        iq,
       },
     );
     Ok(opened)
@@ -1231,12 +1284,14 @@ fn parse_cli_version(raw: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
   use super::*;
   use serde_json::{json, Value};
   use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
-  fn fake_client(steps: Vec<(&'static str, Value)>) -> (Client, tokio::task::JoinHandle<Vec<Value>>) {
+  /// A client whose runtime answers the requests `steps` names, in order, and
+  /// hands back the requests it got.
+  pub(crate) fn fake_client(steps: Vec<(&'static str, Value)>) -> (Client, tokio::task::JoinHandle<Vec<Value>>) {
     let (client_stream, server_stream) = tokio::io::duplex(65536);
     let (reader, writer) = tokio::io::split(client_stream);
     let client = Client::from_streams(reader, writer, PathBuf::from(".")).unwrap();
@@ -1480,7 +1535,7 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(),
     });
     manager.reload_auth().await;
     let engine = manager.engine.lock().await;
@@ -1505,6 +1560,61 @@ mod tests {
     assert_eq!(opened.session.id().as_str(), "saved-session");
     let requests = server.await.unwrap();
     assert_eq!(requests[1]["params"]["sessionId"], "saved-session");
+    // With Fabric IQ and Work IQ off, a session gets no MCP servers.
+    assert!(requests.iter().all(|r| r["params"].get("mcpServers").is_none()), "{requests:?}");
+    client.force_stop();
+  }
+
+  /// Fabric IQ and Work IQ are the session's own servers: the runtime only
+  /// keeps them while the session is loaded, so they go with every resume, as
+  /// does the handler that gives the runtime their tokens.
+  #[tokio::test]
+  async fn iq_servers_go_with_every_resume_and_create() {
+    let (client, server) = fake_client(vec![
+      ("session.resume", rpc_error("Session not found s")),
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+      ("session.eventLog.registerInterest", json!({ "result": {} })),
+    ]);
+    let opts = SessionOptions { iq: IqConfig { fabric: true, work: true }, ..Default::default() };
+    open_session(&client, ".", "s", &ModelChoice::default(), &opts, true).await.unwrap();
+    let requests = server.await.unwrap();
+    for request in &requests[..2] {
+      let params = &request["params"];
+      assert_eq!(params["mcpServers"]["FabricIQ"]["type"], "http", "{request}");
+      assert_eq!(params["mcpServers"]["workiq"]["type"], "http", "{request}");
+      assert_eq!(params["mcpOAuthTokenStorage"], IQ_TOKEN_STORAGE, "{request}");
+    }
+    assert_eq!(requests[2]["params"]["eventType"], "mcp.oauth_required");
+    client.force_stop();
+  }
+
+  /// Resuming replaces a session's MCP servers, so turning an experiment off
+  /// reopens the session without its server.
+  #[tokio::test]
+  async fn turning_an_iq_experiment_off_reopens_the_session_without_its_server() {
+    let (client, server) = fake_client(vec![
+      ("session.create", json!({ "result": { "sessionId": "thread" } })),
+      ("auth.getStatus", json!({ "result": { "isAuthenticated": true } })),
+      ("session.detach", json!({ "result": {} })),
+      ("session.resume", json!({ "result": { "sessionId": "thread" } })),
+      ("session.eventLog.registerInterest", json!({ "result": {} })),
+      ("session.skills.reload", json!({ "result": {} })),
+      ("session.model.switchTo", json!({ "result": {} })),
+    ]);
+    let cached = client.create_session(SessionConfig::default().with_session_id(SessionId::new("thread"))).await.unwrap();
+    let manager = manager_with(client.clone());
+    manager.engine.lock().await.sessions.insert("project".into(), Entry {
+      session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
+      iq: IqConfig { fabric: true, work: true },
+    });
+    let fabric = IqConfig { fabric: true, work: false };
+    manager.turn_session(
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), None, None, fabric,
+    ).await.unwrap();
+    let requests = server.await.unwrap();
+    let servers = requests[3]["params"]["mcpServers"].as_object().unwrap();
+    assert_eq!(servers.keys().collect::<Vec<_>>(), ["FabricIQ"]);
+    assert_eq!(manager.engine.lock().await.sessions["project"].iq, fabric);
     client.force_stop();
   }
 
@@ -1560,7 +1670,7 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(),
     });
     assert!(manager.list_models().await.is_err());
     let engine = manager.engine.lock().await;
@@ -1587,7 +1697,7 @@ mod tests {
     ).await.unwrap());
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
+      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(),
     });
     manager.invalidate_transport("project", &stale).await;
     assert!(manager.engine.lock().await.client.is_some());
@@ -1627,10 +1737,10 @@ mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
+      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(),
     });
     let opened = manager.turn_session(
-      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None, None,
+      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(),
     ).await.unwrap();
     assert_eq!(opened.session.id().as_str(), "new-session");
     assert!(!opened.recreated);
@@ -1658,7 +1768,7 @@ mod tests {
     let choice = ModelChoice::of(m("anthropic/claude-opus-5-5"), None);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: choice.clone(),
-      registry_rev: Some("before-the-new-key".into()), guidance: None,
+      registry_rev: Some("before-the-new-key".into()), guidance: None, iq: IqConfig::default(),
     });
     let mut settings = crate::types::ByokSettings::default();
     settings.providers.insert("anthropic".into(), crate::types::ByokProviderSettings {
@@ -1672,7 +1782,7 @@ mod tests {
     let keys = HashMap::from([("anthropic".to_string(), "sk-ant-test".to_string())]);
     let registry = crate::services::byok::registry::build(&settings, &keys);
     manager.turn_session(
-      "project", ".", "thread", choice, None, None, Vec::new(), None, Some(registry.clone()),
+      "project", ".", "thread", choice, None, None, Vec::new(), None, Some(registry.clone()), IqConfig::default(),
     ).await.unwrap();
     let requests = server.await.unwrap();
     let resume = &requests[3]["params"];
@@ -1704,9 +1814,10 @@ mod tests {
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
       guidance: Some(Guidance::Local),
+      iq: IqConfig::default(),
     });
     manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::FabricBacked), None,
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::FabricBacked), None, IqConfig::default(),
     ).await.unwrap();
     let requests = server.await.unwrap();
     let resume = &requests[3]["params"];
@@ -1830,7 +1941,7 @@ mod tests {
     ]);
     let manager = manager_with(client);
     let result = manager.turn_session(
-      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None, None,
+      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(),
     ).await;
     assert!(result.err().unwrap().contains("Sign in to Copilot"));
     assert!(manager.engine.lock().await.sessions.is_empty());
@@ -2054,23 +2165,47 @@ mod tests {
       other => panic!("expected a denial, got {other:?}"),
     };
     let read_secrets = json!({ "kind": "read", "path": ".rayfin-local/secrets.json" });
-    let local = build_chat_policy("a-personal-project", &[Tool::new(LOCAL_STATUS_TOOL), Tool::new("fabricator_local_call")]);
+    let local = build_chat_policy("a-personal-project", &[Tool::new(LOCAL_STATUS_TOOL), Tool::new("fabricator_local_call")], IqConfig::default());
     let said = message(decide(local.as_ref(), read_secrets.clone()).await);
     assert!(said.contains("Fabricator keeps this app's local data in `.rayfin-local`"), "{said}");
     assert!(said.contains("`fabricator_local_status`") && said.contains("`fabricator_local_call`"), "{said}");
     // Without the local backend tools (a Fabric-backed session), it doesn't point at them.
-    let fabric_backed = build_chat_policy("a-personal-project", &[Tool::new("fabricator_locate_semantic_model")]);
+    let fabric_backed = build_chat_policy("a-personal-project", &[Tool::new("fabricator_locate_semantic_model")], IqConfig::default());
     assert!(!message(decide(fabric_backed.as_ref(), read_secrets).await).contains("fabricator_local"));
     assert!(matches!(
       decide(local.as_ref(), json!({ "kind": "write", "fileName": "src/App.tsx" })).await,
       PermissionResult::Decision { decision: PermissionDecision::ApproveOnce(_), .. }
     ));
     // A team project keeps its own guardrails as well.
-    let team = BuildChatPolicy { inner: Arc::new(crate::services::team::guard::TeamChatPolicy), local_tools: false };
+    let team = BuildChatPolicy { inner: Arc::new(crate::services::team::guard::TeamChatPolicy), local_tools: false, iq: IqConfig::default() };
     assert!(matches!(
       decide(&team, json!({ "kind": "shell", "fullCommandText": "npx rayfin up --yes" })).await,
       PermissionResult::Decision { decision: PermissionDecision::UserNotAvailable(_), .. }
     ));
     message(decide(&team, json!({ "kind": "shell", "fullCommandText": "del .rayfin-local\\db.sqlite" })).await);
+  }
+
+  #[tokio::test]
+  async fn build_chat_uses_iq_tools_only_to_read_and_only_while_they_are_on() {
+    let policy = build_chat_policy("a-personal-project", &[], IqConfig { fabric: false, work: true });
+    let call = |server: &str, tool: &str| {
+      permission(json!({ "kind": "mcp", "serverName": server, "toolName": tool, "toolTitle": tool, "readOnly": false }))
+    };
+    let approved = |result: PermissionResult| {
+      matches!(result, PermissionResult::Decision { decision: PermissionDecision::ApproveOnce(_), .. })
+    };
+    let decide = |data| policy.handle(SessionId::from("s"), RequestId::new("1"), data);
+    assert!(approved(decide(call("workiq", "fetch")).await));
+    // Other servers keep the chat's usual policy.
+    assert!(approved(decide(call("rayfin", "search_docs")).await));
+    for (server, tool) in [("workiq", "do_action"), ("workiq", "delete_entity"), ("FabricIQ", "ExecuteQuery")] {
+      match decide(call(server, tool)).await {
+        PermissionResult::Decision { decision: PermissionDecision::DeniedByPermissionRequestHook(denied), .. } => {
+          assert_eq!(denied.interrupt, Some(false), "the turn carries on");
+          assert!(denied.message.unwrap().contains("only to read"));
+        }
+        other => panic!("{server} {tool} must be declined, got {other:?}"),
+      }
+    }
   }
 }

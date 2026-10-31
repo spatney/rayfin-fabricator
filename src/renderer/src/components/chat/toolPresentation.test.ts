@@ -47,6 +47,11 @@ describe('toolKind', () => {
       fabricator_console: 'console',
       fabricator_local_status: 'local-status',
       fabricator_local_call: 'local-call',
+      // MCP tools are named after their server; these would otherwise read as project searches or web reads.
+      'FabricIQ-ValueSearch': 'fabric-iq',
+      'FabricIQ-ExecuteQuery': 'fabric-iq',
+      'workiq-search_paths': 'work-iq',
+      'workiq-fetch': 'work-iq',
       mystery_tool: 'other'
     }
     for (const [name, kind] of Object.entries(cases))
@@ -164,6 +169,18 @@ describe('describeStep', () => {
     ).toBe('Called the app')
     expect(phaseLabel('fabricator_local_status')).toBe('Checking the local backend')
     expect(phaseLabel('fabricator_local_call')).toBe('Calling the app')
+  })
+
+  it('says which service an IQ lookup went to, and what it asked', () => {
+    expect(stepLabel(describeStep(tool('workiq-ask', 'Who owns the billing service?'), ROOT))).toBe(
+      'Looked up in Work IQ “Who owns the billing service?”'
+    )
+    expect(
+      stepLabel(
+        describeStep(tool('FabricIQ-DiscoverArtifacts', 'FabricIQ-DiscoverArtifacts'), ROOT)
+      )
+    ).toBe('Looked up in Fabric IQ')
+    expect(phaseLabel('FabricIQ-ExecuteQuery')).toBe('Looking up Power BI data')
   })
 
   it('reports step durations from renderer timestamps', () => {

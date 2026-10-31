@@ -38,6 +38,8 @@ fn default_flags() -> ExperimentFlags {
     team_workspaces: Some(false),
     report_migration: Some(false),
     app_gallery: Some(false),
+    fabric_iq: Some(false),
+    work_iq: Some(false),
   }
 }
 
@@ -174,6 +176,8 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   if let Some(v) = patch.team_workspaces { current.team_workspaces = Some(v); }
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
   if let Some(v) = patch.app_gallery { current.app_gallery = Some(v); }
+  if let Some(v) = patch.fabric_iq { current.fabric_iq = Some(v); }
+  if let Some(v) = patch.work_iq { current.work_iq = Some(v); }
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -424,6 +428,21 @@ mod tests {
     assert_eq!(
       serde_json::to_value(flags.unwrap()).unwrap(),
       serde_json::json!({"reportMigration":true,"appGallery":true})
+    );
+  }
+
+  #[test]
+  fn iq_flags_merge_independently_and_default_off() {
+    let defaults = default_settings().experiments.unwrap();
+    assert_eq!((defaults.fabric_iq, defaults.work_iq), (Some(false), Some(false)));
+    let mut flags: Option<ExperimentFlags> =
+      Some(serde_json::from_value(serde_json::json!({"appGallery":true})).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"workIq":true})).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"fabricIq":true})).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"fabricIq":false})).unwrap());
+    assert_eq!(
+      serde_json::to_value(flags.unwrap()).unwrap(),
+      serde_json::json!({"appGallery":true,"fabricIq":false,"workIq":true})
     );
   }
 

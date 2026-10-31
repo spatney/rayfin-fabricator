@@ -81,6 +81,7 @@ export function ToolKindIcon({
         </svg>
       )
     case 'model':
+    case 'fabric-iq':
       return (
         <svg {...p}>
           <ellipse cx="12" cy="6.5" rx="7" ry="2.8" />
@@ -151,6 +152,14 @@ export function ToolKindIcon({
           <path d="M15.5 8.5h2M15.5 12h2" />
           <path d="M3.5 14h6.5" />
           <path d="M7.5 11.5 10 14l-2.5 2.5" />
+        </svg>
+      )
+    case 'work-iq':
+      return (
+        <svg {...p}>
+          <rect x="3.5" y="7.5" width="17" height="12" rx="2" />
+          <path d="M9 7.5V5.5h6v2" />
+          <path d="M3.5 12.5h17" />
         </svg>
       )
     default:
