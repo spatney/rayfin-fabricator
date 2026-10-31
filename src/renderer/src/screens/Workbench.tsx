@@ -38,6 +38,7 @@ import PortConflictModal, {
   type PortPromptContext
 } from '../components/PortConflictModal'
 import SettingsModal from '../components/SettingsModal'
+import McpServersModal from '../components/mcp/McpServersModal'
 import { applyUiScale, UI_SCALES } from '../theme'
 import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../components/ChatPanel'
 import { segmentsForStorage, segmentsFromStorage } from '../components/chat/storage'
@@ -285,6 +286,8 @@ export default function Workbench({
   const [signingIn, setSigningIn] = useState(false)
   const [refreshingAuth, setRefreshingAuth] = useState(false)
   const [showAccounts, setShowAccounts] = useState(false)
+  /** The MCP servers dialog (MCP servers experiment), opened on adding a server when `adding`. */
+  const [mcpDialog, setMcpDialog] = useState<{ adding: boolean } | null>(null)
   /** The attention bar was dismissed for these problems (it returns for new ones). */
   const [dismissedAttention, setDismissedAttention] = useState<string | null>(null)
   const [authRefreshTarget, setAuthRefreshTarget] = useState<{
@@ -756,6 +759,13 @@ export default function Workbench({
   useEffect(() => {
     if (!galleryEnabled) setGallery(null)
   }, [galleryEnabled])
+
+  const mcpServersEnabled = Boolean(settings?.experiments?.mcpServers)
+  const openMcpServers = useCallback((adding = false): void => setMcpDialog({ adding }), [])
+  // So does the MCP servers dialog, with its experiment.
+  useEffect(() => {
+    if (!mcpServersEnabled) setMcpDialog(null)
+  }, [mcpServersEnabled])
 
   // A team app's live preview stays up after its turn while the change is
   // saved and the pipeline publishes it. It ends once your preview has that
@@ -2421,6 +2431,7 @@ export default function Workbench({
       autoDeploy: !manualDeploy,
       migrationEnabled,
       galleryEnabled,
+      mcpServersEnabled,
       inGallery: Boolean(gallery),
       teamWorkspaceName: activeTeamWorkspace?.name,
       theme: settings?.theme ?? 'system',
@@ -2493,6 +2504,7 @@ export default function Workbench({
         openSettings: () => setShowSettings(true),
         openAccounts: () => setShowAccounts(true),
         openApiKeys: openModelProviders,
+        openMcpServers: () => openMcpServers(),
         refreshFabricAuth: () => {
           if (active) openAuthRefresh(active)
         },
@@ -2848,6 +2860,7 @@ export default function Workbench({
                             onOptionsChanged={() => void refreshProjects()}
                             onManageKeys={openModelProviders}
                             experiments={settings?.experiments}
+                            onManageMcpServers={mcpServersEnabled ? openMcpServers : undefined}
                             outbound={chatOutbound?.projectId === active.id ? chatOutbound : null}
                             onOutboundConsumed={() => setChatOutbound(null)}
                             onAdvisorRerun={rerunAdvisorFix}
@@ -3206,10 +3219,26 @@ export default function Workbench({
             setShowSettings(false)
             openModelProviders()
           }}
+          onManageMcpServers={
+            mcpServersEnabled
+              ? () => {
+                  setShowSettings(false)
+                  openMcpServers()
+                }
+              : undefined
+          }
           onReviewSetup={() => {
             setShowSettings(false)
             onReviewSetup()
           }}
+        />
+      )}
+
+      {mcpDialog && (
+        <McpServersModal
+          adding={mcpDialog.adding}
+          onClose={() => setMcpDialog(null)}
+          onChanged={() => void refreshProjects()}
         />
       )}
 

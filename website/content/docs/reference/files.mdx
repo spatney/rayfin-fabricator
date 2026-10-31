@@ -18,7 +18,7 @@ Fabricator creates this folder when it needs to save app-owned files.
 
 | Path | What it contains | Safe to delete? |
 | --- | --- | --- |
-| `studio.json` | Settings, the workspace folder path, recent projects, active project, and team workspace list. | Yes, but Fabricator forgets settings and project lists. It does not delete the project folders. |
+| `studio.json` | Settings, the workspace folder path, recent projects, active project, and team workspace list. With the **MCP servers** experiment, also the MCP servers you added: each one's name, command or URL, and the names of its environment variables or headers. | Yes, but Fabricator forgets settings and project lists. It does not delete the project folders. |
 | `chats/` | Saved chat history, one JSON file per project. | Yes, if you no longer need chat history. |
 | `advisor/` | Saved Advisor reports and Advisor UI state for projects. | Yes, if you are comfortable losing saved findings, dismissals, and baselines. |
 | `suggestions/` | Cached starter suggestion sets for projects. | Yes. Fabricator can recreate suggestions. |
@@ -60,6 +60,8 @@ Fabricator stores temporary screenshot attachments under the operating system te
 ## Credentials
 
 Fabricator does not store Copilot, Azure, or Rayfin credentials in `studio.json`. Those credentials are owned by the tools and services that sign you in, such as the bundled Copilot engine, Azure CLI, GitHub CLI, Rayfin CLI, and platform credential stores. The local backend that runs your apps keeps the tokens it gets from them in memory only.
+
+The keys you add for your own model providers, and the values of the environment variables and headers of the MCP servers you add, are in Windows Credential Manager or the macOS Keychain, not in `studio.json`.
 
 ## What to keep for bug reports
 

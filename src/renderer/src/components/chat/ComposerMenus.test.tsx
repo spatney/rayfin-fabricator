@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import type { McpServer } from '@shared/ipc'
 import { AddMenu, PluginsMenu } from './ComposerMenus'
 import { offeredPlugins } from './plugins'
 
@@ -112,5 +113,80 @@ describe('PluginsMenu', () => {
     renderPlugins({ on: ['fabric-iq'], disabled: true })
     const trigger = screen.getByRole('button', { name: 'Plugins: Fabric IQ' }) as HTMLButtonElement
     expect(trigger.disabled).toBe(true)
+  })
+
+  describe('with the MCP servers experiment', () => {
+    const servers: McpServer[] = [
+      {
+        id: 'chart',
+        name: 'Charts',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', '@antv/mcp-server-chart'],
+        readOnly: false,
+        addedAt: '2026-10-31T00:00:00Z'
+      },
+      {
+        id: 'learn',
+        name: 'Microsoft Learn',
+        transport: 'http',
+        url: 'https://learn.microsoft.com/api/mcp',
+        readOnly: true,
+        addedAt: '2026-10-31T00:00:00Z'
+      }
+    ]
+
+    function renderWithServers(list: McpServer[], on: string[] = []) {
+      const onToggle = vi.fn()
+      const onManageServers = vi.fn()
+      render(
+        <PluginsMenu
+          plugins={offeredPlugins({ mcpServers: true })}
+          servers={list}
+          on={on}
+          onToggle={onToggle}
+          onManageServers={onManageServers}
+        />
+      )
+      return { onToggle, onManageServers }
+    }
+
+    it('lists your servers under their own heading, each off until turned on in this chat', () => {
+      const { onToggle, onManageServers } = renderWithServers(servers, ['mcp:learn', 'fabric-iq'])
+      fireEvent.click(screen.getByRole('button', { name: 'Plugins: Fabric IQ, Microsoft Learn' }))
+      const menu = screen.getByRole('menu', { name: 'Plugins' })
+      expect(menu.textContent).toContain('MCP serversExperiment')
+      const charts = within(menu).getByRole('menuitemcheckbox', { name: /Charts/ })
+      expect(charts.getAttribute('aria-checked')).toBe('false')
+      expect(charts.textContent).toContain('npx -y @antv/mcp-server-chart')
+      const learn = within(menu).getByRole('menuitemcheckbox', { name: /Microsoft Learn/ })
+      expect(learn.getAttribute('aria-checked')).toBe('true')
+      expect(learn.textContent).toContain('Read-only · learn.microsoft.com/api/mcp')
+      fireEvent.click(charts)
+      expect(onToggle).toHaveBeenLastCalledWith('mcp:chart', true)
+      fireEvent.click(learn)
+      expect(onToggle).toHaveBeenLastCalledWith('mcp:learn', false)
+      // Not every plugin only reads any more.
+      expect(menu.textContent).toContain('an MCP server can do whatever its tools do')
+      fireEvent.click(within(menu).getByRole('menuitem', { name: 'Manage MCP servers…' }))
+      expect(onManageServers).toHaveBeenLastCalledWith(false)
+      expect(screen.queryByRole('menu')).toBeNull()
+    })
+
+    it('offers adding the first server', () => {
+      const { onManageServers } = renderWithServers([])
+      fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Add an MCP server…' }))
+      expect(onManageServers).toHaveBeenLastCalledWith(true)
+    })
+
+    it('shows no servers without the experiment, even ones that were on', () => {
+      renderPlugins({ on: ['mcp:chart'] })
+      fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
+      expect(screen.queryByText('MCP servers')).toBeNull()
+      expect(screen.getByRole('menu', { name: 'Plugins' }).textContent).toContain(
+        'Plugins only read.'
+      )
+    })
   })
 })

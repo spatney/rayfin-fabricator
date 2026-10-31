@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import type { ChatPluginId } from '@shared/ipc'
+import type { ChatPluginId, McpServer } from '@shared/ipc'
 import { DATA_KINDS, type DataKind } from '@renderer/fabricData'
 import { moveMenuFocus } from '@renderer/menuFocus'
 import { menuLayout, type MenuLayout } from '@renderer/menuLayout'
 import { useSuppressPreview } from '@renderer/overlay'
 import { Codicon, ImageIcon } from '../icons'
-import type { ChatPlugin } from './plugins'
+import { serverSummary } from '../mcp/mcpConfig'
+import { mcpPluginId, type ChatPlugin } from './plugins'
 import fabricSvg from '../../assets/brands/fabric.svg'
 import '../models/modelPicker.css'
 
@@ -246,23 +247,30 @@ export function AddMenu({
 
 /**
  * The composer's plugins, beside the "+" menu: services chat can look things up
- * with while it builds, such as Fabric IQ. Each is off until turned on, and changes
- * from the chat's next message; the trigger names the ones that are on.
+ * with while it builds, such as Fabric IQ, and, with the MCP servers
+ * experiment, the MCP servers you added. Each is off until turned on, and
+ * changes from the chat's next message; the trigger names the ones that are on.
  */
 export function PluginsMenu({
   plugins,
+  servers,
   on,
   disabled = false,
   onToggle,
+  onManageServers,
   onLearnMore
 }: {
   /** The plugins chat offers. */
   plugins: readonly ChatPlugin[]
+  /** The MCP servers you added, while the MCP servers experiment is on. */
+  servers?: readonly McpServer[]
   /** The ids of the plugins on in this chat. */
   on: readonly string[]
   /** While the assistant is working: plugins change between messages. */
   disabled?: boolean
   onToggle: (plugin: ChatPluginId, on: boolean) => void
+  /** Open the MCP servers dialog, adding a server when `add` is set. */
+  onManageServers?: (add: boolean) => void
   onLearnMore?: () => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
@@ -274,10 +282,10 @@ export function PluginsMenu({
   // Wider than the narrowest chat pane, so it can reach over the preview.
   useSuppressPreview(open)
 
-  const names = plugins
-    .filter((p) => on.includes(p.id))
-    .map((p) => p.name)
-    .join(', ')
+  const names = [
+    ...plugins.filter((p) => on.includes(p.id)).map((p) => p.name),
+    ...(servers ?? []).filter((s) => on.includes(mcpPluginId(s.id))).map((s) => s.name)
+  ].join(', ')
 
   useEffect(() => {
     if (!open) return
@@ -395,8 +403,71 @@ export function PluginsMenu({
                   </button>
                 )
               })}
+              {servers && (
+                <>
+                  <div className="mp-sep" role="separator" />
+                  <div className="mp-heading" aria-hidden="true">
+                    MCP servers
+                    <span className="mp-badge mp-badge--inline">Experiment</span>
+                  </div>
+                  {servers.map((s) => {
+                    const id = mcpPluginId(s.id)
+                    const isOn = on.includes(id)
+                    const summary = serverSummary(s)
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={isOn}
+                        className="mp-item pl-item pl-item--mcp"
+                        title={summary}
+                        onClick={() => onToggle(id, !isOn)}
+                      >
+                        <Codicon
+                          name={s.transport === 'stdio' ? 'terminal' : 'globe'}
+                          className="am-icon"
+                        />
+                        <span className="mp-item-text">
+                          <span className="mp-item-label">{s.name}</span>
+                          <span className="mp-item-desc">
+                            {s.readOnly ? `Read-only · ${summary}` : summary}
+                          </span>
+                        </span>
+                        <span
+                          className={`switch switch--sm${isOn ? ' switch--on' : ''}`}
+                          aria-hidden="true"
+                        >
+                          <span className="switch-knob" />
+                        </span>
+                      </button>
+                    )
+                  })}
+                  {onManageServers && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="mp-item mp-quiet"
+                      onClick={() => {
+                        closeMenu(false)
+                        onManageServers(servers.length === 0)
+                      }}
+                    >
+                      <Codicon
+                        name={servers.length ? 'settings-gear' : 'add'}
+                        className="am-icon"
+                      />
+                      <span className="mp-item-label am-label">
+                        {servers.length ? 'Manage MCP servers…' : 'Add an MCP server…'}
+                      </span>
+                    </button>
+                  )}
+                </>
+              )}
               <p className="mp-note">
-                Chat looks things up with a plugin only when a request needs it. Plugins only read.
+                {servers
+                  ? 'Chat uses a plugin only when a request needs it. Fabric IQ and Work IQ only read; an MCP server can do whatever its tools do.'
+                  : 'Chat looks things up with a plugin only when a request needs it. Plugins only read.'}
               </p>
               {onLearnMore && (
                 <>

@@ -1,6 +1,6 @@
 ---
 title: "Settings"
-description: "Every option in Fabricator's Settings: accounts, API keys, setup, workspace folder, theme, text size, diagnostics, experiments, and About."
+description: "Every option in Fabricator's Settings: accounts, API keys, MCP servers, setup, workspace folder, theme, text size, diagnostics, experiments, and About."
 ---
 
 Open **Settings** to manage your accounts, change how Fabricator looks, where new projects are created, how diagnostics are captured, and which experiments are on.
@@ -16,6 +16,10 @@ Settings groups its options into **General**, **Appearance**, **Diagnostics**, *
 ## API keys
 
 **API keys** adds models from Anthropic, OpenAI, xAI and Google, on your own API keys, to the model pickers in Build chat, the Advisor and Design. The provider bills you for them, and you still sign in to GitHub Copilot, which runs the conversation. Select **Manage API keys** to add your keys and choose their models in **Accounts → Model providers**. See [Use your own API keys](/docs/build/your-own-api-keys).
+
+## MCP servers
+
+**MCP servers** shows under **General** while the **MCP servers** experiment is on. Select **Manage MCP servers** to add, check, change or remove the MCP servers that chat can turn on in its **Plugins**. See [Connect MCP servers](/docs/build/mcp-servers).
 
 ## Theme
 
@@ -75,7 +79,7 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 ## Experiments
 
-**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has four experiments: **Team workspaces**, **Migrate Power BI reports**, **App gallery** and **Work IQ**.
+**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has five experiments: **Team workspaces**, **Migrate Power BI reports**, **App gallery**, **Work IQ** and **MCP servers**.
 
 ### Team workspaces
 
@@ -104,6 +108,13 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 > [!WARNING]
 > Work IQ is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
+
+### MCP servers
+
+**MCP servers** adds an **MCP servers** section to the chat composer's **Plugins**, and **MCP servers** under **General**. Add MCP servers there, each a command that runs on this computer or a server's URL. Turned on in an app's chat, a server gives chat its tools while it builds, such as searching documentation, drawing charts or reading your issue tracker. A server runs with your access, so add only servers you trust. Turning the experiment off takes the servers out of every chat, but keeps them for when you turn it on again. See [Connect MCP servers](/docs/build/mcp-servers).
+
+> [!WARNING]
+> MCP servers are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
 
 ## Publish after each chat turn
 

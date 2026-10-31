@@ -18,6 +18,8 @@ interface Props {
   onManageAccounts?: () => void
   /** Open the Accounts dialog at Model providers (your own API keys). */
   onManageKeys?: () => void
+  /** Open the MCP servers dialog, while the MCP servers experiment is on. */
+  onManageMcpServers?: () => void
   /** Leave for the setup screen to re-check tools and sign-ins. */
   onReviewSetup?: () => void
 }
@@ -160,6 +162,7 @@ export default function SettingsModal({
   onClose,
   onManageAccounts,
   onManageKeys,
+  onManageMcpServers,
   onReviewSetup
 }: Props): JSX.Element {
   useSuppressPreview()
@@ -256,6 +259,16 @@ export default function SettingsModal({
                 >
                   <button type="button" className="btn btn--sm" onClick={onManageKeys}>
                     Manage API keys
+                  </button>
+                </Item>
+              )}
+              {onManageMcpServers && (
+                <Item
+                  title="MCP servers"
+                  desc="Add the MCP servers chat can turn on in its Plugins, such as a command that runs on this computer or a server’s URL."
+                >
+                  <button type="button" className="btn btn--sm" onClick={onManageMcpServers}>
+                    Manage MCP servers
                   </button>
                 </Item>
               )}
@@ -399,6 +412,12 @@ export default function SettingsModal({
                       hint="Add Work IQ to chat's plugins. Turned on in a chat, it lets chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. Read-only. You sign in with your work account in your browser. Needs a Microsoft 365 Copilot license and your organization's approval."
                       checked={Boolean(settings.experiments?.workIq)}
                       onChange={(v) => onChange({ experiments: { workIq: v } })}
+                    />
+                    <ToggleRow
+                      label="MCP servers"
+                      hint="Add MCP servers to chat's plugins: a command that runs on this computer, or a server's URL, such as one that draws charts or reads your issue tracker. Turned on in a chat, chat can use the server's tools while it builds. A server runs with your access, so add only servers you trust."
+                      checked={Boolean(settings.experiments?.mcpServers)}
+                      onChange={(v) => onChange({ experiments: { mcpServers: v } })}
                     />
                   </div>
                 )}

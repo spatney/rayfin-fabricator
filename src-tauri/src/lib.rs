@@ -194,6 +194,11 @@ pub fn run() {
       commands::byok::byok_refresh,
       commands::byok::byok_remove_key,
       commands::byok::byok_set_models,
+      // MCP servers (experiment)
+      commands::mcp::mcp_list,
+      commands::mcp::mcp_save,
+      commands::mcp::mcp_remove,
+      commands::mcp::mcp_check,
       // doctor
       commands::doctor::doctor_check,
       commands::doctor::doctor_install,

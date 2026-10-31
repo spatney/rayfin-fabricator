@@ -4,7 +4,7 @@ import microsoftSvg from '../../assets/brands/microsoft.svg'
 
 /** A plugin chat can look things up with, as the composer's Plugins menu shows it. */
 export interface ChatPlugin {
-  id: ChatPluginId
+  id: Exclude<ChatPluginId, `mcp:${string}`>
   name: string
   /** What it looks up. */
   description: string
@@ -32,4 +32,9 @@ export const CHAT_PLUGINS: readonly ChatPlugin[] = [
 /** The plugins chat offers with `experiments` on. */
 export function offeredPlugins(experiments?: ExperimentFlags | null): ChatPlugin[] {
   return CHAT_PLUGINS.filter((p) => !p.experiment || Boolean(experiments?.[p.experiment]))
+}
+
+/** The plugin id of an MCP server you added. */
+export function mcpPluginId(serverId: string): ChatPluginId {
+  return `mcp:${serverId}`
 }

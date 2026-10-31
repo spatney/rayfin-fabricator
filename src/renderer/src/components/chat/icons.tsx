@@ -162,6 +162,14 @@ export function ToolKindIcon({
           <path d="M3.5 12.5h17" />
         </svg>
       )
+    case 'mcp':
+      return (
+        <svg {...p}>
+          <path d="M9 3.5v4M15 3.5v4" />
+          <path d="M6.5 7.5h11v3a5.5 5.5 0 0 1-11 0z" />
+          <path d="M12 16v4.5" />
+        </svg>
+      )
     default:
       return (
         <svg {...p}>

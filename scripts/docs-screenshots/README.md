@@ -20,7 +20,7 @@ Everything here is a maintainer tool. It isn't part of the app or of CI.
 | `scrub.js` | Replaces personal details (names, emails, tenant, workspace and repo names, paths) in a page |
 | `capture-window.ps1` | Captures the app window, including the native preview webview a DevTools screenshot can't see |
 | `optimize.mjs` | Crops, resizes and converts a capture to WebP, and its light twin the same way (uses `sharp` from `website/node_modules`) |
-| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Accounts, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Search, Blueprint, its Data model view with related entities and with loose access, its Data view of the sample app's local data, the local preview with the local backend's output (a stand-in without the app, left out of the default list: the docs capture is live), deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, the chat's Plugins menu, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Migrate a Power BI report, the Migration card) and captures each in both themes with headless Edge. Its local backend runs the sample app with made-up users, rows, secrets and output |
+| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Accounts, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Search, Blueprint, its Data model view with related entities and with loose access, its Data view of the sample app's local data, the local preview with the local backend's output (a stand-in without the app, left out of the default list: the docs capture is live), deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, the chat's Plugins menu, the same menu with MCP servers, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, MCP servers, Migrate a Power BI report, the Migration card) and captures each in both themes with headless Edge. Its local backend runs the sample app with made-up users, rows, secrets and output |
 
 ## Before you start
 
@@ -200,6 +200,8 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `model-providers` | harness | `390,200,660,590` |
 | `add-menu` | harness | `0,630,520,270` |
 | `plugins` | harness | `0,580,520,320` |
+| `mcp-plugins` | harness | `0,415,520,485` |
+| `mcp-servers` | harness | `390,114,660,672` |
 | `connect-data` | harness | `300,140,840,620` |
 | `data-chips` | harness | `0,740,720,160` |
 | `design`, `design-theme` | live (`design-theme` with `--open` on the Theme button) | `720,40,720,860` |

@@ -275,11 +275,12 @@ describe('SettingsModal retired controls', () => {
         expect(screen.queryByText(label)).toBeNull()
       }
       expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-      expect(screen.getAllByRole('checkbox')).toHaveLength(5)
+      expect(screen.getAllByRole('checkbox')).toHaveLength(6)
       expect(screen.getByText('Team workspaces')).toBeTruthy()
       expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
       expect(screen.getByText('App gallery')).toBeTruthy()
       expect(screen.getByText('Work IQ')).toBeTruthy()
+      expect(screen.getByText('MCP servers')).toBeTruthy()
       expect(screen.getByText('Full diagnostics')).toBeTruthy()
     }
   )
@@ -292,6 +293,25 @@ describe('SettingsModal API keys', () => {
     await renderModal({ onManageKeys })
     fireEvent.click(screen.getByRole('button', { name: 'Manage API keys' }))
     expect(onManageKeys).toHaveBeenCalledOnce()
+  })
+})
+
+describe('SettingsModal MCP servers', () => {
+  it('turns the experiment on, and offers managing servers only while it’s on', async () => {
+    installApi()
+    const onChange = vi.fn()
+    await renderModal({ onChange })
+    expect(screen.queryByRole('button', { name: 'Manage MCP servers' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /MCP servers/ }))
+    expect(onChange).toHaveBeenLastCalledWith({ experiments: { mcpServers: true } })
+
+    cleanup()
+    installApi()
+    const onManageMcpServers = vi.fn()
+    await renderModal({ onManageMcpServers })
+    fireEvent.click(screen.getByRole('button', { name: 'Manage MCP servers' }))
+    expect(onManageMcpServers).toHaveBeenCalledOnce()
   })
 })
 

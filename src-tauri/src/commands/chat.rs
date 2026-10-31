@@ -40,6 +40,7 @@ use crate::services::byok;
 use crate::services::copilot::ModelChoice;
 use crate::services::exec::CancelToken;
 use crate::services::iq::{self, IqConfig};
+use crate::services::mcp::{self, McpServers};
 use crate::services::store;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
@@ -73,13 +74,18 @@ const FALLBACK_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft F
 const FALLBACK_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric, because the local backend can't run all of it. Publish after each chat turn is on, so Fabricator publishes the app when this turn ends, and the preview then shows the result.]";
 
 /// The text sent to Copilot for a chat message in `project`, with the note on
-/// how its changes go live, and on the Fabric IQ and Work IQ servers it can
-/// research with (`iq`).
-fn turn_text(project: &StudioProject, text: &str, guidance: Guidance, manual_publish: bool, iq: &iq::Prepared) -> String {
-  let text = match iq.note() {
-    Some(iq_note) => format!("{iq_note}\n\n{text}"),
-    None => text.to_string(),
-  };
+/// how its changes go live, and on the Fabric IQ and Work IQ servers (`iq`) and
+/// the user's own MCP servers (`mcp`) it can use.
+fn turn_text(
+  project: &StudioProject,
+  text: &str,
+  guidance: Guidance,
+  manual_publish: bool,
+  iq: &iq::Prepared,
+  mcp: &mcp::Prepared,
+) -> String {
+  let notes: Vec<String> = [iq.note(), mcp.note()].into_iter().flatten().collect();
+  let text = if notes.is_empty() { text.to_string() } else { format!("{}\n\n{text}", notes.join("\n\n")) };
   if project.team.is_some() {
     return crate::services::team::chat_text(&project.id, &text);
   }
@@ -112,6 +118,27 @@ async fn prepare_iq(
   };
   let ui = iq::Ui { notice: &notice, open: &open };
   iq::prepare(session, iq, &ui, &iq::Microsoft, &iq::MEMORY, cancel, iq::Waits::default()).await
+}
+
+/// Connects a turn's session to the user's MCP servers that are on, asking the
+/// user to sign in to one in the browser when it needs that.
+async fn prepare_mcp(
+  app: &AppHandle,
+  project_id: &str,
+  turn_id: &str,
+  session: &Session,
+  servers: &McpServers,
+  cancel: &CancelToken,
+) -> mcp::Prepared {
+  if servers.is_empty() {
+    return mcp::Prepared::default();
+  }
+  let notice = |text: String| emit_chat_event(app, project_id, turn_id, ChatEvent::Notice { text });
+  let open = |url: &str| {
+    app.opener().open_url(url, None::<&str>).map_err(|e| format!("Fabricator couldn't open the browser ({e})"))
+  };
+  let ui = iq::Ui { notice: &notice, open: &open };
+  mcp::prepare(session, servers, &ui, &mcp::MEMORY, cancel, mcp::Waits::default()).await
 }
 
 /// Stderr signatures that indicate a transient, safe-to-retry failure.
@@ -300,6 +327,9 @@ struct TurnCtx {
   /// For a turn on a provider's model (your own key): the provider and model
   /// names, to put its errors in plain language.
   provider: Option<(String, String)>,
+  /// The id and name of each MCP server the user added that's on in the chat,
+  /// so the work log names the server a tool came from.
+  mcp_servers: Vec<(String, String)>,
 }
 
 impl TurnCtx {
@@ -321,7 +351,22 @@ impl TurnCtx {
       stream_closed: false,
       ended_empty: false,
       provider: None,
+      mcp_servers: vec![],
     }
+  }
+
+  /// The name of the user's MCP server a tool call came from, and the tool's
+  /// own name, by what the runtime reports, or else by the tool's name
+  /// (`chart-generate_bar_chart`).
+  fn mcp_tool(&self, data: &Value, tool_name: &str) -> Option<(String, String)> {
+    let field = |key: &str| data.get(key).and_then(Value::as_str).filter(|s| !s.is_empty());
+    let after = |id: &str| tool_name.strip_prefix(id).and_then(|t| t.strip_prefix('-')).filter(|t| !t.is_empty());
+    let (id, name) = match field("mcpServerName") {
+      Some(server) => self.mcp_servers.iter().find(|(id, _)| id == server)?,
+      None => self.mcp_servers.iter().filter(|(id, _)| after(id).is_some()).max_by_key(|(id, _)| id.len())?,
+    };
+    let tool = field("mcpToolName").or_else(|| after(id))?;
+    Some((name.clone(), tool.to_string()))
   }
 
   /// Record the start of a tool call (metadata always; cheap).
@@ -445,7 +490,11 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
     "tool.execution_start" => {
       let tool_name = data.get("toolName").and_then(|v| v.as_str()).unwrap_or("tool").to_string();
       let args = data.get("arguments");
-      let title = chat_tools::tool_title(&tool_name, args);
+      // A tool of a server the user added goes by its own name, with the server's.
+      let (title, server) = match ctx.mcp_tool(data, &tool_name) {
+        Some((server, tool)) => (tool, Some(server)),
+        None => (chat_tools::tool_title(&tool_name, args), None),
+      };
       let command = args.and_then(|a| a.get("command")).and_then(|v| v.as_str()).unwrap_or("");
       if RAYFIN_UP_RE.is_match(command) {
         ctx.ran_deploy = true;
@@ -464,6 +513,7 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
           paths: chat_tools::tool_paths(&tool_name, args),
           name: tool_name,
           title,
+          server,
           state: ChatToolState::Running,
           ..Default::default()
         },
@@ -768,8 +818,11 @@ pub(crate) async fn run_turn(
   // on a provider's model first checks it can run, so it never quietly runs on
   // another model.
   let byok_registry = state.byok.session_registry();
-  // The plugins on in this chat: the Fabric IQ and Work IQ servers it can research with.
-  let iq = IqConfig::for_project(&project, &store::get_settings());
+  // The plugins on in this chat: the Fabric IQ and Work IQ servers it can research
+  // with, and the MCP servers the user added (an experiment).
+  let settings = store::get_settings();
+  let iq = IqConfig::for_project(&project, &settings);
+  let mcp_servers = McpServers::for_project(&project, &settings);
   let provider_model = project.model.clone().filter(|m| byok::is_provider_selection(m));
   let provider = provider_model.as_deref().and_then(byok::describe);
   let choice = ModelChoice::new(
@@ -791,6 +844,7 @@ pub(crate) async fn run_turn(
       Some(guidance),
       byok_registry.clone(),
       iq,
+      mcp_servers.clone(),
     );
   let first_open = match &provider_model {
     Some(model) => match state.byok.ensure_ready(model) {
@@ -840,8 +894,12 @@ pub(crate) async fn run_turn(
   if let Err(e) = session.rpc().mode().set(ModeSetRequest { mode: session_mode.clone(), ..Default::default() }).await {
     log::warn!("failed to set session mode {session_mode:?}: {e}");
   }
-  // Fabric IQ and Work IQ connect (and sign in) before the message goes, so their tools are there for it.
-  let mut iq_ready = prepare_iq(&app, &project_id, &turn_id, &session, iq, &token).await;
+  // Fabric IQ, Work IQ and the user's MCP servers connect (and sign in) before
+  // the message goes, so their tools are there for it.
+  let (mut iq_ready, mut mcp_ready) = tokio::join!(
+    prepare_iq(&app, &project_id, &turn_id, &session, iq, &token),
+    prepare_mcp(&app, &project_id, &turn_id, &session, &mcp_servers, &token),
+  );
 
   // Point the plan handler at this turn's UI for the duration of the turn.
   // `plan_context` records whether this turn was started in Plan mode:
@@ -872,6 +930,7 @@ pub(crate) async fn run_turn(
   let new_ctx = || {
     let mut ctx = TurnCtx::new(full);
     ctx.provider = provider.clone();
+    ctx.mcp_servers = mcp_servers.names();
     ctx
   };
   let mut ctx = new_ctx();
@@ -919,7 +978,10 @@ pub(crate) async fn run_turn(
           if let Err(e) = session.rpc().mode().set(ModeSetRequest { mode: session_mode.clone(), ..Default::default() }).await {
             log::warn!("failed to set recovered session mode {session_mode:?}: {e}");
           }
-          iq_ready = prepare_iq(&app, &project_id, &turn_id, &session, iq, &token).await;
+          (iq_ready, mcp_ready) = tokio::join!(
+            prepare_iq(&app, &project_id, &turn_id, &session, iq, &token),
+            prepare_mcp(&app, &project_id, &turn_id, &session, &mcp_servers, &token),
+          );
         }
         Err(error) => {
           send_error = Some(error);
@@ -940,7 +1002,14 @@ pub(crate) async fn run_turn(
     let opts = match continuation {
       Some(prompt) => MessageOptions::new(prompt.to_string()),
       None => {
-        let opts = MessageOptions::new(turn_text(&project, &text, guidance, store::manual_deploy_enabled(), &iq_ready));
+        let opts = MessageOptions::new(turn_text(
+          &project,
+          &text,
+          guidance,
+          store::manual_deploy_enabled(),
+          &iq_ready,
+          &mcp_ready,
+        ));
         if attach.is_empty() { opts } else { opts.with_attachments(attach.clone()) }
       }
     };
@@ -1477,12 +1546,22 @@ pub fn chat_set_options(project_id: String, options: ChatOptions) {
 }
 
 /// Turns a plugin on or off in a project's chat, from its next message, and
-/// returns the plugins now on there.
+/// returns the plugins now on there: Fabric IQ, Work IQ, or an MCP server the
+/// user added (`mcp:<id>`).
 #[tauri::command]
 pub fn chat_set_plugin(project_id: String, plugin: String, on: bool) -> Result<Vec<String>, String> {
-  let iq = iq::Iq::from_plugin(&plugin).ok_or_else(|| format!("Fabricator doesn't have the plugin {plugin}."))?;
+  let iq = iq::Iq::from_plugin(&plugin);
+  let server = mcp::server_of_plugin(&plugin).map(str::to_string);
+  if iq.is_none() && server.is_none() {
+    return Err(format!("Fabricator doesn't have the plugin {plugin}."));
+  }
   if store::find_project(&project_id).is_none() {
     return Err("Project not found.".into());
+  }
+  if let Some(id) = &server {
+    if on && !store::mcp_servers().iter().any(|s| &s.id == id) {
+      return Err("That MCP server isn't in Fabricator anymore.".into());
+    }
   }
   let state = store::mutate_project(&project_id, |p| {
     p.plugins.retain(|id| *id != plugin);
@@ -1490,7 +1569,12 @@ pub fn chat_set_plugin(project_id: String, plugin: String, on: bool) -> Result<V
       p.plugins.push(plugin.clone());
     }
   });
-  iq::toggled(iq, IqConfig::in_use(&state.projects, &store::get_settings()));
+  if let Some(iq) = iq {
+    iq::toggled(iq, IqConfig::in_use(&state.projects, &store::get_settings()));
+  }
+  if let Some(id) = &server {
+    mcp::MEMORY.reset(&project_id, id);
+  }
   Ok(state.projects.into_iter().find(|p| p.id == project_id).map(|p| p.plugins).unwrap_or_default())
 }
 
@@ -1534,15 +1618,15 @@ mod tests {
     }))
     .unwrap();
     // The app runs here, or falls back to its published backend.
-    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true, &iq::Prepared::default()), format!("{LOCAL_NOTE}\n\nAdd a list"));
-    assert!(turn_text(&project, "x", Guidance::Local, false, &iq::Prepared::default()).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, &iq::Prepared::default()).starts_with(FALLBACK_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, false, &iq::Prepared::default()).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
+    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default()), format!("{LOCAL_NOTE}\n\nAdd a list"));
+    assert!(turn_text(&project, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(FALLBACK_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, false, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
     // Never published: no turn publishes it, even with publishing after each turn on.
     let mut unpublished = project.clone();
     unpublished.last_deploy = None;
-    assert!(turn_text(&unpublished, "x", Guidance::Local, false, &iq::Prepared::default()).starts_with(LOCAL_UNPUBLISHED_NOTE));
-    assert!(turn_text(&unpublished, "x", Guidance::Local, true, &iq::Prepared::default()).starts_with(LOCAL_NOTE));
+    assert!(turn_text(&unpublished, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(LOCAL_UNPUBLISHED_NOTE));
+    assert!(turn_text(&unpublished, "x", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(LOCAL_NOTE));
     assert!(LOCAL_NOTE.contains("runs on this computer") && LOCAL_NOTE.contains("Publish after each chat turn is off"));
     assert!(LOCAL_UNPUBLISHED_NOTE.contains("hasn't been published yet") && !LOCAL_UNPUBLISHED_NOTE.contains("when this turn ends"));
     assert!(FALLBACK_NOTE.contains("published backend") && FALLBACK_NOTE.contains("whether it needs a publish first"));
@@ -1561,7 +1645,60 @@ mod tests {
     .unwrap();
     let work = iq::Prepared { ready: IqConfig { fabric: false, work: true }, unavailable: vec![] };
     let note = work.note().unwrap();
-    assert_eq!(turn_text(&project, "Who owns billing?", Guidance::Local, true, &work), format!("{LOCAL_NOTE}\n\n{note}\n\nWho owns billing?"));
+    assert_eq!(
+      turn_text(&project, "Who owns billing?", Guidance::Local, true, &work, &mcp::Prepared::default()),
+      format!("{LOCAL_NOTE}\n\n{note}\n\nWho owns billing?")
+    );
+    // The user's MCP servers come after them.
+    let chart = mcp::Prepared {
+      ready: vec![mcp::connect::Ready { id: "chart".into(), name: "Chart".into(), read_only: false }],
+      unavailable: vec![],
+    };
+    let chart_note = chart.note().unwrap();
+    assert_eq!(
+      turn_text(&project, "Chart sales", Guidance::Local, true, &work, &chart),
+      format!("{LOCAL_NOTE}\n\n{note}\n\n{chart_note}\n\nChart sales")
+    );
+    assert_eq!(
+      turn_text(&project, "Chart sales", Guidance::Local, true, &iq::Prepared::default(), &chart),
+      format!("{LOCAL_NOTE}\n\n{chart_note}\n\nChart sales")
+    );
+  }
+
+  #[test]
+  fn a_tool_of_an_mcp_server_the_user_added_goes_by_its_own_name_and_the_servers() {
+    let mut ctx = TurnCtx::new(false);
+    ctx.mcp_servers = vec![("chart".into(), "Chart".into()), ("chart-2".into(), "Charts".into())];
+    let events = collect(
+      &[
+        (
+          "tool.execution_start",
+          json!({"toolCallId":"t1","toolName":"chart-generate_bar_chart","mcpServerName":"chart","mcpToolName":"generate_bar_chart","arguments":{"title":"Sales"}}),
+        ),
+        // A runtime that doesn't name the server: by the tool's name, the longest id first.
+        ("tool.execution_start", json!({"toolCallId":"t2","toolName":"chart-2-generate_pie_chart","arguments":{}})),
+        (
+          "tool.execution_start",
+          json!({"toolCallId":"t3","toolName":"workiq-ask","mcpServerName":"workiq","mcpToolName":"ask","arguments":{"question":"Who owns billing?"}}),
+        ),
+      ],
+      &mut ctx,
+    );
+    let tools: Vec<(String, Option<String>)> = events
+      .into_iter()
+      .filter_map(|e| match e {
+        ChatEvent::ToolStart { tool } => Some((tool.title, tool.server)),
+        _ => None,
+      })
+      .collect();
+    assert_eq!(
+      tools,
+      [
+        ("generate_bar_chart".to_string(), Some("Chart".to_string())),
+        ("generate_pie_chart".to_string(), Some("Charts".to_string())),
+        ("Who owns billing?".to_string(), None),
+      ]
+    );
   }
 
   #[test]

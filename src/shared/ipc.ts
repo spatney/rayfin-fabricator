@@ -1565,8 +1565,9 @@ export interface StudioProject {
   /** With a model that offers several, its context window; undefined = the standard one. */
   contextTier?: ContextTier
   /**
-   * The plugins on in this project's chat ({@link ChatPluginId}s). Each is off
-   * until turned on in the chat. May list plugins this version doesn't know.
+   * The plugins on in this project's chat ({@link ChatPluginId}s, including
+   * `mcp:<id>` for an MCP server you added). Each is off until turned on in the
+   * chat. May list plugins this version doesn't know.
    */
   plugins?: string[]
   /**
@@ -1632,6 +1633,11 @@ export interface AppSettings {
    * pickers show. Never holds a key (those live in the OS credential store).
    */
   byok?: ByokSettings
+  /**
+   * The MCP servers you added (MCP servers experiment). Never holds the values
+   * of their environment variables or headers.
+   */
+  mcpServers?: McpServer[]
 }
 
 /** Saved state of Your own API keys, by provider id. */
@@ -1727,14 +1733,90 @@ export interface ExperimentFlags {
    * turned on there.
    */
   workIq?: boolean
+  /**
+   * MCP servers: add MCP servers (a command Fabricator runs on this computer,
+   * or a remote server's URL) to chat's plugins, so chat can use their tools.
+   * Each chat still has a server off until it's turned on there.
+   */
+  mcpServers?: boolean
 }
 
 /**
- * A chat plugin: a Microsoft MCP server chat can look things up with, read-only.
- * Fabric IQ reads the Power BI reports and semantic models you can open; Work IQ
- * (an experiment) reads your Microsoft 365 data.
+ * A chat plugin: an MCP server chat can use. Fabric IQ reads the Power BI
+ * reports and semantic models you can open; Work IQ (an experiment) reads your
+ * Microsoft 365 data; `mcp:<id>` is an MCP server you added (an experiment).
  */
-export type ChatPluginId = 'fabric-iq' | 'work-iq'
+export type ChatPluginId = 'fabric-iq' | 'work-iq' | `mcp:${string}`
+
+/**
+ * How Fabricator reaches an MCP server: a command it runs on this computer
+ * (`stdio`), or a remote server's URL, over streamable HTTP (`http`) or the
+ * older Server-Sent Events (`sse`).
+ */
+export type McpTransport = 'stdio' | 'http' | 'sse'
+
+/**
+ * An MCP server you added (MCP servers experiment). Only the names of its
+ * environment variables or headers are here: their values stay in the OS
+ * credential store, and never come back to the renderer.
+ */
+export interface McpServer {
+  /** Stable id: starts its tools' names (`chart-generate_bar_chart`); its plugin id is `mcp:<id>`. */
+  id: string
+  name: string
+  transport: McpTransport
+  /** The program a command server runs (`npx`), and its arguments. */
+  command?: string
+  args?: string[]
+  /** A remote server's URL. */
+  url?: string
+  /** Names of the environment variables a command server gets. */
+  env?: string[]
+  /** Names of the headers a remote server gets. */
+  headers?: string[]
+  /** Chat may call only the tools the server marks as read-only. */
+  readOnly: boolean
+  /** When it was added (ISO 8601). */
+  addedAt: string
+}
+
+/** An environment variable or header of a server being saved. */
+export interface McpValueInput {
+  name: string
+  /** Its new value; leave it out to keep the saved one. */
+  value?: string
+}
+
+/**
+ * A server to add, or the new version of one (with its `id`). Names left out
+ * of `env` or `headers` are removed with their values.
+ */
+export interface McpServerInput {
+  id?: string
+  name: string
+  transport: McpTransport
+  command?: string
+  args?: string[]
+  url?: string
+  env?: McpValueInput[]
+  headers?: McpValueInput[]
+  readOnly?: boolean
+}
+
+/** One tool an MCP server offers. */
+export interface McpToolInfo {
+  name: string
+  description?: string
+}
+
+/** What checking an MCP server found. */
+export interface McpCheckResult {
+  status: 'connected' | 'needs-sign-in' | 'failed'
+  /** Why it didn't connect, in words you can act on. */
+  error?: string
+  /** The tools it offers, once connected. */
+  tools?: McpToolInfo[]
+}
 
 export interface CreateProjectInput {
   name: string
@@ -1988,6 +2070,11 @@ export interface ChatToolCall {
   /** Epoch ms the renderer saw the call start / finish. */
   startedAt?: number
   endedAt?: number
+  /**
+   * The name the user gave the MCP server whose tool this is, for a server
+   * they added (MCP servers experiment); `title` then names the tool.
+   */
+  server?: string
 }
 
 /**
@@ -3823,6 +3910,22 @@ export interface RayfinStudioApi {
     removeKey: (provider: string) => Promise<ByokProviderStatus>
     /** Choose which of a provider's models the model pickers show. */
     setModels: (provider: string, models: string[]) => Promise<ByokProviderStatus>
+  }
+
+  /**
+   * MCP servers (experimental; {@link ExperimentFlags.mcpServers}). The values
+   * of a server's environment variables and headers only ever go to the
+   * backend, to be kept in the OS credential store; nothing returns one.
+   */
+  mcp: {
+    /** The servers you added. */
+    list: () => Promise<McpServer[]>
+    /** Add a server, or change one (with its id). Resolves to all of them. */
+    save: (server: McpServerInput) => Promise<McpServer[]>
+    /** Remove a server and turn it off in every chat. Resolves to the rest. */
+    remove: (id: string) => Promise<McpServer[]>
+    /** Start or connect to a saved server on its own, and list its tools. */
+    check: (id: string) => Promise<McpCheckResult>
   }
 
   /**

@@ -28,6 +28,8 @@ import type {
   LocalSecret,
   LocalStatus,
   LocalUser,
+  McpCheckResult,
+  McpServer,
   MigrationInspectedPage,
   MigrationPage,
   MigrationReportItem,
@@ -77,6 +79,7 @@ import ConnectDataModal from './components/ConnectDataModal'
 import MigrateReportScreen from './components/migrate/MigrateReportScreen'
 import MigrationCard from './components/migrate/MigrationCard'
 import AppGalleryView from './components/gallery/AppGalleryView'
+import McpServersModal from './components/mcp/McpServersModal'
 import Spotlight from './components/spotlight/Spotlight'
 import { workbenchSearch } from './components/spotlight/workbenchSearch'
 import type { DataSource } from './fabricData'
@@ -87,6 +90,56 @@ import workbenchDark from '../../../website/public/screenshots/workbench.webp'
 import workbenchLight from '../../../website/public/screenshots/workbench.light.webp'
 
 const ok = <T,>(value: T) => (): Promise<T> => Promise.resolve(value)
+
+/** The sample user's MCP servers: Microsoft Learn (read-only), a chart server, and a tracker that signs in. */
+const sampleMcpServers: McpServer[] = [
+  {
+    id: 'microsoft-learn',
+    name: 'Microsoft Learn',
+    transport: 'http',
+    url: 'https://learn.microsoft.com/api/mcp',
+    readOnly: true,
+    addedAt: '2026-10-30T16:00:00Z'
+  },
+  {
+    id: 'charts',
+    name: 'Charts',
+    transport: 'stdio',
+    command: 'npx',
+    args: ['-y', '@antv/mcp-server-chart'],
+    readOnly: false,
+    addedAt: '2026-10-30T16:05:00Z'
+  },
+  {
+    id: 'issue-tracker',
+    name: 'Issue tracker',
+    transport: 'http',
+    url: 'https://mcp.example.com/mcp',
+    readOnly: false,
+    addedAt: '2026-10-30T16:10:00Z'
+  }
+]
+
+/** What checking each sample server finds: the real servers' tools. */
+const sampleMcpChecks: Record<string, McpCheckResult> = {
+  'microsoft-learn': {
+    status: 'connected',
+    tools: ['microsoft_docs_search', 'microsoft_code_sample_search', 'microsoft_docs_fetch'].map((name) => ({ name }))
+  },
+  charts: {
+    status: 'connected',
+    tools: [
+      'generate_area_chart', 'generate_bar_chart', 'generate_boxplot_chart', 'generate_column_chart',
+      'generate_district_map', 'generate_dual_axes_chart', 'generate_fishbone_diagram', 'generate_flow_diagram',
+      'generate_funnel_chart', 'generate_histogram_chart', 'generate_line_chart', 'generate_liquid_chart',
+      'generate_mind_map', 'generate_network_graph', 'generate_organization_chart', 'generate_path_map',
+      'generate_pie_chart', 'generate_pin_map', 'generate_radar_chart', 'generate_sankey_chart',
+      'generate_scatter_chart', 'generate_treemap_chart', 'generate_venn_chart', 'generate_violin_chart',
+      'generate_waterfall_chart', 'generate_word_cloud_chart', 'generate_spreadsheet'
+    ].map((name) => ({ name }))
+  },
+  'issue-tracker': { status: 'needs-sign-in' }
+}
 
 /** The sample settings: the capture's theme. */
 function sampleSettings(): AppSettings {
@@ -1208,6 +1261,11 @@ function installApi(): void {
     byok: {
       status: ok(sampleByok)
     },
+    // MCP servers: the sample user's three, and what checking each finds.
+    mcp: {
+      list: ok(sampleMcpServers),
+      check: (id: string) => Promise.resolve(sampleMcpChecks[id] ?? { status: 'failed', error: 'Unknown server.' })
+    },
     // Accounts: the sample user's one account in each service.
     github: {
       accounts: ok({ ghInstalled: true, accounts: [{ login: 'averychen', active: true, signedIn: true }] })
@@ -1606,13 +1664,15 @@ function Steps({ clicks, children }: { clicks: string[]; children: ReactNode }):
 
 /** The Build chat's composer, chat-wide beside an empty preview, with its plugins and model
  *  picker (and any Fabric data waiting to go with the next message, or a banner above it, such
- *  as a report migration's card). `plugins` are on; `workIq` offers Work IQ, as its experiment does. */
+ *  as a report migration's card). `plugins` are on; `workIq` offers Work IQ, as its experiment does,
+ *  and `servers` are the MCP servers the MCP servers experiment offers. */
 function ComposerPicker({
   value,
   data,
   banner,
   plugins = [],
   workIq = false,
+  servers,
   project = 'Contoso Expenses'
 }: {
   value: ModelSelection
@@ -1620,6 +1680,7 @@ function ComposerPicker({
   banner?: ReactNode
   plugins?: string[]
   workIq?: boolean
+  servers?: McpServer[]
   project?: string
 }): JSX.Element {
   const [selection, setSelection] = useState(value)
@@ -1652,11 +1713,13 @@ function ComposerPicker({
                   onReferenceFile={noop}
                 />
                 <PluginsMenu
-                  plugins={offeredPlugins({ workIq })}
+                  plugins={offeredPlugins({ workIq, mcpServers: Boolean(servers) })}
+                  servers={servers}
                   on={on}
                   onToggle={(id, value) =>
                     setOn((ids) => (value ? [...ids, id] : ids.filter((i) => i !== id)))
                   }
+                  onManageServers={servers ? noop : undefined}
                   onLearnMore={noop}
                 />
                 <ModelPicker value={selection} disabled={false} onChange={setSelection} tiers onManageKeys={noop} />
@@ -2257,6 +2320,30 @@ function Shot({ id }: { id: string | null }): JSX.Element {
       )
     case 'connect-data':
       return <ConnectDataShot />
+    case 'mcp-plugins':
+      // The MCP servers experiment is on: Charts is on in the sample app's chat, beside Fabric IQ.
+      return (
+        <Steps clicks={['.plugins-menu button']}>
+          <ComposerPicker
+            value={{ model: '', effort: '', autoTier: '', contextTier: '' }}
+            plugins={['fabric-iq', 'mcp:charts']}
+            servers={sampleMcpServers}
+          />
+        </Steps>
+      )
+    case 'mcp-servers':
+      // The sample user's servers, each just checked.
+      return (
+        <Steps
+          clicks={[
+            '[aria-label="Check Microsoft Learn"]',
+            '[aria-label="Check Charts"]',
+            '[aria-label="Check Issue tracker"]'
+          ]}
+        >
+          <McpServersModal onClose={noop} />
+        </Steps>
+      )
     case 'data-chips':
       return (
         <ComposerPicker

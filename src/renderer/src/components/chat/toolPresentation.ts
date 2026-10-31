@@ -26,6 +26,7 @@ export type ToolKind =
   | 'local-call'
   | 'fabric-iq'
   | 'work-iq'
+  | 'mcp'
   | 'other'
 
 /** Tools whose UI lives elsewhere (question cards, the plan card, the status line). */
@@ -33,6 +34,11 @@ const HIDDEN_TOOLS = new Set(['ask_user', 'exit_plan_mode', 'report_intent'])
 
 export function isHiddenTool(name: string): boolean {
   return HIDDEN_TOOLS.has(name.toLowerCase())
+}
+
+/** A tool call's kind: a tool of an MCP server you added goes by that, whatever its name. */
+export function kindOf(tool: Pick<ChatToolCall, 'name' | 'server'>): ToolKind {
+  return tool.server ? 'mcp' : toolKind(tool.name)
 }
 
 export function toolKind(name: string): ToolKind {
@@ -95,6 +101,7 @@ const VERBS: Record<ToolKind, [running: string, done: string]> = {
   'local-call': ['Calling', 'Called'],
   'fabric-iq': ['Looking up in Fabric IQ', 'Looked up in Fabric IQ'],
   'work-iq': ['Looking up in Work IQ', 'Looked up in Work IQ'],
+  mcp: ['Using', 'Used'],
   other: ['Using', 'Used']
 }
 
@@ -139,11 +146,13 @@ const PHASES: Record<ToolKind, string> = {
   'local-call': 'Calling the app',
   'fabric-iq': 'Looking up Power BI data',
   'work-iq': 'Looking up Microsoft 365',
+  mcp: 'Using an MCP server',
   other: 'Working'
 }
 
-export function phaseLabel(name: string): string {
-  return PHASES[toolKind(name)]
+/** Present-tense phrase for the live status line; `server` names the MCP server a tool came from. */
+export function phaseLabel(name: string, server?: string): string {
+  return server ? `Using ${server}` : PHASES[toolKind(name)]
 }
 
 const SHELL_IO_VERBS: Record<string, [string, string]> = {
@@ -190,7 +199,7 @@ function webTarget(title: string): string {
 }
 
 export function describeStep(tool: ChatToolCall, projectPath: string): StepView {
-  const kind = toolKind(tool.name)
+  const kind = kindOf(tool)
   const running = tool.state === 'running'
   let [verbRunning, verbDone] = VERBS[kind]
   if (kind === 'shell-io') {
@@ -221,6 +230,9 @@ export function describeStep(tool: ChatToolCall, projectPath: string): StepView 
       break
     case 'web':
       if (hasTitle) target = { kind: 'text', text: webTarget(title) }
+      break
+    case 'mcp':
+      target = { kind: 'text', text: `${title || humanize(tool.name)} from ${tool.server}` }
       break
     case 'todo':
     case 'shell-io':
@@ -280,7 +292,7 @@ const n = (count: number, one: string, many: string): string =>
 export function summarizeKinds(tools: readonly ChatToolCall[]): KindCount[] {
   const c = { read: 0, edit: 0, create: 0, run: 0, search: 0, web: 0 }
   for (const t of tools) {
-    const k = toolKind(t.name)
+    const k = kindOf(t)
     if (k === 'read') c.read++
     else if (k === 'edit') c.edit++
     else if (k === 'create') c.create++

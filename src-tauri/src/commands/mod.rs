@@ -19,6 +19,7 @@ pub mod gallery;
 pub mod git;
 pub mod github;
 pub mod help;
+pub mod mcp;
 pub mod migration;
 pub mod misc;
 pub mod projects;

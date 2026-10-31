@@ -24,6 +24,7 @@ export interface ActionHandlers {
   openSettings(): void
   openAccounts(): void
   openApiKeys(): void
+  openMcpServers(): void
   refreshFabricAuth(): void
   signInToFabric(): void
   openSetup(): void
@@ -56,6 +57,8 @@ export interface ActionContext {
   migrationEnabled: boolean
   /** The App gallery experiment is on. */
   galleryEnabled: boolean
+  /** The MCP servers experiment is on. */
+  mcpServersEnabled: boolean
   /** The App gallery is showing. */
   inGallery: boolean
   /** The open team app's workspace. */
@@ -332,6 +335,16 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
     icon: { kind: 'codicon', name: 'key' },
     run: run.openApiKeys
   })
+  if (ctx.mcpServersEnabled) {
+    add({
+      id: 'action:mcp-servers',
+      title: 'Manage MCP servers',
+      subtitle: 'Add the MCP servers chat can turn on in its Plugins',
+      keywords: ['mcp', 'model context protocol', 'plugins', 'tools', 'servers'],
+      icon: { kind: 'codicon', name: 'plug' },
+      run: run.openMcpServers
+    })
+  }
   if (ctx.fabricSignedIn && project) {
     add({
       id: 'action:fabric-refresh',

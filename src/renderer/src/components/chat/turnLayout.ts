@@ -1,7 +1,7 @@
 import type { ChatSegment, ChatToolCall } from '@shared/ipc'
 import { composeDiffs, formatUnifiedDiff, parseUnifiedDiff, type DiffFile } from './diff'
 import { looksLikePath, projectRelative } from './paths'
-import { isHiddenTool, toolKind } from './toolPresentation'
+import { isHiddenTool, kindOf } from './toolPresentation'
 import type { UIChatMessage } from './types'
 
 type ReasoningSegment = Extract<ChatSegment, { kind: 'reasoning' }>
@@ -241,7 +241,7 @@ export function filesChanged(tools: readonly ChatToolCall[], projectPath: string
   }
   for (const t of tools) {
     if (t.state !== 'success') continue
-    const kind = toolKind(t.name)
+    const kind = kindOf(t)
     if (kind !== 'edit' && kind !== 'create' && kind !== 'delete') continue
     const diffFiles = t.diff ? parseUnifiedDiff(t.diff).filter((f) => f.path) : []
     if (diffFiles.length > 0 && !t.diffTruncated) {

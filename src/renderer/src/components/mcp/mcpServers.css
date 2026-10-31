@@ -1,0 +1,267 @@
+/* MCP servers (an experiment): the dialog that adds, checks, changes and
+   removes the MCP servers chat can turn on. Server cards are Accounts' own
+   (main.css, which loads after this file), so rules that touch its selectors
+   carry extra specificity. Flat: solid surfaces, neutral 1px borders. */
+
+.mcp-modal {
+  max-width: 640px;
+}
+
+.mcp-modal .modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-badge {
+  flex: none;
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-radius: 999px;
+}
+
+.modal-body.mcp-body {
+  gap: 10px;
+}
+
+.mcp-lead {
+  margin: 0;
+}
+
+.btn.mcp-help {
+  margin-right: auto;
+}
+
+/* No servers yet. */
+.mcp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.mcp-empty p {
+  margin: 0;
+}
+
+.mcp-empty .mcp-empty-try {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.mcp-empty .codicon.mcp-empty-ico {
+  font-size: 20px;
+  color: var(--text-dim);
+}
+
+.mcp-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* A server's card: its name, what it runs or where it is, and its last check. */
+.acct-card.mcp-card .acct-title {
+  flex-wrap: wrap;
+}
+
+.mcp-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.acct-purpose.mcp-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.mcp-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.mcp-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mcp-tool-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.mcp-tool {
+  padding: 1px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+/* The form. */
+.mcp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mcp-mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.mcp-paste {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mcp-paste .field-input.mcp-paste-text {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 96px;
+}
+
+.mcp-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.seg.mcp-kind {
+  align-self: flex-start;
+  margin-bottom: 0;
+}
+
+.mcp-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.mcp-check input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.mcp-check > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mcp-check-title {
+  font-weight: 600;
+}
+
+.mcp-values {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.mcp-values legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.mcp-value {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.mcp-value .field-input {
+  min-width: 0;
+  padding: 7px 10px;
+}
+
+.mcp-value-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 2px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.mcp-value-saved {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.btn.mcp-value-remove {
+  padding: 0 6px;
+}
+
+.btn.mcp-value-add {
+  align-self: flex-start;
+}
+
+.mcp-trust {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.mcp-trust .codicon {
+  flex: none;
+  margin-top: 1px;
+  font-size: 14px;
+}

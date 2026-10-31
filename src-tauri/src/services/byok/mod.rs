@@ -1,7 +1,8 @@
 //! Your own API keys: models from Anthropic, OpenAI, xAI and Google
 //! on the user's own keys, next to Copilot's in Build chat, the Advisor and Design.
 //!
-//! - [`keychain`] keeps keys in the OS credential store (never in settings).
+//! - [`keychain`](crate::services::keychain) keeps keys in the OS credential
+//!   store (never in settings).
 //! - [`catalog`] knows each provider and turns its model list into models a
 //!   Copilot session can use; settings keep that list and the user's choices.
 //! - [`registry`] hands the chosen models to sessions as BYOK providers.
@@ -12,7 +13,6 @@
 //! calls the provider directly with the key.
 
 pub mod catalog;
-pub mod keychain;
 pub mod registry;
 pub mod relay;
 
@@ -26,6 +26,7 @@ use serde_json::Value;
 
 use self::catalog::{Auth, CopilotTwin, Listed, ProviderSpec};
 use self::registry::ByokRegistry;
+use crate::services::keychain;
 use crate::services::store;
 use crate::types::{ByokModelInfo, ByokModelMeta, ByokProviderSettings, ByokProviderStatus, ByokStatus, CopilotModel};
 

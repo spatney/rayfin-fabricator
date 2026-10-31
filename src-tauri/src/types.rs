@@ -693,7 +693,8 @@ pub struct StudioProject {
   /// `"long_context"`).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub context_tier: Option<String>,
-  /// The plugins on in this project's Build chat (`"fabric-iq"`, `"work-iq"`).
+  /// The plugins on in this project's Build chat (`"fabric-iq"`, `"work-iq"`,
+  /// and `"mcp:<id>"` for an MCP server the user added).
   /// Each is off until the user turns it on in the chat.
   #[serde(default, skip_serializing_if = "Vec::is_empty")]
   pub plugins: Vec<String>,
@@ -759,6 +760,12 @@ pub struct ExperimentFlags {
   /// default); each chat still has the plugin off until it's turned on there.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub work_iq: Option<bool>,
+  /// MCP servers: Build chat offers the MCP servers the user adds (a command
+  /// Fabricator runs on this computer, or a remote server's URL) among its
+  /// plugins. Opt-in (off by default); each chat still has a server off until
+  /// it's turned on there.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub mcp_servers: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -789,6 +796,115 @@ pub struct AppSettings {
   /// pickers show. Never holds a key (those live in the OS credential store).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub byok: Option<ByokSettings>,
+  /// The MCP servers the user added (the MCP servers experiment). Never holds
+  /// the values of their environment variables or headers (those live in the
+  /// OS credential store).
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub mcp_servers: Vec<McpServerEntry>,
+}
+
+/// How Fabricator reaches an MCP server: a command it runs on this computer,
+/// which talks over its standard input and output, or a remote server's URL,
+/// over streamable HTTP or the older Server-Sent Events.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum McpTransport {
+  #[default]
+  Stdio,
+  Http,
+  Sse,
+}
+
+/// An MCP server the user added (the MCP servers experiment), which a Build
+/// chat can turn on among its plugins. Only the names of its environment
+/// variables or headers are here: their values are kept in the OS credential
+/// store (see `services::mcp::secrets`).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerEntry {
+  /// Stable id: the server's name in chat sessions, which starts its tools'
+  /// names (`chart-generate_bar_chart`), and its plugin id after `mcp:`.
+  pub id: String,
+  /// What the user calls it.
+  pub name: String,
+  pub transport: McpTransport,
+  /// The program a command server runs (`npx`), and its arguments.
+  #[serde(default, skip_serializing_if = "String::is_empty")]
+  pub command: String,
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub args: Vec<String>,
+  /// A remote server's address.
+  #[serde(default, skip_serializing_if = "String::is_empty")]
+  pub url: String,
+  /// The environment variables a command server gets, by name.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub env: Vec<String>,
+  /// The headers a remote server gets, by name.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub headers: Vec<String>,
+  /// Chat may call only the tools the server marks as read-only.
+  #[serde(default)]
+  pub read_only: bool,
+  /// When it was added (RFC 3339).
+  #[serde(default)]
+  pub added_at: String,
+}
+
+/// A server to add from the MCP servers dialog, or the new version of one
+/// (with its `id`). Each environment variable or header comes with a new value,
+/// or none to keep the one saved under that name; names left out are removed.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerInput {
+  #[serde(default)]
+  pub id: Option<String>,
+  pub name: String,
+  pub transport: McpTransport,
+  #[serde(default)]
+  pub command: String,
+  #[serde(default)]
+  pub args: Vec<String>,
+  #[serde(default)]
+  pub url: String,
+  #[serde(default)]
+  pub env: Vec<McpValueInput>,
+  #[serde(default)]
+  pub headers: Vec<McpValueInput>,
+  #[serde(default)]
+  pub read_only: bool,
+}
+
+/// An environment variable or header of an MCP server being saved.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct McpValueInput {
+  pub name: String,
+  /// Its new value; none keeps the saved one.
+  #[serde(default)]
+  pub value: Option<String>,
+}
+
+/// What checking an MCP server found.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpCheckResult {
+  /// `"connected"`, `"needs-sign-in"` or `"failed"`.
+  pub status: String,
+  /// Why it didn't connect, in words the user can act on.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  /// The tools it offers, once connected.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub tools: Vec<McpToolInfo>,
+}
+
+/// One tool an MCP server offers.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpToolInfo {
+  pub name: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub description: Option<String>,
 }
 
 /// Persisted state of Your own API keys, by provider id
@@ -2218,6 +2334,10 @@ pub struct ChatToolCall {
   pub started_at: Option<f64>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub ended_at: Option<f64>,
+  /// The name the user gave the MCP server whose tool this is, for a server
+  /// they added (the MCP servers experiment); `title` then names the tool.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub server: Option<String>,
 }
 
 /// One chronological slice of an assistant turn (prose, a tool call, or a

@@ -53,6 +53,7 @@ import { suggestionsFor, useGeneratedSuggestions } from './chat/suggestions'
 import { SendIcon } from './chat/icons'
 import { AddMenu, PluginsMenu } from './chat/ComposerMenus'
 import { offeredPlugins } from './chat/plugins'
+import { useMcpServers } from '../mcpServers'
 import { ModelPicker } from './models/ModelPicker'
 import { selectionArgs, selectionOf, type ModelSelection } from '../modelSelection'
 import { useCopilotModels } from '../copilotModels'
@@ -192,8 +193,10 @@ interface Props {
   recentWorkspaces?: readonly WorkspaceUse[]
   /** Shown above the composer, such as a report migration's progress card. */
   banner?: ReactNode
-  /** The experiments that are on, for the plugins they add to chat (Work IQ). */
+  /** The experiments that are on, for the plugins they add to chat (Work IQ, MCP servers). */
   experiments?: ExperimentFlags
+  /** Open the MCP servers dialog (MCP servers experiment), adding a server when `add` is set. */
+  onManageMcpServers?: (add: boolean) => void
 }
 
 export default function ChatPanel({
@@ -233,7 +236,8 @@ export default function ChatPanel({
   onCopilotAuthChanged,
   recentWorkspaces,
   banner,
-  experiments
+  experiments,
+  onManageMcpServers
 }: Props): JSX.Element {
   // The composer draft is seeded from — and mirrored back to — the parent so a
   // typed-but-unsent prompt survives this panel unmounting. Switching to the Code
@@ -469,6 +473,14 @@ export default function ChatPanel({
 
   // The plugins on in this chat. A switch flips at once and flips back if it can't be saved.
   const [plugins, setPlugins] = useState<readonly string[]>(() => project.plugins ?? [])
+  // Follow the saved list when it changes elsewhere, e.g. removing an MCP server turns it off everywhere.
+  const savedPlugins = (project.plugins ?? []).join('\n')
+  useEffect(() => {
+    setPlugins(savedPlugins ? savedPlugins.split('\n') : [])
+  }, [savedPlugins])
+  // The MCP servers you added, offered while their experiment is on.
+  const mcpEnabled = Boolean(experiments?.mcpServers)
+  const mcpServers = useMcpServers(mcpEnabled)
   function togglePlugin(plugin: ChatPluginId, on: boolean): void {
     const turn = (value: boolean) => (ids: readonly string[]) =>
       value ? [...ids.filter((id) => id !== plugin), plugin] : ids.filter((id) => id !== plugin)
@@ -1702,9 +1714,11 @@ export default function ChatPanel({
               />
               <PluginsMenu
                 plugins={offeredPlugins(experiments)}
+                servers={mcpEnabled ? mcpServers : undefined}
                 on={plugins}
                 disabled={sending}
                 onToggle={togglePlugin}
+                onManageServers={onManageMcpServers}
                 onLearnMore={() => openDocs('plugins')}
               />
               <ModelPicker

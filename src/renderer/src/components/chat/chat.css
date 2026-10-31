@@ -2271,6 +2271,19 @@ button.thinking-head:hover {
   white-space: normal;
 }
 
+/* An MCP server's command or URL: one line, the rest on hover. */
+.pl-item--mcp .mp-item-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The badge in a heading keeps its own case and spacing. */
+.pl-panel .mp-heading .mp-badge {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
 /* Fabric data: chips waiting in the composer, and on the message that sent them.
    Flat, like the rest of the composer: a solid surface and a neutral border. */
 .data-tray,

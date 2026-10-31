@@ -28,6 +28,7 @@ function context(overrides: Partial<ActionContext> = {}): ActionContext {
     autoDeploy: true,
     migrationEnabled: false,
     galleryEnabled: false,
+    mcpServersEnabled: false,
     inGallery: false,
     theme: 'dark',
     uiScale: 1,
@@ -105,5 +106,14 @@ describe('Search actions', () => {
     expect(ctx.do.openGallery).toHaveBeenCalled()
     expect(rank(prepare(buildActions(ctx)), 'fabric apps')[0]?.item.id).toBe('action:gallery')
     expect(ids(context({ galleryEnabled: true, inGallery: true }))).not.toContain('action:gallery')
+  })
+
+  it('offers managing MCP servers only with their experiment', () => {
+    expect(ids(context())).not.toContain('action:mcp-servers')
+    const ctx = context({ mcpServersEnabled: true })
+    const manage = buildActions(ctx).find((a) => a.id === 'action:mcp-servers')!
+    manage.run()
+    expect(ctx.do.openMcpServers).toHaveBeenCalled()
+    expect(rank(prepare(buildActions(ctx)), 'mcp')[0]?.item.id).toBe('action:mcp-servers')
   })
 })

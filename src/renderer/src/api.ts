@@ -33,6 +33,7 @@ import {
   type LocalLogEvent,
   type LocalStartOptions,
   type LocalStatus,
+  type McpServerInput,
   type MigrationInspectedPage,
   type MigrationPage,
   type MigrationSource,
@@ -440,6 +441,13 @@ export const api: RayfinStudioApi = {
     refresh: (provider: string) => invoke('byok_refresh', { provider }),
     removeKey: (provider: string) => invoke('byok_remove_key', { provider }),
     setModels: (provider: string, models: string[]) => invoke('byok_set_models', { provider, models })
+  },
+
+  mcp: {
+    list: () => invoke('mcp_list'),
+    save: (server: McpServerInput) => invoke('mcp_save', { server }),
+    remove: (id: string) => invoke('mcp_remove', { id }),
+    check: (id: string) => invoke('mcp_check', { id })
   },
 
   preview: {

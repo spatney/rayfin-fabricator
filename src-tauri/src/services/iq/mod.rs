@@ -63,7 +63,7 @@ impl Iq {
     }
   }
 
-  fn from_server(name: &str) -> Option<Iq> {
+  pub(crate) fn from_server(name: &str) -> Option<Iq> {
     Iq::ALL.into_iter().find(|iq| iq.server() == name)
   }
 
@@ -491,7 +491,8 @@ async fn restart(session: &Session, iq: Iq) -> Result<(), String> {
   }
 }
 
-fn clip(text: &str) -> String {
+/// `text` trimmed, without a closing period, and cut to 300 characters.
+pub(crate) fn clip(text: &str) -> String {
   let text = text.trim().trim_end_matches('.');
   match text.char_indices().nth(300) {
     Some((end, _)) => format!("{}…", &text[..end]),

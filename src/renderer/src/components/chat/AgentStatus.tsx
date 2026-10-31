@@ -6,7 +6,7 @@ import type { UIChatMessage } from './types'
 /** What the turn is doing right now, in a few plain words. */
 export function livePhase(m: UIChatMessage): string {
   const running = m.tools.find((t) => t.state === 'running' && !isHiddenTool(t.name))
-  if (running) return phaseLabel(running.name)
+  if (running) return phaseLabel(running.name, running.server)
   const last = m.segments?.[m.segments.length - 1]
   if (last?.kind === 'reasoning') return 'Thinking'
   if (last?.kind === 'text' && last.text.trim()) return 'Writing the answer'

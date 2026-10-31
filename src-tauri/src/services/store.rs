@@ -11,7 +11,8 @@ use serde_json::Value;
 
 use super::paths;
 use crate::types::{
-  AppSettings, ByokProviderSettings, ByokSettings, ExperimentFlags, ProjectsState, StudioProject, TeamWorkspace,
+  AppSettings, ByokProviderSettings, ByokSettings, ExperimentFlags, McpServerEntry, ProjectsState, StudioProject,
+  TeamWorkspace,
 };
 
 struct Cache {
@@ -39,6 +40,7 @@ fn default_flags() -> ExperimentFlags {
     report_migration: Some(false),
     app_gallery: Some(false),
     work_iq: Some(false),
+    mcp_servers: Some(false),
   }
 }
 
@@ -50,6 +52,7 @@ fn default_settings() -> AppSettings {
     full_diagnostics: Some(false),
     deploy_mode: None,
     byok: None,
+    mcp_servers: Vec::new(),
   }
 }
 
@@ -176,6 +179,7 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
   if let Some(v) = patch.app_gallery { current.app_gallery = Some(v); }
   if let Some(v) = patch.work_iq { current.work_iq = Some(v); }
+  if let Some(v) = patch.mcp_servers { current.mcp_servers = Some(v); }
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -229,6 +233,37 @@ pub fn app_gallery_enabled() -> bool {
       .as_ref()
       .and_then(|e| e.app_gallery)
       .unwrap_or(false)
+  })
+}
+
+/// The MCP servers the user added, in the order they were added.
+pub fn mcp_servers() -> Vec<McpServerEntry> {
+  with_cache(|c| c.settings.mcp_servers.clone())
+}
+
+/// Add an MCP server, or replace the one with its id, and return them all.
+pub fn upsert_mcp_server(server: McpServerEntry) -> Vec<McpServerEntry> {
+  with_cache(|c| {
+    match c.settings.mcp_servers.iter_mut().find(|s| s.id == server.id) {
+      Some(saved) => *saved = server,
+      None => c.settings.mcp_servers.push(server),
+    }
+    persist(c);
+    c.settings.mcp_servers.clone()
+  })
+}
+
+/// Forget an MCP server, and turn it off in every chat that has it on. Returns
+/// the servers left.
+pub fn remove_mcp_server(id: &str) -> Vec<McpServerEntry> {
+  let plugin = format!("mcp:{id}");
+  with_cache(|c| {
+    c.settings.mcp_servers.retain(|s| s.id != id);
+    for project in &mut c.state.projects {
+      project.plugins.retain(|p| *p != plugin);
+    }
+    persist(c);
+    c.settings.mcp_servers.clone()
   })
 }
 
@@ -439,6 +474,32 @@ mod tests {
       serde_json::to_value(flags.unwrap()).unwrap(),
       serde_json::json!({"appGallery":true,"workIq":true})
     );
+  }
+
+  #[test]
+  fn mcp_servers_flag_merges_and_defaults_off() {
+    assert_eq!(default_settings().experiments.unwrap().mcp_servers, Some(false));
+    let mut flags: Option<ExperimentFlags> =
+      Some(serde_json::from_value(serde_json::json!({"workIq":true})).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"mcpServers":true})).unwrap());
+    assert_eq!(
+      serde_json::to_value(flags.unwrap()).unwrap(),
+      serde_json::json!({"workIq":true,"mcpServers":true})
+    );
+  }
+
+  #[test]
+  fn saved_mcp_servers_load_and_settings_without_them_still_do() {
+    let settings = settings_from(Some(serde_json::json!({
+      "theme":"dark",
+      "mcpServers":[{"id":"chart","name":"Chart","transport":"stdio","command":"npx","args":["-y","@antv/mcp-server-chart"],"env":["TOKEN"],"addedAt":"2026-10-31T00:00:00Z"}]
+    })));
+    assert_eq!(settings.mcp_servers.len(), 1);
+    assert_eq!(settings.mcp_servers[0].env, ["TOKEN"]);
+    assert!(!settings.mcp_servers[0].read_only);
+    assert!(settings_from(Some(serde_json::json!({"theme":"dark"}))).mcp_servers.is_empty());
+    // Without any, settings are saved as before.
+    assert!(serde_json::to_value(default_settings()).unwrap().get("mcpServers").is_none());
   }
 
   #[test]

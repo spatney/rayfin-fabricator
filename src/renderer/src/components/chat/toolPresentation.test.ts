@@ -183,6 +183,21 @@ describe('describeStep', () => {
     expect(phaseLabel('FabricIQ-ExecuteQuery')).toBe('Looking up Power BI data')
   })
 
+  it('says which of your MCP servers a tool came from, whatever its name', () => {
+    const chart = tool('chart-generate_bar_chart', 'generate_bar_chart', { server: 'Charts' })
+    const view = describeStep(chart, ROOT)
+    expect(view.kind).toBe('mcp')
+    expect(stepLabel(view)).toBe('Used generate_bar_chart from Charts')
+    expect(stepLabel(describeStep({ ...chart, state: 'running' }, ROOT))).toBe(
+      'Using generate_bar_chart from Charts'
+    )
+    expect(phaseLabel(chart.name, chart.server)).toBe('Using Charts')
+    // A server named like a built-in tool isn't taken for one.
+    const search = tool('search-find_docs', 'find_docs', { server: 'Search' })
+    expect(describeStep(search, ROOT).kind).toBe('mcp')
+    expect(summarizeKinds([search])).toEqual([])
+  })
+
   it('reports step durations from renderer timestamps', () => {
     expect(
       describeStep(tool('powershell', 'Build', { startedAt: 1000, endedAt: 35_000 }), ROOT)
