@@ -373,8 +373,8 @@ export interface LocalBackend {
 
 /**
  * A project's local backend: its live status (from `local:state`, fetched once
- * on mount) and lifecycle actions. Pass `null` while no project is open, and
- * while the Local development experiment is off, when no app has one.
+ * on mount) and lifecycle actions. Pass `null` while no personal project that
+ * runs on one is open.
  */
 export function useLocalBackend(projectId: string | null | undefined): LocalBackend {
   const status = useSyncExternalStore(localBackendStore.subscribe, () =>

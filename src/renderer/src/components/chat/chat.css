@@ -14,7 +14,7 @@
   --user-bubble-border: color-mix(in srgb, var(--accent) 26%, var(--border));
   --stat-add: #4ac26b;
   --stat-del: #ff7b72;
-  /* Diffs sit on the dark code surface in both themes. */
+  /* Diffs sit on the code surface, which follows the theme. */
   --diff-add-bg: rgba(46, 160, 67, 0.17);
   --diff-del-bg: rgba(248, 81, 73, 0.15);
   --diff-add-sign: #56d364;
@@ -26,6 +26,10 @@
   --user-bubble-border: color-mix(in srgb, var(--accent) 22%, var(--border));
   --stat-add: #1a7f37;
   --stat-del: #cf222e;
+  --diff-add-bg: rgba(46, 160, 67, 0.14);
+  --diff-del-bg: rgba(207, 34, 46, 0.1);
+  --diff-add-sign: #1a7f37;
+  --diff-del-sign: #cf222e;
 }
 
 /* Header: the same band as the preview toolbar (so the two line up), with
@@ -458,12 +462,16 @@
   justify-content: flex-end;
 }
 
-/* Time + Copy beside your message's last line, on hover or keyboard focus.
-   Positioned outside the flow so it never adds a row of empty space. */
+/* Time + Copy under your message, on hover or keyboard focus. Positioned
+   outside the flow, in the gap before the next turn (.chat-scroll's 28px), so
+   it never adds a row of empty space and a wide message can't push it out of
+   view. Its padding meets the message's edge, so the pointer keeps the hover
+   on its way to Copy. */
 .msg-meta {
   position: absolute;
-  right: calc(100% + 6px);
-  bottom: 2px;
+  top: 100%;
+  right: 2px;
+  padding-top: 3px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2683,54 +2691,4 @@ button.thinking-head:hover {
   .chat-jump {
     animation: none;
   }
-}
-
-/* Chat hard-gate banner: shown above the composer until the project is
-   published, while Local development is off. */
-.deploy-gate {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  padding: 10px 12px 10px 14px;
-  background: color-mix(in srgb, var(--accent) 9%, var(--bg-elev));
-  border-radius: 14px;
-}
-
-.deploy-gate-ico {
-  flex: none;
-  font-size: 18px;
-  line-height: 1;
-  color: var(--accent);
-}
-
-.deploy-gate-spin {
-  flex: none;
-  width: 16px;
-  height: 16px;
-}
-
-.deploy-gate-text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-right: auto;
-}
-
-.deploy-gate-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.deploy-gate-sub {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-dim);
-}
-
-.composer-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }

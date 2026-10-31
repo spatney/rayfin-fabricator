@@ -191,76 +191,46 @@ describe('SettingsModal report migration experiment', () => {
   })
 })
 
-describe('SettingsModal local development experiment', () => {
-  function localCheckbox(): HTMLInputElement {
-    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
-    const label = screen.getByText('Local development').closest('label')
-    if (!label) throw new Error('Local development label not found')
-    return label.querySelector('input[type="checkbox"]') as HTMLInputElement
-  }
-
-  it('is off by default and turns on through the experiment flags', async () => {
-    installApi()
-    const { onChange } = await renderModal()
-    const checkbox = localCheckbox()
-    expect(checkbox.checked).toBe(false)
-    expect(
-      screen.getByText(
-        'Run your apps and their backend on this computer while you build, and publish to Microsoft Fabric when you choose.'
-      )
-    ).toBeTruthy()
-    fireEvent.click(checkbox)
-    expect(onChange).toHaveBeenCalledWith({ experiments: { localDevelopment: true } })
-  })
-
-  it('reflects the persisted flag, and turns off the same way', async () => {
-    installApi()
-    const { onChange } = await renderModal({
-      settings: { theme: 'system', experiments: { localDevelopment: true } }
-    })
-    const checkbox = localCheckbox()
-    expect(checkbox.checked).toBe(true)
-    fireEvent.click(checkbox)
-    expect(onChange).toHaveBeenCalledWith({ experiments: { localDevelopment: false } })
-  })
-})
-
 describe('SettingsModal retired controls', () => {
-  it.each([false, true])('does not show retired controls with legacy flags set to %s', async (enabled) => {
-    installApi()
-    const legacySettings = {
-      ...settings,
-      experiments: {
-        compatibilityRendering: enabled,
-        chatModeSelector: enabled,
-        localDevPreview: enabled,
-        manualDeploy: enabled,
-        byok: enabled,
-        teamWorkspaces: true
+  it.each([false, true])(
+    'does not show retired controls with legacy flags set to %s',
+    async (enabled) => {
+      installApi()
+      const legacySettings = {
+        ...settings,
+        experiments: {
+          compatibilityRendering: enabled,
+          chatModeSelector: enabled,
+          localDevPreview: enabled,
+          manualDeploy: enabled,
+          byok: enabled,
+          localDevelopment: enabled,
+          teamWorkspaces: true
+        }
       }
-    }
-    await renderModal({ settings: legacySettings })
-    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
+      await renderModal({ settings: legacySettings })
+      fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
 
-    for (const label of [
-      'Compatibility rendering',
-      'Chat mode selector',
-      'Live local preview',
-      'Deploy manually',
-      'Your own API keys',
-      'Performance',
-      'Ray',
-      'Check for updates'
-    ]) {
-      expect(screen.queryByText(label)).toBeNull()
+      for (const label of [
+        'Compatibility rendering',
+        'Chat mode selector',
+        'Live local preview',
+        'Deploy manually',
+        'Your own API keys',
+        'Local development',
+        'Performance',
+        'Ray',
+        'Check for updates'
+      ]) {
+        expect(screen.queryByText(label)).toBeNull()
+      }
+      expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
+      expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+      expect(screen.getByText('Team workspaces')).toBeTruthy()
+      expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
+      expect(screen.getByText('Full diagnostics')).toBeTruthy()
     }
-    expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-    expect(screen.getAllByRole('checkbox')).toHaveLength(4)
-    expect(screen.getByText('Team workspaces')).toBeTruthy()
-    expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
-    expect(screen.getByText('Local development')).toBeTruthy()
-    expect(screen.getByText('Full diagnostics')).toBeTruthy()
-  })
+  )
 })
 
 describe('SettingsModal API keys', () => {

@@ -64,7 +64,7 @@ pub(crate) fn fail_with(problem: TeamProblem) -> TeamActionResult {
 }
 
 pub(crate) fn with_project(project: Option<StudioProject>) -> TeamActionResult {
-  TeamActionResult { ok: true, project: project.map(crate::commands::util::with_missing), ..Default::default() }
+  TeamActionResult { ok: true, project: project.map(crate::commands::util::annotate_project), ..Default::default() }
 }
 
 pub(crate) fn with_workspace(workspace: TeamWorkspace) -> TeamActionResult {

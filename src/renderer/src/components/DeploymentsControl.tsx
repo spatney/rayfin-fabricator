@@ -62,12 +62,10 @@ interface Props {
   /** The workspaces your apps use, most recent first: the workspace picker lists them first. */
   recentWorkspaces?: readonly string[]
   /**
-   * Whether chat turns publish the app as they finish; off, the user publishes
-   * when they choose. `defaultOn` is what it is when the user hasn't chosen
-   * (it follows Local development, see `publishesAfterTurn`), so the chip only
-   * calls out the other choice.
+   * Whether chat turns publish the app as they finish; off, the default, the
+   * user publishes when they choose (see `publishesAfterTurn`).
    */
-  autoDeploy?: { on: boolean; defaultOn?: boolean; onChange: (on: boolean) => void }
+  autoDeploy?: { on: boolean; onChange: (on: boolean) => void }
   /** Open Help about why the last deploy failed. */
   onDiagnose?: () => void
   /** Show the running deploy on its full screen. */
@@ -403,15 +401,9 @@ export default function DeploymentsControl({
       : failed
         ? `Couldn't publish to ${name}. Click for details.`
         : `${name} is live${workspaceName && workspaceName !== name ? ` in ${workspaceName}` : ''}. Click for details, or to switch or add a published app.`
-  // When chat turns publish differently than they would by default, the chip
-  // says so without opening the panel: "· Auto", or "· Manual". The default
-  // goes unsaid.
-  const modeNote =
-    autoDeploy && hasDeployment && autoDeploy.on !== Boolean(autoDeploy.defaultOn)
-      ? autoDeploy.on
-        ? 'Auto'
-        : 'Manual'
-      : null
+  // When chat turns publish, the chip says so without opening the panel: "· Auto".
+  // Off, the default, goes unsaid.
+  const modeNote = autoDeploy && hasDeployment && autoDeploy.on ? 'Auto' : null
   const chipTitle = autoDeploy
     ? `${chipState}\n${autoDeploy.on ? 'Publish after each chat turn is on: chat changes publish as each turn finishes.' : 'Publish after each chat turn is off: chat changes wait for you to publish them.'}`
     : chipState

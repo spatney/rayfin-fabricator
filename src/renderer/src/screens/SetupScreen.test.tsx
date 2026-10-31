@@ -483,16 +483,8 @@ describe('the Local backend check', () => {
     onEnter: () => {}
   }
 
-  it('stays out of setup without Local development', () => {
+  it('shows, without ever keeping you out', () => {
     render(<SetupScreen {...props} />)
-    openCompletedSteps()
-    expect(screen.queryByText('Local backend')).toBeNull()
-    expect(screen.getByText('All 3 installed')).toBeTruthy()
-    expect(screen.getByText("You're all set")).toBeTruthy()
-  })
-
-  it('shows with Local development, without ever keeping you out', () => {
-    render(<SetupScreen {...props} localDevelopment />)
     openCompletedSteps()
     expect(screen.getByText('Local backend')).toBeTruthy()
     expect(screen.getByText('All 4 installed')).toBeTruthy()

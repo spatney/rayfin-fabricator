@@ -1,8 +1,7 @@
 //! Project scaffolding/registration (ported from `src/main/services/projects.ts`).
 //! Handles listing templates, creating a project via `npm create
 //! @microsoft/rayfin` (the official scaffolder, streaming live output on the
-//! `create:project` proc channel) on the Rayfin release the local backend runs
-//! (or, while the Local development experiment is off, on its latest release),
+//! `create:project` proc channel) on the Rayfin release the local backend runs,
 //! opening an existing project, renaming, and removing.
 
 use std::collections::HashMap;
@@ -14,7 +13,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use tauri::{AppHandle, Emitter};
 
-use crate::commands::util::{is_rayfin_project, normalize, same_path, with_missing};
+use crate::commands::util::{annotate_project, is_rayfin_project, normalize, same_path};
 use crate::services::exec::{run, OnData, RunOptions, RunResult, Stream};
 use crate::services::rayfin_sdk::{self, Pinning};
 use crate::services::{emit, git, history, store};
@@ -218,13 +217,13 @@ pub(crate) fn register_project(dir: &Path, display_name: Option<&str>) -> Studio
     workspace: None,
     workspace_name: None,
     deployment_names: None,
-    awaiting_first_deploy: None,
     model: None,
     effort: None,
     auto_tier: None,
     context_tier: None,
     preview_mode: None,
     fabric_preview_defaulted: None,
+    needs_fabric_portal: None,
     team: None,
     missing: None,
   };
@@ -375,17 +374,12 @@ pub(crate) fn scaffold_request(input: &CreateProjectInput) -> Result<ScaffoldReq
   Ok(ScaffoldRequest { name, slug, template, template_name, is_url })
 }
 
-/// The scaffolder's release while the Local development experiment is off: new
-/// apps are developed against their Fabric deployment, so they start on the
-/// newest Rayfin release, as before the local backend.
-const LATEST_RELEASE: &str = "latest";
-
 /// The `npm` arguments that scaffold `request` into `<cwd>/<folder>`:
 ///
 /// `npm create @microsoft/rayfin@<release> -- <folder> -t <template>
 ///   [--template-name <name>] --project-name "<name>" [--skip-install]`
 ///
-/// `<release>` is a version, or [`LATEST_RELEASE`]. `<template>` is a template
+/// `<release>` is a version. `<template>` is a template
 /// built into the Rayfin CLI (resolved against the CLI's own set) or a community
 /// template URL, which may also name one entry of a multi-template gallery. The
 /// positional `<folder>` is the target directory; `--project-name` carries the
@@ -465,8 +459,7 @@ fn scaffold_failure(init: &RunResult, dir: &Path, request: &ScaffoldRequest) -> 
 /// Run the Rayfin scaffolder into `<root>/<folder>` on the release the local
 /// backend runs, pin the project's Rayfin packages to it, install them, and add
 /// Fabricator's agent instructions. Doesn't touch git. Returns the project dir.
-/// New personal projects get this while the Local development experiment is on
-/// (otherwise [`scaffold_latest_project`]), and team apps always do.
+/// Every new project gets this, personal or team.
 pub(crate) async fn scaffold_project(
   root: &Path,
   folder: &str,
@@ -521,33 +514,6 @@ pub(crate) async fn scaffold_project(
     install_new_project(&dir, on).await;
   }
 
-  crate::commands::skills::ensure_project_skills(dir.to_string_lossy().as_ref());
-  Ok(dir)
-}
-
-/// Run the scaffolder's latest release into `<root>/<folder>`, which installs
-/// the packages itself, then the functions folder's own, and add Fabricator's
-/// agent instructions. Doesn't touch git. Returns the project dir. New personal
-/// projects get this while the Local development experiment is off: they're
-/// developed against their Fabric deployment, so nothing holds their Rayfin
-/// versions to the releases the local backend runs.
-async fn scaffold_latest_project(
-  root: &Path,
-  folder: &str,
-  request: &ScaffoldRequest,
-  on: &OnData,
-) -> Result<PathBuf, String> {
-  let dir = root.join(folder);
-  say(on, &format!("Creating \"{folder}\" from the {}…\n", request.label()));
-  let init = run_scaffolder(root, folder, request, LATEST_RELEASE, false, on).await;
-  if let Some(error) = scaffold_failure(&init, &dir, request) {
-    return Err(error);
-  }
-  // The scaffolder's install doesn't cover a functions folder outside the
-  // workspaces. Opening the app tries again, so a failure doesn't stop it.
-  if let Err(e) = ensure_functions_dependencies(&dir, Some(on.clone())).await {
-    say(on, &format!("\n⚠️ {e}\nFabricator tries again when the app opens.\n"));
-  }
   crate::commands::skills::ensure_project_skills(dir.to_string_lossy().as_ref());
   Ok(dir)
 }
@@ -659,38 +625,22 @@ pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> Proje
   }
 
   let on = emit::proc_streamer(app, CREATE_CHANNEL);
-  let local_development = store::local_development_enabled();
-  let scaffolded = if local_development {
-    scaffold_project(Path::new(&root), &request.slug, &request, &on).await
-  } else {
-    scaffold_latest_project(Path::new(&root), &request.slug, &request, &on).await
-  };
-  let dir = match scaffolded {
+  let dir = match scaffold_project(Path::new(&root), &request.slug, &request, &on).await {
     Ok(dir) => dir,
     Err(e) => return err(e),
   };
   init_git_repo(&dir, &format!("Initial commit ({})", request.label()), &on).await;
 
+  // The app runs on this computer from the start. The preview mode is left at
+  // its default (direct view); a project that later connects a semantic model
+  // is switched to the embedded Fabric view on its next publish.
   let project = register_project(&dir, Some(&request.name));
-  // With Local development the app runs on this computer from the start.
-  // Without it, it's developed against its Fabric deployment, so the workbench
-  // asks for a first publish before chat (cleared by the first successful
-  // publish). Only projects created here are gated: ones opened from disk never
-  // are. The preview mode is left at its default (direct view); a project that
-  // later connects a semantic model is switched to the embedded Fabric view on
-  // its next publish.
-  let project = if local_development {
-    project
-  } else {
-    store::mutate_project(&project.id, |p| p.awaiting_first_deploy = Some(true));
-    store::find_project(&project.id).unwrap_or(project)
-  };
   store::set_active(Some(project.id.clone()));
   say(&on, "\n✅ Project ready.\n");
   ProjectActionResult {
     ok: true,
     error: None,
-    project: Some(with_missing(project)),
+    project: Some(annotate_project(project)),
   }
 }
 
@@ -710,7 +660,7 @@ pub async fn open_project(path: String) -> ProjectActionResult {
   ProjectActionResult {
     ok: true,
     error: None,
-    project: Some(with_missing(project)),
+    project: Some(annotate_project(project)),
   }
 }
 
@@ -739,7 +689,7 @@ pub async fn prepare_project_dependencies(id: String) -> ProjectActionResult {
   ProjectActionResult {
     ok: true,
     error: None,
-    project: Some(with_missing(project)),
+    project: Some(annotate_project(project)),
   }
 }
 
@@ -758,7 +708,7 @@ pub async fn rename_project(id: String, name: String) -> ProjectActionResult {
   ProjectActionResult {
     ok: true,
     error: None,
-    project: Some(with_missing(updated)),
+    project: Some(annotate_project(updated)),
   }
 }
 
@@ -942,26 +892,6 @@ entries:
     // Only URL sources take a template name.
     let named = scaffold_request(&input("universal-app", Some("Todo App"))).unwrap();
     assert!(!args(&named).contains("--template-name"));
-  }
-
-  #[test]
-  fn without_local_development_new_projects_scaffold_the_latest_release_as_before() {
-    let input = |template: &str, template_name: Option<&str>| CreateProjectInput {
-      name: "Trip Logger".into(),
-      template: template.into(),
-      template_name: template_name.map(String::from),
-    };
-    // The scaffolder installs the packages itself, and nothing is pinned.
-    let latest = |request: &ScaffoldRequest| create_args(&request.slug, request, LATEST_RELEASE, false).join(" ");
-    assert_eq!(
-      latest(&scaffold_request(&input("", None)).unwrap()),
-      "create @microsoft/rayfin@latest -- trip-logger -t universal-app --project-name Trip Logger"
-    );
-    assert_eq!(
-      latest(&scaffold_request(&input("https://github.com/microsoft/awesome-rayfin", Some("Todo App"))).unwrap()),
-      "create @microsoft/rayfin@latest -- trip-logger -t https://github.com/microsoft/awesome-rayfin \
-       --template-name Todo App --project-name Trip Logger"
-    );
   }
 
   #[test]

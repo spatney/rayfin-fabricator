@@ -89,3 +89,47 @@ describe('CodeViewer external open requests', () => {
     expect(screen.queryByText('id: lead-tracker')).toBeNull()
   })
 })
+
+describe('CodeViewer files that no longer exist', () => {
+  const configPath = 'rayfin/rayfin.yml'
+  const gone = 'rayfin/connectors/healthcare/Providers.ts'
+
+  it.each([
+    ['remembered from an earlier visit', undefined],
+    ['asked for by a link', { path: gone, line: 12, nonce: 1 }]
+  ])('opens the Rayfin config instead of one %s', async (_, openRequest) => {
+    const read = vi.fn((_projectId: string, path: string) =>
+      Promise.resolve<FileContent>(
+        path === configPath
+          ? content(configPath, 'id: clinic')
+          : { path, size: 0, error: 'File not found.', missing: true }
+      )
+    )
+    ;(window as unknown as { api: unknown }).api = {
+      projects: {
+        files: {
+          tree: vi.fn(() =>
+            Promise.resolve([
+              {
+                name: 'rayfin',
+                path: 'rayfin',
+                type: 'dir',
+                children: [{ name: 'rayfin.yml', path: configPath, type: 'file' }]
+              }
+            ])
+          ),
+          read
+        }
+      }
+    }
+    const project = makeProject('p1')
+    localStorage.setItem(`rayfin.code.file.${project.id}`, gone)
+
+    render(<CodeViewer project={project} refreshKey={0} openRequest={openRequest} />)
+
+    expect((await screen.findByTestId('monaco-value')).textContent).toBe('id: clinic')
+    expect(read).toHaveBeenCalledWith(project.id, gone)
+    expect(screen.queryByText('File not found.')).toBeNull()
+    expect(localStorage.getItem(`rayfin.code.file.${project.id}`)).toBe(configPath)
+  })
+})

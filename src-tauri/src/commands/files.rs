@@ -147,10 +147,8 @@ pub async fn files_read(id: String, path: String) -> FileContent {
   let err = |size: u64, message: &str| FileContent {
     path: path.clone(),
     size,
-    content: None,
-    binary: None,
-    too_large: None,
     error: Some(message.to_string()),
+    ..Default::default()
   };
 
   let Some(project) = find_project(&id) else {
@@ -163,36 +161,23 @@ pub async fn files_read(id: String, path: String) -> FileContent {
   let size = match std::fs::metadata(&target) {
     Ok(m) if m.is_file() => m.len(),
     Ok(_) => return err(0, "Not a file."),
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+      return FileContent { missing: Some(true), ..err(0, "File not found.") };
+    }
     Err(_) => return err(0, "File not found."),
   };
 
   if size > MAX_FILE_BYTES {
-    return FileContent {
-      path,
-      size,
-      content: None,
-      binary: None,
-      too_large: Some(true),
-      error: None,
-    };
+    return FileContent { path, size, too_large: Some(true), ..Default::default() };
   }
 
   match std::fs::read(&target) {
-    Ok(buf) if looks_binary(&buf) => FileContent {
-      path,
-      size,
-      content: None,
-      binary: Some(true),
-      too_large: None,
-      error: None,
-    },
+    Ok(buf) if looks_binary(&buf) => FileContent { path, size, binary: Some(true), ..Default::default() },
     Ok(buf) => FileContent {
       path,
       size,
       content: Some(String::from_utf8_lossy(&buf).to_string()),
-      binary: None,
-      too_large: None,
-      error: None,
+      ..Default::default()
     },
     Err(_) => err(size, "Could not read the file."),
   }

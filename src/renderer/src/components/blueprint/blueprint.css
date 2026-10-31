@@ -1545,16 +1545,31 @@
   outline-offset: -2px;
 }
 
+/* Selected: a solid fill a step above hover, as the view tabs above show theirs. Light
+   surfaces darken as they recess, so there the step is --bg-elev-2 and hover a half step. */
 .bp-data-item--on,
 .bp-data-item--on:hover {
+  background: var(--bg-elev-3);
+}
+
+[data-theme='light'] .bp-data-item:hover {
+  background: color-mix(in srgb, var(--bg-elev-2) 55%, transparent);
+}
+
+[data-theme='light'] .bp-data-item--on,
+[data-theme='light'] .bp-data-item--on:hover {
   background: var(--bg-elev-2);
-  box-shadow: inset 2px 0 0 var(--text-dim);
 }
 
 .bp-data-item .codicon[class*='codicon-'] {
   flex: none;
   font-size: 13px;
   color: var(--text-faint);
+}
+
+.bp-data-item--on .codicon[class*='codicon-'],
+.bp-data-item--on .bp-data-item-count {
+  color: var(--text-dim);
 }
 
 .bp-data-item-name {

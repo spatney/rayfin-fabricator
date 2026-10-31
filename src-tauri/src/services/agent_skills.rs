@@ -12,18 +12,17 @@
 //! There are two sets, each with its own skills and instructions folder, and
 //! [`guidance_for`] picks one per session:
 //!
-//! - **Local**, while the Local development experiment is on: Fabricator runs
-//!   the app and its whole backend on this computer (`services::local_backend`)
-//!   and shows it live. The agent never starts or publishes the app; it checks
-//!   its work with static checks, one-shot unit tests and the
-//!   `fabricator_local_*` tools (see [`crate::services::agent_tools`]).
-//!   Publishing to Fabric is the user's choice.
-//! - **Fabric-backed**: the app's backend runs on Microsoft Fabric (every app
-//!   while the experiment is off, team apps, and published apps the local
-//!   backend can't run). The agent validates without running the app (the
-//!   headless `npm run preview` where the app has it), and Fabricator deploys
-//!   the app: after each chat turn or when the user publishes, as the note on
-//!   each message says.
+//! - **Local**: Fabricator runs the app and its whole backend on this computer
+//!   (`services::local_backend`) and shows it live. The agent never starts or
+//!   publishes the app; it checks its work with static checks, one-shot unit
+//!   tests and the `fabricator_local_*` tools (see
+//!   [`crate::services::agent_tools`]). Publishing to Fabric is the user's
+//!   choice.
+//! - **Fabric-backed**: the app's backend runs on Microsoft Fabric (team apps,
+//!   and published apps the local backend can't run). The agent validates
+//!   without running the app (the headless `npm run preview` where the app has
+//!   it), and Fabricator deploys the app: after each chat turn or when the user
+//!   publishes, as the note on each message says.
 
 use std::path::{Path, PathBuf};
 
@@ -49,21 +48,22 @@ impl Guidance {
   }
 }
 
-/// The guidance a project's chat sessions get. While the Local development
-/// experiment is off (`local_development`), every app is Fabric-backed: it's
-/// developed against its Fabric deployment, as before the local backend, and the
-/// local backend tools aren't offered. With it on, team apps are Fabric-backed
-/// too: their pipeline deploys them, and their preview runs against that. So is
-/// a published app the local backend can't run all of ([`needs_fabric`]), which
+/// The guidance a project's chat sessions get. Team apps are Fabric-backed:
+/// their pipeline deploys them, and their preview runs against that. So is a
+/// published app the local backend can't run all of ([`needs_fabric`]), which
 /// Fabricator previews against its published backend instead. Every other app
 /// runs locally.
-pub fn guidance_for(project: &StudioProject, local: &LocalStatus, local_development: bool) -> Guidance {
-  let published = project.last_deploy.as_ref().and_then(|d| d.url.as_deref()).is_some_and(|url| !url.trim().is_empty());
-  if !local_development || project.team.is_some() || (published && needs_fabric(local)) {
+pub fn guidance_for(project: &StudioProject, local: &LocalStatus) -> Guidance {
+  if project.team.is_some() || (is_published(project) && needs_fabric(local)) {
     Guidance::FabricBacked
   } else {
     Guidance::Local
   }
+}
+
+/// Whether the app has a published copy: its last publish recorded an address.
+pub fn is_published(project: &StudioProject) -> bool {
+  project.last_deploy.as_ref().and_then(|d| d.url.as_deref()).is_some_and(|url| !url.trim().is_empty())
 }
 
 /// Whether the local backend reported that it can't run the whole app: its
@@ -1237,7 +1237,7 @@ mod tests {
       ..Default::default()
     };
     let never_started = LocalStatus::default();
-    let local = |project: &StudioProject, status: &LocalStatus| guidance_for(project, status, true);
+    let local = |project: &StudioProject, status: &LocalStatus| guidance_for(project, status);
     assert_eq!(local(&project(false, false), &running), Guidance::Local);
     assert_eq!(local(&project(true, false), &running), Guidance::Local);
     assert_eq!(local(&project(true, false), &never_started), Guidance::Local);
@@ -1264,23 +1264,9 @@ mod tests {
   }
 
   #[test]
-  fn without_local_development_every_app_is_fabric_backed() {
-    let running = LocalStatus {
-      ready: Some(LocalReady { sdk: sdk(Some("1.36.2"), true), ..Default::default() }),
-      ..Default::default()
-    };
-    // So the local backend tools aren't offered, even with a backend still reporting in.
-    for status in [&running, &LocalStatus::default()] {
-      for (published, team) in [(false, false), (true, false), (false, true)] {
-        assert_eq!(guidance_for(&project(published, team), status, false), Guidance::FabricBacked, "{published} {team}");
-      }
-    }
-  }
-
-  #[test]
   fn fabric_backed_guidance_covers_publishing_after_a_turn_and_on_demand() {
-    // While Local development is off, Publish after each chat turn starts on; the
-    // note on each message says which applies, so the guidance reads right either way.
+    // Publish after each chat turn can be on or off; the note on each message
+    // says which applies, so the guidance reads right either way.
     for marker in [
       "when your turn ends while **Publish after each chat turn** is on",
       "or when the user\nselects **Publish**",

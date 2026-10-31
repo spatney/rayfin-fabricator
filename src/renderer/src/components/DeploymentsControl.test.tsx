@@ -406,7 +406,7 @@ describe('DeploymentsControl chip', () => {
       installApi()
       const onChange = vi.fn()
       const { rerender } = render(control({ autoDeploy: { on: false, onChange } }))
-      // Off is the default with Local development, so the chip doesn't call it out.
+      // Off is the default, so the chip doesn't call it out.
       const chip = screen.getByRole('button', { name: /^Published app:\s*Production$/ })
       expect(chip.title).toContain('Publish after each chat turn is off')
       fireEvent.click(chip)
@@ -442,19 +442,6 @@ describe('DeploymentsControl chip', () => {
       render(control())
       const chip = screen.getByRole('button', { name: /^Published app:\s*Production$/ })
       expect(chip.title).not.toContain('after each chat turn')
-    })
-
-    it('calls out Manual when turns publish by default and the user turned it off', () => {
-      const onChange = vi.fn()
-      const { rerender } = render(control({ autoDeploy: { on: true, defaultOn: true, onChange } }))
-      // Without Local development, publishing after each turn is the default: unsaid.
-      expect(screen.getByRole('button', { name: /^Published app:\s*Production$/ })).toBeTruthy()
-
-      rerender(control({ autoDeploy: { on: false, defaultOn: true, onChange } }))
-      const manual = screen.getByRole('button', {
-        name: /^Published app:\s*Production\s*· Manual$/
-      })
-      expect(manual.title).toContain('Publish after each chat turn is off')
     })
 
     it('has no Share until there is something to share', () => {

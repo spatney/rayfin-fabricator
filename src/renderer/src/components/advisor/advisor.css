@@ -24,6 +24,10 @@
   --adv-idle: color-mix(in srgb, var(--text-faint) 26%, transparent);
   --stat-add: #1a7f37;
   --stat-del: #cf222e;
+  --diff-add-bg: rgba(46, 160, 67, 0.14);
+  --diff-del-bg: rgba(207, 34, 46, 0.1);
+  --diff-add-sign: #1a7f37;
+  --diff-del-sign: #cf222e;
 }
 
 /* ── Top bar (same band as the chat and preview toolbars) ── */
@@ -1797,7 +1801,8 @@
   margin: 0 9px 4px;
 }
 
-.adv-fix-ico {
+/* Component CSS loads before codicon.css, so codicon sizes carry a parent class. */
+.adv-fix-head .codicon[class*='codicon-'].adv-fix-ico {
   flex: none;
   font-size: 15px;
   color: var(--accent);
@@ -1825,7 +1830,7 @@
   animation: advPop 0.2s ease both;
 }
 
-.adv-fix-progress .codicon {
+.adv-fix-progress .codicon[class*='codicon-'] {
   font-size: 13px;
 }
 
@@ -1846,12 +1851,13 @@
   list-style: none;
 }
 
+/* The marker, the status words and the title's first line share one line. */
 .adv-fix-row {
   width: 100%;
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 9px;
   padding: 6px 9px;
   font: inherit;
   text-align: left;
@@ -1874,6 +1880,22 @@ button.adv-fix-row:focus-visible {
   outline-offset: -2px;
 }
 
+/* The issue's severity dot, or a check once the Advisor no longer detects it. */
+.adv-fix-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 18px;
+}
+
+.adv-fix-mark .codicon[class*='codicon-'].adv-fix-done {
+  font-size: 14px;
+  color: var(--ok);
+  animation: advPop 0.2s ease both;
+}
+
 .adv-fix-main {
   flex: 1;
   min-width: 0;
@@ -1888,8 +1910,8 @@ button.adv-fix-row:focus-visible {
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-size: 13px;
-  font-weight: 550;
-  line-height: 1.4;
+  font-weight: 500;
+  line-height: 18px;
   overflow-wrap: break-word;
   color: var(--text);
 }
@@ -1911,12 +1933,13 @@ button.adv-fix-row:focus-visible {
   color: var(--text-dim);
 }
 
-.adv-fix-cat {
+.adv-fix-meta .codicon[class*='codicon-'].adv-fix-cat {
   flex: none;
   font-size: 12px;
 }
 
 .adv-fix-cat.adv-cat-svg {
+  flex: none;
   width: 12px;
   height: 12px;
 }
@@ -1936,17 +1959,17 @@ button.adv-fix-row:focus-visible {
   text-overflow: ellipsis;
 }
 
+/* Where an issue that isn't fixed stands: words on the card, not a chip. */
 .adv-fix .adv-status {
   flex: none;
+  padding: 0;
+  line-height: 18px;
+  background: none;
   animation: advPop 0.2s ease both;
 }
 
 .adv-fix .adv-status .codicon {
   font-size: 12px;
-}
-
-.adv-status--fixed {
-  color: var(--ok);
 }
 
 .adv-fix-more {
@@ -2098,7 +2121,8 @@ button.adv-fix-row:focus-visible {
   .adv-activity,
   .adv-menu-pop,
   .adv-fix-progress,
-  .adv-fix .adv-status {
+  .adv-fix .adv-status,
+  .adv-fix-mark .codicon[class*='codicon-'].adv-fix-done {
     animation: none;
   }
 

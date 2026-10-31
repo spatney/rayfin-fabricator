@@ -1,27 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import type { AppSettings, RayfinVersionInfo } from '@shared/ipc'
+import type { RayfinVersionInfo } from '@shared/ipc'
 import { publishesAfterTurn, upgradesWithinLocalRange } from './localDevelopment'
 
 describe('publishing after each chat turn', () => {
-  const off: AppSettings = { theme: 'system' }
-  const on: AppSettings = { theme: 'system', experiments: { localDevelopment: true } }
-
-  it('follows Local development until the user chooses: on without it, off with it', () => {
-    expect(publishesAfterTurn(null)).toBe(true)
-    expect(publishesAfterTurn(off)).toBe(true)
-    expect(publishesAfterTurn({ ...off, experiments: { localDevelopment: false } })).toBe(true)
-    expect(publishesAfterTurn(on)).toBe(false)
-  })
-
-  it('does what the user chose in either mode', () => {
-    for (const settings of [off, on]) {
-      expect(publishesAfterTurn({ ...settings, deployMode: 'auto' })).toBe(true)
-      expect(publishesAfterTurn({ ...settings, deployMode: 'manual' })).toBe(false)
-    }
+  it('is off until the user turns it on', () => {
+    expect(publishesAfterTurn(null)).toBe(false)
+    expect(publishesAfterTurn({ theme: 'system' })).toBe(false)
+    expect(publishesAfterTurn({ theme: 'system', deployMode: 'manual' })).toBe(false)
+    expect(publishesAfterTurn({ theme: 'system', deployMode: 'auto' })).toBe(true)
   })
 })
 
-describe('Rayfin upgrades with Local development', () => {
+describe('Rayfin upgrades of a personal app', () => {
   const versions = (
     installed: string,
     latest: string,

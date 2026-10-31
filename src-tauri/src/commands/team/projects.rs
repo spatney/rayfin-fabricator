@@ -38,10 +38,7 @@ fn register(ws: &TeamWorkspace, folder: &str, branch: &str, pr: Option<&TeamPull
     view: Some(if pr.is_some() { "preview".into() } else { "production".into() }),
     ..Default::default()
   };
-  store::mutate_project(&project.id, |p| {
-    p.team = Some(binding);
-    p.awaiting_first_deploy = None;
-  });
+  store::mutate_project(&project.id, |p| p.team = Some(binding));
   store::set_active(Some(project.id.clone()));
   store::find_project(&project.id)
 }

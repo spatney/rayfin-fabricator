@@ -10,15 +10,15 @@
 use super::context::HelpContext;
 use super::local;
 
-/// How Fabricator works with the Local development experiment on, when apps run
-/// locally first. Docs, release notes and journal records may describe
-/// deploy-first Fabricator, so the model is told plainly which world it's in.
+/// How Fabricator works: apps run locally first. Docs, release notes and journal
+/// records may describe deploy-first Fabricator, or running apps locally as an
+/// experiment, so the model is told plainly which world it's in.
 const HOW_IT_WORKS: &str = "# How Fabricator works\n\n\
-Fabricator builds and runs apps on this computer first; Microsoft Fabric is optional. That's the \
-**Local development** experiment, which the user turned on in **Settings → Experiments**. \
-Documentation, release notes, journal records and earlier answers may describe how it works \
-without it, when every app had to be deployed to Fabric before it could be tried. Answer for how \
-it works now:\n\n\
+Fabricator builds and runs apps on this computer first; Microsoft Fabric is optional. \
+Documentation, release notes, journal records and earlier answers may describe how it worked \
+before: when every app had to be deployed to Fabric before it could be tried, or when running \
+apps on this computer was an experiment (**Local development**, in **Settings → Experiments**), \
+which it no longer is. Answer for how it works now:\n\n\
 - **Every personal app runs on this computer, on its own local backend.** When an app is open, \
 Fabricator starts its local backend (rayfin-local, which comes with Fabricator): the app's data, \
 sign-in, functions, connectors and file storage, plus the app's own dev server (Vite), which is \
@@ -36,9 +36,10 @@ app in as the user, and for its connectors and the functions that ask for tokens
 Microsoft Fabric workspace so other people can use it. It runs when the user asks; **Publish after \
 each chat turn** is off unless they turned it on. Publishing never touches the local data. \
 Fabricator's internal names didn't change, so `deploy.*` journal records are about publishing.\n\
-- **What the user sees.** The preview shows the app running on this computer. Its toolbar shows \
-the local backend's status (**Starting…**, **Running**, **Restarting…**, **Error** or \
-**Stopped**); selecting it opens the output. Once the app is published, a **Local** and \
+- **What the user sees.** The preview shows the app running on this computer. The **Output** \
+button in its toolbar opens the local backend's output, and marks the app's state when it needs \
+a look: a blinking dot while it starts, a red one when it couldn't start, and the number of \
+problems when it runs but its latest change didn't apply. Once the app is published, a **Local** and \
 **Published** switch chooses between this copy and the published one, each with its own data; an \
 app that was published before it ran on this computer starts with empty local data. Blueprint's \
 **Data** view shows the local data, and can clear it.\n\
@@ -48,31 +49,6 @@ outside the versions the local backend supports or it uses a connector that runs
 instead, and says why. An app that was never published has nothing to fall back to.\n\
 - **Team apps don't use the local backend.** Their preview and publishing go through the team's \
 pipeline, as before.\n\n";
-
-/// How Fabricator works with the Local development experiment off (the
-/// default): apps are developed against their Fabric deployment, and there is
-/// no local backend to describe. Documentation and release notes may describe
-/// the experiment, so the model is told it's off.
-const HOW_IT_WORKS_FABRIC: &str = "# How Fabricator works\n\n\
-Fabricator develops each app against its copy published to Microsoft Fabric. Answer for how it \
-works now:\n\n\
-- **A new app is published first.** Fabricator asks the user to publish a new app to a Fabric \
-workspace before the chat opens for it. Publishing asks for a Microsoft Fabric sign-in when it's \
-needed.\n\
-- **Chat turns and the preview.** While Copilot works, the preview shows frontend changes as \
-they're made, running the app's frontend on this computer against the published app's backend. \
-Changes to the data model, permissions or functions reach the app only when it's published.\n\
-- **Publishing.** **Publish** (called Deploy in earlier versions) copies the app to its Fabric \
-workspace. **Publish after each chat turn** is on unless the user turned it off: while it's on, \
-Fabricator publishes when each chat turn ends; while it's off, the app is published when the \
-user selects **Publish**. Fabricator's internal names didn't change, so `deploy.*` journal \
-records are about publishing.\n\
-- **Running apps on this computer is an experiment, and it's off.** With **Local development** \
-on in **Settings → Experiments**, personal apps run on this computer with a local backend, and \
-publishing them is optional. Documentation and release notes that describe a local backend, the \
-**Local** and **Published** preview switch or local data are about that experiment. Journal \
-records about a local backend (`local.*`) are from when it was on.\n\
-- **Team apps** are published by the team's pipeline, as always.\n\n";
 
 /// What each local backend problem code means and what fixes it, in terms of
 /// the controls the preview offers for it (`components/local` in the renderer;
@@ -172,28 +148,21 @@ wrong in plain language, says why it happened, and gives the exact steps to fix 
 explains Fabricator's internals.\n\n",
   );
 
-  s.push_str(if ctx.local_development { HOW_IT_WORKS } else { HOW_IT_WORKS_FABRIC });
+  s.push_str(HOW_IT_WORKS);
 
   s.push_str(
     "# What you can read, and why\n\n\
 You have read-only access to several things. Use them in this order:\n\n",
   );
-  s.push_str(if ctx.local_development {
+  s.push_str(
     "1. **What is true right now** — the `<now>` and `<local-backend>` blocks that come with each \
 question, plus the orientation at the end of these instructions. Always start here. The journal \
 is history, and history is not the present.\n\
 2. **The activity journal and logs** — what actually happened on this machine. `activity-*.jsonl` \
 has one JSON record per notable event, oldest first. `diagnostics-*.jsonl` has one record per \
 chat turn. `main-*.log` has crashes. The open app's local backend output comes from \
-`help_local_output`.\n"
-  } else {
-    "1. **What is true right now** — the `<now>` block that comes with each question, plus the \
-orientation at the end of these instructions. Always start here. The journal is history, and \
-history is not the present.\n\
-2. **The activity journal and logs** — what actually happened on this machine. `activity-*.jsonl` \
-has one JSON record per notable event, oldest first. `diagnostics-*.jsonl` has one record per \
-chat turn. `main-*.log` has crashes.\n"
-  });
+`help_local_output`.\n",
+  );
   s.push_str(
     "3. **The documentation and the release notes** — the published user guide and the notes for each \
 release, mirrored locally. The guide is the source of truth for how a feature is *meant* to work \
@@ -218,16 +187,14 @@ the error, such as `Details: …`, which the message leaves out. Read it before 
 the line that explains the failure, and never send the user to find it in the logs themselves. \
 The `Diagnostic log:` file it names belongs to the Rayfin CLI and is outside what you can read.\n",
   );
-  if ctx.local_development {
-    s.push_str(
-      "- `local.*` records (area `preview`) are the local backend's. `local.started`: it started. \
+  s.push_str(
+    "- `local.*` records (area `preview`) are the local backend's. `local.started`: it started. \
 `local.failed`: a problem stopped it, or kept it from starting (its `detail` has the code). \
 `local.crashed`: it kept stopping, so Fabricator stopped restarting it. `local.warning`, \
 `local.error` and the `local.schema.*`, `local.functions.*`, `local.analysis.*` and `local.vite.*` \
 records are problems it hit while running, and their resolution. `local.rows_cleared` and \
 `local.data_reset` mean the user deleted local data themselves, in Blueprint's Data view.\n",
-    );
-  }
+  );
   // Both kinds of build write to the same journal. In the installed app, a dev
   // record is someone's half-finished edit to Fabricator; in a dev build it is
   // this very session, and ignoring it hides the answer.
@@ -242,9 +209,7 @@ the user asks about them specifically, and never present them to a user as their
   });
   s.push_str("- Check the time. Something from days ago is rarely the answer to \"what is wrong now\".\n\n");
 
-  if ctx.local_development {
-    s.push_str(LOCAL_PROBLEMS);
-  }
+  s.push_str(LOCAL_PROBLEMS);
 
   s.push_str(
     "## How to use the source code\n\n\
@@ -292,14 +257,12 @@ the user types or sees.\n\
     "# Tools\n\n\
 Search and read files to ground your answer; you cannot modify anything.\n\n",
   );
-  if ctx.local_development {
-    s.push_str(
-      "- Call `help_local_output` to read the open app's local backend output: what rayfin-local, the \
+  s.push_str(
+    "- Call `help_local_output` to read the open app's local backend output: what rayfin-local, the \
 app's dev server (Vite), the functions' build and host, and Fabricator printed, newest last. Read \
 it before explaining why an app didn't start, stopped, or misbehaves in the preview. Narrow it \
 with `problemsOnly` or a `source` when the output is long.\n",
-    );
-  }
+  );
   s.push_str(
     "- When the user wants to get somewhere or do something the app can do for them, call \
 `help_offer_action` so the UI shows a button. Prefer this over telling them where to click. \
@@ -331,8 +294,7 @@ pub fn turn_frame(ctx: &HelpContext, question: &str, attachments: &[String]) -> 
     s.push_str("</now>\n\n");
   }
 
-  // Only while Local development is on: otherwise no app runs on a local backend.
-  if let (true, Some(status), Some(project)) = (ctx.local_development, &ctx.local, &ctx.project) {
+  if let (Some(status), Some(project)) = (&ctx.local, &ctx.project) {
     s.push_str("<local-backend>\n");
     s.push_str(&local::describe(status, project.published));
     s.push_str("</local-backend>\n\n");
@@ -379,7 +341,6 @@ mod tests {
       projects: Vec::new(),
       recent_activity: String::new(),
       facts: Vec::new(),
-      local_development: true,
       local: None,
       surface: crate::commands::help::tools::Surface::Project,
       extra_roots: Vec::new(),
@@ -389,45 +350,24 @@ mod tests {
   #[test]
   fn the_frame_says_how_fabricator_works_now() {
     let frame = system_frame(&ctx());
-    assert!(frame.contains("That's the **Local development** experiment, which the user turned on"));
+    assert!(frame.contains("running apps on this computer was an experiment"));
     assert!(frame.contains("**Every personal app runs on this computer, on its own local backend.**"));
     assert!(frame.contains("**There is no first deploy any more.**"));
     assert!(frame.contains("**Signing in to Azure and Microsoft Fabric is optional.**"));
     assert!(frame.contains("**Publishing is optional.**"));
     assert!(frame.contains("**Publish after each chat turn** is off unless they turned it on"));
+    assert!(frame.contains("The **Output** button in its toolbar"));
     assert!(frame.contains("a **Local** and **Published** switch"));
     assert!(frame.contains("the preview uses the published app's backend instead"));
     assert!(frame.contains("**Team apps don't use the local backend.**"));
+    assert!(frame.contains("help_local_output") && frame.contains("## When the local backend has a problem"));
     assert!(!frame.contains("**Redeploy**"), "the examples use today's labels");
     assert!(!frame.contains("**A new app is published first.**"));
+    assert!(!frame.contains("**Running**"), "the toolbar has no status pill any more");
   }
 
   #[test]
-  fn without_local_development_the_frame_describes_publishing_and_no_local_backend() {
-    let mut c = ctx();
-    c.local_development = false;
-    let frame = system_frame(&c);
-    assert!(frame.contains("Fabricator develops each app against its copy published to Microsoft Fabric."));
-    assert!(frame.contains("**A new app is published first.**"));
-    assert!(frame.contains("**Publish after each chat turn** is on unless the user turned it off"));
-    assert!(frame.contains("while it's off, the app is published when the user selects **Publish**"));
-    assert!(frame.contains("**Local development** on in **Settings → Experiments**"));
-    assert!(frame.contains("(`local.*`) are from when it was on"));
-    for local_only in [
-      "**Every personal app runs on this computer",
-      "**Publishing is optional.**",
-      "<local-backend>",
-      "help_local_output",
-      "## When the local backend has a problem",
-      "`local.started`",
-    ] {
-      assert!(!frame.contains(local_only), "the frame mentions {local_only:?}");
-    }
-    assert!(!frame.contains("**Redeploy**"), "the examples use today's labels");
-  }
-
-  #[test]
-  fn the_local_backend_block_comes_only_with_local_development() {
+  fn the_local_backend_block_comes_with_a_personal_apps_status() {
     let mut c = ctx();
     c.project = Some(crate::commands::help::context::ProjectContext {
       name: "Notes".into(),
@@ -435,10 +375,9 @@ mod tests {
       team: None,
       published: false,
     });
+    assert!(!turn_frame(&c, "why?", &[]).contains("<local-backend>"));
     c.local = Some(crate::types::LocalStatus { project_id: "p".into(), ..Default::default() });
     assert!(turn_frame(&c, "why?", &[]).contains("<local-backend>"));
-    c.local_development = false;
-    assert!(!turn_frame(&c, "why?", &[]).contains("<local-backend>"));
   }
 
   #[test]
@@ -483,11 +422,7 @@ mod tests {
       ("Local", "components/PreviewPane.tsx"),
       ("Published", "components/PreviewPane.tsx"),
       ("Data", "components/blueprint/BlueprintTab.tsx"),
-      ("Starting…", "localBackend.ts"),
-      ("Running", "localBackend.ts"),
-      ("Restarting…", "localBackend.ts"),
-      ("Error", "localBackend.ts"),
-      ("Stopped", "localBackend.ts"),
+      ("Output", "components/local/LocalOutput.tsx"),
       ("Try again", "components/local/LocalStatePanel.tsx"),
       ("View output", "components/local/LocalStatePanel.tsx"),
       ("Find out why", "components/local/LocalStatePanel.tsx"),

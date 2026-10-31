@@ -1,42 +1,20 @@
-/* The local backend in the preview: its status pill, the panel shown while the
-   app starts or can't, its output under the preview, the notes above the app and
-   the dialog for a schema change that would delete data. Flat: solid surfaces,
-   neutral 1px borders, status as a small dot and words. */
+/* The local backend in the preview: its Output button and the note about Local
+   and Published in the toolbar, the panel shown while the app starts or can't,
+   its output under the preview, the notes above the app and the dialog for a
+   schema change that would delete data. Flat: solid surfaces, neutral 1px
+   borders, status as a small dot and words. Component CSS loads before
+   codicon.css, so codicon sizes carry a parent class. */
 
-/* ── Status pill (preview toolbar) ─────────────────────────────────────── */
+/* ── Output button (preview toolbar) ───────────────────────────────────── */
 
-.local-pill {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 9px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  cursor: pointer;
-  transition:
-    color 0.12s ease,
-    background 0.12s ease;
+/* The same size whether the button is a square icon or has a dot and words. */
+.local-output-btn .local-output-ico {
+  width: 16px;
+  height: 16px;
 }
 
-.local-pill:hover,
-.local-pill[aria-pressed='true'] {
-  color: var(--text);
-  background: var(--bg-elev-2);
-}
-
-.local-pill:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.local-pill-dot {
+/* Shown only when the app needs a look; running fine, it has none. */
+.local-output-dot {
   flex: none;
   width: 7px;
   height: 7px;
@@ -44,21 +22,17 @@
   border-radius: 50%;
 }
 
-.local-pill--ok .local-pill-dot {
-  background: var(--ok);
-}
-
 /* Running, with a problem it carries on through (see `runningProblems`). */
-.local-pill--warn .local-pill-dot {
+.local-output-btn--warn .local-output-dot {
   background: var(--pending);
 }
 
-.local-pill--busy .local-pill-dot {
+.local-output-btn--busy .local-output-dot {
   background: var(--pending);
   animation: local-blink 1.2s ease-in-out infinite;
 }
 
-.local-pill--err .local-pill-dot {
+.local-output-btn--err .local-output-dot {
   background: var(--danger);
 }
 
@@ -68,10 +42,110 @@
   }
 }
 
-@container previewbar (max-width: 360px) {
-  .local-pill-label {
-    display: none;
+/* ── About Local and Published (preview toolbar) ───────────────────────── */
+
+.lpi {
+  display: inline-flex;
+  flex: none;
+}
+
+.lpi-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.lpi-trigger:hover,
+.lpi-trigger.is-open {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.lpi-trigger:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 1px;
+}
+
+/* An app published before it ran here: its local data starts empty, so the
+   button stands out until it's opened. */
+.lpi-trigger.is-fresh {
+  color: var(--accent);
+}
+
+.lpi-trigger .codicon[class*='codicon-'] {
+  font-size: 15px;
+}
+
+/* Drawn at the document root (fixed, under its button) so it reaches over the
+   preview pane. Its width is POP_WIDTH in LocalPublishedInfo.tsx. */
+.lpi-pop {
+  position: fixed;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+  padding: 12px 14px 13px;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  animation: local-pop-in 0.12s ease both;
+}
+
+.lpi-pop:focus {
+  outline: none;
+}
+
+@keyframes local-pop-in {
+  from {
+    opacity: 0;
   }
+}
+
+.lpi-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.lpi-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.lpi-ico {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  color: var(--text-dim);
+}
+
+.lpi-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.lpi-text strong {
+  font-weight: 600;
+  color: var(--text);
 }
 
 /* ── The preview while there's no page to show ─────────────────────────── */
@@ -230,7 +304,14 @@
 
 /* ── Output, under the preview ─────────────────────────────────────────── */
 
+/* The log follows the theme, like the Code tab's editor: a dark well in the dark
+   theme, a light one in the light theme, each with readable warning and error colors. */
 .local-output {
+  --log-bg: var(--code-bg);
+  --log-text: var(--code-text);
+  --log-dim: #6b7488;
+  --log-warn: #f5c451;
+  --log-error: #ff7a72;
   display: flex;
   flex: none;
   flex-direction: column;
@@ -238,6 +319,12 @@
   max-height: 45%;
   background: var(--bg-elev);
   border-top: 1px solid var(--border);
+}
+
+[data-theme='light'] .local-output {
+  --log-dim: var(--text-faint);
+  --log-warn: #8a5d00;
+  --log-error: #c42b1c;
 }
 
 .local-output-head {
@@ -338,8 +425,8 @@
   font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.55;
-  color: var(--code-text);
-  background: var(--code-bg);
+  color: var(--log-text);
+  background: var(--log-bg);
 }
 
 .local-output-body:focus-visible {
@@ -356,7 +443,7 @@
 .local-output-time,
 .local-output-source {
   flex: none;
-  color: #6b7488;
+  color: var(--log-dim);
 }
 
 .local-output-source {
@@ -373,19 +460,18 @@
   overflow-wrap: anywhere;
 }
 
-/* The log is dark in both themes, so its warning and error colors are fixed. */
 .local-output-line--warn .local-output-text {
-  color: #f5c451;
+  color: var(--log-warn);
 }
 
 .local-output-line--error .local-output-text {
-  color: #ff7a72;
+  color: var(--log-error);
 }
 
 .local-output-empty {
   margin: 0;
   padding: 4px 12px;
-  color: #6b7488;
+  color: var(--log-dim);
 }
 
 /* ── Schema change dialog ──────────────────────────────────────────────── */

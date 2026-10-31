@@ -1,5 +1,7 @@
-/* highlight.js token theme — keyed to the app palette; the code surface stays dark
-   in both themes, so a single (dark) token set is correct everywhere. */
+/* highlight.js token colors. highlight.js's GitHub Dark (imported by main.css, which
+   loads after this file) colors most tokens, and wins at equal specificity; these
+   rules color what it leaves out. The light theme's block at the end gives each of its
+   rules a light counterpart, scoped so it outranks it there. */
 .md-codeblock-pre .hljs {
   display: block;
   background: transparent;
@@ -82,4 +84,84 @@
 
 .hljs-link {
   color: var(--accent);
+}
+
+/* Light theme: GitHub's light syntax colors, hue for hue with GitHub Dark, and dark
+   enough to read on the light code surface. */
+[data-theme='light'] .hljs-doctag,
+[data-theme='light'] .hljs-keyword,
+[data-theme='light'] .hljs-meta .hljs-keyword,
+[data-theme='light'] .hljs-template-tag,
+[data-theme='light'] .hljs-template-variable,
+[data-theme='light'] .hljs-type,
+[data-theme='light'] .hljs-variable.language_ {
+  color: #cf222e;
+}
+
+[data-theme='light'] .hljs-title,
+[data-theme='light'] .hljs-title.class_,
+[data-theme='light'] .hljs-title.class_.inherited__,
+[data-theme='light'] .hljs-title.function_ {
+  color: #8250df;
+}
+
+[data-theme='light'] .hljs-attr,
+[data-theme='light'] .hljs-attribute,
+[data-theme='light'] .hljs-literal,
+[data-theme='light'] .hljs-meta,
+[data-theme='light'] .hljs-number,
+[data-theme='light'] .hljs-operator,
+[data-theme='light'] .hljs-variable,
+[data-theme='light'] .hljs-selector-attr,
+[data-theme='light'] .hljs-selector-class,
+[data-theme='light'] .hljs-selector-id {
+  color: #0550ae;
+}
+
+[data-theme='light'] .hljs-regexp,
+[data-theme='light'] .hljs-string,
+[data-theme='light'] .hljs-meta .hljs-string {
+  color: #0a3069;
+}
+
+[data-theme='light'] .hljs-built_in,
+[data-theme='light'] .hljs-symbol {
+  color: #953800;
+}
+
+[data-theme='light'] .hljs-comment,
+[data-theme='light'] .hljs-code,
+[data-theme='light'] .hljs-formula {
+  color: #59636e;
+}
+
+[data-theme='light'] .hljs-name,
+[data-theme='light'] .hljs-quote,
+[data-theme='light'] .hljs-selector-tag,
+[data-theme='light'] .hljs-selector-pseudo {
+  color: #116329;
+}
+
+[data-theme='light'] .hljs-subst,
+[data-theme='light'] .hljs-emphasis,
+[data-theme='light'] .hljs-strong {
+  color: var(--code-text);
+}
+
+[data-theme='light'] .hljs-section {
+  color: #0550ae;
+}
+
+[data-theme='light'] .hljs-bullet {
+  color: #953800;
+}
+
+[data-theme='light'] .hljs-addition {
+  color: #116329;
+  background-color: #dafbe1;
+}
+
+[data-theme='light'] .hljs-deletion {
+  color: #82071e;
+  background-color: #ffebe9;
 }

@@ -177,13 +177,11 @@ const project: StudioProject = {
   addedAt: '2026-09-12T00:00:00Z',
   lastDeploy: { url: 'https://project.example.com', status: 'success' }
 }
-/** "Publish after each chat turn", turned off or on by the user: it wins over the mode's default. */
+/** Settings as they start: personal apps run on their local backend, and turns don't publish. */
+const defaultSettings: AppSettings = { theme: 'system' }
+/** "Publish after each chat turn", turned off or on by the user. */
 const manualSettings: AppSettings = { theme: 'system', deployMode: 'manual' }
 const autoSettings: AppSettings = { theme: 'system', deployMode: 'auto' }
-/** The Local development experiment is on: personal apps run on their local backend. */
-const localDevSettings: AppSettings = { theme: 'system', experiments: { localDevelopment: true } }
-const localManualSettings: AppSettings = { ...localDevSettings, deployMode: 'manual' }
-const localAutoSettings: AppSettings = { ...localDevSettings, deployMode: 'auto' }
 
 const localReady: LocalReady = {
   appUrl: 'http://localhost:5173/',
@@ -960,38 +958,14 @@ describe('Workbench app bar', () => {
 describe('Workbench after-turn publishing', () => {
   it.each<{ label: string; settings: AppSettings | null }>([
     { label: 'while settings load', settings: null },
-    { label: 'by default', settings: { theme: 'system' } }
-  ])(
-    'publishes after each turn $label without Local development, as it always has',
-    async ({ settings }) => {
-      const api = installApi(true)
-      api.deploy.hasChanges.mockResolvedValue(true)
-      render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
-      await screen.findByLabelText('Chat draft')
-      expect(deploymentsProps.mock.lastCall?.[0].autoDeploy).toMatchObject({
-        on: true,
-        defaultOn: true
-      })
-
-      await act(async () => completeTurn())
-      expect(api.deploy.hasChanges).toHaveBeenCalledWith(project.id)
-      expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined)
-    }
-  )
-
-  it.each<{ label: string; settings: AppSettings | null }>([
-    { label: 'by default with Local development', settings: localDevSettings },
-    { label: 'once turned off', settings: manualSettings },
-    { label: 'once turned off with Local development', settings: localManualSettings }
+    { label: 'by default', settings: defaultSettings },
+    { label: 'once turned off', settings: manualSettings }
   ])('keeps every turn on this computer $label, and publishes on Publish', async ({ settings }) => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
     render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on).toBe(false)
-    expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.defaultOn).toBe(
-      !settings?.experiments?.localDevelopment
-    )
 
     await act(async () => completeTurn())
     await act(async () => completeTurn())
@@ -1007,14 +981,14 @@ describe('Workbench after-turn publishing', () => {
   it('turns on publishing after each turn from the published apps panel', async () => {
     const api = installApi(true)
     api.deploy.hasChanges.mockResolvedValue(true)
-    const props = makeProps({ settings: localDevSettings })
+    const props = makeProps({ settings: defaultSettings })
     const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     expect(screen.queryByRole('combobox', { name: /deploy/i }), 'not in the status bar').toBeNull()
 
     act(() => deploymentsProps.mock.lastCall?.[0].autoDeploy?.onChange(true))
     expect(props.onSettingsChange).toHaveBeenCalledWith({ deployMode: 'auto' })
-    rerender(<Workbench {...props} settings={localAutoSettings} />)
+    rerender(<Workbench {...props} settings={autoSettings} />)
     expect(deploymentsProps.mock.lastCall?.[0].autoDeploy?.on).toBe(true)
 
     await act(async () => completeTurn())
@@ -1071,26 +1045,10 @@ describe('Workbench after-turn publishing', () => {
     expect(api.deploy.run).not.toHaveBeenCalled()
   })
 
-  it('leaves the first publish of a new app to the user with Local development, even with publishing after each turn on', async () => {
+  it('leaves the first publish of a new app to the user, even with publishing after each turn on', async () => {
     const api = installApi(true)
     const fresh = { ...project, lastDeploy: undefined }
     const state = { workspaceRoot: 'C:\\projects', activeProjectId: fresh.id, projects: [fresh] }
-    api.projects.state.mockResolvedValue(state)
-    api.deploy.reconcile.mockResolvedValue(state)
-    api.deploy.hasChanges.mockResolvedValue(true)
-    render(<Workbench {...makeProps({ settings: localAutoSettings })} />, { wrapper: Wrapper })
-    await screen.findByLabelText('Chat draft')
-
-    await act(async () => completeTurn())
-
-    expect(api.deploy.hasChanges).not.toHaveBeenCalled()
-    expect(api.deploy.run).not.toHaveBeenCalled()
-  })
-
-  it('publishes an app that never was after a turn without Local development, which asks where', async () => {
-    const api = installApi(true)
-    const opened = { ...project, lastDeploy: undefined }
-    const state = { workspaceRoot: 'C:\\projects', activeProjectId: opened.id, projects: [opened] }
     api.projects.state.mockResolvedValue(state)
     api.deploy.reconcile.mockResolvedValue(state)
     api.deploy.hasChanges.mockResolvedValue(true)
@@ -1099,7 +1057,8 @@ describe('Workbench after-turn publishing', () => {
 
     await act(async () => completeTurn())
 
-    expect(api.deploy.run).toHaveBeenCalledWith(opened.id, undefined)
+    expect(api.deploy.hasChanges).not.toHaveBeenCalled()
+    expect(api.deploy.run).not.toHaveBeenCalled()
   })
 
   it.each([undefined, 'Coding failed'])(
@@ -1227,8 +1186,7 @@ describe('Workbench after-turn publishing', () => {
 })
 
 /**
- * With Local development, a personal app's turn that changed files becomes a
- * version in its history, named after what was asked, so History and Restore
+ * A personal app's turn that changed files becomes a version in its history, named after what was asked, so History and Restore
  * go turn by turn even while turns don't publish.
  */
 describe('Workbench versions per chat turn', () => {
@@ -1247,7 +1205,7 @@ describe('Workbench versions per chat turn', () => {
 
   it('saves a turn that changed files, named after the request, and nothing else', async () => {
     const api = installApi(true)
-    render(<Workbench {...makeProps({ settings: localDevSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
 
     asked('Add a task list')
@@ -1272,7 +1230,7 @@ describe('Workbench versions per chat turn', () => {
 
   it('saves a turn whose answer shows edits, without Copilot’s file events', async () => {
     const api = installApi(true)
-    render(<Workbench {...makeProps({ settings: localDevSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
 
     const app = `${project.path}\\src\\App.tsx`
@@ -1289,7 +1247,7 @@ describe('Workbench versions per chat turn', () => {
     const saving = deferred<SavedTurn>()
     api.projects.git.saveTurn.mockReturnValueOnce(saving.promise)
     api.deploy.hasChanges.mockResolvedValue(true)
-    render(<Workbench {...makeProps({ settings: localAutoSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: autoSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
 
     await act(async () =>
@@ -1303,30 +1261,15 @@ describe('Workbench versions per chat turn', () => {
     expect(api.deploy.run).toHaveBeenCalledTimes(1)
   })
 
-  it('leaves a turn to its publish without Local development, as before', async () => {
-    const api = installApi(true)
-    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
-    await screen.findByLabelText('Chat draft')
-
-    asked('Add a task list')
-    await act(async () =>
-      completeTurn({ ok: true, filesModified: ['src/App.tsx'], ranDeploy: false })
-    )
-    expect(api.projects.git.saveTurn).not.toHaveBeenCalled()
-  })
 })
 
 /**
- * Without Local development every personal app, and with it a published app
- * this computer can't run, previews on its published backend: a turn starts
+ * A published app this computer can't run previews on its published backend: a turn starts
  * Vite on a port the app's sign-in accepts. When every such port is taken, the
  * turn waits while the user registers another port (rayfin.yml + a settings
  * push) or stops the process.
  */
-describe.each([
-  { mode: 'without Local development', localDevelopment: false },
-  { mode: 'for an app Local development can’t run', localDevelopment: true }
-])('Workbench live preview on the published backend, $mode', ({ localDevelopment }) => {
+describe('Workbench live preview on the published backend, for an app this computer can’t run', () => {
   const conflict: PortConflict = {
     port: 5173,
     occupant: { pid: 4321, name: 'node.exe', commandLine: 'node C:\\other-app\\node_modules\\vite\\bin\\vite.js' },
@@ -1335,19 +1278,8 @@ describe.each([
     needsPush: true
   }
 
-  /** The settings, in this mode. */
-  function inMode(settings: AppSettings | null): AppSettings | null {
-    if (!localDevelopment) return settings
-    return {
-      theme: 'system',
-      ...settings,
-      experiments: { ...settings?.experiments, localDevelopment: true }
-    }
-  }
-
-  /** With Local development, the app falls back: its Rayfin version is newer than this computer runs. */
+  /** The app falls back: its Rayfin version is newer than this computer runs. */
   async function waitForFallback(): Promise<void> {
-    if (!localDevelopment) return
     await waitFor(() =>
       expect(previewProps.mock.lastCall?.[0].fallbackReason).toContain('Rayfin 1.40.0')
     )
@@ -1359,7 +1291,7 @@ describe.each([
     nextLocal(project.id, tooNew)
     const dev = api.dev
     dev.plan.mockResolvedValue({ conflict })
-    const view = render(<Workbench {...makeProps({ settings: inMode(settings) })} />, {
+    const view = render(<Workbench {...makeProps({ settings })} />, {
       wrapper: Wrapper
     })
     await screen.findByLabelText('Chat draft')
@@ -1368,18 +1300,12 @@ describe.each([
   }
 
   it('starts straight away on a free port that sign-in accepts', async () => {
-    const { api, dev } = await mount()
+    const { dev } = await mount()
     dev.plan.mockResolvedValue({ port: 5174 })
     const { turn } = await beginTurn()
     await act(async () => turn)
     expect(dev.start).toHaveBeenCalledWith(project.id, 5174)
     expect(screen.queryByRole('dialog')).toBeNull()
-    if (!localDevelopment) {
-      // No local backend without Local development.
-      expect(api.local.status).not.toHaveBeenCalled()
-      expect(api.local.start).not.toHaveBeenCalled()
-      expect(previewProps.mock.lastCall?.[0].local).toBeUndefined()
-    }
   })
 
   it('holds the turn until another port is registered and pushed, then starts on it', async () => {
@@ -1392,12 +1318,13 @@ describe.each([
       sent = true
     })
     const dialog = screen.getByRole('dialog')
-    expect(dialog.textContent).toContain('localhost:5173 is in use')
+    expect(dialog.textContent).toContain('Your live preview needs localhost:5173')
+    expect(dialog.textContent).toContain('A dev server for other-app is using it.')
     expect(dialog.textContent).toContain('node.exe')
     expect(dialog.textContent).toContain('PID 4321')
     expect(dialog.textContent).toContain('vite.js')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Use port 5174' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Use localhost:5174 instead' }))
     expect(dev.registerPort).toHaveBeenCalledWith(project.id, 5174)
     act(() => api.onProcLog.mock.calls[0][0]({ channel: 'dev:register', stream: 'system', data: 'Pushing sign-in settings\n' }))
     expect(screen.getByLabelText('Port registration log').textContent).toContain('Pushing sign-in settings')
@@ -1415,10 +1342,27 @@ describe.each([
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('stops another app on this computer that holds the address, and starts on it', async () => {
+    const { api, dev } = await mount()
+    const holder = { projectId: 'p2', name: 'Toy Story', kind: 'backend' as const }
+    dev.plan
+      .mockResolvedValueOnce({
+        conflict: { ...conflict, occupant: undefined, canStop: false, holder }
+      })
+      .mockResolvedValueOnce({ port: 5173 })
+    const { turn } = await beginTurn()
+    await act(async () => turn)
+    // It keeps running after you leave it, so it makes way, and starts again when you open it.
+    expect(api.local.stop).toHaveBeenCalledWith('p2')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(dev.freePort).not.toHaveBeenCalled()
+    expect(dev.start).toHaveBeenCalledWith(project.id, 5173)
+  })
+
   it('stops the process holding the port when asked, then starts on that port', async () => {
     const { dev } = await mount()
     const { turn } = await beginTurn()
-    fireEvent.click(screen.getByRole('button', { name: 'Stop node.exe' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop the dev server' }))
     await act(async () => turn)
     expect(dev.freePort).toHaveBeenCalledWith(5173, 4321)
     expect(dev.registerPort).not.toHaveBeenCalled()
@@ -1426,8 +1370,8 @@ describe.each([
   })
 
   it.each([
-    ['stopping', 'Stop node.exe', 'Access is denied.'],
-    ['pushing', 'Use port 5174', 'Workspace not found']
+    ['stopping', 'Stop the dev server', 'Access is denied.'],
+    ['pushing', 'Use localhost:5174 instead', 'Workspace not found']
   ])('keeps the prompt open with the reason when %s fails, and skipping still sends the turn', async (_, action, reason) => {
     const { dev } = await mount()
     dev.freePort.mockRejectedValueOnce(reason)
@@ -1447,7 +1391,7 @@ describe.each([
     const { api, dev } = await mount()
     dev.registerPort.mockResolvedValueOnce({ ok: false, outcome: 'not-signed-in', error: 'Unauthorized' })
     const { turn } = await beginTurn()
-    fireEvent.click(screen.getByRole('button', { name: 'Use port 5174' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Use localhost:5174 instead' }))
     await act(async () => turn)
     expect(api.auth.loginRayfin).toHaveBeenCalledWith(undefined, project.id)
     expect(dev.registerPort).toHaveBeenCalledTimes(2)
@@ -1478,9 +1422,9 @@ describe.each([
     })
     await act(async () => chatProps.mock.lastCall?.[0].onPlanExecutionStart?.())
     const dialog = screen.getByRole('dialog')
-    expect(screen.queryByRole('button', { name: 'Use port 5174' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Use localhost:5174 instead' })).toBeNull()
     expect(dialog.textContent).toContain('while Copilot is working')
-    fireEvent.click(screen.getByRole('button', { name: 'Stop node.exe' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop the dev server' }))
     await waitFor(() => expect(dev.start).toHaveBeenCalledWith(project.id, 5173))
     expect(dev.registerPort).not.toHaveBeenCalled()
   })
@@ -1496,7 +1440,6 @@ describe.each([
   })
 
   it.each<{ label: string; settings: AppSettings | null }>([
-    ...(localDevelopment ? [] : [{ label: 'settings are still loading', settings: null }]),
     { label: 'experiments are absent', settings: autoSettings },
     { label: 'experiments are empty', settings: { ...autoSettings, experiments: {} } },
     ...[false, true].map((localDevPreview) => ({
@@ -1634,7 +1577,7 @@ describe.each([
     const api = installApi(true)
     nextLocal(project.id, tooNew)
     api.dev.plan.mockResolvedValue({ port: 5174 })
-    const view = render(<Workbench {...makeProps({ settings: inMode(manualSettings) })} />, {
+    const view = render(<Workbench {...makeProps({ settings: manualSettings })} />, {
       wrapper: Wrapper
     })
     await screen.findByLabelText('Chat draft')
@@ -1726,7 +1669,7 @@ describe.each([
     api.dev.plan.mockResolvedValue({ port: 5174 })
     const stopped = deferred<void>()
     api.dev.stop.mockReturnValueOnce(stopped.promise)
-    render(<Workbench {...makeProps({ settings: inMode(manualSettings) })} />, {
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, {
       wrapper: Wrapper
     })
     await screen.findByLabelText('Chat draft')
@@ -1744,7 +1687,7 @@ describe.each([
 
   it('closes the live preview when publishing after each turn is turned on', async () => {
     const { dev, view } = await mountManual()
-    view.rerender(<Workbench {...makeProps({ settings: inMode(autoSettings) })} />)
+    view.rerender(<Workbench {...makeProps({ settings: autoSettings })} />)
     expect(dev.stop).toHaveBeenCalledWith(project.id)
     expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBeNull()
   })
@@ -1771,9 +1714,9 @@ describe.each([
 })
 
 /**
- * With Local development, a personal app runs on its local backend from the
- * moment it opens, through every turn: no Vite of Fabricator's own, no port
- * prompts, nothing published unless the user asks. Without it, no app has one.
+ * A personal app runs on its local backend from the moment it opens, through
+ * every turn: no Vite of Fabricator's own, no port prompts, nothing published
+ * unless the user asks.
  */
 describe('Workbench local backend', () => {
   const setTurnRunning = (pending: boolean): void =>
@@ -1788,7 +1731,7 @@ describe('Workbench local backend', () => {
     return props
   }
 
-  async function mountLocal(settings: AppSettings | null = localDevSettings) {
+  async function mountLocal(settings: AppSettings | null = defaultSettings) {
     const api = installApi(true)
     const props = makeProps({ settings })
     const view = render(<Workbench {...props} />, { wrapper: Wrapper })
@@ -1800,7 +1743,7 @@ describe('Workbench local backend', () => {
   it('starts a personal app’s backend once its packages are ready, and keeps it through turns', async () => {
     guardState.ready = false
     const api = installApi(true)
-    const props = makeProps({ settings: localDevSettings })
+    const props = makeProps({ settings: defaultSettings })
     const view = render(<Workbench {...props} />, { wrapper: Wrapper })
     await screen.findByText('Preparing Project One')
     await act(async () => {})
@@ -1846,7 +1789,7 @@ describe('Workbench local backend', () => {
       return current
     })
     nextLocal(other.id, { state: 'running', ready: localReady })
-    render(<Workbench {...makeProps({ settings: localDevSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     await waitFor(() => expect(api.local.start).toHaveBeenCalledWith(project.id, undefined))
 
@@ -1873,32 +1816,12 @@ describe('Workbench local backend', () => {
     }
     api.projects.state.mockResolvedValue(state)
     api.deploy.reconcile.mockResolvedValue(state)
-    render(<Workbench {...makeProps({ settings: localDevSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     await act(async () => {})
     expect(api.local.status).not.toHaveBeenCalled()
     expect(api.local.start).not.toHaveBeenCalled()
     expect(preview().local).toBeUndefined()
-  })
-
-  it('never starts a local backend without Local development', async () => {
-    const api = installApi(true)
-    nextLocal(project.id, { state: 'running', ready: localReady })
-    api.dev.plan.mockResolvedValue({ port: 5174 })
-    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
-    await screen.findByLabelText('Chat draft')
-    // Turns don't publish, so its live preview on the published backend runs instead.
-    await waitFor(() => expect(api.dev.start).toHaveBeenCalledWith(project.id, 5174))
-    expect(api.local.status).not.toHaveBeenCalled()
-    expect(api.local.start).not.toHaveBeenCalled()
-    expect(preview().local, 'no app on this computer').toBeUndefined()
-    expect(preview().fallbackReason).toBeNull()
-    expect(preview().localPreviewUrl).toBe('http://localhost:5174')
-
-    fireEvent.keyDown(window, { key: 'j', ctrlKey: true })
-    const facts = helpProps.mock.lastCall?.[0].facts ?? []
-    expect(facts.some((f) => f.includes('on this computer (Local)'))).toBe(false)
-    expect(facts.some((f) => f.includes('status says'))).toBe(false)
   })
 
   it('reloads the page once the backend rebuilds what it uses, after the turn that changed it', async () => {
@@ -2025,7 +1948,7 @@ describe('Workbench local backend', () => {
   it('falls back to the published backend when this computer can’t run the app, and says why', async () => {
     const api = installApi(true)
     api.dev.plan.mockResolvedValue({ port: 5174 })
-    render(<Workbench {...makeProps({ settings: localManualSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     await waitFor(() => expect(api.local.start).toHaveBeenCalledTimes(1))
     emitLocal({
@@ -2061,7 +1984,7 @@ describe('Workbench local backend', () => {
     const api = installApi(true)
     nextLocal(project.id, tooNew)
     api.dev.plan.mockResolvedValue({ port: 5174 })
-    render(<Workbench {...makeProps({ settings: localManualSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     await waitFor(() => expect(preview().localPreviewUrl).toBe('http://localhost:5174'))
     expect(api.local.start, 'known to fall back').not.toHaveBeenCalled()
@@ -2092,7 +2015,7 @@ describe('Workbench local backend', () => {
     api.projects.state.mockResolvedValue(state)
     api.deploy.reconcile.mockResolvedValue(state)
     nextLocal(project.id, tooNew)
-    render(<Workbench {...makeProps({ settings: localDevSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     await waitFor(() => expect(api.local.start).toHaveBeenCalledTimes(1))
     expect(preview().local).toBeDefined()
@@ -2112,34 +2035,6 @@ describe('Workbench local backend', () => {
     expect(preview().view).toBe('local')
     act(() => preview().onViewChange?.('published'))
     expect(preview().view).toBe('published')
-  })
-
-  it('turns Local development on and off without a restart', async () => {
-    const api = installApi(true)
-    api.dev.plan.mockResolvedValue({ port: 5174 })
-    const props = makeProps({ settings: manualSettings })
-    const view = render(<Workbench {...props} />, { wrapper: Wrapper })
-    await screen.findByLabelText('Chat draft')
-    // Off: turns don't publish, so the app's live preview runs on its published backend.
-    await waitFor(() => expect(api.dev.start).toHaveBeenCalledWith(project.id, 5174))
-    expect(api.local.start).not.toHaveBeenCalled()
-
-    // On: its local backend starts, and the preview shows the app on this computer.
-    view.rerender(<Workbench {...props} settings={localManualSettings} />)
-    await waitFor(() => expect(api.local.start).toHaveBeenCalledWith(project.id, undefined))
-    expect(api.dev.stop).toHaveBeenCalledWith(project.id)
-    emitLocal({ state: 'running', ready: localReady })
-    expect(preview().local?.state).toBe('running')
-    expect(preview().view).toBe('local')
-    expect(preview().localPreviewUrl).toBeNull()
-
-    // Off again: the local backend stops, and the live preview on the published
-    // backend starts again once it has.
-    view.rerender(<Workbench {...props} settings={manualSettings} />)
-    expect(preview().local).toBeUndefined()
-    await waitFor(() => expect(api.local.stop).toHaveBeenCalledWith(project.id))
-    await waitFor(() => expect(api.dev.start).toHaveBeenCalledTimes(2))
-    expect(api.local.start).toHaveBeenCalledTimes(1)
   })
 
   it('lets the Power BI migration refresh the accounts after signing in there', async () => {
@@ -2335,7 +2230,7 @@ describe('Workbench team workspaces', () => {
     const { api, team } = installTeamApi()
     const settings: AppSettings = {
       theme: 'system',
-      experiments: { teamWorkspaces: true, localDevelopment: true }
+      experiments: { teamWorkspaces: true }
     }
     render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
@@ -2377,7 +2272,7 @@ describe('Workbench team workspaces', () => {
     expect(api.deploy.run).not.toHaveBeenCalled()
   })
 
-  it('replaces the deployments control with Publish and never locks chat behind a deploy', async () => {
+  it('replaces the deployments control with Publish', async () => {
     installTeamApi()
     const { container } = render(<Workbench {...makeProps({ settings: teamSettings })} />, {
       wrapper: Wrapper
@@ -2388,7 +2283,6 @@ describe('Workbench team workspaces', () => {
     expect(bar.queryByRole('button', { name: 'Test deploy' })).toBeNull()
     expect(await bar.findByText('2 unpublished')).toBeTruthy()
     expect(bar.getByRole('button', { name: /^Workspace overview/ })).toBeTruthy()
-    expect(chatProps.mock.lastCall?.[0].deployLock).toBe(false)
   })
 
   it('publishes through the team pipeline', async () => {
@@ -2559,15 +2453,6 @@ describe('Workbench before the first publish', () => {
     projects: [project]
   })
 
-  /** The api, with Fabric listing no workspaces for the Publish your app step. */
-  function installPublishApi() {
-    const api = installApi(false)
-    Object.assign(api, {
-      fabric: { listWorkspaces: vi.fn().mockResolvedValue({ ok: true, workspaces: [] }) }
-    })
-    return api
-  }
-
   /** Creates `created` from Search's New project, as the core creates it. */
   async function createApp(api: ReturnType<typeof installApi>, created: StudioProject) {
     const create = vi.fn(async () => {
@@ -2590,66 +2475,9 @@ describe('Workbench before the first publish', () => {
     return create
   }
 
-  it('locks chat and Design changes until a new app is published, without Local development', async () => {
-    const api = installPublishApi()
-    const waiting = opened({ ...fresh, awaitingFirstDeploy: true })
-    api.projects.state.mockResolvedValue(waiting)
-    api.deploy.reconcile.mockResolvedValue(waiting)
-    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
-    await screen.findByLabelText('Chat draft')
-
-    const chat = chatProps.mock.lastCall![0]
-    expect(chat.project.id).toBe(fresh.id)
-    expect(chat.deployLock).toBe(true)
-    expect(previewProps.mock.lastCall?.[0].designSendBlocked).toBe('Publish your app first')
-    expect(previewProps.mock.lastCall?.[0].awaitingPublish, 'the preview points at Publish').toBe(
-      true
-    )
-
-    // The lock's Publish now opens the Publish your app step on its own.
-    act(() => chat.onRequestDeploy?.())
-    expect(await screen.findByRole('heading', { name: 'Publish your app' })).toBeTruthy()
-    expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Maybe later' }))
-    await screen.findByLabelText('Chat draft')
-    expect(chatProps.mock.lastCall?.[0].deployLock).toBe(true)
-  })
-
-  it('asks to publish a new app right after creating it, without Local development', async () => {
-    const api = installPublishApi()
-    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
-    await screen.findByTestId('home')
-    const create = await createApp(api, { ...fresh, awaitingFirstDeploy: true })
-
-    expect(create).toHaveBeenCalledTimes(1)
-    expect(await screen.findByRole('heading', { name: 'Publish your app' })).toBeTruthy()
-    expect(screen.queryByLabelText('Chat draft')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Continue without publishing →' }))
-
-    await screen.findByLabelText('Chat draft')
-    expect(chatProps.mock.lastCall?.[0].project.id).toBe(fresh.id)
-    expect(chatProps.mock.lastCall?.[0].deployLock).toBe(true)
-  })
-
-  it('never locks chat or Design changes behind a first publish with Local development', async () => {
+  it('opens a new app in the workbench as soon as it’s created', async () => {
     const api = installApi(false)
-    // Created while Local development was off, so it was waiting for a first publish.
-    const waiting = opened({ ...fresh, awaitingFirstDeploy: true })
-    api.projects.state.mockResolvedValue(waiting)
-    api.deploy.reconcile.mockResolvedValue(waiting)
-    render(<Workbench {...makeProps({ settings: localDevSettings })} />, { wrapper: Wrapper })
-    await screen.findByLabelText('Chat draft')
-
-    const chat = chatProps.mock.lastCall![0]
-    expect(chat.project.id).toBe(fresh.id)
-    expect(chat.deployLock).toBe(false)
-    expect(previewProps.mock.lastCall?.[0].designSendBlocked).toBeNull()
-    expect(previewProps.mock.lastCall?.[0].awaitingPublish).toBe(false)
-  })
-
-  it('opens a new app in the workbench as soon as it’s created with Local development', async () => {
-    const api = installApi(false)
-    render(<Workbench {...makeProps({ settings: localDevSettings })} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
     await screen.findByTestId('home')
     const create = await createApp(api, fresh)
 

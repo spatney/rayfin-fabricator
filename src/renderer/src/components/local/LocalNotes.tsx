@@ -4,7 +4,10 @@ import './local.css'
 
 const NOTICE_KEY = 'fabricator.localNotice.'
 
-/** The "now runs on this computer" notice was seen (or never needed) for the project. */
+/**
+ * The app was published before it ran on this computer, and its local data
+ * starting empty was pointed out (or never needed to be) for the project.
+ */
 export function localNoticeSeen(projectId: string): boolean {
   try {
     return localStorage.getItem(NOTICE_KEY + projectId) === '1'
@@ -19,42 +22,6 @@ export function markLocalNoticeSeen(projectId: string): void {
   } catch {
     // Without storage it shows again next time; nothing else depends on it.
   }
-}
-
-/**
- * Once, for an app that was published before it ran on this computer: its
- * local data starts empty, and the published app keeps its own.
- */
-export function PublishedAppNotice({
-  name,
-  onShowPublished,
-  onDismiss
-}: {
-  name: string
-  onShowPublished: () => void
-  onDismiss: () => void
-}): JSX.Element {
-  return (
-    <section className="local-note" aria-label="Your app runs on this computer">
-      <Codicon name="info" className="local-note-icon" />
-      <p className="local-note-text">
-        <strong>{name} now runs on this computer.</strong> Its local data starts empty. Your
-        published app and its data are unchanged.
-      </p>
-      <button type="button" className="btn btn--sm" onClick={onShowPublished}>
-        Show published app
-      </button>
-      <button
-        type="button"
-        className="icon-btn local-note-close"
-        aria-label="Dismiss"
-        title="Dismiss"
-        onClick={onDismiss}
-      >
-        <Codicon name="close" />
-      </button>
-    </section>
-  )
 }
 
 /** Why the preview uses the published app's backend instead of this computer's. */

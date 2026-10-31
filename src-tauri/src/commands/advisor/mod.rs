@@ -544,16 +544,14 @@ pub async fn advisor_collect(project_id: String) -> Result<AdvisorProjectSnapsho
   let Some(project) = store::find_project(&project_id) else {
     return Err("Project not found.".into());
   };
-  let local = runs_locally(&project, store::local_development_enabled());
+  let local = runs_locally(&project);
   Ok(collect::collect(&project.path, local).await)
 }
 
 /// Whether the bundled local backend runs the app, so the local-only quick
-/// checks apply to it: personal apps while the Local development experiment is
-/// on. Team apps run on their pipeline's backend, and every app on its Fabric
-/// deployment while the experiment is off.
-fn runs_locally(project: &StudioProject, local_development: bool) -> bool {
-  local_development && project.team.is_none()
+/// checks apply to it: personal apps. Team apps run on their pipeline's backend.
+fn runs_locally(project: &StudioProject) -> bool {
+  project.team.is_none()
 }
 
 /// Return the saved deep review (with `stale` recomputed) and the
@@ -667,9 +665,6 @@ struct RunCtx<'a> {
   root: &'a str,
   choice: ModelChoice,
   token: &'a CancelToken,
-  /// The Local development experiment is on, which changes how the prompts say
-  /// apps run and publish.
-  local_development: bool,
 }
 
 /// Deliver a project's Advisor events to the renderer.
@@ -776,7 +771,7 @@ async fn review(run: &RunCtx<'_>, request: &AdvisorRunRequest, emit: Emit) -> Ad
 
   let mut text = TextAcc::default();
   let mut activity = Activity::default();
-  let end = one_shot(run, opts, prompt::review_prompt(request, &rules, run.local_development), RUN_TIMEOUT_MS, |event_type, data| {
+  let end = one_shot(run, opts, prompt::review_prompt(request, &rules), RUN_TIMEOUT_MS, |event_type, data| {
     if let Some(tool) = activity.feed(event_type, data) {
       emit(AdvisorEvent::Activity { tool });
     }
@@ -801,7 +796,7 @@ async fn explain(
 ) -> Result<String, String> {
   let mut text = TextAcc::default();
   let opts = read_only_options(run.root);
-  let end = one_shot(run, opts, prompt::explain_prompt(finding, run.local_development), EXPLAIN_TIMEOUT_MS, |event_type, data| {
+  let end = one_shot(run, opts, prompt::explain_prompt(finding), EXPLAIN_TIMEOUT_MS, |event_type, data| {
     let chunk = text.feed(event_type, data);
     if is_narration(event_type, data) {
       on_delta(String::new(), true);
@@ -842,7 +837,7 @@ async fn verify(
   opts.tools = tools::verify_tools(ctx);
 
   let mut text = TextAcc::default();
-  let end = one_shot(run, opts, prompt::verify_prompt(findings, run.local_development), VERIFY_TIMEOUT_MS, |event_type, data| {
+  let end = one_shot(run, opts, prompt::verify_prompt(findings), VERIFY_TIMEOUT_MS, |event_type, data| {
     text.feed(event_type, data);
     is_terminal(event_type)
   })
@@ -890,7 +885,6 @@ pub async fn advisor_run(
       request.context_tier.clone(),
     ),
     token: &token,
-    local_development: store::local_development_enabled(),
   };
   let report = review(&run, &request, emit.clone()).await;
   state.end_advisor(&project_id, &token);
@@ -961,7 +955,6 @@ pub async fn advisor_explain(
     root: &project.path,
     choice,
     token: &token,
-    local_development: store::local_development_enabled(),
   };
   let result = explain(&run, &finding, |text, reset| {
     emit(AdvisorEvent::ExplainDelta { explain_id: explain_id.clone(), text, reset });
@@ -1013,7 +1006,6 @@ pub async fn advisor_verify(
     root: &project.path,
     choice,
     token: &token,
-    local_development: store::local_development_enabled(),
   };
   let result = verify(&run, &findings, &verify_id, emit.clone()).await;
   state.end_verify(&project_id, &token);
@@ -1128,7 +1120,7 @@ mod tests {
   }
 
   #[test]
-  fn the_local_only_checks_apply_to_personal_apps_with_local_development_on() {
+  fn the_local_only_checks_apply_to_personal_apps() {
     let project = |team: bool| -> StudioProject {
       let mut project: StudioProject = serde_json::from_value(json!({
         "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z"
@@ -1137,10 +1129,8 @@ mod tests {
       project.team = team.then(crate::types::TeamBinding::default);
       project
     };
-    assert!(runs_locally(&project(false), true));
-    assert!(!runs_locally(&project(false), false), "off, a personal app runs on its Fabric deployment");
-    assert!(!runs_locally(&project(true), true), "team apps run on their pipeline's backend");
-    assert!(!runs_locally(&project(true), false));
+    assert!(runs_locally(&project(false)));
+    assert!(!runs_locally(&project(true)), "team apps run on their pipeline's backend");
   }
 
   #[test]

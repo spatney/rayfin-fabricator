@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { FileNode, StudioProject, TeamManifest } from '@shared/ipc'
 import { ToastProvider } from '../../toast'
-import { LocalDevelopmentContext } from '../../localDevelopment'
 import { makeProject } from '../../../test/harness'
 import BlueprintTab from './BlueprintTab'
 import { clearFabricInfo } from './fabricInfo'
@@ -208,7 +207,6 @@ function renderTab(
     project?: StudioProject
     teamManifest?: TeamManifest
     fabricUser?: string
-    localDevelopment?: boolean
   } = {}
 ): {
   onSendToChat: ReturnType<typeof vi.fn>
@@ -220,20 +218,18 @@ function renderTab(
   const onOpenSecrets = vi.fn()
   render(
     <ToastProvider>
-      <LocalDevelopmentContext.Provider value={Boolean(over.localDevelopment)}>
-        <BlueprintTab
-          project={
-            over.project ??
-            makeProject('p1', { name: 'Contoso Expenses', workspaceName: 'Contoso Apps' })
-          }
-          refreshKey={0}
-          onOpenFile={onOpenFile}
-          onSendToChat={onSendToChat}
-          onOpenSecrets={onOpenSecrets}
-          fabricUser={'fabricUser' in over ? over.fabricUser : 'avery.chen@contoso.com'}
-          teamManifest={over.teamManifest}
-        />
-      </LocalDevelopmentContext.Provider>
+      <BlueprintTab
+        project={
+          over.project ??
+          makeProject('p1', { name: 'Contoso Expenses', workspaceName: 'Contoso Apps' })
+        }
+        refreshKey={0}
+        onOpenFile={onOpenFile}
+        onSendToChat={onSendToChat}
+        onOpenSecrets={onOpenSecrets}
+        fabricUser={'fabricUser' in over ? over.fabricUser : 'avery.chen@contoso.com'}
+        teamManifest={over.teamManifest}
+      />
     </ToastProvider>
   )
   return { onSendToChat, onOpenFile, onOpenSecrets }
@@ -478,23 +474,12 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
         }))
       }
     })
-    renderTab({ localDevelopment: true })
+    renderTab()
     fireEvent.click(screen.getByRole('tab', { name: 'Data' }))
     expect(await screen.findByRole('button', { name: 'Expense, 1 row' })).toBeTruthy()
     expect(localStorage.getItem('rayfin.model.view.p1')).toBe('local-data')
     expect(document.querySelector('.bp-head-slot')!.textContent).toContain('1 entity · 1 row')
     expect(await screen.findByText('1–1 of 1')).toBeTruthy()
-  })
-
-  it('has no Data view without Local development, even when it was the one last shown', async () => {
-    localStorage.setItem('rayfin.model.view.p1', 'local-data')
-    renderTab()
-    await screen.findByText('Contoso Expenses')
-    expect(screen.queryByRole('tab', { name: 'Data' })).toBeNull()
-    expect(screen.getByRole('tab', { name: 'Architecture' }).getAttribute('aria-selected')).toBe(
-      'true'
-    )
-    expect(screen.getByRole('tab', { name: /Data model/ })).toBeTruthy()
   })
 
   it('explains an unreadable rayfin.yml instead of drawing nothing', async () => {

@@ -1,19 +1,17 @@
 /**
  * **Preview as**: who the app in the preview signs in as on this computer.
  *
- * Where it belongs: the preview toolbar (`PreviewPane.tsx`), next to the Local /
- * Published switch (after the local status pill), and only in the Local view
- * while the local backend is running and no chat turn runs (Copilot may be
- * checking the app as someone then). The local Fabric host view (Fabric on)
- * signs the app in with the host page's own form, not as this identity, so keep
- * it disabled there:
+ * Where it belongs: the preview toolbar (`PreviewPane.tsx`), after the Local /
+ * Published switch, and only in the Local view while the local backend is
+ * running and no chat turn runs (Copilot may be checking the app as someone
+ * then):
  *
  * ```tsx
  * {localView && local?.state === 'running' && !turnRunning && (
  *   <PreviewAsMenu
  *     key={project.id}
  *     projectId={project.id}
- *     disabled={transitioning || designActive || previewMode === 'fabric'}
+ *     disabled={transitioning || designActive}
  *   />
  * )}
  * ```

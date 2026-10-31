@@ -284,7 +284,7 @@ export function SecretDetails({
 
 interface EntryDetailsProps {
   entry: SecretEntry
-  /** Reading the values on this computer; `null` without them (no Local development). */
+  /** Reading the values on this computer; `null` for an app that has none here. */
   localCheck: Check | null
   /** Reading the published app's values; `null` while the app isn't published. */
   publishedCheck: Check | null
@@ -338,8 +338,8 @@ function localHint(entry: SecretEntry, check: Check): JSX.Element | null {
 }
 
 /**
- * A personal app's secret: its value on this computer (with Local development),
- * its value on the published app once there is one, and how functions read it.
+ * A personal app's secret: its value on this computer, its value on the
+ * published app once there is one, and how functions read it.
  */
 export function EntryDetails({
   entry,
@@ -485,8 +485,7 @@ export function SecretsOverview({
   facts,
   functionsEnabled,
   team,
-  published = false,
-  local = true
+  published = false
 }: {
   /** Figures for "In this app", as (label, value). */
   facts: [string, string][]
@@ -495,9 +494,6 @@ export function SecretsOverview({
   team: boolean
   /** A personal app that has been published, so it has published values too. */
   published?: boolean
-  /** A personal app has values on this computer (with Local development). Without
-   *  them, its values live on the published app alone. */
-  local?: boolean
 }): JSX.Element {
   return (
     <aside className="skl-side skl-side--overview" aria-label="About secrets">
@@ -509,22 +505,17 @@ export function SecretsOverview({
               The published app and each person’s preview keep their own secrets. Change them in the
               Fabric portal.
             </li>
-          ) : local ? (
+          ) : (
             <li>
               Add a secret with a name and a value. The value stays on this computer, outside your
               code and History.
-            </li>
-          ) : (
-            <li>
-              Add a secret with a name and a value. Fabricator sends the value to your published
-              app; it never goes into your code or History.
             </li>
           )}
           <li>
             Your app’s functions read it by name, such as{' '}
             <code>{readExpression('OPENAI_API_KEY')}</code>.
           </li>
-          {team || !local ? (
+          {team ? (
             <li>Nobody can read a value back. To change one, set a new value.</li>
           ) : published ? (
             <li>

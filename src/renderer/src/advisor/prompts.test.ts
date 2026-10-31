@@ -76,7 +76,7 @@ describe('fixPrompt', () => {
 
   it('leaves publishing to Fabricator, whose note on the message says how the change goes live', () => {
     // The core prepends that note to every chat message: where the app runs, and
-    // whether the turn publishes, with Local development on or off.
+    // whether the turn publishes.
     for (const findings of [[MAX], [LABEL, MAX]]) {
       const { prompt } = fixPrompt(findings)
       expect(prompt).toContain(

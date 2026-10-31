@@ -458,20 +458,21 @@ async fn status_for(path: &str) -> DeployStatus {
   }
 }
 
-/// One-time Fabric-preview default applied after a successful deploy. Semantic-model
-/// apps only render correctly inside the Fabric portal shell, so the first deploy that
-/// carries a `fabric.yaml` semantic-model connection switches the preview to the
-/// embedded Fabric view — but only if the user hasn't already picked a view, and only
-/// once, so a later manual switch back to the direct view (persisted as `None`) is
-/// never re-overridden on subsequent (often after-turn) auto-deploys. Returns
-/// `Some(new_preview_mode)` to persist (marking the project defaulted), or `None` to
-/// leave the project untouched.
+/// One-time Fabric-preview default applied after a successful deploy. An app that works only inside
+/// the Fabric portal shell — its `fabric.yaml` declares semantic models (the classic Fabric
+/// embed), or its `rayfin.yml` hosts it embedded only — doesn't render as a direct page, so the
+/// first deploy of one switches the preview to the embedded Fabric view — but only if the user
+/// hasn't already picked a view, and only once, so a later manual switch back to the direct view
+/// (persisted as `None`) is never re-overridden on subsequent (often after-turn) auto-deploys.
+/// Semantic model connectors query through the app's backend and need no Fabric view. Returns
+/// `Some(new_preview_mode)` to persist (marking the project defaulted), or `None` to leave the
+/// project untouched.
 fn fabric_preview_after_deploy(
   preview_mode: Option<&str>,
   already_defaulted: bool,
-  has_semantic_models: bool,
+  needs_fabric_portal: bool,
 ) -> Option<Option<String>> {
-  if already_defaulted || !has_semantic_models {
+  if already_defaulted || !needs_fabric_portal {
     return None;
   }
   // Adopt the Fabric view when the user hasn't chosen one; otherwise keep their
@@ -807,21 +808,16 @@ async fn run_deploy_inner(
     });
   }
 
-  // Projects from before local-first may still carry the retired first-deploy
-  // flag; a successful publish clears it.
-  store::mutate_project(&project_id, |p| p.awaiting_first_deploy = None);
-
-  // Semantic-model apps render correctly only inside the Fabric portal shell, so the
-  // first successful deploy that carries a `fabric.yaml` semantic-model connection
-  // defaults the preview to the embedded Fabric view (a one-time default; see
+  // An app that works only inside the Fabric portal shell (`fabric.yaml` semantic models, or
+  // hosted embedded only) doesn't render as a direct page, so the first successful deploy of
+  // one defaults the preview to the embedded Fabric view (a one-time default; see
   // `fabric_preview_after_deploy`).
-  let has_semantic_models =
-    !crate::commands::fabric::read_project_semantic_models(Path::new(&project.path)).is_empty();
+  let needs_fabric_portal = crate::commands::fabric::needs_fabric_portal(Path::new(&project.path));
   store::mutate_project(&project_id, |p| {
     if let Some(mode) = fabric_preview_after_deploy(
       p.preview_mode.as_deref(),
       p.fabric_preview_defaulted == Some(true),
-      has_semantic_models,
+      needs_fabric_portal,
     ) {
       p.preview_mode = mode;
       p.fabric_preview_defaulted = Some(true);
@@ -1009,8 +1005,6 @@ pub async fn deploy_reconcile(project_id: String) -> ProjectsState {
         p.last_deploy = Some(deploy);
         p.workspace = workspace;
         p.workspace_name = ws_name;
-        // A recorded deployment exists: clear the retired first-deploy flag too.
-        p.awaiting_first_deploy = None;
       });
     }
     None => {
@@ -1103,11 +1097,7 @@ pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String
 
   {
     let w = workspace.clone();
-    store::mutate_project(&project_id, move |p| {
-      p.workspace = Some(w);
-      // Switching proves a deployment exists: clear the retired first-deploy flag too.
-      p.awaiting_first_deploy = None;
-    });
+    store::mutate_project(&project_id, move |p| p.workspace = Some(w));
   }
   {
     let (url, api, portal) = (url.clone(), api.clone(), portal.clone());
@@ -1607,11 +1597,11 @@ mod tests {
   }
 
   #[test]
-  fn fabric_preview_after_deploy_switches_once_for_semantic_apps() {
-    // No semantic models → never touch the project's preview mode.
+  fn fabric_preview_after_deploy_switches_once_for_fabric_portal_apps() {
+    // An app that works outside the Fabric portal → never touch the project's preview mode.
     assert_eq!(fabric_preview_after_deploy(None, false, false), None);
     assert_eq!(fabric_preview_after_deploy(Some("fabric"), false, false), None);
-    // First deploy with a connected model and no explicit view → adopt Fabric.
+    // First deploy of an app that needs the portal, with no explicit view → adopt Fabric.
     assert_eq!(fabric_preview_after_deploy(None, false, true), Some(Some("fabric".to_string())));
     // Already defaulted once → never override again, even though a later manual
     // switch to the direct view is persisted as `None` (indistinguishable from unset).

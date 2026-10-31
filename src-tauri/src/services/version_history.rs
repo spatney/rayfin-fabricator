@@ -4,12 +4,12 @@
 //! Fabricator keeps every app's versions in git: History lists them, Restore
 //! brings one back, each deploy records which one is live, and the check after
 //! a chat turn compares the code with that live version to decide whether to
-//! redeploy. With the Local development experiment on, a chat turn that
-//! changes a personal app also saves a version of it ([`save_version`]), named
-//! after what the user asked ([`turn_message`]), so History can go back turn
-//! by turn. Apps Fabricator creates get a repository right away, but a folder
-//! opened from disk may have none, and then all of that fails — the after-turn
-//! check with "fatal: not a git repository" after every single turn.
+//! redeploy. A chat turn that changes a personal app also saves a version of it
+//! ([`save_version`]), named after what the user asked ([`turn_message`]), so
+//! History can go back turn by turn. Apps Fabricator creates get a repository
+//! right away, but a folder opened from disk may have none, and then all of that
+//! fails — the after-turn check with "fatal: not a git repository" after every
+//! single turn.
 //!
 //! [`ensure_tracked`] gives such a folder a repository, carefully:
 //!

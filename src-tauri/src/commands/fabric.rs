@@ -797,6 +797,38 @@ pub(crate) fn read_project_semantic_models(project_dir: &Path) -> Vec<SemanticMo
   models
 }
 
+/// The project's `fabric.yaml` declares semantic models: the classic Fabric
+/// embed (fabric-app-data), which the app queries from the browser as each
+/// person. Those queries work only inside the Fabric portal shell, unlike a
+/// `fabric-semanticmodel` connector's, which run through the app's backend.
+fn has_fabric_yaml_models(project_dir: &Path) -> bool {
+  std::fs::read_to_string(project_dir.join("fabric.yaml"))
+    .map(|text| !parse_semantic_models_yaml(&text).is_empty())
+    .unwrap_or(false)
+}
+
+/// The project's `rayfin.yml` hosts the app embedded only
+/// (`services.staticHosting.embedded.only`): it opens only inside the Fabric
+/// portal, with no page of its own.
+fn hosted_embedded_only(project_dir: &Path) -> bool {
+  let rayfin = project_dir.join("rayfin");
+  let Ok(text) = std::fs::read_to_string(rayfin.join("rayfin.yml"))
+    .or_else(|_| std::fs::read_to_string(rayfin.join("rayfin.yaml")))
+  else {
+    return false;
+  };
+  let Ok(root) = serde_yaml::from_str::<serde_yaml::Value>(&text) else { return false };
+  let only = &root["services"]["staticHosting"]["embedded"]["only"];
+  only.as_bool() == Some(true) || only.as_str() == Some("true")
+}
+
+/// The published app works only inside the Fabric portal shell, so the preview
+/// offers its Fabric view: its `fabric.yaml` declares semantic models, or its
+/// `rayfin.yml` hosts it embedded only.
+pub(crate) fn needs_fabric_portal(project_dir: &Path) -> bool {
+  has_fabric_yaml_models(project_dir) || hosted_embedded_only(project_dir)
+}
+
 /// One `rayfin.yml` connector — only the fields we read.
 #[derive(Deserialize)]
 struct RayfinConnector {
@@ -1294,6 +1326,42 @@ connectors:
     let _ = std::fs::remove_dir_all(&dir);
     let aliases: Vec<&str> = models.iter().map(|m| m.alias.as_str()).collect();
     assert_eq!(aliases, vec!["finance", "sales"]);
+  }
+
+  #[test]
+  fn the_fabric_portal_is_needed_for_fabric_yaml_models_or_embedded_only_hosting() {
+    let dir = std::env::temp_dir().join(format!("fab-portal-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(dir.join("rayfin")).unwrap();
+    let rayfin_yml = |hosting: &str| {
+      std::fs::write(
+        dir.join("rayfin").join("rayfin.yml"),
+        format!(
+          "connectors:\n  - name: sales\n    type: fabric-semanticmodel\n    config:\n      workspaceId: ws-1\n      itemId: ds-1\n{hosting}"
+        ),
+      )
+      .unwrap()
+    };
+    rayfin_yml("");
+    let connectors_only = needs_fabric_portal(&dir);
+    std::fs::write(dir.join("fabric.yaml"), "activeProfile: default\nprofiles:\n  default: {}\n").unwrap();
+    let no_models = needs_fabric_portal(&dir);
+    std::fs::write(
+      dir.join("fabric.yaml"),
+      "activeProfile: d\nprofiles:\n  d:\n    semanticModels:\n      finance:\n        workspaceId: ws-2\n        itemId: ds-2\n",
+    )
+    .unwrap();
+    let classic = needs_fabric_portal(&dir);
+    std::fs::remove_file(dir.join("fabric.yaml")).unwrap();
+    rayfin_yml("services:\n  staticHosting:\n    enabled: true\n    embedded:\n      only: true\n");
+    let embedded_only = needs_fabric_portal(&dir);
+    rayfin_yml("services:\n  staticHosting:\n    enabled: true\n    embedded:\n      only: false\n");
+    let standalone = needs_fabric_portal(&dir);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(!connectors_only, "a semantic model connector queries through the backend");
+    assert!(!no_models, "a fabric.yaml without models");
+    assert!(classic, "fabric.yaml semantic models");
+    assert!(embedded_only, "hosted embedded only");
+    assert!(!standalone);
   }
 
   #[test]

@@ -11,7 +11,7 @@ use crate::commands::util::{looks_binary, safe_resolve};
 use crate::services::exec::RunOptions;
 use crate::services::git::run;
 use crate::services::journal::{self, Area, Level};
-use crate::services::store::{self, find_project};
+use crate::services::store::find_project;
 use crate::services::version_history;
 use crate::types::{
   GitChange, GitCommitResult, GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus,
@@ -170,17 +170,16 @@ pub async fn git_commit(id: String, message: String) -> GitCommitResult {
   GitCommitResult { ok: true, error: None, status: git_status(id).await }
 }
 
-/// After a chat turn that changed a personal app, with the Local development
-/// experiment on: save what it changed as a version, named after what the user
-/// asked (`request`), so History lists one per turn and Restore goes back turn
-/// by turn. Nothing else saves a turn while chat turns don't publish. Without
-/// Local development a turn's changes are saved when they're published, as
-/// before, and a team app saves each turn to its working branch instead.
+/// After a chat turn that changed a personal app: save what it changed as a
+/// version, named after what the user asked (`request`), so History lists one
+/// per turn and Restore goes back turn by turn. Nothing else saves a turn while
+/// chat turns don't publish. A team app saves each turn to its working branch
+/// instead.
 pub async fn git_save_turn(id: String, request: String) -> SavedTurn {
   let Some(project) = find_project(&id) else {
     return SavedTurn { commit: None, error: Some("Project not found.".into()) };
   };
-  if project.team.is_some() || !store::local_development_enabled() {
+  if project.team.is_some() {
     return SavedTurn::default();
   }
   let message = version_history::turn_message(&request, &format!("Update {}", project.name));

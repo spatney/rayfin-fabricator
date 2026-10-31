@@ -1,7 +1,7 @@
 //! Reports a project's local Rayfin toolchain version — the `@microsoft/rayfin-*`
 //! CLI and SDK packages pinned in its package.json — whether a newer stable
 //! release is available on npm, and the newest one the bundled local backend
-//! runs, where upgrades stop while the Local development experiment is on.
+//! runs, where a personal app's upgrades stop.
 //!
 //! The app never upgrades these itself: when an update exists, Fabricator
 //! hands a prepared prompt to the Copilot agent (which edits package.json and runs

@@ -1312,13 +1312,25 @@ export interface PortOccupant {
   commandLine?: string
 }
 
+/** Another project in this window that holds a port the live preview needs. */
+export interface PortHolder {
+  projectId: string
+  /** The project's name. */
+  name: string
+  /**
+   * `backend`: its local backend, which runs the app on this computer.
+   * `preview`: its live preview, which runs while Copilot works on it.
+   */
+  kind: 'backend' | 'preview'
+}
+
 /** Why the live preview can't start on a sign-in-ready port, and the ways out. */
 export interface PortConflict {
   /** The preferred registered port that is taken. */
   port: number
   occupant?: PortOccupant
-  /** Another project in this window whose live preview holds `port`. */
-  ownProject?: string
+  /** Another project in this window holds `port`. */
+  holder?: PortHolder
   /** Fabricator may offer to stop `occupant`. */
   canStop: boolean
   /** The next free port to register instead. */
@@ -1544,14 +1556,6 @@ export interface StudioProject {
    * workspace they live in.
    */
   deploymentNames?: Record<string, string>
-  /**
-   * Set on a project created in-app while the Local development experiment is
-   * off: it has never been published, and chat stays locked until its first
-   * publish, which clears it. Never set for projects opened from disk or created
-   * with Local development on, and ignored while it's on, when apps run on this
-   * computer from the start. Team apps aren't gated.
-   */
-  awaitingFirstDeploy?: boolean
   /** Copilot model id for this project's chat (`--model`); undefined = auto. */
   model?: string
   /** Copilot reasoning effort for this project's chat (`--effort`). */
@@ -1565,9 +1569,16 @@ export interface StudioProject {
    * portal shell ({@link DeployInfo.portalUrl}); absent / `'direct'` shows the
    * direct app URL. Persisted (rather than kept in the renderer alone) so the
    * Fabricator agent's screenshot/navigate tools honour the same view the user
-   * is looking at.
+   * is looking at. Honoured only for an app that {@link needsFabricPortal}.
    */
   previewMode?: PreviewMode
+  /**
+   * The published app works only inside the Fabric portal shell: its
+   * `fabric.yaml` declares semantic models (the classic Fabric embed), or its
+   * `rayfin.yml` hosts it embedded only. Read from its folder when projects are
+   * listed. Only such an app offers the preview's Fabric view, on its published app.
+   */
+  needsFabricPortal?: boolean
   /**
    * Set when the project lives in a GitHub-backed team workspace (experimental).
    * Team projects are deployed by the workspace's pipeline, never locally.
@@ -1606,8 +1617,7 @@ export interface AppSettings {
    * How chat turns publish personal apps, set by the published apps panel's
    * "Publish after each chat turn" switch: 'auto' publishes as each turn
    * finishes; 'manual' keeps chat changes on this computer until the user
-   * publishes them. The user's choice always wins. Unset, it follows the Local
-   * development experiment: turns publish while it's off, and don't while it's on
+   * publishes them. The user's choice always wins; unset, turns don't publish
    * (the renderer's `publishesAfterTurn`, the core's `store::is_manual_deploy`).
    * Team apps aren't affected.
    */
@@ -1699,13 +1709,6 @@ export interface ExperimentFlags {
    * page by page.
    */
   reportMigration?: boolean
-  /**
-   * Local development: personal apps run on this computer with the bundled
-   * local backend from creation, and publishing to Fabric is optional. Off:
-   * apps are developed against their Fabric deployment. Team apps aren't
-   * affected.
-   */
-  localDevelopment?: boolean
 }
 
 export interface CreateProjectInput {
@@ -1923,6 +1926,8 @@ export interface FileContent {
   tooLarge?: boolean
   /** Populated when the read failed. */
   error?: string
+  /** True when the file doesn't exist (any longer), such as one deleted since it was opened. */
+  missing?: boolean
 }
 
 /* ------------------------------------------------------------------ *
@@ -2091,9 +2096,8 @@ export interface RayfinVersionInfo {
   /**
    * The newest stable release within the Rayfin versions the bundled local
    * backend runs (`rayfin-local.json` `sdk.supported`), for the headline
-   * package; Rayfin's packages ship in lockstep. While the Local development
-   * experiment is on, upgrades stop here. Absent when npm couldn't list the
-   * releases or none is in the range.
+   * package; Rayfin's packages ship in lockstep. A personal app's upgrades stop
+   * here. Absent when npm couldn't list the releases or none is in the range.
    */
   latestSupportedLocally?: string
 }
@@ -3275,11 +3279,10 @@ export interface RayfinStudioApi {
       /** Stage everything and commit; resolves with the post-commit status. */
       commit: (id: string, message: string) => Promise<GitCommitResult>
       /**
-       * With the Local development experiment on, after a chat turn that
-       * changed a personal app: save its changes as a version named after what
-       * the user asked (`request`, trimmed to a commit subject), never the
-       * local backend's `.rayfin-local`. Does nothing for team apps, and
-       * without Local development, where a publish saves the changes.
+       * After a chat turn that changed a personal app: save its changes as a
+       * version named after what the user asked (`request`, trimmed to a
+       * commit subject), never the local backend's `.rayfin-local`. Does
+       * nothing for team apps.
        */
       saveTurn: (id: string, request: string) => Promise<SavedTurn>
       /** The project's commit timeline + uncommitted-change count (History view). */
@@ -4271,9 +4274,8 @@ export interface LocalSecret {
 /**
  * Why a `window.api.local` command failed. `code` is stable: the control API's
  * own codes, or `not-running`, `project-not-found`, `invalid`, `unreachable`,
- * `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed`, `experiment-off`
- * (the Local development experiment is off) and the `binary-*` codes of
- * {@link LocalProblemCode}.
+ * `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed` and the
+ * `binary-*` codes of {@link LocalProblemCode}.
  */
 export interface LocalCommandError {
   code: string

@@ -240,6 +240,16 @@ function FilesView({
     if (target) setSelectedState({ projectId: project.id, path: target.path })
   }, [project.id, tree, selected])
 
+  // A file that no longer exists, remembered from an earlier visit or asked for
+  // by a link, opens the Rayfin config instead, as a first visit does.
+  const missing = Boolean(file?.missing && file.path === selected)
+  useEffect(() => {
+    if (!missing || !tree) return
+    const config = findFile(tree, (n) => DEFAULT_FILES.includes(n.path.toLowerCase()))?.path ?? null
+    pendingLineRef.current = null
+    setSelectedState({ projectId: project.id, path: config !== selected ? config : null })
+  }, [missing, tree, selected, project.id])
+
   useEffect(() => {
     if (selected) void readPath(selected)
   }, [refreshKey, selected, readPath])
@@ -325,7 +335,7 @@ function FilesView({
         <div className="code-body">
           {!selected ? (
             <div className="code-empty">Select a file to view its code.</div>
-          ) : loading ? (
+          ) : loading || missing ? (
             <div className="code-empty">Loading…</div>
           ) : file?.error ? (
             <div className="code-empty code-empty--err">{file.error}</div>

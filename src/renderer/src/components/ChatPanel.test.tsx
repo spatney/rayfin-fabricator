@@ -1009,12 +1009,12 @@ describe('ChatPanel submit-pause while deploying', () => {
 })
 
 describe('ChatPanel before the first publish', () => {
-  it('builds an app that has never been published when nothing locks it', async () => {
+  it('builds an app that has never been published', async () => {
     const onTurnStart = vi.fn()
     await act(async () => {
       render(
         <ChatPanel
-          project={makeProject('p1', { lastDeploy: undefined, awaitingFirstDeploy: true })}
+          project={makeProject('p1', { lastDeploy: undefined })}
           messages={[]}
           onChange={() => {}}
           draft=""
@@ -1022,11 +1022,7 @@ describe('ChatPanel before the first publish', () => {
         />
       )
     })
-    expect(screen.queryByText(/Publish your app/)).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Publish now' })).toBeNull()
-
     const ta = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
-    expect(ta.disabled).toBe(false)
     await act(async () => {
       fireEvent.change(ta, { target: { value: 'Add a task list' } })
     })
@@ -1037,62 +1033,6 @@ describe('ChatPanel before the first publish', () => {
     expect(
       (window as unknown as { api: { chat: { send: ReturnType<typeof vi.fn> } } }).api.chat.send
     ).toHaveBeenCalled()
-  })
-
-  // Without Local development, a new app is published before chat starts.
-  it('locks chat until the app is published, and offers to publish it', async () => {
-    const onTurnStart = vi.fn()
-    const onRequestDeploy = vi.fn()
-    const project = makeProject('p1', {
-      name: 'Trip Logger',
-      lastDeploy: undefined,
-      awaitingFirstDeploy: true
-    })
-    const panel = (deploying: boolean): JSX.Element => (
-      <ChatPanel
-        project={project}
-        messages={[]}
-        onChange={() => {}}
-        draft="Add a task list"
-        onTurnStart={onTurnStart}
-        deployLock
-        deploying={deploying}
-        onRequestDeploy={onRequestDeploy}
-      />
-    )
-    let view!: ReturnType<typeof render>
-    await act(async () => {
-      view = render(panel(false))
-    })
-
-    const gate = screen.getByRole('status')
-    expect(gate.textContent).toContain('Publish your app to start building')
-    expect(gate.textContent).toContain('Chat is locked until Trip Logger is published.')
-    const ta = screen.getByPlaceholderText(
-      'Publish your app to start chatting…'
-    ) as HTMLTextAreaElement
-    expect(ta.disabled).toBe(true)
-    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(
-      (screen.getByRole('button', { name: 'Add images, files or data' }) as HTMLButtonElement)
-        .disabled
-    ).toBe(true)
-    await act(async () => {
-      fireEvent.keyDown(ta, { key: 'Enter' })
-    })
-    expect(onTurnStart).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Publish now' }))
-    expect(onRequestDeploy).toHaveBeenCalledTimes(1)
-
-    view.rerender(panel(true))
-    expect(screen.getByRole('status').textContent).toContain('Publishing your app…')
-    expect(screen.getByRole('status').textContent).toContain(
-      'Chat unlocks as soon as Trip Logger is live.'
-    )
-    expect(
-      (screen.getByRole('button', { name: 'Publishing…' }) as HTMLButtonElement).disabled
-    ).toBe(true)
   })
 })
 
@@ -1548,9 +1488,11 @@ describe('ChatPanel Advisor fixes', () => {
     const rows = card.querySelectorAll('.adv-fix-row')
     expect(rows).toHaveLength(2)
     expect(rows[0].textContent).toContain('Text field has no maximum length×2')
-    expect(rows[0].textContent).toContain('Data model·rayfin/data/Todo.ts:7')
+    // The place is the file's name and line; its full path is the tooltip.
+    expect(rows[0].textContent).toContain('Data model·Todo.ts:7')
+    expect(within(rows[0] as HTMLElement).getByTitle('rayfin/data/Todo.ts:7')).toBeTruthy()
     expect(within(rows[0] as HTMLElement).getByRole('img', { name: 'High severity' })).toBeTruthy()
-    expect(rows[1].textContent).toContain('Accessibility·src/App.tsx:12')
+    expect(rows[1].textContent).toContain('Accessibility·App.tsx:12')
     // The card replaces the bubble; the full prompt sits behind a disclosure.
     expect(document.querySelector('.user-bubble')).toBeNull()
     expect(card.querySelector('details pre')?.textContent).toBe(PROMPT)
@@ -1567,8 +1509,12 @@ describe('ChatPanel Advisor fixes', () => {
     const { rerender } = render(<AdvisorHarness initial={sent()} links={links} />)
     const card = screen.getByRole('group', { name: 'Advisor issues to fix (2)' })
     expect(within(card).getByText('1 of 2 fixed')).toBeTruthy()
-    expect(within(card).getByText('Fixed')).toBeTruthy()
-    expect(within(card).getByText('Still detected')).toBeTruthy()
+    // A fixed issue's severity dot turns into a check; the others say where they stand.
+    const [maxRow, labelRow] = Array.from(card.querySelectorAll<HTMLElement>('.adv-fix-row'))
+    expect(within(maxRow).getByRole('img', { name: 'Fixed' })).toBeTruthy()
+    expect(within(maxRow).queryByRole('img', { name: 'High severity' })).toBeNull()
+    expect(within(labelRow).getByText('Still detected')).toBeTruthy()
+    expect(within(labelRow).getByRole('img', { name: 'Medium severity' })).toBeTruthy()
 
     fireEvent.click(within(card).getByRole('button', { name: /Form control has no label/ }))
     expect(show).toHaveBeenCalledWith(LABEL.id)
@@ -1576,7 +1522,8 @@ describe('ChatPanel Advisor fixes', () => {
     outcomes[LABEL.id] = 'fixed'
     rerender(<AdvisorHarness initial={sent()} links={{ ...links }} />)
     expect(within(card).getByText('All 2 fixed')).toBeTruthy()
-    expect(within(card).getAllByText('Fixed')).toHaveLength(2)
+    expect(within(card).getAllByRole('img', { name: 'Fixed' })).toHaveLength(2)
+    expect(within(card).queryByText('Still detected')).toBeNull()
   })
 
   it('folds a long list behind “Show more”', async () => {

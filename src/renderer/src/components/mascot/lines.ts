@@ -85,12 +85,11 @@ export const QUIPS: readonly string[] = [
 ]
 
 /**
- * What Ray keeps you company through: creating an app (`create`, which a first
- * publish follows; `create-local`, which runs on this computer with Local
- * development; `team`, in a team workspace), cloning one, or installing an
+ * What Ray keeps you company through: creating an app (`create`, which runs on
+ * this computer; `team`, in a team workspace), cloning one, or installing an
  * opened app's packages.
  */
-export type Occasion = 'create' | 'create-local' | 'team' | 'clone' | 'prepare'
+export type Occasion = 'create' | 'team' | 'clone' | 'prepare'
 
 export function pickLine<T>(items: readonly T[], random: () => number = Math.random): T {
   return items[Math.min(items.length - 1, Math.floor(random() * items.length))]
@@ -115,7 +114,6 @@ export function greeting(
   ]
   const lines: Record<Occasion, readonly string[]> = {
     create,
-    'create-local': create,
     team: create,
     clone: [
       'Cloning, nice. I’ll keep you company while the packages arrive.',
@@ -131,8 +129,7 @@ export function greeting(
 
 export function successLine(occasion: Occasion): MascotLine {
   const text: Partial<Record<Occasion, string>> = {
-    'create-local': 'Your app is ready! It runs right here on your computer. Let’s build.',
-    create: 'Your app is ready! Next, pick a Fabric workspace to publish it.',
+    create: 'Your app is ready! It runs right here on your computer. Let’s build.',
     team: 'Your app is ready! The team pipeline is deploying your first preview.'
   }
   return { kind: 'chat', text: text[occasion] ?? 'All set! Your app is ready.' }

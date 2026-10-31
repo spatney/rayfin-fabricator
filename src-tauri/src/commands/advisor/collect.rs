@@ -241,9 +241,8 @@ fn rayfin_packages(root: &Path) -> Vec<AdvisorPackage> {
 }
 
 /// Build the quick-check snapshot for the project at `root`. `local`: the
-/// bundled local backend runs the app (personal apps while the Local
-/// development experiment is on), so the snapshot carries the Rayfin releases
-/// it runs and the local-only checks apply.
+/// bundled local backend runs the app (personal apps), so the snapshot carries
+/// the Rayfin releases it runs and the local-only checks apply.
 pub(crate) async fn collect(root: &str, local: bool) -> AdvisorProjectSnapshot {
   let root_path = Path::new(root).to_path_buf();
   let is_git_repo = root_path.join(".git").exists();

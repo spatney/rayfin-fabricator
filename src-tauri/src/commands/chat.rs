@@ -59,31 +59,28 @@ const TURN_TIMEOUT_MS: u64 = 2 * 60 * 60_000;
 const LOCAL_NOTE: &str = "[Fabricator: this app runs on this computer. Publish after each chat turn is off, so your changes stay here until the user publishes them.]";
 /// Fabricator runs the app on this computer, and publishes it after each turn.
 const LOCAL_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app runs on this computer. Publish after each chat turn is on, so Fabricator also publishes the app to Microsoft Fabric when this turn ends.]";
+/// Fabricator runs the app on this computer, and it was never published. Turns
+/// don't publish it whatever Publish after each chat turn says: the first
+/// publish is the user's, who chooses where the app goes.
+const LOCAL_UNPUBLISHED_NOTE: &str = "[Fabricator: this app runs on this computer and hasn't been published yet, so your changes stay here until the user publishes it.]";
 /// A published app the local backend can't run all of (the Fabric-backed
 /// guidance), whose turns don't publish.
 const FALLBACK_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric, because the local backend can't run all of it. The preview shows your frontend changes against the published backend. Publish after each chat turn is off, so changes to data, permissions or functions reach that backend only once the user publishes. End by saying what to try in the preview and whether it needs a publish first.]";
 /// A published app the local backend can't run all of, published after each turn.
 const FALLBACK_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric, because the local backend can't run all of it. Publish after each chat turn is on, so Fabricator publishes the app when this turn ends, and the preview then shows the result.]";
-/// The Local development experiment is off, so the app is developed against its
-/// published backend (the Fabric-backed guidance), and turns don't publish.
-const FABRIC_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric. Publish after each chat turn is off, so Fabricator doesn't publish when this turn ends: your changes stay on this computer until the user publishes them. The preview shows your frontend changes as you make them, but against the published backend, so changes to data, permissions or functions work there only after a publish. End by saying what to try in the preview and whether it needs a publish first.]";
-/// The Local development experiment is off, and Fabricator publishes after each turn.
-const FABRIC_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric. Publish after each chat turn is on, so Fabricator publishes the app when this turn ends, and the preview then shows the result.]";
 
 /// The text sent to Copilot for a chat message in `project`, with the note on
-/// how its changes go live. `local_development`: the Local development
-/// experiment is on, so a Fabric-backed app is one the local backend can't run.
-fn turn_text(project: &StudioProject, text: &str, guidance: Guidance, local_development: bool, manual_publish: bool) -> String {
+/// how its changes go live.
+fn turn_text(project: &StudioProject, text: &str, guidance: Guidance, manual_publish: bool) -> String {
   if project.team.is_some() {
     return crate::services::team::chat_text(&project.id, text);
   }
-  let note = match (guidance, local_development, manual_publish) {
-    (Guidance::Local, _, true) => LOCAL_NOTE,
-    (Guidance::Local, _, false) => LOCAL_AUTO_PUBLISH_NOTE,
-    (Guidance::FabricBacked, true, true) => FALLBACK_NOTE,
-    (Guidance::FabricBacked, true, false) => FALLBACK_AUTO_PUBLISH_NOTE,
-    (Guidance::FabricBacked, false, true) => FABRIC_NOTE,
-    (Guidance::FabricBacked, false, false) => FABRIC_AUTO_PUBLISH_NOTE,
+  let note = match (guidance, manual_publish) {
+    (Guidance::Local, true) => LOCAL_NOTE,
+    (Guidance::Local, false) if !agent_skills::is_published(project) => LOCAL_UNPUBLISHED_NOTE,
+    (Guidance::Local, false) => LOCAL_AUTO_PUBLISH_NOTE,
+    (Guidance::FabricBacked, true) => FALLBACK_NOTE,
+    (Guidance::FabricBacked, false) => FALLBACK_AUTO_PUBLISH_NOTE,
   };
   format!("{note}\n\n{text}")
 }
@@ -732,15 +729,9 @@ pub(crate) async fn run_turn(
 
   // The guidance and Fabricator's in-process tools fit where the app's backend
   // runs (see `agent_skills::guidance_for`): on this computer, with the local
-  // backend tools beside the semantic-model ones, or on Microsoft Fabric, which
-  // is where every app's runs while the Local development experiment is off.
-  // The session is resumed with another set when that changes.
-  let local_development = store::local_development_enabled();
-  let guidance = agent_skills::guidance_for(
-    &project,
-    &crate::services::local_backend::snapshot(&app, &project_id),
-    local_development,
-  );
+  // backend tools beside the semantic-model ones, or on Microsoft Fabric. The
+  // session is resumed with another set when that changes.
+  let guidance = agent_skills::guidance_for(&project, &crate::services::local_backend::snapshot(&app, &project_id));
   let fab_tools = crate::services::agent_tools::fabricator_tools(app.clone(), project_id.clone(), guidance);
 
   // Your own API keys: every session gets the provider registry so
@@ -914,7 +905,7 @@ pub(crate) async fn run_turn(
     let opts = match continuation {
       Some(prompt) => MessageOptions::new(prompt.to_string()),
       None => {
-        let opts = MessageOptions::new(turn_text(&project, &text, guidance, local_development, store::manual_deploy_enabled()));
+        let opts = MessageOptions::new(turn_text(&project, &text, guidance, store::manual_deploy_enabled()));
         if attach.is_empty() { opts } else { opts.with_attachments(attach.clone()) }
       }
     };
@@ -1485,26 +1476,24 @@ mod tests {
   #[test]
   fn each_message_says_where_the_app_runs_and_whether_the_turn_publishes() {
     let project: StudioProject = serde_json::from_value(json!({
-      "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z"
+      "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z",
+      "lastDeploy": { "url": "https://app.example", "status": "success" }
     }))
     .unwrap();
-    // Local development on: the app runs here, or falls back to its published backend.
-    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true, true), format!("{LOCAL_NOTE}\n\nAdd a list"));
-    assert!(turn_text(&project, "x", Guidance::Local, true, false).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, true).starts_with(FALLBACK_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, false).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
-    // Off: every personal app is developed against its published backend, as before.
-    assert_eq!(turn_text(&project, "Add a list", Guidance::FabricBacked, false, true), format!("{FABRIC_NOTE}\n\nAdd a list"));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, false, false).starts_with(FABRIC_AUTO_PUBLISH_NOTE));
+    // The app runs here, or falls back to its published backend.
+    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true), format!("{LOCAL_NOTE}\n\nAdd a list"));
+    assert!(turn_text(&project, "x", Guidance::Local, false).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, true).starts_with(FALLBACK_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, false).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
+    // Never published: no turn publishes it, even with publishing after each turn on.
+    let mut unpublished = project.clone();
+    unpublished.last_deploy = None;
+    assert!(turn_text(&unpublished, "x", Guidance::Local, false).starts_with(LOCAL_UNPUBLISHED_NOTE));
+    assert!(turn_text(&unpublished, "x", Guidance::Local, true).starts_with(LOCAL_NOTE));
     assert!(LOCAL_NOTE.contains("runs on this computer") && LOCAL_NOTE.contains("Publish after each chat turn is off"));
+    assert!(LOCAL_UNPUBLISHED_NOTE.contains("hasn't been published yet") && !LOCAL_UNPUBLISHED_NOTE.contains("when this turn ends"));
     assert!(FALLBACK_NOTE.contains("published backend") && FALLBACK_NOTE.contains("whether it needs a publish first"));
-    assert!(FABRIC_NOTE.contains("Publish after each chat turn is off") && FABRIC_NOTE.contains("whether it needs a publish first"));
-    assert!(FABRIC_AUTO_PUBLISH_NOTE.contains("Publish after each chat turn is on") && FABRIC_AUTO_PUBLISH_NOTE.contains("publishes the app when this turn ends"));
-    for note in [FABRIC_NOTE, FABRIC_AUTO_PUBLISH_NOTE] {
-      // Nothing about the local backend while the experiment is off.
-      assert!(!note.contains("local backend") && !note.contains("runs on this computer"), "{note}");
-    }
-    for note in [LOCAL_NOTE, LOCAL_AUTO_PUBLISH_NOTE, FALLBACK_NOTE, FALLBACK_AUTO_PUBLISH_NOTE, FABRIC_NOTE, FABRIC_AUTO_PUBLISH_NOTE] {
+    for note in [LOCAL_NOTE, LOCAL_AUTO_PUBLISH_NOTE, LOCAL_UNPUBLISHED_NOTE, FALLBACK_NOTE, FALLBACK_AUTO_PUBLISH_NOTE] {
       assert!(note.starts_with("[Fabricator: ") && note.ends_with(']'), "{note}");
       // Publishing is what the UI calls it: no note talks about deploying.
       assert!(!note.to_lowercase().contains("deploy"), "{note}");

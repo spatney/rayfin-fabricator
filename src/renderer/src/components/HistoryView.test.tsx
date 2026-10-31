@@ -9,7 +9,6 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { makeProject } from '../../test/harness'
-import { LocalDevelopmentContext } from '../localDevelopment'
 import HistoryView from './HistoryView'
 
 const editorProps = vi.hoisted(() => vi.fn<(props: DiffEditorProps) => void>())
@@ -167,10 +166,7 @@ describe('HistoryView restore', () => {
     subject: 'First version'
   }
 
-  async function restore(
-    project: StudioProject,
-    { localDevelopment = false, label = 'Restore' } = {}
-  ): Promise<ReturnType<typeof vi.fn>> {
+  async function restore(project: StudioProject): Promise<ReturnType<typeof vi.fn>> {
     const git = installApi(
       {},
       { ...history, workingChanges: 0, commits: [...history.commits, older] }
@@ -181,19 +177,17 @@ describe('HistoryView restore', () => {
     Object.assign(git, { revert })
     const onRequestDeploy = vi.fn()
     render(
-      <LocalDevelopmentContext.Provider value={localDevelopment}>
-        <HistoryView
-          project={project}
-          refreshKey={0}
-          theme="vs-dark"
-          onRequestDeploy={onRequestDeploy}
-        />
-      </LocalDevelopmentContext.Provider>
+      <HistoryView
+        project={project}
+        refreshKey={0}
+        theme="vs-dark"
+        onRequestDeploy={onRequestDeploy}
+      />
     )
     fireEvent.click(await screen.findByText('First version'))
     fireEvent.click(await screen.findByRole('button', { name: 'Restore this version' }))
-    fireEvent.click(screen.getByRole('button', { name: label }))
-    await waitFor(() => expect(screen.queryByRole('button', { name: label })).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Restore' })).toBeNull())
     expect(revert).toHaveBeenCalledWith('p1', 'old456')
     return onRequestDeploy
   }
@@ -203,11 +197,7 @@ describe('HistoryView restore', () => {
   })
 
   it('keeps a personal app’s restore on this computer until the user publishes', async () => {
-    expect(await restore(published, { localDevelopment: true })).not.toHaveBeenCalled()
-  })
-
-  it('publishes a published app’s restore again without Local development', async () => {
-    expect(await restore(published, { label: 'Restore & publish' })).toHaveBeenCalledTimes(1)
+    expect(await restore(published)).not.toHaveBeenCalled()
   })
 
   it('only restores an app that was never published', async () => {

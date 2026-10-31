@@ -5,9 +5,8 @@ import { useSuppressPreview } from '../overlay'
 interface Props {
   /**
    * Local Rayfin version report for the active project (null while loading).
-   * With Local development on, a personal app's upgrades stop at the newest
-   * release the local backend runs (the workbench caps them, see
-   * `upgradesWithinLocalRange`).
+   * A personal app's upgrades stop at the newest release the local backend
+   * runs (the workbench caps them, see `upgradesWithinLocalRange`).
    */
   info: RayfinVersionInfo | null
   /** Hand the upgrade off to the Copilot agent (parent builds + sends the prompt). */

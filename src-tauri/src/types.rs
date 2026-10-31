@@ -575,6 +575,18 @@ pub struct PortOccupant {
   pub command_line: Option<String>,
 }
 
+/// Another project in this window that holds a port the live preview needs.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PortHolder {
+  pub project_id: String,
+  /// The project's name.
+  pub name: String,
+  /// `backend`: its local backend, which runs the app on this computer.
+  /// `preview`: its live preview, which runs while Copilot works on it.
+  pub kind: String,
+}
+
 /// Why the live preview can't start on a sign-in-ready port, and the ways out.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -583,9 +595,9 @@ pub struct PortConflict {
   pub port: u16,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub occupant: Option<PortOccupant>,
-  /// Another project in this window whose live preview holds `port`.
+  /// Another project in this window holds `port`.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub own_project: Option<String>,
+  pub holder: Option<PortHolder>,
   /// Fabricator may offer to stop `occupant`.
   pub can_stop: bool,
   /// The next free port to register instead.
@@ -669,14 +681,6 @@ pub struct StudioProject {
   pub workspace_name: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub deployment_names: Option<std::collections::HashMap<String, String>>,
-  /// Set on a project created while the Local development experiment is off:
-  /// it's developed against its Fabric deployment, so the workbench keeps chat
-  /// locked until its first publish, which clears it. Projects created with the
-  /// experiment on run on this computer from the start and don't get it, and the
-  /// renderer applies the gate only while the experiment is off. Projects opened
-  /// from disk never get it.
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub awaiting_first_deploy: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub model: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -701,6 +705,12 @@ pub struct StudioProject {
   /// view (persisted as `None`) is never re-overridden on subsequent deploys.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub fabric_preview_defaulted: Option<bool>,
+  /// Whether the published app works only inside the Fabric portal shell (its
+  /// `fabric.yaml` declares semantic models, or `rayfin.yml` hosts it embedded
+  /// only), read from its folder when projects are listed, like `missing`. Only
+  /// such an app offers the preview's Fabric view.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub needs_fabric_portal: Option<bool>,
   /// Set when the project lives in a GitHub-backed team workspace (experimental).
   /// Team projects never deploy from this machine: the workspace's pipeline does.
   #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -734,12 +744,6 @@ pub struct ExperimentFlags {
   /// page by page. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub report_migration: Option<bool>,
-  /// Local development: personal apps run on this computer with the bundled
-  /// local backend (rayfin-local) from creation, and publishing to Fabric is
-  /// optional. Off: apps are developed against their Fabric deployment, as
-  /// before. Opt-in (off by default); team apps aren't affected.
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub local_development: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -761,8 +765,8 @@ pub struct AppSettings {
   /// How chat turns publish personal apps, set by the published apps panel's
   /// "Publish after each chat turn" switch: "auto" publishes as each turn
   /// finishes; "manual" keeps the changes on this computer until the user
-  /// publishes. The user's choice always wins. Unset, it's "auto" while the
-  /// Local development experiment is off and "manual" while it's on (see
+  /// publishes. The user's choice always wins; unset, it's "manual": personal
+  /// apps run on this computer, and publishing is the user's choice (see
   /// `store::manual_deploy_enabled`). Team projects aren't affected.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub deploy_mode: Option<String>,
@@ -2136,7 +2140,7 @@ pub struct FileNode {
   pub ignored: Option<bool>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct FileContent {
   pub path: String,
@@ -2149,6 +2153,9 @@ pub struct FileContent {
   pub too_large: Option<bool>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
+  /// The file doesn't exist (any longer), such as one deleted since it was opened.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub missing: Option<bool>,
 }
 
 /* ----------------------------- chat ----------------------------- */
@@ -2669,8 +2676,8 @@ pub struct RayfinVersionInfo {
   pub packages: Vec<RayfinPackageVersion>,
   /// The newest stable release npm lists within the Rayfin versions the bundled
   /// local backend runs (`rayfin-local.json` `sdk.supported`), for the headline
-  /// package: where upgrades stop while the Local development experiment is on.
-  /// Absent when npm couldn't list them or none is in the range.
+  /// package: where a personal app's upgrades stop, so it keeps running on this
+  /// computer. Absent when npm couldn't list them or none is in the range.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub latest_supported_locally: Option<String>,
 }
@@ -3114,7 +3121,7 @@ pub struct AdvisorProjectSnapshot {
   pub packages: Vec<AdvisorPackage>,
   /// The Rayfin releases the bundled local backend runs, as an npm range
   /// (`rayfin-local.json` `sdk.supported`). Absent for apps it doesn't run: team
-  /// apps, and every app while the Local development experiment is off.
+  /// apps.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub local_sdk_range: Option<String>,
 }
@@ -4088,8 +4095,7 @@ pub struct LocalSecret {
 
 /// Why a local backend command failed. `code` is stable: the control API's
 /// own codes, or `not-running`, `project-not-found`, `invalid`, `unreachable`,
-/// `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed`,
-/// `experiment-off` (the Local development experiment is off) and the binary
+/// `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed` and the binary
 /// codes of [`LocalProblem`].
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase", default)]

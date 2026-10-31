@@ -7,7 +7,6 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { toLocalBackendError, type LocalBackendError } from '../localBackend'
-import { useLocalDevelopment } from '../localDevelopment'
 import { relativeTime } from './advisor/format'
 import { Codicon } from './icons'
 import Skeleton from './Skeleton'
@@ -115,7 +114,7 @@ function TeamSecretRow({
   )
 }
 
-/** A personal app's secret: its value on this computer (with Local development) and, once published, on the published app. */
+/** A personal app's secret: its value on this computer and, once published, on the published app. */
 function EntryRow({
   entry,
   localCheck,
@@ -124,7 +123,7 @@ function EntryRow({
   onSelect
 }: {
   entry: SecretEntry
-  /** `null` without Local development: there's no local column. */
+  /** `null` for an app that doesn't run on this computer: there's no local column. */
   localCheck: Check | null
   /** `null` while the app isn't published: there's no published column. */
   publishedCheck: Check | null
@@ -209,8 +208,8 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
   /** The dialog added a secret to rayfin.yml but didn't store its value. */
   const declaredInDialog = useRef(false)
   const team = Boolean(project.team)
-  /** Values on this computer: a personal app's, with Local development. */
-  const withLocal = useLocalDevelopment() && !team
+  /** Values on this computer: a personal app's. A team app runs on its pipeline's backend. */
+  const withLocal = !team
 
   const load = useCallback(async () => {
     const id = ++request.current
@@ -226,8 +225,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
     }
   }, [project.id])
 
-  // Only an app that runs on this computer has values here: not a team app, nor
-  // any app without Local development.
+  // Only an app that runs on this computer has values here: not a team app.
   const loadLocal = useCallback(async () => {
     if (!withLocal) return
     const id = ++localRequest.current
@@ -276,13 +274,10 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
   }, [])
 
   const status = data?.status
-  // Without Local development, secrets live on the published app alone, so an
-  // app that isn't published yet has none to show.
-  const waitsForPublish = !withLocal && status === 'not-deployed'
   const personal =
     status === 'ready' || status === 'error' || (status === 'not-deployed' && withLocal)
   const isTeam = status === 'team'
-  /** Reading the values on this computer; `null` without them (no Local development). */
+  /** Reading the values on this computer; `null` for a team app, which has none here. */
   const localCheck: Check | null = !withLocal
     ? null
     : local.status === 'ok'
@@ -293,8 +288,8 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
   // The published column: values read, or not readable. None before the first publish.
   const publishedCheck: Check | null =
     status === 'ready' ? 'ok' : status === 'error' ? 'failed' : null
-  /** A new secret's value goes to this computer, or without it to the published app. */
-  const canAdd = withLocal ? personal : status === 'ready'
+  /** A new secret's value goes to this computer. A team app's secrets change in the Fabric portal. */
+  const canAdd = withLocal && personal
 
   const saved = useCallback(
     (name: string, what: SecretSaved) => {
@@ -302,9 +297,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       setError(null)
       flash(
         what === 'added'
-          ? withLocal
-            ? `Added ${name}, with its value on this computer.${publishedCheck ? ' Set its published value too.' : ''}`
-            : `Added ${name}. Its value is stored with your published app.`
+          ? `Added ${name}, with its value on this computer.${publishedCheck ? ' Set its published value too.' : ''}`
           : what === 'local'
             ? `Saved the value of ${name} on this computer.`
             : `Saved a new value for ${name} on your published app.`
@@ -316,7 +309,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
       }
       void loadLocal()
     },
-    [flash, load, loadLocal, onChanged, publishedCheck, withLocal]
+    [flash, load, loadLocal, onChanged, publishedCheck]
   )
 
   const closeDialog = useCallback(() => {
@@ -499,11 +492,6 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
         Rayfin in the status bar and choose <strong>Update with Copilot</strong>.
       </>
     )
-  } else if (waitsForPublish) {
-    content = empty(
-      'Publish your app first',
-      'Secrets are stored with your published app, so you can add them once it’s published.'
-    )
   } else if (entries.length === 0) {
     content = (
       <>
@@ -516,7 +504,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
             <button
               type="button"
               className="btn btn--sm btn--primary"
-              onClick={() => setDialog({ kind: 'new', published: !withLocal })}
+              onClick={() => setDialog({ kind: 'new' })}
             >
               <Codicon name="add" /> New secret
             </button>
@@ -655,7 +643,6 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
         functionsEnabled={data.functionsEnabled}
         team={isTeam}
         published={publishedCheck !== null}
-        local={withLocal}
       />
     )
   }
@@ -686,7 +673,7 @@ export default function SecretsView({ project, onChanged, onSendToChat }: Props)
           <button
             type="button"
             className="model-tool-btn"
-            onClick={() => setDialog({ kind: 'new', published: !withLocal })}
+            onClick={() => setDialog({ kind: 'new' })}
             disabled={!canAdd}
             title={isTeam ? 'Change a team app’s secrets in the Fabric portal' : 'Add a secret'}
           >

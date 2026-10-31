@@ -48,7 +48,6 @@ import type {
 import { OverlayProvider } from './overlay'
 import { ToastProvider } from './toast'
 import { applyTheme } from './theme'
-import { LocalDevelopmentContext } from './localDevelopment'
 import { useLocalBackend } from './localBackend'
 import SetupScreen from './screens/SetupScreen'
 import { HelpView } from './components/help/HelpView'
@@ -85,10 +84,10 @@ import workbenchLight from '../../../website/public/screenshots/workbench.light.
 
 const ok = <T,>(value: T) => (): Promise<T> => Promise.resolve(value)
 
-/** The sample settings: the capture's theme, with the Local development experiment on. */
+/** The sample settings: the capture's theme. */
 function sampleSettings(): AppSettings {
   const theme = new URLSearchParams(location.search).get('theme') === 'light' ? 'light' : 'dark'
-  return { theme, experiments: { teamWorkspaces: false, localDevelopment: true } }
+  return { theme, experiments: { teamWorkspaces: false } }
 }
 
 /** A Copilot model for the pickers. */
@@ -1170,7 +1169,7 @@ function installApi(): void {
     secrets: {
       list: ok(secrets)
     },
-    // The sample app's local backend, running (Local development is on).
+    // The sample app's local backend, running.
     local: {
       status: (projectId: string) => Promise.resolve(localStatus(projectId)),
       start: (projectId: string) => Promise.resolve(localStatus(projectId)),
@@ -1183,7 +1182,7 @@ function installApi(): void {
         Promise.resolve(localRows(entity, offset, limit, orderBy, desc)),
       secrets: ok(localSecrets)
     },
-    // What the app reads at launch: the sample settings, with Local development on.
+    // What the app reads at launch: the sample settings.
     settings: {
       get: () => Promise.resolve(sampleSettings())
     },
@@ -1438,7 +1437,7 @@ const setupDoctor: DoctorReport = {
     tool('git', 'Git', '2.49.0'),
     { ...tool('az', 'Azure CLI', '2.83.0'), required: false },
     { ...tool('gh', 'GitHub CLI (gh)', '2.95.0'), required: false },
-    // Setup lists the bundled local backend while Local development is on.
+    // Setup lists the bundled local backend.
     { ...tool('rayfin-local', 'Local backend', '0.2.0'), required: false }
   ]
 }
@@ -1830,8 +1829,8 @@ const expensesApp: StudioProject = {
 
 /**
  * The app bar's publish control, its panel open on the sample app's Development
- * published app: live, nothing waiting, signed in, and publishing after each chat turn, the
- * default without Local development.
+ * published app: live, nothing waiting, signed in, and publishing after each chat turn off,
+ * the default.
  */
 function Deployments(): JSX.Element {
   const app: StudioProject = { ...expensesApp, deploymentNames: { [APPS_WS]: 'Development' } }
@@ -1853,7 +1852,7 @@ function Deployments(): JSX.Element {
               account={{ user: 'avery.chen@contoso.com', tenant: 'Contoso' }}
               onManageAccounts={noop}
               onSignIn={noop}
-              autoDeploy={{ on: true, defaultOn: true, onChange: noop }}
+              autoDeploy={{ on: false, onChange: noop }}
             />
           </Open>
           <div className="app-bar-global">
@@ -1955,7 +1954,7 @@ function Blueprint({ view = 'architecture' }: { view?: 'architecture' | 'data' |
 
 /**
  * The preview of the sample app running on this computer, in a preview-sized frame: its
- * toolbar with Local and Published and the running local backend, whose output is open.
+ * toolbar with Local and Published, and the running local backend, whose output is open.
  */
 function LocalPreview(): JSX.Element {
   const local = useLocalBackend(expensesApp.id)
@@ -1972,7 +1971,7 @@ function LocalPreview(): JSX.Element {
           overflow: 'hidden'
         }}
       >
-        <Steps clicks={['.local-pill']}>
+        <Steps clicks={['.local-output-btn']}>
           <PreviewPane
             project={expensesApp}
             deploy={undefined}
@@ -2041,11 +2040,17 @@ function Shot({ id }: { id: string | null }): JSX.Element {
         <PortConflictModal
           conflict={{
             port: 5173,
-            occupant: { pid: 18244, name: 'node.exe', commandLine: 'node node_modules/vite/bin/vite.js --port 5173' },
+            // A preview of another app, left running by rayfin-local.
+            occupant: {
+              pid: 18244,
+              name: 'node.exe',
+              commandLine: `"C:\\Program Files\\nodejs\\node.exe" ${LOCAL_PROJECT_DIR}\\.rayfin-local\\cache\\js\\vite-dev-3f2a91c07d1e\\vite-dev.mjs --root ${LOCAL_PROJECT_DIR}\\packages\\frontend --port 5173`
+            },
             canStop: true,
             suggestedPort: 5174,
             needsPush: true
           }}
+          projects={[{ name: 'Contoso Expenses', path: LOCAL_PROJECT_DIR }]}
           context="turn"
           busy={null}
           error={null}
@@ -2197,11 +2202,9 @@ applyTheme(params.get('theme') === 'light' ? 'light' : 'dark')
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <OverlayProvider>
     <ToastProvider>
-      <LocalDevelopmentContext.Provider value={Boolean(sampleSettings().experiments?.localDevelopment)}>
-        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-          <Shot id={params.get('shot')} />
-        </div>
-      </LocalDevelopmentContext.Provider>
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <Shot id={params.get('shot')} />
+      </div>
     </ToastProvider>
   </OverlayProvider>
 )

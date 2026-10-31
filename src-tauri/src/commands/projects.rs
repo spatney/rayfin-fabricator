@@ -4,7 +4,7 @@
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::commands::util::{annotate_state, with_missing};
+use crate::commands::util::{annotate_project, annotate_state};
 use crate::services::store;
 use crate::state::AppState;
 use crate::types::{
@@ -147,7 +147,7 @@ pub fn projects_set_workspace(
   ProjectActionResult {
     ok: true,
     error: None,
-    project: store::find_project(&id).map(with_missing),
+    project: store::find_project(&id).map(annotate_project),
   }
 }
 
@@ -164,7 +164,7 @@ pub fn projects_set_preview_mode(id: String, mode: String) -> ProjectActionResul
   ProjectActionResult {
     ok: true,
     error: None,
-    project: store::find_project(&id).map(with_missing),
+    project: store::find_project(&id).map(annotate_project),
   }
 }
 

@@ -19,7 +19,6 @@ import type {
 } from '@shared/ipc'
 import { GIT_WORKING_REF } from '@shared/ipc'
 import { monacoLanguage } from '../monaco'
-import { useLocalDevelopment } from '../localDevelopment'
 import { ChatIcon, CompareIcon, CopyIcon, HistoryIcon, SearchIcon } from './icons'
 import ConfirmModal from './ConfirmModal'
 import Skeleton from './Skeleton'
@@ -177,8 +176,8 @@ const DIFF_OPTIONS = {
 /**
  * The "History" view: a vibe-coder-friendly timeline of everything that changed
  * in the project. Studio commits on the user's behalf (scaffold, every publish,
- * and with Local development each chat turn that changes a personal app, named
- * after what was asked), so the git log reads as a plain-English list of "what
+ * and each chat turn that changes a personal app, named after what was asked),
+ * so the git log reads as a plain-English list of "what
  * happened". Picking an entry lists its changed files; picking a file shows a
  * clear before/after diff.
  *
@@ -205,11 +204,6 @@ export default function HistoryView({
   const [wrap, setWrap] = useState(false)
   const [query, setQuery] = useState('')
   const [confirmRevert, setConfirmRevert] = useState<GitCommitSummary | null>(null)
-  // Without Local development a published personal app is developed against its published
-  // backend, so a restore publishes again to keep the two in step. With it, the restore stays
-  // on this computer until the user publishes.
-  const localDevelopment = useLocalDevelopment()
-  const republishes = !project.team && !localDevelopment && Boolean(project.lastDeploy?.url)
   const [reverting, setReverting] = useState(false)
   const [revertError, setRevertError] = useState<string | null>(null)
   const [copiedSha, setCopiedSha] = useState(false)
@@ -360,12 +354,13 @@ export default function HistoryView({
         return
       }
       setConfirmRevert(null)
-      // A team app saves the restore for its pipeline; see `republishes` for personal apps.
-      if (!res.noChanges && (project.team || republishes)) onRequestDeploy?.()
+      // A team app saves the restore for its pipeline. A personal app's stays on this
+      // computer until the user publishes.
+      if (!res.noChanges && project.team) onRequestDeploy?.()
     } finally {
       setReverting(false)
     }
-  }, [confirmRevert, project.id, project.team, republishes, onRequestDeploy])
+  }, [confirmRevert, project.id, project.team, onRequestDeploy])
 
   const copySha = useCallback((hash: string): void => {
     void navigator.clipboard.writeText(hash)
@@ -893,7 +888,7 @@ export default function HistoryView({
       {confirmRevert && (
         <ConfirmModal
           title="Restore this version?"
-          confirmLabel={republishes ? 'Restore & publish' : 'Restore'}
+          confirmLabel="Restore"
           busy={reverting}
           onCancel={() => {
             if (!reverting) setConfirmRevert(null)
@@ -909,11 +904,9 @@ export default function HistoryView({
                 Your current version stays saved in this timeline, so you can switch back anytime.
                 {project.team
                   ? ' Fabricator then saves it, and the team pipeline updates your preview.'
-                  : republishes
-                    ? ' Fabricator then publishes it, so your published app matches.'
-                    : project.lastDeploy?.url
-                      ? ' Your published app doesn’t change until you publish.'
-                      : null}
+                  : project.lastDeploy?.url
+                    ? ' Your published app doesn’t change until you publish.'
+                    : null}
               </p>
               {revertError && <p className="confirm-error">{revertError}</p>}
             </>

@@ -17,8 +17,8 @@ export interface AdvisorFixLinks {
 /** Provided around the Build chat so fix cards can follow their findings live. */
 export const AdvisorFixContext = createContext<AdvisorFixLinks | null>(null)
 
+/** Where an issue stands once it isn't fixed (a fixed one gets a check instead of its dot). */
 const CHIPS: Partial<Record<FixOutcome, { label: string; tone: string; tip: string; icon?: string }>> = {
-  fixed: { label: 'Fixed', tone: 'fixed', icon: 'pass-filled', tip: 'The Advisor no longer detects this issue' },
   applied: { label: 'Fix applied', tone: 'applied', tip: 'Copilot applied a fix — verify it in the Advisor' },
   still: { label: 'Still detected', tone: 'still', tip: 'The Advisor still detects this issue' },
   dismissed: { label: 'Dismissed', tone: 'muted', tip: 'Dismissed in the Advisor' },
@@ -27,6 +27,12 @@ const CHIPS: Partial<Record<FixOutcome, { label: string; tone: string; tip: stri
 
 /** Rows shown before the rest fold behind "Show more". */
 const LIMIT = 5
+
+/** The file's name and line, e.g. `Contact.ts:12` (the full path is its tooltip). */
+function shortPlace(file: string, line?: number): string {
+  const name = file.split(/[\\/]/).pop() || file
+  return line ? `${name}:${line}` : name
+}
 
 function FixRow({
   fix,
@@ -40,15 +46,27 @@ function FixRow({
   const sev = normalizeSeverity(fix.severity)
   const category = categoryById(fix.category)?.title ?? fix.category
   const where = fix.file ? (fix.line ? `${fix.file}:${fix.line}` : fix.file) : undefined
-  const chip = outcome ? CHIPS[outcome] : undefined
+  const fixed = outcome === 'fixed'
+  const chip = outcome && !fixed ? CHIPS[outcome] : undefined
   const body = (
     <>
-      <i
-        className={`adv-sev-dot adv-sev-dot--${sev}`}
-        role="img"
-        aria-label={`${severityLabel(sev)} severity`}
-        title={`${severityLabel(sev)} severity`}
-      />
+      <span className="adv-fix-mark">
+        {fixed ? (
+          <i
+            className="codicon codicon-pass-filled adv-fix-done"
+            role="img"
+            aria-label="Fixed"
+            title="Fixed: the Advisor no longer detects this issue"
+          />
+        ) : (
+          <i
+            className={`adv-sev-dot adv-sev-dot--${sev}`}
+            role="img"
+            aria-label={`${severityLabel(sev)} severity`}
+            title={`${severityLabel(sev)} severity`}
+          />
+        )}
+      </span>
       <span className="adv-fix-main">
         <span className="adv-fix-name">
           <CodeText text={fix.title} />
@@ -57,11 +75,11 @@ function FixRow({
         <span className="adv-fix-meta">
           <CategoryIcon id={fix.category} className="adv-fix-cat" />
           <span className="adv-fix-cat-name">{category}</span>
-          {where && (
+          {fix.file && (
             <>
               <span aria-hidden="true">·</span>
               <span className="adv-fix-where" title={where}>
-                {where}
+                {shortPlace(fix.file, fix.line)}
               </span>
             </>
           )}
@@ -91,9 +109,10 @@ function FixRow({
 
 /**
  * The Advisor findings a message handed to Copilot, as a card in the transcript:
- * each issue with its severity, area, and place, then where it stands — fixed,
- * still detected, and so on — as the Advisor re-checks the app. While the turn
- * runs the card just says it's fixing. The full prompt stays behind a disclosure.
+ * each issue with its severity, area, and place, then where it stands as the
+ * Advisor re-checks the app — a check once it's fixed, else a word (still
+ * detected, dismissed, and so on). While the turn runs the card just says it's
+ * fixing. The full prompt stays behind a disclosure.
  */
 export function AdvisorFixSummary({
   summary,
