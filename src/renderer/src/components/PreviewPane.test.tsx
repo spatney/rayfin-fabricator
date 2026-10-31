@@ -1171,6 +1171,15 @@ describe('PreviewPane design mode', () => {
     const host = document.querySelector('.preview-webview-host') as HTMLElement
     expect(host.style.width).toBe('390px')
     expect(host.classList.contains('preview-webview-host--device')).toBe(true)
+    // Phone gives the host a phone's screen height and draws a phone around it.
+    expect(host.style.height).toBe('844px')
+    expect(host.parentElement!.classList.contains('preview-stage--phone')).toBe(true)
+    expect(host.querySelector('.preview-phone')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Tablet width' }))
+    expect(host.style.width).toBe('820px')
+    expect(host.style.height).toBe('')
+    expect(host.parentElement!.classList.contains('preview-stage--phone')).toBe(false)
+    expect(host.querySelector('.preview-phone')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Desktop width' }))
     expect(host.style.width).toBe('')
 

@@ -5338,6 +5338,52 @@ code {
     -1px 0 0 var(--border),
     1px 0 0 var(--border);
 }
+/* Phone: the host is the phone's screen, centered in a phone outline. The stage's
+   padding leaves room for the outline plus a 20px margin, and a pane too short for
+   the screen's full height shrinks the screen to fit. */
+.preview-stage.preview-stage--phone {
+  --phone-bezel-x: 12px;
+  --phone-bezel-y: 36px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--phone-bezel-y) + 20px) calc(var(--phone-bezel-x) + 20px);
+}
+.preview-stage--phone .preview-webview-host.preview-webview-host--device {
+  flex: 0 1 auto;
+  margin: 0;
+  box-shadow: none;
+}
+/* The outline is a ring drawn around the host's box, never over it, because the
+   native preview covers that box: the screen's corners stay square. */
+.preview-phone {
+  position: absolute;
+  inset: calc(-1 * var(--phone-bezel-y)) calc(-1 * var(--phone-bezel-x));
+  border: solid var(--border);
+  border-width: var(--phone-bezel-y) var(--phone-bezel-x);
+  border-radius: 48px;
+  pointer-events: none;
+}
+/* The speaker in the top bezel and the home indicator in the bottom one. */
+.preview-phone::before,
+.preview-phone::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  border-radius: 999px;
+  background: var(--text-faint);
+  transform: translateX(-50%);
+}
+.preview-phone::before {
+  top: calc(var(--phone-bezel-y) / -2 - 3px);
+  width: 52px;
+  height: 6px;
+}
+.preview-phone::after {
+  bottom: calc(var(--phone-bezel-y) / -2 - 2px);
+  width: 96px;
+  height: 4px;
+}
 
 .preview-placeholder {
   flex: 1;

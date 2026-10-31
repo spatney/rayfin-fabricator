@@ -10,7 +10,7 @@ import type {
 import { usePreviewSuppressed } from '../overlay'
 import { measurePreviewBounds, watchPreviewPixelRatio } from '../previewBounds'
 import { refusedSchemaLosses, type LocalBackend } from '../localBackend'
-import { DEVICES, deviceHostWidth, type DeviceId } from '../design/devices'
+import { DEVICES, deviceHostHeight, deviceHostWidth, type DeviceId } from '../design/devices'
 import { readFabricatorTheme } from '../design/hostTheme'
 import type { DesignSession, DesignSurface } from '../design/useDesignSession'
 import type { ModelSelection } from '../modelSelection'
@@ -1035,7 +1035,13 @@ export default function PreviewPane({
   }, [designSurface, onDesignSurface])
   useEffect(() => () => onDesignSurface?.(null), [onDesignSurface])
   const uiScale = useUiScale(designActive)
-  const hostWidth = designActive && design ? deviceHostWidth(design.device, uiScale) : null
+  const device = designActive && design ? design.device : null
+  const hostWidth = device ? deviceHostWidth(device, uiScale) : null
+  const hostHeight = device ? deviceHostHeight(device, uiScale) : null
+  const hostStyle = hostWidth
+    ? { width: `${hostWidth}px`, height: hostHeight ? `${hostHeight}px` : undefined }
+    : undefined
+  const phone = device === 'phone'
   const polishSeconds = useElapsed(designActive ? (design?.polishingSince ?? null) : null)
   const designCount = design?.items.length ?? 0
   const dotClass =
@@ -1400,7 +1406,7 @@ export default function PreviewPane({
           />
         ) : showWebview ? (
           <div className="preview-canvas">
-            <div className="preview-stage">
+            <div className={`preview-stage${phone ? ' preview-stage--phone' : ''}`}>
               {/* Placeholder the native WebView2 child is positioned over. When an
                   overlay suppresses the native child, `frozen` paints the last frame
                   here so the overlay floats over a still preview instead of black.
@@ -1409,8 +1415,11 @@ export default function PreviewPane({
               <div
                 className={`preview-webview-host${hostWidth ? ' preview-webview-host--device' : ''}`}
                 ref={hostRef}
-                style={hostWidth ? { width: `${hostWidth}px` } : undefined}
+                style={hostStyle}
               >
+                {/* The phone's outline, drawn around the host and outside its box,
+                    which the native preview covers. */}
+                {phone && <span className="preview-phone" aria-hidden="true" />}
                 {frozen && <img className="preview-frozen" src={frozen} alt="" draggable={false} />}
               </div>
             </div>
