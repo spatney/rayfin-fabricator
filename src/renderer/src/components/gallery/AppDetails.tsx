@@ -8,8 +8,10 @@ interface Props {
   app: GalleryApp
   /** What Fabric said about its latest publish; undefined while it's asked. */
   status?: GalleryStatus
+  pinned: boolean
   onClose: () => void
   onOpenProject: (projectId: string) => void
+  onPin: (app: GalleryApp) => void
   openUrl: (url: string) => void
 }
 
@@ -34,7 +36,7 @@ function CopyLink({ url }: { url: string }): JSX.Element {
     }
   }
   return (
-    <button type="button" className="btn btn--sm gdetail-copy" onClick={() => void copy()}>
+    <button type="button" className="btn btn--sm" onClick={() => void copy()}>
       {copied ? <CheckIcon /> : <CopyIcon />}
       {copied ? 'Copied' : 'Copy link'}
     </button>
@@ -45,8 +47,10 @@ function CopyLink({ url }: { url: string }): JSX.Element {
 export default function AppDetails({
   app,
   status,
+  pinned,
   onClose,
   onOpenProject,
+  onPin,
   openUrl
 }: Props): JSX.Element {
   const address = status?.hostingUrl ?? app.hostingUrl
@@ -113,7 +117,13 @@ export default function AppDetails({
               Open in Fabricator
             </button>
           )}
-          <CopyLink url={address ?? app.portalUrl} />
+          <div className="gdetail-more">
+            <CopyLink url={address ?? app.portalUrl} />
+            <button type="button" className="btn btn--sm" onClick={() => onPin(app)}>
+              <Codicon name={pinned ? 'pinned' : 'pin'} />
+              {pinned ? 'Unpin' : 'Pin to the top'}
+            </button>
+          </div>
         </div>
 
         <dl className="gdetail-facts">

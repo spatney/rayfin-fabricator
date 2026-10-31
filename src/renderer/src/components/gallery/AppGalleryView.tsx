@@ -11,8 +11,10 @@ import {
   applyQuery,
   count,
   groupByWorkspace,
+  pinKey,
   workspacesOf,
   type GalleryEntry,
+  type GalleryGroup,
   type GalleryQuery,
   type GallerySort,
   type GalleryWhere
@@ -47,19 +49,26 @@ export function resetGallerySnapshotForTests(): void {
   snapshot = null
 }
 
-type Prefs = Pick<GalleryQuery, 'where' | 'sort'>
+type Prefs = Pick<GalleryQuery, 'where' | 'sort' | 'pinned'>
 const WHERE: readonly GalleryWhere[] = ['all', 'local', 'remote']
 const SORTS: readonly GallerySort[] = ['name', 'recent', 'workspace']
+
+/** The saved pins: each key once, leaving out anything that isn't one. */
+function savedPins(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.filter((key): key is string => typeof key === 'string' && key !== ''))]
+}
 
 function loadPrefs(): Prefs {
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs>
     return {
       where: WHERE.includes(saved.where as GalleryWhere) ? (saved.where as GalleryWhere) : 'all',
-      sort: SORTS.includes(saved.sort as GallerySort) ? (saved.sort as GallerySort) : 'name'
+      sort: SORTS.includes(saved.sort as GallerySort) ? (saved.sort as GallerySort) : 'name',
+      pinned: savedPins(saved.pinned)
     }
   } catch {
-    return { where: 'all', sort: 'name' }
+    return { where: 'all', sort: 'name', pinned: [] }
   }
 }
 
@@ -225,7 +234,8 @@ export default function AppGalleryView({
     if (selectedId && result && !apps.some((a) => a.id === selectedId)) setSelectedId(null)
   }, [selectedId, apps, result])
 
-  useEffect(() => setLimit(PAGE), [text, workspaceId, prefs])
+  // A new search, filter or order shows the first page again; pinning doesn't.
+  useEffect(() => setLimit(PAGE), [text, workspaceId, prefs.where, prefs.sort])
 
   // Read the statuses of the cards on screen, or of every app to sort by publish.
   useEffect(() => {
@@ -249,6 +259,37 @@ export default function AppGalleryView({
     // The card stays put while its details close: give it back the focus.
     if (id) document.querySelector<HTMLElement>(`[data-app-id="${id}"]`)?.focus()
   }, [selectedId])
+
+  const togglePin = useCallback((app: GalleryApp): void => {
+    const key = pinKey(app)
+    setPrefs((p) => ({
+      ...p,
+      pinned: p.pinned.includes(key) ? p.pinned.filter((k) => k !== key) : [...p.pinned, key]
+    }))
+  }, [])
+
+  /** The card whose pin was just pressed, and whether the keyboard pressed it. */
+  const pinPressed = useRef<{ id: string; keyboard: boolean } | null>(null)
+
+  const pinCard = useCallback(
+    (app: GalleryApp, keyboard: boolean): void => {
+      pinPressed.current = { id: app.id, keyboard }
+      togglePin(app)
+    },
+    [togglePin]
+  )
+
+  // Pinning moves the card, which takes the focus off its pin: give it back,
+  // scrolled to when the keyboard pressed it.
+  useEffect(() => {
+    const pressed = pinPressed.current
+    pinPressed.current = null
+    const focusLost = !document.activeElement || document.activeElement === document.body
+    if (!pressed || !focusLost) return
+    document
+      .querySelector<HTMLElement>(`[data-app-id="${pressed.id}"] ~ .gcard-pin`)
+      ?.focus({ preventScroll: !pressed.keyboard })
+  }, [prefs.pinned])
 
   // Esc closes the details, then clears the search, then leaves. Capture runs
   // before a dialog's own handler can remove it, so a dialog, Search or Help on
@@ -459,21 +500,22 @@ export default function AppGalleryView({
               groupByWorkspace(shown).map((group) => (
                 <section key={group.id} className="gallery-group" aria-label={group.name}>
                   <h2 className="gallery-group-head">
-                    <Codicon name={group.name === 'My workspace' ? 'account' : 'folder'} />
+                    <Codicon name={groupIcon(group)} />
                     {group.name}
                     <span className="gallery-group-count">{group.entries.length}</span>
                   </h2>
                   <Grid
                     entries={group.entries}
                     selectedId={selectedId}
-                    label={`Apps in ${group.name}`}
-                    grouped
+                    label={group.pinned ? 'Pinned apps' : `Apps in ${group.name}`}
+                    grouped={!group.pinned}
                     onSelect={select}
+                    onPin={pinCard}
                   />
                 </section>
               ))
             ) : (
-              <Grid entries={shown} selectedId={selectedId} onSelect={select} />
+              <Grid entries={shown} selectedId={selectedId} onSelect={select} onPin={pinCard} />
             )}
             {filtered.length > shown.length && (
               <div className="gallery-more">
@@ -494,8 +536,10 @@ export default function AppGalleryView({
           key={selected.id}
           app={selected}
           status={statuses[selected.id]}
+          pinned={prefs.pinned.includes(pinKey(selected))}
           onClose={closeDetails}
           onOpenProject={onOpenProject}
+          onPin={togglePin}
           openUrl={openUrl}
         />
       )}
@@ -503,12 +547,18 @@ export default function AppGalleryView({
   )
 }
 
+function groupIcon(group: GalleryGroup): string {
+  if (group.pinned) return 'pinned'
+  return group.name === 'My workspace' ? 'account' : 'folder'
+}
+
 function Grid({
   entries,
   selectedId,
   label = 'Apps',
   grouped = false,
-  onSelect
+  onSelect,
+  onPin
 }: {
   entries: readonly GalleryEntry[]
   selectedId: string | null
@@ -516,17 +566,20 @@ function Grid({
   /** Under a workspace's heading, so the cards needn't name it. */
   grouped?: boolean
   onSelect: (app: GalleryApp) => void
+  onPin: (app: GalleryApp, keyboard: boolean) => void
 }): JSX.Element {
   return (
     <ul className="gallery-grid" aria-label={label}>
-      {entries.map(({ app, status }) => (
+      {entries.map(({ app, status, pinned }) => (
         <AppCard
           key={app.id}
           app={app}
           status={status}
           selected={app.id === selectedId}
+          pinned={pinned}
           showWorkspace={!grouped}
           onSelect={onSelect}
+          onPin={onPin}
         />
       ))}
     </ul>

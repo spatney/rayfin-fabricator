@@ -40,6 +40,7 @@ const query = (over: Partial<GalleryQuery> = {}): GalleryQuery => ({
   where: 'all',
   workspaceId: null,
   sort: 'name',
+  pinned: [],
   ...over
 })
 const names = (q: GalleryQuery, statuses = {}): string[] =>
@@ -103,6 +104,56 @@ describe('gallery filters and order', () => {
       { id: 'ws-sales', name: 'Sales', count: 2 },
       { id: 'ws-trips', name: 'Travel', count: 1 }
     ])
+  })
+})
+
+describe('gallery pins', () => {
+  // `atlas` is in Travel, so A to Z and by workspace order the pinned apps differently.
+  const all = [...apps, app('e', 'atlas', { workspaceId: 'ws-trips', workspaceName: 'Travel' })]
+  const pinned = ['e', 'd']
+  const statuses = {
+    a: { id: 'a', publishedAt: '2026-10-05T00:00:00Z' },
+    b: { id: 'b', publishedAt: '2026-10-25T00:00:00Z' },
+    d: { id: 'd', publishedAt: '2026-10-20T00:00:00Z' },
+    e: { id: 'e', publishedAt: '2026-10-01T00:00:00Z' }
+  }
+  const shown = (over: Partial<GalleryQuery>): string[] =>
+    applyQuery(all, statuses, query({ pinned, ...over })).map((e) => e.app.name)
+
+  it('puts pinned apps first under every order, in that order', () => {
+    expect(shown({ sort: 'name' })).toEqual([
+      'atlas',
+      'dashboard-sales-old',
+      'expense-tracker',
+      'sales-dashboard',
+      'Trip logger'
+    ])
+    expect(shown({ sort: 'recent' })).toEqual([
+      'dashboard-sales-old',
+      'atlas',
+      'sales-dashboard',
+      'expense-tracker',
+      'Trip logger'
+    ])
+    const entries = applyQuery(all, statuses, query({ pinned, sort: 'workspace' }))
+    expect(
+      groupByWorkspace(entries).map((g) => [g.name, g.entries.map((e) => e.app.name)])
+    ).toEqual([
+      ['Pinned', ['dashboard-sales-old', 'atlas']],
+      ['Sales', ['expense-tracker', 'sales-dashboard']],
+      ['Travel', ['Trip logger']]
+    ])
+  })
+
+  it('still searches and filters pinned apps', () => {
+    // `atlas` doesn't match; the pinned match comes before a better one.
+    expect(shown({ text: 'sales' })).toEqual([
+      'dashboard-sales-old',
+      'sales-dashboard',
+      'expense-tracker'
+    ])
+    expect(shown({ where: 'local' })).toEqual(['expense-tracker'])
+    expect(shown({ workspaceId: 'ws-trips' })).toEqual(['atlas', 'Trip logger'])
   })
 })
 

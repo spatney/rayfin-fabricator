@@ -256,6 +256,7 @@
 /* ── Cards ──────────────────────────────────────────────────────────────── */
 
 .gcard-item {
+  position: relative;
   display: flex;
   min-width: 0;
 }
@@ -279,7 +280,8 @@
     border-color 0.12s ease;
 }
 
-.gcard:hover {
+.gcard:hover,
+.gcard-item:hover .gcard {
   background: var(--bg-elev-2);
 }
 
@@ -295,6 +297,49 @@
 
 .gcard--skeleton {
   cursor: default;
+}
+
+/* The pin sits in the cover's corner: shown on hover and keyboard focus, and
+   always once the app is pinned. */
+.gcard-item .gcard-pin {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border-color: var(--border);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.gcard-item:hover .gcard-pin,
+.gcard-item .gcard-pin:focus-visible,
+.gcard-item .gcard-pin[aria-pressed='true'] {
+  opacity: 1;
+}
+
+/* On its own, so a webview without :has() keeps the rule above. */
+.gcard-item:has(:focus-visible) .gcard-pin {
+  opacity: 1;
+}
+
+.gcard-item .gcard-pin:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.gcard-item .gcard-pin[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+.gcard-item .gcard-pin .codicon {
+  font-size: 14px;
 }
 
 .gcard-body {
@@ -581,8 +626,10 @@
   font-size: 14px;
 }
 
-.gdetail-copy {
-  align-self: flex-start;
+.gdetail-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .gdetail-note {

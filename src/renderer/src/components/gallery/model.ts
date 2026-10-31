@@ -10,12 +10,15 @@ export interface GalleryQuery {
   /** One workspace's apps, or every workspace's (`null`). */
   workspaceId: string | null
   sort: GallerySort
+  /** The pinned apps' keys (`pinKey`): they come first. */
+  pinned: readonly string[]
 }
 
-/** An app with what Fabric said about its latest publish, once it has. */
+/** An app with what Fabric said about its latest publish, once it has, and whether it's pinned. */
 export interface GalleryEntry {
   app: GalleryApp
   status?: GalleryStatus
+  pinned: boolean
 }
 
 export interface GalleryWorkspace {
@@ -25,12 +28,24 @@ export interface GalleryWorkspace {
 }
 
 export interface GalleryGroup {
+  /** The workspace's id, or `pinned` for the pinned apps' group. */
   id: string
   name: string
+  pinned: boolean
   entries: GalleryEntry[]
 }
 
 const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
+const PINNED_GROUP = 'pinned'
+
+/**
+ * What a pin remembers an app by: its Fabric item id, which stays the same when
+ * the app is renamed and is unique across workspaces. Fabric's ids are GUIDs in
+ * either case, so the key is lowercase.
+ */
+export function pinKey(app: GalleryApp): string {
+  return app.id.toLowerCase()
+}
 
 /** The lowercase words of a search. */
 export function terms(text: string): string[] {
@@ -90,25 +105,33 @@ const ORDER: Record<GallerySort, (a: GalleryEntry, b: GalleryEntry) => number> =
   workspace: (a, b) => collator.compare(a.app.workspaceName, b.app.workspaceName) || byName(a, b)
 }
 
-/** The apps a query shows: best matches first when searching, then in the chosen order. */
+/**
+ * The apps a query shows: pinned apps first, then the rest. Within each, best
+ * matches first when searching, then in the chosen order.
+ */
 export function applyQuery(
   apps: readonly GalleryApp[],
   statuses: Readonly<Record<string, GalleryStatus>>,
   query: GalleryQuery
 ): GalleryEntry[] {
   const search = terms(query.text)
+  const pins = new Set(query.pinned)
   const scored: Array<{ entry: GalleryEntry; score: number }> = []
   for (const app of apps) {
     if (query.where === 'local' && !app.local) continue
     if (query.where === 'remote' && app.local) continue
     if (query.workspaceId && app.workspaceId !== query.workspaceId) continue
     const s = score(app, search)
-    if (s > 0) scored.push({ entry: { app, status: statuses[app.id] }, score: s })
+    if (s > 0) {
+      const entry = { app, status: statuses[app.id], pinned: pins.has(pinKey(app)) }
+      scored.push({ entry, score: s })
+    }
   }
   // Grouped by workspace, the groups keep their order; relevance ranks within each.
   const order = ORDER[query.sort]
   const relevance = search.length > 0
   scored.sort((a, b) => {
+    if (a.entry.pinned !== b.entry.pinned) return a.entry.pinned ? -1 : 1
     if (query.sort === 'workspace') {
       const ws = collator.compare(a.entry.app.workspaceName, b.entry.app.workspaceName)
       if (ws) return ws
@@ -129,16 +152,21 @@ export function workspacesOf(apps: readonly GalleryApp[]): GalleryWorkspace[] {
   return [...all.values()].sort((a, b) => collator.compare(a.name, b.name))
 }
 
-/** Entries in workspace groups, keeping their order within each group. */
+/**
+ * Entries in workspace groups, keeping their order within each group. Pinned
+ * apps are a group of their own, first, whatever their workspace.
+ */
 export function groupByWorkspace(entries: readonly GalleryEntry[]): GalleryGroup[] {
   const groups = new Map<string, GalleryGroup>()
   for (const entry of entries) {
-    const { workspaceId: id, workspaceName: name } = entry.app
+    const { app, pinned } = entry
+    const id = pinned ? PINNED_GROUP : app.workspaceId
+    const name = pinned ? 'Pinned' : app.workspaceName
     const group = groups.get(id)
     if (group) group.entries.push(entry)
-    else groups.set(id, { id, name, entries: [entry] })
+    else groups.set(id, { id, name, pinned, entries: [entry] })
   }
-  return [...groups.values()]
+  return [...groups.values()].sort((a, b) => Number(b.pinned) - Number(a.pinned))
 }
 
 /** One or two letters for an app's cover: `sales-dashboard` → `SD`, `notes` → `N`. */

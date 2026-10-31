@@ -62,10 +62,12 @@ function renderGallery(over: Partial<Parameters<typeof AppGalleryView>[0]> = {})
 }
 
 const card = (name: RegExp): HTMLElement => screen.getByRole('button', { name })
-const shownNames = (): string[] =>
-  within(screen.getByRole('list', { name: 'Apps' }))
-    .getAllByRole('button')
-    .map((b) => b.getAttribute('aria-label') ?? '')
+/** Each card's name in a list, leaving out its pin. */
+const shownNames = (list = 'Apps'): string[] =>
+  within(screen.getByRole('list', { name: list }))
+    .getAllByRole('listitem')
+    .map((item) => within(item).getAllByRole('button')[0].getAttribute('aria-label') ?? '')
+const saved = (): unknown => JSON.parse(localStorage.getItem('rayfin.gallery') ?? '{}')
 
 beforeEach(() => {
   resetGallerySnapshotForTests()
@@ -209,6 +211,77 @@ describe('AppGalleryView', () => {
     )
     expect(shownNames()).toEqual(['expense-tracker, in Sales', 'notes, in Sales'])
     expect(screen.queryByText('Checking Fabric…')).toBeNull()
+  })
+
+  it('pins an app to the top without opening it, and remembers it', async () => {
+    installApi()
+    const first = renderGallery()
+    await screen.findByRole('button', { name: /^expense-tracker/ })
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Trip logger', pressed: false }))
+    expect(screen.queryByRole('complementary')).toBeNull()
+    expect(shownNames()).toEqual([
+      'Trip logger, in Travel',
+      'expense-tracker, in Sales',
+      'sales-dashboard, in Sales'
+    ])
+    expect(saved()).toEqual({ where: 'all', sort: 'name', pinned: ['c'] })
+    first.unmount()
+
+    installApi()
+    renderGallery()
+    const pin = await screen.findByRole('button', { name: 'Pin Trip logger', pressed: true })
+    expect(pin.title).toBe('Unpin')
+    expect(shownNames()[0]).toBe('Trip logger, in Travel')
+
+    // The details pin and unpin it too.
+    fireEvent.click(card(/^Trip logger/))
+    const details = screen.getByRole('complementary', { name: 'About Trip logger' })
+    fireEvent.click(within(details).getByRole('button', { name: 'Unpin' }))
+    expect(within(details).getByRole('button', { name: 'Pin to the top' })).toBeTruthy()
+    expect(shownNames()).toEqual([
+      'expense-tracker, in Sales',
+      'sales-dashboard, in Sales',
+      'Trip logger, in Travel'
+    ])
+    expect(saved()).toMatchObject({ pinned: [] })
+  })
+
+  it('groups pinned apps first by workspace, and the pin keeps the focus as its card moves', async () => {
+    localStorage.setItem(
+      'rayfin.gallery',
+      JSON.stringify({ sort: 'workspace', pinned: ['c', 7, null, 'c'] })
+    )
+    installApi()
+    renderGallery()
+    await screen.findByRole('button', { name: /^expense-tracker/ })
+    expect(saved()).toEqual({ where: 'all', sort: 'workspace', pinned: ['c'] })
+    expect(screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual([
+      'Pinned',
+      'Sales'
+    ])
+    // Under Pinned, cards still say where they are.
+    expect(
+      within(screen.getByRole('list', { name: 'Pinned apps' })).getByText('Travel')
+    ).toBeTruthy()
+
+    const pin = screen.getByRole('button', { name: 'Pin sales-dashboard' })
+    pin.focus()
+    fireEvent.click(pin)
+    expect(shownNames('Pinned apps')).toEqual([
+      'sales-dashboard, in Sales',
+      'Trip logger, in Travel'
+    ])
+    expect(shownNames('Apps in Sales')).toEqual(['expense-tracker, in Sales'])
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Pin sales-dashboard', pressed: true })
+    )
+
+    // Search still applies to pinned apps.
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search apps' }), {
+      target: { value: 'expense' }
+    })
+    expect(screen.queryByRole('region', { name: 'Pinned' })).toBeNull()
+    expect(shownNames('Apps in Sales')).toEqual(['expense-tracker, in Sales'])
   })
 
   it('offers a new project when there are no apps yet', async () => {

@@ -90,20 +90,25 @@ export function AppTags({ app }: { app: GalleryApp }): JSX.Element | null {
   )
 }
 
-/** One app in the gallery. */
+/** One app in the gallery, with its pin in the corner. */
 export default function AppCard({
   app,
   status,
   selected,
+  pinned = false,
   showWorkspace = true,
-  onSelect
+  onSelect,
+  onPin
 }: {
   app: GalleryApp
   status?: GalleryStatus
   selected: boolean
+  pinned?: boolean
   /** Off under a workspace's own heading. */
   showWorkspace?: boolean
   onSelect: (app: GalleryApp) => void
+  /** Pin or unpin the app; `keyboard` when the keyboard pressed the pin, not a pointer. */
+  onPin: (app: GalleryApp, keyboard: boolean) => void
 }): JSX.Element {
   const published = publishedText(status)
   const descId = `gcard-desc-${app.id}`
@@ -144,6 +149,19 @@ export default function AppCard({
             )}
           </span>
         </span>
+      </button>
+      <button
+        type="button"
+        className="icon-btn gcard-pin"
+        aria-label={`Pin ${app.name}`}
+        aria-pressed={pinned}
+        title={pinned ? 'Unpin' : 'Pin to the top'}
+        onClick={(event) => {
+          event.stopPropagation()
+          onPin(app, event.detail === 0)
+        }}
+      >
+        <Codicon name={pinned ? 'pinned' : 'pin'} />
       </button>
     </li>
   )
