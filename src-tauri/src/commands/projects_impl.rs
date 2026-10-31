@@ -512,7 +512,7 @@ pub(crate) async fn scaffold_project(
   };
   // Without --skip-install the scaffolder already installed, before the pin.
   if skipped_install || pinned {
-    install_new_project(&dir, on).await;
+    install_new_project(&dir, &release, !request.is_url, on).await;
   }
 
   crate::commands::skills::ensure_project_skills(dir.to_string_lossy().as_ref());
@@ -542,12 +542,15 @@ fn install_failure(folder: &str, result: &RunResult) -> String {
   crate::services::exec::npm_install_failure(result, Some(folder))
 }
 
-/// Install a new project's packages: the root's, with its workspaces, then the
-/// functions folder's when it has its own. A failure doesn't stop the project
-/// being created: the dependency check installs again when it opens.
-async fn install_new_project(dir: &Path, on: &OnData) {
-  say(on, "\nInstalling dependencies with npm…\n");
-  let result = npm_install(dir, Some(on.clone())).await;
+/// Install a new project's packages: the root's, with its workspaces, from
+/// what earlier new projects on Rayfin `release` installed when it can (with a
+/// spare set aside for the next one when `built_in`, see
+/// [`crate::services::new_project_cache`]), then the functions folder's when it
+/// has its own. A failure doesn't stop the project being created: the
+/// dependency check installs again when it opens.
+async fn install_new_project(dir: &Path, release: &str, built_in: bool, on: &OnData) {
+  let from_registry = || npm_install(dir, Some(on.clone()));
+  let result = crate::services::new_project_cache::install(dir, release, built_in, on, from_registry).await;
   let outcome = if result.ok {
     ensure_functions_dependencies(dir, Some(on.clone())).await
   } else {

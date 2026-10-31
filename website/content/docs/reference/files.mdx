@@ -57,6 +57,19 @@ A project you created with **Migrate a Power BI report** keeps what Copilot work
 
 Fabricator stores temporary screenshot attachments under the operating system temp folder in a `rayfin-fabricator-shots` directory. It deletes the screenshot files it owns after they are no longer needed.
 
+## Packages for new projects
+
+Fabricator keeps what it needs to create projects faster in a cache folder that stays on this computer:
+
+| OS | Cache folder |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\com.rayfin.fabricator\new-projects` |
+| macOS | `~/Library/Caches/com.rayfin.fabricator/new-projects` |
+
+It holds the package versions recorded for the last four combinations of Rayfin release and template you created projects with, a few hundred kilobytes each, and the packages installed ahead of time for your next new project, about 500 MB. Recorded versions are used for a week. The first time Fabricator starts after that, it deletes them, with any packages installed ahead of time from them. Those packages move into the new project's folder, so they're used only when that folder is on the same drive as the cache folder. Otherwise, the new project installs the recorded versions.
+
+The folder is safe to delete. The next project you create then installs its packages from npm, which takes longer, and Fabricator fills the folder again. See [Create a new project](/docs/build/projects#create-a-new-project).
+
 ## Credentials
 
 Fabricator does not store Copilot, Azure, or Rayfin credentials in `studio.json`. Those credentials are owned by the tools and services that sign you in, such as the bundled Copilot engine, Azure CLI, GitHub CLI, Rayfin CLI, and platform credential stores. The local backend that runs your apps keeps the tokens it gets from them in memory only.

@@ -23,6 +23,8 @@ A new Fabricator project starts from the Universal App, the default template tha
 
 Fabricator creates the project with the newest Rayfin release that it can run on this computer, and keeps the project's Rayfin packages on that release line, such as `~1.36.0` in `package.json`, so the app keeps running here. It installs the packages, starts the project's version history, and opens the project in the workbench with chat ready. The app runs on this computer from the start, and its data starts empty and stays here. Publish it to a Fabric workspace whenever you're ready. See [Develop on this computer](/docs/build/local-development) and [Publish to Microsoft Fabric](/docs/ship/deploy).
 
+The first project you create on a Rayfin release takes the longest, because npm works out which versions of the app's packages to install and downloads them. Fabricator records those versions. A minute after you create a project, it also installs the packages for your next new project in the background, so that project's packages are ready in a few seconds. After a week, Fabricator works the versions out again, so new projects still get package updates. Community examples reuse recorded versions, but nothing is installed ahead of time for them. See [Packages for new projects](/docs/reference/files#packages-for-new-projects).
+
 While the project installs its packages, Ray, Fabricator's stingray, keeps you company with facts about Rayfin and tips for Fabricator. When the app is ready, he says "Your app is ready! It runs right here on your computer. Let’s build." He also turns up when a cloned or opened project takes a while to install. To find out what else he does, and how to send him away, see [Ray](/docs/start/tour#ray).
 
 > [!NOTE]

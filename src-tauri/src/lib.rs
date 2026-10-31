@@ -151,7 +151,10 @@ pub fn run() {
       //   - remove retired app-data storage nothing reads anymore: the Design
       //     Studio experiment's drafts, receipts and imported assets, and the
       //     per-user npm cache earlier releases seeded from a cache bundled with
-      //     the app (a no-op once they're gone).
+      //     the app (a no-op once they're gone);
+      //   - delete the packages set aside for new projects that are out of
+      //     use, and what setting them aside left behind when Fabricator
+      //     stopped part way (last: a spare is tens of thousands of files).
       std::thread::spawn(|| {
         services::agent_skills::ensure_materialized();
         services::diagnostics::prune();
@@ -165,6 +168,7 @@ pub fn run() {
             }
           }
         }
+        services::new_project_cache::clean_up();
       });
 
       Ok(())

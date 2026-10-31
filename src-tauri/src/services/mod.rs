@@ -25,6 +25,7 @@ pub mod iq;
 pub mod keychain;
 pub mod local_ports;
 pub mod mcp;
+pub mod new_project_cache;
 pub mod npm_env;
 pub mod paths;
 pub mod preview;

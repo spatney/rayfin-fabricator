@@ -11,6 +11,10 @@ use std::path::PathBuf;
 /// the packaged `productName`; "rayfin-desktop" is the dev-mode app name.
 const DATA_DIR_CANDIDATES: &[&str] = &["Rayfin Fabricator", "rayfin-desktop"];
 
+/// The app's Tauri `identifier`, which names its folders on this computer only,
+/// such as the web view's data.
+const IDENTIFIER: &str = "com.rayfin.fabricator";
+
 /// Roaming app-data base (`%APPDATA%` on Windows, XDG/Library elsewhere).
 fn data_base() -> PathBuf {
   dirs::data_dir().unwrap_or_else(|| home_dir().join("AppData").join("Roaming"))
@@ -55,6 +59,19 @@ fn validated_dev_data_dir(value: &std::ffi::OsStr) -> Result<PathBuf, &'static s
     );
   }
   Ok(path)
+}
+
+/// The per-user cache directory, for large files Fabricator can make again. It
+/// stays on this computer: `%LOCALAPPDATA%\com.rayfin.fabricator` on Windows
+/// (not the roaming app data, and not `%LOCALAPPDATA%\Rayfin Fabricator`, where
+/// the app is installed) and `~/Library/Caches/com.rayfin.fabricator` on macOS.
+/// A debug build with `FABRICATOR_DEV_DATA_DIR` keeps it in that folder.
+pub fn cache_dir() -> PathBuf {
+  #[cfg(debug_assertions)]
+  if std::env::var_os("FABRICATOR_DEV_DATA_DIR").is_some() {
+    return data_dir().join("cache");
+  }
+  dirs::cache_dir().unwrap_or_else(temp_dir).join(IDENTIFIER)
 }
 
 /// Ensure the data directory exists and return it.

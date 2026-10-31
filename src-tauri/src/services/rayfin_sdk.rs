@@ -365,7 +365,7 @@ fn workspace_globs(package_json: &str) -> Vec<String> {
 }
 
 /// The folders, with a package.json, that the project's npm workspaces name.
-fn workspace_dirs(project: &Path) -> Vec<PathBuf> {
+pub(crate) fn workspace_dirs(project: &Path) -> Vec<PathBuf> {
   let Ok(text) = std::fs::read_to_string(project.join("package.json")) else {
     return vec![];
   };
