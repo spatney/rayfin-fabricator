@@ -388,6 +388,12 @@ export default function SettingsModal({
                       checked={Boolean(settings.experiments?.reportMigration)}
                       onChange={(v) => onChange({ experiments: { reportMigration: v } })}
                     />
+                    <ToggleRow
+                      label="App gallery"
+                      hint="Browse every Rayfin app you can open in Fabric from Home, including apps that aren't on this computer. Search them, see where each one lives and when it was last published, and open them. Needs the Azure CLI."
+                      checked={Boolean(settings.experiments?.appGallery)}
+                      onChange={(v) => onChange({ experiments: { appGallery: v } })}
+                    />
                   </div>
                 )}
               </div>

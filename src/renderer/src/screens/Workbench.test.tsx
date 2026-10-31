@@ -38,6 +38,8 @@ import type ChatPanel from '../components/ChatPanel'
 import type AdvisorView from '../components/advisor/AdvisorView'
 import type DeploymentsControl from '../components/DeploymentsControl'
 import type MigrateReportScreen from '../components/migrate/MigrateReportScreen'
+import type AppGalleryView from '../components/gallery/AppGalleryView'
+import type HomeView from '../components/HomeView'
 import type { HelpView } from '../components/help/HelpView'
 import type Spotlight from '../components/spotlight/Spotlight'
 import type { AdvisorFixLinks } from '../components/advisor/AdvisorFixSummary'
@@ -55,6 +57,10 @@ const searchProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof Spotlig
 const migrateProps = vi.hoisted(() =>
   vi.fn<(props: ComponentProps<typeof MigrateReportScreen>) => void>()
 )
+const galleryProps = vi.hoisted(() =>
+  vi.fn<(props: ComponentProps<typeof AppGalleryView>) => void>()
+)
+const homeProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof HomeView>) => void>())
 /** The Advisor state the mocked `useAdvisor` reports, and what the chat's fix cards see. */
 const advisorMock = vi.hoisted(() => ({
   derived: { badge: null, items: [], open: [], resolved: [] } as Pick<
@@ -70,7 +76,12 @@ vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({ setTitle: vi.fn().mockResolvedValue(undefined) })
 }))
 vi.mock('../chatEventStore', () => ({ useChatEventStore: () => {} }))
-vi.mock('../components/HomeView', () => ({ default: () => <div data-testid="home">Home</div> }))
+vi.mock('../components/HomeView', () => ({
+  default: (props: ComponentProps<typeof HomeView>) => {
+    homeProps(props)
+    return <div data-testid="home">Home</div>
+  }
+}))
 vi.mock('../components/ModelTab', () => ({ default: () => null }))
 vi.mock('../components/advisor/AdvisorView', () => ({
   default: (props: ComponentProps<typeof AdvisorView>) => {
@@ -132,6 +143,12 @@ vi.mock('../components/migrate/MigrateReportScreen', () => ({
     return <div role="dialog" aria-label="Migrate a Power BI report" />
   },
   describePick: () => ''
+}))
+vi.mock('../components/gallery/AppGalleryView', () => ({
+  default: (props: ComponentProps<typeof AppGalleryView>) => {
+    galleryProps(props)
+    return <section aria-label="App gallery" />
+  }
 }))
 vi.mock('../components/PreviewPane', () => ({
   default: (props: ComponentProps<typeof PreviewPane>) => {
@@ -417,6 +434,8 @@ beforeEach(() => {
   helpProps.mockClear()
   searchProps.mockClear()
   migrateProps.mockClear()
+  galleryProps.mockClear()
+  homeProps.mockClear()
   advisorMock.derived = { badge: null, items: [], open: [], resolved: [] }
   advisorMock.handOff.mockClear()
   advisorMock.links = null
@@ -2437,6 +2456,65 @@ describe('Workbench search', () => {
     expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull()
     expect(screen.getByRole('dialog', { name: 'Help' })).toBeTruthy()
     expect(helpProps.mock.lastCall![0].continuing).toBe(true)
+  })
+})
+
+describe('Workbench app gallery', () => {
+  const gallery = (): HTMLElement | null => screen.queryByRole('region', { name: 'App gallery' })
+  const withGallery: AppSettings = { theme: 'system', experiments: { appGallery: true } }
+
+  it('opens from Home with its experiment, and opens a project on this computer from it', async () => {
+    const api = installApi(false)
+    const home = { workspaceRoot: 'C:\\projects', activeProjectId: null, projects: [project] }
+    const opened = { ...home, activeProjectId: project.id }
+    api.projects.state.mockResolvedValue(home)
+    api.deploy.reconcile.mockResolvedValue(home)
+    api.projects.setActive.mockImplementation(async () => {
+      api.projects.state.mockResolvedValue(opened)
+      api.deploy.reconcile.mockResolvedValue(opened)
+      return opened
+    })
+    const props = makeProps({ settings: withGallery })
+    render(<Workbench {...props} />, { wrapper: Wrapper })
+    await screen.findByTestId('home')
+
+    act(() => homeProps.mock.lastCall![0].onOpenGallery!())
+    expect(gallery()).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Back to projects' })).toBeTruthy()
+    expect(galleryProps.mock.lastCall![0].onSignedIn).toBe(props.onAuthChanged)
+
+    await act(async () => galleryProps.mock.lastCall![0].onOpenProject(project.id))
+    expect(api.projects.setActive).toHaveBeenCalledWith(project.id)
+    expect(gallery()).toBeNull()
+    await screen.findByLabelText('Chat draft')
+  })
+
+  it('opens over the open app from Search, goes back to it, and closes when turned off', async () => {
+    installApi(true)
+    const props = makeProps({ settings: withGallery })
+    const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    const openFromSearch = (): void => {
+      fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+      const search = searchProps.mock.lastCall![0]
+      act(() => {
+        search.items.find((item) => item.id === 'action:gallery')!.run()
+        search.onClose()
+      })
+    }
+
+    openFromSearch()
+    expect(gallery()).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Advisor' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Back to Project One' }))
+    expect(gallery()).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Advisor' })).toBeTruthy()
+
+    openFromSearch()
+    expect(gallery()).toBeTruthy()
+    rerender(<Workbench {...props} settings={{ theme: 'system' }} />)
+    expect(gallery()).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Advisor' })).toBeTruthy()
   })
 })
 

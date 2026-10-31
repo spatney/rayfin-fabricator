@@ -27,6 +27,8 @@ function context(overrides: Partial<ActionContext> = {}): ActionContext {
     chatBusy: false,
     autoDeploy: true,
     migrationEnabled: false,
+    galleryEnabled: false,
+    inGallery: false,
     theme: 'dark',
     uiScale: 1,
     fabricSignedIn: true,
@@ -93,5 +95,15 @@ describe('Search actions', () => {
     expect(toggle.title).toBe('Turn off Publish after each chat turn')
     toggle.run()
     expect(ctx.do.setAutoDeploy).toHaveBeenCalledWith(false)
+  })
+
+  it('offers the app gallery with its experiment, except from the gallery itself', () => {
+    expect(ids(context())).not.toContain('action:gallery')
+    const ctx = context({ galleryEnabled: true })
+    const gallery = buildActions(ctx).find((a) => a.id === 'action:gallery')!
+    gallery.run()
+    expect(ctx.do.openGallery).toHaveBeenCalled()
+    expect(rank(prepare(buildActions(ctx)), 'fabric apps')[0]?.item.id).toBe('action:gallery')
+    expect(ids(context({ galleryEnabled: true, inGallery: true }))).not.toContain('action:gallery')
   })
 })

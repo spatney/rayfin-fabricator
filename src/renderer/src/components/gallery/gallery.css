@@ -1,0 +1,680 @@
+/* App gallery. Flat: solid surfaces, neutral 1px borders, status shown as small
+   dots and words. Each app's cover is a flat tint of its hue (the same hue as its
+   mark on Home) with a few flat shapes: no gradients, glows or shadows. */
+
+.gallery {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* The header and the apps; the details sit beside both, full height. */
+.gallery-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gallery-wrap {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.gallery-head {
+  flex: none;
+  padding: 24px 28px 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.gallery-head-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.gallery-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.gallery-titles {
+  min-width: 0;
+}
+
+.gallery-eyebrow {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.9px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.gallery-title {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 25px;
+  letter-spacing: -0.3px;
+  line-height: 1.15;
+}
+
+.gallery-sub {
+  margin: 6px 0 0;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-sub strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.gallery-head-tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.gallery-count,
+.gallery-checking {
+  color: var(--text-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.gallery-checking {
+  color: var(--text-dim);
+}
+
+/* ── Toolbar ────────────────────────────────────────────────────────────── */
+
+.gallery-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.gallery-search {
+  position: relative;
+  display: flex;
+  flex: 1 1 300px;
+  align-items: center;
+  min-width: 220px;
+}
+
+/* The gallery's styles load before main.css and codicon.css in the app, so each
+   rule that adjusts a shared class (.field-input, .icon-btn, .codicon) is more
+   specific than that class's own rule. */
+
+.gallery-search .codicon.gallery-search-ico {
+  position: absolute;
+  left: 11px;
+  color: var(--text-faint);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.gallery-search .gallery-search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 36px 0 33px;
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.gallery-search-key {
+  position: absolute;
+  right: 9px;
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  color: var(--text-faint);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  pointer-events: none;
+}
+
+.gallery-search-input:focus + .gallery-search-key {
+  display: none;
+}
+
+.gallery-toolbar .seg {
+  margin-bottom: 0;
+}
+
+.gallery-where .seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+
+.gallery-seg-count {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* `select.field-input` keeps its right padding for the chevron. */
+.gallery-toolbar select.gallery-select {
+  max-width: 220px;
+  height: 34px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 12.5px;
+}
+
+/* ── Body ───────────────────────────────────────────────────────────────── */
+
+.gallery-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 20px 28px 32px;
+  overflow-y: auto;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gallery-group + .gallery-group {
+  margin-top: 28px;
+}
+
+.gallery-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.gallery-group-head .codicon {
+  color: var(--text-dim);
+}
+
+.gallery-group-count {
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.gallery-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.gallery-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.gallery-note-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+
+.gcard-item {
+  display: flex;
+  min-width: 0;
+}
+
+.gcard {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.gcard:hover {
+  background: var(--bg-elev-2);
+}
+
+.gcard:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+.gcard--selected,
+.gcard--selected:hover {
+  border-color: var(--accent);
+}
+
+.gcard--skeleton {
+  cursor: default;
+}
+
+.gcard-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px 14px 12px;
+}
+
+.gcard-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcard-ws {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.gcard .gcard-ws .codicon {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.gcard-ws span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcard-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.gcard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 16px;
+  margin-top: auto;
+  padding-top: 8px;
+  font-size: 11.5px;
+}
+
+.gcard-time {
+  color: var(--text-faint);
+}
+
+.gcard-time--pending {
+  width: 92px;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--border);
+}
+
+.gtag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-dim);
+}
+
+.gdot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.gdot--local {
+  background: var(--ok);
+}
+
+.gdot--team {
+  background: var(--accent);
+}
+
+.gdot--preview,
+.gdot--warn {
+  background: var(--pending);
+}
+
+/* ── Covers ─────────────────────────────────────────────────────────────── */
+
+.gcover {
+  --hue: 205;
+  position: relative;
+  display: block;
+  flex: none;
+  aspect-ratio: 16 / 7;
+  overflow: hidden;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.gcover--skeleton {
+  background: var(--bg-elev-2);
+}
+
+.gcover-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.gcover-bg {
+  fill: hsl(var(--hue) 55% 50% / 0.14);
+}
+
+.gcover-a {
+  fill: hsl(var(--hue) 60% 60% / 0.16);
+}
+
+.gcover-b {
+  fill: hsl(var(--hue) 65% 66% / 0.26);
+}
+
+.gcover-ring {
+  fill: none;
+  stroke: hsl(var(--hue) 65% 66% / 0.38);
+  stroke-width: 3;
+}
+
+.gcover-mark {
+  position: absolute;
+  bottom: 10px;
+  left: 14px;
+  color: hsl(var(--hue) 65% 72%);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  line-height: 1;
+  user-select: none;
+}
+
+[data-theme='light'] .gcover-bg {
+  fill: hsl(var(--hue) 55% 50% / 0.12);
+}
+
+[data-theme='light'] .gcover-a {
+  fill: hsl(var(--hue) 55% 50% / 0.13);
+}
+
+[data-theme='light'] .gcover-b {
+  fill: hsl(var(--hue) 55% 46% / 0.2);
+}
+
+[data-theme='light'] .gcover-ring {
+  stroke: hsl(var(--hue) 55% 42% / 0.32);
+}
+
+[data-theme='light'] .gcover-mark {
+  color: hsl(var(--hue) 55% 32%);
+}
+
+.gcover--large {
+  aspect-ratio: 16 / 8;
+}
+
+.gcover--large .gcover-mark {
+  bottom: 14px;
+  left: 18px;
+  font-size: 30px;
+}
+
+/* ── Details ────────────────────────────────────────────────────────────── */
+
+.gdetail {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 340px;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border);
+}
+
+.gdetail-cover {
+  position: relative;
+  flex: none;
+}
+
+.gdetail-cover .gdetail-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border-color: var(--border);
+}
+
+.gdetail-cover .gdetail-close:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.gdetail-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 18px 22px;
+}
+
+.gdetail-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.gdetail-name {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.gdetail-ws,
+.gdetail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
+.gdetail-ws {
+  gap: 6px;
+}
+
+.gdetail-ws .codicon {
+  color: var(--text-faint);
+}
+
+.gdetail-tags {
+  font-size: 12px;
+}
+
+.gdetail-desc {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.gdetail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gdetail-actions .btn {
+  justify-content: flex-start;
+}
+
+.gdetail-actions .btn .codicon {
+  font-size: 14px;
+}
+
+.gdetail-copy {
+  align-self: flex-start;
+}
+
+.gdetail-note {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.45;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+}
+
+.gdetail-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  padding-top: 14px;
+  font-size: 12.5px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.gdetail-facts dt {
+  color: var(--text-faint);
+}
+
+.gdetail-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.gdetail-mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+/* ── States ─────────────────────────────────────────────────────────────── */
+
+.gallery-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 460px;
+  margin: 48px auto;
+  padding: 30px 26px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.gallery-state-mark {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 4px;
+}
+
+/* Beats codicon.css's `.codicon[class*='codicon-']` size. */
+.gallery-state .codicon.gallery-state-glyph {
+  margin-bottom: 4px;
+  color: var(--text-faint);
+  font-size: 28px;
+}
+
+.gallery-state-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.gallery-state-sub {
+  margin: 0;
+}
+
+.gallery-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+@media (max-width: 920px) {
+  .gdetail {
+    width: 300px;
+  }
+}

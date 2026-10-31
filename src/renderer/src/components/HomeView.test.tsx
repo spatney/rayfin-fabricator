@@ -49,6 +49,17 @@ describe('HomeView project launcher', () => {
     expect(onMigrateReport).toHaveBeenCalledTimes(1)
   })
 
+  it('offers the app gallery only when the experiment provides it', () => {
+    const props = baseProps()
+    const { rerender } = render(<HomeView {...props} />)
+    expect(screen.queryByRole('button', { name: /app gallery/i })).toBeNull()
+
+    const onOpenGallery = vi.fn()
+    rerender(<HomeView {...props} onOpenGallery={onOpenGallery} />)
+    fireEvent.click(screen.getByRole('button', { name: /app gallery/i }))
+    expect(onOpenGallery).toHaveBeenCalledTimes(1)
+  })
+
   it('uses separate native controls to open and manage a recent project', () => {
     const props = baseProps()
     const project = makeProject('p1', { name: 'Sales' })

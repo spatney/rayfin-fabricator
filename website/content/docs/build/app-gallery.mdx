@@ -1,0 +1,116 @@
+---
+title: App gallery
+description: Browse, search and open every Rayfin app you can open in your Fabric tenant, including apps that aren't on this computer. Experimental.
+---
+
+> [!WARNING]
+> The app gallery is an experiment. Turn it on in **Settings → Experiments**. It may change or be
+> removed in a future update.
+
+The app gallery shows every Rayfin app you can open in Microsoft Fabric: the apps you publish
+from this computer, the apps you published from another computer, and the apps other people share
+with you. Search them, see where each one lives and when it was last published, and open them in
+your browser, in Fabric, or in Fabricator.
+
+![The app gallery with eleven sample apps as cards, each with its workspace and when it was last published, and the details of Contoso Expenses open beside them with Open app, Open in Fabric, Open in Fabricator and Copy link](/screenshots/app-gallery.webp)
+
+## Turn on the app gallery
+
+1. Open **Settings**.
+2. Open **Experiments**.
+3. Turn on **App gallery**.
+
+**Your projects** now has **App gallery** with the project actions.
+
+## Open the app gallery
+
+- On **Your projects**, select **App gallery**.
+- Or press `Ctrl+K` (`⌘K` on macOS), type `gallery`, and select **App gallery**. You can open it this
+  way while you work on an app, too.
+
+To leave, select **Back to projects** in the app bar, or **Back to** your project's name when you
+opened the gallery from a project. You can also press `Esc`.
+
+## Sign in to Azure
+
+The gallery finds your apps with your Azure CLI sign-in. Signing in to Azure is optional at setup,
+so if you skipped it, the gallery shows **Sign in to Azure** and "Fabricator finds the apps you can
+open with your Azure sign-in. Sign in to Azure to see them."
+
+1. Select **Sign in to Azure**.
+2. Finish signing in in your browser. The gallery then lists your apps.
+
+The gallery lists the apps the Azure CLI's account can open. Under the gallery's title, "Every
+Rayfin app you can open in Fabric, as" names that account. It can be a different account from the
+Fabric account you publish with. To use another account, see
+[Use more than one Azure CLI account](/docs/start/accounts#use-more-than-one-azure-cli-account).
+
+## Find an app
+
+Each app is a card with its name, its workspace, and its description when it has one. Below them,
+small dots and words say more:
+
+- **On this computer**: a project in Fabricator publishes this app.
+- A team workspace's name: the app is that team workspace's published app. A teammate's preview
+  says **Team preview**. These show when **Team workspaces** is turned on in
+  **Settings → Experiments**.
+- When the app was last published, such as "Published 3 days ago", or "Not published yet".
+
+To find an app:
+
+- Type in the search box. It matches app names and descriptions, workspace and team workspace
+  names, and the names of your projects. Press `/` to get to the search box from anywhere in the
+  gallery.
+- Select **All**, **On this computer** or **In Fabric only** to see every app, only the apps a
+  project on this computer publishes, or only the others. Each shows how many apps it has.
+- Pick a workspace in **All workspaces** to see only its apps.
+- Sort by **Name**, **Recently published** or **Workspace**. **Workspace** groups the apps under
+  their workspaces' names.
+
+Fabricator remembers your choice of **All**, **On this computer** or **In Fabric only**, and the
+order, for the next time you open the gallery.
+
+## Open an app
+
+Select an app's card to see its details beside the gallery: when it was last published, its
+address, its workspace, and its project and team workspace when it has them.
+
+- **Open app** opens the app in your browser.
+- **Open in Fabric** opens the app's page in the Fabric portal.
+- **Open in Fabricator** opens the project that publishes the app. Only apps marked **On this
+  computer** have it.
+- **Copy link** copies the app's address, or the link to its page in Fabric when Fabricator doesn't
+  know its address.
+
+An app that hasn't published its pages yet says "This app hasn’t published its pages yet." When
+Fabric doesn't say where an app is, its details say "Fabric didn’t share this app’s address. Open it
+in Fabric instead."
+
+To close the details, select the close button or press `Esc`.
+
+## Keep the gallery up to date
+
+When you open the gallery again, it shows the apps it found last time while it checks Fabric again,
+and says "Checking Fabric…" until it's done. To check now, select the **Refresh** button next to the
+number of apps.
+
+If checking again doesn't work, the gallery keeps showing the apps it found before, with what went
+wrong above them. When your Azure sign-in has expired, it says "Sign in to Azure to see your latest
+apps. These are from earlier." Select **Sign in to Azure**.
+
+## An app is missing from the gallery
+
+The gallery shows only the Rayfin apps the Azure CLI's account can open.
+
+1. Under the gallery's title, check which account it reads with. If it's the wrong one, switch the
+   Azure CLI to the right account in **Accounts**. See
+   [Azure CLI is signed in to the wrong account](/docs/troubleshooting/setup-and-sign-in#azure-cli-is-signed-in-to-the-wrong-account).
+2. Make sure the account can open the app in Fabric: someone has to share the app with you, or add
+   you to its workspace. See [Share your app](/docs/ship/share).
+3. Select **Refresh**.
+
+If you can open more apps than Fabricator reads at once, the gallery says "Fabric has more apps than
+Fabricator reads at once, so some apps you can open aren’t shown."
+
+If the gallery says "Couldn’t list your apps", select **Try again**. If it still fails,
+[Report a problem](/docs/troubleshooting/report-a-problem).

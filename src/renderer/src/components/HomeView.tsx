@@ -28,6 +28,8 @@ interface Props {
   onCloneFromGitHub: () => void
   /** Migrate a Power BI report into a new app (experimental); the action shows only when set. */
   onMigrateReport?: () => void
+  /** Browse every Rayfin app you can open in Fabric (experimental); the action shows only when set. */
+  onOpenGallery?: () => void
   onChangeWorkspaceRoot: () => void
   /** Team workspaces (experimental); the section shows only when set. */
   team?: {
@@ -52,6 +54,7 @@ export default function HomeView({
   onOpenExisting,
   onCloneFromGitHub,
   onMigrateReport,
+  onOpenGallery,
   onChangeWorkspaceRoot,
   team
 }: Props): JSX.Element {
@@ -121,6 +124,17 @@ export default function HomeView({
                 <span className="home-action-text">
                   <span className="home-action-label">Migrate a Power BI report</span>
                   <span className="home-action-hint">Turn a report into an app</span>
+                </span>
+              </button>
+            )}
+            {onOpenGallery && (
+              <button type="button" className="home-action" onClick={onOpenGallery}>
+                <span className="home-action-icon" aria-hidden="true">
+                  <Codicon name="library" className="home-action-svg" />
+                </span>
+                <span className="home-action-text">
+                  <span className="home-action-label">App gallery</span>
+                  <span className="home-action-hint">Browse every app you can open in Fabric</span>
                 </span>
               </button>
             )}

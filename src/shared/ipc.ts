@@ -1709,6 +1709,12 @@ export interface ExperimentFlags {
    * page by page.
    */
   reportMigration?: boolean
+  /**
+   * App gallery: Home offers a gallery of every Rayfin app you can open in your
+   * Fabric tenant, including apps that aren't on this computer. Read with the
+   * Azure CLI's sign-in.
+   */
+  appGallery?: boolean
 }
 
 export interface CreateProjectInput {
@@ -2480,6 +2486,70 @@ export interface ChatMigrationRef {
 }
 
 /* ------------------------------------------------------------------ *
+ * App gallery (experimental; ExperimentFlags.appGallery)
+ * ------------------------------------------------------------------ */
+
+/** The Azure CLI's signed-in account, which the gallery reads with. */
+export interface GalleryAccount {
+  user?: string
+  tenantId?: string
+}
+
+/** The project on this computer that publishes to a gallery app. */
+export interface GalleryLocal {
+  projectId: string
+  projectName: string
+}
+
+/** The team workspace a gallery app belongs to. */
+export interface GalleryTeam {
+  /** The local team workspace's id. */
+  workspaceId: string
+  name: string
+  /** A teammate's preview, rather than the team's published app. */
+  preview: boolean
+}
+
+/** One Rayfin app (a Fabric `AppBackend` item) the Azure CLI's account can open. */
+export interface GalleryApp {
+  /** The Fabric item id. */
+  id: string
+  name: string
+  description?: string
+  workspaceId: string
+  workspaceName: string
+  /** The app's page in the Fabric portal. */
+  portalUrl: string
+  /** The app's own address, when a project on this computer records it. */
+  hostingUrl?: string
+  local?: GalleryLocal
+  team?: GalleryTeam
+}
+
+/** Every app the account can open, A to Z. */
+export interface GalleryResult {
+  ok: boolean
+  /** Reading needs an Azure sign-in (missing, expired or rejected). */
+  needsAz?: boolean
+  error?: string
+  apps: GalleryApp[]
+  account?: GalleryAccount
+  /** More apps than the gallery reads at once. */
+  truncated?: boolean
+}
+
+/** What Fabric says about an app's latest publish. */
+export interface GalleryStatus {
+  id: string
+  /** The app's own address, once it has published its pages. */
+  hostingUrl?: string
+  /** When it last published successfully (ISO 8601). */
+  publishedAt?: string
+  /** Fabric couldn't say: no access to the app's status, or the read failed. */
+  unknown?: boolean
+}
+
+/* ------------------------------------------------------------------ *
  * Report migration (experimental; ExperimentFlags.reportMigration)
  * ------------------------------------------------------------------ */
 
@@ -3230,6 +3300,17 @@ export interface RayfinStudioApi {
     dismiss: (projectId: string, dismissed: boolean) => Promise<MigrationState>
     /** A project's migration changed. */
     onState: (cb: (event: MigrationStateEvent) => void) => () => void
+  }
+
+  /**
+   * The app gallery (experimental): every Rayfin app the Azure CLI's account
+   * can open in Fabric, including apps that aren't on this computer.
+   */
+  gallery: {
+    /** Every app, A to Z. `refresh` signs in to Azure afresh and drops cached statuses. Never throws. */
+    list: (refresh?: boolean) => Promise<GalleryResult>
+    /** Each app's address and last publish, in the order asked (up to 50 at a time). Never throws. */
+    status: (apps: Array<{ workspaceId: string; id: string }>) => Promise<GalleryStatus[]>
   }
 
   projects: {

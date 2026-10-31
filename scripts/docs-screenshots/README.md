@@ -210,7 +210,7 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `accounts` | harness | `390,40,660,820` |
 | `deployments` | harness | `1000,0,440,360` |
 | `share` | live, `--open` on Share, `--close` on Cancel | `400,240,640,420` |
-| `team-overview`, `skills`, `secrets`, `blueprint` | harness | none |
+| `team-overview`, `skills`, `secrets`, `blueprint`, `app-gallery` | harness | none |
 | `model-relations`, `model-access` | harness | `0,0,1440,770` |
 | `local-data` | harness | `0,0,1440,580` |
 | `setup`, `help` | harness, shorter window (picked by the script) | none |

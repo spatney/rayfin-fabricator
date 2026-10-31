@@ -18,6 +18,8 @@ import type {
   FabricCapacitiesResult,
   FabricWorkspace,
   FileNode,
+  GalleryApp,
+  GalleryStatus,
   LocalColumn,
   LocalEntity,
   LocalIdentity,
@@ -73,6 +75,7 @@ import { DataTray } from './components/chat/DataTray'
 import ConnectDataModal from './components/ConnectDataModal'
 import MigrateReportScreen from './components/migrate/MigrateReportScreen'
 import MigrationCard from './components/migrate/MigrationCard'
+import AppGalleryView from './components/gallery/AppGalleryView'
 import Spotlight from './components/spotlight/Spotlight'
 import { workbenchSearch } from './components/spotlight/workbenchSearch'
 import type { DataSource } from './fabricData'
@@ -954,6 +957,77 @@ const salesInspection: ReportInspection = {
   }
 }
 
+/* App gallery: every Rayfin app the sample user can open in Fabric, most of them not on this computer. */
+
+const MARKETING_WS = 'b1111111-1111-4111-8111-111111111111'
+const OPERATIONS_WS = 'b2222222-2222-4222-8222-222222222222'
+const TRIPS_WS = 'e1111111-1111-4111-8111-111111111111'
+
+const galleryApp = (
+  n: number,
+  name: string,
+  workspaceId: string,
+  workspaceName: string,
+  over: Partial<GalleryApp> = {}
+): GalleryApp => {
+  const id = over.id ?? `f${n}f${n}f${n}f${n}-${n}${n}${n}${n}-4${n}${n}${n}-8${n}${n}${n}-${String(n).repeat(12)}`
+  return {
+    id,
+    name,
+    workspaceId,
+    workspaceName,
+    portalUrl: `https://app.fabric.microsoft.com/groups/${workspaceId}/appbackends/${id}`,
+    ...over
+  }
+}
+
+const galleryApps: GalleryApp[] = [
+  galleryApp(0, 'contoso-expenses', APPS_WS, 'Contoso Apps', {
+    id: EXPENSES_ITEM,
+    description: 'Submit expenses, attach receipts, and approve your team’s reports.',
+    local: { projectId: 'p2', projectName: 'Contoso Expenses' },
+    hostingUrl: EXPENSES_URL
+  }),
+  galleryApp(1, 'budget-planner', FINANCE_WS, 'Finance analytics', {
+    description: 'Plan next year’s budget by department, with this year’s spend beside it.'
+  }),
+  galleryApp(2, 'vendor-portal', FINANCE_WS, 'Finance analytics', {
+    description: 'Vendors upload invoices and follow their payments.'
+  }),
+  galleryApp(3, 'campaign-tracker', MARKETING_WS, 'Marketing', {
+    description: 'Campaigns, budgets and results in one place.',
+    local: { projectId: 'p3', projectName: 'Campaign tracker' }
+  }),
+  galleryApp(4, 'event-check-in', MARKETING_WS, 'Marketing'),
+  galleryApp(5, 'field-inspections', OPERATIONS_WS, 'Operations', {
+    description: 'Inspectors record site visits, photos and follow-ups from the field.'
+  }),
+  galleryApp(6, 'inventory-counts', OPERATIONS_WS, 'Operations'),
+  galleryApp(7, 'trip-logger', TRIPS_WS, 'Trips', {
+    description: 'Log business trips and mileage.',
+    team: { workspaceId: sampleWorkspace.id, name: sampleWorkspace.name, preview: false },
+    local: { projectId: 'p1', projectName: 'Trip Logger' }
+  }),
+  galleryApp(8, 'sales-dashboard', SALES_WS, 'Sales analytics', { description: 'Daily sales by region and store.' }),
+  galleryApp(9, 'store-scorecards', SALES_WS, 'Sales analytics'),
+  galleryApp(1, 'onboarding-checklist', 'c0000000-0000-4000-8000-000000000000', 'My workspace', {
+    id: 'f1a2b3c4-1111-4aaa-8bbb-0c1d2e3f4a5b',
+    description: 'Tasks for a new hire’s first two weeks.'
+  })
+]
+
+/** What each app's deploy status says: its address and when it last published. */
+const galleryStatuses: Record<string, GalleryStatus> = Object.fromEntries(
+  galleryApps.map((app, i) => [
+    app.id,
+    {
+      id: app.id,
+      hostingUrl: app.hostingUrl ?? `https://${app.name}-${(i + 3).toString(16).repeat(10)}-westus.webapp.fabricapps.net`,
+      publishedAt: [minutesAgo(120), daysAgo(1), daysAgo(9), daysAgo(3), daysAgo(40), minutesAgo(25), daysAgo(16), daysAgo(2), daysAgo(5), daysAgo(70), daysAgo(12)][i]
+    }
+  ])
+)
+
 /** A report page's preview, as the Migration card shows it: shapes only, on a white page. */
 function pageThumb(shapes: string): string {
   const svg =
@@ -1231,6 +1305,12 @@ function installApi(): void {
       reports: (workspaceId: string) => Promise.resolve({ ok: true, reports: migrationReports[workspaceId] ?? [] }),
       search: ok({ ok: true, reports: [] }),
       inspect: ok(salesInspection)
+    },
+    // The app gallery: read with the same Azure CLI sign-in.
+    gallery: {
+      list: ok({ ok: true, apps: galleryApps, account: { user: 'avery.chen@contoso.com' } }),
+      status: (apps: Array<{ id: string }>) =>
+        Promise.resolve(apps.map((app) => galleryStatuses[app.id] ?? { id: app.id, unknown: true }))
     },
     team: {
       map: ok(sampleMap()),
@@ -2190,6 +2270,13 @@ function Shot({ id }: { id: string | null }): JSX.Element {
             />
           }
         />
+      )
+    case 'app-gallery':
+      // Every app the sample user can open, with the sample app's details open.
+      return (
+        <Steps clicks={[`[data-app-id="${EXPENSES_ITEM}"]`]}>
+          <AppGalleryView onClose={noop} onOpenProject={noop} onNewProject={noop} />
+        </Steps>
       )
     default:
       return <p style={{ padding: 24 }}>Unknown shot: {String(id)}</p>

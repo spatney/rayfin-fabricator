@@ -297,6 +297,9 @@ pub fn run() {
       commands::migration::migration_set_page_status,
       commands::migration::migration_cancel,
       commands::migration::migration_dismiss,
+      // app gallery
+      commands::gallery::gallery_list,
+      commands::gallery::gallery_status,
       // projects
       commands::projects::projects_state,
       commands::projects::projects_check_name,

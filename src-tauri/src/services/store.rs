@@ -37,6 +37,7 @@ fn default_flags() -> ExperimentFlags {
   ExperimentFlags {
     team_workspaces: Some(false),
     report_migration: Some(false),
+    app_gallery: Some(false),
   }
 }
 
@@ -172,6 +173,7 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   let current = experiments.get_or_insert_with(default_flags);
   if let Some(v) = patch.team_workspaces { current.team_workspaces = Some(v); }
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
+  if let Some(v) = patch.app_gallery { current.app_gallery = Some(v); }
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -213,6 +215,17 @@ pub fn report_migration_enabled() -> bool {
       .experiments
       .as_ref()
       .and_then(|e| e.report_migration)
+      .unwrap_or(false)
+  })
+}
+
+/// True when the App gallery experiment is on.
+pub fn app_gallery_enabled() -> bool {
+  with_cache(|c| {
+    c.settings
+      .experiments
+      .as_ref()
+      .and_then(|e| e.app_gallery)
       .unwrap_or(false)
   })
 }
@@ -398,6 +411,19 @@ mod tests {
     assert_eq!(
       serde_json::to_value(flags.unwrap()).unwrap(),
       serde_json::json!({"teamWorkspaces":true,"reportMigration":true})
+    );
+  }
+
+  #[test]
+  fn app_gallery_flag_merges_and_defaults_off() {
+    assert_eq!(default_settings().experiments.unwrap().app_gallery, Some(false));
+    let mut flags: Option<ExperimentFlags> =
+      Some(serde_json::from_value(serde_json::json!({"reportMigration":true})).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"appGallery":true})).unwrap());
+    assert_eq!(flags.as_ref().unwrap().app_gallery, Some(true));
+    assert_eq!(
+      serde_json::to_value(flags.unwrap()).unwrap(),
+      serde_json::json!({"reportMigration":true,"appGallery":true})
     );
   }
 

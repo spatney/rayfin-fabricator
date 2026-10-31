@@ -1,0 +1,192 @@
+import type { GalleryApp, GalleryStatus } from '@shared/ipc'
+
+/** Where the apps shown live: everywhere, on this computer, or only in Fabric. */
+export type GalleryWhere = 'all' | 'local' | 'remote'
+export type GallerySort = 'name' | 'recent' | 'workspace'
+
+export interface GalleryQuery {
+  text: string
+  where: GalleryWhere
+  /** One workspace's apps, or every workspace's (`null`). */
+  workspaceId: string | null
+  sort: GallerySort
+}
+
+/** An app with what Fabric said about its latest publish, once it has. */
+export interface GalleryEntry {
+  app: GalleryApp
+  status?: GalleryStatus
+}
+
+export interface GalleryWorkspace {
+  id: string
+  name: string
+  count: number
+}
+
+export interface GalleryGroup {
+  id: string
+  name: string
+  entries: GalleryEntry[]
+}
+
+const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true })
+
+/** The lowercase words of a search. */
+export function terms(text: string): string[] {
+  return text.toLowerCase().split(/\s+/).filter(Boolean)
+}
+
+/** Words in a name: `sales-dashboard`, `Sales dashboard` and `salesDashboard` alike. */
+function words(name: string): string[] {
+  return name
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .split(/[\s\-_.]+/)
+    .filter(Boolean)
+}
+
+/**
+ * How well an app matches a search: 0 when it doesn't (every term must appear in
+ * its name, description, workspace, team or project), higher the more of it is
+ * in the name. Empty searches match everything.
+ */
+export function score(app: GalleryApp, query: string[]): number {
+  if (query.length === 0) return 1
+  const name = app.name.toLowerCase()
+  const haystack = [
+    name,
+    app.description,
+    app.workspaceName,
+    app.team?.name,
+    app.local?.projectName
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase()
+  if (!query.every((term) => haystack.includes(term))) return 0
+  const nameWords = words(app.name).map((w) => w.toLowerCase())
+  if (name.startsWith(query.join(' ')) || name.startsWith(query.join('-'))) return 4
+  if (query.every((term) => nameWords.some((w) => w.startsWith(term)))) return 3
+  if (query.every((term) => name.includes(term))) return 2
+  return 1
+}
+
+function publishedTime(entry: GalleryEntry): number {
+  const t = entry.status?.publishedAt ? Date.parse(entry.status.publishedAt) : NaN
+  return Number.isFinite(t) ? t : -Infinity
+}
+
+const byName = (a: GalleryEntry, b: GalleryEntry): number =>
+  collator.compare(a.app.name, b.app.name) ||
+  collator.compare(a.app.workspaceName, b.app.workspaceName)
+
+const ORDER: Record<GallerySort, (a: GalleryEntry, b: GalleryEntry) => number> = {
+  name: byName,
+  // Apps Fabric hasn't said anything about yet come last, by name.
+  recent: (a, b) => {
+    const [ta, tb] = [publishedTime(a), publishedTime(b)]
+    return ta === tb ? byName(a, b) : tb > ta ? 1 : -1
+  },
+  workspace: (a, b) => collator.compare(a.app.workspaceName, b.app.workspaceName) || byName(a, b)
+}
+
+/** The apps a query shows: best matches first when searching, then in the chosen order. */
+export function applyQuery(
+  apps: readonly GalleryApp[],
+  statuses: Readonly<Record<string, GalleryStatus>>,
+  query: GalleryQuery
+): GalleryEntry[] {
+  const search = terms(query.text)
+  const scored: Array<{ entry: GalleryEntry; score: number }> = []
+  for (const app of apps) {
+    if (query.where === 'local' && !app.local) continue
+    if (query.where === 'remote' && app.local) continue
+    if (query.workspaceId && app.workspaceId !== query.workspaceId) continue
+    const s = score(app, search)
+    if (s > 0) scored.push({ entry: { app, status: statuses[app.id] }, score: s })
+  }
+  // Grouped by workspace, the groups keep their order; relevance ranks within each.
+  const order = ORDER[query.sort]
+  const relevance = search.length > 0
+  scored.sort((a, b) => {
+    if (query.sort === 'workspace') {
+      const ws = collator.compare(a.entry.app.workspaceName, b.entry.app.workspaceName)
+      if (ws) return ws
+    }
+    return (relevance ? b.score - a.score : 0) || order(a.entry, b.entry)
+  })
+  return scored.map((s) => s.entry)
+}
+
+/** The workspaces the apps live in, A to Z, with how many each has. */
+export function workspacesOf(apps: readonly GalleryApp[]): GalleryWorkspace[] {
+  const all = new Map<string, GalleryWorkspace>()
+  for (const app of apps) {
+    const ws = all.get(app.workspaceId)
+    if (ws) ws.count++
+    else all.set(app.workspaceId, { id: app.workspaceId, name: app.workspaceName, count: 1 })
+  }
+  return [...all.values()].sort((a, b) => collator.compare(a.name, b.name))
+}
+
+/** Entries in workspace groups, keeping their order within each group. */
+export function groupByWorkspace(entries: readonly GalleryEntry[]): GalleryGroup[] {
+  const groups = new Map<string, GalleryGroup>()
+  for (const entry of entries) {
+    const { workspaceId: id, workspaceName: name } = entry.app
+    const group = groups.get(id)
+    if (group) group.entries.push(entry)
+    else groups.set(id, { id, name, entries: [entry] })
+  }
+  return [...groups.values()]
+}
+
+/** One or two letters for an app's cover: `sales-dashboard` → `SD`, `notes` → `N`. */
+export function initials(name: string): string {
+  const letters = words(name.trim())
+    .slice(0, 2)
+    .map((w) => [...w][0] ?? '')
+  return letters.join('').toUpperCase() || '?'
+}
+
+const UNITS: ReadonlyArray<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['year', 365 * 86_400],
+  ['month', 30 * 86_400],
+  ['week', 7 * 86_400],
+  ['day', 86_400],
+  ['hour', 3_600],
+  ['minute', 60]
+]
+const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+
+/** "3 days ago", "yesterday", "just now": when something happened, in words. */
+export function ago(iso: string | undefined, now = Date.now()): string | undefined {
+  const then = iso ? Date.parse(iso) : NaN
+  if (!Number.isFinite(then)) return undefined
+  const seconds = Math.round((then - now) / 1000)
+  for (const [unit, size] of UNITS) {
+    if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit)
+  }
+  return 'just now'
+}
+
+/** "Oct 24, 2026, 3:34 AM": an exact time, for details. */
+export function fullDate(iso: string | undefined): string | undefined {
+  const then = iso ? Date.parse(iso) : NaN
+  if (!Number.isFinite(then)) return undefined
+  return new Date(then).toLocaleString('en', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+/** `https://flat-oak-1a2b-westus.webapp.fabricapps.net` → `flat-oak-1a2b-westus.webapp.fabricapps.net`. */
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
+
+/** "26 apps", "1 app". */
+export function count(n: number, one: string, many = `${one}s`): string {
+  return `${n.toLocaleString('en')} ${n === 1 ? one : many}`
+}

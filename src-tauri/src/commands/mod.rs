@@ -15,6 +15,7 @@ pub mod diagnostics;
 pub mod doctor;
 pub mod fabric;
 pub mod files;
+pub mod gallery;
 pub mod git;
 pub mod github;
 pub mod help;

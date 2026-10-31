@@ -15,6 +15,7 @@ pub mod exec;
 pub mod fabric_accounts;
 pub mod fabric_auth;
 pub mod fingerprint;
+pub mod gallery;
 pub mod git;
 pub mod grounding;
 pub mod help_session;

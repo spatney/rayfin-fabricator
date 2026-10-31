@@ -20,6 +20,7 @@
     "build/code-and-history",
     "build/data-model",
     "build/migrate-power-bi",
+    "build/app-gallery",
     "build/skills",
     "build/secrets",
     "---Ship---",

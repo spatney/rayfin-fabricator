@@ -282,6 +282,13 @@ fn registry_deployments(dir: &Path, names: &std::collections::HashMap<String, St
   )
 }
 
+/// The deployments a project's registry records, from the file alone (never the
+/// CLI): empty when there's none. The app gallery matches Fabric apps to the
+/// projects on this computer with them.
+pub(crate) fn recorded_deployments(dir: &Path) -> Vec<FabricDeployment> {
+  registry_deployments(dir, &Default::default()).unwrap_or_default()
+}
+
 /// Where the active deployment lives.
 struct ActiveDeployment {
   workspace_id: Option<String>,

@@ -13,6 +13,7 @@ export interface ActionHandlers {
   openFolder(): void
   cloneFromGitHub(): void
   migrateReport(): void
+  openGallery(): void
   manageProject(): void
   openOverview(): void
   deploy(): void
@@ -53,6 +54,10 @@ export interface ActionContext {
   /** Publish after each chat turn. */
   autoDeploy: boolean
   migrationEnabled: boolean
+  /** The App gallery experiment is on. */
+  galleryEnabled: boolean
+  /** The App gallery is showing. */
+  inGallery: boolean
   /** The open team app's workspace. */
   teamWorkspaceName?: string
   theme: ThemePreference
@@ -246,6 +251,16 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
       keywords: ['power bi', 'report', 'convert'],
       icon: { kind: 'codicon', name: 'graph' },
       run: run.migrateReport
+    })
+  }
+  if (ctx.galleryEnabled && !ctx.inGallery) {
+    add({
+      id: 'action:gallery',
+      title: 'App gallery',
+      subtitle: 'Browse every app you can open in Fabric',
+      keywords: ['fabric apps', 'published apps', 'browse', 'catalog', 'shared with me'],
+      icon: { kind: 'codicon', name: 'library' },
+      run: run.openGallery
     })
   }
   if (project) {

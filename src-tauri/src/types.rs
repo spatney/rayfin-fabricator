@@ -744,6 +744,11 @@ pub struct ExperimentFlags {
   /// page by page. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub report_migration: Option<bool>,
+  /// App gallery: Home offers a gallery of every Rayfin app the user can open
+  /// in their Fabric tenant, including apps that aren't on this computer, read
+  /// with the Azure CLI's sign-in. Opt-in (off by default).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub app_gallery: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

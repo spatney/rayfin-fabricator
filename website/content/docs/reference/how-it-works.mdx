@@ -143,6 +143,7 @@ Fabricator and the tools it runs can contact these services:
 - Power BI, Fabric SQL databases, warehouses and SQL analytics endpoints (over TCP port 1433), and the Azure and Fabric APIs your app's functions call, from the local backend with your own sign-in. The local backend itself listens only on this computer.
 - Azure and GitHub APIs for team workspace setup and **Diagnose with Copilot** when the **Team workspaces** experiment is enabled.
 - Power BI and Fabric APIs, with the Azure CLI's sign-in, to find and read a Power BI report when the **Migrate Power BI reports** experiment is enabled.
+- Fabric APIs, with the Azure CLI's sign-in, to list the Rayfin apps you can open, and each one's address and last publish, when the **App gallery** experiment is enabled. Fabricator finds the apps with Fabric's catalog search, which needs a permission only the Azure CLI's sign-in has, and scans your workspaces instead when the catalog can't search for them.
 - Anthropic, OpenAI, xAI and Google, when you add your own API keys: to check a key and list its models, and for chat, Advisor and Design requests on a model you chose from them.
 
 ## What the Advisor can read

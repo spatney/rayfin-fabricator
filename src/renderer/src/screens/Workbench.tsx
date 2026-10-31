@@ -83,6 +83,7 @@ import { fixPrompt, isVersionFinding } from '../advisor/prompts'
 import BlueprintTab from '../components/blueprint/BlueprintTab'
 import MigrationCard from '../components/migrate/MigrationCard'
 import MigrateReportScreen, { describePick, type ReportPick } from '../components/migrate/MigrateReportScreen'
+import AppGalleryView from '../components/gallery/AppGalleryView'
 import { useMigration, type MigrationControl } from '../migration/useMigration'
 import { writeCodeTab, type CodeTab } from '../components/codeTab'
 import { useToast } from '../toast'
@@ -325,6 +326,8 @@ export default function Workbench({
   const [showClone, setShowClone] = useState(false)
   /** The Migrate a Power BI report picker is showing (experimental). */
   const [showMigrate, setShowMigrate] = useState(false)
+  /** The app gallery (experimental), when open: over Home, or over the project it was opened from. */
+  const [gallery, setGallery] = useState<{ from: 'home' | 'project' } | null>(null)
   /** The report picked for migration, while its new project is being created. */
   const [migrationPick, setMigrationPick] = useState<ReportPick | null>(null)
   const [opening, setOpening] = useState(false)
@@ -727,10 +730,13 @@ export default function Workbench({
   const mapWorkspace = teamMap ? projects?.teamWorkspaces?.find((w) => w.id === teamMap.workspaceId) : undefined
   // What the active team app's pipeline is doing, for the app bar's overview button.
   const teamRuns = useTeamActivity(
-    teamEnabled && active?.team && !showHome && !teamMap ? active.team.workspaceId : null
+    teamEnabled && active?.team && !showHome && !teamMap && !gallery
+      ? active.team.workspaceId
+      : null
   )
   const openTeamMap = useCallback(
     (workspaceId: string, from: 'home' | 'project', folder?: string, manage?: boolean): void => {
+      setGallery(null)
       setTeamMap({ workspaceId, folder, from, manage })
     },
     []
@@ -739,6 +745,17 @@ export default function Workbench({
   useEffect(() => {
     if (teamMap && projects && !mapWorkspace) setTeamMap(null)
   }, [teamMap, projects, mapWorkspace])
+
+  const galleryEnabled = Boolean(settings?.experiments?.appGallery)
+  const openGallery = useCallback((from: 'home' | 'project'): void => {
+    setTeamMap(null)
+    setGallery({ from })
+  }, [])
+  const closeGallery = useCallback((): void => setGallery(null), [])
+  // The gallery closes when its experiment is turned off.
+  useEffect(() => {
+    if (!galleryEnabled) setGallery(null)
+  }, [galleryEnabled])
 
   // A team app's live preview stays up after its turn while the change is
   // saved and the pipeline publishes it. It ends once your preview has that
@@ -1751,6 +1768,7 @@ export default function Workbench({
 
   async function selectProject(p: StudioProject): Promise<void> {
     setNotice(null)
+    setGallery(null)
     // Re-opening the project that's already active just closes the launcher and
     // returns to it exactly as it was left — nothing is torn down or reloaded.
     if (p.id === active?.id) {
@@ -1766,6 +1784,7 @@ export default function Workbench({
   // project is only closed when a different one is opened from the launcher.
   function goHome(): void {
     setNotice(null)
+    setGallery(null)
     remindUnpublished()
     setShowHome(true)
   }
@@ -2092,7 +2111,13 @@ export default function Workbench({
     : null
   /** The active project's own screen — not the launcher or a fullscreen flow. */
   const onProjectScreen =
-    Boolean(active) && !showHome && !showCreate && !showClone && !showMigrate && !teamMap
+    Boolean(active) &&
+    !showHome &&
+    !showCreate &&
+    !showClone &&
+    !showMigrate &&
+    !teamMap &&
+    !gallery
   // The active team app's status, with the run deploying it from the workspace
   // activity until its own status catches up (that's read right after a save).
   const activeTeamStatus = active?.team
@@ -2370,14 +2395,15 @@ export default function Workbench({
       deployFailed: Boolean(active && lastDeployFailed(active, deploys[active.id]))
     })
   ]
-  const helpSurface = showHome || !active ? 'home' : 'project'
+  const helpSurface = showHome || !active || gallery ? 'home' : 'project'
 
   // Search's results run what the app's own controls do. Moving to a part of the
-  // open project leaves Home or a workspace overview for it.
+  // open project leaves Home, a workspace overview or the gallery for it.
   function renderSearch(): JSX.Element {
     const toProject = (): void => {
       setShowHome(false)
       setTeamMap(null)
+      setGallery(null)
     }
     const toolsReady = Boolean(active && depsReadyId === active.id)
     const search = workbenchSearch({
@@ -2386,7 +2412,7 @@ export default function Workbench({
       teamWorkspaces: teamEnabled ? (projects?.teamWorkspaces ?? []) : [],
       toolsReady,
       onProjectScreen,
-      onHome: (showHome || !active) && !teamMap,
+      onHome: (showHome || !active) && !teamMap && !gallery,
       view: viewMode,
       deployed: Boolean(active && (active.lastDeploy?.url || active.workspace)),
       deploying: activeDeploying,
@@ -2394,6 +2420,8 @@ export default function Workbench({
       pending: active ? (pending[active.id] ?? undefined) : undefined,
       autoDeploy: !manualDeploy,
       migrationEnabled,
+      galleryEnabled,
+      inGallery: Boolean(gallery),
       teamWorkspaceName: activeTeamWorkspace?.name,
       theme: settings?.theme ?? 'system',
       uiScale: settings?.uiScale ?? 1,
@@ -2438,6 +2466,7 @@ export default function Workbench({
         openFolder: () => void openExisting(),
         cloneFromGitHub: () => setShowClone(true),
         migrateReport: () => setShowMigrate(true),
+        openGallery: () => openGallery(onProjectScreen ? 'project' : 'home'),
         manageProject: () => {
           if (active) setManagingProject(active)
         },
@@ -2525,6 +2554,16 @@ export default function Workbench({
                 name={teamMap.from === 'project' && active ? active.name : 'projects'}
                 title={teamMap.from === 'project' && active ? `Return to ${active.name}` : 'Return to your projects'}
                 onClick={() => setTeamMap(null)}
+              />
+            ) : gallery && !showCreate && !showClone && !showMigrate ? (
+              <BackToProject
+                name={gallery.from === 'project' && active ? active.name : 'projects'}
+                title={
+                  gallery.from === 'project' && active
+                    ? `Return to ${active.name}`
+                    : 'Return to your projects'
+                }
+                onClick={() => setGallery(null)}
               />
             ) : active && onProjectScreen ? (
               <ProjectSwitcher
@@ -2685,6 +2724,7 @@ export default function Workbench({
           onCloned={() => {
             void refreshProjects()
             setShowClone(false)
+            setGallery(null)
           }}
         />
       ) : showCreate ? (
@@ -2703,6 +2743,7 @@ export default function Workbench({
               setNewAppTeamId(null)
               setMigrationPick(null)
               setShowHome(false)
+              setGallery(null)
               setViewMode('build')
               if (pick && result.project) {
                 void startMigration(result.project.id, pick, migrationModel)
@@ -2715,6 +2756,7 @@ export default function Workbench({
             setShowCreate(false)
             setNewAppTeamId(null)
             setShowHome(false)
+            setGallery(null)
             setViewMode('build')
             void refreshProjects()
             if (migrationPick && result.project) void startMigration(result.project.id, migrationPick, migrationModel)
@@ -2737,10 +2779,12 @@ export default function Workbench({
               <ProjectDependencyGuard
                 project={active}
                 onSwitchProjects={goHome}
-                hidden={showHome || Boolean(teamMap)}
+                hidden={showHome || Boolean(teamMap) || Boolean(gallery)}
                 onReadyChange={onDepsReadyChange}
               >
-                <div className={`project-pane${showHome || teamMap ? ' project-pane--hidden' : ''}`}>
+                <div
+                  className={`project-pane${showHome || teamMap || gallery ? ' project-pane--hidden' : ''}`}
+                >
                   {viewMode === 'code' ? (
                     <Suspense fallback={<div className="code-empty">Loading editor…</div>}>
                       <CodeViewer
@@ -2990,6 +3034,21 @@ export default function Workbench({
                 }}
                 onChanged={() => void refreshProjects()}
               />
+            ) : gallery ? (
+              <AppGalleryView
+                onClose={closeGallery}
+                onOpenProject={(projectId) => {
+                  const project = projects?.projects.find((p) => p.id === projectId)
+                  if (project) void selectProject(project)
+                  else toast.error('That project isn’t in Fabricator anymore.')
+                }}
+                onNewProject={() => {
+                  setGallery(null)
+                  setNewAppTeamId(null)
+                  setShowCreate(true)
+                }}
+                onSignedIn={onAuthChanged}
+              />
             ) : showHome || !active ? (
               <>
                 {/* Project stays mounted underneath; hide the native preview (it paints
@@ -3006,6 +3065,7 @@ export default function Workbench({
                   onOpenExisting={openExisting}
                   onCloneFromGitHub={() => setShowClone(true)}
                   onMigrateReport={migrationEnabled ? () => setShowMigrate(true) : undefined}
+                  onOpenGallery={galleryEnabled ? () => openGallery('home') : undefined}
                   onChangeWorkspaceRoot={changeWorkspaceRoot}
                   team={
                     teamEnabled

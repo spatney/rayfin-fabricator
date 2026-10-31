@@ -219,6 +219,11 @@ export const api: RayfinStudioApi = {
       subscribe<MigrationStateEvent>(IpcChannels.migrationState, cb)
   },
 
+  gallery: {
+    list: (refresh?: boolean) => invoke('gallery_list', { refresh: refresh ?? null }),
+    status: (apps: Array<{ workspaceId: string; id: string }>) => invoke('gallery_status', { apps })
+  },
+
   projects: {
     state: () => invoke('projects_state'),
     communityTemplates: (repoUrl?: string) => invoke('projects_community_templates', { repoUrl }),
