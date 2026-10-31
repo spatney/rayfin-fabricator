@@ -40,6 +40,9 @@ updates:
       # @types/node follows the Node major CI runs on (24), not the newest release.
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # typescript-eslint accepts only TypeScript below 6.1; drop this once it supports 7.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: cargo
     directory: /src-tauri

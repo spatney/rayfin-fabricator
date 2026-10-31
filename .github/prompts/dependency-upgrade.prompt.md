@@ -177,6 +177,8 @@ short summary. **Stop there.** Do not implement until I say so.
   `softprops/action-gh-release` v3, Pages actions v6 / v5 / v5.
 - **Blocked or deliberately held:**
   - TypeScript 7: `typescript-eslint` 8.71.2 accepts only `typescript >=4.8.4 <6.1.0`.
+    `.github/dependabot.yml` ignores TypeScript majors until it does; remove that rule
+    as part of the upgrade.
   - Pre-releases: Tauri 3 alphas, `github-copilot-sdk` previews, `@monaco-editor/react`
     4.8 release candidates.
   - `reqwest` uses `native-tls` on purpose: its `rustls` feature adds `aws-lc-rs` next to
