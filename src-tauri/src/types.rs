@@ -4208,6 +4208,45 @@ pub struct LocalRows {
   pub total: u64,
 }
 
+/// A storage folder and the files stored in it locally: one the app declares,
+/// or one that only stored files still name.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalStorageFolder {
+  pub name: String,
+  /// Its `@blob` class's name; `None` when the app no longer declares the folder.
+  pub display_name: Option<String>,
+  pub files: u64,
+  /// The size of its files together.
+  pub bytes: u64,
+}
+
+/// A stored file, regardless of its folder's rules.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalFile {
+  pub id: String,
+  /// Its path in the folder, such as `team/2024/scan.pdf`.
+  pub path: String,
+  pub name: String,
+  pub size: u64,
+  pub content_type: String,
+  /// The local user who first uploaded it; `None` for anonymous uploads.
+  pub owner_id: Option<String>,
+  pub created_at: Option<String>,
+  pub updated_at: Option<String>,
+  /// The app's own fields of the file.
+  pub fields: serde_json::Value,
+}
+
+/// A page of a storage folder's files, in path order.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalFiles {
+  pub files: Vec<LocalFile>,
+  pub total: u64,
+}
+
 /// What reading `rayfin.yml`, the entities and the secrets again did.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
@@ -4230,8 +4269,8 @@ pub struct LocalSecret {
 
 /// Why a local backend command failed. `code` is stable: the control API's
 /// own codes, or `not-running`, `project-not-found`, `invalid`, `unreachable`,
-/// `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed` and the binary
-/// codes of [`LocalProblem`].
+/// `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed`, `save-failed`
+/// and the binary codes of [`LocalProblem`].
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct LocalCommandError {

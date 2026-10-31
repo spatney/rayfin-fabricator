@@ -156,7 +156,7 @@ Add Project and Task entities. A project has many tasks. Tasks have a title, due
 
 ## See your app's local data
 
-Your app runs on this computer with its own data. The **Data** view shows that data as the app's local backend stores it. You can't edit rows there, but you can delete them: see [Clear or reset local data](/docs/build/data-model#clear-or-reset-local-data). For how the app runs on this computer, see [Develop on this computer](/docs/build/local-development).
+Your app runs on this computer with its own data. The **Data** view shows that data as the app's local backend stores it. You can't edit rows or files there, but you can delete them: see [Clear or reset local data](/docs/build/data-model#clear-or-reset-local-data). For how the app runs on this computer, see [Develop on this computer](/docs/build/local-development).
 
 ![Blueprint's Data view of the sample app's local data: 4 entities · 24 rows and the running local backend in the header, the note that local data is separate from the published app's, the Expense entity's 12 rows with each column's name and type, the other entities and Local users with their counts, and Refresh, Reset local data and Clear rows.](/screenshots/local-data.webp)
 
@@ -174,6 +174,14 @@ The header counts the entities and rows, such as **4 entities · 37 rows**, and 
 
 **Local users** lists the people who signed in to the app on this computer, and your test users from **Preview as**: their **Username**, **Email**, how they sign in under **Signs in with**, and when they were added under **Created**. Your own account is marked **Developer**. It appears when the app uses sign-in.
 
+**Storage** lists the app's storage folders, each with its number of files, when the app stores files. Select a folder to see all of its files, whatever its rules say about who can read them:
+
+- Each file shows its **Name**, which is its path in the folder, its **Type** and **Size**, its **Owner**, the local user who uploaded it or **Anonymous**, and when it was last **Updated**. Files come 50 at a time.
+- Select a file's name to preview it beside the list: images, video, audio, text and JSON, and the first five pages of a PDF. Under the preview are the file's details, including the fields the app stores with it.
+- **Save a copy**, above the preview, saves the file where you choose on this computer.
+
+A folder the app no longer has is marked **Not in the app**. Its files stay until you clear them.
+
 Select **Refresh** to read the data again. The view also reads it again after each chat turn, and whenever the local backend rebuilds the app. If the local backend isn't running, the view says so and offers **Start**.
 
 When this computer can't run a published app, its preview uses the published app's backend, and the **Data** view says it shows only the local data. For a team app, the view says its data lives in Fabric.
@@ -184,6 +192,8 @@ The **Data** view can delete local data. Each action asks you to confirm, and ca
 
 - **Clear rows**, above an entity's rows, deletes all of that entity's rows. Other entities, the local users and stored files stay. If rows of another entity still refer to them, Fabricator says which entity to clear first, for example "Rows of ExpenseTag still refer to these rows, so they can’t be cleared on their own. Clear ExpenseTag first, or reset all local data."
 - **Delete**, beside a local user, deletes the user and signs them out of the app on this computer.
+- **Clear files**, above a storage folder's files, deletes all of that folder's files. The entities' rows, the local users and other folders' files stay.
+- **Delete**, beside a stored file or above its preview, deletes that file.
 - **Reset local data**, in the toolbar, deletes every entity's rows, the local users and their sessions, and the files the app stored. If a data model change is waiting because it would delete data, it applies afterward.
 
 When the data model changes in a way that would delete local data, Fabricator asks you before it deletes anything. See [When a data model change would delete local data](/docs/build/local-development#when-a-data-model-change-would-delete-local-data).

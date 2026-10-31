@@ -13,7 +13,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::types::{
-  LocalCommandError, LocalEntity, LocalIdentity, LocalIdentityRequest, LocalReloadResult, LocalRows, LocalUser,
+  LocalCommandError, LocalEntity, LocalFiles, LocalIdentity, LocalIdentityRequest, LocalReloadResult, LocalRows,
+  LocalStorageFolder, LocalUser,
 };
 
 const CONTROL: [&str; 2] = [".rayfin-local", "control"];
@@ -22,6 +23,8 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const RELOAD_TIMEOUT: Duration = Duration::from_secs(180);
 /// The most rows the control API returns at once.
 pub const MAX_ROWS: u64 = 500;
+/// The most files the control API lists at once.
+pub const MAX_FILES: u64 = 500;
 
 static HTTP: Lazy<reqwest::Client> = Lazy::new(|| {
   reqwest::Client::builder()
@@ -235,6 +238,51 @@ impl ControlClient {
   /// Delete every entity's rows, the local users and their sessions, and the stored files.
   pub async fn reset_data(&self) -> Result<(), LocalCommandError> {
     Self::send(self.request(Method::POST, &["data", "reset"]).json(&json!({}))).await.map(drop)
+  }
+
+  /// The storage folders, each with its number of files and their size.
+  pub async fn storage(&self) -> Result<Vec<LocalStorageFolder>, LocalCommandError> {
+    #[derive(Deserialize)]
+    struct Storage {
+      #[serde(default)]
+      folders: Vec<LocalStorageFolder>,
+    }
+    Ok(Self::json::<Storage>(self.request(Method::GET, &["storage"])).await?.folders)
+  }
+
+  /// A page of `folder`'s files in path order, regardless of its rules (`limit` at most [`MAX_FILES`]).
+  pub async fn files(&self, folder: &str, offset: u64, limit: u64) -> Result<LocalFiles, LocalCommandError> {
+    let mut url = self.url(&["storage", folder, "files"]);
+    url
+      .query_pairs_mut()
+      .append_pair("offset", &offset.to_string())
+      .append_pair("limit", &limit.clamp(1, MAX_FILES).to_string());
+    Self::json(self.request_to(Method::GET, url)).await
+  }
+
+  /// A stored file's bytes. Its `path` goes as one escaped segment.
+  pub async fn file(&self, folder: &str, path: &str) -> Result<Vec<u8>, LocalCommandError> {
+    let response = self.request(Method::GET, &["storage", folder, "files", path]).send().await.map_err(transport)?;
+    let status = response.status();
+    if !status.is_success() {
+      let body = response.text().await.map_err(transport)?;
+      return Err(api_error(status, &body));
+    }
+    Ok(response.bytes().await.map_err(transport)?.to_vec())
+  }
+
+  pub async fn delete_file(&self, folder: &str, path: &str) -> Result<(), LocalCommandError> {
+    Self::send(self.request(Method::DELETE, &["storage", folder, "files", path])).await.map(drop)
+  }
+
+  /// Delete every file in `folder`; returns how many.
+  pub async fn clear_files(&self, folder: &str) -> Result<u64, LocalCommandError> {
+    #[derive(Deserialize)]
+    struct Deleted {
+      #[serde(default)]
+      deleted: u64,
+    }
+    Ok(Self::json::<Deleted>(self.request(Method::DELETE, &["storage", folder, "files"])).await?.deleted)
   }
 
   /// Read `rayfin.yml`, the entities and the secrets again and apply them now.

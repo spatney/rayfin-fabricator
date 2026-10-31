@@ -98,6 +98,14 @@ function localInvoke<T>(command: string, args?: Record<string, unknown>): Promis
   })
 }
 
+/** Bytes the core sent as base64, which crosses the IPC much faster than raw bytes. */
+function fromBase64(text: string): ArrayBuffer {
+  const binary = atob(text)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes.buffer
+}
+
 export const api: RayfinStudioApi = {
   ping: () => invoke('ping'),
   getVersions: () => invoke('get_versions'),
@@ -612,6 +620,22 @@ export const api: RayfinStudioApi = {
       }),
     clearRows: (projectId: string, entity: string) =>
       localInvoke('local_clear_rows', { projectId, entity }),
+    storage: (projectId: string) => localInvoke('local_storage', { projectId }),
+    files: (projectId: string, folder: string, offset: number, limit: number) =>
+      localInvoke('local_files', { projectId, folder, offset, limit }),
+    file: (projectId: string, folder: string, path: string, maxBytes?: number) =>
+      localInvoke<string>('local_file', {
+        projectId,
+        folder,
+        path,
+        maxBytes: maxBytes ?? null
+      }).then(fromBase64),
+    saveFile: (projectId: string, folder: string, path: string) =>
+      localInvoke('local_save_file', { projectId, folder, path }),
+    deleteFile: (projectId: string, folder: string, path: string) =>
+      localInvoke('local_delete_file', { projectId, folder, path }),
+    clearFiles: (projectId: string, folder: string) =>
+      localInvoke('local_clear_files', { projectId, folder }),
     secrets: (projectId: string) => localInvoke('local_secrets', { projectId }),
     setSecret: (projectId: string, name: string, value: string) =>
       localInvoke('local_set_secret', { projectId, name, value }),

@@ -4,13 +4,14 @@
 //! fail with a [`LocalCommandError`] (`{code, message, hint}`).
 
 use tauri::AppHandle;
+use tauri_plugin_dialog::DialogExt;
 
 use crate::services::journal::{self, Area, Level};
 use crate::services::local_backend::{self, error, project_dir, sign_in_flag, valid_sign_in, DEFAULT_LOG_LINES};
 use crate::services::telemetry;
 use crate::types::{
-  LocalCommandError, LocalEntity, LocalIdentity, LocalIdentityRequest, LocalLogEvent, LocalReloadResult, LocalRows,
-  LocalSecret, LocalStartOptions, LocalStatus, LocalUser,
+  LocalCommandError, LocalEntity, LocalFiles, LocalIdentity, LocalIdentityRequest, LocalLogEvent, LocalReloadResult,
+  LocalRows, LocalSecret, LocalStartOptions, LocalStatus, LocalStorageFolder, LocalUser,
 };
 
 type LocalResult<T> = Result<T, LocalCommandError>;
@@ -143,6 +144,70 @@ pub async fn local_rows(
 #[tauri::command]
 pub async fn local_clear_rows(app: AppHandle, project_id: String, entity: String) -> LocalResult<u64> {
   local_backend::control(&app, &project_id)?.clear_rows(&entity).await
+}
+
+/// The storage folders, each with its number of files and their size.
+#[tauri::command]
+pub async fn local_storage(app: AppHandle, project_id: String) -> LocalResult<Vec<LocalStorageFolder>> {
+  local_backend::control(&app, &project_id)?.storage().await
+}
+
+/// A page of a storage folder's files, regardless of its rules (`limit` at most 500).
+#[tauri::command]
+pub async fn local_files(app: AppHandle, project_id: String, folder: String, offset: u64, limit: u64) -> LocalResult<LocalFiles> {
+  local_backend::control(&app, &project_id)?.files(&folder, offset, limit).await
+}
+
+/// A stored file's bytes, as base64, for a preview: the first `max_bytes` of
+/// them when given. Base64 because the renderer's IPC runs over postMessage
+/// (its CSP keeps Tauri's IPC protocol out), which sends raw bytes as a JSON
+/// array of numbers: about five times slower for a 20 MB file.
+#[tauri::command]
+pub async fn local_file(
+  app: AppHandle,
+  project_id: String,
+  folder: String,
+  path: String,
+  max_bytes: Option<u64>,
+) -> LocalResult<String> {
+  use base64::Engine as _;
+  let mut bytes = local_backend::control(&app, &project_id)?.file(&folder, &path).await?;
+  if let Some(max) = max_bytes {
+    bytes.truncate(usize::try_from(max).unwrap_or(usize::MAX));
+  }
+  Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+/// Save a copy of a stored file where the user chooses in the OS's Save As
+/// dialog. Resolves with where it went, or `None` when they cancel.
+#[tauri::command]
+pub async fn local_save_file(app: AppHandle, project_id: String, folder: String, path: String) -> LocalResult<Option<String>> {
+  let control = local_backend::control(&app, &project_id)?;
+  let name = path.rsplit('/').next().unwrap_or(&path).to_string();
+  let (tx, rx) = tokio::sync::oneshot::channel();
+  app.dialog().file().set_file_name(name).save_file(move |picked| {
+    let _ = tx.send(picked);
+  });
+  let Some(target) = rx.await.ok().flatten().and_then(|picked| picked.into_path().ok()) else {
+    return Ok(None);
+  };
+  let bytes = control.file(&folder, &path).await?;
+  tokio::fs::write(&target, bytes)
+    .await
+    .map_err(|e| error("save-failed", format!("Couldn't save the file: {e}"), Some("Choose another folder.")))?;
+  Ok(Some(target.display().to_string()))
+}
+
+/// Delete a stored file.
+#[tauri::command]
+pub async fn local_delete_file(app: AppHandle, project_id: String, folder: String, path: String) -> LocalResult<()> {
+  local_backend::control(&app, &project_id)?.delete_file(&folder, &path).await
+}
+
+/// Delete every file in a storage folder; returns how many.
+#[tauri::command]
+pub async fn local_clear_files(app: AppHandle, project_id: String, folder: String) -> LocalResult<u64> {
+  local_backend::control(&app, &project_id)?.clear_files(&folder).await
 }
 
 /// The secrets and where their local values come from (never the values).

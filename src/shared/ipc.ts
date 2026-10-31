@@ -4464,6 +4464,39 @@ export interface LocalRows {
   total: number
 }
 
+/** A storage folder and the files stored in it locally. */
+export interface LocalStorageFolder {
+  name: string
+  /** Its `@blob` class's name; `null` when the app no longer declares the folder. */
+  displayName: string | null
+  files: number
+  /** The size of its files together, in bytes. */
+  bytes: number
+}
+
+/** A stored file, regardless of its folder's rules. */
+export interface LocalFile {
+  id: string
+  /** Its path in the folder, such as `team/2024/scan.pdf`. */
+  path: string
+  name: string
+  /** In bytes. */
+  size: number
+  contentType: string
+  /** The local user who first uploaded it; `null` for anonymous uploads. */
+  ownerId: string | null
+  createdAt: string | null
+  updatedAt: string | null
+  /** The app's own fields of the file. */
+  fields: Record<string, unknown> | null
+}
+
+/** A page of a storage folder's files, in path order. */
+export interface LocalFiles {
+  files: LocalFile[]
+  total: number
+}
+
 export interface LocalReloadResult {
   schema: LocalSchema | null
   config: LocalConfigChanged | null
@@ -4482,8 +4515,8 @@ export interface LocalSecret {
 /**
  * Why a `window.api.local` command failed. `code` is stable: the control API's
  * own codes, or `not-running`, `project-not-found`, `invalid`, `unreachable`,
- * `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed` and the
- * `binary-*` codes of {@link LocalProblemCode}.
+ * `timeout`, `unauthorized`, `not-rayfin-local`, `cli-failed`, `save-failed`
+ * and the `binary-*` codes of {@link LocalProblemCode}.
  */
 export interface LocalCommandError {
   code: string
@@ -4533,6 +4566,17 @@ export interface LocalBackendApi {
   ) => Promise<LocalRows>
   /** Delete every row of an entity; resolves with how many. */
   clearRows: (projectId: string, entity: string) => Promise<number>
+  /** The storage folders, each with its number of files and their size. */
+  storage: (projectId: string) => Promise<LocalStorageFolder[]>
+  /** A page of a folder's files in path order, regardless of its rules; `limit` is at most 500. */
+  files: (projectId: string, folder: string, offset: number, limit: number) => Promise<LocalFiles>
+  /** A stored file's bytes, for a preview: the first `maxBytes` of them when given. */
+  file: (projectId: string, folder: string, path: string, maxBytes?: number) => Promise<ArrayBuffer>
+  /** Save a copy where the user chooses; resolves with where, or `null` when they cancel. */
+  saveFile: (projectId: string, folder: string, path: string) => Promise<string | null>
+  deleteFile: (projectId: string, folder: string, path: string) => Promise<void>
+  /** Delete every file in a folder; resolves with how many. */
+  clearFiles: (projectId: string, folder: string) => Promise<number>
   /** Works whether or not the backend runs. */
   secrets: (projectId: string) => Promise<LocalSecret[]>
   /** The value goes to rayfin-local through stdin; a running backend applies it by itself. */

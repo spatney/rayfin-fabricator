@@ -3,9 +3,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import type {
   LocalColumn,
   LocalEntity,
+  LocalFile,
   LocalReady,
   LocalRows,
   LocalStatus,
+  LocalStorageFolder,
   LocalUser,
   StudioProject
 } from '@shared/ipc'
@@ -99,10 +101,37 @@ const MODEL: DataModel = {
 let current: LocalStatus
 let entities: LocalEntity[]
 let users: LocalUser[]
+let folders: LocalStorageFolder[]
+let stored: Record<string, LocalFile[]>
 let local: Record<string, Mock>
 let preview: { resetSiteData: Mock }
 let record: Mock
 let emitState: (status: LocalStatus) => void
+
+function storedFile(
+  path: string,
+  contentType: string,
+  size: number,
+  ownerId: string | null
+): LocalFile {
+  return {
+    id: path,
+    path,
+    name: path.split('/').pop()!,
+    size,
+    contentType,
+    ownerId,
+    createdAt: '2026-10-29T10:30:00Z',
+    updatedAt: '2026-10-29T10:30:00Z',
+    fields: {}
+  }
+}
+
+/** The bytes of the stored files the previews read. */
+const CONTENT: Record<string, string> = {
+  'notes.json': '{"total":12.5,"items":["taxi"]}',
+  'scans/2026/oct.png': 'png!'
+}
 
 function page(entity: string, offset: number, limit: number): LocalRows {
   const total = entities.find((e) => e.name === entity)?.rows ?? 0
@@ -151,6 +180,19 @@ beforeEach(() => {
     }
   ]
   record = vi.fn(async () => {})
+  folders = [{ name: 'receipts', displayName: 'Receipts', files: 2, bytes: 2079 }]
+  stored = {
+    receipts: [
+      storedFile('notes.json', 'application/json', 31, null),
+      { ...storedFile('scans/2026/oct.png', 'image/png', 2048, 'u2'), fields: { expense_id: 'e1' } }
+    ]
+  }
+  const forget = (folder: string, gone: (file: LocalFile) => boolean): number => {
+    const before = stored[folder].length
+    stored[folder] = stored[folder].filter((file) => !gone(file))
+    folders = folders.map((f) => (f.name === folder ? { ...f, files: stored[folder].length } : f))
+    return before - stored[folder].length
+  }
   local = {
     status: vi.fn(async () => current),
     start: vi.fn(async () => {
@@ -178,6 +220,20 @@ beforeEach(() => {
     deleteUser: vi.fn(async (_id: string, user: string) => {
       users = users.filter((u) => u.id !== user)
     }),
+    storage: vi.fn(async () => folders),
+    files: vi.fn(async (_id: string, folder: string, offset: number, limit: number) => ({
+      files: (stored[folder] ?? []).slice(offset, offset + limit),
+      total: (stored[folder] ?? []).length
+    })),
+    file: vi.fn(
+      async (_id: string, _folder: string, path: string) =>
+        new TextEncoder().encode(CONTENT[path] ?? '').buffer
+    ),
+    saveFile: vi.fn(async () => 'C:\\Users\\avery\\Downloads\\oct.png'),
+    deleteFile: vi.fn(async (_id: string, folder: string, path: string) => {
+      forget(folder, (file) => file.path === path)
+    }),
+    clearFiles: vi.fn(async (_id: string, folder: string) => forget(folder, () => true)),
     reload: vi.fn(async () => ({ schema: null, config: null }))
   }
   preview = { resetSiteData: vi.fn(async () => true) }
@@ -329,7 +385,7 @@ describe('DataView', () => {
     ).toEqual([
       'All 122 rows of its 3 entities',
       'Its 2 local users and their sessions',
-      'The files it stored'
+      'Its 2 stored files'
     ])
     expect(dialog.textContent).not.toContain('data model change')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Reset local data' }))
@@ -390,6 +446,100 @@ describe('DataView', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(local.deleteUser).toHaveBeenCalledWith('p1', 'u2')
     await waitFor(() => expect(within(pane).queryByText('ana@example.com')).toBeNull())
+  })
+
+  it('lists the storage folders and a folder’s files with their type, size and owner', async () => {
+    renderView()
+    const list = await screen.findByRole('navigation', { name: 'Local data' })
+    expect(within(list).getByText('Storage')).toBeTruthy()
+    fireEvent.click(within(list).getByRole('button', { name: 'Receipts, 2 files' }))
+    const pane = await screen.findByRole('region', { name: 'Receipts files' })
+    // The @blob class names the folder; its own name is beside it.
+    expect(within(pane).getByText('receipts')).toBeTruthy()
+    expect(within(pane).getByText('2 files · 2 KB')).toBeTruthy()
+    const table = await within(pane).findByRole('table')
+    expect(local.files).toHaveBeenCalledWith('p1', 'receipts', 0, 50)
+    const cells = (row: HTMLElement): string[] =>
+      within(row)
+        .getAllByRole('cell')
+        .slice(0, 4)
+        .map((cell) => cell.textContent ?? '')
+    const [notes, scan] = within(table).getAllByRole('row').slice(1)
+    expect(cells(notes)).toEqual(['notes.json', 'application/json', '31 bytes', 'Anonymous'])
+    // Owners show by username.
+    expect(cells(scan)).toEqual(['scans/2026/oct.png', 'image/png', '2 KB', 'ana@example.com'])
+  })
+
+  it('previews a stored file with its details, and saves a copy', async () => {
+    const revokeObjectURL = vi.fn()
+    Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL })
+    renderView()
+    fireEvent.click(await screen.findByRole('button', { name: 'Receipts, 2 files' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview notes.json' }))
+    const json = await screen.findByRole('complementary', { name: 'Preview of notes.json' })
+    // JSON shows indented, read no further than a text preview shows.
+    expect(await within(json).findByText(/"items": \[/)).toBeTruthy()
+    expect(local.file).toHaveBeenCalledWith('p1', 'receipts', 'notes.json', 256 * 1024)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview scans/2026/oct.png' }))
+    const image = await screen.findByRole('complementary', {
+      name: 'Preview of scans/2026/oct.png'
+    })
+    const shown = await within(image).findByRole('img', { name: 'oct.png' })
+    expect(shown.getAttribute('src')).toBe('blob:preview')
+    // The app's own fields of the file, and its owner.
+    expect(within(image).getByText('expense_id')).toBeTruthy()
+    expect(within(image).getByText('ana@example.com')).toBeTruthy()
+
+    fireEvent.click(within(image).getByRole('button', { name: 'Save a copy' }))
+    await waitFor(() =>
+      expect(local.saveFile).toHaveBeenCalledWith('p1', 'receipts', 'scans/2026/oct.png')
+    )
+    fireEvent.click(within(image).getByRole('button', { name: 'Close the preview' }))
+    expect(screen.queryByRole('complementary')).toBeNull()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview')
+  })
+
+  it('deletes a stored file and clears a folder after saying what goes', async () => {
+    renderView()
+    fireEvent.click(await screen.findByRole('button', { name: 'Receipts, 2 files' }))
+    const pane = await screen.findByRole('region', { name: 'Receipts files' })
+    fireEvent.click(await within(pane).findByRole('button', { name: 'Delete scans/2026/oct.png' }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete oct.png?' })
+    expect(dialog.textContent).toContain(
+      'This deletes scans/2026/oct.png from the Receipts storage folder of the app’s local data on this computer.'
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(local.deleteFile).toHaveBeenCalledWith('p1', 'receipts', 'scans/2026/oct.png')
+    expect(await screen.findByRole('button', { name: 'Receipts, 1 file' })).toBeTruthy()
+    await waitFor(() =>
+      expect(within(pane).queryByRole('button', { name: 'Preview scans/2026/oct.png' })).toBeNull()
+    )
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ event: 'local.file_deleted' }))
+
+    fireEvent.click(within(pane).getByRole('button', { name: 'Clear files' }))
+    const clear = screen.getByRole('dialog', { name: 'Delete all Receipts files?' })
+    expect(clear.textContent).toContain('This deletes the only file in the Receipts storage folder')
+    fireEvent.click(within(clear).getByRole('button', { name: 'Clear files' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(local.clearFiles).toHaveBeenCalledWith('p1', 'receipts')
+    expect(await within(pane).findByText('No files yet')).toBeTruthy()
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ event: 'local.files_cleared' }))
+  })
+
+  it('shows no storage when the local backend can’t list stored files', async () => {
+    local.storage.mockRejectedValueOnce(
+      new LocalBackendError({
+        code: 'not-found',
+        message: 'The local backend doesn’t know that.',
+        status: 404
+      })
+    )
+    renderView()
+    const list = await screen.findByRole('navigation', { name: 'Local data' })
+    expect(within(list).getByRole('button', { name: 'Expense, 120 rows' })).toBeTruthy()
+    expect(within(list).queryByText('Storage')).toBeNull()
   })
 
   it('offers to start a backend that isn’t running, and says why it stopped', async () => {

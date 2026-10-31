@@ -166,6 +166,17 @@ async fn runs_a_project_answers_its_control_api_and_stops_it_by_closing_stdin() 
   assert!(query.contains("offset=10") && query.contains("limit=500") && query.contains("orderBy=title") && query.contains("desc=true"), "{query}");
   assert_eq!(control.clear_rows("Note").await.unwrap(), 2);
   control.reset_data().await.unwrap();
+  let folder = &control.storage().await.unwrap()[0];
+  assert_eq!((folder.name.as_str(), folder.display_name.as_deref(), folder.files, folder.bytes), ("avatars", Some("Avatars"), 1, 4));
+  let files = control.files("avatars", 0, 9999).await.unwrap();
+  let face = &files.files[0];
+  assert_eq!((files.total, face.path.as_str(), face.content_type.as_str(), face.owner_id.as_deref()), (1, "ana/face.png", "image/png", Some("u1")));
+  let query = face.fields["query"].as_str().unwrap();
+  assert!(query.contains("offset=0") && query.contains("limit=500"), "{query}");
+  assert_eq!(control.file("avatars", "ana/face.png").await.unwrap(), b"png!");
+  assert_eq!(control.file("avatars", "ana/none.png").await.unwrap_err().code, "file-not-found");
+  control.delete_file("avatars", "ana/face.png").await.unwrap();
+  assert_eq!(control.clear_files("avatars").await.unwrap(), 1);
   assert_eq!(control.reload(true).await.unwrap().schema.unwrap().result, "applied");
   control.delete_user("ana@example.com").await.unwrap();
   assert_eq!(control.delete_user("ana@example.com").await.unwrap_err().code, "user-not-found");

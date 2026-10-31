@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState, type JSX, type ReactNode } from 'reac
 import type {
   LocalBackendState,
   LocalEntity,
+  LocalFile,
   LocalRows,
+  LocalStorageFolder,
   LocalUser,
   StudioProject
 } from '@shared/ipc'
@@ -23,15 +25,18 @@ import {
 import ConfirmModal from '../ConfirmModal'
 import { Codicon } from '../icons'
 import { describeProblem } from '../local/problems'
+import { Empty, Pager, Problem } from './dataParts'
 import {
   formatCell,
   formatDate,
   isNumberColumn,
+  lastPage,
   listNames,
   PAGE_SIZE,
   plural,
   referrersOf
 } from './localData'
+import { FilesPane, folderLabel } from './StoragePane'
 import { ViewHead } from './ViewHead'
 import './blueprint.css'
 
@@ -43,19 +48,25 @@ interface Props {
   dataModel?: DataModel
 }
 
-type Selection = { kind: 'entity'; name: string } | { kind: 'users' }
+type Selection =
+  { kind: 'entity'; name: string } | { kind: 'folder'; name: string } | { kind: 'users' }
 
 interface Overview {
   entities: LocalEntity[]
   /** `null` when they couldn't be read (see `usersError`). */
   users: LocalUser[] | null
   usersError: LocalBackendError | null
+  /** The storage folders; `null` when they couldn't be read (see `storageError`). */
+  storage: LocalStorageFolder[] | null
+  storageError: LocalBackendError | null
 }
 
 type Confirm =
   | { kind: 'clear'; entity: string; rows: number }
   | { kind: 'reset' }
   | { kind: 'delete-user'; user: LocalUser }
+  | { kind: 'clear-files'; folder: LocalStorageFolder; files: number }
+  | { kind: 'delete-file'; folder: LocalStorageFolder; file: LocalFile }
 
 const STATE_DOT: Record<LocalBackendState, string> = {
   running: 'ok',
@@ -73,9 +84,11 @@ const SIGN_IN_LABEL: Record<string, string> = {
 /**
  * Blueprint's Data view: the app's local data, as its local backend
  * (rayfin-local) stores it on this computer. The entities with their row
- * counts and the local users; a page of the selected entity's rows, read-only
- * and sortable; and clearing an entity's rows or every bit of local data.
- * Team apps have no local backend, so they only get a note.
+ * counts, the storage folders with their files, and the local users; a page of
+ * the selected entity's rows, read-only and sortable, or of the selected
+ * folder's files, with a preview; and clearing an entity's rows, deleting
+ * files, or every bit of local data. Team apps have no local backend, so they
+ * only get a note.
  */
 export default function DataView({ project, refreshKey, dataModel }: Props): JSX.Element {
   const team = Boolean(project.team)
@@ -175,11 +188,18 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
       (list): Pick<Overview, 'users' | 'usersError'> => ({ users: list, usersError: null }),
       (reason: unknown) => ({ users: null, usersError: toLocalBackendError(reason) })
     )
-    Promise.all([window.api.local.entities(projectId), users])
+    const storage = window.api.local.storage(projectId).then(
+      (folders): Pick<Overview, 'storage' | 'storageError'> => ({
+        storage: folders,
+        storageError: null
+      }),
+      (reason: unknown) => ({ storage: null, storageError: toLocalBackendError(reason) })
+    )
+    Promise.all([window.api.local.entities(projectId), users, storage])
       .then(
-        ([entities, people]) => {
+        ([entities, people, files]) => {
           if (!alive) return
-          setOverview({ entities, ...people })
+          setOverview({ entities, ...people, ...files })
           setOverviewError(null)
         },
         (reason: unknown) => {
@@ -202,17 +222,33 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
   const entities = overview?.entities ?? []
   const users = overview?.users ?? null
   const showUsers = status?.ready?.features.auth.enabled !== false || (users?.length ?? 0) > 0
+  const folders = overview?.storage ?? []
+  const storageError = overview?.storageError ?? null
+  // An older local backend has no storage routes: it answers 404, and the view shows no storage.
+  const storageUnknown =
+    storageError !== null && (storageError.status === 404 || storageError.code === 'not-found')
+  const showStorage =
+    !storageUnknown &&
+    (Boolean(status?.ready?.features.storage.enabled) ||
+      folders.some((folder) => folder.files > 0) ||
+      storageError !== null)
   const [selected, setSelected] = useState<Selection | null>(null)
   const current: Selection | null =
     selected?.kind === 'users' && showUsers
       ? selected
       : selected?.kind === 'entity' && entities.some((e) => e.name === selected.name)
         ? selected
-        : entities.length > 0
-          ? { kind: 'entity', name: entities[0].name }
-          : showUsers
-            ? { kind: 'users' }
-            : null
+        : selected?.kind === 'folder' &&
+            showStorage &&
+            folders.some((folder) => folder.name === selected.name)
+          ? selected
+          : entities.length > 0
+            ? { kind: 'entity', name: entities[0].name }
+            : showStorage && folders.length > 0
+              ? { kind: 'folder', name: folders[0].name }
+              : showUsers
+                ? { kind: 'users' }
+                : null
 
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [confirmBusy, setConfirmBusy] = useState(false)
@@ -256,6 +292,26 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
         void window.api.preview.resetSiteData().catch(() => undefined)
         reportEvent('preview', 'local.data_reset', 'Reset the app’s local data.', { projectId })
         if (schemaWaiting) await window.api.local.reload(projectId, false)
+      })
+    } else if (confirm.kind === 'clear-files') {
+      void perform(async () => {
+        const deleted = await window.api.local.clearFiles(projectId, confirm.folder.name)
+        reportEvent(
+          'preview',
+          'local.files_cleared',
+          `Deleted ${plural(deleted, 'file')} of the ${confirm.folder.name} storage folder from the local data.`,
+          { projectId }
+        )
+      })
+    } else if (confirm.kind === 'delete-file') {
+      void perform(async () => {
+        await window.api.local.deleteFile(projectId, confirm.folder.name, confirm.file.path)
+        reportEvent(
+          'preview',
+          'local.file_deleted',
+          `Deleted a file of the ${confirm.folder.name} storage folder from the local data.`,
+          { projectId }
+        )
       })
     } else {
       void perform(() => window.api.local.deleteUser(projectId, confirm.user.id))
@@ -311,6 +367,8 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
   } else {
     const entity =
       current?.kind === 'entity' ? entities.find((e) => e.name === current.name) : undefined
+    const folder =
+      current?.kind === 'folder' ? folders.find((f) => f.name === current.name) : undefined
     body = (
       <div className="bp-data-body">
         <nav className="bp-data-side" aria-label="Local data">
@@ -333,6 +391,38 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
               </button>
             )
           })}
+          {showStorage && (
+            <>
+              <div className="bp-data-side-h bp-data-side-h--next">Storage</div>
+              {storageError && (
+                <div className="bp-data-side-empty" title={storageError.message}>
+                  Couldn’t read the stored files
+                </div>
+              )}
+              {!storageError && folders.length === 0 && (
+                <div className="bp-data-side-empty">No storage folders</div>
+              )}
+              {folders.map((f) => {
+                const on = current?.kind === 'folder' && current.name === f.name
+                const label = folderLabel(f)
+                return (
+                  <button
+                    key={f.name}
+                    type="button"
+                    className={`bp-data-item${on ? ' bp-data-item--on' : ''}`}
+                    aria-current={on ? 'true' : undefined}
+                    aria-label={`${label}, ${plural(f.files, 'file')}`}
+                    title={f.displayName ? `${f.displayName} (${f.name})` : f.name}
+                    onClick={() => setSelected({ kind: 'folder', name: f.name })}
+                  >
+                    <Codicon name={on ? 'folder-opened' : 'folder'} />
+                    <span className="bp-data-item-name">{label}</span>
+                    <span className="bp-data-item-count">{f.files.toLocaleString('en-US')}</span>
+                  </button>
+                )
+              })}
+            </>
+          )}
           {showUsers && (
             <>
               <div className="bp-data-sep" />
@@ -357,6 +447,16 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
             error={overview.usersError}
             onRetry={reload}
             onDelete={(user) => setConfirm({ kind: 'delete-user', user })}
+          />
+        ) : folder ? (
+          <FilesPane
+            key={folder.name}
+            projectId={projectId}
+            folder={folder}
+            users={users}
+            reloadKey={reloadKey}
+            onClear={(files) => setConfirm({ kind: 'clear-files', folder, files })}
+            onDelete={(file) => setConfirm({ kind: 'delete-file', folder, file })}
           />
         ) : entity ? (
           <RowsPane
@@ -507,59 +607,6 @@ function BackendState({ backend }: { backend: LocalBackend }): JSX.Element {
   )
 }
 
-function Empty({ icon, title, sub }: { icon: string; title: string; sub: string }): JSX.Element {
-  return (
-    <div className="model-empty model-empty--cta">
-      <span className="bp-data-empty-ico">
-        <Codicon name={icon} />
-      </span>
-      <div className="model-empty-title">{title}</div>
-      <p className="model-empty-sub">{sub}</p>
-    </div>
-  )
-}
-
-function Problem({
-  title,
-  error,
-  onRetry,
-  extra
-}: {
-  title: string
-  error: { message: string; hint?: string | null }
-  onRetry?: () => void
-  /** Another way out, beside Retry. */
-  extra?: { label: string; onClick: () => void }
-}): JSX.Element {
-  return (
-    <div className="model-empty model-empty--cta" role="alert">
-      <div className="model-empty-title">{title}</div>
-      <p className="model-empty-sub">{error.message}</p>
-      {error.hint && <p className="model-empty-sub bp-data-hint">{error.hint}</p>}
-      {(onRetry || extra) && (
-        <div className="bp-data-actions">
-          {onRetry && (
-            <button type="button" className="btn btn--sm" onClick={onRetry}>
-              <Codicon name="refresh" />
-              Retry
-            </button>
-          )}
-          {extra && (
-            <button type="button" className="btn btn--sm btn--ghost" onClick={extra.onClick}>
-              {extra.label}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** The first row of the last page of `total` rows. */
-function lastPage(total: number): number {
-  return total > 0 ? Math.floor((total - 1) / PAGE_SIZE) * PAGE_SIZE : 0
-}
-
 function RowsPane({
   projectId,
   entity,
@@ -637,7 +684,6 @@ function RowsPane({
       />
     )
   } else {
-    const n = (value: number): string => value.toLocaleString('en-US')
     content = (
       <>
         <div className="bp-data-scroll">
@@ -694,36 +740,7 @@ function RowsPane({
             </tbody>
           </table>
         </div>
-        <div className="bp-data-pager">
-          <span>
-            {n(offset + 1)}–{n(offset + page.rows.length)} of {n(page.total)}
-          </span>
-          {page.total > PAGE_SIZE && (
-            <>
-              <div className="model-toolbar-spacer" />
-              <button
-                type="button"
-                className="model-tool-btn"
-                onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                disabled={offset === 0}
-                aria-label="Previous page"
-              >
-                <Codicon name="chevron-left" />
-                Previous
-              </button>
-              <button
-                type="button"
-                className="model-tool-btn"
-                onClick={() => setOffset(offset + PAGE_SIZE)}
-                disabled={offset + PAGE_SIZE >= page.total}
-                aria-label="Next page"
-              >
-                Next
-                <Codicon name="chevron-right" />
-              </button>
-            </>
-          )}
-        </div>
+        <Pager offset={offset} shown={page.rows.length} total={page.total} onOffset={setOffset} />
       </>
     )
   }
@@ -903,6 +920,7 @@ function ConfirmDialog({
     const entities = overview?.entities ?? []
     const rows = entities.reduce((sum, e) => sum + e.rows, 0)
     const users = overview?.users
+    const files = (overview?.storage ?? []).reduce((sum, folder) => sum + folder.files, 0)
     const entityCount = plural(entities.length, 'entity', 'entities')
     title = 'Reset local data?'
     label = 'Reset local data'
@@ -923,9 +941,42 @@ function ConfirmDialog({
               ? `Its ${plural(users.length, 'local user')} and their sessions`
               : 'Its local users and their sessions'}
           </li>
-          {storage && <li>The files it stored</li>}
+          {files > 0 ? (
+            <li>{`Its ${plural(files, 'stored file')}`}</li>
+          ) : (
+            storage && <li>The files it stored</li>
+          )}
         </ul>
         {schemaWaiting && <p>Then the data model change waiting for your decision applies.</p>}
+        <p>{unaffected}</p>
+      </>
+    )
+  } else if (confirm.kind === 'clear-files') {
+    const name = folderLabel(confirm.folder)
+    title = `Delete all ${name} files?`
+    label = 'Clear files'
+    busyLabel = 'Clearing…'
+    message = (
+      <>
+        <p>
+          This deletes{' '}
+          {confirm.files === 1 ? 'the only file' : `all ${plural(confirm.files, 'file')}`} in the{' '}
+          {name} storage folder from the app’s local data on this computer. The entities’ rows, the
+          local users and other folders’ files stay.
+        </p>
+        <p>{unaffected}</p>
+      </>
+    )
+  } else if (confirm.kind === 'delete-file') {
+    title = `Delete ${confirm.file.name}?`
+    label = 'Delete file'
+    busyLabel = 'Deleting…'
+    message = (
+      <>
+        <p>
+          This deletes {confirm.file.path} from the {folderLabel(confirm.folder)} storage folder of
+          the app’s local data on this computer.
+        </p>
         <p>{unaffected}</p>
       </>
     )

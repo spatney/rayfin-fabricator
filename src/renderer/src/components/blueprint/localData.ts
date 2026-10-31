@@ -1,8 +1,13 @@
-import type { LocalColumn } from '@shared/ipc'
+import type { LocalColumn, LocalFile } from '@shared/ipc'
 import type { DataModel } from '../../model/parseSchema'
 
 /** Rows the Data view reads at a time (the control API allows up to 500). */
 export const PAGE_SIZE = 50
+
+/** The first row of the last page of `total` rows (or files). */
+export function lastPage(total: number): number {
+  return total > 0 ? Math.floor((total - 1) / PAGE_SIZE) * PAGE_SIZE : 0
+}
 
 /** The most of a value a cell renders; the full value is on hover. */
 const MAX_CELL_TEXT = 300
@@ -103,6 +108,71 @@ export function plural(count: number, one: string, many = `${one}s`): string {
 export function listNames(names: string[]): string {
   if (names.length <= 1) return names.join('')
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+const BYTE_UNITS = ['KB', 'MB', 'GB']
+
+/** `512 bytes`, `1.5 KB`, `12 MB`: a file's size, in 1,024s. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return bytes === 1 ? '1 byte' : `${bytes.toLocaleString('en-US')} bytes`
+  let value = bytes
+  let unit = ''
+  for (const next of BYTE_UNITS) {
+    value /= 1024
+    unit = next
+    if (value < 1024) break
+  }
+  return `${value < 10 ? value.toFixed(1).replace(/\.0$/, '') : Math.round(value)} ${unit}`
+}
+
+/** How a stored file previews. */
+export type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'none'
+
+const TEXT_TYPE =
+  /^text\/|^application\/(json|xml|javascript|x-javascript|ecmascript|yaml|x-yaml|toml|sql|graphql|x-ndjson|csv)$|\+(json|xml|yaml)$/
+const EXTENSION_KIND: Record<string, PreviewKind> = {
+  ...Object.fromEntries(
+    ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif', 'svg'].map((e) => [e, 'image'])
+  ),
+  ...Object.fromEntries(['mp4', 'webm', 'mov', 'm4v'].map((e) => [e, 'video'])),
+  ...Object.fromEntries(['mp3', 'wav', 'ogg', 'oga', 'm4a', 'flac'].map((e) => [e, 'audio'])),
+  pdf: 'pdf',
+  ...Object.fromEntries(
+    [
+      'txt',
+      'md',
+      'csv',
+      'tsv',
+      'json',
+      'xml',
+      'yaml',
+      'yml',
+      'log',
+      'html',
+      'css',
+      'js',
+      'ts',
+      'sql'
+    ].map((e) => [e, 'text'])
+  )
+}
+
+/**
+ * How `file` previews, by its content type; by its name's extension when the
+ * type says nothing (`application/octet-stream`, which uploads without a type get).
+ */
+export function previewKind(file: Pick<LocalFile, 'contentType' | 'name'>): PreviewKind {
+  const type = file.contentType.split(';')[0].trim().toLowerCase()
+  if (type.startsWith('image/')) return 'image'
+  if (type.startsWith('video/')) return 'video'
+  if (type.startsWith('audio/')) return 'audio'
+  if (type === 'application/pdf') return 'pdf'
+  if (TEXT_TYPE.test(type)) return 'text'
+  if (type === '' || type === 'application/octet-stream') {
+    const extension = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase() ?? ''
+    return EXTENSION_KIND[extension] ?? 'none'
+  }
+  return 'none'
 }
 
 /**

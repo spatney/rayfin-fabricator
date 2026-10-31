@@ -153,6 +153,23 @@ function serve() {
       }
       if (route === 'DELETE /entities/Note/rows') return send(res, 200, { deleted: 2 })
       if (route === 'POST /data/reset') return send(res, 200, { ok: true })
+      if (route === 'GET /storage') {
+        return send(res, 200, { folders: [{ name: 'avatars', displayName: 'Avatars', files: 1, bytes: 4 }] })
+      }
+      if (route === 'GET /storage/avatars/files') {
+        const file = { id: 'f1', path: 'ana/face.png', name: 'face.png', size: 4, contentType: 'image/png', ownerId: 'u1' }
+        return send(res, 200, { files: [{ ...file, fields: { query: url.search } }], total: 1 })
+      }
+      // A file's path comes as one escaped segment.
+      if (route === 'GET /storage/avatars/files/ana/face.png' && url.pathname.endsWith('/ana%2Fface.png')) {
+        res.writeHead(200, { 'content-type': 'image/png' })
+        return res.end('png!')
+      }
+      if (route === 'DELETE /storage/avatars/files/ana/face.png') return send(res, 200, { deleted: 1 })
+      if (route === 'DELETE /storage/avatars/files') return send(res, 200, { deleted: 1 })
+      if (route.startsWith('GET /storage/avatars/files/')) {
+        return send(res, 404, { error: { code: 'file-not-found', message: 'No such file.' } })
+      }
       if (route === 'POST /reload') {
         const schema = { v: 1, type: 'schema', result: body.forceSchema ? 'applied' : 'unchanged', changes: [], losses: [], message: null, live: true }
         return send(res, 200, { schema, config: null })
