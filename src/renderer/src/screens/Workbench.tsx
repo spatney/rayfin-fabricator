@@ -33,6 +33,7 @@ import CloneFromGitHubScreen from '../components/CloneFromGitHubScreen'
 import HomeView from '../components/HomeView'
 import ManageProjectModal from '../components/ManageProjectModal'
 import DeleteProjectModal from '../components/DeleteProjectModal'
+import HandoffProjectModal from '../components/HandoffProjectModal'
 import ConfirmModal from '../components/ConfirmModal'
 import PortConflictModal, {
   hasPortChoice,
@@ -352,6 +353,8 @@ export default function Workbench({
   /** The report picked for migration, while its new project is being created. */
   const [migrationPick, setMigrationPick] = useState<ReportPick | null>(null)
   const [opening, setOpening] = useState(false)
+  /** What Home's Open existing says while a hand-off opens, with its progress. */
+  const [openingLabel, setOpeningLabel] = useState<string | undefined>(undefined)
   const [notice, setNotice] = useState<string | null>(null)
   /** Lazy-mount the Advisor view on first visit, then keep it mounted (hidden when
    * inactive) so an in-flight review's live feed/timer/results survive tab switches. */
@@ -371,6 +374,8 @@ export default function Workbench({
   /** Launcher project-management and local-trash confirmation state. */
   const [managingProject, setManagingProject] = useState<StudioProject | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<StudioProject | null>(null)
+  /** The project whose hand-off .zip is being prepared. */
+  const [handingOff, setHandingOff] = useState<StudioProject | null>(null)
   /** Bumped whenever the working tree likely changed (deploy / chat turn). */
   const [gitRefresh, setGitRefresh] = useState(0)
   /** A user-initiated deploy paused by the "you have unpulled changes" warning. */
@@ -1887,6 +1892,42 @@ export default function Workbench({
     }
   }
 
+  /** Pick a hand-off .zip someone sent, unpack it into the projects folder and open it. */
+  async function openHandoff(): Promise<void> {
+    setNotice(null)
+    setGallery(null)
+    setOpening(true)
+    setOpeningLabel('Opening hand-off…')
+    const stopListening = window.api.projects.handoff.onProgress((event) => {
+      if (event.id === 'open' && event.total > 0) {
+        setOpeningLabel(`Unpacking… ${Math.round((event.processed / event.total) * 100)}%`)
+      }
+    })
+    try {
+      const result = await window.api.projects.handoff.open()
+      if (result.cancelled) return
+      if (!result.ok || !result.project) {
+        setNotice(result.error ?? 'Could not open that hand-off.')
+        return
+      }
+      await refreshProjects()
+      const from = result.from ? `From ${result.from}` : 'It’s in your projects folder'
+      const lines = [result.chatMessages > 0 ? `${from}, with its chat.` : `${from}.`]
+      if (result.workspace) {
+        lines.push(
+          `Publishing updates its app in ${result.workspace} once you have access to that workspace.`
+        )
+      }
+      toast.success(lines.join(' '), { title: `Opened ${result.project.name}`, duration: 9000 })
+    } catch (reason) {
+      setNotice(errorMessage(reason, 'Could not open that hand-off.'))
+    } finally {
+      stopListening()
+      setOpening(false)
+      setOpeningLabel(undefined)
+    }
+  }
+
   async function changeWorkspaceRoot(): Promise<void> {
     setProjects(await window.api.projects.pickWorkspaceRoot())
   }
@@ -1899,6 +1940,12 @@ export default function Workbench({
   function manageProject(p: StudioProject): void {
     if (removingIds.has(p.id)) return
     setManagingProject(p)
+  }
+
+  /** Open Hand off project, unless the project is on its way out. */
+  function handOffProject(p: StudioProject): void {
+    if (removingIds.has(p.id) || p.team || p.missing) return
+    setHandingOff(p)
   }
 
   /**
@@ -2576,10 +2623,14 @@ export default function Workbench({
         },
         openFolder: () => void openExisting(),
         cloneFromGitHub: () => setShowClone(true),
+        openHandoff: () => void openHandoff(),
         migrateReport: () => setShowMigrate(true),
         openGallery: () => openGallery(onProjectScreen ? 'project' : 'home'),
         manageProject: () => {
           if (active) manageProject(active)
+        },
+        handOff: () => {
+          if (active) handOffProject(active)
         },
         openOverview: () => {
           if (active?.team) openTeamMap(active.team.workspaceId, 'project', active.team.folder)
@@ -3183,6 +3234,7 @@ export default function Workbench({
                   activeId={active?.id}
                   workspaceRoot={projects?.workspaceRoot ?? ''}
                   opening={opening}
+                  openingLabel={openingLabel}
                   onSelect={(p) => void selectProject(p)}
                   onManageProject={manageProject}
                   removals={removals.removals}
@@ -3191,6 +3243,7 @@ export default function Workbench({
                   onNewProject={() => setShowCreate(true)}
                   onOpenExisting={openExisting}
                   onCloneFromGitHub={() => setShowClone(true)}
+                  onOpenHandoff={() => void openHandoff()}
                   onMigrateReport={migrationEnabled ? () => setShowMigrate(true) : undefined}
                   onOpenGallery={() => openGallery('home')}
                   onChangeWorkspaceRoot={changeWorkspaceRoot}
@@ -3387,6 +3440,7 @@ export default function Workbench({
           onRename={renameProject}
           onRemoveFromList={(p) => void removeFromList(p)}
           onReviewRemoval={setConfirmDelete}
+          onHandOff={handOffProject}
           onClose={() => setManagingProject(null)}
           teamWorkspaces={teamEnabled ? projects?.teamWorkspaces : undefined}
           onMoveToTeam={
@@ -3412,6 +3466,20 @@ export default function Workbench({
           project={confirmDelete}
           onConfirm={(p, choice) => void removeProject(p, choice.deleteApp)}
           onClose={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {handingOff && (
+        <HandoffProjectModal
+          project={handingOff}
+          busy={
+            isTurnRunning(handingOff.id)
+              ? `Copilot is still working on ${handingOff.name}. Hand it off once the turn finishes.`
+              : deploys[handingOff.id]?.running
+                ? `${handingOff.name} is publishing. Hand it off once it finishes.`
+                : undefined
+          }
+          onClose={() => setHandingOff(null)}
         />
       )}
 

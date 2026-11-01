@@ -1005,6 +1005,116 @@ pub struct ProjectActionResult {
   pub project: Option<StudioProject>,
 }
 
+/* ----------------------------- hand-offs ----------------------------- */
+
+/// What a hand-off of a project can hold, for the hand-off dialog.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffPreview {
+  /// The app's files: how many, and their size in bytes.
+  pub files: u64,
+  pub bytes: u64,
+  /// Its version history, when the project has its own git repository.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub history: Option<HandoffHistory>,
+  /// Where it's published, when it is.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub deployment: Option<HandoffDeployment>,
+  /// Messages in the project's chat.
+  pub chat_messages: u32,
+  /// Secrets the app declares. Their values never go in a hand-off.
+  pub secrets: Vec<String>,
+  /// Files git would keep that stay out because they may hold secrets.
+  pub kept_out: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffHistory {
+  pub versions: u32,
+  pub bytes: u64,
+}
+
+/// The published app a hand-off can point the recipient's publishes at.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffDeployment {
+  /// The workspace, by the name Rayfin records it under.
+  pub workspace: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub workspace_id: Option<String>,
+  /// The published app's address.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub url: Option<String>,
+  /// The app in the Fabric portal.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub portal_url: Option<String>,
+}
+
+/// What goes in a hand-off besides the app's code.
+#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffOptions {
+  pub history: bool,
+  pub deployment: bool,
+  pub chat: bool,
+}
+
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffSaveResult {
+  pub ok: bool,
+  /// Nothing was saved: the save dialog was closed, or packing was stopped.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub cancelled: bool,
+  /// Where the .zip was saved.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub path: Option<String>,
+  /// Its size in bytes.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub bytes: Option<u64>,
+  /// Files in it.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub files: Option<u64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+/// Progress while a hand-off is packed (`id` is the project) or opened (`id` is `open`).
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffProgressEvent {
+  pub id: String,
+  /// `"packing"` or `"unpacking"`.
+  pub phase: String,
+  pub processed: u64,
+  pub total: u64,
+}
+
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffOpenResult {
+  pub ok: bool,
+  /// No .zip was picked.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub cancelled: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub project: Option<StudioProject>,
+  /// Who handed it off, as the hand-off records it.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub from: Option<String>,
+  /// When it was handed off (ISO 8601).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub at: Option<String>,
+  /// Chat messages that came with it.
+  pub chat_messages: u32,
+  /// The workspace its publishes go to, when the hand-off says where it's published.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub workspace: Option<String>,
+}
+
 /// Whether a new project's name is free where it will be saved.
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]

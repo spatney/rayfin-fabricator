@@ -7805,6 +7805,12 @@ button.deploy-trouble-ray:focus-visible {
   font-size: 13px;
 }
 
+/* Opens the next step, like Review options, without its warning color. */
+.project-manage-next .codicon {
+  margin-right: -4px;
+  font-size: 13px;
+}
+
 .project-manage-error {
   margin: 2px 0 0;
   padding: 7px 9px;
@@ -8284,6 +8290,319 @@ button.deploy-trouble-ray:focus-visible {
 .remove-note .codicon {
   flex: none;
   font-size: 15px;
+}
+
+/* Hand off project: the parts of the .zip in one list, what never goes in, then
+   what the recipient needs once it's saved. Flat, like Remove project. */
+.handoff-modal {
+  max-width: 500px;
+}
+
+.handoff-modal .modal-header .icon-btn {
+  font-size: 16px;
+}
+
+.handoff-body {
+  gap: 14px;
+}
+
+.handoff-lead {
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.handoff-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
+.handoff-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.handoff-parts {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.handoff-part {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.handoff-part + .handoff-part {
+  border-top: 1px solid var(--border);
+}
+
+.handoff-part--locked,
+.handoff-part:has(.handoff-part-input:disabled) {
+  cursor: default;
+}
+
+/* The real checkbox stays focusable under the drawn one. */
+.handoff-part-input {
+  position: absolute;
+  top: 13px;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  opacity: 0;
+}
+
+.handoff-check {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  place-items: center;
+  margin-top: 1px;
+  color: transparent;
+  background: var(--bg);
+  border: 1.5px solid var(--text-faint);
+  border-radius: 5px;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.handoff-check svg {
+  width: 12px;
+  height: 12px;
+}
+
+.handoff-part--on .handoff-check {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Always in a hand-off: checked, but quieter than a choice. */
+.handoff-part--locked .handoff-check {
+  opacity: 0.55;
+}
+
+.handoff-part-input:focus-visible + .handoff-check {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+.handoff-part-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.handoff-part-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.handoff-part-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.handoff-part-detail {
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handoff-part-desc {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.handoff-part-desc strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.handoff-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.handoff-note .codicon {
+  flex: none;
+  margin-top: 1px;
+  font-size: 14px;
+}
+
+.handoff-note-extra {
+  display: block;
+  margin-top: 2px;
+}
+
+.handoff-busy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.handoff-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  background: var(--pending);
+  border-radius: 50%;
+}
+
+.handoff-packing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 2px;
+}
+
+.handoff-packing-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.handoff-bar {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  background: var(--bg-elev-3);
+  border-radius: 2px;
+}
+
+.handoff-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.handoff-packing-count {
+  color: var(--text-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.handoff-saved {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.handoff-saved-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--ok);
+  font-size: 18px;
+}
+
+.handoff-saved-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.handoff-saved-text strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handoff-path {
+  overflow: hidden;
+  padding: 6px 10px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.handoff-next {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.handoff-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.handoff-steps strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.handoff-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.handoff-link:hover {
+  text-decoration: underline;
+}
+
+.handoff-link .codicon {
+  font-size: 12px;
 }
 
 .modal-header {

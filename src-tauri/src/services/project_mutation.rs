@@ -11,6 +11,7 @@ enum Owner {
   Deploy,
   Team,
   Secrets,
+  Handoff,
 }
 
 impl Owner {
@@ -20,6 +21,7 @@ impl Owner {
       Owner::Deploy => "Fabricator is publishing this project. Wait for it to finish, then try again.",
       Owner::Team => "Fabricator is saving or publishing this project. Wait for it to finish, then try again.",
       Owner::Secrets => "Fabricator is updating this app's secrets. Wait for it to finish, then try again.",
+      Owner::Handoff => "Fabricator is packing this project for a hand-off. Wait for it to finish, then try again.",
     }
   }
 }
@@ -81,6 +83,12 @@ impl ProjectMutations {
   /// rewrites `rayfin/rayfin.yml`, which a turn or a deploy may be using.
   pub fn secrets(&self, project_id: &str) -> Result<MutationGuard, String> {
     self.acquire(project_id, Owner::Secrets)
+  }
+
+  /// Lease the project while its files are packed into a hand-off, so the .zip
+  /// never holds a half-written turn or a half-updated publishing record.
+  pub fn handoff(&self, project_id: &str) -> Result<MutationGuard, String> {
+    self.acquire(project_id, Owner::Handoff)
   }
 
   #[cfg(test)]

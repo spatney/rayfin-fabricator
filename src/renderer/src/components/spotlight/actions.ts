@@ -12,9 +12,11 @@ export interface ActionHandlers {
   newProject(): void
   openFolder(): void
   cloneFromGitHub(): void
+  openHandoff(): void
   migrateReport(): void
   openGallery(): void
   manageProject(): void
+  handOff(): void
   openOverview(): void
   deploy(): void
   share(): void
@@ -244,6 +246,14 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
     icon: { kind: 'codicon', name: 'repo-clone' },
     run: run.cloneFromGitHub
   })
+  add({
+    id: 'action:open-handoff',
+    title: 'Open a hand-off',
+    subtitle: 'Open a project someone sent you as a .zip',
+    keywords: ['handoff', 'zip', 'import', 'received', 'continue'],
+    icon: { kind: 'codicon', name: 'package' },
+    run: run.openHandoff
+  })
   if (ctx.migrationEnabled) {
     add({
       id: 'action:migrate',
@@ -268,10 +278,20 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
     add({
       id: 'action:manage-project',
       title: `Manage ${project.name}`,
-      subtitle: 'Rename it, or remove it from Fabricator',
+      subtitle: 'Rename it, hand it off, or remove it from Fabricator',
       keywords: ['rename', 'remove', 'delete', 'trash'],
       icon: { kind: 'codicon', name: 'gear' },
       run: run.manageProject
+    })
+  }
+  if (project && !project.team && !project.missing) {
+    add({
+      id: 'action:handoff',
+      title: `Hand off ${project.name}`,
+      subtitle: 'Save a .zip someone else can pick it up from',
+      keywords: ['handoff', 'export', 'zip', 'send', 'transfer', 'give'],
+      icon: { kind: 'codicon', name: 'package' },
+      run: run.handOff
     })
   }
   if (project?.team) {

@@ -452,7 +452,7 @@ export function CubeIcon(props: IconProps): JSX.Element {
   )
 }
 
-/** Shipping box — an npm package. */
+/** Shipping box — an npm package, or a project handed off as a .zip. */
 export function PackageIcon(props: IconProps): JSX.Element {
   return (
     <Icon {...props}>

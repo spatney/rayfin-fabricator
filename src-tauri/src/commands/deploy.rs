@@ -325,19 +325,19 @@ pub(crate) fn recorded_deployments(dir: &Path) -> Vec<FabricDeployment> {
 }
 
 /// Where the active deployment lives.
-struct ActiveDeployment {
-  workspace_id: Option<String>,
-  workspace_name: String,
-  hosting: Option<String>,
-  api: Option<String>,
-  portal: Option<String>,
+pub(crate) struct ActiveDeployment {
+  pub(crate) workspace_id: Option<String>,
+  pub(crate) workspace_name: String,
+  pub(crate) hosting: Option<String>,
+  pub(crate) api: Option<String>,
+  pub(crate) portal: Option<String>,
 }
 
 /// The active deployment as the registry records it: the addresses
 /// `rayfin up status --json` reports, without its network checks (about 6 s).
 /// `Some(None)` when the registry has no active deployment; `None` when there's
 /// no registry to read.
-fn registry_active(dir: &Path) -> Option<Option<ActiveDeployment>> {
+pub(crate) fn registry_active(dir: &Path) -> Option<Option<ActiveDeployment>> {
   let list = read_registry(dir)?;
   Some(list.into_iter().find(|r| r.active).map(|r| ActiveDeployment {
     workspace_id: r.entry.fabric_workspace_id,

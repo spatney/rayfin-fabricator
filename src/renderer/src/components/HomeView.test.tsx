@@ -46,6 +46,22 @@ describe('HomeView project launcher', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /clone from github/i }))
     expect(props.onCloneFromGitHub).toHaveBeenCalledTimes(1)
     expect(document.querySelectorAll('.home-action-icon > svg')).toHaveLength(2)
+    expect(screen.queryByRole('menuitem', { name: /open a hand-off/i })).toBeNull()
+  })
+
+  it('opens a hand-off someone sent, and says so while it unpacks', () => {
+    const props = baseProps()
+    props.onOpenHandoff = vi.fn()
+    const { rerender } = render(<HomeView {...props} />)
+
+    const existing = screen.getByRole('button', { name: /open existing/i })
+    expect(existing.textContent).toContain('From a folder, GitHub or a hand-off')
+    fireEvent.click(existing)
+    fireEvent.click(screen.getByRole('menuitem', { name: /open a hand-off/i }))
+    expect(props.onOpenHandoff).toHaveBeenCalledTimes(1)
+
+    rerender(<HomeView {...props} opening openingLabel="Unpacking… 40%" />)
+    expect(screen.getByRole('button', { name: /unpacking… 40%/i })).toBeTruthy()
   })
 
   it('offers to migrate a Power BI report only when the experiment provides it', () => {

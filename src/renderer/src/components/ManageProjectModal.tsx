@@ -19,6 +19,8 @@ interface Props {
   onRemoveFromList: (project: StudioProject) => void
   /** Open Remove project, which asks what to remove. */
   onReviewRemoval: (project: StudioProject) => void
+  /** Open Hand off project, which packs a .zip for someone else. */
+  onHandOff?: (project: StudioProject) => void
   onClose: () => void
   /** Team workspaces this project can move into (experimental). */
   teamWorkspaces?: TeamWorkspace[]
@@ -58,12 +60,13 @@ function Action({
   )
 }
 
-/** The project's name, then what you can do with it: hide it from recents, or remove it. */
+/** The project's name, then what you can do with it: hand it off, hide it from recents, or remove it. */
 export default function ManageProjectModal({
   project,
   onRename,
   onRemoveFromList,
   onReviewRemoval,
+  onHandOff,
   onClose,
   teamWorkspaces,
   onMoveToTeam
@@ -155,6 +158,11 @@ export default function ManageProjectModal({
     onReviewRemoval(project)
   }
 
+  function handOff(): void {
+    onClose()
+    onHandOff?.(project)
+  }
+
   const recentsHint = project.team
     ? 'Hide from your recent list. Your work on GitHub stays, and you can open it again from its team workspace.'
     : project.missing
@@ -163,6 +171,7 @@ export default function ManageProjectModal({
         ? 'Hide from your recent list. Files and the Fabric app stay intact.'
         : 'Hide from your recent list. Files stay intact.'
   const canMove = !project.team && onMoveToTeam && moveTargets.length > 0
+  const canHandOff = Boolean(onHandOff) && !project.team && !project.missing
 
   return (
     <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
@@ -280,6 +289,30 @@ export default function ManageProjectModal({
                     {moveError}
                   </p>
                 )}
+              </Action>
+            )}
+
+            {canHandOff && (
+              <Action
+                icon="package"
+                title="Hand off project"
+                control={
+                  <button
+                    type="button"
+                    className="btn project-manage-next"
+                    disabled={saving}
+                    onClick={handOff}
+                  >
+                    Create .zip
+                    <span className="codicon codicon-chevron-right" aria-hidden="true" />
+                  </button>
+                }
+              >
+                <span className="project-action-desc">
+                  {hasDeploy
+                    ? 'Save a .zip with the code and where it’s published, so someone else can pick it up in Fabricator.'
+                    : 'Save a .zip with the code, so someone else can pick it up in Fabricator.'}
+                </span>
               </Action>
             )}
 

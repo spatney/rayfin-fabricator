@@ -88,10 +88,37 @@ describe('ManageProjectModal', () => {
   it('only offers to forget a project whose folder is gone', () => {
     const props = baseProps()
     props.project = makeProject('p1', { missing: true })
+    props.onHandOff = vi.fn()
     renderModal(props)
 
     expect(screen.getByText(/can’t find this project on this computer/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remove from recent projects' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Review options' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create .zip' })).toBeNull()
+  })
+
+  it('opens Hand off project for a local project, saying what the .zip holds', () => {
+    const props = baseProps()
+    props.onHandOff = vi.fn()
+    renderModal(props)
+
+    expect(
+      screen.getByText(/the code and where it’s published, so someone else can pick it up/)
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Create .zip' }))
+
+    expect(props.onClose).toHaveBeenCalledTimes(1)
+    expect(props.onHandOff).toHaveBeenCalledWith(props.project)
+  })
+
+  it('leaves a team app to its team workspace instead of a hand-off', () => {
+    const props = baseProps()
+    props.onHandOff = vi.fn()
+    props.project = makeProject('p1', {
+      team: { workspaceId: 'w1', folder: 'sales', worktree: 'C:/team/sales' }
+    })
+    renderModal(props)
+
+    expect(screen.queryByRole('button', { name: 'Create .zip' })).toBeNull()
   })
 })

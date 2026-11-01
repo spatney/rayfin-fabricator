@@ -257,7 +257,7 @@ fn file_name(path: &str) -> &str {
 
 /// Whether an `.npmrc` holds a literal registry credential. A reference to an
 /// environment variable (`${NPM_TOKEN}`) is safe to keep, and usual to commit.
-fn holds_registry_token(path: &Path) -> bool {
+pub(crate) fn holds_registry_token(path: &Path) -> bool {
   let Ok(text) = std::fs::read_to_string(path) else {
     return false;
   };

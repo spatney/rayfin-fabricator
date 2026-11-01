@@ -1,6 +1,6 @@
 ---
 title: "Create and manage projects"
-description: "Start a new Rayfin app, open an existing project, clone from GitHub, switch between projects, and rename or remove projects from Fabricator."
+description: "Start a new Rayfin app, open or clone an existing one, hand a project off to someone or open one handed to you, switch between projects, and rename or remove them."
 ---
 
 Projects are the Rayfin apps Fabricator can open. From **Your projects**, you can start a new app, open a local folder, clone a GitHub repository, or return to a recent project.
@@ -81,6 +81,21 @@ An app that's already published runs on this computer too: its data here starts 
 
 Fabricator clones the repository into your workspace folder, verifies that it has `rayfin/rayfin.yml`, runs `npm install`, and opens it. If the repository is not a Rayfin project, Fabricator removes the fresh clone and reports the problem.
 
+## Open a hand-off
+
+When someone hands a project off to you, they send you a .zip. Open it in Fabricator to carry on where they left off.
+
+1. On **Your projects**, select **Open existing**, then **Open a hand-off**.
+2. Pick the .zip.
+
+Fabricator unpacks the project into a new folder in your workspace folder, named after the project, and opens it. As with any project you open, it installs the project's packages first. A notification says who handed it off to you. If the chat came with it, it's in the chat panel, but Copilot starts a new session, so it doesn't remember that conversation.
+
+If the hand-off includes where the app is published, publishing updates that same app. To publish, you need to be a Contributor, Member or Admin of its Fabric workspace, so ask the person who sent it to add you. The app also runs on this computer, with its own empty data. Secret values never come with a hand-off: to run the app's functions here, set your own in **Code → Secrets**. See [Manage secrets](/docs/build/secrets).
+
+The .zip has a `HANDOFF.md` file at its top that explains the same steps, with or without Fabricator. If you unpacked the .zip yourself, open the folder with **Open folder** instead: Fabricator brings in the chat the first time it opens the folder.
+
+**Open a hand-off** opens any .zip of a Rayfin project, as long as the project is at the top of the .zip or in the one folder at its top.
+
 ## Switch between projects
 
 While a project is open, you can switch to another one from the app bar.
@@ -105,6 +120,25 @@ Each recent project has a **Manage** button.
 3. Select **Save**.
 
 Renaming updates Fabricator's project list and the `name:` field in `rayfin/rayfin.yml`.
+
+### Hand off a project
+
+When someone else is taking a project over, hand it off: Fabricator saves it as a .zip they open in their own Fabricator, with what they need to carry on.
+
+1. Select **Manage** on the project card.
+2. Next to **Hand off project**, select **Create .zip**.
+3. Choose what goes in besides **App code**, which is always included:
+   - **Version history**: every saved version, so **History** and **Restore this version** work for them too.
+   - **Published app**: where the app is published, so their publishes update the same app. Clear it to have them publish it as a new app.
+   - **Chat**: your conversation with Copilot, so they can see how the app was built.
+4. Select **Save .zip…**, then choose where to save it.
+5. Send them the .zip, for example by email, chat or a shared folder.
+
+The .zip holds the files the project's version history keeps, so installed packages and build output stay out: Fabricator installs them again when the project opens. It never includes secret values, files that may hold them such as `.env` files, the app's data on this computer, or your sign-ins, and the dialog names any file it left out because it may hold a secret. The version history still names who saved each version, but leaves your git settings and sign-ins behind, so their changes aren't saved under your name. A `HANDOFF.md` file at the top of the .zip explains how to open it, with or without Fabricator.
+
+When the app is published, **What happens next** reminds you to give them access to its Fabric workspace: to publish, they need to be a Contributor, Member or Admin. Select **Open the workspace** to open it in Fabric, then add them in its **Manage access**.
+
+While Copilot is working on the project or it's publishing, the dialog waits, so the .zip never holds a half-finished change. To stop a hand-off while it's being packed, select **Stop**. A team app doesn't offer **Hand off project**: invite people to its team workspace instead.
 
 ### Remove a project from the list
 

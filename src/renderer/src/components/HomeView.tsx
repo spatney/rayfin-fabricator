@@ -10,7 +10,7 @@ import type { StudioProject, TeamWorkspace } from '@shared/ipc'
 import { moveMenuFocus } from '../menuFocus'
 import { removalStatus, type ProjectRemoval } from '../projectRemovals'
 import { FabricatorMark } from './FabricatorMark'
-import { AddIcon, BranchIcon, Codicon, FolderIcon, GearIcon } from './icons'
+import { AddIcon, BranchIcon, Codicon, FolderIcon, GearIcon, PackageIcon } from './icons'
 import { displayPath } from './projectDisplay'
 import TeamSection from './team/TeamSection'
 import { hueOf } from './team/map/parts'
@@ -24,16 +24,21 @@ const MENU_ITEMS = '[role="menuitem"]:not(:disabled)'
 
 /**
  * One Home action for a project that already exists, as a folder on this
- * computer or a repository on GitHub: it opens a menu of the two.
+ * computer, a repository on GitHub, or a hand-off someone sent: it opens a
+ * menu of the three.
  */
 function OpenExisting({
   opening,
+  openingLabel,
   onOpenFolder,
-  onClone
+  onClone,
+  onOpenHandoff
 }: {
   opening: boolean
+  openingLabel?: string
   onOpenFolder: () => void
   onClone: () => void
+  onOpenHandoff?: () => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -90,8 +95,12 @@ function OpenExisting({
           <FolderIcon className="home-action-svg" />
         </span>
         <span className="home-action-text">
-          <span className="home-action-label">{opening ? 'Opening folder…' : 'Open existing'}</span>
-          <span className="home-action-hint">From a folder or GitHub</span>
+          <span className="home-action-label">
+            {opening ? (openingLabel ?? 'Opening folder…') : 'Open existing'}
+          </span>
+          <span className="home-action-hint">
+            {onOpenHandoff ? 'From a folder, GitHub or a hand-off' : 'From a folder or GitHub'}
+          </span>
         </span>
         <Codicon name="chevron-down" className="home-action-caret" />
       </button>
@@ -122,6 +131,20 @@ function OpenExisting({
               <span className="mp-item-desc">Bring a repository into Fabricator</span>
             </span>
           </button>
+          {onOpenHandoff && (
+            <button
+              type="button"
+              role="menuitem"
+              className="mp-item"
+              onClick={() => choose(onOpenHandoff)}
+            >
+              <PackageIcon className="home-open-icon" />
+              <span className="mp-item-text">
+                <span className="mp-item-label">Open a hand-off</span>
+                <span className="mp-item-desc">A .zip someone sent you</span>
+              </span>
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -137,6 +160,8 @@ interface Props {
   workspaceRoot: string
   /** True while a folder picker is in flight. */
   opening: boolean
+  /** What the Open existing action says while `opening` (default "Opening folder…"). */
+  openingLabel?: string
   /** Open (make active) a recent project. */
   onSelect: (project: StudioProject) => void
   /** Open focused management for a recent project. */
@@ -151,6 +176,8 @@ interface Props {
   onOpenExisting: () => void
   /** Start the sign-in/browse/clone flow. */
   onCloneFromGitHub: () => void
+  /** Pick a hand-off .zip someone sent, and open it. */
+  onOpenHandoff?: () => void
   /** Migrate a Power BI report into a new app (experimental); the action shows only when set. */
   onMigrateReport?: () => void
   /** Browse every Rayfin app you can open in Fabric. */
@@ -173,6 +200,7 @@ export default function HomeView({
   activeId,
   workspaceRoot,
   opening,
+  openingLabel,
   onSelect,
   onManageProject,
   removals,
@@ -181,6 +209,7 @@ export default function HomeView({
   onNewProject,
   onOpenExisting,
   onCloneFromGitHub,
+  onOpenHandoff,
   onMigrateReport,
   onOpenGallery,
   onChangeWorkspaceRoot,
@@ -222,8 +251,10 @@ export default function HomeView({
             </button>
             <OpenExisting
               opening={opening}
+              openingLabel={openingLabel}
               onOpenFolder={onOpenExisting}
               onClone={onCloneFromGitHub}
+              onOpenHandoff={onOpenHandoff}
             />
             <button type="button" className="home-action" onClick={onOpenGallery}>
               <span className="home-action-icon" aria-hidden="true">

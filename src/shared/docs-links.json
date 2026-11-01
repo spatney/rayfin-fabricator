@@ -16,6 +16,7 @@
     "plugins": "/docs/build/fabric-iq-and-work-iq",
     "chatUsage": "/docs/build/chat#see-what-a-chat-has-used",
     "mcpServers": "/docs/build/mcp-servers",
-    "teamAdmins": "/docs/team/administrators"
+    "teamAdmins": "/docs/team/administrators",
+    "openHandoff": "/docs/build/projects#open-a-hand-off"
   }
 }

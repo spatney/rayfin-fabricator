@@ -223,8 +223,10 @@ Don't write "ask Copilot to do X" in prose. Write the prompt instead.
   below. Don't rename these headings; if you must, update `src/shared/docs-links.json` in
   the same change (`npm run verify:app-links` fails the build otherwise). Fabricator's Rust
   core also links to `windows-blocked-rayfin-local` directly (`BLOCKED_DOCS_URL` in
-  `src-tauri/src/services/local_backend/binary.rs`), so renaming that heading means changing
-  it there too. Releases of the app already installed keep linking to these headings, so a
+  `src-tauri/src/services/local_backend/binary.rs`), and every hand-off's `HANDOFF.md` links
+  to `/docs/build/projects#open-a-hand-off` (`OPEN_DOCS` in
+  `src-tauri/src/commands/handoff.rs`), so renaming either heading means changing it there too.
+  Releases of the app already installed keep linking to these headings, so a
   heading such as "A deploy failed" keeps its wording even though the app now says Publish:
 
   | Page | Heading |

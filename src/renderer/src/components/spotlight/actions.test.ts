@@ -114,4 +114,24 @@ describe('Search actions', () => {
     expect(ctx.do.openMcpServers).toHaveBeenCalled()
     expect(rank(prepare(buildActions(ctx)), 'mcp')[0]?.item.id).toBe('action:mcp-servers')
   })
+
+  it('hands off the open app, and opens one handed to you from anywhere', () => {
+    const ctx = context()
+    const prepared = prepare(buildActions(ctx))
+    const top = (query: string): string | undefined => rank(prepared, query)[0]?.item.id
+    expect(top('hand off')).toBe('action:handoff')
+    buildActions(ctx)
+      .find((a) => a.id === 'action:handoff')!
+      .run()
+    expect(ctx.do.handOff).toHaveBeenCalled()
+
+    const none = context({ project: null, onProjectScreen: false, onHome: true })
+    expect(ids(none)).not.toContain('action:handoff')
+    expect(ids(none)).toContain('action:open-handoff')
+    const team = {
+      ...project,
+      team: { workspaceId: 'w1', folder: 'apps/contoso' }
+    } as StudioProject
+    expect(ids(context({ project: team }))).not.toContain('action:handoff')
+  })
 })

@@ -1852,6 +1852,78 @@ export interface ProjectActionResult {
   project?: StudioProject
 }
 
+/** What a hand-off of a project can hold (`projects.handoff.preview`). */
+export interface HandoffPreview {
+  /** The app's files: how many, and their total size in bytes. */
+  files: number
+  bytes: number
+  /** Its version history, when the project has its own git repository. */
+  history?: { versions: number; bytes: number }
+  /** Where it's published, when it is. */
+  deployment?: HandoffDeployment
+  /** Messages in the project's chat. */
+  chatMessages: number
+  /** Secrets the app declares. Their values never go in a hand-off. */
+  secrets: string[]
+  /** Files git would keep that stay out because they may hold secrets. */
+  keptOut: string[]
+}
+
+/** The published app a hand-off can point the recipient's publishes at. */
+export interface HandoffDeployment {
+  /** The workspace, by the name Rayfin records it under. */
+  workspace: string
+  workspaceId?: string
+  /** The published app's address. */
+  url?: string
+  /** The app in the Fabric portal. */
+  portalUrl?: string
+}
+
+/** What goes in a hand-off besides the app's code. */
+export interface HandoffOptions {
+  history: boolean
+  deployment: boolean
+  chat: boolean
+}
+
+export interface HandoffSaveResult {
+  ok: boolean
+  /** Nothing was saved: the save dialog was closed, or packing was stopped. */
+  cancelled?: boolean
+  /** Where the .zip was saved. */
+  path?: string
+  /** Its size in bytes. */
+  bytes?: number
+  /** Files in it. */
+  files?: number
+  error?: string
+}
+
+/** Progress while a hand-off is packed (`id` is the project) or opened (`id` is `open`). */
+export interface HandoffProgressEvent {
+  id: string
+  phase: 'packing' | 'unpacking'
+  processed: number
+  total: number
+}
+
+export interface HandoffOpenResult {
+  ok: boolean
+  /** No .zip was picked. */
+  cancelled?: boolean
+  error?: string
+  project?: StudioProject
+  /** Who handed it off, as the hand-off records it. */
+  from?: string
+  /** When it was handed off (ISO 8601). */
+  at?: string
+  /** Chat messages that came with it. */
+  chatMessages: number
+  /** The workspace its publishes go to, when the hand-off says where it's published. */
+  workspace?: string
+}
+
 /** Whether a new project's name is free where it will be saved. */
 export interface ProjectNameCheck {
   ok: boolean
@@ -3229,6 +3301,7 @@ export const IpcChannels = {
   previewAgent: 'preview:agent',
   updateProgress: 'update:progress',
   deleteProgress: 'delete:progress',
+  handoffProgress: 'handoff:progress',
   teamProgress: 'team:progress',
   teamDiagnosis: 'team:diagnosis',
   devState: 'dev:state',
@@ -3544,6 +3617,26 @@ export interface RayfinStudioApi {
      * pass `deleteFiles: true` to also move the project folder to the OS trash.
      */
     remove: (id: string, deleteFiles?: boolean) => Promise<ProjectsState>
+    /** Hand a project off to someone else as a .zip, or open one handed to you. */
+    handoff: {
+      /** What a hand-off of the project would hold. Rejects for a team or missing project. */
+      preview: (id: string) => Promise<HandoffPreview>
+      /**
+       * Ask where to save the hand-off, then pack it there (progress on
+       * `onProgress`). Never rejects: a failure is in `error`.
+       */
+      save: (id: string, options: HandoffOptions) => Promise<HandoffSaveResult>
+      /** Stop packing the project's hand-off; `save` then resolves as cancelled. */
+      stop: (id: string) => Promise<void>
+      /** Show a saved hand-off in the file manager. */
+      reveal: (path: string) => Promise<void>
+      /**
+       * Pick a hand-off (or any .zip of a Rayfin project), unpack it into the
+       * projects folder and make it the active project, with its chat.
+       */
+      open: () => Promise<HandoffOpenResult>
+      onProgress: (cb: (event: HandoffProgressEvent) => void) => () => void
+    }
     git: {
       /** Snapshot of the project's git working tree (branch + change count). */
       status: (id: string) => Promise<GitStatus>
