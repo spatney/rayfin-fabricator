@@ -273,7 +273,8 @@ export const api: RayfinStudioApi = {
     },
     files: {
       tree: (id: string) => invoke('projects_files_tree', { id }),
-      read: (id: string, path: string) => invoke('projects_files_read', { id, path })
+      read: (id: string, path: string) => invoke('projects_files_read', { id, path }),
+      listDir: (id: string, path: string) => invoke('projects_files_list_dir', { id, path })
     }
   },
 

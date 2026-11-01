@@ -3,12 +3,13 @@
 //! traversal-guarded and heavy/generated folders are pruned from the tree.
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::commands::util::{looks_binary, safe_resolve};
 use crate::services::exec::{run, RunOptions};
+use crate::services::paths;
 use crate::services::store::find_project;
-use crate::types::{FileContent, FileNode};
+use crate::types::{DirEntryInfo, DirListing, FileContent, FileNode};
 
 /// Folders never worth showing in a code viewer (huge and/or generated).
 const EXCLUDED_DIRS: [&str; 11] = [
@@ -183,6 +184,82 @@ pub async fn files_read(id: String, path: String) -> FileContent {
   }
 }
 
+/// The most entries a folder lists for an `@` reference: plenty to pick from
+/// once filtered by what's typed.
+const MAX_DIR_ENTRIES: usize = 2000;
+
+/// A path from an `@` reference, resolved: relative to the project folder,
+/// from the home folder after `~`, or absolute, with `.` and `..` worked out.
+fn resolve_reference(project_dir: &Path, path: &str) -> PathBuf {
+  let path = path.trim();
+  let joined = if path == "~" {
+    paths::home_dir()
+  } else if let Some(rest) = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
+    paths::home_dir().join(rest)
+  } else {
+    project_dir.join(path)
+  };
+  normalize(&joined)
+}
+
+/// `path` with `.` and `..` worked out, without reaching above its root.
+fn normalize(path: &Path) -> PathBuf {
+  let mut out = PathBuf::new();
+  for component in path.components() {
+    match component {
+      Component::CurDir => {}
+      Component::ParentDir => {
+        if matches!(out.components().next_back(), Some(Component::Normal(_))) {
+          out.pop();
+        }
+      }
+      other => out.push(other.as_os_str()),
+    }
+  }
+  out
+}
+
+/// One folder's entries: folders first, then files, each by name.
+fn list_dir(dir: &Path) -> DirListing {
+  let shown = dir.to_string_lossy().to_string();
+  let failed = |error: &str| DirListing { dir: shown.clone(), error: Some(error.into()), ..Default::default() };
+  if dir.is_file() {
+    return failed("This is a file, not a folder.");
+  }
+  let read = match std::fs::read_dir(dir) {
+    Ok(read) => read,
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return failed("There's no folder here."),
+    Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+      return failed("You don't have access to this folder.")
+    }
+    Err(_) => return failed("Couldn't open this folder."),
+  };
+  let mut entries: Vec<DirEntryInfo> = read
+    .flatten()
+    .map(|entry| {
+      // A link to a folder is browsed like one.
+      let dir = entry.file_type().is_ok_and(|t| t.is_dir() || (t.is_symlink() && entry.path().is_dir()));
+      DirEntryInfo { name: entry.file_name().to_string_lossy().to_string(), dir }
+    })
+    .collect();
+  entries.sort_by(|a, b| b.dir.cmp(&a.dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+  let truncated = entries.len() > MAX_DIR_ENTRIES;
+  entries.truncate(MAX_DIR_ENTRIES);
+  DirListing { dir: shown, entries, truncated, error: None }
+}
+
+/// List one folder for an `@` reference in chat, which can point at anything
+/// the user can open, in the project or outside it. Names only: nothing is read.
+pub async fn files_list_dir(id: String, path: String) -> DirListing {
+  let Some(project) = find_project(&id) else {
+    return DirListing { error: Some("Project not found.".into()), ..Default::default() };
+  };
+  let dir = resolve_reference(Path::new(&project.path), &path);
+  tokio::task::spawn_blocking(move || list_dir(&dir))
+    .await
+    .unwrap_or_else(|_| DirListing { error: Some("Couldn't open this folder.".into()), ..Default::default() })
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -218,5 +295,35 @@ mod tests {
     // Unrelated, tracked paths.
     assert!(!ign.is_ignored("src/main.ts"));
     assert!(!ign.is_ignored(".envrc"));
+  }
+
+  #[test]
+  fn references_resolve_from_the_project_the_home_folder_or_a_full_path() {
+    let project = std::env::temp_dir().join("fabricator-refs").join("app");
+    assert_eq!(resolve_reference(&project, "../shared/"), project.parent().unwrap().join("shared"));
+    assert_eq!(resolve_reference(&project, "./src/../rayfin"), project.join("rayfin"));
+    assert_eq!(resolve_reference(&project, "~/notes"), paths::home_dir().join("notes"));
+    let elsewhere = std::env::temp_dir().join("elsewhere");
+    assert_eq!(resolve_reference(&project, &elsewhere.to_string_lossy()), elsewhere);
+    // However many `..`, never above the root.
+    let root = project.ancestors().last().unwrap().to_path_buf();
+    assert_eq!(resolve_reference(&project, &"../".repeat(40)), root);
+  }
+
+  #[test]
+  fn a_folder_lists_folders_first_then_files_by_name_or_says_why_it_cannot() {
+    let dir = std::env::temp_dir().join(format!("fabricator-list-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(dir.join("beta")).unwrap();
+    std::fs::create_dir_all(dir.join("Alpha")).unwrap();
+    std::fs::write(dir.join("notes.md"), "x").unwrap();
+    std::fs::write(dir.join("a.txt"), "x").unwrap();
+
+    let listing = list_dir(&dir);
+    assert_eq!(listing.error, None);
+    let entries: Vec<(&str, bool)> = listing.entries.iter().map(|e| (e.name.as_str(), e.dir)).collect();
+    assert_eq!(entries, [("Alpha", true), ("beta", true), ("a.txt", false), ("notes.md", false)]);
+    assert_eq!(list_dir(&dir.join("missing")).error.as_deref(), Some("There's no folder here."));
+    assert_eq!(list_dir(&dir.join("a.txt")).error.as_deref(), Some("This is a file, not a folder."));
+    std::fs::remove_dir_all(&dir).unwrap();
   }
 }

@@ -2296,6 +2296,29 @@ pub struct FileNode {
   pub ignored: Option<bool>,
 }
 
+/// One folder's entries, for an `@` reference in chat to something outside the project.
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DirListing {
+  /// The folder, as an absolute path.
+  pub dir: String,
+  /// Folders first, then files, each by name.
+  pub entries: Vec<DirEntryInfo>,
+  /// The folder has more entries than were listed.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub truncated: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DirEntryInfo {
+  pub name: String,
+  /// A folder (or a link to one) rather than a file.
+  pub dir: bool,
+}
+
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct FileContent {

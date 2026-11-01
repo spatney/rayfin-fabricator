@@ -343,6 +343,7 @@ pub fn run() {
       commands::projects::projects_git_push,
       commands::projects::projects_files_tree,
       commands::projects::projects_files_read,
+      commands::projects::projects_files_list_dir,
       // rayfin versions
       commands::rayfin_version::rayfin_versions,
       // skills

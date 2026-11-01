@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import Markdown, { MarkdownLinksContext } from './Markdown'
-import { splitMentions } from './MentionText'
+import { MentionText, splitMentions } from './MentionText'
 import PlanQuestionCard from './PlanQuestionCard'
 
 afterEach(() => cleanup())
@@ -76,6 +76,30 @@ describe('splitMentions', () => {
     expect(splitMentions('open @Dockerfile').some((p) => p.mention)).toBe(false)
     expect(splitMentions('open @Dockerfile', new Set(['Dockerfile'])).some((p) => p.mention)).toBe(
       true
+    )
+  })
+
+  it('takes paths outside the project, folders and quoted paths with spaces as references', () => {
+    const parts = splitMentions(
+      'compare @../shared/ with @"C:\\My files\\plan.md" and @~/notes, not @scope/pkg'
+    )
+    expect(parts.filter((p) => p.mention).map((p) => p.text)).toEqual([
+      '@../shared/',
+      '@"C:\\My files\\plan.md"',
+      '@~/notes'
+    ])
+  })
+})
+
+describe('MentionText', () => {
+  it('links references in the project to the Code tab, but not those outside it', () => {
+    const onOpen = vi.fn()
+    render(<MentionText text='see @src/App.tsx and @"../My notes/plan.md"' onOpen={onOpen} />)
+    fireEvent.click(screen.getByRole('button', { name: '@src/App.tsx' }))
+    expect(onOpen).toHaveBeenCalledWith('@src/App.tsx')
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    expect(screen.getByText('@"../My notes/plan.md"').getAttribute('title')).toBe(
+      '../My notes/plan.md'
     )
   })
 })

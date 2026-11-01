@@ -272,3 +272,9 @@ pub async fn projects_files_tree(id: String) -> Vec<FileNode> {
 pub async fn projects_files_read(id: String, path: String) -> FileContent {
   crate::commands::files::files_read(id, path).await
 }
+
+/// One folder's entries, for an `@` reference in chat (in the project or outside it).
+#[tauri::command]
+pub async fn projects_files_list_dir(id: String, path: String) -> crate::types::DirListing {
+  crate::commands::files::files_list_dir(id, path).await
+}

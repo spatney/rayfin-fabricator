@@ -1342,6 +1342,103 @@ describe('ChatPanel Fabric data', () => {
   })
 })
 
+describe('ChatPanel @ references outside the project', () => {
+  /** Two levels of folders beside the project, one of them with a space in its name. */
+  function installFolders(): ReturnType<typeof vi.fn> {
+    installApi()
+    const listDir = vi.fn(async (_id: string, dir: string) => {
+      const folders: Record<
+        string,
+        { dir: string; entries: Array<{ name: string; dir: boolean }> }
+      > = {
+        '../': {
+          dir: 'C:\\code',
+          entries: [
+            { name: '.git', dir: true },
+            { name: 'shared', dir: true },
+            { name: 'Team notes', dir: true },
+            { name: 'todo.md', dir: false }
+          ]
+        },
+        '../shared/': { dir: 'C:\\code\\shared', entries: [{ name: 'brand.css', dir: false }] },
+        '../Team notes/': {
+          dir: 'C:\\code\\Team notes',
+          entries: [{ name: 'plan.md', dir: false }]
+        }
+      }
+      return folders[dir] ?? { dir, entries: [], error: 'There’s no folder here.' }
+    })
+    ;(window.api.projects.files as unknown as Record<string, unknown>).listDir = listDir
+    return listDir
+  }
+
+  const names = async (): Promise<string[]> => {
+    const menu = await screen.findByRole('listbox', { name: 'Files and folders' })
+    return within(menu)
+      .getAllByRole('option')
+      .map((o) => o.querySelector('.mention-name')?.textContent ?? '')
+  }
+  const pick = (name: string): void => {
+    const option = screen
+      .getAllByRole('option')
+      .find((o) => o.querySelector('.mention-name')?.textContent === name)
+    fireEvent.mouseDown(option!)
+  }
+
+  it('browses into folders, and references a file or the folder itself', async () => {
+    const listDir = installFolders()
+    render(<ChatPanel project={makeProject('p1')} messages={[]} onChange={vi.fn()} draft="" />)
+    const composer = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+
+    fireEvent.change(composer, { target: { value: 'match @../' } })
+    await waitFor(async () =>
+      expect(await names()).toEqual(['This folder', 'shared', 'Team notes', 'todo.md'])
+    )
+    expect(listDir).toHaveBeenLastCalledWith('p1', '../')
+    expect(screen.getByText('C:\\code')).toBeTruthy()
+
+    pick('shared')
+    expect(composer.value).toBe('match @../shared/')
+    await waitFor(async () => expect(await names()).toEqual(['This folder', 'brand.css']))
+    pick('brand.css')
+    expect(composer.value).toBe('match @../shared/brand.css ')
+    expect(screen.queryByRole('listbox')).toBeNull()
+
+    fireEvent.change(composer, { target: { value: 'match @../' } })
+    await waitFor(async () => expect(await names()).toContain('This folder'))
+    pick('This folder')
+    expect(composer.value).toBe('match @../ ')
+  })
+
+  it('quotes a path with spaces, and says when a folder can’t be listed', async () => {
+    installFolders()
+    render(<ChatPanel project={makeProject('p1')} messages={[]} onChange={vi.fn()} draft="" />)
+    const composer = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+
+    fireEvent.change(composer, { target: { value: '@../Te' } })
+    await waitFor(async () => expect(await names()).toEqual(['Team notes']))
+    pick('Team notes')
+    expect(composer.value).toBe('@"../Team notes/')
+    await waitFor(async () => expect(await names()).toEqual(['This folder', 'plan.md']))
+    pick('plan.md')
+    expect(composer.value).toBe('@"../Team notes/plan.md" ')
+
+    fireEvent.change(composer, { target: { value: '@../missing/' } })
+    expect(await screen.findByText('There’s no folder here.')).toBeTruthy()
+  })
+
+  it('points to ../ when nothing in the project matches', async () => {
+    installApi()
+    render(<ChatPanel project={makeProject('p1')} messages={[]} onChange={vi.fn()} draft="" />)
+    fireEvent.change(screen.getByPlaceholderText(PLACEHOLDER), { target: { value: '@zzz' } })
+    expect(
+      await screen.findByText(
+        'To reference something outside the project, type ../ or a full path.'
+      )
+    ).toBeTruthy()
+  })
+})
+
 describe('ChatPanel Design changes', () => {
   const ITEM: DesignItem = {
     id: 'i1',

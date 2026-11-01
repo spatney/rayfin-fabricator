@@ -20,6 +20,7 @@ import {
   type ChatPluginId,
   type ChatTurnResult,
   type CopilotAuthStatus,
+  type DirListing,
   type ExperimentFlags,
   type StudioProject
 } from '@shared/ipc'
@@ -63,7 +64,17 @@ import { uid } from './chat/format'
 import { readAsDataUrl, toPngAndThumb } from './chat/images'
 import { reduceChatMessage, rollbackInterjection, settleRunningTools } from './chat/reducer'
 import { ChatEventBuffer, isStreamingEvent } from './chat/eventCoalescer'
-import { flattenFiles, rankFiles, type MentionFile } from './chat/mentions'
+import {
+  activeMention,
+  flattenFiles,
+  isPathQuery,
+  mentionText,
+  rankEntries,
+  rankFiles,
+  splitPathQuery,
+  type MentionFile,
+  type MentionOption
+} from './chat/mentions'
 import { createFileResolver } from './chat/paths'
 import { MessageRow } from './chat/MessageRow'
 import { tryAgainPrompt } from './chat/prompts'
@@ -352,8 +363,15 @@ export default function ChatPanel({
   const [atOpen, setAtOpen] = useState(false)
   const [atStart, setAtStart] = useState(0)
   const [atQuery, setAtQuery] = useState('')
+  /** The @-token is quoted (`@"…`), for a path with spaces. */
+  const [atQuoted, setAtQuoted] = useState(false)
   const [atIdx, setAtIdx] = useState(0)
   const [atDismissed, setAtDismissed] = useState(false)
+  /** The folder an @-path browses (as typed), and what's in it once listed. */
+  const [listing, setListing] = useState<{ dir: string; result?: DirListing } | null>(null)
+  const listingDir = useRef<string | null>(null)
+  /** A folder was picked: list what's in it once the composer has its new text. */
+  const browseNext = useRef(false)
   const pendingCaret = useRef<number | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const highlightRef = useRef<HTMLDivElement>(null)
@@ -1339,16 +1357,34 @@ export default function ChatPanel({
       return
     }
     const caret = ta.selectionStart ?? ta.value.length
-    const m = /(^|\s)@([^\s@]*)$/.exec(ta.value.slice(0, caret))
-    if (!m) {
+    const token = activeMention(ta.value.slice(0, caret))
+    if (!token) {
       setAtOpen(false)
       return
     }
-    setAtStart(caret - m[2].length - 1)
-    setAtQuery(m[2])
+    setAtStart(token.start)
+    setAtQuery(token.query)
+    setAtQuoted(token.quoted)
     setAtIdx(0)
     setAtOpen(true)
-    void ensureFiles()
+    // A path browses folders, in the project or outside it; anything else
+    // searches the project's files. Opening the picker lists a folder afresh.
+    if (isPathQuery(token.query)) void ensureListing(splitPathQuery(token.query).dir, !atOpen)
+    else void ensureFiles()
+  }
+
+  /** List the folder an @-path is in: once per folder typed while the picker is open. */
+  async function ensureListing(dir: string, fresh: boolean): Promise<void> {
+    if (!fresh && listingDir.current === dir) return
+    listingDir.current = dir
+    setListing({ dir })
+    let result: DirListing
+    try {
+      result = await window.api.projects.files.listDir(project.id, dir)
+    } catch (err) {
+      result = { dir, entries: [], error: err instanceof Error ? err.message : String(err) }
+    }
+    if (listingDir.current === dir) setListing({ dir, result })
   }
 
   function onComposerChange(e: ChangeEvent<HTMLTextAreaElement>): void {
@@ -1363,24 +1399,69 @@ export default function ChatPanel({
     evalAt()
   }
 
-  const atMatches = useMemo(() => {
+  const pathParts = useMemo(
+    () => (atOpen && isPathQuery(atQuery) ? splitPathQuery(atQuery) : null),
+    [atOpen, atQuery]
+  )
+  const pathListing = pathParts && listing?.dir === pathParts.dir ? listing.result : undefined
+  const atOptions = useMemo<MentionOption[]>(() => {
     if (!atOpen) return []
-    return fileList ? rankFiles(fileList, atQuery) : []
-  }, [atOpen, fileList, atQuery])
-  const atLoading = atOpen && fileList == null
-  const atCapture = atOpen && atMatches.length > 0
-  const atSel = Math.max(0, Math.min(atIdx, atMatches.length - 1))
+    if (!pathParts) {
+      return (fileList ? rankFiles(fileList, atQuery) : []).map((f) => ({
+        key: f.path,
+        kind: 'file' as const,
+        name: f.name,
+        detail: f.path,
+        insert: `${mentionText(f.path)} `
+      }))
+    }
+    if (!pathListing || pathListing.error) return []
+    const { dir, partial } = pathParts
+    // Folders keep the separator the path was typed with.
+    const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/'
+    const options: MentionOption[] = rankEntries(pathListing.entries, partial).map((e) =>
+      e.dir
+        ? {
+            key: `dir:${e.name}`,
+            kind: 'dir' as const,
+            name: e.name,
+            detail: `${dir}${e.name}${sep}`,
+            insert: mentionText(`${dir}${e.name}${sep}`, atQuoted, true),
+            browse: true
+          }
+        : {
+            key: `file:${e.name}`,
+            kind: 'file' as const,
+            name: e.name,
+            detail: `${dir}${e.name}`,
+            insert: `${mentionText(`${dir}${e.name}`, atQuoted)} `
+          }
+    )
+    if (!partial) {
+      options.unshift({
+        key: 'here',
+        kind: 'here',
+        name: 'This folder',
+        detail: dir,
+        insert: `${mentionText(dir, atQuoted)} `
+      })
+    }
+    return options
+  }, [atOpen, atQuery, atQuoted, fileList, pathParts, pathListing])
+  const atLoading = atOpen && (pathParts ? !pathListing : fileList == null)
+  const atCapture = atOpen && atOptions.length > 0
+  const atSel = Math.max(0, Math.min(atIdx, atOptions.length - 1))
 
-  /** Replace the active @-token with a reference to `path`. */
-  function pickFile(path: string): void {
+  /** Replace the active @-token with `option`'s reference; a folder goes on to list what's in it. */
+  function pickMention(option: MentionOption): void {
     const caret = taRef.current?.selectionStart ?? input.length
     const before = input.slice(0, atStart)
     const after = input.slice(caret)
-    const insert = `@${path} `
-    setInput(before + insert + after)
+    setInput(before + option.insert + after)
     setAtOpen(false)
     setAtDismissed(false)
-    pendingCaret.current = before.length + insert.length
+    pendingCaret.current = before.length + option.insert.length
+    browseNext.current = Boolean(option.browse)
   }
 
   // Restore focus + caret after an @-mention insertion (input is controlled).
@@ -1393,11 +1474,15 @@ export default function ChatPanel({
       ta.focus()
       ta.setSelectionRange(c, c)
     }
+    if (browseNext.current) {
+      browseNext.current = false
+      evalAt()
+    }
   }, [input])
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>): void {
     if (atCapture) {
-      const len = atMatches.length
+      const len = atOptions.length
       if (e.key === 'ArrowDown') {
         e.preventDefault()
         setAtIdx((i) => (Math.max(0, Math.min(i, len - 1)) + 1) % len)
@@ -1410,7 +1495,7 @@ export default function ChatPanel({
       }
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
         e.preventDefault()
-        pickFile(atMatches[atSel].path)
+        pickMention(atOptions[atSel])
         return
       }
       if (e.key === 'Escape') {
@@ -1613,15 +1698,40 @@ export default function ChatPanel({
             </div>
           )}
           {atOpen && (
-            <div className="mention-menu" role="listbox" aria-label="Project files">
-              <div className="mention-menu-head">Reference a file</div>
-              {atLoading && <div className="mention-empty">Loading files…</div>}
-              {!atLoading && atMatches.length === 0 && (
-                <div className="mention-empty">No files match “{atQuery}”</div>
+            <div
+              className="mention-menu"
+              role="listbox"
+              aria-label={pathParts ? 'Files and folders' : 'Project files'}
+            >
+              <div className="mention-menu-head">
+                {pathParts ? 'Reference a file or folder' : 'Reference a file'}
+              </div>
+              {pathListing?.dir && (
+                <div className="mention-dir" title={pathListing.dir}>
+                  {pathListing.dir}
+                </div>
               )}
-              {atMatches.map((f, i) => (
+              {atLoading && <div className="mention-empty">Loading files…</div>}
+              {!atLoading && pathListing?.error && (
+                <div className="mention-empty">{pathListing.error}</div>
+              )}
+              {!atLoading && !pathListing?.error && atOptions.length === 0 && (
+                <div className="mention-empty">
+                  {pathParts ? (
+                    `Nothing here matches “${pathParts.partial}”`
+                  ) : (
+                    <>
+                      No files match “{atQuery}”
+                      <span className="mention-hint">
+                        To reference something outside the project, type ../ or a full path.
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+              {atOptions.map((o, i) => (
                 <button
-                  key={f.path}
+                  key={o.key}
                   type="button"
                   role="option"
                   aria-selected={i === atSel}
@@ -1629,12 +1739,15 @@ export default function ChatPanel({
                   onMouseEnter={() => setAtIdx(i)}
                   onMouseDown={(e) => {
                     e.preventDefault()
-                    pickFile(f.path)
+                    pickMention(o)
                   }}
                 >
-                  <span className="codicon codicon-file mention-ico" aria-hidden="true" />
-                  <span className="mention-name">{f.name}</span>
-                  <span className="mention-path">{f.path}</span>
+                  <span
+                    className={`codicon codicon-${o.kind === 'file' ? 'file' : o.kind === 'dir' ? 'folder' : 'folder-opened'} mention-ico`}
+                    aria-hidden="true"
+                  />
+                  <span className="mention-name">{o.name}</span>
+                  <span className="mention-path">{o.detail}</span>
                 </button>
               ))}
             </div>

@@ -2365,6 +2365,23 @@ button.thinking-head:hover {
   color: var(--text-faint);
 }
 
+/* How to reach outside the project, under "No files match". */
+.mention-hint {
+  display: block;
+  margin-top: 4px;
+}
+
+/* The folder an @-path is browsing, in full. */
+.mention-dir {
+  padding: 0 8px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Icon in the @-mention file picker. */
 .mention-ico {
   font-size: 13px;

@@ -2038,6 +2038,17 @@ export interface FileNode {
   ignored?: boolean
 }
 
+/** One folder's entries, for an `@` reference in chat to something outside the project. */
+export interface DirListing {
+  /** The folder, as an absolute path. */
+  dir: string
+  /** Folders first, then files, each by name. */
+  entries: Array<{ name: string; dir: boolean }>
+  /** The folder has more entries than were listed. */
+  truncated?: boolean
+  error?: string
+}
+
 /** The result of reading one project file for the viewer. */
 export interface FileContent {
   path: string
@@ -3601,6 +3612,11 @@ export interface RayfinStudioApi {
       tree: (id: string) => Promise<FileNode[]>
       /** Read one project file's text (size-capped, traversal-guarded). */
       read: (id: string, path: string) => Promise<FileContent>
+      /**
+       * List one folder for an `@` reference in chat: relative to the project,
+       * from the home folder after `~`, or absolute. Names only.
+       */
+      listDir: (id: string, path: string) => Promise<DirListing>
     }
   }
 
