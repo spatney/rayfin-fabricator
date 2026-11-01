@@ -8,6 +8,7 @@ pub mod auth;
 pub mod byok;
 pub mod chat;
 pub mod chat_tools;
+pub mod commit_message;
 pub mod custom_skills;
 pub mod deploy;
 pub mod design;

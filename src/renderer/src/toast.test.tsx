@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ErrorReport } from '@shared/ipc'
 import { ToastProvider, useToast, type ToastApi } from './toast'
 
@@ -75,5 +75,50 @@ describe('what a toast puts in the activity journal', () => {
       api.success('Your app is live.')
     })
     expect(screen.getByText('Your app is live.')).toBeTruthy()
+  })
+})
+
+describe('staying out of the way', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('waits while you read it: pointing at a toast pauses its countdown', () => {
+    vi.useFakeTimers()
+    act(() => {
+      api.success('Your app is live.')
+    })
+    const toast = screen.getByRole('status')
+    fireEvent.mouseEnter(toast)
+    act(() => vi.advanceTimersByTime(10_000))
+    expect(screen.queryByText('Your app is live.')).toBeTruthy()
+
+    fireEvent.mouseLeave(toast)
+    act(() => vi.advanceTimersByTime(4_000))
+    expect(screen.queryByText('Your app is live.')).toBeNull()
+  })
+
+  it('shows the same news once instead of stacking copies', () => {
+    act(() => {
+      api.error('Port 5173 is in use.')
+      api.error('Port 5173 is in use.')
+    })
+    expect(screen.getAllByText('Port 5173 is in use.')).toHaveLength(1)
+  })
+
+  it('stays paused when the same news comes again while you point at it', () => {
+    vi.useFakeTimers()
+    act(() => {
+      api.success('Saved.')
+    })
+    const toast = screen.getByRole('status')
+    fireEvent.mouseEnter(toast)
+    act(() => {
+      api.success('Saved.')
+    })
+    act(() => vi.advanceTimersByTime(10_000))
+    expect(screen.queryByText('Saved.')).toBeTruthy()
+
+    fireEvent.mouseLeave(toast)
+    act(() => vi.advanceTimersByTime(4_000))
+    expect(screen.queryByText('Saved.')).toBeNull()
   })
 })

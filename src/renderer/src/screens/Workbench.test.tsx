@@ -23,6 +23,7 @@ import type {
   PortConflict,
   ProcLogEvent,
   ProcResult,
+  ProjectsState,
   RayfinStudioApi,
   SavedTurn,
   StudioProject
@@ -2456,6 +2457,110 @@ describe('Workbench search', () => {
     expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull()
     expect(screen.getByRole('dialog', { name: 'Help' })).toBeTruthy()
     expect(helpProps.mock.lastCall![0].continuing).toBe(true)
+  })
+})
+
+describe('Workbench project removal', () => {
+  it('removes the open project in the background: it closes, and the app stays usable meanwhile', async () => {
+    const api = installApi(true)
+    const other: StudioProject = {
+      ...project,
+      id: 'p2',
+      name: 'Project Two',
+      path: 'C:\\projects\\p2'
+    }
+    const state: ProjectsState = {
+      workspaceRoot: 'C:\\projects',
+      activeProjectId: project.id,
+      projects: [project, other]
+    }
+    const closed = { ...state, activeProjectId: null }
+    api.projects.state.mockResolvedValue(state)
+    api.deploy.reconcile.mockResolvedValue(state)
+    api.projects.setActive.mockResolvedValue(closed)
+    const trashed = deferred<ProjectsState>()
+    const remove = vi.fn((_id: string, _deleteFiles?: boolean) => trashed.promise)
+    const deleteApps = vi.fn()
+    Object.assign(api.projects, { remove })
+    Object.assign(api, { fabric: { deleteApps }, onDeleteProgress: vi.fn(() => () => {}) })
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Project One — Switch projects' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'All projects' }))
+    act(() => homeProps.mock.lastCall![0].onManageProject(project))
+    fireEvent.click(screen.getByRole('button', { name: 'Review options' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Published Fabric app' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Move folder to trash' }))
+
+    // The dialog is gone at once, the project closes, and Home shows the removal.
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => expect(remove).toHaveBeenCalledWith('p1', true))
+    expect(api.projects.setActive).toHaveBeenCalledWith(null)
+    expect(deleteApps).not.toHaveBeenCalled()
+    expect(homeProps.mock.lastCall![0].removals?.p1).toMatchObject({ step: 'folder' })
+
+    // It can't be opened or found meanwhile; other projects can.
+    api.projects.setActive.mockClear()
+    act(() => homeProps.mock.lastCall![0].onSelect(project))
+    expect(api.projects.setActive).not.toHaveBeenCalled()
+    expect(screen.getByText('Project One is being removed.')).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const items = searchProps.mock.lastCall![0].items
+    expect(items.some((item) => item.id === 'project:p1')).toBe(false)
+    expect(items.some((item) => item.id === 'project:p2')).toBe(true)
+    act(() => searchProps.mock.lastCall![0].onClose())
+
+    await act(async () => trashed.resolve({ ...closed, projects: [other] }))
+    expect(homeProps.mock.lastCall![0].projects.map((p) => p.id)).toEqual(['p2'])
+    expect(homeProps.mock.lastCall![0].removals).toEqual({})
+    expect(screen.getByText('Removed Project One')).toBeTruthy()
+    expect(
+      screen.getByText('Its folder is in your system trash. You can restore it from there.')
+    ).toBeTruthy()
+  })
+
+  it('closes a project opened again after its removal stopped before trying again', async () => {
+    const api = installApi(true)
+    const state: ProjectsState = {
+      workspaceRoot: 'C:\\projects',
+      activeProjectId: project.id,
+      projects: [project]
+    }
+    const closed = { ...state, activeProjectId: null }
+    api.projects.state.mockResolvedValue(state)
+    api.deploy.reconcile.mockResolvedValue(state)
+    api.projects.setActive.mockImplementation(async (id) => (id ? state : closed))
+    const remove = vi
+      .fn()
+      .mockRejectedValueOnce('Couldn’t move the folder to trash: a file is in use.')
+      .mockResolvedValue({ ...closed, projects: [] })
+    Object.assign(api.projects, { remove })
+    Object.assign(api, { fabric: { deleteApps: vi.fn() }, onDeleteProgress: vi.fn(() => () => {}) })
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Project One — Switch projects' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'All projects' }))
+    act(() => homeProps.mock.lastCall![0].onManageProject(project))
+    fireEvent.click(screen.getByRole('button', { name: 'Review options' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Published Fabric app' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Move folder to trash' }))
+    await waitFor(() => expect(homeProps.mock.lastCall![0].removals?.p1?.error).toBeTruthy())
+
+    // Open it again, go back Home, and try again.
+    await act(async () => homeProps.mock.lastCall![0].onSelect(project))
+    await screen.findByLabelText('Chat draft')
+    fireEvent.click(screen.getByRole('button', { name: 'Project One — Switch projects' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'All projects' }))
+    api.projects.setActive.mockClear()
+    await act(async () => homeProps.mock.lastCall![0].onRetryRemoval?.('p1'))
+
+    await waitFor(() => expect(remove).toHaveBeenCalledTimes(2))
+    expect(api.projects.setActive).toHaveBeenCalledWith(null)
+    expect(api.projects.setActive.mock.invocationCallOrder[0]).toBeLessThan(
+      remove.mock.invocationCallOrder[1]
+    )
   })
 })
 

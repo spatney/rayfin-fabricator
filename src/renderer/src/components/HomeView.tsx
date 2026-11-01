@@ -1,10 +1,12 @@
 import { useState, type CSSProperties, type JSX } from 'react'
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
+import { removalStatus, type ProjectRemoval } from '../projectRemovals'
 import { FabricatorMark } from './FabricatorMark'
 import { AddIcon, BranchIcon, Codicon, FolderIcon, GearIcon } from './icons'
 import { displayPath } from './projectDisplay'
 import TeamSection from './team/TeamSection'
 import { hueOf } from './team/map/parts'
+import { useNow } from './team/runProgress'
 
 /** Recent projects shown before "Show all". */
 const RECENT_LIMIT = 6
@@ -22,6 +24,12 @@ interface Props {
   onSelect: (project: StudioProject) => void
   /** Open focused management for a recent project. */
   onManageProject: (project: StudioProject) => void
+  /** Projects being removed in the background, or whose removal stopped, by id. */
+  removals?: Readonly<Record<string, ProjectRemoval>>
+  /** Run a stopped removal again. */
+  onRetryRemoval?: (projectId: string) => void
+  /** Forget a stopped removal; the project stays. */
+  onDismissRemoval?: (projectId: string) => void
   onNewProject: () => void
   onOpenExisting: () => void
   /** Start the sign-in/browse/clone flow. */
@@ -50,6 +58,9 @@ export default function HomeView({
   opening,
   onSelect,
   onManageProject,
+  removals,
+  onRetryRemoval,
+  onDismissRemoval,
   onNewProject,
   onOpenExisting,
   onCloneFromGitHub,
@@ -62,6 +73,8 @@ export default function HomeView({
   const teamNames = new Map((team?.workspaces ?? []).map((w) => [w.id, w.name]))
   const [showAll, setShowAll] = useState(false)
   const shown = showAll ? projects : projects.slice(0, RECENT_LIMIT)
+  // Ticks while a folder moves to trash, which reports no progress of its own.
+  const now = useNow(Object.values(removals ?? {}).some((r) => r.trashingSince && !r.error))
 
   return (
     <div className="home">
@@ -171,18 +184,24 @@ export default function HomeView({
             <div className="home-project-list" role="list">
               {shown.map((project) => {
                 const teamName = project.team ? (teamNames.get(project.team.workspaceId) ?? 'Team') : undefined
+                const removal = removals?.[project.id]
+                const removing = Boolean(removal && !removal.error)
+                const stopped = Boolean(removal?.error)
+                const status = removal ? removalStatus(removal, now) : ''
                 return (
                   <article
                     key={project.id}
                     className={`home-project${project.id === activeId ? ' home-project--active' : ''}${
                       project.missing ? ' home-project--missing' : ''
-                    }`}
+                    }${removing ? ' home-project--removing' : ''}${stopped ? ' home-project--stopped' : ''}`}
                     role="listitem"
+                    aria-busy={removing || undefined}
                   >
                     <button
                       type="button"
                       className="home-project-open"
                       aria-label={`Open ${project.name}`}
+                      disabled={removing}
                       onClick={() => onSelect(project)}
                     >
                       <span
@@ -195,38 +214,80 @@ export default function HomeView({
                       <span className="home-project-main">
                         <span className="home-project-name">
                           <span className="home-project-title">{project.name}</span>
-                          {project.id === activeId && (
-                            <span className="home-project-status home-project-status--active">
-                              Open now
+                          {removing ? (
+                            <span className="home-project-status home-project-status--removing">
+                              Removing
                             </span>
-                          )}
-                          {project.missing && (
-                            <span className="home-project-status home-project-status--missing">
-                              Missing
+                          ) : stopped ? (
+                            <span className="home-project-status home-project-status--stopped">
+                              Not removed
                             </span>
-                          )}
-                        </span>
-                        <span className="home-project-path" title={project.path}>
-                          {teamName ? (
-                            <>
-                              <span className="codicon codicon-organization" aria-hidden="true" />
-                              {teamName} · saved to GitHub as you work
-                            </>
                           ) : (
-                            displayPath(project.path)
+                            <>
+                              {project.id === activeId && (
+                                <span className="home-project-status home-project-status--active">
+                                  Open now
+                                </span>
+                              )}
+                              {project.missing && (
+                                <span className="home-project-status home-project-status--missing">
+                                  Missing
+                                </span>
+                              )}
+                            </>
                           )}
                         </span>
+                        {removal ? (
+                          <span className="home-project-removal" title={status}>
+                            {removing && <span className="home-project-spin" aria-hidden="true" />}
+                            <span className="home-project-removal-text">{status}</span>
+                          </span>
+                        ) : (
+                          <span className="home-project-path" title={project.path}>
+                            {teamName ? (
+                              <>
+                                <span className="codicon codicon-organization" aria-hidden="true" />
+                                {teamName} · saved to GitHub as you work
+                              </>
+                            ) : (
+                              displayPath(project.path)
+                            )}
+                          </span>
+                        )}
                       </span>
                     </button>
-                    <button
-                      type="button"
-                      className="home-project-manage"
-                      aria-label={`Manage ${project.name}`}
-                      title="Manage"
-                      onClick={() => onManageProject(project)}
-                    >
-                      <GearIcon className="home-project-manage-icon" />
-                    </button>
+                    {stopped ? (
+                      <span className="home-project-removal-actions">
+                        <button
+                          type="button"
+                          className="btn btn--sm"
+                          aria-label={`Try again to remove ${project.name}`}
+                          onClick={() => onRetryRemoval?.(project.id)}
+                        >
+                          Try again
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm btn--ghost"
+                          aria-label={`Keep ${project.name}`}
+                          onClick={() => onDismissRemoval?.(project.id)}
+                        >
+                          Keep
+                        </button>
+                      </span>
+                    ) : (
+                      !removing && (
+                        <button
+                          type="button"
+                          className="home-project-manage"
+                          aria-label={`Manage ${project.name}`}
+                          title="Manage"
+                          onClick={() => onManageProject(project)}
+                        >
+                          <GearIcon className="home-project-manage-icon" />
+                        </button>
+                      )
+                    )}
                   </article>
                 )
               })}

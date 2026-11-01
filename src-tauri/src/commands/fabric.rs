@@ -289,11 +289,18 @@ pub async fn fabric_check_deploy_target(workspace_id: String) -> DeployTargetChe
 }
 
 /// Write a helper script to the app data dir and return its path.
+/// Write a helper script into the data folder. Calls running at once (projects
+/// removing their apps in parallel) share the file, so it's only rewritten when
+/// it differs: rewriting truncates it under a helper another call is starting.
 fn write_helper(name: &str, source: &str) -> std::io::Result<PathBuf> {
+  static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
   fabric_auth::write_helper()?;
   let dir = paths::ensure_data_dir()?;
   let path = dir.join(name);
-  std::fs::write(&path, source)?;
+  let _writing = WRITING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+  if std::fs::read_to_string(&path).ok().as_deref() != Some(source) {
+    std::fs::write(&path, source)?;
+  }
   Ok(path)
 }
 

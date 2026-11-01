@@ -2135,6 +2135,17 @@ pub struct GitCommitResult {
   pub status: GitStatus,
 }
 
+/// A commit message Copilot wrote for a project's uncommitted changes.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GitMessageResult {
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub message: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GitCommitSummary {

@@ -1880,6 +1880,13 @@ export interface GitCommitResult {
   status: GitStatus
 }
 
+/** A commit message Copilot (on its Auto model) wrote for the uncommitted changes. */
+export interface GitMessageResult {
+  ok: boolean
+  message?: string
+  error?: string
+}
+
 /** Sentinel ref for "uncommitted working-tree changes" (vs a commit SHA). */
 export const GIT_WORKING_REF = 'WORKING'
 
@@ -3520,6 +3527,12 @@ export interface RayfinStudioApi {
       status: (id: string) => Promise<GitStatus>
       /** Stage everything and commit; resolves with the post-commit status. */
       commit: (id: string, message: string) => Promise<GitCommitResult>
+      /**
+       * Have Copilot, on its Auto model, write a one-line message for what
+       * committing everything would take. Lockfiles, `.env` files and the local
+       * backend's state are left out of what it sees.
+       */
+      message: (id: string) => Promise<GitMessageResult>
       /**
        * After a chat turn that changed a personal app: save its changes as a
        * version named after what the user asked (`request`, trimmed to a

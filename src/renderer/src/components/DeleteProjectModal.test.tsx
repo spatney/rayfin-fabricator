@@ -1,148 +1,68 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ProcResult } from '@shared/ipc'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import type { StudioProject } from '@shared/ipc'
 import { OverlayProvider } from '../overlay'
 import DeleteProjectModal from './DeleteProjectModal'
 import { makeProject } from '../../test/harness'
-import { deferred } from '../../test/deferred'
 
-function installApi(): void {
-  ;(window as unknown as { api: unknown }).api = {
-    onDeleteProgress: vi.fn(() => () => {})
-  }
+function renderModal(project: StudioProject): {
+  onConfirm: ReturnType<typeof vi.fn>
+  onClose: ReturnType<typeof vi.fn>
+} {
+  const onConfirm = vi.fn()
+  const onClose = vi.fn()
+  render(
+    <OverlayProvider>
+      <DeleteProjectModal project={project} onConfirm={onConfirm} onClose={onClose} />
+    </OverlayProvider>
+  )
+  return { onConfirm, onClose }
 }
 
-afterEach(() => {
-  cleanup()
-  delete (window as unknown as { api?: unknown }).api
-})
+afterEach(() => cleanup())
 
 describe('DeleteProjectModal', () => {
-  it('defaults permanent Fabric app cleanup on for a published project, and lets the user turn it off', () => {
-    installApi()
-    render(
-      <OverlayProvider>
-        <DeleteProjectModal
-          project={makeProject('p1', { name: 'Sales' })}
-          onRemoved={vi.fn()}
-          onClose={vi.fn()}
-        />
-      </OverlayProvider>
-    )
+  it('trashes the folder and, by default, deletes the published app, with no name to type', () => {
+    const project = makeProject('p1', { name: 'Sales', workspaceName: 'fabcon' })
+    const { onConfirm, onClose } = renderModal(project)
 
     expect(screen.getByRole('heading', { name: 'Remove project' })).toBeTruthy()
-    expect(screen.getByText('Local project folder')).toBeTruthy()
-    expect(
-      screen.getByText(/Move it to your system trash. You can restore it from there/i)
-    ).toBeTruthy()
-    const toggle = screen.getByRole('checkbox', {
-      name: /also permanently delete the published Fabric app/i
+    const folder = screen.getByRole('checkbox', {
+      name: 'Local project folder'
     }) as HTMLInputElement
-    // Checked by default when a published Fabric app exists.
-    expect(toggle.checked).toBe(true)
-    expect(screen.getByText(/Fabric workspace itself is not deleted/i)).toBeTruthy()
-    expect(
-      screen.getByRole('button', { name: 'Move folder to trash and delete Fabric app' })
-    ).toBeTruthy()
+    expect(folder.checked).toBe(true)
+    expect(folder.disabled).toBe(true)
+    const app = screen.getByRole('checkbox', { name: 'Published Fabric app' }) as HTMLInputElement
+    expect(app.checked).toBe(true)
+    expect(screen.getByText(/Delete Sales and all app data in fabcon/)).toBeTruthy()
+    expect(screen.getByText('This cannot be undone.')).toBeTruthy()
+    expect(screen.getByText('Your Fabric workspace will be kept.')).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
 
-    // The destructive default is still opt-out.
-    fireEvent.click(toggle)
+    fireEvent.click(screen.getByRole('button', { name: 'Trash folder & delete app' }))
 
-    expect(toggle.checked).toBe(false)
-    expect(screen.getByRole('button', { name: 'Move folder to trash' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Delete project?' })).toBeNull()
+    expect(onConfirm).toHaveBeenCalledWith(project, { deleteApp: true })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the published app when its box is cleared', () => {
+    const project = makeProject('p1')
+    const { onConfirm } = renderModal(project)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Published Fabric app' }))
+
+    expect(screen.getByText('The published app and its data stay in Fabric.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Move folder to trash' }))
+    expect(onConfirm).toHaveBeenCalledWith(project, { deleteApp: false })
   })
 
   it('makes clear that an unpublished project only moves its local folder to trash', () => {
-    installApi()
-    render(
-      <OverlayProvider>
-        <DeleteProjectModal
-          project={makeProject('p1', { lastDeploy: undefined })}
-          onRemoved={vi.fn()}
-          onClose={vi.fn()}
-        />
-      </OverlayProvider>
-    )
+    const project = makeProject('p1', { lastDeploy: undefined })
+    const { onConfirm } = renderModal(project)
 
-    expect(screen.getByText(/No published Fabric app is linked to this project/i)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Move folder to trash' })).toBeTruthy()
-  })
-
-  it.each(['failed login', 'rejected login', 'rejected verification'])(
-    'stops both Fabric retries and local deletion after %s',
-    async (failure) => {
-      const deleteApps = vi.fn().mockResolvedValue({
-        ok: false,
-        needsLogin: true,
-        deleted: 0,
-        failures: []
-      })
-      const loginRayfin = vi.fn().mockResolvedValue({ ok: true, exitCode: 0 })
-      const onSignedIn = vi.fn().mockResolvedValue(undefined)
-      if (failure === 'failed login') {
-        loginRayfin.mockResolvedValueOnce({ ok: false, exitCode: 1, error: 'Fabric authentication cancelled' })
-      } else if (failure === 'rejected login') {
-        loginRayfin.mockRejectedValueOnce('Fabric authentication cancelled')
-      } else {
-        onSignedIn.mockRejectedValueOnce(new Error('Fabric authentication cancelled'))
-      }
-      const remove = vi.fn()
-      ;(window as unknown as { api: unknown }).api = {
-        onDeleteProgress: vi.fn(() => () => {}),
-        fabric: { deleteApps },
-        auth: { loginRayfin },
-        projects: { remove }
-      }
-      const onRemoved = vi.fn()
-      render(
-        <OverlayProvider>
-          <DeleteProjectModal
-            project={makeProject('p1')}
-            onRemoved={onRemoved}
-            onClose={vi.fn()}
-            onSignedIn={onSignedIn}
-          />
-        </OverlayProvider>
-      )
-      fireEvent.click(screen.getByRole('button', { name: 'Move folder to trash and delete Fabric app' }))
-
-      expect(await screen.findByText('Fabric authentication cancelled')).toBeTruthy()
-      expect(deleteApps).toHaveBeenCalledTimes(1)
-      expect(remove).not.toHaveBeenCalled()
-      expect(onRemoved).not.toHaveBeenCalled()
-      expect(screen.queryByText(/Deleting from Fabric is taking longer/)).toBeNull()
-    }
-  )
-
-  it('does not resume destructive work after the dialog unmounts during sign-in', async () => {
-    const login = deferred<ProcResult>()
-    const loginRayfin = vi.fn(() => login.promise)
-    const deleteApps = vi.fn().mockResolvedValue({ ok: false, needsLogin: true, failures: [], deleted: 0 })
-    const remove = vi.fn()
-    const onSignedIn = vi.fn()
-    ;(window as unknown as { api: unknown }).api = {
-      onDeleteProgress: vi.fn(() => () => {}),
-      fabric: { deleteApps },
-      auth: { loginRayfin },
-      projects: { remove }
-    }
-    const view = render(
-      <OverlayProvider>
-        <DeleteProjectModal
-          project={makeProject('p1')}
-          onRemoved={vi.fn()}
-          onClose={vi.fn()}
-          onSignedIn={onSignedIn}
-        />
-      </OverlayProvider>
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Move folder to trash and delete Fabric app' }))
-    await waitFor(() => expect(loginRayfin).toHaveBeenCalledTimes(1))
-    view.unmount()
-    await act(async () => login.resolve({ ok: true, exitCode: 0 }))
-    expect(deleteApps).toHaveBeenCalledTimes(1)
-    expect(remove).not.toHaveBeenCalled()
-    expect(onSignedIn).not.toHaveBeenCalled()
+    expect(screen.queryByRole('checkbox', { name: 'Published Fabric app' })).toBeNull()
+    expect(screen.getByText(/No published Fabric app is linked to this project/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Move folder to trash' }))
+    expect(onConfirm).toHaveBeenCalledWith(project, { deleteApp: false })
   })
 })

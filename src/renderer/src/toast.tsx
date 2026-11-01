@@ -52,12 +52,15 @@ const DEFAULT_DURATION: Record<ToastKind, number> = {
 }
 
 /** Most recent toasts win; the stack is capped so it can't grow without bound. */
-const MAX_TOASTS = 4
+const MAX_TOASTS = 3
+
+/** A countdown paused while you read the toast resumes with at least this long left. */
+const MIN_RESUME_MS = 1500
 
 const ICON: Record<ToastKind, string> = {
-  success: '✓',
-  error: '!',
-  info: 'i'
+  success: 'pass',
+  error: 'error',
+  info: 'info'
 }
 
 const ToastContext = createContext<ToastApi | null>(null)
@@ -91,17 +94,56 @@ export function useToast(): ToastApi {
 
 export function ToastProvider({ children }: { children: ReactNode }): JSX.Element {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const toastsRef = useRef<Toast[]>([])
   const idRef = useRef(0)
-  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
+  /** Each timed toast's countdown: running (`timer`), or paused with `left` to go. */
+  const timers = useRef(
+    new Map<number, { timer?: ReturnType<typeof setTimeout>; due: number; left: number }>()
+  )
 
-  const dismiss = useCallback((id: number): void => {
-    setToasts((list) => list.filter((t) => t.id !== id))
-    const timer = timers.current.get(id)
-    if (timer) {
-      clearTimeout(timer)
-      timers.current.delete(id)
-    }
+  const update = useCallback((change: (list: Toast[]) => Toast[]): void => {
+    toastsRef.current = change(toastsRef.current)
+    setToasts(toastsRef.current)
   }, [])
+
+  const dismiss = useCallback(
+    (id: number): void => {
+      update((list) => list.filter((t) => t.id !== id))
+      const timer = timers.current.get(id)?.timer
+      if (timer) clearTimeout(timer)
+      timers.current.delete(id)
+    },
+    [update]
+  )
+
+  const schedule = useCallback(
+    (id: number, ms: number): void => {
+      const running = timers.current.get(id)?.timer
+      if (running) clearTimeout(running)
+      timers.current.set(id, {
+        timer: setTimeout(() => dismiss(id), ms),
+        due: Date.now() + ms,
+        left: ms
+      })
+    },
+    [dismiss]
+  )
+
+  /** Hold a toast while it's pointed at or focused, so it can be read. */
+  const pause = useCallback((id: number): void => {
+    const countdown = timers.current.get(id)
+    if (!countdown?.timer) return
+    clearTimeout(countdown.timer)
+    timers.current.set(id, { due: countdown.due, left: Math.max(countdown.due - Date.now(), 0) })
+  }, [])
+
+  const resume = useCallback(
+    (id: number): void => {
+      const countdown = timers.current.get(id)
+      if (countdown && !countdown.timer) schedule(id, Math.max(countdown.left, MIN_RESUME_MS))
+    },
+    [schedule]
+  )
 
   const show = useCallback(
     (kind: ToastKind, message: string, opts?: ToastOptions): number => {
@@ -119,25 +161,44 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
           reportEvent(area, kind === 'success' ? `${area}.succeeded` : `${area}.notice`, text)
         }
       }
-      const id = (idRef.current += 1)
       const duration = opts?.duration ?? DEFAULT_DURATION[kind]
-      setToasts((list) => [...list, { id, kind, message, title: opts?.title, duration }].slice(-MAX_TOASTS))
-      if (duration > 0) {
-        timers.current.set(
-          id,
-          setTimeout(() => dismiss(id), duration)
-        )
+      // The same news again refreshes the toast already showing it rather than stacking a copy.
+      const same = toastsRef.current.find(
+        (t) => t.kind === kind && t.message === message && t.title === opts?.title
+      )
+      if (same) {
+        const countdown = timers.current.get(same.id)
+        if (countdown && !countdown.timer) {
+          // Paused under the pointer: it starts over once the pointer leaves.
+          timers.current.set(same.id, { due: Date.now() + duration, left: duration })
+        } else if (duration > 0) {
+          schedule(same.id, duration)
+        }
+        return same.id
       }
+      const id = (idRef.current += 1)
+      update((list) => {
+        const next = [...list, { id, kind, message, title: opts?.title, duration }]
+        for (const dropped of next.slice(0, -MAX_TOASTS)) {
+          const timer = timers.current.get(dropped.id)?.timer
+          if (timer) clearTimeout(timer)
+          timers.current.delete(dropped.id)
+        }
+        return next.slice(-MAX_TOASTS)
+      })
+      if (duration > 0) schedule(id, duration)
       return id
     },
-    [dismiss]
+    [schedule, update]
   )
 
   // Clear any pending timers when the provider unmounts.
   useEffect(() => {
     const map = timers.current
     return () => {
-      map.forEach((t) => clearTimeout(t))
+      map.forEach((t) => {
+        if (t.timer) clearTimeout(t.timer)
+      })
       map.clear()
     }
   }, [])
@@ -156,17 +217,26 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <ToastHost toasts={toasts} onDismiss={dismiss} />
+      <ToastHost toasts={toasts} onDismiss={dismiss} onPause={pause} onResume={resume} />
     </ToastContext.Provider>
   )
 }
 
+/**
+ * Toasts sit under the app bar at the left: the chat column there is HTML, while
+ * the live preview on the right is a native view that would paint over them, and
+ * the bottom left is the chat's message box.
+ */
 function ToastHost({
   toasts,
-  onDismiss
+  onDismiss,
+  onPause,
+  onResume
 }: {
   toasts: Toast[]
   onDismiss: (id: number) => void
+  onPause: (id: number) => void
+  onResume: (id: number) => void
 }): JSX.Element | null {
   if (toasts.length === 0) return null
   return (
@@ -177,16 +247,23 @@ function ToastHost({
           className={`toast toast--${t.kind}`}
           role={t.kind === 'error' ? 'alert' : 'status'}
           aria-live={t.kind === 'error' ? 'assertive' : 'polite'}
+          onMouseEnter={() => onPause(t.id)}
+          onMouseLeave={() => onResume(t.id)}
+          onFocus={() => onPause(t.id)}
+          onBlur={() => onResume(t.id)}
         >
-          <span className="toast-icon" aria-hidden="true">
-            {ICON[t.kind]}
-          </span>
+          <span className={`toast-icon codicon codicon-${ICON[t.kind]}`} aria-hidden="true" />
           <div className="toast-body">
             {t.title && <div className="toast-title">{t.title}</div>}
             <div className="toast-msg">{t.message}</div>
           </div>
-          <button className="toast-close" aria-label="Dismiss notification" onClick={() => onDismiss(t.id)}>
-            ×
+          <button
+            type="button"
+            className="toast-close"
+            aria-label="Dismiss notification"
+            onClick={() => onDismiss(t.id)}
+          >
+            <span className="codicon codicon-close" aria-hidden="true" />
           </button>
         </div>
       ))}

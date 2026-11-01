@@ -89,6 +89,7 @@ import { useMigration, type MigrationControl } from '../migration/useMigration'
 import { writeCodeTab, type CodeTab } from '../components/codeTab'
 import { useToast } from '../toast'
 import { authErrorMessage } from '../authErrors'
+import { useProjectRemovals, withoutProject } from '../projectRemovals'
 import { reportIssue as runReportIssue } from './reportIssue'
 import { branchLabel } from './statusbar'
 import { openDocs } from '../docsLinks'
@@ -624,6 +625,39 @@ export default function Workbench({
       stoppingRef.current.set(projectId, stopping)
     },
     [onDevServerError]
+  )
+  /** Projects removing in the background, any number at once (see projectRemovals). */
+  const removals = useProjectRemovals({
+    onSignedIn: onAuthChanged,
+    // A live preview runs from the project's folder; stop it before the folder moves.
+    beforeTrash: async (project) => {
+      stopDevServer(project.id)
+      await stoppingRef.current.get(project.id)
+    },
+    onRemoved: (project, next, appDeleted) => {
+      setProjects((current) => (current ? withoutProject(current, project.id) : next))
+      toast.success(
+        appDeleted
+          ? 'Its folder is in your system trash, and its published app is deleted.'
+          : 'Its folder is in your system trash. You can restore it from there.',
+        { title: `Removed ${project.name}` }
+      )
+    },
+    onFailed: (project, error) => toast.error(error, { title: `Couldn’t remove ${project.name}` })
+  })
+  /** Projects being removed can't be opened or managed, so the switcher and Search leave them out. */
+  const removingIds = useMemo(
+    () =>
+      new Set(
+        Object.values(removals.removals)
+          .filter((removal) => !removal.error)
+          .map((removal) => removal.project.id)
+      ),
+    [removals.removals]
+  )
+  const listedProjects = useMemo(
+    () => (projects?.projects ?? []).filter((p) => !removingIds.has(p.id)),
+    [projects, removingIds]
   )
   /** A Build chat turn is running for the project. */
   const isTurnRunning = useCallback(
@@ -1777,6 +1811,10 @@ export default function Workbench({
   }, [active?.id])
 
   async function selectProject(p: StudioProject): Promise<void> {
+    if (removingIds.has(p.id)) {
+      toast.info(`${p.name} is being removed.`)
+      return
+    }
     setNotice(null)
     setGallery(null)
     // Re-opening the project that's already active just closes the launcher and
@@ -1822,6 +1860,36 @@ export default function Workbench({
 
   async function removeFromList(p: StudioProject): Promise<void> {
     setProjects(await window.api.projects.remove(p.id, false))
+  }
+
+  /** Open Manage project, unless the project is on its way out. */
+  function manageProject(p: StudioProject): void {
+    if (removingIds.has(p.id)) return
+    setManagingProject(p)
+  }
+
+  /**
+   * Remove a project in the background, so you can keep working (and remove
+   * others) meanwhile. An open project closes first: its files are going.
+   */
+  async function removeProject(p: StudioProject, deleteApp: boolean): Promise<void> {
+    await closeIfOpen(p.id)
+    removals.start(p, { deleteApp })
+  }
+
+  /** Try a stopped removal again. Its project may have been opened since, so it closes first too. */
+  async function retryRemoval(projectId: string): Promise<void> {
+    await closeIfOpen(projectId)
+    removals.retry(projectId)
+  }
+
+  async function closeIfOpen(projectId: string): Promise<void> {
+    if (activeIdRef.current !== projectId) return
+    try {
+      setProjects(await window.api.projects.setActive(null))
+    } catch {
+      // Removing it closes it anyway.
+    }
   }
 
   async function renameProject(p: StudioProject, name: string): Promise<string | null> {
@@ -2418,7 +2486,7 @@ export default function Workbench({
     const toolsReady = Boolean(active && depsReadyId === active.id)
     const search = workbenchSearch({
       project: active,
-      projects: projects?.projects ?? [],
+      projects: listedProjects,
       teamWorkspaces: teamEnabled ? (projects?.teamWorkspaces ?? []) : [],
       toolsReady,
       onProjectScreen,
@@ -2445,7 +2513,7 @@ export default function Workbench({
           setTeamMap(null)
           void selectProject(project)
         },
-        manage: setManagingProject,
+        manage: manageProject,
         openInEditor: (project) => {
           window.api.openInEditor(project.id).then(
             (res) => {
@@ -2479,7 +2547,7 @@ export default function Workbench({
         migrateReport: () => setShowMigrate(true),
         openGallery: () => openGallery(onProjectScreen ? 'project' : 'home'),
         manageProject: () => {
-          if (active) setManagingProject(active)
+          if (active) manageProject(active)
         },
         openOverview: () => {
           if (active?.team) openTeamMap(active.team.workspaceId, 'project', active.team.folder)
@@ -2580,7 +2648,7 @@ export default function Workbench({
             ) : active && onProjectScreen ? (
               <ProjectSwitcher
                 project={active}
-                projects={projects?.projects ?? []}
+                projects={listedProjects}
                 teamWorkspaces={projects?.teamWorkspaces}
                 onSelect={(p) => void selectProject(p)}
                 onShowAll={goHome}
@@ -3075,7 +3143,10 @@ export default function Workbench({
                   workspaceRoot={projects?.workspaceRoot ?? ''}
                   opening={opening}
                   onSelect={(p) => void selectProject(p)}
-                  onManageProject={setManagingProject}
+                  onManageProject={manageProject}
+                  removals={removals.removals}
+                  onRetryRemoval={(projectId) => void retryRemoval(projectId)}
+                  onDismissRemoval={removals.dismiss}
                   onNewProject={() => setShowCreate(true)}
                   onOpenExisting={openExisting}
                   onCloneFromGitHub={() => setShowClone(true)}
@@ -3274,7 +3345,7 @@ export default function Workbench({
           project={managingProject}
           onRename={renameProject}
           onRemoveFromList={(p) => void removeFromList(p)}
-          onMoveToTrash={setConfirmDelete}
+          onReviewRemoval={setConfirmDelete}
           onClose={() => setManagingProject(null)}
           teamWorkspaces={teamEnabled ? projects?.teamWorkspaces : undefined}
           onMoveToTeam={
@@ -3298,8 +3369,7 @@ export default function Workbench({
       {confirmDelete && (
         <DeleteProjectModal
           project={confirmDelete}
-          onSignedIn={onAuthChanged}
-          onRemoved={(next) => setProjects(next)}
+          onConfirm={(p, choice) => void removeProject(p, choice.deleteApp)}
           onClose={() => setConfirmDelete(null)}
         />
       )}

@@ -101,23 +101,27 @@ Each recent project has a **Manage** button.
 ### Rename a project
 
 1. Select **Manage** on the project card.
-2. Under **Project details**, edit **Project name**.
-3. Select **Save name**.
+2. Edit **Project name**.
+3. Select **Save**.
 
 Renaming updates Fabricator's project list and the `name:` field in `rayfin/rayfin.yml`.
 
 ### Remove a project from the list
 
-Use **Remove from recent projects** when you want Fabricator to forget the entry without changing files, published apps, or data. If the app is running on this computer, Fabricator stops it. You can open the folder again later.
+To make Fabricator forget a project without changing its files, published apps, or data, select **Manage**, then select **Remove** next to **Recent projects**. If the app is running on this computer, Fabricator stops it. You can open the folder again later.
 
 ### Move a local project to trash
 
 1. Select **Manage**.
-2. Under **Remove project**, select **Review removal options...**.
-3. Choose whether to also delete the published Fabric app, if the project has one.
-4. Select **Move folder to trash** or **Move folder to trash and delete Fabric app**.
+2. Next to **Remove project**, select **Review options**.
+3. **Local project folder** is always selected. If the project has a published app, **Published Fabric app** is selected too; clear it to keep the app.
+4. Select **Move folder to trash** or **Trash folder & delete app**.
 
-Moving the folder uses your system trash, so you can restore it there. An app that ran on this computer keeps its local data in the folder, so that goes to the trash too. If you also delete the Fabric app, Fabricator removes the published app and its data from the Fabric workspace. The Fabric workspace itself is not deleted.
+Moving the folder uses your system trash, so you can restore it there. An app that ran on this computer keeps its local data in the folder, so that goes to the trash too. If you also delete the published app, Fabricator removes it and its data from its Fabric workspace, and that can't be undone. The Fabric workspace itself is kept.
+
+The removal runs in the background, so you can keep working and remove other projects at the same time. If the project is open, it closes first. Until the removal finishes, the project's row on **Your projects** shows **Removing** and what's happening, such as how many files are moving to the trash. When it's done, the project leaves the list, and a notification says its folder is in your system trash.
+
+If a removal can't finish, the project stays, and its row shows **Not removed** with the reason. For example, the folder can't move to the trash while another program, such as an editor or a terminal, has one of its files open. Close that program, then select **Try again**. To stop trying, select **Keep**.
 
 ## Change where new projects are saved
 

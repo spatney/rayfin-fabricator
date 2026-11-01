@@ -75,6 +75,53 @@ describe('HomeView project launcher', () => {
     expect(props.onManageProject).toHaveBeenCalledWith(project)
   })
 
+  it('shows projects being removed in the background, and what to do when one stops', () => {
+    const props = baseProps()
+    const sales = makeProject('p1', { name: 'Sales', workspaceName: 'fabcon' })
+    const notes = makeProject('p2', { name: 'Notes' })
+    const crm = makeProject('p3', { name: 'CRM' })
+    props.projects = [sales, notes, crm]
+    props.removals = {
+      p1: { project: sales, deleteApp: true, appDeleted: false, step: 'app' },
+      p2: {
+        project: notes,
+        deleteApp: false,
+        appDeleted: false,
+        step: 'folder',
+        error: 'Couldn’t move the folder to trash: The file is in use.'
+      },
+      p3: {
+        project: crm,
+        deleteApp: false,
+        appDeleted: false,
+        step: 'folder',
+        progress: { id: 'p3', phase: 'trashing', processed: 1200, total: 1200 },
+        trashingSince: Date.now() - 5000
+      }
+    }
+    props.onRetryRemoval = vi.fn()
+    props.onDismissRemoval = vi.fn()
+    render(<HomeView {...props} />)
+
+    const removing = screen.getByRole('button', { name: 'Open Sales' }) as HTMLButtonElement
+    expect(removing.disabled).toBe(true)
+    expect(removing.textContent).toContain('Removing')
+    expect(removing.textContent).toContain('Deleting the published app from fabcon…')
+    expect(screen.queryByRole('button', { name: 'Manage Sales' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open CRM' }).textContent).toContain(
+      'Moving 1,200 files to trash… 5s'
+    )
+
+    const stopped = screen.getByRole('button', { name: 'Open Notes' }) as HTMLButtonElement
+    expect(stopped.disabled).toBe(false)
+    expect(stopped.textContent).toContain('Not removed')
+    expect(stopped.textContent).toContain('The file is in use.')
+    fireEvent.click(screen.getByRole('button', { name: 'Try again to remove Notes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Keep Notes' }))
+    expect(props.onRetryRemoval).toHaveBeenCalledWith('p2')
+    expect(props.onDismissRemoval).toHaveBeenCalledWith('p2')
+  })
+
   it('keeps the workspace location actionable', () => {
     const props = baseProps()
     render(<HomeView {...props} />)

@@ -297,7 +297,8 @@ fn map_event(event_type: &str, data: &Value, st: &mut GenState) -> bool {
 /// return the assistant's full reply. Never touches the project's chat.
 /// `on_text` sees the reply so far each time it grows. A model on the user's
 /// own key must be able to run first, and its errors come back in plain language.
-async fn run_transient(
+/// With no `model`, Copilot's Auto router picks one (commit messages use that).
+pub(crate) async fn run_transient(
     state: &AppState,
     cwd: &str,
     model: Option<String>,

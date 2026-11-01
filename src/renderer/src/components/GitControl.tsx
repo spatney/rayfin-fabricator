@@ -26,9 +26,14 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  /** Copilot is writing the commit message. */
+  const [writing, setWriting] = useState(false)
   const [syncing, setSyncing] = useState<'pull' | 'push' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fetchingRef = useRef(false)
+  const projectRef = useRef(projectId)
+  projectRef.current = projectId
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const refresh = useCallback(async (): Promise<void> => {
     setStatus(await window.api.projects.git.status(projectId))
@@ -104,6 +109,32 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
       onSynced?.()
     } finally {
       setBusy(false)
+    }
+  }
+
+  /** Have Copilot, on its Auto model, write the message from the changes. */
+  async function writeMessage(): Promise<void> {
+    const asked = projectId
+    let wrote = false
+    setWriting(true)
+    setError(null)
+    try {
+      const res = await window.api.projects.git.message(asked)
+      if (projectRef.current !== asked) return
+      if (res.ok && res.message) {
+        setMessage(res.message)
+        wrote = true
+      } else {
+        setError(res.error ?? 'Couldn’t write a commit message.')
+      }
+    } catch (reason) {
+      if (projectRef.current === asked) {
+        setError(reason instanceof Error ? reason.message : 'Couldn’t write a commit message.')
+      }
+    } finally {
+      setWriting(false)
+      // The box is disabled while Copilot writes; focus it once it's back, to edit or commit.
+      if (wrote) requestAnimationFrame(() => inputRef.current?.focus())
     }
   }
 
@@ -226,19 +257,36 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
                 Commit {status.changedCount} change{status.changedCount === 1 ? '' : 's'}
                 {status.branch ? ` on ${status.branch}` : ''}
               </div>
-              <input
-                className="git-msg-input"
-                placeholder="Commit message"
-                value={message}
-                autoFocus
-                spellCheck={false}
-                disabled={busy || syncing !== null}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void commit()
-                  else if (e.key === 'Escape') setOpen(false)
-                }}
-              />
+              <div className="git-msg-field">
+                <input
+                  ref={inputRef}
+                  className="git-msg-input"
+                  placeholder={writing ? 'Writing a message…' : 'Commit message'}
+                  aria-label="Commit message"
+                  value={message}
+                  autoFocus
+                  spellCheck={false}
+                  disabled={busy || writing || syncing !== null}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void commit()
+                    else if (e.key === 'Escape') setOpen(false)
+                  }}
+                />
+                <button
+                  type="button"
+                  className="git-msg-write"
+                  aria-label="Write a message with Copilot"
+                  title="Write a message with Copilot (Auto)"
+                  disabled={busy || writing || syncing !== null}
+                  onClick={() => void writeMessage()}
+                >
+                  <Codicon
+                    name={writing ? 'loading' : 'sparkle'}
+                    className={writing ? 'codicon-modifier-spin' : ''}
+                  />
+                </button>
+              </div>
             </>
           )}
 
@@ -251,7 +299,7 @@ export default function GitControl({ projectId, refreshKey, onSynced }: Props): 
               </button>
               <button
                 className="btn btn--xs btn--primary"
-                disabled={busy || syncing !== null || !message.trim()}
+                disabled={busy || writing || syncing !== null || !message.trim()}
                 onClick={() => void commit()}
               >
                 {busy ? 'Committing…' : 'Commit all'}

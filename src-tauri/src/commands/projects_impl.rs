@@ -701,16 +701,16 @@ pub async fn rename_project(id: String, name: String) -> ProjectActionResult {
 }
 
 /// Remove a project. Forgets it by default; trashes the folder when `delete_files`.
+/// A folder that can't be trashed (a program has one of its files open) keeps the
+/// project and its chat, and the error says why.
 pub async fn remove_project(
   app: &AppHandle,
   state: &AppState,
   id: String,
   delete_files: bool,
-) -> ProjectsState {
-  // Stop any in-flight chat and drop the transcript *before* the project folder
-  // goes away.
+) -> Result<ProjectsState, String> {
+  // Stop any in-flight chat before the project folder goes away.
   state.cancel_chat(&id);
-  history::clear_history(&id);
   // Its local backend holds files in the folder (the database, the logs), so it
   // stops first, and doesn't outlive a project that's only forgotten either.
   crate::services::local_backend::state(app).forget(&id).await;
@@ -724,19 +724,38 @@ pub async fn remove_project(
         // file count (delete:progress) so the delete never looks hung.
         let app = app.clone();
         let id = id.clone();
-        let _ =
-          tokio::task::spawn_blocking(move || count_and_trash(&app, &id, Path::new(&path))).await;
+        tokio::task::spawn_blocking(move || count_and_trash(&app, &id, Path::new(&path)))
+          .await
+          .map_err(|error| format!("Couldn't move the folder to trash: {error}"))??;
       }
     }
   }
-  crate::commands::util::annotate_state(store::remove_project(&id))
+  history::clear_history(&id);
+  Ok(crate::commands::util::annotate_state(store::remove_project(&id)))
+}
+
+/// Why a folder couldn't be moved to trash, in words: the crate's own message is
+/// its debug dump.
+fn trash_failure(error: &trash::Error) -> String {
+  let reason = match error {
+    trash::Error::Os { description, .. } | trash::Error::Unknown { description } => {
+      description.trim().trim_end_matches('.')
+    }
+    _ => "",
+  };
+  let hint = "Close any program using its files, such as an editor, a terminal or a dev server, and try again.";
+  if reason.is_empty() {
+    format!("Couldn't move the folder to trash. {hint}")
+  } else {
+    format!("Couldn't move the folder to trash: {reason}. {hint}")
+  }
 }
 
 /// Walk `root` streaming a throttled `delete:progress` file count, then move the
 /// whole tree to the system trash. The folder is trashed atomically (one
 /// `trash::delete`) so the user can still restore it; the up-front scan is purely
 /// to report a count (the OS move itself exposes no per-file progress).
-fn count_and_trash(app: &AppHandle, id: &str, root: &Path) {
+fn count_and_trash(app: &AppHandle, id: &str, root: &Path) -> Result<(), String> {
   emit_delete_progress(app, id, "scanning", 0, None);
 
   let mut files: u64 = 0;
@@ -764,7 +783,7 @@ fn count_and_trash(app: &AppHandle, id: &str, root: &Path) {
   }
 
   emit_delete_progress(app, id, "trashing", files, Some(files));
-  let _ = trash::delete(root);
+  trash::delete(root).map_err(|error| trash_failure(&error))
 }
 
 /// Emit one `delete:progress` event (file-count progress for a project delete).

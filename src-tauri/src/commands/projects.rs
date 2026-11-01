@@ -175,10 +175,7 @@ pub async fn projects_remove(
   id: String,
   delete_files: Option<bool>,
 ) -> Result<ProjectsState, String> {
-  Ok(
-    crate::commands::projects_impl::remove_project(&app, state.inner(), id, delete_files.unwrap_or(false))
-      .await,
-  )
+  crate::commands::projects_impl::remove_project(&app, state.inner(), id, delete_files.unwrap_or(false)).await
 }
 
 /* ----------------------------- git (ported in Phase 3) ----------------------------- */
