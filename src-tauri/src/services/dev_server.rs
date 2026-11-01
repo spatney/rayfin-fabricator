@@ -911,7 +911,7 @@ async fn register_port(app: AppHandle, project_id: String, port: u16) -> DeployR
 }
 
 fn register_result(ok: bool, outcome: &str, error: Option<String>) -> DeployResult {
-    DeployResult { ok, outcome: outcome.into(), url: None, api_url: None, portal_url: None, error }
+    DeployResult { ok, outcome: outcome.into(), url: None, api_url: None, portal_url: None, error, unsupported: None }
 }
 
 /// A team app's new port is saved in rayfin.yml only: nothing deploys from this

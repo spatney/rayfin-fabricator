@@ -1259,6 +1259,21 @@ export type DeployOutcome =
   | 'auth-cache-error'
   | 'not-found'
   | 'needs-workspace'
+  /** Fabric wouldn't create the app in the workspace: Fabric apps aren't available there. */
+  | 'workspace-unsupported'
+
+/**
+ * A workspace Fabric wouldn't create an app in ("The feature is not available"),
+ * as far as Fabric described it. Its capacity's region is the usual reason:
+ * Fabric apps aren't in every region.
+ */
+export interface UnsupportedWorkspace {
+  id: string
+  name?: string
+  /** Its capacity's region, e.g. "UK South". */
+  region?: string
+  capacityId?: string
+}
 
 export interface DeployResult {
   ok: boolean
@@ -1268,6 +1283,8 @@ export interface DeployResult {
   apiUrl?: string
   portalUrl?: string
   error?: string
+  /** Set with `workspace-unsupported`: the workspace Fabric wouldn't create the app in. */
+  unsupported?: UnsupportedWorkspace
 }
 
 /** Read-only deployment status from `rayfin up status --json`. */

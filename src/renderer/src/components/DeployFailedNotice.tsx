@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
-import type { DeployOutcome } from '@shared/ipc'
+import type { DeployOutcome, UnsupportedWorkspace } from '@shared/ipc'
+import { REGION_AVAILABILITY_URL } from '../fabric'
 import { Codicon } from './icons'
 import { Ray, RAY_VIEWBOX, type RayMood } from './mascot/Ray'
 import { SpeechBubble, TYPE_MS } from './mascot/SpeechBubble'
 import { useReducedMotion } from './mascot/context'
 import { useRayGaze } from './mascot/gaze'
 import { isRaySentAway, useRayOnScreen } from './mascot/stage'
-import { DEPLOY_TROUBLE_LINES, type DeployTrouble } from './mascot/lines'
+import { DEPLOY_TROUBLE_LINES, unsupportedRegionLine, type DeployTrouble } from './mascot/lines'
 
 /**
  * Publishing that failed, above the preview: Ray swims in and offers to find out
@@ -32,6 +33,7 @@ const LEAVE_MS = 240
 export function deployTrouble(outcome: DeployOutcome | undefined): DeployTrouble {
   if (outcome === 'not-signed-in' || outcome === 'auth-cache-error') return 'signin'
   if (outcome === 'cancelled') return 'stopped'
+  if (outcome === 'workspace-unsupported') return 'unsupported'
   return 'failed'
 }
 
@@ -39,7 +41,19 @@ export function deployTrouble(outcome: DeployOutcome | undefined): DeployTrouble
 const PLAIN_LINES: Record<DeployTrouble, string> = {
   failed: 'Couldn’t publish this app. Help can find out why.',
   signin: 'Fabric needs you to sign in again before you can publish this app.',
-  stopped: 'Publishing was stopped before it finished.'
+  stopped: 'Publishing was stopped before it finished.',
+  unsupported:
+    'Fabric apps aren’t available in this workspace’s region. Choose a workspace in another region.'
+}
+
+/** What the notice says: Ray's line or the plain one, naming the region when Fabric did. */
+function troubleLine(trouble: DeployTrouble, withRay: boolean, region?: string): string {
+  if (trouble === 'unsupported' && region?.trim()) {
+    return withRay
+      ? unsupportedRegionLine(region.trim())
+      : `This workspace’s capacity is in ${region.trim()}, where Fabric apps aren’t available yet. Choose a workspace in another region.`
+  }
+  return withRay ? DEPLOY_TROUBLE_LINES[trouble] : PLAIN_LINES[trouble]
 }
 
 export interface DeployFailedNoticeProps {
@@ -54,6 +68,10 @@ export interface DeployFailedNoticeProps {
   onRefreshAuth?: () => void
   /** Another sign-in or publish is running, so a refresh has to wait. */
   authBusy?: boolean
+  /** The workspace Fabric turned the app down in (`workspace-unsupported`). */
+  unsupported?: UnsupportedWorkspace
+  /** Pick another workspace to publish to. Offered when Fabric turned the app down in one. */
+  onChooseWorkspace?: () => void
   onDismiss: () => void
 }
 
@@ -64,6 +82,8 @@ export default function DeployFailedNotice({
   onDiagnose,
   onRefreshAuth,
   authBusy = false,
+  unsupported,
+  onChooseWorkspace,
   onDismiss
 }: DeployFailedNoticeProps): JSX.Element {
   const [sentAway] = useState(isRaySentAway)
@@ -72,10 +92,12 @@ export default function DeployFailedNotice({
   const reduced = useReducedMotion()
 
   const trouble = deployTrouble(outcome)
-  const line = withRay ? DEPLOY_TROUBLE_LINES[trouble] : PLAIN_LINES[trouble]
-  // A stopped publish is the user's own doing: there's nothing to diagnose.
-  const diagnose = trouble === 'stopped' ? undefined : onDiagnose
+  const line = troubleLine(trouble, withRay, unsupported?.region)
+  // A stopped publish is the user's own doing, and a workspace without Fabric
+  // apps is already explained: there's nothing to diagnose.
+  const diagnose = trouble === 'stopped' || trouble === 'unsupported' ? undefined : onDiagnose
   const refresh = trouble === 'signin' ? onRefreshAuth : undefined
+  const choose = trouble === 'unsupported' ? onChooseWorkspace : undefined
   const output = log?.length ? log.join('') : (error ?? '').trim()
   const [showOutput, setShowOutput] = useState(false)
 
@@ -176,6 +198,21 @@ export default function DeployFailedNotice({
             </p>
           )}
           <div className="deploy-trouble-actions">
+            {choose && (
+              <button className="btn btn--sm btn--primary" onClick={choose}>
+                Choose another workspace
+              </button>
+            )}
+            {trouble === 'unsupported' && (
+              <button
+                className="btn btn--sm"
+                title="See which regions have Fabric apps (opens learn.microsoft.com)"
+                onClick={() => void window.api.openExternal(REGION_AVAILABILITY_URL)}
+              >
+                <Codicon name="link-external" />
+                Region availability
+              </button>
+            )}
             {refresh && (
               <button className="btn btn--sm btn--primary" disabled={authBusy} onClick={refresh}>
                 Refresh Fabric authentication

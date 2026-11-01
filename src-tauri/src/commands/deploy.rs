@@ -22,6 +22,7 @@ use crate::services::exec::{self, OnData, RunOptions, RunResult, Stream};
 use crate::services::{crashlog, emit, fabric_auth, git, journal, store, telemetry, version_history};
 use crate::types::{
   DeployInfo, DeployResult, DeployStatus, FabricDeployment, PendingChanges, ProjectsState, StudioProject,
+  UnsupportedWorkspace,
 };
 
 const DEPLOY_TIMEOUT_MS: u64 = 20 * 60_000;
@@ -42,6 +43,11 @@ static ERROR_LINE_RE: Lazy<Regex> =
   Lazy::new(|| Regex::new(r"(?i)\berror(?:\s+(?:[a-z]+\d+|\[[^\]]+\]))?\s*:|\b[a-z_]+error\b|\b(?:failed|exception)\s*:|\bAADSTS\d+\b|could not acquire|not able to acquire lock").unwrap());
 static GENERIC_FAILURE_RE: Lazy<Regex> =
   Lazy::new(|| Regex::new(r"(?i)^[^a-z0-9]*(?:deploy(?:ment)? failed|error)\s*[:.!]?\s*$").unwrap());
+static ITEM_CREATE_FAILED_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\bfailed to create rayfin item\b").unwrap());
+static FEATURE_UNAVAILABLE_RE: Lazy<Regex> =
+  Lazy::new(|| Regex::new(r"(?i)\bthe feature is not available\b|\bFeatureNotAvailable\b").unwrap());
+/// How long a refused publish waits to learn the workspace's name and region.
+const WORKSPACE_LOOKUP_TIMEOUT_MS: u64 = 15_000;
 
 /* ------------------------------ helpers ----------------------------------- */
 
@@ -122,6 +128,35 @@ fn failure_outcome(error: &str) -> &'static str {
   } else {
     "error"
   }
+}
+
+/// Fabric turned down creating the app in the target workspace: `rayfin up`
+/// says "Failed to create Rayfin item" with Fabric's 403 "The feature is not
+/// available". Fabric apps aren't in every region, and which regions have them
+/// changes, so what Fabric answers is the test, not a list of regions.
+fn apps_unavailable(output: &str) -> bool {
+  let output = crate::commands::chat_tools::strip_ansi(output);
+  ITEM_CREATE_FAILED_RE.is_match(&output) && FEATURE_UNAVAILABLE_RE.is_match(&output)
+}
+
+/// What a publish Fabric turned down says: where Fabric apps aren't available,
+/// as far as Fabric said, and what to do about it. The region is the usual
+/// reason; an admin who hasn't turned Fabric Apps on is the other.
+fn unsupported_message(workspace: &UnsupportedWorkspace) -> String {
+  let name = workspace.name.as_deref().map(str::trim).filter(|n| !n.is_empty());
+  let region = workspace.region.as_deref().map(str::trim).filter(|r| !r.is_empty());
+  let headline = match (name, region) {
+    (Some(name), Some(region)) => {
+      format!("Fabric apps aren’t available in “{name}”, a workspace on a capacity in {region}.")
+    }
+    (None, Some(region)) => format!("Fabric apps aren’t available in this workspace, on a capacity in {region}."),
+    (Some(name), None) => format!("Fabric apps aren’t available in “{name}”."),
+    (None, None) => "Fabric apps aren’t available in this workspace.".to_string(),
+  };
+  format!(
+    "{headline} They aren’t in every region yet, so publish to a workspace on a capacity in another region. \
+     If none works, ask your Fabric admin to turn on Fabric Apps."
+  )
 }
 
 #[derive(Deserialize)]
@@ -581,7 +616,53 @@ fn record_deploy(project_id: &str, result: &DeployResult, detail: Option<String>
 }
 
 fn deployment_error(error: String) -> DeployResult {
-  DeployResult { ok: false, outcome: "error".into(), url: None, api_url: None, portal_url: None, error: Some(error) }
+  DeployResult { ok: false, outcome: "error".into(), url: None, api_url: None, portal_url: None, error: Some(error), unsupported: None }
+}
+
+/// A publish Fabric turned down because Fabric apps aren't available in the
+/// target workspace (see [`apps_unavailable`]). Says where, as far as Fabric
+/// tells us, and points the project back at what it published to before.
+/// Fabric created nothing in the refused workspace, so neither Try again nor
+/// publishing after a chat turn should go there again, and it isn't one of the
+/// workspaces this app uses.
+async fn refused_publish(project: &StudioProject, target: Option<&str>, renderer: &OnData) -> DeployResult {
+  let mut unsupported = UnsupportedWorkspace { id: target.unwrap_or_default().to_string(), ..Default::default() };
+  if let Some(id) = target.filter(|t| GUID_RE.is_match(t)) {
+    match crate::commands::fabric::workspace_details(Path::new(&project.path), id, WORKSPACE_LOOKUP_TIMEOUT_MS).await {
+      Ok(details) => {
+        unsupported.name = details.name;
+        unsupported.region = details.region;
+        unsupported.capacity_id = details.capacity_id;
+      }
+      Err(error) => crashlog::log_error("deploy", &format!("Could not look up the refused workspace: {error}")),
+    }
+  }
+  let error = unsupported_message(&unsupported);
+  let previous = project.workspace.clone();
+  let retargeted = target.map(str::to_string) != previous;
+  let previous_commit = project.last_deploy.as_ref().and_then(|d| d.commit.clone());
+  if retargeted {
+    store::mutate_project(&project.id, move |p| p.workspace = previous);
+  }
+  patch_deploy(&project.id, |d| {
+    if retargeted {
+      d.commit = previous_commit;
+    }
+    d.status = Some("error".into());
+    d.outcome = Some("workspace-unsupported".into());
+    d.error = Some(error.clone());
+    d.at = Some(now_iso());
+  });
+  crashlog::log_error("deploy", &format!("outcome=workspace-unsupported: {error}"));
+  telemetry::track_deploy(get_cached_identity().as_ref(), false);
+  renderer(Stream::System, &format!("\nCouldn't publish: {error}\n"));
+  DeployResult {
+    ok: false,
+    outcome: "workspace-unsupported".into(),
+    error: Some(error),
+    unsupported: Some(unsupported),
+    ..Default::default()
+  }
 }
 
 /// Push rayfin.yml's runtime settings to the project's Fabric backend without
@@ -621,13 +702,13 @@ pub(crate) async fn push_runtime_settings(project: &StudioProject, on_data: OnDa
   )
   .await;
   if result.ok {
-    return DeployResult { ok: true, outcome: "success".into(), url: None, api_url: None, portal_url: None, error: None };
+    return DeployResult { ok: true, outcome: "success".into(), url: None, api_url: None, portal_url: None, error: None, unsupported: None };
   }
   let captured_text = captured.lock().unwrap().clone();
   let error = error_text(&result, &captured_text, "rayfin up couldn't push the sign-in settings. Check the log above.");
   let outcome = if result.not_found { "not-found" } else { failure_outcome(&error) };
   crashlog::log_error("settings-push", &format!("exit={:?} outcome={outcome}: {error}", result.exit_code));
-  DeployResult { ok: false, outcome: outcome.into(), url: None, api_url: None, portal_url: None, error: Some(error) }
+  DeployResult { ok: false, outcome: outcome.into(), url: None, api_url: None, portal_url: None, error: Some(error), unsupported: None }
 }
 
 async fn run_deploy_inner(
@@ -644,6 +725,7 @@ async fn run_deploy_inner(
       api_url: None,
       portal_url: None,
       error: Some("Project not found.".into()),
+      unsupported: None,
     };
   };
 
@@ -697,6 +779,7 @@ async fn run_deploy_inner(
       api_url: None,
       portal_url: None,
       error: Some(error),
+      unsupported: None,
     };
   }
   // The dependency-recovery output is useful in the live log, but must not be
@@ -744,7 +827,12 @@ async fn run_deploy_inner(
       api_url: None,
       portal_url: None,
       error: Some(error),
+      unsupported: None,
     };
+  }
+
+  if !result.ok && apps_unavailable(&captured_text) {
+    return refused_publish(&project, workspace_target.as_deref(), &renderer).await;
   }
 
   if !result.ok {
@@ -779,6 +867,7 @@ async fn run_deploy_inner(
       api_url: None,
       portal_url: None,
       error: Some(error),
+      unsupported: None,
     };
   }
 
@@ -848,6 +937,7 @@ async fn run_deploy_inner(
     api_url: api,
     portal_url: portal,
     error: None,
+    unsupported: None,
   }
 }
 
@@ -1049,6 +1139,7 @@ pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String
       api_url: None,
       portal_url: None,
       error: Some("Project not found.".into()),
+      unsupported: None,
     };
   };
 
@@ -1077,6 +1168,7 @@ pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String
       api_url: None,
       portal_url: None,
       error: Some("The rayfin CLI was not found on PATH.".into()),
+      unsupported: None,
     };
   }
   if !res.ok {
@@ -1088,6 +1180,7 @@ pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String
       api_url: None,
       portal_url: None,
       error: Some(error),
+      unsupported: None,
     };
   }
 
@@ -1127,6 +1220,7 @@ pub async fn deploy_switch(app: AppHandle, project_id: String, workspace: String
     api_url: api,
     portal_url: portal,
     error: None,
+    unsupported: None,
   }
 }
 
@@ -1230,6 +1324,44 @@ mod tests {
     ] {
       assert_eq!(failure_outcome(message), "error", "{message}");
     }
+  }
+
+  #[test]
+  fn fabric_turning_down_the_app_in_a_workspace_is_told_apart_from_other_failures() {
+    // `rayfin up` in a workspace whose capacity's region has no Fabric apps.
+    let refused = "🚀 Deploying item \"notes\" to Fabric...\n\n\
+      Error making Fabric API request: Fabric API error: 403 Forbidden\n\
+      \x20  Details: The feature is not available\n\
+      \x20  RootActivityId: 22caf904-2901-4034-97ce-4df612790a88\n\
+      \x1b[31m✖ Failed to create Rayfin item: Fabric API error: 403 Forbidden\x1b[0m\n\
+      \x20  Details: The feature is not available\n\n\
+      ❌ Deployment failed:\n\x20  Error: Fabric API error: 403 Forbidden\n";
+    assert!(apps_unavailable(refused));
+
+    // Creating the app failed for another reason.
+    assert!(!apps_unavailable(
+      "✖ Failed to create Rayfin item: Fabric API error: 403 Forbidden\n   Details: Insufficient workspace permissions"
+    ));
+    // A later step turned down once the app existed isn't about the workspace.
+    assert!(!apps_unavailable(
+      "✔ Rayfin item ready (ID: 1)\n❌ Deployment failed: Functions deploy failed: 403 Forbidden\n   Details: The feature is not available"
+    ));
+  }
+
+  #[test]
+  fn a_turned_down_publish_names_what_fabric_said_and_nothing_it_did_not() {
+    let known = UnsupportedWorkspace {
+      id: "w1".into(),
+      name: Some("Sales".into()),
+      region: Some("UK South".into()),
+      capacity_id: Some("c1".into()),
+    };
+    let message = unsupported_message(&known);
+    assert!(message.starts_with("Fabric apps aren’t available in “Sales”, a workspace on a capacity in UK South. "));
+    assert!(message.contains("another region") && message.contains("ask your Fabric admin"));
+
+    let unknown = UnsupportedWorkspace { id: "w1".into(), name: Some("  ".into()), ..Default::default() };
+    assert!(unsupported_message(&unknown).starts_with("Fabric apps aren’t available in this workspace. "));
   }
 
   struct TestRepo(PathBuf);

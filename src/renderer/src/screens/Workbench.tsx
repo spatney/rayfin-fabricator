@@ -25,7 +25,8 @@ import {
   type PortConflict,
   type ProjectsState,
   type RayfinVersionInfo,
-  type StudioProject
+  type StudioProject,
+  type UnsupportedWorkspace
 } from '@shared/ipc'
 import CreateProjectScreen from '../components/CreateProjectScreen'
 import CloneFromGitHubScreen from '../components/CloneFromGitHubScreen'
@@ -116,7 +117,7 @@ import {
   type ProjectView
 } from '../components/AppBar'
 import { DeploymentQueue } from '../deploymentQueue'
-import { workspaceUses } from '../fabric'
+import { refusedAfterPublish, workspaceUses } from '../fabric'
 import { useDesignSession, type DesignSurface } from '../design/useDesignSession'
 import { readStoredSelection, selectionArgs, writeStoredSelection, type ModelSelection } from '../modelSelection'
 import { toProjectName } from '../projectName'
@@ -323,6 +324,22 @@ export default function Workbench({
   const onShareRequestHandled = useCallback((nonce: number): void => {
     setShareRequest((current) => (current?.nonce === nonce ? null : current))
   }, [])
+  /**
+   * The failed-publish notice's Choose another workspace, waiting for
+   * DeploymentsControl to open its workspace picker for this project.
+   */
+  const [chooseRequest, setChooseRequest] = useState<{ projectId: string; nonce: number } | null>(
+    null
+  )
+  const onChooseRequestHandled = useCallback((nonce: number): void => {
+    setChooseRequest((current) => (current?.nonce === nonce ? null : current))
+  }, [])
+  /**
+   * Workspaces Fabric turned down an app in this session ("The feature is not
+   * available"). The workspace picker marks them, and others on their capacity
+   * or in their region: what Fabric answered, not a list of regions.
+   */
+  const [refusedWorkspaces, setRefusedWorkspaces] = useState<readonly UnsupportedWorkspace[]>([])
   const [projects, setProjects] = useState<ProjectsState | null>(null)
   /** The fullscreen new-project screen. */
   const [showCreate, setShowCreate] = useState(false)
@@ -554,6 +571,7 @@ export default function Workbench({
   // drops it, so it can't pop up when you come back later.
   useEffect(() => {
     setShareRequest((current) => (current && current.projectId !== active?.id ? null : current))
+    setChooseRequest((current) => (current && current.projectId !== active?.id ? null : current))
   }, [active?.id])
   /** The Build chat for the active project is mid-turn. */
   const activeChatBusy = Boolean(
@@ -975,6 +993,12 @@ export default function Workbench({
             error: authErrorMessage(reason, 'Publishing didn’t finish. Please try again.')
           }
         }
+        // What Fabric answered, for the workspace picker: it turned the app down
+        // in this workspace, or took it after all.
+        const finished = result
+        const target =
+          workspace ?? projectsRef.current?.projects.find((p) => p.id === projectId)?.workspace
+        setRefusedWorkspaces((all) => refusedAfterPublish(all, finished, target))
         if (
           !result.ok &&
           (result.outcome === 'not-signed-in' || result.outcome === 'auth-cache-error')
@@ -2707,6 +2731,9 @@ export default function Workbench({
                 deployingTo={deployingTo}
                 shareRequest={shareRequest}
                 onShareRequestHandled={onShareRequestHandled}
+                chooseRequest={chooseRequest}
+                onChooseRequestHandled={onChooseRequestHandled}
+                refused={refusedWorkspaces}
                 onCreate={(name, workspaceId, workspaceName) => {
                   setViewMode('build')
                   nameNewTarget(active.id, workspaceId, name.trim() || workspaceName || '')
@@ -2995,6 +3022,11 @@ export default function Workbench({
                           onRefreshAuth={active.team ? undefined : () => openAuthRefresh(active)}
                           authBusy={fabricAuthBusy}
                           onDiagnoseDeploy={() => openHelp(DEPLOY_QUESTION)}
+                          onChooseWorkspace={
+                            active.team
+                              ? undefined
+                              : () => setChooseRequest({ projectId: active.id, nonce: Date.now() })
+                          }
                           local={runsLocally ? local : undefined}
                           view={previewViews[active.id] ?? 'local'}
                           onViewChange={(view) =>

@@ -288,6 +288,60 @@ pub async fn fabric_check_deploy_target(workspace_id: String) -> DeployTargetChe
   }
 }
 
+/// Helper executed by the system `node` to read one workspace (Get Workspace,
+/// which any workspace viewer may call). argv: <authModulePath> <apiBase> <workspaceId>.
+const WORKSPACE_HELPER_SOURCE: &str = r#"import { makeRayfinTokens, makeApi, apiError, runHelper } from './fabric_auth_helper.mjs'
+
+async function main() {
+  const [authPath, base, workspaceId] = process.argv.slice(2)
+  const token = await makeRayfinTokens(authPath)
+  const api = makeApi(await token(), base)
+  const [status, ws] = await api.get(base + '/workspaces/' + encodeURIComponent(workspaceId))
+  if (status !== 200 || !ws) throw new Error(apiError('Fabric workspace lookup', status, ws))
+  return {
+    ok: true,
+    name: ws.displayName || undefined,
+    region: ws.capacityRegion || undefined,
+    capacityId: ws.capacityId || undefined
+  }
+}
+
+runHelper(main)
+"#;
+
+/// A workspace's name, and its capacity's id and region, as Fabric reports them.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceDetails {
+  #[serde(default)]
+  ok: bool,
+  pub name: Option<String>,
+  pub region: Option<String>,
+  pub capacity_id: Option<String>,
+  error: Option<String>,
+}
+
+/// Ask Fabric about one workspace with the project's Rayfin sign-in. Installs
+/// nothing: the caller has the project's dependencies in place.
+pub(crate) async fn workspace_details(
+  project_dir: &Path,
+  workspace_id: &str,
+  timeout_ms: u64,
+) -> Result<WorkspaceDetails, String> {
+  let auth_path = exec::project_rayfin_auth_module(Some(project_dir))
+    .ok_or_else(|| "Could not locate the Rayfin CLI to look up the workspace.".to_string())?;
+  let script_path = write_helper("fabric-workspace.mjs", WORKSPACE_HELPER_SOURCE)
+    .map_err(|e| format!("Could not prepare the workspace lookup: {e}"))?;
+  let (script, auth) = (script_path.to_string_lossy().to_string(), auth_path.to_string_lossy().to_string());
+  let res = exec::run("node", &[&script, &auth, FABRIC_API_BASE, workspace_id], RunOptions::timeout(timeout_ms)).await;
+  let details: WorkspaceDetails = fabric_auth::parse_helper_output(&res)?;
+  if details.ok {
+    Ok(details)
+  } else {
+    Err(details.error.clone().unwrap_or_else(|| "Could not look up the workspace.".into()))
+  }
+}
+
 /// Write a helper script to the app data dir and return its path.
 /// Write a helper script into the data folder. Calls running at once (projects
 /// removing their apps in parallel) share the file, so it's only rewritten when

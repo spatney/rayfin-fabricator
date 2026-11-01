@@ -41,6 +41,8 @@ When your apps already use some eligible workspaces, the list starts with up to 
 
 To create a workspace from Fabricator, select **+ New workspace**, choose an active F-SKU or P-SKU capacity, enter a name, and select **Create workspace**. The new workspace uses the selected capacity's region.
 
+Fabric apps aren't available in every Fabric region yet. Fabricator doesn't guess from a list of regions: Fabric answers when you publish. If Fabric turns the app down in the workspace you chose, Fabricator says so and helps you choose another; see [Fabric apps aren't available in the workspace](/docs/troubleshooting/deploy#fabric-apps-arent-available-in-the-workspace).
+
 ## Same-name warning
 
 Before a first publish into a workspace, Fabricator checks whether that workspace already has a Rayfin app with the same item name from `rayfin/rayfin.yml`.
@@ -73,7 +75,7 @@ If Fabric asks you to sign in again, publishing waits for you to finish in your 
 
 ![The publish screen: Ray says "Building your app. Fins crossed!" above Publishing Contoso Expenses and a list of steps. Five are checked off, Building and uploading your app is in progress with the CLI's words "Deploying static content" under it, and Going live is still to come.](/screenshots/deploy-progress.webp)
 
-During publishing you can select **View logs** on the publish screen. If publishing fails, Ray stays above the preview and says "Your app didn’t make it to Fabric. Want me to find out why?" He offers **Find out why**, which opens Help to explain what went wrong, and **View logs** for the publish log. When Fabric wants you to sign in again, he offers **Refresh Fabric authentication** too. See [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
+During publishing you can select **View logs** on the publish screen. If publishing fails, Ray stays above the preview and says "Your app didn’t make it to Fabric. Want me to find out why?" He offers **Find out why**, which opens Help to explain what went wrong, and **View logs** for the publish log. When Fabric wants you to sign in again, he offers **Refresh Fabric authentication** too. When Fabric apps aren't available in the workspace's region, he offers **Choose another workspace** and **Region availability** instead. See [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
 
 ## Publish changes
 

@@ -512,7 +512,7 @@ pub struct DeployInfo {
   pub commit: Option<String>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DeployResult {
   pub ok: bool,
@@ -525,6 +525,25 @@ pub struct DeployResult {
   pub portal_url: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
+  /// Set with the `workspace-unsupported` outcome: the workspace Fabric
+  /// wouldn't create the app in.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub unsupported: Option<UnsupportedWorkspace>,
+}
+
+/// A workspace Fabric wouldn't create an app in ("The feature is not
+/// available"), with what Fabric reports about it.
+#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UnsupportedWorkspace {
+  pub id: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub name: Option<String>,
+  /// Its capacity's region, e.g. "UK South".
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub region: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub capacity_id: Option<String>,
 }
 
 /// Result of starting a project's Vite dev server for the live local preview.

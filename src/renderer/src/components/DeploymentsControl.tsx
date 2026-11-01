@@ -6,12 +6,13 @@ import type {
   FabricWorkspace,
   FabricWorkspacesResult,
   PendingChanges,
-  StudioProject
+  StudioProject,
+  UnsupportedWorkspace
 } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useToast } from '../toast'
 import { authErrorMessage } from '../authErrors'
-import { fabricWorkspaceUrl } from '../fabric'
+import { REGION_AVAILABILITY_URL, fabricWorkspaceUrl } from '../fabric'
 import { clockLabel, meterStepLabel, useDeployMeter } from '../deployMeter'
 import { Codicon } from './icons'
 import DeploymentCreateForm, { checkActiveDeployTarget } from './DeploymentCreateForm'
@@ -59,6 +60,16 @@ interface Props {
   shareRequest?: { projectId: string; nonce: number } | null
   /** The `shareRequest` with this nonce has been acted on. */
   onShareRequestHandled?: (nonce: number) => void
+  /**
+   * Set by an outside caller (the failed-publish notice's Choose another
+   * workspace) to open the workspace picker for this project. Honoured on mount
+   * too, and reported back through `onChooseRequestHandled` so the caller drops it.
+   */
+  chooseRequest?: { projectId: string; nonce: number } | null
+  /** The `chooseRequest` with this nonce has been acted on. */
+  onChooseRequestHandled?: (nonce: number) => void
+  /** Workspaces Fabric turned down an app in this session: the workspace picker marks them. */
+  refused?: readonly UnsupportedWorkspace[]
   /** The workspaces your apps use, most recent first: the workspace picker lists them first. */
   recentWorkspaces?: readonly string[]
   /**
@@ -93,6 +104,11 @@ const workspaceDetails = new Map<string, FabricWorkspace>()
 function workspaceMeta(w: FabricWorkspace | undefined): string {
   if (!w) return ''
   return [w.region, w.capacityKind === 'unknown' ? undefined : w.sku].filter(Boolean).join(' · ')
+}
+
+/** Workspace ids (or names) compare without case. */
+function sameWorkspace(a?: string, b?: string): boolean {
+  return Boolean(a?.trim() && b?.trim() && a.trim().toLowerCase() === b.trim().toLowerCase())
 }
 
 /** Host-only label for an app's address (the full URL is in the tooltip). */
@@ -143,6 +159,9 @@ export default function DeploymentsControl({
   onSignIn,
   shareRequest,
   onShareRequestHandled,
+  chooseRequest,
+  onChooseRequestHandled,
+  refused,
   recentWorkspaces,
   autoDeploy,
   onDiagnose,
@@ -318,7 +337,17 @@ export default function DeploymentsControl({
     undefined
   const activeLabel = activeDep ? activeDep.name || activeDep.workspaceName : fallbackName
   const hasDeployment = Boolean(activeDep || project.lastDeploy?.url || project.workspace)
-  const failed = !running && (deploy?.result ? !deploy.result.ok : project.lastDeploy?.status === 'error')
+  const lastOutcome = deploy?.result ? deploy.result.outcome : project.lastDeploy?.outcome
+  /** Fabric turned the last publish down: Fabric apps aren't available in the workspace it went to. */
+  const turnedDown = !running && lastOutcome === 'workspace-unsupported'
+  const turnedDownIn = turnedDown ? deploy?.result?.unsupported : undefined
+  // Fabric created nothing there, so the app is back on the workspace it
+  // published to before, if any, which is as it was: not failed.
+  const elsewhere = Boolean(turnedDownIn?.id) && !sameWorkspace(turnedDownIn?.id, project.workspace)
+  const failed =
+    !running &&
+    (deploy?.result ? !deploy.result.ok : project.lastDeploy?.status === 'error') &&
+    !(turnedDown && elsewhere)
   const meter = useDeployMeter(project.id, deploy?.log, deploy?.startedAt, running)
   const percent = meter ? Math.round(meter.fraction * 100) : null
   const files = pending?.changed ? pending.files : undefined
@@ -374,7 +403,15 @@ export default function DeploymentsControl({
             run: openCreate
           }
         : failed
-          ? { label: 'Try again', title: `Publish ${name} again`, primary: true, run: onRedeploy }
+          ? turnedDown
+            ? {
+                label: 'Choose workspace',
+                title:
+                  'Fabric apps aren’t available in this workspace. Choose another workspace to publish to.',
+                primary: true,
+                run: openCreate
+              }
+            : { label: 'Try again', title: `Publish ${name} again`, primary: true, run: onRedeploy }
           : waiting
             ? {
                 label: files ? `Publish ${plural(files, 'change')}` : 'Publish changes',
@@ -540,6 +577,26 @@ export default function DeploymentsControl({
     void shareRef.current()
   }, [shareRequest, project.id])
 
+  // The failed-publish notice asked for the workspace picker. Like a share
+  // request, it's reported handled at once. The picker opens once the click that
+  // asked for it is over: opened during it, that click would go on to reach the
+  // window and close the panel again.
+  const openCreateRef = useRef(openCreate)
+  openCreateRef.current = openCreate
+  const onChooseHandledRef = useRef(onChooseRequestHandled)
+  onChooseHandledRef.current = onChooseRequestHandled
+  const handledChooseRef = useRef<number | null>(null)
+  const chooseTimer = useRef(0)
+  useEffect(() => {
+    if (!chooseRequest || chooseRequest.projectId !== project.id) return
+    if (handledChooseRef.current === chooseRequest.nonce) return
+    handledChooseRef.current = chooseRequest.nonce
+    onChooseHandledRef.current?.(chooseRequest.nonce)
+    window.clearTimeout(chooseTimer.current)
+    chooseTimer.current = window.setTimeout(() => openCreateRef.current(), 0)
+  }, [chooseRequest, project.id])
+  useEffect(() => () => window.clearTimeout(chooseTimer.current), [])
+
   /** Leave the panel, then do `then`. */
   const leave = (then: () => void) => (): void => {
     setOpen(false)
@@ -671,6 +728,7 @@ export default function DeploymentsControl({
                 }}
                 checkTarget={checkActiveDeployTarget}
                 recentWorkspaces={recentWorkspaces}
+                refused={refused}
               />
             </div>
           ) : (
@@ -724,21 +782,60 @@ export default function DeploymentsControl({
                   </div>
                 )}
 
-                {status === 'err' && (
+                {turnedDown ? (
                   <div className="dep-callout">
                     <span className="dep-callout-text">
-                      Publishing didn&apos;t finish.
-                      {failure && <span className="dep-callout-detail">{failure}</span>}
+                      Couldn&apos;t publish to{' '}
+                      {turnedDownIn?.name ? `“${turnedDownIn.name}”` : 'that workspace'}.
+                      <span className="dep-callout-detail">
+                        {turnedDownIn?.region
+                          ? `Fabric apps aren’t available in ${turnedDownIn.region}, where its capacity is. `
+                          : 'Fabric apps aren’t available in its region. '}
+                        Choose a workspace on a capacity in another region.
+                      </span>
                     </span>
-                    {onDiagnose && (
-                      <div className="dep-actions">
-                        <button type="button" className="btn btn--sm btn--primary" onClick={leave(onDiagnose)}>
-                          <Codicon name="comment-discussion" />
-                          Find out why
-                        </button>
-                      </div>
-                    )}
+                    <div className="dep-actions">
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--primary"
+                        disabled={held}
+                        title={held ? heldTitle : undefined}
+                        onClick={startCreate}
+                      >
+                        Choose another workspace
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--ghost"
+                        title="See which regions have Fabric apps (opens learn.microsoft.com)"
+                        onClick={() => void window.api.openExternal(REGION_AVAILABILITY_URL)}
+                      >
+                        <Codicon name="link-external" />
+                        Region availability
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  status === 'err' && (
+                    <div className="dep-callout">
+                      <span className="dep-callout-text">
+                        Publishing didn&apos;t finish.
+                        {failure && <span className="dep-callout-detail">{failure}</span>}
+                      </span>
+                      {onDiagnose && (
+                        <div className="dep-actions">
+                          <button
+                            type="button"
+                            className="btn btn--sm btn--primary"
+                            onClick={leave(onDiagnose)}
+                          >
+                            <Codicon name="comment-discussion" />
+                            Find out why
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
                 )}
 
                 {waiting && (

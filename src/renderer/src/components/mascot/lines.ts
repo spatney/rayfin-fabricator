@@ -260,7 +260,7 @@ export function deployLiveLine(name: string): string {
 }
 
 /** Why publishing didn't finish, as far as what to offer goes. */
-export type DeployTrouble = 'failed' | 'signin' | 'stopped'
+export type DeployTrouble = 'failed' | 'signin' | 'stopped' | 'unsupported'
 
 /**
  * What Ray says when publishing fails: what happened, in a sentence, and that
@@ -269,7 +269,14 @@ export type DeployTrouble = 'failed' | 'signin' | 'stopped'
 export const DEPLOY_TROUBLE_LINES: Record<DeployTrouble, string> = {
   failed: 'Your app didn’t make it to Fabric. Want me to find out why?',
   signin: 'Fabric wants you to sign in again before you can publish this app.',
-  stopped: 'Publishing was stopped before it finished.'
+  stopped: 'Publishing was stopped before it finished.',
+  unsupported:
+    'Fabric apps aren’t available in that workspace’s region yet. Let’s pick a workspace in another region.'
+}
+
+/** What Ray says when Fabric turned the app down in a workspace whose capacity is in `region`. */
+export function unsupportedRegionLine(region: string): string {
+  return `That workspace’s capacity is in ${region}, and Fabric apps aren’t there yet. Let’s pick a workspace in another region.`
 }
 
 /**

@@ -3224,6 +3224,47 @@ code {
   flex: none;
   align-self: auto;
 }
+/* Fabric turned down an app in this workspace, on its capacity or in its region:
+   a caution, not an error, so amber rather than red. */
+.ws-target-conflict--refused .codicon {
+  color: var(--pending);
+}
+.ws-refused-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 2px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.ws-refused-note .codicon {
+  flex: none;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--pending);
+}
+.ws-refused-note-text {
+  flex: 1;
+  min-width: 0;
+}
+.ws-refused-note .link-btn {
+  font-size: inherit;
+}
+/* A workspace row Fabric turned apps down for: a small amber dot and words. */
+.ws-item-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ws-item-flag::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pending);
+}
 .ws-empty {
   display: flex;
   flex-direction: column;

@@ -6,6 +6,7 @@ import { OverlayProvider } from '../overlay'
 import { ToastProvider } from '../toast'
 import { deferred } from '../../test/deferred'
 import DeploymentsControl from './DeploymentsControl'
+import type { DeployUiState } from './PreviewPane'
 
 function makeProject(over: Partial<StudioProject> = {}): StudioProject {
   return {
@@ -647,6 +648,100 @@ describe('DeploymentsControl chip', () => {
       expect((await screen.findByRole('alert')).textContent).toContain('Fabric sign-in required')
       expect(share.getAttribute('aria-busy')).toBeNull()
       expect(screen.queryByRole('dialog')).toBeNull()
+    })
+  })
+
+  describe('DeploymentsControl when Fabric turns a workspace down', () => {
+    const turnedDown = (id: string): DeployUiState => ({
+      running: false,
+      log: [],
+      result: {
+        ok: false,
+        outcome: 'workspace-unsupported',
+        error: 'Fabric apps aren’t available in “Sales”, a workspace on a capacity in UK South.',
+        unsupported: { id, name: 'Sales', region: 'UK South' }
+      }
+    })
+    const published = makeProject({
+      workspace: 'ws1',
+      deploymentNames: { ws1: 'Production' },
+      lastDeploy: {
+        url: 'https://sales.example.app/',
+        status: 'error',
+        outcome: 'workspace-unsupported'
+      }
+    })
+
+    function control(extra: Partial<ComponentProps<typeof DeploymentsControl>> = {}): JSX.Element {
+      return (
+        <ToastProvider>
+          <OverlayProvider>
+            <DeploymentsControl
+              project={published}
+              running={false}
+              onCreate={vi.fn()}
+              onRedeploy={vi.fn()}
+              onSwitch={vi.fn()}
+              onChanged={vi.fn()}
+              {...extra}
+            />
+          </OverlayProvider>
+        </ToastProvider>
+      )
+    }
+
+    it('offers another workspace rather than the same one again', async () => {
+      const api = installApi()
+      const onRedeploy = vi.fn()
+      render(control({ onRedeploy, deploy: turnedDown('ws1') }))
+      expect(
+        screen.getByRole('button', { name: /^Published app:\s*Production\s*· Failed$/ })
+      ).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Choose workspace' }))
+      expect(onRedeploy).not.toHaveBeenCalled()
+      expect(screen.getByRole('dialog', { name: 'Publish to another workspace' })).toBeTruthy()
+      await waitFor(() => expect(api.fabric.listWorkspaces).toHaveBeenCalledTimes(1))
+    })
+
+    it('leaves the published app as it was when Fabric turned another workspace down', async () => {
+      installApi()
+      const onRedeploy = vi.fn()
+      render(
+        control({ onRedeploy, pending: { changed: true, files: 2 }, deploy: turnedDown('ws2') })
+      )
+      const chip = screen.getByRole('button', { name: /^Published app:\s*Production$/ })
+      expect(chip.querySelector('.dep-dot--ok')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Publish 2 changes' }))
+      expect(onRedeploy).toHaveBeenCalledTimes(1)
+
+      fireEvent.click(chip)
+      const panel = screen.getByRole('dialog', { name: 'Published apps' })
+      expect(panel.textContent).toContain("Couldn't publish to “Sales”.")
+      expect(panel.textContent).toContain(
+        'Fabric apps aren’t available in UK South, where its capacity is.'
+      )
+      fireEvent.click(within(panel).getByRole('button', { name: 'Choose another workspace' }))
+      expect(screen.getByRole('dialog', { name: 'Publish to another workspace' })).toBeTruthy()
+      await act(async () => {})
+    })
+
+    it('opens the workspace picker when the notice asks, once', async () => {
+      installApi()
+      const onChooseRequestHandled = vi.fn()
+      const request = { projectId: 'p1', nonce: 4 }
+      const { rerender } = render(
+        control({ chooseRequest: request, onChooseRequestHandled, deploy: turnedDown('ws1') })
+      )
+      expect(
+        await screen.findByRole('dialog', { name: 'Publish to another workspace' })
+      ).toBeTruthy()
+      expect(onChooseRequestHandled).toHaveBeenCalledWith(4)
+
+      rerender(
+        control({ chooseRequest: request, onChooseRequestHandled, deploy: turnedDown('ws1') })
+      )
+      await act(async () => {})
+      expect(onChooseRequestHandled).toHaveBeenCalledTimes(1)
     })
   })
 })

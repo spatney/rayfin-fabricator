@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { StudioProject } from '@shared/ipc'
-import { fabricWorkspaceUrl, recentWorkspaces } from './fabric'
+import type { StudioProject, UnsupportedWorkspace } from '@shared/ipc'
+import {
+  fabricWorkspaceUrl,
+  recentWorkspaces,
+  refusalFor,
+  refusedAfterPublish,
+  refusedRegions
+} from './fabric'
 
 /**
  * The footer workspace link deep-links to the Fabric portal using the workspace
@@ -63,5 +69,50 @@ describe('recentWorkspaces', () => {
         app('d', 'ws-mine', '2026-10-01T09:00:00Z')
       ])
     ).toEqual(['ws-mine'])
+  })
+})
+
+describe('workspaces Fabric turned apps down in', () => {
+  const sales: UnsupportedWorkspace = {
+    id: 'ws-sales',
+    name: 'Sales',
+    region: 'UK South',
+    capacityId: 'cap-uk'
+  }
+
+  it('marks the workspace, others on its capacity, and others in its region however it is spelled', () => {
+    expect(refusalFor({ id: 'WS-SALES' }, [sales])?.by).toBe('workspace')
+    expect(refusalFor({ id: 'ws-2', capacityId: 'CAP-UK' }, [sales])?.by).toBe('capacity')
+    expect(refusalFor({ id: 'ws-3', capacityId: 'cap-2', region: 'uksouth' }, [sales])?.by).toBe(
+      'region'
+    )
+    expect(
+      refusalFor({ id: 'ws-4', capacityId: 'cap-3', region: 'UK West' }, [sales])
+    ).toBeUndefined()
+    // Nothing Fabric didn't say: no region or capacity in common, nothing to mark.
+    expect(refusalFor({ id: 'ws-5' }, [{ id: 'ws-sales' }])).toBeUndefined()
+    expect(refusalFor({ id: 'ws-sales' }, [])).toBeUndefined()
+  })
+
+  it('names each region once', () => {
+    expect(
+      refusedRegions([
+        sales,
+        { id: 'b', region: 'uk south' },
+        { id: 'c' },
+        { id: 'd', region: 'Japan West' }
+      ])
+    ).toEqual(['UK South', 'Japan West'])
+  })
+
+  it('learns from each publish: a refusal is added once, and a workspace that took the app is dropped', () => {
+    const refused = { ok: false, outcome: 'workspace-unsupported' as const, unsupported: sales }
+    const once = refusedAfterPublish([], refused, 'ws-sales')
+    expect(refusedAfterPublish(once, refused, 'ws-sales')).toEqual([sales])
+
+    const other = { ok: false, outcome: 'error' as const, error: 'Build failed' }
+    expect(refusedAfterPublish(once, other, 'ws-sales')).toBe(once)
+    expect(refusedAfterPublish(once, { ok: true, outcome: 'success' }, 'ws-other')).toBe(once)
+    expect(refusedAfterPublish(once, { ok: true, outcome: 'success' }, 'WS-SALES')).toEqual([])
   })
 })

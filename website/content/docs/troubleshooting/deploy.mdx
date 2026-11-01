@@ -19,8 +19,9 @@ Fabricator publishes with the project's pinned Rayfin CLI, running `rayfin up -y
 4. If the log mentions authentication, expired credentials, a token-cache lock, `HTTP 401`, or `unauthorized`, use **Refresh Fabric authentication**, then select **Try again** in the app bar.
 5. If the log mentions a build or TypeScript error, send the prompt below in chat, then publish again.
 6. If the log says "Environment variable '…' referenced in rayfin.yml (…) is not defined.", your app's `rayfin/rayfin.yml` uses a setting that isn't set on this computer. Add that variable to the project's `rayfin/.env`, then select **Try again**.
-7. If the log mentions Fabric capacity, permissions, a workspace conflict, or a Fabric API failure, fix that Fabric workspace issue and select **Try again**.
-8. If the log mentions destructive data-model changes, note that Fabricator already publishes with `--force`; the failure is coming from the CLI or Fabric after that forced attempt.
+7. If the log says "Failed to create Rayfin item" with "Details: The feature is not available", Fabric apps aren't available in that workspace. See [Fabric apps aren't available in the workspace](/docs/troubleshooting/deploy#fabric-apps-arent-available-in-the-workspace).
+8. If the log mentions Fabric capacity, permissions, a workspace conflict, or a Fabric API failure, fix that Fabric workspace issue and select **Try again**.
+9. If the log mentions destructive data-model changes, note that Fabricator already publishes with `--force`; the failure is coming from the CLI or Fabric after that forced attempt.
 
 ```prompt title="Fix the build errors"
 Publishing my app failed because it doesn't build. Find and fix the build and TypeScript errors, and check that the app builds without errors.
@@ -100,6 +101,21 @@ Rayfin apps are published to a Fabric workspace backed by an eligible Fabric cap
 5. Select **Try again** in the app bar.
 
 If you cannot see the right workspace or capacity, contact your Fabric administrator or [Report a problem](/docs/troubleshooting/report-a-problem) with the publish log.
+
+## Fabric apps aren't available in the workspace
+
+Publishing stops and Ray says "That workspace’s capacity is in UK South, and Fabric apps aren’t there yet. Let’s pick a workspace in another region.", naming your workspace's region. If you've sent Ray away, the notice says "This workspace’s capacity is in UK South, where Fabric apps aren’t available yet. Choose a workspace in another region." The publish log says "✖ Failed to create Rayfin item: Fabric API error: 403 Forbidden" with "Details: The feature is not available", and then "Couldn't publish: Fabric apps aren’t available in “Sales”, a workspace on a capacity in UK South.", with your workspace's name and region.
+
+Fabric apps aren't available in every Fabric region yet, and a workspace is in the region of the Fabric capacity it's on. Fabricator doesn't keep a list of regions, because which regions have Fabric apps changes: it goes by what Fabric answers when you publish. Fabric created nothing in that workspace, so your app stays published where it was, if it was published before.
+
+1. Above the preview, select **Choose another workspace**. The publish control's panel in the app bar offers **Choose another workspace** too.
+2. Pick a workspace that isn't marked "Fabric apps unavailable". For the rest of the session, the workspace picker marks the workspace Fabric turned down, and the other workspaces on its capacity or in its region, and lists them last. Publishing to a marked workspace asks you first: select **Publish here anyway** to try it.
+3. If none of your workspaces is in another region, select **+ New workspace** and choose a capacity in another region. Capacities in a region Fabric turned down are listed last.
+4. Select **Publish**.
+
+To see which regions have Fabric apps, select **Region availability**. It opens Microsoft's [Fabric region availability](https://learn.microsoft.com/fabric/admin/region-availability) page, where regions without them list "Fabric App (preview)" as not available.
+
+The same message can mean that Fabric Apps isn't turned on for your organization. If Fabric turns down workspaces in more than one region, ask your Fabric administrator to turn on **Fabric Apps (preview)** in the tenant settings of the Fabric admin portal. If it still fails, [Report a problem](/docs/troubleshooting/report-a-problem).
 
 ## Rayfin CLI or npm package resolution failed
 

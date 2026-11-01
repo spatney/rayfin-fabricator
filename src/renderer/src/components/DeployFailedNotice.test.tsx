@@ -51,6 +51,7 @@ describe('what a failed publish offers', () => {
     expect(deployTrouble('not-signed-in')).toBe('signin')
     expect(deployTrouble('auth-cache-error')).toBe('signin')
     expect(deployTrouble('cancelled')).toBe('stopped')
+    expect(deployTrouble('workspace-unsupported')).toBe('unsupported')
   })
 
   it('has Ray swim in and say it, then offer to find out why', () => {
@@ -97,6 +98,44 @@ describe('what a failed publish offers', () => {
     show({ outcome: 'cancelled' })
     expect(screen.queryByRole('button', { name: 'Find out why' })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Ray/ })).toBeNull()
+  })
+
+  it('points to another workspace when Fabric turned the app down in this one', () => {
+    const openExternal = vi.fn()
+    vi.stubGlobal('api', { openExternal })
+    const onChooseWorkspace = vi.fn()
+    const props = show({
+      outcome: 'workspace-unsupported',
+      unsupported: { id: 'ws1', name: 'Sales', region: 'UK South' },
+      onChooseWorkspace
+    })
+    expect(screen.getByRole('alert').textContent).toBe(
+      'That workspace’s capacity is in UK South, and Fabric apps aren’t there yet. Let’s pick a workspace in another region.'
+    )
+    const choose = screen.getByRole('button', { name: 'Choose another workspace' })
+    expect(choose.className).toContain('btn--primary')
+    fireEvent.click(choose)
+    expect(onChooseWorkspace).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Region availability' }))
+    expect(openExternal).toHaveBeenCalledWith(
+      'https://learn.microsoft.com/fabric/admin/region-availability'
+    )
+    // The cause is known: no diagnosis, and Ray isn't a button for one.
+    expect(screen.queryByRole('button', { name: 'Find out why' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Ray/ })).toBeNull()
+    expect(props.onDiagnose).not.toHaveBeenCalled()
+  })
+
+  it('says so plainly, without a region Fabric didn’t name', () => {
+    vi.mocked(isRaySentAway).mockReturnValue(true)
+    show({
+      outcome: 'workspace-unsupported',
+      unsupported: { id: 'ws1' },
+      onChooseWorkspace: vi.fn()
+    })
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Fabric apps aren’t available in this workspace’s region. Choose a workspace in another region.'
+    )
   })
 })
 

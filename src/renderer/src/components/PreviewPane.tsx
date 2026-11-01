@@ -134,6 +134,8 @@ interface Props {
   authBusy?: boolean
   /** Open Help and ask it why the last deploy failed. */
   onDiagnoseDeploy?: () => void
+  /** Open the publish control's workspace picker: Fabric turned the app down in the last one. */
+  onChooseWorkspace?: () => void
   /** True when the preview pane is expanded to fill the build view (chat hidden). */
   focused: boolean
   /** Toggle preview focus (full-width preview ⇄ split with chat). */
@@ -304,6 +306,7 @@ export default function PreviewPane({
   onRefreshAuth,
   authBusy = false,
   onDiagnoseDeploy,
+  onChooseWorkspace,
   focused,
   onToggleFocus,
   onPreviewModeChanged,
@@ -1423,6 +1426,8 @@ export default function PreviewPane({
           onDiagnose={onDiagnoseDeploy}
           onRefreshAuth={onRefreshAuth}
           authBusy={authBusy}
+          unsupported={deploy?.result?.unsupported}
+          onChooseWorkspace={onChooseWorkspace}
           onDismiss={() => setFailureDismissed(true)}
         />
       )}
@@ -1491,6 +1496,8 @@ export default function PreviewPane({
                 The team pipeline couldn&apos;t publish this version. Open the team menu in the
                 header to see what happened.
               </p>
+            ) : status === 'error' && outcome === 'workspace-unsupported' ? (
+              <p>Choose a workspace on a capacity in another region, then publish again.</p>
             ) : status === 'error' ? (
               <p>Review the error and logs above, then publish again to retry.</p>
             ) : team ? (

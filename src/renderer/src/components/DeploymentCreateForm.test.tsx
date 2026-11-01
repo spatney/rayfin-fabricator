@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { FabricWorkspace, FabricWorkspacesResult, ProcResult } from '@shared/ipc'
 import { deferred } from '../../test/deferred'
 import DeploymentCreateForm from './DeploymentCreateForm'
@@ -370,5 +370,143 @@ describe('DeploymentCreateForm recent workspaces', () => {
     expect(listed()).toEqual(['# Recent', 'Workspace L'])
     fireEvent.change(search, { target: { value: 'workspace g' } })
     expect(listed()).toEqual(['Workspace G'])
+  })
+})
+
+describe('DeploymentCreateForm workspaces Fabric turned apps down in', () => {
+  const ws = (
+    id: string,
+    displayName: string,
+    region?: string,
+    capacityId?: string
+  ): FabricWorkspace => ({
+    id,
+    displayName,
+    region,
+    capacityId,
+    capacityKind: 'fabric',
+    sku: 'F2',
+    eligible: true
+  })
+  const workspaces: FabricWorkspacesResult = {
+    ok: true,
+    workspaces: [
+      ws('w1', 'Analytics', 'UK South', 'cap-a'),
+      ws('w2', 'Finance', 'West Europe', 'cap-b'),
+      ws('w3', 'Sales', 'UK South', 'cap-c')
+    ]
+  }
+  const sales = { id: 'w3', name: 'Sales', region: 'UK South', capacityId: 'cap-c' }
+
+  const rows = (): string[] =>
+    [...screen.getByRole('listbox').querySelectorAll('.ws-item')].map(
+      (row) =>
+        `${row.querySelector('.ws-item-name')?.textContent} | ${row.querySelector('.ws-item-sub')?.textContent}`
+    )
+
+  it('marks workspaces in the region Fabric turned down, lists them last, and links the region list', () => {
+    render(
+      <DeploymentCreateForm
+        wsResult={workspaces}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={vi.fn()}
+        refused={[sales]}
+      />
+    )
+    expect(rows()).toEqual([
+      'Finance | West Europe',
+      'Analytics | UK South · Fabric apps unavailable',
+      'Sales | UK South · Fabric apps unavailable'
+    ])
+    const note = screen.getByRole('note')
+    expect(note.textContent).toContain(
+      'Fabric apps weren’t available in UK South, so workspaces there are marked. Choose one on a capacity in another region.'
+    )
+    fireEvent.click(within(note).getByRole('button', { name: 'Region availability' }))
+    expect(window.api.openExternal).toHaveBeenCalledWith(
+      'https://learn.microsoft.com/fabric/admin/region-availability'
+    )
+  })
+
+  it('asks before publishing to one, and publishes elsewhere straight away', () => {
+    const onSubmit = vi.fn()
+    render(
+      <DeploymentCreateForm
+        wsResult={workspaces}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={onSubmit}
+        refused={[sales]}
+      />
+    )
+    const publish = screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement
+    fireEvent.click(screen.getByText('Analytics'))
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Fabric apps weren’t available in UK South when you published earlier, so publishing here will likely fail.'
+    )
+    expect(publish.disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Publish here anyway' }))
+    expect(publish.disabled).toBe(false)
+
+    fireEvent.click(screen.getByText('Finance'))
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.click(publish)
+    expect(onSubmit).toHaveBeenCalledWith('Finance', 'w2')
+  })
+
+  it('suggests the Fabric admin once more than one region turned apps down', () => {
+    render(
+      <DeploymentCreateForm
+        wsResult={workspaces}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={vi.fn()}
+        refused={[sales, { id: 'w2', region: 'West Europe' }]}
+      />
+    )
+    expect(screen.getByRole('note').textContent).toContain(
+      'Fabric apps weren’t available in UK South or West Europe, so workspaces there are marked. If no region works, your Fabric admin may need to turn on Fabric Apps.'
+    )
+  })
+
+  it('lists capacities in that region last when creating a workspace, and picks another', async () => {
+    vi.mocked(window.api.fabric.listCapacities).mockResolvedValueOnce({
+      ok: true,
+      capacities: [
+        {
+          id: 'cap-c',
+          displayName: 'UK capacity',
+          sku: 'F4',
+          region: 'UK South',
+          kind: 'fabric',
+          eligible: true
+        },
+        {
+          id: 'cap-b',
+          displayName: 'EU capacity',
+          sku: 'F2',
+          region: 'West Europe',
+          kind: 'fabric',
+          eligible: true
+        }
+      ]
+    })
+    render(
+      <DeploymentCreateForm
+        wsResult={workspaces}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={vi.fn()}
+        refused={[sales]}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: '+ New workspace' }))
+    const options = (await screen.findAllByRole('option')).map((o) => o.textContent)
+    expect(options).toEqual([
+      'EU capacity · F2 · West Europe',
+      'UK capacity · F4 · UK South · Fabric apps unavailable'
+    ])
+    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('cap-b')
   })
 })
