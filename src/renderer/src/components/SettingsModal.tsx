@@ -402,12 +402,6 @@ export default function SettingsModal({
                       onChange={(v) => onChange({ experiments: { reportMigration: v } })}
                     />
                     <ToggleRow
-                      label="App gallery"
-                      hint="Browse every Rayfin app you can open in Fabric from Home, including apps that aren't on this computer. Search them, see where each one lives and when it was last published, and open them. Needs the Azure CLI."
-                      checked={Boolean(settings.experiments?.appGallery)}
-                      onChange={(v) => onChange({ experiments: { appGallery: v } })}
-                    />
-                    <ToggleRow
                       label="Work IQ"
                       hint="Add Work IQ to chat's plugins. Turned on in a chat, it lets chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. Read-only. You sign in with your work account in your browser. Needs a Microsoft 365 Copilot license and your organization's approval."
                       checked={Boolean(settings.experiments?.workIq)}

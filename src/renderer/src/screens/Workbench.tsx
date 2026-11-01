@@ -783,20 +783,15 @@ export default function Workbench({
     if (teamMap && projects && !mapWorkspace) setTeamMap(null)
   }, [teamMap, projects, mapWorkspace])
 
-  const galleryEnabled = Boolean(settings?.experiments?.appGallery)
   const openGallery = useCallback((from: 'home' | 'project'): void => {
     setTeamMap(null)
     setGallery({ from })
   }, [])
   const closeGallery = useCallback((): void => setGallery(null), [])
-  // The gallery closes when its experiment is turned off.
-  useEffect(() => {
-    if (!galleryEnabled) setGallery(null)
-  }, [galleryEnabled])
 
   const mcpServersEnabled = Boolean(settings?.experiments?.mcpServers)
   const openMcpServers = useCallback((adding = false): void => setMcpDialog({ adding }), [])
-  // So does the MCP servers dialog, with its experiment.
+  // The MCP servers dialog closes when its experiment is turned off.
   useEffect(() => {
     if (!mcpServersEnabled) setMcpDialog(null)
   }, [mcpServersEnabled])
@@ -2498,7 +2493,6 @@ export default function Workbench({
       pending: active ? (pending[active.id] ?? undefined) : undefined,
       autoDeploy: !manualDeploy,
       migrationEnabled,
-      galleryEnabled,
       mcpServersEnabled,
       inGallery: Boolean(gallery),
       teamWorkspaceName: activeTeamWorkspace?.name,
@@ -3151,7 +3145,7 @@ export default function Workbench({
                   onOpenExisting={openExisting}
                   onCloneFromGitHub={() => setShowClone(true)}
                   onMigrateReport={migrationEnabled ? () => setShowMigrate(true) : undefined}
-                  onOpenGallery={galleryEnabled ? () => openGallery('home') : undefined}
+                  onOpenGallery={() => openGallery('home')}
                   onChangeWorkspaceRoot={changeWorkspaceRoot}
                   team={
                     teamEnabled

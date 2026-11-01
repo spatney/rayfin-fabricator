@@ -2566,9 +2566,8 @@ describe('Workbench project removal', () => {
 
 describe('Workbench app gallery', () => {
   const gallery = (): HTMLElement | null => screen.queryByRole('region', { name: 'App gallery' })
-  const withGallery: AppSettings = { theme: 'system', experiments: { appGallery: true } }
 
-  it('opens from Home with its experiment, and opens a project on this computer from it', async () => {
+  it('opens from Home, and opens a project on this computer from it', async () => {
     const api = installApi(false)
     const home = { workspaceRoot: 'C:\\projects', activeProjectId: null, projects: [project] }
     const opened = { ...home, activeProjectId: project.id }
@@ -2579,7 +2578,7 @@ describe('Workbench app gallery', () => {
       api.deploy.reconcile.mockResolvedValue(opened)
       return opened
     })
-    const props = makeProps({ settings: withGallery })
+    const props = makeProps()
     render(<Workbench {...props} />, { wrapper: Wrapper })
     await screen.findByTestId('home')
 
@@ -2594,30 +2593,20 @@ describe('Workbench app gallery', () => {
     await screen.findByLabelText('Chat draft')
   })
 
-  it('opens over the open app from Search, goes back to it, and closes when turned off', async () => {
+  it('opens over the open app from Search, and goes back to it', async () => {
     installApi(true)
-    const props = makeProps({ settings: withGallery })
-    const { rerender } = render(<Workbench {...props} />, { wrapper: Wrapper })
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
-    const openFromSearch = (): void => {
-      fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-      const search = searchProps.mock.lastCall![0]
-      act(() => {
-        search.items.find((item) => item.id === 'action:gallery')!.run()
-        search.onClose()
-      })
-    }
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    const search = searchProps.mock.lastCall![0]
+    act(() => {
+      search.items.find((item) => item.id === 'action:gallery')!.run()
+      search.onClose()
+    })
 
-    openFromSearch()
     expect(gallery()).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'Advisor' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Back to Project One' }))
-    expect(gallery()).toBeNull()
-    expect(screen.getByRole('tab', { name: 'Advisor' })).toBeTruthy()
-
-    openFromSearch()
-    expect(gallery()).toBeTruthy()
-    rerender(<Workbench {...props} settings={{ theme: 'system' }} />)
     expect(gallery()).toBeNull()
     expect(screen.getByRole('tab', { name: 'Advisor' })).toBeTruthy()
   })

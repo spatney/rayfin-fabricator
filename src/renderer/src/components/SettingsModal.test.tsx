@@ -191,30 +191,6 @@ describe('SettingsModal report migration experiment', () => {
   })
 })
 
-describe('SettingsModal app gallery experiment', () => {
-  function galleryCheckbox(): HTMLInputElement {
-    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
-    const label = screen.getByText('App gallery').closest('label')
-    if (!label) throw new Error('App gallery label not found')
-    return label.querySelector('input[type="checkbox"]') as HTMLInputElement
-  }
-
-  it('is off by default and turns on through the experiment flags', async () => {
-    installApi()
-    const { onChange } = await renderModal()
-    const checkbox = galleryCheckbox()
-    expect(checkbox.checked).toBe(false)
-    fireEvent.click(checkbox)
-    expect(onChange).toHaveBeenCalledWith({ experiments: { appGallery: true } })
-  })
-
-  it('reflects the persisted flag', async () => {
-    installApi()
-    await renderModal({ settings: { theme: 'system', experiments: { appGallery: true } } })
-    expect(galleryCheckbox().checked).toBe(true)
-  })
-})
-
 describe('SettingsModal Work IQ experiment', () => {
   function checkbox(label: string): HTMLInputElement {
     const row = screen.getByText(label).closest('label')
@@ -254,6 +230,7 @@ describe('SettingsModal retired controls', () => {
           byok: enabled,
           localDevelopment: enabled,
           fabricIq: enabled,
+          appGallery: enabled,
           teamWorkspaces: true
         }
       }
@@ -268,6 +245,7 @@ describe('SettingsModal retired controls', () => {
         'Your own API keys',
         'Local development',
         'Fabric IQ',
+        'App gallery',
         'Performance',
         'Ray',
         'Check for updates'
@@ -275,10 +253,9 @@ describe('SettingsModal retired controls', () => {
         expect(screen.queryByText(label)).toBeNull()
       }
       expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-      expect(screen.getAllByRole('checkbox')).toHaveLength(6)
+      expect(screen.getAllByRole('checkbox')).toHaveLength(5)
       expect(screen.getByText('Team workspaces')).toBeTruthy()
       expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
-      expect(screen.getByText('App gallery')).toBeTruthy()
       expect(screen.getByText('Work IQ')).toBeTruthy()
       expect(screen.getByText('MCP servers')).toBeTruthy()
       expect(screen.getByText('Full diagnostics')).toBeTruthy()

@@ -749,11 +749,6 @@ pub struct ExperimentFlags {
   /// page by page. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub report_migration: Option<bool>,
-  /// App gallery: Home offers a gallery of every Rayfin app the user can open
-  /// in their Fabric tenant, including apps that aren't on this computer, read
-  /// with the Azure CLI's sign-in. Opt-in (off by default).
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub app_gallery: Option<bool>,
   /// Work IQ: Build chat offers the Work IQ plugin, which looks up the user's
   /// Microsoft 365 email, meetings, files, Teams messages and people,
   /// read-only, through Microsoft's Work IQ MCP server. Opt-in (off by

@@ -55,8 +55,6 @@ export interface ActionContext {
   /** Publish after each chat turn. */
   autoDeploy: boolean
   migrationEnabled: boolean
-  /** The App gallery experiment is on. */
-  galleryEnabled: boolean
   /** The MCP servers experiment is on. */
   mcpServersEnabled: boolean
   /** The App gallery is showing. */
@@ -256,7 +254,7 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
       run: run.migrateReport
     })
   }
-  if (ctx.galleryEnabled && !ctx.inGallery) {
+  if (!ctx.inGallery) {
     add({
       id: 'action:gallery',
       title: 'App gallery',

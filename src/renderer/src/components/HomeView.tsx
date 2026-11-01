@@ -1,5 +1,13 @@
-import { useState, type CSSProperties, type JSX } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+  type KeyboardEvent
+} from 'react'
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
+import { moveMenuFocus } from '../menuFocus'
 import { removalStatus, type ProjectRemoval } from '../projectRemovals'
 import { FabricatorMark } from './FabricatorMark'
 import { AddIcon, BranchIcon, Codicon, FolderIcon, GearIcon } from './icons'
@@ -7,9 +15,118 @@ import { displayPath } from './projectDisplay'
 import TeamSection from './team/TeamSection'
 import { hueOf } from './team/map/parts'
 import { useNow } from './team/runProgress'
+import './models/modelPicker.css'
 
 /** Recent projects shown before "Show all". */
 const RECENT_LIMIT = 6
+
+const MENU_ITEMS = '[role="menuitem"]:not(:disabled)'
+
+/**
+ * One Home action for a project that already exists, as a folder on this
+ * computer or a repository on GitHub: it opens a menu of the two.
+ */
+function OpenExisting({
+  opening,
+  onOpenFolder,
+  onClone
+}: {
+  opening: boolean
+  onOpenFolder: () => void
+  onClone: () => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: MouseEvent): void => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    window.addEventListener('mousedown', outside)
+    const id = requestAnimationFrame(() =>
+      menuRef.current?.querySelector<HTMLElement>(MENU_ITEMS)?.focus()
+    )
+    return () => {
+      window.removeEventListener('mousedown', outside)
+      cancelAnimationFrame(id)
+    }
+  }, [open])
+
+  function close(): void {
+    setOpen(false)
+    requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+
+  function choose(action: () => void): void {
+    setOpen(false)
+    action()
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      close()
+      return
+    }
+    moveMenuFocus(event, MENU_ITEMS)
+  }
+
+  return (
+    <div ref={rootRef} className="home-open">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`home-action${open ? ' is-open' : ''}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={opening}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="home-action-icon" aria-hidden="true">
+          <FolderIcon className="home-action-svg" />
+        </span>
+        <span className="home-action-text">
+          <span className="home-action-label">{opening ? 'Opening folder…' : 'Open existing'}</span>
+          <span className="home-action-hint">From a folder or GitHub</span>
+        </span>
+        <Codicon name="chevron-down" className="home-action-caret" />
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          className="mp-panel home-open-menu"
+          role="menu"
+          aria-label="Open existing"
+          onKeyDown={onKeyDown}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="mp-item"
+            onClick={() => choose(onOpenFolder)}
+          >
+            <FolderIcon className="home-open-icon" />
+            <span className="mp-item-text">
+              <span className="mp-item-label">Open folder</span>
+              <span className="mp-item-desc">A project on this computer</span>
+            </span>
+          </button>
+          <button type="button" role="menuitem" className="mp-item" onClick={() => choose(onClone)}>
+            <BranchIcon className="home-open-icon" />
+            <span className="mp-item-text">
+              <span className="mp-item-label">Clone from GitHub</span>
+              <span className="mp-item-desc">Bring a repository into Fabricator</span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   /** All known projects, most-recently-used first. */
@@ -36,8 +153,8 @@ interface Props {
   onCloneFromGitHub: () => void
   /** Migrate a Power BI report into a new app (experimental); the action shows only when set. */
   onMigrateReport?: () => void
-  /** Browse every Rayfin app you can open in Fabric (experimental); the action shows only when set. */
-  onOpenGallery?: () => void
+  /** Browse every Rayfin app you can open in Fabric. */
+  onOpenGallery: () => void
   onChangeWorkspaceRoot: () => void
   /** Team workspaces (experimental); the section shows only when set. */
   team?: {
@@ -82,15 +199,14 @@ export default function HomeView({
         <header className="home-head">
           <div className="home-brand">
             <FabricatorMark className="home-mark" />
-            <div>
-              <p className="home-eyebrow">Fabricator</p>
+            <div className="home-brand-text">
               <h1 className="home-title">Your projects</h1>
+              <p className="home-sub">
+                Start a new Rayfin app, open a local project, or pick up where you left off.
+              </p>
             </div>
           </div>
-          <p className="home-sub">
-            Start a new Rayfin app, open a local project, or pick up where you left off.
-          </p>
-          <div className="home-actions" aria-label="Project actions">
+          <div className="home-actions" role="group" aria-label="Project actions">
             <button
               type="button"
               className="home-action home-action--primary"
@@ -104,29 +220,18 @@ export default function HomeView({
                 <span className="home-action-hint">Describe it and Copilot builds it</span>
               </span>
             </button>
-            <button
-              type="button"
-              className="home-action"
-              disabled={opening}
-              onClick={onOpenExisting}
-            >
+            <OpenExisting
+              opening={opening}
+              onOpenFolder={onOpenExisting}
+              onClone={onCloneFromGitHub}
+            />
+            <button type="button" className="home-action" onClick={onOpenGallery}>
               <span className="home-action-icon" aria-hidden="true">
-                <FolderIcon className="home-action-svg" />
+                <Codicon name="library" className="home-action-svg" />
               </span>
               <span className="home-action-text">
-                <span className="home-action-label">
-                  {opening ? 'Opening folder...' : 'Open folder'}
-                </span>
-                <span className="home-action-hint">Use an existing local project</span>
-              </span>
-            </button>
-            <button type="button" className="home-action" onClick={onCloneFromGitHub}>
-              <span className="home-action-icon" aria-hidden="true">
-                <BranchIcon className="home-action-svg" />
-              </span>
-              <span className="home-action-text">
-                <span className="home-action-label">Clone from GitHub</span>
-                <span className="home-action-hint">Bring a repository into Fabricator</span>
+                <span className="home-action-label">App gallery</span>
+                <span className="home-action-hint">Browse apps in Fabric</span>
               </span>
             </button>
             {onMigrateReport && (
@@ -137,17 +242,6 @@ export default function HomeView({
                 <span className="home-action-text">
                   <span className="home-action-label">Migrate a Power BI report</span>
                   <span className="home-action-hint">Turn a report into an app</span>
-                </span>
-              </button>
-            )}
-            {onOpenGallery && (
-              <button type="button" className="home-action" onClick={onOpenGallery}>
-                <span className="home-action-icon" aria-hidden="true">
-                  <Codicon name="library" className="home-action-svg" />
-                </span>
-                <span className="home-action-text">
-                  <span className="home-action-label">App gallery</span>
-                  <span className="home-action-hint">Browse every app you can open in Fabric</span>
                 </span>
               </button>
             )}

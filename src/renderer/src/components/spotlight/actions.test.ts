@@ -27,7 +27,6 @@ function context(overrides: Partial<ActionContext> = {}): ActionContext {
     chatBusy: false,
     autoDeploy: true,
     migrationEnabled: false,
-    galleryEnabled: false,
     mcpServersEnabled: false,
     inGallery: false,
     theme: 'dark',
@@ -98,14 +97,13 @@ describe('Search actions', () => {
     expect(ctx.do.setAutoDeploy).toHaveBeenCalledWith(false)
   })
 
-  it('offers the app gallery with its experiment, except from the gallery itself', () => {
-    expect(ids(context())).not.toContain('action:gallery')
-    const ctx = context({ galleryEnabled: true })
+  it('offers the app gallery, except from the gallery itself', () => {
+    const ctx = context()
     const gallery = buildActions(ctx).find((a) => a.id === 'action:gallery')!
     gallery.run()
     expect(ctx.do.openGallery).toHaveBeenCalled()
     expect(rank(prepare(buildActions(ctx)), 'fabric apps')[0]?.item.id).toBe('action:gallery')
-    expect(ids(context({ galleryEnabled: true, inGallery: true }))).not.toContain('action:gallery')
+    expect(ids(context({ inGallery: true }))).not.toContain('action:gallery')
   })
 
   it('offers managing MCP servers only with their experiment', () => {

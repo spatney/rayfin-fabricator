@@ -1721,12 +1721,6 @@ export interface ExperimentFlags {
    */
   reportMigration?: boolean
   /**
-   * App gallery: Home offers a gallery of every Rayfin app you can open in your
-   * Fabric tenant, including apps that aren't on this computer. Read with the
-   * Azure CLI's sign-in.
-   */
-  appGallery?: boolean
-  /**
    * Work IQ: chat offers the Work IQ plugin, which looks up your Microsoft 365
    * email, meetings, files, Teams messages and people, read-only, through
    * Microsoft's Work IQ MCP server. Each chat still has it off until it's
@@ -2654,7 +2648,7 @@ export interface ChatMigrationRef {
 }
 
 /* ------------------------------------------------------------------ *
- * App gallery (experimental; ExperimentFlags.appGallery)
+ * App gallery
  * ------------------------------------------------------------------ */
 
 /** The Azure CLI's signed-in account, which the gallery reads with. */

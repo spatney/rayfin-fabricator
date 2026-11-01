@@ -16,6 +16,7 @@ function baseProps(): ComponentProps<typeof HomeView> {
     onNewProject: vi.fn(),
     onOpenExisting: vi.fn(),
     onCloneFromGitHub: vi.fn(),
+    onOpenGallery: vi.fn(),
     onChangeWorkspaceRoot: vi.fn()
   }
 }
@@ -23,19 +24,28 @@ function baseProps(): ComponentProps<typeof HomeView> {
 afterEach(() => cleanup())
 
 describe('HomeView project launcher', () => {
-  it('routes each direct quick-start action without hiding folder or GitHub options in a menu', () => {
+  it('starts a new project, or opens an existing one from a folder or GitHub', () => {
     const props = baseProps()
     render(<HomeView {...props} />)
 
     fireEvent.click(screen.getByRole('button', { name: /new project/i }))
-    fireEvent.click(screen.getByRole('button', { name: /open folder/i }))
-    fireEvent.click(screen.getByRole('button', { name: /clone from github/i }))
-
     expect(props.onNewProject).toHaveBeenCalledTimes(1)
+
+    const existing = screen.getByRole('button', { name: /open existing/i })
+    fireEvent.click(existing)
+    expect(existing.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(screen.getByRole('menuitem', { name: /open folder/i }))
     expect(props.onOpenExisting).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    fireEvent.click(existing)
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Open existing' }), { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    fireEvent.click(existing)
+    fireEvent.click(screen.getByRole('menuitem', { name: /clone from github/i }))
     expect(props.onCloneFromGitHub).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('button', { name: /open existing/i })).toBeNull()
-    expect(document.querySelectorAll('.home-action-icon > svg')).toHaveLength(3)
+    expect(document.querySelectorAll('.home-action-icon > svg')).toHaveLength(2)
   })
 
   it('offers to migrate a Power BI report only when the experiment provides it', () => {
@@ -49,15 +59,21 @@ describe('HomeView project launcher', () => {
     expect(onMigrateReport).toHaveBeenCalledTimes(1)
   })
 
-  it('offers the app gallery only when the experiment provides it', () => {
+  it('offers the app gallery to everyone, after the ways to start a project', () => {
     const props = baseProps()
-    const { rerender } = render(<HomeView {...props} />)
-    expect(screen.queryByRole('button', { name: /app gallery/i })).toBeNull()
+    render(<HomeView {...props} onMigrateReport={vi.fn()} />)
 
-    const onOpenGallery = vi.fn()
-    rerender(<HomeView {...props} onOpenGallery={onOpenGallery} />)
+    const actions = within(screen.getByRole('group', { name: 'Project actions' }))
+      .getAllByRole('button')
+      .map((button) => button.querySelector('.home-action-label')?.textContent)
+    expect(actions).toEqual([
+      'New project',
+      'Open existing',
+      'App gallery',
+      'Migrate a Power BI report'
+    ])
     fireEvent.click(screen.getByRole('button', { name: /app gallery/i }))
-    expect(onOpenGallery).toHaveBeenCalledTimes(1)
+    expect(props.onOpenGallery).toHaveBeenCalledTimes(1)
   })
 
   it('uses separate native controls to open and manage a recent project', () => {
