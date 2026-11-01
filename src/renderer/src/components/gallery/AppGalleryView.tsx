@@ -3,15 +3,20 @@ import type { GalleryApp, GalleryResult, GalleryStatus } from '@shared/ipc'
 import { topLayerOpen, useSuppressPreview } from '../../overlay'
 import { useAzureSignIn, type AzureSignIn } from '../../azureAuth'
 import { authErrorMessage } from '../../authErrors'
+import type { WorkspaceUse } from '../../fabric'
 import { FabricatorMark } from '../FabricatorMark'
 import { Codicon } from '../icons'
 import AppCard, { SkeletonCard } from './AppCard'
 import AppDetails from './AppDetails'
+import { GalleryMenu } from './GalleryMenu'
+import { WorkspaceName, WorkspacePicker, workspaceIcon } from './WorkspacePicker'
 import {
+  ago,
   applyQuery,
   count,
   groupByWorkspace,
   pinKey,
+  rankWorkspaces,
   workspacesOf,
   type GalleryEntry,
   type GalleryGroup,
@@ -30,6 +35,8 @@ interface Props {
   onNewProject: () => void
   /** Refresh the app's accounts after signing in to Azure here. */
   onSignedIn?: () => Promise<void> | void
+  /** The workspaces your apps on this computer use, and when: the gallery lists them first. */
+  recentWorkspaces?: readonly WorkspaceUse[]
 }
 
 /** Cards shown before "Show more". */
@@ -52,6 +59,11 @@ export function resetGallerySnapshotForTests(): void {
 type Prefs = Pick<GalleryQuery, 'where' | 'sort' | 'pinned'>
 const WHERE: readonly GalleryWhere[] = ['all', 'local', 'remote']
 const SORTS: readonly GallerySort[] = ['name', 'recent', 'workspace']
+const SORT_NAMES: Record<GallerySort, { label: string; desc: string }> = {
+  name: { label: 'Name', desc: 'A to Z' },
+  recent: { label: 'Recently published', desc: 'Newest publish first' },
+  workspace: { label: 'Workspace', desc: 'Grouped, your recent workspaces first' }
+}
 
 /** The saved pins: each key once, leaving out anything that isn't one. */
 function savedPins(value: unknown): string[] {
@@ -86,7 +98,8 @@ export default function AppGalleryView({
   onClose,
   onOpenProject,
   onNewProject,
-  onSignedIn
+  onSignedIn,
+  recentWorkspaces
 }: Props): JSX.Element {
   useSuppressPreview()
   const [result, setResult] = useState<GalleryResult | null>(() => snapshot?.result ?? null)
@@ -210,10 +223,16 @@ export default function AppGalleryView({
 
   const apps = useMemo(() => result?.apps ?? [], [result])
   const workspaces = useMemo(() => workspacesOf(apps), [apps])
+  const ranked = useMemo(
+    () => rankWorkspaces(workspaces, recentWorkspaces ?? []),
+    [workspaces, recentWorkspaces]
+  )
+  const recentIds = useMemo(() => ranked.recent.map((w) => w.id), [ranked])
+  const usedAtOf = useMemo(() => new Map(ranked.recent.map((w) => [w.id, w.usedAt])), [ranked])
   const localCount = useMemo(() => apps.filter((a) => a.local).length, [apps])
   const query = useMemo<GalleryQuery>(
-    () => ({ text, workspaceId, ...prefs }),
-    [text, workspaceId, prefs]
+    () => ({ text, workspaceId, ...prefs, recent: recentIds }),
+    [text, workspaceId, prefs, recentIds]
   )
   const filtered = useMemo(() => applyQuery(apps, statuses, query), [apps, statuses, query])
   const shown = filtered.slice(0, limit)
@@ -293,11 +312,12 @@ export default function AppGalleryView({
 
   // Esc closes the details, then clears the search, then leaves. Capture runs
   // before a dialog's own handler can remove it, so a dialog, Search or Help on
-  // top keeps its Esc.
+  // top keeps its Esc, and so does an open toolbar menu.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       if (topLayerOpen() || document.querySelector('.help')) return
+      if ((event.target as Element | null)?.closest?.('.mp-pop')) return
       if (selectedId) closeDetails()
       else if (text) setText('')
       else onClose()
@@ -418,29 +438,45 @@ export default function AppGalleryView({
                   </button>
                 ))}
               </div>
-              <select
-                className="field-input gallery-select"
-                aria-label="Workspace"
-                value={workspaceId ?? ''}
-                onChange={(e) => setWorkspaceId(e.target.value || null)}
+              <WorkspacePicker
+                recent={ranked.recent}
+                others={ranked.others}
+                total={apps.length}
+                value={workspaceId}
+                onChange={setWorkspaceId}
+              />
+              <GalleryMenu
+                icon="list-ordered"
+                label={SORT_NAMES[prefs.sort].label}
+                value={SORT_NAMES[prefs.sort].label}
+                name="Sort"
+                width={260}
               >
-                <option value="">All workspaces</option>
-                {workspaces.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} ({w.count})
-                  </option>
-                ))}
-              </select>
-              <select
-                className="field-input gallery-select"
-                aria-label="Sort"
-                value={prefs.sort}
-                onChange={(e) => setPrefs((p) => ({ ...p, sort: e.target.value as GallerySort }))}
-              >
-                <option value="name">Name</option>
-                <option value="recent">Recently published</option>
-                <option value="workspace">Workspace</option>
-              </select>
+                {(close) =>
+                  SORTS.map((sort) => {
+                    const on = prefs.sort === sort
+                    return (
+                      <button
+                        key={sort}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={on}
+                        className="mp-item"
+                        onClick={() => {
+                          setPrefs((p) => ({ ...p, sort }))
+                          close()
+                        }}
+                      >
+                        <span className="mp-item-text">
+                          <span className="mp-item-label">{SORT_NAMES[sort].label}</span>
+                          <span className="mp-item-desc">{SORT_NAMES[sort].desc}</span>
+                        </span>
+                        <Codicon name="check" className={`mp-check${on ? '' : ' mp-check--off'}`} />
+                      </button>
+                    )
+                  })
+                }
+              </GalleryMenu>
             </div>
           </div>
         </header>
@@ -497,23 +533,33 @@ export default function AppGalleryView({
                 </div>
               </div>
             ) : prefs.sort === 'workspace' ? (
-              groupByWorkspace(shown).map((group) => (
-                <section key={group.id} className="gallery-group" aria-label={group.name}>
-                  <h2 className="gallery-group-head">
-                    <Codicon name={groupIcon(group)} />
-                    {group.name}
-                    <span className="gallery-group-count">{group.entries.length}</span>
-                  </h2>
-                  <Grid
-                    entries={group.entries}
-                    selectedId={selectedId}
-                    label={group.pinned ? 'Pinned apps' : `Apps in ${group.name}`}
-                    grouped={!group.pinned}
-                    onSelect={select}
-                    onPin={pinCard}
-                  />
-                </section>
-              ))
+              groupByWorkspace(shown).map((group) => {
+                const usedAt = group.pinned ? undefined : usedAtOf.get(group.id)
+                return (
+                  <section key={group.id} className="gallery-group" aria-label={group.name}>
+                    <h2 className="gallery-group-head">
+                      <Codicon name={groupIcon(group)} />
+                      <span className="gallery-group-name">
+                        {group.pinned ? group.name : <WorkspaceName name={group.name} />}
+                      </span>
+                      <span className="gallery-group-count">{group.entries.length}</span>
+                      {usedAt ? (
+                        <span className="gallery-group-used">
+                          Used {ago(new Date(usedAt).toISOString())}
+                        </span>
+                      ) : null}
+                    </h2>
+                    <Grid
+                      entries={group.entries}
+                      selectedId={selectedId}
+                      label={group.pinned ? 'Pinned apps' : `Apps in ${group.name}`}
+                      grouped={!group.pinned}
+                      onSelect={select}
+                      onPin={pinCard}
+                    />
+                  </section>
+                )
+              })
             ) : (
               <Grid entries={shown} selectedId={selectedId} onSelect={select} onPin={pinCard} />
             )}
@@ -549,7 +595,7 @@ export default function AppGalleryView({
 
 function groupIcon(group: GalleryGroup): string {
   if (group.pinned) return 'pinned'
-  return group.name === 'My workspace' ? 'account' : 'folder'
+  return workspaceIcon(group.name)
 }
 
 function Grid({

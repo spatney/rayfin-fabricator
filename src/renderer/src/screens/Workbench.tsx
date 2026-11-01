@@ -3051,6 +3051,7 @@ export default function Workbench({
             ) : gallery ? (
               <AppGalleryView
                 onClose={closeGallery}
+                recentWorkspaces={appWorkspaces}
                 onOpenProject={(projectId) => {
                   const project = projects?.projects.find((p) => p.id === projectId)
                   if (project) void selectProject(project)

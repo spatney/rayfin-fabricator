@@ -3,6 +3,7 @@ import type { GalleryApp, GalleryStatus } from '@shared/ipc'
 import { Codicon } from '../icons'
 import { hueOf } from '../team/map/parts'
 import { ago, initials } from './model'
+import { WorkspaceName, workspaceIcon } from './WorkspacePicker'
 
 /** A stable number for a name, to pick its cover's shapes. */
 function hash(text: string): number {
@@ -129,9 +130,11 @@ export default function AppCard({
             {app.name}
           </span>
           {showWorkspace && (
-            <span className="gcard-ws">
-              <Codicon name={app.workspaceName === 'My workspace' ? 'account' : 'folder'} />
-              <span>{app.workspaceName}</span>
+            <span className="gcard-ws" title={app.workspaceName}>
+              <Codicon name={workspaceIcon(app.workspaceName)} />
+              <span>
+                <WorkspaceName name={app.workspaceName} />
+              </span>
             </span>
           )}
           {app.description && <span className="gcard-desc">{app.description}</span>}

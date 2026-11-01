@@ -5,9 +5,12 @@ import {
   applyQuery,
   groupByWorkspace,
   initials,
+  rankWorkspaces,
   score,
+  splitWorkspaceName,
   terms,
   workspacesOf,
+  workspaceTitle,
   type GalleryQuery
 } from './model'
 
@@ -174,5 +177,59 @@ describe('gallery covers and times', () => {
     expect(ago('2026-10-24T03:34:31Z', now)).toBe('last week')
     expect(ago(undefined, now)).toBeUndefined()
     expect(ago('soon', now)).toBeUndefined()
+  })
+})
+
+describe('gallery workspaces', () => {
+  it('puts the workspaces your apps here use first, most recently used first', () => {
+    const { recent, others } = rankWorkspaces(workspacesOf(apps), [
+      { workspace: 'travel', at: 5 },
+      { workspace: 'WS-ARCHIVE', at: 9 },
+      { workspace: 'gone', at: 10 }
+    ])
+    expect(recent.map((w) => [w.name, w.usedAt])).toEqual([
+      ['Archive', 9],
+      ['Travel', 5]
+    ])
+    expect(others.map((w) => w.name)).toEqual(['Sales'])
+    // Grouped by workspace, they come first too.
+    expect(names(query({ sort: 'workspace', recent: recent.map((w) => w.id) }))).toEqual([
+      'dashboard-sales-old',
+      'Trip logger',
+      'expense-tracker',
+      'sales-dashboard'
+    ])
+  })
+
+  it('quiets a generated tail on a workspace’s name', () => {
+    expect(
+      splitWorkspaceName('replit-data-dashboard-2e377200-1e4d-49e0-a744-dd9a6fa78c1e')
+    ).toEqual(['replit-data-dashboard', '-2e377200-1e4d-49e0-a744-dd9a6fa78c1e'])
+    expect(splitWorkspaceName('college-tracker-20261022-041214309-cd12809e')).toEqual([
+      'college-tracker',
+      '-20261022-041214309-cd12809e'
+    ])
+    expect(splitWorkspaceName('my-rayfin-app-918529')).toEqual(['my-rayfin-app-918529', ''])
+    expect(splitWorkspaceName('Sample Reports / SM')).toEqual(['Sample Reports / SM', ''])
+  })
+
+  it('titles a workspace a tool named, and keeps the name as its detail', () => {
+    const title = (name: string): string => workspaceTitle(name).title
+    expect(title('replit-data-dashboard-2e377200-1e4d-49e0-a744-dd9a6fa78c1e')).toBe(
+      'Replit data dashboard'
+    )
+    expect(title('college-tracker-20261022-041214309-cd12809e')).toBe('College tracker')
+    expect(title('my-rayfin-app-918529')).toBe('My Rayfin app')
+    expect(title('replit-fabric-dashboard-fd3ec906-06b2-4104-ace5-fcb4c07cb813')).toBe(
+      'Replit Fabric dashboard'
+    )
+    // A year stays; it isn't a hash.
+    expect(title('budget-review-2026')).toBe('Budget review 2026')
+    expect(workspaceTitle('micro-fabric-analytics-spike')).toEqual({
+      title: 'Micro Fabric analytics spike',
+      detail: 'micro-fabric-analytics-spike'
+    })
+    expect(workspaceTitle('FabCON')).toEqual({ title: 'FabCON' })
+    expect(workspaceTitle('Sample Reports / SM')).toEqual({ title: 'Sample Reports / SM' })
   })
 })

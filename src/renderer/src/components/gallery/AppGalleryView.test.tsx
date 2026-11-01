@@ -139,9 +139,8 @@ describe('AppGalleryView', () => {
     })
     renderGallery()
     await screen.findByRole('button', { name: /^expense-tracker/ })
-    fireEvent.change(screen.getByRole('combobox', { name: 'Sort' }), {
-      target: { value: 'recent' }
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Sort: Name' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /^Recently published/ }))
     await waitFor(() =>
       expect(shownNames()).toEqual([
         'Trip logger, in Travel',
@@ -168,6 +167,43 @@ describe('AppGalleryView', () => {
     expect(api.auth.loginAz).toHaveBeenCalledTimes(1)
     expect(props.onSignedIn).toHaveBeenCalledTimes(1)
     expect(api.gallery.list).toHaveBeenLastCalledWith(true)
+  })
+
+  it('lists the workspaces your apps here use first, and keeps Esc in its menu', async () => {
+    installApi()
+    const { props } = renderGallery({
+      recentWorkspaces: [{ workspace: 'ws-travel', at: Date.now() - 2 * DAY }]
+    })
+    await screen.findByRole('button', { name: /^expense-tracker/ })
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace: All workspaces' }))
+    const menu = screen.getByRole('menu', { name: 'Workspace' })
+    const group = (name: string): HTMLElement => within(menu).getByRole('group', { name })
+    const names = (name: string): string[] =>
+      within(group(name))
+        .getAllByRole('menuitemradio')
+        .map((item) => item.getAttribute('title') ?? '')
+    expect(names('Recent')).toEqual(['Travel'])
+    expect(within(group('Recent')).getByText('2 days ago')).toBeTruthy()
+    expect(names('Other workspaces')).toEqual(['Sales'])
+    expect(within(group('Other workspaces')).getByText('2 apps')).toBeTruthy()
+
+    fireEvent.keyDown(within(menu).getByRole('menuitemradio', { name: /^Travel/ }), {
+      key: 'Escape'
+    })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(props.onClose).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace: All workspaces' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /^Travel/ }))
+    expect(shownNames()).toEqual(['Trip logger, in Travel'])
+    expect(screen.getByRole('button', { name: 'Workspace: Travel' })).toBeTruthy()
+
+    // Enter in its search picks the first match.
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace: Travel' }))
+    const search = screen.getByRole('textbox', { name: 'Search workspaces' })
+    fireEvent.change(search, { target: { value: 'sal' } })
+    fireEvent.keyDown(search, { key: 'Enter' })
+    expect(shownNames()).toEqual(['expense-tracker, in Sales', 'sales-dashboard, in Sales'])
   })
 
   it('closes the details, then clears the search, then leaves on Escape', async () => {

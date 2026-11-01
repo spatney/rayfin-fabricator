@@ -177,13 +177,314 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* `select.field-input` keeps its right padding for the chevron. */
-.gallery-toolbar select.gallery-select {
-  max-width: 220px;
+/* The workspace and sort menus: a field that opens a list in the app's menu style. */
+.gallery-menu {
+  position: relative;
+  flex: none;
+  min-width: 0;
+}
+
+.gallery-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 260px;
   height: 34px;
-  padding-top: 0;
-  padding-bottom: 0;
+  padding: 0 10px 0 11px;
+  font: inherit;
   font-size: 12.5px;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.gallery-menu-btn:hover,
+.gallery-menu-btn.is-open {
+  border-color: color-mix(in srgb, var(--text) 18%, var(--border));
+}
+
+.gallery-menu-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.gallery-menu-btn .codicon[class*='codicon-'].gallery-menu-icon {
+  flex: none;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.gallery-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-menu-btn .codicon[class*='codicon-'].gallery-menu-chev {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: transform 0.12s ease;
+}
+
+.gallery-menu-btn.is-open .codicon[class*='codicon-'].gallery-menu-chev {
+  transform: rotate(180deg);
+}
+
+/* A generated tail on a workspace's name (a GUID, a timestamp), quieter. */
+.gallery-ws-tail {
+  opacity: 0.5;
+}
+
+.gallery-menu-btn.is-open {
+  border-color: var(--accent);
+}
+
+/* The workspace menu: title, search, the workspaces, and its keys. */
+.mp-panel.gallery-ws-panel {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-elev);
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.gallery-ws-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 14px 10px;
+}
+
+.gallery-ws-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.gallery-ws-badge {
+  padding: 0 7px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 11%, transparent);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.gallery-ws-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  margin: 0 12px 8px;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 13%, transparent);
+  border-radius: 8px;
+}
+
+.gallery-ws-search:focus-within {
+  border-color: var(--accent);
+}
+
+.gallery-ws-search .codicon[class*='codicon-'] {
+  font-size: 14px;
+  color: var(--text-faint);
+}
+
+.gallery-ws-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: none;
+  border: 0;
+  outline: none;
+}
+
+.gallery-ws-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(420px, calc(var(--mp-max-h, 520px) - 130px));
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.gallery-ws-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.gallery-ws-row:hover,
+.gallery-ws-row:focus-visible {
+  outline: none;
+  background: var(--bg-elev-2);
+}
+
+.gallery-ws-row.is-selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.gallery-ws-row.is-selected:hover,
+.gallery-ws-row.is-selected:focus-visible {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.gallery-ws-tile {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 11%, transparent);
+  border-radius: 7px;
+}
+
+.gallery-ws-tile .codicon[class*='codicon-'] {
+  font-size: 14px;
+}
+
+.gallery-ws-tile--hue {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #fff;
+  background: hsl(var(--hue) 48% 40%);
+  border-color: transparent;
+}
+
+.gallery-ws-tile--all {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: transparent;
+}
+
+.gallery-ws-tile--all svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+
+.gallery-ws-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.gallery-ws-name,
+.gallery-ws-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-ws-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.gallery-ws-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.gallery-ws-apps {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.gallery-ws-row .codicon[class*='codicon-'].gallery-ws-check {
+  flex: none;
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.gallery-ws-sep {
+  height: 1px;
+  margin: 6px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.gallery-ws-heading {
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.gallery-ws-empty {
+  padding: 14px 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.gallery-ws-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-top: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.gallery-ws-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.gallery-ws-keys kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 4px;
+}
+
+.gallery-ws-keys-sep {
+  width: 1px;
+  height: 12px;
+  margin: 0 4px;
+  background: color-mix(in srgb, var(--text) 14%, transparent);
 }
 
 /* ── Body ───────────────────────────────────────────────────────────────── */
@@ -224,6 +525,19 @@
 }
 
 .gallery-group-count {
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.gallery-group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-group-used {
   color: var(--text-faint);
   font-size: 12px;
   font-weight: 400;

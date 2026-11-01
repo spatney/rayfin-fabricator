@@ -1,4 +1,5 @@
 import type { GalleryApp, GalleryStatus } from '@shared/ipc'
+import type { WorkspaceUse } from '../../fabric'
 
 /** Where the apps shown live: everywhere, on this computer, or only in Fabric. */
 export type GalleryWhere = 'all' | 'local' | 'remote'
@@ -12,6 +13,8 @@ export interface GalleryQuery {
   sort: GallerySort
   /** The pinned apps' keys (`pinKey`): they come first. */
   pinned: readonly string[]
+  /** The workspaces your apps on this computer use, most recent first: grouped by workspace, they come first. */
+  recent?: readonly string[]
 }
 
 /** An app with what Fabric said about its latest publish, once it has, and whether it's pinned. */
@@ -25,6 +28,8 @@ export interface GalleryWorkspace {
   id: string
   name: string
   count: number
+  /** When one of your apps on this computer last used it (ms), when it's one they use. */
+  usedAt?: number
 }
 
 export interface GalleryGroup {
@@ -105,6 +110,18 @@ const ORDER: Record<GallerySort, (a: GalleryEntry, b: GalleryEntry) => number> =
   workspace: (a, b) => collator.compare(a.app.workspaceName, b.app.workspaceName) || byName(a, b)
 }
 
+/** Workspaces in the order of `recent` (ids), then A to Z. */
+function workspaceOrder(recent: readonly string[] = []): (a: GalleryApp, b: GalleryApp) => number {
+  const rank = new Map(recent.map((id, i) => [id, i]))
+  return (a, b) => {
+    const [ra, rb] = [
+      rank.get(a.workspaceId) ?? recent.length,
+      rank.get(b.workspaceId) ?? recent.length
+    ]
+    return ra - rb || collator.compare(a.workspaceName, b.workspaceName)
+  }
+}
+
 /**
  * The apps a query shows: pinned apps first, then the rest. Within each, best
  * matches first when searching, then in the chosen order.
@@ -129,11 +146,12 @@ export function applyQuery(
   }
   // Grouped by workspace, the groups keep their order; relevance ranks within each.
   const order = ORDER[query.sort]
+  const byWorkspace = workspaceOrder(query.recent)
   const relevance = search.length > 0
   scored.sort((a, b) => {
     if (a.entry.pinned !== b.entry.pinned) return a.entry.pinned ? -1 : 1
     if (query.sort === 'workspace') {
-      const ws = collator.compare(a.entry.app.workspaceName, b.entry.app.workspaceName)
+      const ws = byWorkspace(a.entry.app, b.entry.app)
       if (ws) return ws
     }
     return (relevance ? b.score - a.score : 0) || order(a.entry, b.entry)
@@ -150,6 +168,73 @@ export function workspacesOf(apps: readonly GalleryApp[]): GalleryWorkspace[] {
     else all.set(app.workspaceId, { id: app.workspaceId, name: app.workspaceName, count: 1 })
   }
   return [...all.values()].sort((a, b) => collator.compare(a.name, b.name))
+}
+
+/**
+ * The workspaces your apps on this computer use (`uses`: by id, or briefly by
+ * name), most recently used first, and the other workspaces, A to Z.
+ */
+export function rankWorkspaces(
+  workspaces: readonly GalleryWorkspace[],
+  uses: readonly WorkspaceUse[]
+): { recent: GalleryWorkspace[]; others: GalleryWorkspace[] } {
+  const recent: GalleryWorkspace[] = []
+  for (const use of [...uses].sort((a, b) => b.at - a.at)) {
+    const key = use.workspace.trim().toLowerCase()
+    const w = workspaces.find((x) => x.id.toLowerCase() === key || x.name.toLowerCase() === key)
+    if (w && !recent.some((r) => r.id === w.id)) recent.push({ ...w, usedAt: use.at || undefined })
+  }
+  const ids = new Set(recent.map((w) => w.id))
+  return { recent, others: workspaces.filter((w) => !ids.has(w.id)) }
+}
+
+/** A generated tail on a workspace's name: a GUID, or a timestamp and a hash. */
+const GENERATED_TAIL =
+  /^(.+?)([-_](?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{8}-\d{6,}-[0-9a-f]{6,}))$/i
+
+/**
+ * A workspace's name and its generated tail, shown quieter so the name reads
+ * first: `replit-data-dashboard-2e377200-…` → `replit-data-dashboard`, `-2e377200-…`.
+ */
+export function splitWorkspaceName(name: string): [string, string] {
+  const match = GENERATED_TAIL.exec(name)
+  return match ? [match[1], match[2]] : [name, '']
+}
+
+/** A name a tool made: lowercase words joined by hyphens or underscores. */
+const SLUG = /^[a-z0-9]+(?:[-_][a-z0-9]+)+$/
+/** A number or hash a tool added to a slug: `-918529`, `-cd12809e` (not a year like `-2026`). */
+const SLUG_NOISE = /[-_](?:\d{6,}|(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{4,})$/
+/** Words that keep their own capitals in a title. */
+const PROPER: Readonly<Record<string, string>> = {
+  ai: 'AI',
+  api: 'API',
+  azure: 'Azure',
+  bi: 'BI',
+  copilot: 'Copilot',
+  fabric: 'Fabric',
+  github: 'GitHub',
+  kql: 'KQL',
+  microsoft: 'Microsoft',
+  onelake: 'OneLake',
+  rayfin: 'Rayfin',
+  sql: 'SQL'
+}
+
+/**
+ * How a workspace reads in a list. A name a tool made (`replit-data-dashboard-
+ * 2e377200-…`) becomes a title (`Replit data dashboard`), with the name itself
+ * as its detail; any other name stays as it is.
+ */
+export function workspaceTitle(name: string): { title: string; detail?: string } {
+  if (!SLUG.test(name)) return { title: name }
+  let base = splitWorkspaceName(name)[0]
+  while (SLUG_NOISE.test(base)) base = base.replace(SLUG_NOISE, '')
+  const title = base
+    .split(/[-_]/)
+    .map((word, i) => PROPER[word] ?? (i === 0 ? word[0].toUpperCase() + word.slice(1) : word))
+    .join(' ')
+  return { title, detail: name }
 }
 
 /**
