@@ -31,6 +31,8 @@ interface Props {
   refreshKey: number
   onOpenFile: (path: string) => void
   onSendToChat: (display: string, prompt: string, stage?: boolean) => void
+  /** Open Add Fabric data in the chat: what's picked waits in the composer. */
+  onConnectData?: () => void
   onSignedIn?: () => Promise<void> | void
   /** The Fabric account Fabricator deploys with: whose credentials a personal app uses. */
   fabricUser?: string
@@ -209,6 +211,7 @@ export default function BlueprintTab({
   refreshKey,
   onOpenFile,
   onSendToChat,
+  onConnectData,
   onSignedIn,
   fabricUser,
   teamManifest,
@@ -360,6 +363,7 @@ export default function BlueprintTab({
         workspaceName={workspaceName}
         onOpenFile={onOpenFile}
         onSendToChat={onSendToChat}
+        onConnectData={onConnectData}
         onOpenEntity={openEntity}
         onOpenFabricData={openFabricData}
         onOpenSecrets={onOpenSecrets}

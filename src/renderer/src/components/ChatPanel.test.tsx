@@ -1215,6 +1215,50 @@ describe('ChatPanel Fabric data', () => {
     return <ChatPanel project={makeProject('p1')} messages={messages} onChange={(update) => setMessages(update)} draft="" />
   }
 
+  /** The chat API, plus what Add Fabric data reads: two workspaces with nothing in them. */
+  function installDataApi(): ReturnType<typeof installApi> {
+    const api = installApi()
+    const all = api as unknown as Record<string, unknown> & { projects: Record<string, unknown> }
+    Object.assign(all, {
+      deploy: { list: vi.fn(async () => []) },
+      fabric: {
+        listWorkspaces: vi.fn(async () => ({
+          ok: true,
+          workspaces: [
+            { id: 'ws-fin', displayName: 'Finance', capacityKind: 'fabric', eligible: true },
+            { id: 'ws-ops', displayName: 'Ops', capacityKind: 'fabric', eligible: true }
+          ]
+        })),
+        listWorkspaceData: vi.fn(async () => ({ ok: true, items: [] })),
+        projectSemanticModels: vi.fn(async () => [])
+      }
+    })
+    all.projects.files = {
+      ...(all.projects.files as object),
+      read: vi.fn(async () => ({ error: 'not found' }))
+    }
+    return api
+  }
+
+  it('opens Add Fabric data when asked from outside the chat, and sends nothing', async () => {
+    const api = installDataApi()
+    const onOutboundConsumed = vi.fn()
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[]}
+        onChange={vi.fn()}
+        draft=""
+        outbound={{ id: 'connect-1', display: '', prompt: '', connectData: true }}
+        onOutboundConsumed={onOutboundConsumed}
+      />
+    )
+    expect(await screen.findByRole('dialog', { name: 'Add Fabric data' })).toBeTruthy()
+    expect(onOutboundConsumed).toHaveBeenCalledOnce()
+    expect(api.chat.send).not.toHaveBeenCalled()
+    expect((screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement).value).toBe('')
+  })
+
   it('shows picked data as chips and tells only Copilot how to connect it', async () => {
     const api = installApi()
     setPendingData('p1', [
@@ -1278,22 +1322,7 @@ describe('ChatPanel Fabric data', () => {
   })
 
   it('reopens Add Fabric data from a chip with what is picked, and Update changes the chips', async () => {
-    const api = installApi() as unknown as Record<string, unknown> & { projects: Record<string, unknown> }
-    Object.assign(api, {
-      deploy: { list: vi.fn(async () => []) },
-      fabric: {
-        listWorkspaces: vi.fn(async () => ({
-          ok: true,
-          workspaces: [
-            { id: 'ws-fin', displayName: 'Finance', capacityKind: 'fabric', eligible: true },
-            { id: 'ws-ops', displayName: 'Ops', capacityKind: 'fabric', eligible: true }
-          ]
-        })),
-        listWorkspaceData: vi.fn(async () => ({ ok: true, items: [] })),
-        projectSemanticModels: vi.fn(async () => [])
-      }
-    })
-    api.projects.files = { ...(api.projects.files as object), read: vi.fn(async () => ({ error: 'not found' })) }
+    installDataApi()
     setPendingData('p1', [
       { workspaceId: 'ws-fin', workspaceName: 'Finance', item: { id: 'm1', name: 'Sales', type: 'SemanticModel' } },
       { workspaceId: 'ws-ops', workspaceName: 'Ops', item: { id: 'l1', name: 'orders', type: 'Lakehouse' } }

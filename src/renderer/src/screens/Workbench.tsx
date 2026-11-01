@@ -1707,6 +1707,20 @@ export default function Workbench({
       stage
     })
   }, [])
+  /** Blueprint's Add Fabric data: the chat's own picker, whose picks wait in the composer. */
+  const connectModelData = useCallback((): void => {
+    const id = activeIdRef.current
+    if (!id) return
+    setViewMode('build')
+    setFocusPane(null)
+    setChatOutbound({
+      id: `connect-${Date.now()}`,
+      projectId: id,
+      display: '',
+      prompt: '',
+      connectData: true
+    })
+  }, [])
   useEffect(() => {
     const id = projects?.activeProjectId
     if (!id) {
@@ -2910,6 +2924,7 @@ export default function Workbench({
                       onOpenFile={openFileInCode}
                       onOpenSecrets={openSecretsInCode}
                       onSendToChat={sendModelToChat}
+                      onConnectData={connectModelData}
                       onSignedIn={onAuthChanged}
                       fabricUser={auth.rayfin.signedIn ? auth.rayfin.user : undefined}
                       teamManifest={activeTeamWorkspace?.manifest}

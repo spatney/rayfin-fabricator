@@ -1434,7 +1434,9 @@ export default function ChatPanel({
   useEffect(() => {
     if (!outbound || outbound.id === handledOutbound.current) return
     handledOutbound.current = outbound.id
-    if (outbound.design) {
+    if (outbound.connectData) {
+      setConnect({})
+    } else if (outbound.design) {
       // The preview toolbar's Send: the same as pressing Send here.
       if (!sending) void send()
     } else if (sending || outbound.stage) {

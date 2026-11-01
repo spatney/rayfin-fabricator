@@ -210,10 +210,12 @@ function renderTab(
   } = {}
 ): {
   onSendToChat: ReturnType<typeof vi.fn>
+  onConnectData: ReturnType<typeof vi.fn>
   onOpenFile: ReturnType<typeof vi.fn>
   onOpenSecrets: ReturnType<typeof vi.fn>
 } {
   const onSendToChat = vi.fn()
+  const onConnectData = vi.fn()
   const onOpenFile = vi.fn()
   const onOpenSecrets = vi.fn()
   render(
@@ -226,13 +228,14 @@ function renderTab(
         refreshKey={0}
         onOpenFile={onOpenFile}
         onSendToChat={onSendToChat}
+        onConnectData={onConnectData}
         onOpenSecrets={onOpenSecrets}
         fabricUser={'fabricUser' in over ? over.fabricUser : 'avery.chen@contoso.com'}
         teamManifest={over.teamManifest}
       />
     </ToastProvider>
   )
-  return { onSendToChat, onOpenFile, onOpenSecrets }
+  return { onSendToChat, onConnectData, onOpenFile, onOpenSecrets }
 }
 
 const node = (name: string | RegExp): HTMLElement => screen.getByRole('button', { name })
@@ -436,14 +439,18 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
     ).toBe('true')
   })
 
-  it('offers to connect data when the app reaches nothing outside, and has no Fabric connections view', async () => {
+  it('offers to add Fabric data when the app reaches nothing outside, and has no Fabric connections view', async () => {
     installApi({ 'rayfin/rayfin.yml': SIMPLE_YML, 'rayfin/data/schema.ts': SCHEMA })
-    const { onSendToChat } = renderTab({ project: makeProject('p2', { name: 'Team Notes' }) })
+    const { onSendToChat, onConnectData } = renderTab({
+      project: makeProject('p2', { name: 'Team Notes' })
+    })
     await screen.findByText('No outside data yet')
     expect(screen.queryByText('Signs in as')).toBeNull()
     expect(screen.queryByRole('tab', { name: /Fabric connections/ })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Connect data with Copilot' }))
-    expect(onSendToChat).toHaveBeenCalledWith('Connect data from Fabric', expect.stringContaining('rayfin connector add'), true)
+    fireEvent.click(screen.getByRole('button', { name: 'Add Fabric data…' }))
+    // The data picker, not a prompt for Copilot.
+    expect(onConnectData).toHaveBeenCalledOnce()
+    expect(onSendToChat).not.toHaveBeenCalled()
   })
 
   it('remembers the chosen view for the project', async () => {

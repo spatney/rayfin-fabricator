@@ -40,6 +40,12 @@ export interface OutboundPrompt {
    * `display` and `prompt` are ignored.
    */
   design?: boolean
+  /**
+   * Open Add Fabric data on every kind of data instead of sending anything (the
+   * Blueprint's Add Fabric data). What's picked waits in the composer as chips.
+   * `display` and `prompt` are ignored.
+   */
+  connectData?: boolean
   /** Advisor findings this prompt hands to Copilot, shown as the message's card. */
   advisor?: ChatAdvisorSummary
   /**

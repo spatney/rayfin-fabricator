@@ -24,7 +24,7 @@ import {
 } from '../../model/architecture'
 import { Codicon } from '../icons'
 import ArchitectureInspector from './ArchitectureInspector'
-import { connectData, type ChatPrompt } from './prompts'
+import type { ChatPrompt } from './prompts'
 import { loadFabricInfo, type FabricInfo } from './fabricInfo'
 import { appIdentityName, appWorkspaceId, deployState, FabricMark, host, hueOf, IDENTITY_ICON, PORT_LABEL } from './util'
 import './blueprint.css'
@@ -38,6 +38,8 @@ interface Props {
   workspaceName?: string
   onOpenFile: (path: string) => void
   onSendToChat: (display: string, prompt: string, stage?: boolean) => void
+  /** Open Add Fabric data in the chat: what's picked waits in the composer. */
+  onConnectData?: () => void
   /** Show an entity in the Data model view. */
   onOpenEntity: (entity: string) => void
   /** Show a semantic model (`workspaceId:itemId`) or a SQL source's tables in the Fabric connections view. */
@@ -159,6 +161,7 @@ export default function ArchitectureView({
   workspaceName,
   onOpenFile,
   onSendToChat,
+  onConnectData,
   onOpenEntity,
   onOpenFabricData,
   onOpenSecrets
@@ -757,9 +760,15 @@ export default function ArchitectureView({
                       Bring in a Fabric warehouse, SQL database, lakehouse or semantic model, or call Azure
                       services from functions.
                     </span>
-                    <button type="button" className="btn btn--xs btn--ghost" onClick={() => sendPrompt(connectData())}>
-                      Connect data with Copilot
-                    </button>
+                    {onConnectData && (
+                      <button
+                        type="button"
+                        className="btn btn--xs btn--ghost"
+                        onClick={onConnectData}
+                      >
+                        Add Fabric data…
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

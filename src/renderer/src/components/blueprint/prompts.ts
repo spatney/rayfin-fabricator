@@ -85,20 +85,6 @@ export function hardenTables(tables: TableInfo[]): ChatPrompt {
   }
 }
 
-export function connectData(): ChatPrompt {
-  return {
-    display: 'Connect data from Fabric',
-    stage: true,
-    prompt:
-      'Connect this app to existing data in Microsoft Fabric: ' +
-      '<which warehouse, SQL database, lakehouse or semantic model, and what the app should do with it>. ' +
-      'Add it as a connector with `npx rayfin connector add` and choose `auth.type` deliberately: ' +
-      '`delegated` when each person should only see what they can access in Fabric, `application` when ' +
-      'everyone should see the same data through the app. Wire it into the app. ' +
-      NO_DEPLOY
-  }
-}
-
 export function grantAppAccess(who: string, sources: string[]): ChatPrompt {
   return {
     display: 'What access does the app need?',
