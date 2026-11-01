@@ -17,13 +17,13 @@ export const CHAT_PLUGINS: readonly ChatPlugin[] = [
   {
     id: 'fabric-iq',
     name: 'Fabric IQ',
-    description: 'The Power BI reports and semantic models you can open',
+    description: 'Explore the Power BI reports and semantic models you can open.',
     logo: fabricSvg
   },
   {
     id: 'work-iq',
     name: 'Work IQ',
-    description: 'Your Microsoft 365 email, meetings, files, Teams messages and people',
+    description: 'Find your Microsoft 365 email, meetings, files, Teams messages and people.',
     logo: microsoftSvg,
     experiment: 'workIq'
   }

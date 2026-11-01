@@ -83,7 +83,8 @@ describe('PluginsMenu', () => {
     fireEvent.click(fabric)
     expect(onToggle).toHaveBeenLastCalledWith('fabric-iq', true)
     // Switching a plugin leaves the menu open for the next one.
-    expect(screen.getByRole('menu', { name: 'Plugins' })).toBeTruthy()
+    expect(screen.getByRole('menu', { name: 'Plugins & tools' })).toBeTruthy()
+    expect(screen.getByText('0 enabled')).toBeTruthy()
 
     cleanup()
     renderPlugins({ workIq: true })
@@ -95,6 +96,7 @@ describe('PluginsMenu', () => {
   it('names the plugins that are on, which turn off from the menu', () => {
     const { onToggle, onLearnMore } = renderPlugins({ on: ['work-iq', 'fabric-iq'], workIq: true })
     fireEvent.click(screen.getByRole('button', { name: 'Plugins: Fabric IQ, Work IQ' }))
+    expect(screen.getByText('2 enabled')).toBeTruthy()
     const work = screen.getByRole('menuitemcheckbox', { name: /Work IQ/ })
     expect(work.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(work)
@@ -154,20 +156,22 @@ describe('PluginsMenu', () => {
     it('lists your servers under their own heading, each off until turned on in this chat', () => {
       const { onToggle, onManageServers } = renderWithServers(servers, ['mcp:learn', 'fabric-iq'])
       fireEvent.click(screen.getByRole('button', { name: 'Plugins: Fabric IQ, Microsoft Learn' }))
-      const menu = screen.getByRole('menu', { name: 'Plugins' })
+      const menu = screen.getByRole('menu', { name: 'Plugins & tools' })
       expect(menu.textContent).toContain('MCP serversExperiment')
       const charts = within(menu).getByRole('menuitemcheckbox', { name: /Charts/ })
       expect(charts.getAttribute('aria-checked')).toBe('false')
       expect(charts.textContent).toContain('npx -y @antv/mcp-server-chart')
+      expect(charts.textContent).not.toContain('Read-only')
       const learn = within(menu).getByRole('menuitemcheckbox', { name: /Microsoft Learn/ })
       expect(learn.getAttribute('aria-checked')).toBe('true')
-      expect(learn.textContent).toContain('Read-only · learn.microsoft.com/api/mcp')
+      expect(learn.textContent).toContain('Read-only')
+      expect(learn.textContent).toContain('learn.microsoft.com/api/mcp')
       fireEvent.click(charts)
       expect(onToggle).toHaveBeenLastCalledWith('mcp:chart', true)
       fireEvent.click(learn)
       expect(onToggle).toHaveBeenLastCalledWith('mcp:learn', false)
       // Not every plugin only reads any more.
-      expect(menu.textContent).toContain('an MCP server can do whatever its tools do')
+      expect(menu.textContent).toContain('An MCP server can do whatever its tools do.')
       fireEvent.click(within(menu).getByRole('menuitem', { name: 'Manage MCP servers…' }))
       expect(onManageServers).toHaveBeenLastCalledWith(false)
       expect(screen.queryByRole('menu')).toBeNull()
@@ -184,9 +188,9 @@ describe('PluginsMenu', () => {
       renderPlugins({ on: ['mcp:chart'] })
       fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
       expect(screen.queryByText('MCP servers')).toBeNull()
-      expect(screen.getByRole('menu', { name: 'Plugins' }).textContent).toContain(
-        'Plugins only read.'
-      )
+      const menu = screen.getByRole('menu', { name: 'Plugins & tools' })
+      expect(menu.textContent).toContain('Read-only')
+      expect(menu.textContent).not.toContain('An MCP server')
     })
   })
 })

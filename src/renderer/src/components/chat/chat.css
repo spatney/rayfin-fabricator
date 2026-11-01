@@ -2681,34 +2681,196 @@ button.thinking-head:hover {
   }
 }
 
+/* The Plugins panel: what this chat can use, in sections, each with a switch.
+   Flat, like the app's other menus. Its lines are mixed from the text color:
+   the app's border color is the panel's own surface color. */
 .mp-panel.pl-panel {
-  width: 300px;
+  --pl-line: color-mix(in srgb, var(--text) 12%, transparent);
+  width: 340px;
+  gap: 2px;
+  padding: 6px 6px 8px;
+}
+
+.pl-panel .mp-sep {
+  margin: 6px 10px;
+  background: var(--pl-line);
+}
+
+.pl-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px 6px;
+}
+
+.pl-head-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pl-title {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.pl-sub {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.pl-count {
+  flex: none;
+  padding: 1px 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 18px;
+  border: 1px solid var(--pl-line);
+  border-radius: 999px;
+}
+
+.pl-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 4px;
+}
+
+.pl-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pl-section-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.pl-section-note .codicon[class*='codicon-'] {
+  font-size: 13px;
 }
 
 .pl-item {
   align-items: flex-start;
-}
-
-.pl-item .am-icon,
-.pl-item .switch {
-  margin-top: 1px;
+  gap: 10px;
+  padding: 8px 10px;
 }
 
 .pl-item .mp-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
   white-space: normal;
+}
+
+.pl-item .mp-item-desc {
+  font-size: 11.5px;
+}
+
+.pl-item .switch {
+  margin-top: 4px;
+}
+
+.pl-logo {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+}
+
+.pl-logo img {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.pl-logo--tile {
+  color: var(--text-dim);
+  border: 1px solid var(--pl-line);
+  border-radius: 7px;
+}
+
+.pl-logo--tile .codicon[class*='codicon-'] {
+  font-size: 15px;
+}
+
+.pl-badge {
+  padding: 0 7px;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+  border: 1px solid var(--pl-line);
+  border-radius: 999px;
 }
 
 /* An MCP server's command or URL: one line, the rest on hover. */
 .pl-item--mcp .mp-item-desc {
   overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The badge in a heading keeps its own case and spacing. */
-.pl-panel .mp-heading .mp-badge {
-  letter-spacing: normal;
-  text-transform: none;
+.pl-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 4px 10px;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.pl-note .codicon[class*='codicon-'] {
+  flex: none;
+  margin-top: 1px;
+  font-size: 13px;
+}
+
+/* Manage MCP servers: a row of its own, framed like a button. */
+.mp-item.pl-manage {
+  width: auto;
+  margin: 4px 4px 2px;
+  border: 1px solid var(--pl-line);
+}
+
+.pl-manage .mp-item-label {
+  flex: 1;
+}
+
+.pl-manage .codicon[class*='codicon-'] {
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.pl-manage .codicon[class*='codicon-'].pl-manage-caret {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.mp-item.pl-learn,
+.mp-item.pl-learn:hover:not(:disabled),
+.mp-item.pl-learn:focus-visible {
+  color: var(--accent);
+}
+
+.pl-learn .codicon[class*='codicon-'] {
+  font-size: 14px;
 }
 
 /* Fabric data: chips waiting in the composer, and on the message that sent them.

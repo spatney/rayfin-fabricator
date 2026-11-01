@@ -157,8 +157,8 @@ in `.md`.
 | `model-picker` | The chat composer's model picker with **Auto** off and the model list open, including **Your API keys** (sample data) | `/docs/build/chat`, `/docs/build/your-own-api-keys` |
 | `model-providers` | **Accounts → Model providers** with an Anthropic key saved and an OpenAI key being added (sample data) | `/docs/build/your-own-api-keys` |
 | `add-menu` | The chat composer's **+** menu with **Fabric data** open beside it, listing the kinds of data (sample data) | `/docs/build/chat` |
-| `plugins` | The chat composer's **Plugins** menu with **Fabric IQ** on and **Work IQ**, marked **Experiment**, off; the **Plugins** button names Fabric IQ (sample data) | `/docs/build/fabric-iq-and-work-iq` |
-| `mcp-plugins` | The chat composer's **Plugins** menu with **Fabric IQ** on and an **MCP servers** section, marked **Experiment**: **Charts** on, **Microsoft Learn** and **Issue tracker** off, and **Manage MCP servers…** (sample data) | `/docs/build/mcp-servers` |
+| `plugins` | The chat composer's **Plugins & tools** panel, 1 enabled: **Fabric IQ** on and **Work IQ**, marked **Experiment**, off, under **Plugins**, marked **Read-only**; the **Plugins** button names Fabric IQ (sample data) | `/docs/build/fabric-iq-and-work-iq` |
+| `mcp-plugins` | The chat composer's **Plugins & tools** panel, 2 enabled: **Fabric IQ** on, and an **MCP servers** section, marked **Experiment**: **Charts** on, **Microsoft Learn** (**Read-only**) and **Issue tracker** off, and **Manage MCP servers…** (sample data) | `/docs/build/mcp-servers` |
 | `mcp-servers` | **MCP servers** with Microsoft Learn (read-only) and Charts checked, each listing its tools, and an issue tracker that signs in when used (sample data) | `/docs/build/mcp-servers` |
 | `connect-data` | **Add Fabric data** on the Finance analytics workspace: recent workspaces first, three items already connected and two picked (sample data) | `/docs/build/data-model` |
 | `data-chips` | The chat composer with the two items picked in `connect-data` waiting as chips for the next message (sample data) | `/docs/build/data-model` |

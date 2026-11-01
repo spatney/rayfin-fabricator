@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { ChatPluginId, McpServer } from '@shared/ipc'
 import { DATA_KINDS, type DataKind } from '@renderer/fabricData'
@@ -14,7 +14,7 @@ import '../models/modelPicker.css'
 const MAIN_WIDTH = 236
 const FLY_WIDTH = 236
 const GAP = 6
-const PLUGINS_WIDTH = 300
+const PLUGINS_WIDTH = 340
 
 /** What each kind of Fabric data lets the app do, in a word or two. */
 const DATA_HINT: Record<DataKind, string> = {
@@ -282,10 +282,13 @@ export function PluginsMenu({
   // Wider than the narrowest chat pane, so it can reach over the preview.
   useSuppressPreview(open)
 
-  const names = [
+  const onNames = [
     ...plugins.filter((p) => on.includes(p.id)).map((p) => p.name),
     ...(servers ?? []).filter((s) => on.includes(mcpPluginId(s.id))).map((s) => s.name)
-  ].join(', ')
+  ]
+  const names = onNames.join(', ')
+  const enabled = onNames.length
+  const titleId = useId()
 
   useEffect(() => {
     if (!open) return
@@ -367,11 +370,25 @@ export function PluginsMenu({
               ref={panelRef}
               className="mp-panel pl-panel"
               role="menu"
-              aria-label="Plugins"
+              aria-labelledby={titleId}
               onKeyDown={(event) => moveMenuFocus(event, '[role^="menuitem"]')}
             >
-              <div className="mp-heading" aria-hidden="true">
-                Plugins
+              <div className="pl-head">
+                <div className="pl-head-text">
+                  <span className="pl-title" id={titleId}>
+                    Plugins &amp; tools
+                  </span>
+                  <span className="pl-sub">Choose what this chat can use.</span>
+                </div>
+                <span className="pl-count">{enabled} enabled</span>
+              </div>
+
+              <div className="pl-section" aria-hidden="true">
+                <span className="pl-section-title">Plugins</span>
+                <span className="pl-section-note">
+                  <Codicon name="workspace-trusted" />
+                  Read-only
+                </span>
               </div>
               {plugins.map((p) => {
                 const isOn = on.includes(p.id)
@@ -384,13 +401,13 @@ export function PluginsMenu({
                     className="mp-item pl-item"
                     onClick={() => onToggle(p.id, !isOn)}
                   >
-                    <img src={p.logo} alt="" draggable={false} className="am-icon" />
+                    <span className="pl-logo" aria-hidden="true">
+                      <img src={p.logo} alt="" draggable={false} />
+                    </span>
                     <span className="mp-item-text">
                       <span className="mp-item-label">
                         {p.name}
-                        {p.experiment && (
-                          <span className="mp-badge mp-badge--inline">Experiment</span>
-                        )}
+                        {p.experiment && <span className="pl-badge">Experiment</span>}
                       </span>
                       <span className="mp-item-desc">{p.description}</span>
                     </span>
@@ -403,12 +420,15 @@ export function PluginsMenu({
                   </button>
                 )
               })}
+
               {servers && (
                 <>
                   <div className="mp-sep" role="separator" />
-                  <div className="mp-heading" aria-hidden="true">
-                    MCP servers
-                    <span className="mp-badge mp-badge--inline">Experiment</span>
+                  <div className="pl-section" aria-hidden="true">
+                    <span className="pl-section-title">
+                      MCP servers
+                      <span className="pl-badge">Experiment</span>
+                    </span>
                   </div>
                   {servers.map((s) => {
                     const id = mcpPluginId(s.id)
@@ -424,15 +444,15 @@ export function PluginsMenu({
                         title={summary}
                         onClick={() => onToggle(id, !isOn)}
                       >
-                        <Codicon
-                          name={s.transport === 'stdio' ? 'terminal' : 'globe'}
-                          className="am-icon"
-                        />
+                        <span className="pl-logo pl-logo--tile" aria-hidden="true">
+                          <Codicon name={s.transport === 'stdio' ? 'terminal' : 'globe'} />
+                        </span>
                         <span className="mp-item-text">
-                          <span className="mp-item-label">{s.name}</span>
-                          <span className="mp-item-desc">
-                            {s.readOnly ? `Read-only · ${summary}` : summary}
+                          <span className="mp-item-label">
+                            {s.name}
+                            {s.readOnly && <span className="pl-badge">Read-only</span>}
                           </span>
+                          <span className="mp-item-desc">{summary}</span>
                         </span>
                         <span
                           className={`switch switch--sm${isOn ? ' switch--on' : ''}`}
@@ -443,48 +463,50 @@ export function PluginsMenu({
                       </button>
                     )
                   })}
+                  {servers.length > 0 && (
+                    <p className="pl-note">
+                      <Codicon name="info" />
+                      An MCP server can do whatever its tools do.
+                    </p>
+                  )}
                   {onManageServers && (
                     <button
                       type="button"
                       role="menuitem"
-                      className="mp-item mp-quiet"
+                      className="mp-item pl-manage"
                       onClick={() => {
                         closeMenu(false)
                         onManageServers(servers.length === 0)
                       }}
                     >
-                      <Codicon
-                        name={servers.length ? 'settings-gear' : 'add'}
-                        className="am-icon"
-                      />
-                      <span className="mp-item-label am-label">
+                      <Codicon name={servers.length ? 'settings-gear' : 'add'} />
+                      <span className="mp-item-label">
                         {servers.length ? 'Manage MCP servers…' : 'Add an MCP server…'}
                       </span>
+                      <Codicon name="chevron-right" className="pl-manage-caret" />
                     </button>
                   )}
                 </>
               )}
-              <p className="mp-note">
-                {servers
-                  ? 'Chat uses a plugin only when a request needs it. Fabric IQ and Work IQ only read; an MCP server can do whatever its tools do.'
-                  : 'Chat looks things up with a plugin only when a request needs it. Plugins only read.'}
+
+              <div className="mp-sep" role="separator" />
+              <p className="pl-note">
+                <Codicon name="info" />
+                Chat uses these only when a request needs them.
               </p>
               {onLearnMore && (
-                <>
-                  <div className="mp-sep" role="separator" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="mp-item mp-quiet"
-                    onClick={() => {
-                      closeMenu(false)
-                      onLearnMore()
-                    }}
-                  >
-                    <Codicon name="book" className="am-icon" />
-                    <span className="mp-item-label am-label">Learn about plugins</span>
-                  </button>
-                </>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="mp-item pl-learn"
+                  onClick={() => {
+                    closeMenu(false)
+                    onLearnMore()
+                  }}
+                >
+                  <Codicon name="book" />
+                  <span className="mp-item-label">Learn about plugins</span>
+                </button>
               )}
             </div>
           </div>,
