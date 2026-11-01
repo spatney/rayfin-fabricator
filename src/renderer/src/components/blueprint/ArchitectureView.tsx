@@ -40,7 +40,7 @@ interface Props {
   onSendToChat: (display: string, prompt: string, stage?: boolean) => void
   /** Show an entity in the Data model view. */
   onOpenEntity: (entity: string) => void
-  /** Show a semantic model (`workspaceId:itemId`) or a SQL source's tables in the Fabric data view. */
+  /** Show a semantic model (`workspaceId:itemId`) or a SQL source's tables in the Fabric connections view. */
   onOpenFabricData: (key: string) => void
   /** Open Code → Secrets. */
   onOpenSecrets?: () => void

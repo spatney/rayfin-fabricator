@@ -839,7 +839,7 @@ export default function SemanticModelView({
   const sourceBar =
     sources.length > 1 ? (
       <div className="semantic-sources">
-        <div className="seg semantic-seg" role="group" aria-label="Fabric data">
+        <div className="seg semantic-seg" role="group" aria-label="Fabric connections">
           {sources.map((s) => (
             <button
               key={s.key}
@@ -862,7 +862,8 @@ export default function SemanticModelView({
     </div>
   )
 
-  if (!selected) return frame(<div className="semantic-empty">There’s no Fabric data to draw.</div>)
+  if (!selected)
+    return frame(<div className="semantic-empty">There are no Fabric connections to draw.</div>)
 
   if (sqlSource && !sqlSource.tables.length) {
     const discovered = shortDate(sqlSource.discoveredAt)
@@ -1034,7 +1035,7 @@ export default function SemanticModelView({
   return (
     <div className="semantic-view">
       <ViewHead
-        title="Fabric data"
+        title="Fabric connections"
         subtitle={
           <>
             {sources.length === 1 && `${selected.label} · `}

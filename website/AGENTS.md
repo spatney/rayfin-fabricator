@@ -174,7 +174,7 @@ in `.md`.
 | `model` | Blueprint's Data model view with the entity diagram | `/docs/build/data-model` |
 | `model-relations` | Blueprint's Data model view with four related entities and a join entity (sample data) | `/docs/build/data-model` |
 | `model-access` | The same Data model view with one entity left without a permission decorator: its amber access dot and **Harden** (sample data) | `/docs/build/data-model` |
-| `local-data` | Blueprint's **Data** view of the sample app's local data (sample data) | `/docs/build/data-model` |
+| `local-data` | Blueprint's **Data explorer** of the sample app's local data (sample data) | `/docs/build/data-model` |
 | `skills` | The Skills view | `/docs/build/skills` |
 | `secrets` | The Secrets view: **Local value** and **Published value**, and a secret selected (sample data) | `/docs/build/secrets` |
 | `deployments` | The publish control's panel, open on the sample app's published app, with **Publish after each chat turn** off (sample data) | `/docs/ship/deploy` |

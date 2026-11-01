@@ -66,7 +66,7 @@ interface Props {
   onOpenFile: (path: string) => void
   onPrompt: (prompt: ChatPrompt) => void
   onOpenEntity: (entity: string) => void
-  /** Show a semantic model (`workspaceId:itemId`) or a SQL source's tables in the Fabric data view. */
+  /** Show a semantic model (`workspaceId:itemId`) or a SQL source's tables in the Fabric connections view. */
   onOpenFabricData: (key: string) => void
   /** Open Code → Secrets, where values are added and changed. */
   onOpenSecrets?: () => void

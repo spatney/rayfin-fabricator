@@ -29,7 +29,7 @@ const KIND_ICON: Record<PreviewKind, string> = {
   none: 'file'
 }
 
-/** A storage folder as the Data view names it: by its `@blob` class, else by its own name. */
+/** A storage folder as the Data explorer names it: by its `@blob` class, else by its own name. */
 export function folderLabel(folder: LocalStorageFolder): string {
   return folder.displayName ?? folder.name
 }
@@ -43,7 +43,7 @@ function ownerOf(file: LocalFile, users: LocalUser[] | null): string | null {
 /**
  * A storage folder's files, whatever its rules: a page of them in path order,
  * with their type, size, owner and last change; a preview of the one opened;
- * and deleting one file or clearing the folder (which the Data view confirms).
+ * and deleting one file or clearing the folder (which the Data explorer confirms).
  */
 export function FilesPane({
   projectId,

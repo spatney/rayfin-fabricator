@@ -1,7 +1,7 @@
 import type { LocalColumn, LocalFile } from '@shared/ipc'
 import type { DataModel } from '../../model/parseSchema'
 
-/** Rows the Data view reads at a time (the control API allows up to 500). */
+/** Rows the Data explorer reads at a time (the control API allows up to 500). */
 export const PAGE_SIZE = 50
 
 /** The first row of the last page of `total` rows (or files). */
@@ -59,7 +59,7 @@ function json(value: unknown): CellView {
 }
 
 /**
- * A value as the Data view shows it, by its column's type and its own:
+ * A value as the Data explorer shows it, by its column's type and its own:
  * `null` and empty text faintly, booleans and numbers as such, dates in local
  * time, objects as JSON, ids in a monospace font, and text clipped (CSS
  * truncates it further).

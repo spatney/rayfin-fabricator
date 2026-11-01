@@ -1,7 +1,7 @@
 /* Blueprint tab: how the app is put together. One header row holds the view
-   switcher (Architecture / Data model / Data / Fabric data) and the active
-   view's summary; the Data model and Fabric data views keep their own .model-*
-   styles, and the Data view's rows are .bp-data-*.
+   switcher (Architecture / Data model / Fabric connections / Data explorer) and the active
+   view's summary; the Data model and Fabric connections views keep their own .model-*
+   styles, and the Data explorer's rows are .bp-data-*.
    Flat, like the workspace overview: solid surfaces, neutral 1px borders,
    dashed outlines for the places things live, and color only for the
    identity a connection signs in as. The toolbar reuses .model-toolbar. */
@@ -1334,7 +1334,7 @@
   font-size: 13px;
 }
 
-/* ── Data view: the app's local data ───────────────────────────────────── */
+/* ── Data explorer: the app's local data ───────────────────────────────────── */
 
 .bp-data {
   display: flex;

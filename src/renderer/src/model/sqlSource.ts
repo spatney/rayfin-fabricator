@@ -1,6 +1,6 @@
 /**
  * The tables behind a Rayfin SQL connector (a SQL database, warehouse or
- * lakehouse SQL endpoint), for the Blueprint tab's Fabric data view. Read from
+ * lakehouse SQL endpoint), for the Blueprint tab's Fabric connections view. Read from
  * the project's files, so no sign-in or query is needed:
  *
  *  - `rayfin/connectors/<name>/metadata.json`, which `rayfin connector add`

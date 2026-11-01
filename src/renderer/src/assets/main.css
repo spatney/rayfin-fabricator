@@ -186,7 +186,7 @@ code {
 
 .app-shell {
   display: grid;
-  /* Never wider than the window: wide content, such as a Data view table, scrolls
+  /* Never wider than the window: wide content, such as a Data explorer table, scrolls
      in its own pane instead of stretching the shell and pushing the app bar away. */
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;

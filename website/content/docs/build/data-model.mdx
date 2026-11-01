@@ -3,7 +3,7 @@ title: "Blueprint: architecture and data models"
 description: "Use Blueprint to see what your app is made of, what it connects to and which identity each connection uses, its Rayfin data model, the Fabric data it reads, and its local data."
 ---
 
-Use **Blueprint** to see how your app is put together. The **Architecture** view shows what the app is made of, what it connects to, and which identity each connection uses. The **Data model** view shows the Rayfin data model, and the **Fabric data** view shows the Fabric data the app connects to: its semantic models, and the tables of its SQL databases, warehouses and lakehouses. The **Data** view shows the data your app stores on this computer.
+Use **Blueprint** to see how your app is put together. The **Architecture** view shows what the app is made of, what it connects to, and which identity each connection uses. The **Data model** view shows the Rayfin data model, and the **Fabric connections** view shows the Fabric data the app connects to: its semantic models, and the tables of its SQL databases, warehouses and lakehouses. The **Data explorer** shows the data your app stores on this computer.
 
 ![The Architecture view of the Contoso Expenses sample app. People on the left connect to the app in the middle, which lists its app identity and its pieces: Website, Sign-in, Database, File storage, Connectors, Functions and Secrets. Lines run from the Connectors and Functions ports to the semantic models, warehouse, Azure services and web API on the right, grouped by where they live.](/screenshots/blueprint.webp)
 
@@ -11,7 +11,7 @@ Use **Blueprint** to see how your app is put together. The **Architecture** view
 
 1. Open a project.
 2. Select **Blueprint** in the project tabs.
-3. Choose **Architecture**, **Data model**, **Data** or **Fabric data**. **Fabric data** appears when the app connects to a semantic model, SQL database, warehouse or lakehouse.
+3. Choose **Architecture**, **Data model**, **Fabric connections** or **Data explorer**. **Fabric connections** appears when the app connects to a semantic model, SQL database, warehouse or lakehouse.
 
 Fabricator remembers the view you chose for the project.
 
@@ -85,8 +85,8 @@ Depending on what you select, the details can include:
 - **Use user’s identity** or **Use app identity**, to ask Copilot to change a connector's `auth.type`.
 - **Fix with Copilot**, when a connector's `auth.type` or the functions' `services.functions.auth.type` would stop the app from publishing.
 - **Use app identity** on a web API that Rayfin can also reach with the app identity, so the functions don't need a key for it.
-- **View the model**, which opens a semantic model in the **Fabric data** view.
-- **View the tables**, which opens a SQL database, warehouse or lakehouse in the **Fabric data** view.
+- **View the model**, which opens a semantic model in the **Fabric connections** view.
+- **View the tables**, which opens a SQL database, warehouse or lakehouse in the **Fabric connections** view.
 - **Open in Fabric**, which opens a source or its workspace in the Fabric portal.
 - **Harden access** and **Open the data model** on **Database**.
 
@@ -156,13 +156,13 @@ Add Project and Task entities. A project has many tasks. Tasks have a title, due
 
 ## See your app's local data
 
-Your app runs on this computer with its own data. The **Data** view shows that data as the app's local backend stores it. You can't edit rows or files there, but you can delete them: see [Clear or reset local data](/docs/build/data-model#clear-or-reset-local-data). For how the app runs on this computer, see [Develop on this computer](/docs/build/local-development).
+Your app runs on this computer with its own data. The **Data explorer** shows that data as the app's local backend stores it. You can't edit rows or files there, but you can delete them: see [Clear or reset local data](/docs/build/data-model#clear-or-reset-local-data). For how the app runs on this computer, see [Develop on this computer](/docs/build/local-development).
 
-![Blueprint's Data view of the sample app's local data: 4 entities · 24 rows and the running local backend in the header, the note that local data is separate from the published app's, the Expense entity's 12 rows with each column's name and type, the other entities and Local users with their counts, and Refresh, Reset local data and Clear rows.](/screenshots/local-data.webp)
+![Blueprint's Data explorer with the sample app's local data: 4 entities · 24 rows and the running local backend in the header, the note that local data is separate from the published app's, the Expense entity's 12 rows with each column's name and type, the other entities and Local users with their counts, and Refresh, Reset local data and Clear rows.](/screenshots/local-data.webp)
 
 1. Open a project.
 2. Select **Blueprint** in the project tabs.
-3. Select **Data**.
+3. Select **Data explorer**.
 
 The header counts the entities and rows, such as **4 entities · 37 rows**, and shows the local backend's state. A note under it says where the data is: "Local data on this computer. Publishing doesn’t copy it to Fabric." Once the app is published, it says "Local data on this computer, separate from the published app’s data."
 
@@ -184,11 +184,11 @@ A folder the app no longer has is marked **Not in the app**. Its files stay unti
 
 Select **Refresh** to read the data again. The view also reads it again after each chat turn, and whenever the local backend rebuilds the app. If the local backend isn't running, the view says so and offers **Start**.
 
-When this computer can't run a published app, its preview uses the published app's backend, and the **Data** view says it shows only the local data. For a team app, the view says its data lives in Fabric.
+When this computer can't run a published app, its preview uses the published app's backend, and the **Data explorer** says it shows only the local data. For a team app, the view says its data lives in Fabric.
 
 ## Clear or reset local data
 
-The **Data** view can delete local data. Each action asks you to confirm, and can't be undone. None of them touches your published app's data.
+The **Data explorer** can delete local data. Each action asks you to confirm, and can't be undone. None of them touches your published app's data.
 
 - **Clear rows**, above an entity's rows, deletes all of that entity's rows. Other entities, the local users and stored files stay. If rows of another entity still refer to them, Fabricator says which entity to clear first, for example "Rows of ExpenseTag still refer to these rows, so they can’t be cleared on their own. Clear ExpenseTag first, or reset all local data."
 - **Delete**, beside a local user, deletes the user and signs them out of the app on this computer.
@@ -200,11 +200,11 @@ When the data model changes in a way that would delete local data, Fabricator as
 
 ## View the Fabric data the app connects to
 
-The **Fabric data** view draws each source the app reads from Microsoft Fabric: its semantic models, and the tables of its SQL databases, warehouses and lakehouses. When the app connects to more than one, choose a source above the diagram. Each one shows its name and its kind, such as **Warehouse**.
+The **Fabric connections** view draws each source the app reads from Microsoft Fabric: its semantic models, and the tables of its SQL databases, warehouses and lakehouses. When the app connects to more than one, choose a source above the diagram. Each one shows its name and its kind, such as **Warehouse**.
 
 ## View a semantic model
 
-When the app uses semantic models, from `fabric.yaml` or a semantic model connector, the **Fabric data** view reads them live from Fabric and draws a diagram of:
+When the app uses semantic models, from `fabric.yaml` or a semantic model connector, the **Fabric connections** view reads them live from Fabric and draws a diagram of:
 
 - Tables.
 - Columns and data types.
@@ -219,7 +219,7 @@ Learn about Rayfin semantic model connectors in the [Rayfin semantic models docs
 
 ## View the tables of a SQL database, warehouse or lakehouse
 
-For a SQL database, warehouse or lakehouse connector, the **Fabric data** view draws the source's tables from the app's files, so it doesn't need to sign in to Fabric. Each table card shows:
+For a SQL database, warehouse or lakehouse connector, the **Fabric connections** view draws the source's tables from the app's files, so it doesn't need to sign in to Fabric. Each table card shows:
 
 - Each column and its SQL type, such as `nvarchar(30)` or `decimal(8,2)`.
 - A key on each primary key column, and a link on each foreign key column.
@@ -289,4 +289,4 @@ Reading a semantic model schema can also require sign-in:
 - **Sign in to Fabric** appears when the Fabric session is missing.
 - **Sign in to Azure** appears when the schema query needs an Azure CLI session.
 
-If the schema cannot be read, the **Fabric data** view shows "Couldn’t read the semantic model" and offers **Try again**. You can still choose the app's other sources above the message. SQL databases, warehouses and lakehouses don't need sign-in, because Fabricator reads their tables from the app's files. For publishing and Fabric authentication recovery, see [Publishing troubleshooting](/docs/troubleshooting/deploy).
+If the schema cannot be read, the **Fabric connections** view shows "Couldn’t read the semantic model" and offers **Try again**. You can still choose the app's other sources above the message. SQL databases, warehouses and lakehouses don't need sign-in, because Fabricator reads their tables from the app's files. For publishing and Fabric authentication recovery, see [Publishing troubleshooting](/docs/troubleshooting/deploy).

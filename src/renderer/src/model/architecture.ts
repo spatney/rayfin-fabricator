@@ -450,7 +450,7 @@ export const SQL_CONNECTOR_TYPES: ReadonlySet<string> = new Set([
   'fabric-sqlanalytics'
 ])
 
-/** How the Fabric data view names a SQL connector's tables. */
+/** How the Fabric connections view names a SQL connector's tables. */
 export const sqlSourceKey = (connectorName: string): string => `sql:${connectorName}`
 
 export interface AudienceKind {
@@ -575,9 +575,9 @@ export interface SourceNode {
   functions: string[]
   /** Where it's declared, for "Open" actions. */
   files: string[]
-  /** `workspaceId:itemId` (lowercase) when the Fabric data view can draw the semantic model. */
+  /** `workspaceId:itemId` (lowercase) when the Fabric connections view can draw the semantic model. */
   semanticKey?: string
-  /** {@link sqlSourceKey} when the Fabric data view can draw its tables. */
+  /** {@link sqlSourceKey} when the Fabric connections view can draw its tables. */
   tablesKey?: string
   issues: Issue[]
 }
@@ -630,9 +630,9 @@ export interface AppArchitecture {
     /** Every secret, declared in rayfin.yml or read by the code, by name. */
     secrets: SecretEntry[]
   }
-  /** Semantic models the Fabric data view can draw (fabric.yaml + connectors). */
+  /** Semantic models the Fabric connections view can draw (fabric.yaml + connectors). */
   semanticModels: SemanticModelRef[]
-  /** SQL connectors whose tables the Fabric data view draws, in rayfin.yml order. */
+  /** SQL connectors whose tables the Fabric connections view draws, in rayfin.yml order. */
   sqlConnectors: ConnectorConfig[]
 }
 

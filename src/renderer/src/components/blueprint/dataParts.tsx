@@ -2,7 +2,7 @@ import type { JSX } from 'react'
 import { Codicon } from '../icons'
 import { PAGE_SIZE } from './localData'
 
-/** The Data view's empty state: an icon, what's missing, and how it fills. */
+/** The Data explorer's empty state: an icon, what's missing, and how it fills. */
 export function Empty({
   icon,
   title,

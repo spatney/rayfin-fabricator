@@ -82,7 +82,7 @@ const SIGN_IN_LABEL: Record<string, string> = {
 }
 
 /**
- * Blueprint's Data view: the app's local data, as its local backend
+ * Blueprint's Data explorer: the app's local data, as its local backend
  * (rayfin-local) stores it on this computer. The entities with their row
  * counts, the storage folders with their files, and the local users; a page of
  * the selected entity's rows, read-only and sortable, or of the selected
@@ -98,8 +98,8 @@ export default function DataView({ project, refreshKey, dataModel }: Props): JSX
       'preview',
       'local.data_view_opened',
       team
-        ? 'Opened the Data view of a team app, which has no local data.'
-        : 'Opened the Data view of the app’s local data.',
+        ? 'Opened the Data explorer of a team app, which has no local data.'
+        : 'Opened the Data explorer of the app’s local data.',
       { projectId: project.id }
     )
   }, [project.id, team])
@@ -107,11 +107,11 @@ export default function DataView({ project, refreshKey, dataModel }: Props): JSX
   if (team) {
     return (
       <div className="bp-data">
-        <ViewHead title="Data" subtitle="Local data only" />
+        <ViewHead title="Data explorer" subtitle="Local data only" />
         <Empty
           icon="cloud"
           title="Local data only"
-          sub="The Data view shows data stored on this computer. This team app runs on its Fabric deployment, so its data lives in Fabric."
+          sub="The Data explorer shows data stored on this computer. This team app runs on its Fabric deployment, so its data lives in Fabric."
         />
       </div>
     )
@@ -119,7 +119,7 @@ export default function DataView({ project, refreshKey, dataModel }: Props): JSX
   if (!window.api?.local) {
     return (
       <div className="bp-data">
-        <ViewHead title="Data" subtitle="Local data" />
+        <ViewHead title="Data explorer" subtitle="Local data" />
         <Problem
           title="Couldn’t reach the local backend"
           error={{ message: 'This version of Fabricator can’t read local data.' }}
@@ -321,7 +321,7 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
   const totalRows = entities.reduce((sum, e) => sum + e.rows, 0)
   const head = (
     <ViewHead
-      title="Data"
+      title="Data explorer"
       subtitle={
         overview
           ? `${plural(entities.length, 'entity', 'entities')} · ${plural(totalRows, 'row')}`
@@ -509,7 +509,7 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
       {fallback && (
         <div className="bp-data-notice" role="note">
           <Codicon name="info" />
-          <span>{fallback} The Data view shows local data only.</span>
+          <span>{fallback} The Data explorer shows local data only.</span>
         </div>
       )}
       {unread && (

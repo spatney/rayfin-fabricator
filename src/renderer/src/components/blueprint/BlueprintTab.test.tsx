@@ -11,8 +11,8 @@ import { clearFabricInfo } from './fabricInfo'
  * connects to, and who each connection signs in as. These tests feed it a
  * project's files through a mocked `window.api` and protect what people rely on:
  * the identities and whose credentials the app uses, the details panel and its
- * Copilot hand-offs, and moving between the Architecture, Data model, Data and
- * Fabric data views.
+ * Copilot hand-offs, and moving between the Architecture, Data model, Fabric
+ * connections and Data explorer views.
  */
 
 const WS = '5d1c2a9e-1b7f-4c3d-9e21-8a64f0c2b7d1'
@@ -397,18 +397,27 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
     expect(localStorage.getItem('rayfin.model.view.p1')).toBe('data')
   })
 
-  it('jumps from a warehouse to its tables in the Fabric data view', async () => {
+  it('jumps from a warehouse to its tables in the Fabric connections view', async () => {
     const { onOpenFile } = renderTab()
     await screen.findByText('Contoso Expenses')
+    // The Data explorer comes last, after the views of what the app is made of and connects to.
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.replace(/\d+$/, ''))).toEqual([
+      'Architecture',
+      'Data model',
+      'Fabric connections',
+      'Data explorer'
+    ])
     // One tab for every source the app connects to: the semantic model and the warehouse.
-    expect(screen.getByRole('tab', { name: /Fabric data/ }).textContent).toContain('2')
+    expect(screen.getByRole('tab', { name: /Fabric connections/ }).textContent).toContain('2')
     fireEvent.click(node('Finance warehouse, Warehouse'))
     const panel = screen.getByRole('complementary', { name: 'Finance warehouse details' })
     fireEvent.click(within(panel).getByRole('button', { name: 'View the tables' }))
 
     // The tables the app uses, read from the project: no Fabric query.
     await screen.findByText('ledger')
-    expect(screen.getByRole('tab', { name: /Fabric data/ }).getAttribute('aria-selected')).toBe('true')
+    expect(
+      screen.getByRole('tab', { name: /Fabric connections/ }).getAttribute('aria-selected')
+    ).toBe('true')
     expect(localStorage.getItem('rayfin.model.view.p1')).toBe('fabric')
     expect(screen.getByRole('button', { name: 'Finance warehouse Warehouse' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByText('accounts')).toBeNull()
@@ -418,19 +427,21 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
     expect(onOpenFile).toHaveBeenCalledWith(`${WAREHOUSE_DIR}/Ledger.ts`)
   })
 
-  it('opens the Fabric data view for a project that remembered the Semantic model view', async () => {
+  it('opens the Fabric connections view for a project that remembered the Semantic model view', async () => {
     localStorage.setItem('rayfin.model.view.p1', 'semantic')
     renderTab()
     await screen.findByText('Couldn’t read the semantic model')
-    expect(screen.getByRole('tab', { name: /Fabric data/ }).getAttribute('aria-selected')).toBe('true')
+    expect(
+      screen.getByRole('tab', { name: /Fabric connections/ }).getAttribute('aria-selected')
+    ).toBe('true')
   })
 
-  it('offers to connect data when the app reaches nothing outside, and has no Fabric data view', async () => {
+  it('offers to connect data when the app reaches nothing outside, and has no Fabric connections view', async () => {
     installApi({ 'rayfin/rayfin.yml': SIMPLE_YML, 'rayfin/data/schema.ts': SCHEMA })
     const { onSendToChat } = renderTab({ project: makeProject('p2', { name: 'Team Notes' }) })
     await screen.findByText('No outside data yet')
     expect(screen.queryByText('Signs in as')).toBeNull()
-    expect(screen.queryByRole('tab', { name: /Fabric data/ })).toBeNull()
+    expect(screen.queryByRole('tab', { name: /Fabric connections/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Connect data with Copilot' }))
     expect(onSendToChat).toHaveBeenCalledWith('Connect data from Fabric', expect.stringContaining('rayfin connector add'), true)
   })
@@ -445,7 +456,7 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
     await screen.findByText('Contoso Expenses')
   })
 
-  it('shows the app’s local data in the Data view, with its summary in the header', async () => {
+  it('shows the app’s local data in the Data explorer, with its summary in the header', async () => {
     const running = {
       projectId: 'p1',
       state: 'running',
@@ -476,7 +487,7 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
       }
     })
     renderTab()
-    fireEvent.click(screen.getByRole('tab', { name: 'Data' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Data explorer' }))
     expect(await screen.findByRole('button', { name: 'Expense, 1 row' })).toBeTruthy()
     expect(localStorage.getItem('rayfin.model.view.p1')).toBe('local-data')
     expect(document.querySelector('.bp-head-slot')!.textContent).toContain('1 entity · 1 row')

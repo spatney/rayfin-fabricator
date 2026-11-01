@@ -40,7 +40,7 @@ A few things don't run on this computer:
 - **KQL database (Kusto) connectors.** Until the app is published, its calls to them fail in the preview.
 - **Rayfin releases outside the line Fabricator runs**, such as 1.36.x. An app on another release can misbehave here. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
 
-When a published app needs one of these, its preview uses the published app's backend instead, and says why, for example "The logs connector runs only on Fabric, so the preview uses your published app’s backend." The preview then runs your app's frontend on this computer against the published backend, so changes to data, permissions or functions reach that backend when you publish. While **Publish after each chat turn** is on, it does that only during chat turns, and shows your published app the rest of the time. There's no **Local** and **Published** switch, and the **Data** view still shows only the local data. After a chat turn that changes the app's packages or `rayfin/rayfin.yml`, Fabricator checks again whether this computer can run it. An app that was never published has no published backend to use, so it runs on this computer anyway. See [The preview uses your published app's backend](/docs/troubleshooting/preview#the-preview-uses-your-published-apps-backend).
+When a published app needs one of these, its preview uses the published app's backend instead, and says why, for example "The logs connector runs only on Fabric, so the preview uses your published app’s backend." The preview then runs your app's frontend on this computer against the published backend, so changes to data, permissions or functions reach that backend when you publish. While **Publish after each chat turn** is on, it does that only during chat turns, and shows your published app the rest of the time. There's no **Local** and **Published** switch, and the **Data explorer** still shows only the local data. After a chat turn that changes the app's packages or `rayfin/rayfin.yml`, Fabricator checks again whether this computer can run it. An app that was never published has no published backend to use, so it runs on this computer anyway. See [The preview uses your published app's backend](/docs/troubleshooting/preview#the-preview-uses-your-published-apps-backend).
 
 Some things work on this computer but can fail once the app is published:
 
@@ -61,7 +61,7 @@ After each chat turn that changes your app, Fabricator saves a version in **Code
 
 ## See and clear local data
 
-Blueprint's **Data** view shows the rows of each entity and the app's local users, as the local backend stores them. You can't edit rows there, but you can clear an entity's rows, delete a local user, or reset all of the app's local data. See [See your app's local data](/docs/build/data-model#see-your-apps-local-data).
+Blueprint's **Data explorer** shows the rows of each entity, the files the app stored and the app's local users, as the local backend stores them. You can't edit rows or files there, but you can clear an entity's rows, delete stored files or a local user, or reset all of the app's local data. See [See your app's local data](/docs/build/data-model#see-your-apps-local-data).
 
 ## Set secret values for this computer
 
@@ -120,4 +120,4 @@ Each app keeps its local state in a `.rayfin-local` folder in its project folder
 - The local backend's signing keys.
 - The local values of its secrets.
 
-The folder has its own `.gitignore`, so git ignores it: it isn't in **History**, and it doesn't go to GitHub with the app. The Advisor flags **Local backend folder isn't git-ignored** if git could commit it. Copilot, Help and the Advisor's deep review don't open the folder. To see or clear the data, use the **Data** view. See [Files and folders](/docs/reference/files).
+The folder has its own `.gitignore`, so git ignores it: it isn't in **History**, and it doesn't go to GitHub with the app. The Advisor flags **Local backend folder isn't git-ignored** if git could commit it. Copilot, Help and the Advisor's deep review don't open the folder. To see or clear the data, use the **Data explorer**. See [Files and folders](/docs/reference/files).

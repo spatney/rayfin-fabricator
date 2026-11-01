@@ -17,7 +17,7 @@ import { LocalBackendError, localBackendStore } from '../../localBackend'
 import DataView from './DataView'
 
 /**
- * The Data view shows an app's local data through `window.api.local`: its
+ * The Data explorer shows an app's local data through `window.api.local`: its
  * entities and rows, typed and paged, and its local users; it clears and resets
  * that data only after saying what goes; and it says why it can't show any when
  * the backend isn't running, can't be read, or the app's data lives in Fabric.
@@ -612,7 +612,7 @@ describe('DataView', () => {
     expect(screen.getByText('Local data only', { selector: '.model-empty-title' })).toBeTruthy()
     expect(
       screen.getByText(
-        'The Data view shows data stored on this computer. This team app runs on its Fabric deployment, so its data lives in Fabric.'
+        'The Data explorer shows data stored on this computer. This team app runs on its Fabric deployment, so its data lives in Fabric.'
       )
     ).toBeTruthy()
     expect(local.status).not.toHaveBeenCalled()
@@ -635,7 +635,7 @@ describe('DataView', () => {
     const { rerender } = renderView()
     const note = await screen.findByRole('note')
     expect(note.textContent).toContain('telemetry')
-    expect(note.textContent).toMatch(/The Data view shows local data only\.$/)
+    expect(note.textContent).toMatch(/The Data explorer shows local data only\.$/)
     // Without a published app there's nothing to fall back to.
     rerender(
       <DataView

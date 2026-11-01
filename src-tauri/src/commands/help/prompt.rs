@@ -42,7 +42,7 @@ a look: a blinking dot while it starts, a red one when it couldn't start, and th
 problems when it runs but its latest change didn't apply. Once the app is published, a **Local** and \
 **Published** switch chooses between this copy and the published one, each with its own data; an \
 app that was published before it ran on this computer starts with empty local data. Blueprint's \
-**Data** view shows the local data, and can clear it.\n\
+**Data explorer** shows the local data and stored files, and can delete them.\n\
 - **The fallback.** When the local backend can't run an app, because its Rayfin packages are \
 outside the versions the local backend supports or it uses a connector that runs only on Fabric \
 (such as Kusto), and the app has been published, the preview uses the published app's backend \
@@ -192,8 +192,9 @@ The `Diagnostic log:` file it names belongs to the Rayfin CLI and is outside wha
 `local.failed`: a problem stopped it, or kept it from starting (its `detail` has the code). \
 `local.crashed`: it kept stopping, so Fabricator stopped restarting it. `local.warning`, \
 `local.error` and the `local.schema.*`, `local.functions.*`, `local.analysis.*` and `local.vite.*` \
-records are problems it hit while running, and their resolution. `local.rows_cleared` and \
-`local.data_reset` mean the user deleted local data themselves, in Blueprint's Data view.\n",
+records are problems it hit while running, and their resolution. `local.rows_cleared`, \
+`local.files_cleared`, `local.file_deleted` and `local.data_reset` mean the user deleted local \
+data themselves, in Blueprint's Data explorer.\n",
   );
   // Both kinds of build write to the same journal. In the installed app, a dev
   // record is someone's half-finished edit to Fabricator; in a dev build it is
@@ -421,7 +422,7 @@ mod tests {
       ("Publish after each chat turn", "components/DeploymentsControl.tsx"),
       ("Local", "components/PreviewPane.tsx"),
       ("Published", "components/PreviewPane.tsx"),
-      ("Data", "components/blueprint/BlueprintTab.tsx"),
+      ("Data explorer", "components/blueprint/BlueprintTab.tsx"),
       ("Output", "components/local/LocalOutput.tsx"),
       ("Try again", "components/local/LocalStatePanel.tsx"),
       ("View output", "components/local/LocalStatePanel.tsx"),
