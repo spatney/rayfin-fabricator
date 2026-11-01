@@ -3973,11 +3973,20 @@ export interface RayfinStudioApi {
     forward: () => Promise<void>
     /**
      * Capture the current preview content as a PNG `data:` URL (via WebView2's
-     * `CapturePreview`). Used for the still frame shown while an overlay hides the
-     * native preview, and by Design to attach the previewed changes (full view +
-     * element crops) to a chat turn. Rejects when no preview is open or capture fails.
+     * `CapturePreview`). Lossless, for Design to attach the previewed changes
+     * (full view + element crops) to a chat turn. Rejects when no preview is open
+     * or capture fails.
      */
     capture: () => Promise<string>
+    /**
+     * An image URL of the preview's current frame, for the still painted in its
+     * place while an HTML overlay covers it. Built for speed, since the overlay
+     * waits on it: on Windows a JPEG served from the app's `preview-still` scheme
+     * (allowed in index.html's CSP), so it never travels through IPC as base64;
+     * elsewhere the same PNG `data:` URL as {@link capture}. Not for attachments.
+     * Rejects when the preview isn't shown or the capture doesn't finish in time.
+     */
+    still: () => Promise<string>
     /** Subscribe to preview navigation state. Returns an unsubscribe function. */
     onNavState: (cb: (state: PreviewNavState) => void) => () => void
     /**

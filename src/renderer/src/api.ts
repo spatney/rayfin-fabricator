@@ -471,6 +471,7 @@ export const api: RayfinStudioApi = {
       forward: () => invoke('preview_forward')
     }),
     capture: () => invoke('preview_capture'),
+    still: () => invoke('preview_still'),
     resetSiteData: () => invoke('preview_reset_site_data'),
     onNavState: (cb: (state: PreviewNavState) => void) =>
       subscribe<PreviewNavState>(IpcChannels.previewNav, cb),

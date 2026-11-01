@@ -326,12 +326,12 @@ describe('PreviewPane visibility', () => {
     await settle(e)
 
     const after = e.methodsAfter(mark)
-    expect(after).toContain('capture')
+    expect(after).toContain('still')
     expect(after).toContain('suppress')
     expect(after).not.toContain('hide')
     // The still must be captured BEFORE the surface parks, so it's painted as a
     // backstop and the pane never flashes bare during the park.
-    expect(after.indexOf('capture')).toBeLessThan(after.indexOf('suppress'))
+    expect(after.indexOf('still')).toBeLessThan(after.indexOf('suppress'))
   })
 
   it('parks immediately without a screenshot for a full-screen overlay (launcher)', async () => {
@@ -348,7 +348,7 @@ describe('PreviewPane visibility', () => {
     expect(after).toContain('suppress')
     // No screenshot when the host is hidden — and an instant park keeps the
     // webview from covering the launcher for a beat.
-    expect(after, 'no screenshot needed when the host is hidden').not.toContain('capture')
+    expect(after, 'no screenshot needed when the host is hidden').not.toContain('still')
   })
 
   it('re-reveals the same webview when an overlay closes', async () => {
@@ -367,6 +367,64 @@ describe('PreviewPane visibility', () => {
     expect(reveal!.index).toBeGreaterThanOrEqual(mark)
     expect(reveal!.url).toBe('https://p1.example.app/')
     expect(reveal!.bounds.width).toBeGreaterThan(0)
+  })
+
+  it('keeps the still under a closing overlay until the live preview is back on screen', async () => {
+    e.setCaptureResult('http://preview-still.localhost/k1')
+    const { container, rerender } = render(
+      <Harnessed project={makeProject('p1')} suppressed={false} />
+    )
+    await settle(e)
+    rerender(<Harnessed project={makeProject('p1')} suppressed={true} />)
+    await settle(e)
+    const still = (): string | null =>
+      container.querySelector('.preview-frozen')?.getAttribute('src') ?? null
+    expect(still()).toBe('http://preview-still.localhost/k1')
+
+    // A busy machine takes a while to move the surface back on screen.
+    const moved = deferred<void>()
+    e.api.showUrl.mockImplementationOnce(() => moved.promise)
+    rerender(<Harnessed project={makeProject('p1')} suppressed={false} />)
+    await settle(e)
+    expect(still(), 'the pane would show bare until the surface is back').toBe(
+      'http://preview-still.localhost/k1'
+    )
+
+    await act(async () => moved.resolve())
+    await settle(e)
+    expect(still()).toBeNull()
+  })
+
+  it('starts the still as a menu’s button is pressed, and the menu takes it over', async () => {
+    function WithButtons({ open }: { open: boolean }): JSX.Element {
+      return (
+        <>
+          <button type="button">Plain</button>
+          <button type="button" aria-haspopup="menu">
+            Open menu
+          </button>
+          <Harnessed project={makeProject('p1')} suppressed={open} />
+        </>
+      )
+    }
+    const { rerender } = render(<WithButtons open={false} />)
+    await settle(e)
+    const before = e.api.still.mock.calls.length
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Plain' }), { button: 0 })
+    expect(e.api.still, 'a plain button opens nothing over the preview').toHaveBeenCalledTimes(
+      before
+    )
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Open menu' }), { button: 0 })
+    expect(e.api.still).toHaveBeenCalledTimes(before + 1)
+
+    const mark = e.calls.length
+    rerender(<WithButtons open />)
+    await settle(e)
+    expect(e.api.still, 'the menu takes the still its press started').toHaveBeenCalledTimes(
+      before + 1
+    )
+    expect(e.methodsAfter(mark)).toContain('suppress')
   })
 
   // The launch screen covers a pane that has never been on screen. There's no
@@ -412,14 +470,14 @@ describe('PreviewPane visibility', () => {
     expect(url).toBe('https://p1.example.app/')
     expect(bounds.width).toBeGreaterThan(0)
     expect(e.api.showUrl).not.toHaveBeenCalled()
-    expect(e.api.capture, 'nothing to capture before the page loads').not.toHaveBeenCalled()
+    expect(e.api.still, 'nothing to capture before the page loads').not.toHaveBeenCalled()
     expect(onSettle).not.toHaveBeenCalled()
 
     act(() => e.emitNav({ url: 'https://p1.example.app/', loading: true }))
     act(() => e.emitNav({ url: 'https://p1.example.app/', loading: false }))
     await settle(e)
 
-    expect(e.api.capture).toHaveBeenCalled()
+    expect(e.api.still).toHaveBeenCalled()
     expect(e.api.preload).toHaveBeenCalledTimes(1)
     expect(e.api.showUrl, 'still covered').not.toHaveBeenCalled()
     expect(onSettle).toHaveBeenCalledTimes(1)
@@ -475,10 +533,11 @@ describe('PreviewPane visibility', () => {
   // leaves the preview blank. Home opens (suppressed + the pane goes display:none
   // so the host is 0×0), the active project is swapped WHILE still suppressed,
   // then Home closes (suppressed=false) and a load transition runs. During that
-  // in-flight load the preview must NOT capture (capturing pumps the UI thread
-  // mid-navigation and stalls the load-completion events → blank). It should park
-  // OFF-SCREEN but keep rendering (so the new page paints before reveal — avoids
-  // the stale old-project frame) and end revealed at the new project's URL.
+  // in-flight load the preview must NOT capture (a still taken mid-navigation
+  // shows a half-loaded page; capturing once also stalled the load-completion
+  // events → blank). It should park OFF-SCREEN but keep rendering (so the new
+  // page paints before reveal — avoids the stale old-project frame) and end
+  // revealed at the new project's URL.
   it('parks + navigates (never captures) during a Home-mediated switch, then reveals p2', async () => {
     const { rerender } = render(<Harnessed project={makeProject('p1')} suppressed={false} />)
     await settle(e)
@@ -500,12 +559,11 @@ describe('PreviewPane visibility', () => {
     await settle(e)
 
     // Contract during the in-flight load: navigate + park (keep rendering), and
-    // NEVER capture (would pump the UI thread) nor hard-hide (stops rendering →
-    // reveal flashes the stale old-project frame).
+    // NEVER capture nor hard-hide (stops rendering → reveal flashes the stale
+    // old-project frame).
     const during = e.methodsAfter(mark)
-    expect(during, 'must not capture during a load transition (pumps the UI thread)').not.toContain(
-      'capture'
-    )
+    expect(during, 'must not capture during a load transition').not.toContain('still')
+    expect(during, 'must not capture during a load transition').not.toContain('capture')
     expect(during, 'must keep rendering off-screen, not hard-hide').not.toContain('hide')
     expect(during).toContain('navigate')
     expect(during).toContain('suppress')
@@ -654,6 +712,7 @@ describe('PreviewPane visibility', () => {
     const during = e.methodsAfter(mark)
     expect(during).toContain('reload')
     expect(during).toContain('suppress') // parked off-screen, kept rendering
+    expect(during, 'no capture during a reload transition').not.toContain('still')
     expect(during, 'no capture during a reload transition').not.toContain('capture')
 
     await act(async () => {

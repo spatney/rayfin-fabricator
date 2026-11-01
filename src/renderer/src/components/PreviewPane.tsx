@@ -77,12 +77,18 @@ const DEVICE_ICONS: Record<DeviceId, (props: { className?: string }) => JSX.Elem
   phone: PhoneIcon
 }
 
-/** How long the frozen still-frame lingers as a backstop after the native preview
- *  is revealed again (an overlay closed). The live surface is opaque and paints
+/** How long the frozen still-frame lingers as a backstop once the native preview
+ *  is back on screen (an overlay closed). The live surface is opaque and paints
  *  above the HTML, so an identical still underneath is invisible — this only has
- *  to outlast the surface's on-screen reposition/present so the HTML→native
- *  handoff never flashes a bare host. */
+ *  to outlast the surface's first present after the move, so the HTML→native
+ *  handoff never flashes a bare host. Counted from when the move is done, not
+ *  from when it's asked for, which a busy machine can take a while to get to. */
 const FROZEN_CLEAR_MS = 150
+
+/** How long a still started when a menu's button was pressed (see PreviewPane's
+ *  press handler) stands in for the still of the menu it opens. A press can be
+ *  held a while; the page rarely changes beneath it meanwhile. */
+const EARLY_STILL_MS = 1000
 
 /** Duration of the project-load overlay's fade-out. MUST match the CSS opacity
  *  transition on `.project-loading`. */
@@ -407,9 +413,12 @@ export default function PreviewPane({
   const [canForward, setCanForward] = useState(false)
   const [nativeShown, setNativeShown] = useState(false)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
-  // While an HTML overlay suppresses the native preview, `frozen` holds a PNG of
-  // the last visible frame so the placeholder shows that still image, not black.
+  // While an HTML overlay suppresses the native preview, `frozen` holds an image
+  // URL of the last visible frame so the placeholder shows that still, not black.
   const [frozen, setFrozen] = useState<string | null>(null)
+  // A still started early, as a button that opens a menu or dialog was pressed,
+  // and when (see the press handler below). The menu's overlay takes it over.
+  const earlyStillRef = useRef<{ at: number; still: Promise<string | null> } | null>(null)
   // While a load transition is in flight, `loaderVisible` keeps the (Workbench-
   // level, centered) loading overlay mounted; `loaderOut` fades it out over the
   // reveal. Reported to the parent via `onLoadingChange`.
@@ -509,6 +518,7 @@ export default function PreviewPane({
   const beginTransition = useCallback(
     (url: string): void => {
       revealTokenRef.current += 1 // cancel any in-flight reveal/dissolve sequence
+      earlyStillRef.current = null // a still of the page being replaced
       transitionStartRef.current = performance.now()
       pendingUrlRef.current = url
       sawLoadingRef.current = false
@@ -706,13 +716,17 @@ export default function PreviewPane({
         }
         let cancelled = false
         let rafId = 0
+        // The still a press on the menu's button already started, if it's recent
+        // enough; else a new one.
+        const early = earlyStillRef.current
+        earlyStillRef.current = null
+        const pending =
+          early && performance.now() - early.at < EARLY_STILL_MS
+            ? early.still
+            : window.api.preview.still().catch(() => null)
         void (async () => {
-          let frame: string | null = null
-          try {
-            frame = await window.api.preview.capture()
-          } catch {
-            // Capture can fail (e.g. no surface yet) — fall back to a blank pane.
-          }
+          // A still that can't be had (no surface yet, or too slow) leaves a blank pane.
+          const frame = await pending
           if (cancelled) return
           if (frame) {
             // Pre-decode so painting the <img> is instant (no half-drawn still).
@@ -775,18 +789,27 @@ export default function PreviewPane({
     let raf = 0
     let clearFrozenTimer = 0
     let cancelled = false
+    // Drop the frozen backstop once the live surface is back on screen and has had
+    // a moment to present there (see FROZEN_CLEAR_MS). A no-op without a backstop.
+    const releaseFrozen = (): void => {
+      if (clearFrozenTimer === 0) {
+        clearFrozenTimer = window.setTimeout(() => setFrozen(null), FROZEN_CLEAR_MS)
+      }
+    }
     const show = (bounds: PreviewBounds): void => {
       void window.api.preview.showUrl(previewUrl, bounds).then(() => {
         if (!cancelled) {
           setSurfaceError(null)
           setNativeShown(true)
           markSettled()
+          releaseFrozen()
         }
       }).catch((reason: unknown) => {
         if (!cancelled) {
           setNativeShown(false)
           setSurfaceError(reason instanceof Error ? reason.message : String(reason))
           markSettled()
+          releaseFrozen()
         }
       })
     }
@@ -894,13 +917,6 @@ export default function PreviewPane({
     }
     startTracking()
 
-    // The native surface has been repositioned on-screen; clear the frozen
-    // backstop after a short delay. The surface is opaque and paints above the
-    // HTML, so an identical still lingering underneath is invisible — clearing it
-    // too early (before the surface presents) is what would flash the bare host.
-    // setFrozen(null) is a no-op when there was no backstop.
-    clearFrozenTimer = window.setTimeout(() => setFrozen(null), FROZEN_CLEAR_MS)
-
     return () => {
       cancelled = true
       window.removeEventListener('resize', onResize)
@@ -956,21 +972,40 @@ export default function PreviewPane({
   // Ensure the parent clears the overlay if the pane unmounts mid-load.
   useEffect(() => () => onLoadingChange?.(null), [onLoadingChange])
 
-  // Warm the WebView2 CapturePreview pipeline once, shortly after the preview is
-  // first shown. Its cold first use is slow and pumps the UI thread, which is what
-  // made the FIRST overlay (dropdown/modal) laggy — the live surface sat over the
-  // overlay until that slow capture finished. Warming off the critical path (and
-  // never mid-load) makes the first real overlay screenshot fast.
+  // Warm the still pipeline once, shortly after the preview is first shown. Its
+  // cold first use is slower, which made the FIRST overlay (dropdown/modal) lag —
+  // the live surface sat over the overlay until that still was ready. Warming off
+  // the critical path (and never mid-load) makes the first real overlay's still
+  // fast too.
   const warmedRef = useRef(false)
   useEffect(() => {
     if (warmedRef.current || !showWebview) return
     const t = window.setTimeout(() => {
       if (transitioningRef.current || suppressed) return // don't capture mid-load / while parked
       warmedRef.current = true
-      void window.api.preview.capture().catch(() => {})
+      void window.api.preview.still().catch(() => {})
     }, 600)
     return () => window.clearTimeout(t)
   }, [showWebview, suppressed])
+
+  // An overlay opening over the live preview waits on a still of it before the
+  // surface can make way (see the positioning effect). A menu or dialog opened
+  // from a button can have that still started as the button is pressed, rather
+  // than once it has opened, so it's ready, or nearly, when the overlay asks.
+  useEffect(() => {
+    if (!nativeShown || suppressed) return
+    const onPress = (event: PointerEvent): void => {
+      if (event.button !== 0 || transitioningRef.current) return
+      const target = event.target instanceof Element ? event.target : null
+      if (!target?.closest('[aria-haspopup]:not([aria-haspopup="false"])')) return
+      earlyStillRef.current = {
+        at: performance.now(),
+        still: window.api.preview.still().catch(() => null)
+      }
+    }
+    document.addEventListener('pointerdown', onPress, true)
+    return () => document.removeEventListener('pointerdown', onPress, true)
+  }, [nativeShown, suppressed])
 
   const reload = useCallback((): void => {
     void window.api.preview.reload()

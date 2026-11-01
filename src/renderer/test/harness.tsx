@@ -32,7 +32,7 @@ export interface PreviewEnv {
   emitNav: (state: Partial<PreviewNavState>) => void
   /** Set the (mocked) host bounding rect; `null` ⇒ 0×0 (a `display:none` pane). */
   setHostRect: (rect: Rect | null) => void
-  /** Result the mocked `capture()` resolves with. */
+  /** Result the mocked `capture()` and `still()` resolve with. */
   setCaptureResult: (dataUrl: string) => void
   /** Run queued requestAnimationFrame callbacks `rounds` times (default 4). */
   flushRaf: (rounds?: number) => void
@@ -66,6 +66,7 @@ function makeApi(calls: PreviewCall[], getCaptureResult: () => string) {
 
   const preview = {
     capture: vi.fn(rec('capture', getCaptureResult)),
+    still: vi.fn(rec('still', getCaptureResult)),
     hide: vi.fn(rec('hide')),
     suppress: vi.fn(rec('suppress')),
     showUrl: vi.fn(rec('showUrl')),

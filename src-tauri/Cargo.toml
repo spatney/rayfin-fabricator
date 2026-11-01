@@ -77,7 +77,7 @@ anyhow = "1"
 # `enclosed_name()` is used on entries to guard against zip-slip path traversal.
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
-# Windows-only: capture the native WebView2 preview to a PNG (ICoreWebView2::CapturePreview).
+# Windows-only: capture the native WebView2 preview to a PNG or JPEG (ICoreWebView2::CapturePreview).
 # webview2-com / windows versions are pinned to what the vendored wry (and tauri) resolve to,
 # so Cargo unifies them rather than pulling a second copy. See services/preview.rs.
 [target.'cfg(windows)'.dependencies]
@@ -93,7 +93,6 @@ windows = { version = "0.62", features = [
   "Win32_System_ProcessStatus",
   "Win32_System_Registry",
   "Win32_System_Threading",
-  "Win32_UI_WindowsAndMessaging",
 ] }
 
 # macOS-only: capture the native WKWebView preview to a PNG via

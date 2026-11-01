@@ -110,6 +110,8 @@ pub fn run() {
     .manage(UpdaterState::default())
     .manage(DevServers::default())
     .manage(services::local_backend::LocalBackends::default())
+    // The stills the preview leaves in its place under an HTML overlay.
+    .register_uri_scheme_protocol(services::preview::STILL_SCHEME, services::preview::serve_still)
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -426,6 +428,7 @@ pub fn run() {
       services::preview::preview_back,
       services::preview::preview_forward,
       services::preview::preview_capture,
+      services::preview::preview_still,
       services::preview::preview_design_set,
       services::preview::preview_design_poll,
       services::preview::preview_design_snapshot,
