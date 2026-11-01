@@ -52,5 +52,6 @@ Fabricator checks GitHub Releases when it starts, every 4 hours while it's open,
 4. If the banner stays on `Downloading update <version>…` or "Installing update…" for a long time, restart Fabricator. It checks for the update again when it starts.
 5. If your installed build predates auto-update support, install the latest release manually once from [GitHub Releases](https://github.com/spatney/rayfin-fabricator/releases/latest). After that, in-app updates work.
 6. If you see "A required update must be installed to continue.", leave Fabricator open until it restarts. If it fails, install the latest release manually.
+7. If the installer stops with "Failed to kill Rayfin Fabricator. Please close it first then try again", Fabricator or something using its files didn't close within 20 seconds. Select **Cancel**, open Fabricator again, and select **Update now**.
 
 If updates keep failing after a manual reinstall, [Report a problem](/docs/troubleshooting/report-a-problem).

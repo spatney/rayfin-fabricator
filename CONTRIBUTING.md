@@ -205,7 +205,7 @@ Fabricator runs [rayfin-local](https://github.com/spatney/rayfin-local) for each
 - `npm ci` runs the fetch but only warns when it can't, for example offline, or on Linux, which Fabricator doesn't ship for. `npm run dev`, `npm run build` and `npm run rayfin-local:fetch` fail instead. Add `-- --target <triple>` to fetch for another target, or `-- --force` to download again.
 - To bundle a rayfin-local you built, for example while you change both repositories, set `FABRICATOR_RAYFIN_LOCAL_BIN` to its binary and run `npm run rayfin-local:fetch` or `npm run dev`. The fetch copies that binary without checking it, and the app runs the binary the variable names. Unset it and fetch again to go back to the pinned release.
 - To move to a new rayfin-local release, set `version` and each target's `archive` and `sha256` in `rayfin-local.json` from the release's `SHA256SUMS.txt`, update `sdk` when the Rayfin versions it supports change, and run `npm run rayfin-local:fetch`.
-- The Windows installer and uninstaller stop a rayfin-local that runs from the install folder before they replace or remove it, and leave any other rayfin-local alone (`src-tauri/windows/installer-hooks.nsh`).
+- The Windows installer and uninstaller stop a rayfin-local that runs from the install folder before they replace or remove it, and leave any other rayfin-local alone (`src-tauri/windows/installer-hooks.nsh`). An in-app update first waits, at most 20 seconds, until nothing uses Fabricator's or rayfin-local's executable: Fabricator is still exiting when the updater starts the installer, and Tauri's running-app check stops the update with "Failed to kill Rayfin Fabricator" when something that uses the executable can't be closed.
 
 ## Releases
 
