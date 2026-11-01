@@ -1,23 +1,16 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type CSSProperties,
-  type JSX,
-  type ReactNode
-} from 'react'
-import type { HandoffOptions, HandoffPreview, HandoffSaveResult, StudioProject } from '@shared/ipc'
+import { useEffect, useId, useRef, useState, type JSX, type ReactNode } from 'react'
+import type { ExportOptions, ExportPreview, ExportResult, StudioProject } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { errorMessage } from '../errorReport'
 import { fabricWorkspaceUrl } from '../fabric'
+import { docsUrl } from '../docsLinks'
 import { formatBytes, listNames } from './blueprint/localData'
-import { hueOf } from './team/map/parts'
+import { ProjectFileProgress, ProjectFileSummary, count, fileName } from './projectFile'
 
 interface Props {
   project: StudioProject
-  /** Why it can't be packed right now: Copilot is working on it, or it's publishing. */
+  /** Why it can't be exported right now: Copilot is working on it, or it's publishing. */
   busy?: string
   onClose: () => void
 }
@@ -26,14 +19,6 @@ type Phase = 'loading' | 'choose' | 'saving' | 'done'
 
 /** Files that may hold secrets named before "and N more". */
 const KEPT_OUT_SHOWN = 3
-
-function count(n: number, word: string): string {
-  return `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`
-}
-
-function fileName(path: string): string {
-  return path.split(/[\\/]/).pop() || path
-}
 
 function CheckMark(): JSX.Element {
   return (
@@ -49,7 +34,7 @@ function CheckMark(): JSX.Element {
   )
 }
 
-/** One part of the project the hand-off can hold, with whether it does. */
+/** One part of the project the export can hold, with whether it does. */
 function Part({
   title,
   detail,
@@ -62,7 +47,7 @@ function Part({
   title: string
   detail: string
   checked: boolean
-  /** Always in a hand-off. */
+  /** Always in an export. */
   locked?: boolean
   disabled?: boolean
   onChange?: (checked: boolean) => void
@@ -71,28 +56,28 @@ function Part({
   const id = useId()
   return (
     <label
-      className={`handoff-part${checked ? ' handoff-part--on' : ''}${locked ? ' handoff-part--locked' : ''}`}
+      className={`project-file-part${checked ? ' project-file-part--on' : ''}${locked ? ' project-file-part--locked' : ''}`}
     >
       <input
         type="checkbox"
-        className="handoff-part-input"
+        className="project-file-part-input"
         checked={checked}
         disabled={locked || disabled}
         aria-labelledby={`${id}-title`}
         aria-describedby={`${id}-desc`}
         onChange={(event) => onChange?.(event.target.checked)}
       />
-      <span className="handoff-check" aria-hidden="true">
+      <span className="project-file-check" aria-hidden="true">
         <CheckMark />
       </span>
-      <span className="handoff-part-text">
-        <span className="handoff-part-head">
-          <span className="handoff-part-title" id={`${id}-title`}>
+      <span className="project-file-part-text">
+        <span className="project-file-part-head">
+          <span className="project-file-part-title" id={`${id}-title`}>
             {title}
           </span>
-          <span className="handoff-part-detail">{detail}</span>
+          <span className="project-file-part-detail">{detail}</span>
         </span>
-        <span className="handoff-part-desc" id={`${id}-desc`}>
+        <span className="project-file-part-desc" id={`${id}-desc`}>
           {children}
         </span>
       </span>
@@ -101,28 +86,25 @@ function Part({
 }
 
 /**
- * Hand a project off to someone else: choose what the .zip holds besides the
- * code (its version history, where it's published, its chat), save it, then
+ * Export a project for someone else: choose what its `.fabricator` file holds
+ * besides the code (its version history, where it's published), save it, then
  * see what the recipient needs to carry on. Secret values, the app's local data
  * and sign-ins never go in.
  */
-export default function HandoffProjectModal({ project, busy, onClose }: Props): JSX.Element {
+export default function ExportProjectModal({ project, busy, onClose }: Props): JSX.Element {
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
-  const saveRef = useRef<HTMLButtonElement>(null)
+  const exportRef = useRef<HTMLButtonElement>(null)
   const mountedRef = useRef(true)
   const [phase, setPhase] = useState<Phase>('loading')
-  const [preview, setPreview] = useState<HandoffPreview | null>(null)
+  const [preview, setPreview] = useState<ExportPreview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
-  const [options, setOptions] = useState<HandoffOptions>({
-    history: false,
-    deployment: false,
-    chat: false
-  })
+  const [options, setOptions] = useState<ExportOptions>({ history: false, deployment: false })
   const [progress, setProgress] = useState<{ processed: number; total: number } | null>(null)
-  const [saved, setSaved] = useState<HandoffSaveResult | null>(null)
+  const [saved, setSaved] = useState<ExportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
   const saving = phase === 'saving'
 
   useEffect(() => {
@@ -135,15 +117,11 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
   function loadPreview(): void {
     setPhase('loading')
     setPreviewError(null)
-    window.api.projects.handoff.preview(project.id).then(
+    window.api.projects.exportPreview(project.id).then(
       (next) => {
         if (!mountedRef.current) return
         setPreview(next)
-        setOptions({
-          history: Boolean(next.history),
-          deployment: Boolean(next.deployment),
-          chat: next.chatMessages > 0
-        })
+        setOptions({ history: Boolean(next.history), deployment: Boolean(next.deployment) })
         setPhase('choose')
       },
       (reason) => {
@@ -156,15 +134,15 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
 
   useEffect(() => loadPreview(), [project.id])
 
-  // Once there's something to save, Enter saves it.
+  // Once there's something to export, Enter exports it.
   useEffect(() => {
-    if (phase === 'choose' && preview && !busy) saveRef.current?.focus()
+    if (phase === 'choose' && preview && !busy) exportRef.current?.focus()
   }, [phase, preview, busy])
 
-  // Listen from the start, so no event of a save is missed. Only one save runs per project.
+  // Listen from the start, so no event of an export is missed. One export runs per project.
   useEffect(
     () =>
-      window.api.projects.handoff.onProgress((event) => {
+      window.api.projects.onZipProgress((event) => {
         if (event.id === project.id && event.phase === 'packing') {
           setProgress({ processed: event.processed, total: event.total })
         }
@@ -184,11 +162,11 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
     setPhase('saving')
     setProgress(null)
     setError(null)
-    let result: HandoffSaveResult
+    let result: ExportResult
     try {
-      result = await window.api.projects.handoff.save(project.id, options)
+      result = await window.api.projects.exportProject(project.id, options)
     } catch (reason) {
-      result = { ok: false, error: errorMessage(reason, 'Fabricator couldn’t save the hand-off.') }
+      result = { ok: false, error: errorMessage(reason, 'Fabricator couldn’t export the project.') }
     }
     if (!mountedRef.current) return
     setProgress(null)
@@ -197,8 +175,21 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
       setPhase('done')
       return
     }
-    if (!result.cancelled) setError(result.error ?? 'Fabricator couldn’t save the hand-off.')
+    if (!result.cancelled) setError(result.error ?? 'Fabricator couldn’t export the project.')
     setPhase('choose')
+  }
+
+  function copyInstallLink(): void {
+    navigator.clipboard.writeText(docsUrl('install')).then(
+      () => {
+        if (!mountedRef.current) return
+        setLinkCopied(true)
+        window.setTimeout(() => {
+          if (mountedRef.current) setLinkCopied(false)
+        }, 2500)
+      },
+      () => setError('Fabricator couldn’t copy the link.')
+    )
   }
 
   const deployment = preview?.deployment
@@ -214,7 +205,7 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
   return (
     <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
       <div
-        className="modal handoff-modal"
+        className="modal project-file-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -223,7 +214,7 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2 id={titleId}>Hand off project</h2>
+          <h2 id={titleId}>Export project</h2>
           <button
             type="button"
             className="icon-btn"
@@ -235,34 +226,22 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
           </button>
         </div>
 
-        <div className="modal-body handoff-body">
-          <div className="project-manage-summary">
-            <span
-              className="home-project-mark project-manage-mark"
-              aria-hidden="true"
-              style={{ '--hue': hueOf(project.name) } as CSSProperties}
-            >
-              {project.name.trim()[0]?.toUpperCase() ?? '?'}
-            </span>
-            <span className="project-manage-summary-text">
-              <strong>{project.name}</strong>
-              <span className="handoff-lead">
-                {phase === 'done'
-                  ? 'Its hand-off is ready to send.'
-                  : 'Save it as a .zip someone else can open in Fabricator and carry on from.'}
-              </span>
-            </span>
-          </div>
+        <div className="modal-body project-file-body">
+          <ProjectFileSummary name={project.name}>
+            {phase === 'done'
+              ? 'It’s exported and ready to send.'
+              : 'Save a copy someone else can import into Fabricator.'}
+          </ProjectFileSummary>
 
           {phase === 'loading' && (
-            <p className="handoff-status" role="status">
+            <p className="project-file-status" role="status">
               <span className="ws-spinner" aria-hidden="true" />
               Checking what to include…
             </p>
           )}
 
           {previewError && phase === 'choose' && (
-            <div className="project-manage-error handoff-error" role="alert">
+            <div className="project-manage-error project-file-error" role="alert">
               <span>{previewError}</span>
               <button type="button" className="btn btn--sm" onClick={loadPreview}>
                 Try again
@@ -272,15 +251,18 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
 
           {preview && (phase === 'choose' || (saving && !progress)) && (
             <>
-              <div className="handoff-parts" role="group" aria-label="What the hand-off includes">
+              <div
+                className="project-file-parts"
+                role="group"
+                aria-label="What the export includes"
+              >
                 <Part
                   title="App code"
                   detail={`${count(preview.files, 'file')} · ${formatBytes(preview.bytes)}`}
                   checked
                   locked
                 >
-                  Its source and settings. Installed packages and build output stay out; Fabricator
-                  installs them again.
+                  Source and settings. Installed packages and build output stay out.
                 </Part>
                 {preview.history && (
                   <Part
@@ -306,27 +288,15 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
                       : 'They’ll publish it as a new app, in a workspace they choose.'}
                   </Part>
                 )}
-                {preview.chatMessages > 0 && (
-                  <Part
-                    title="Chat"
-                    detail={count(preview.chatMessages, 'message')}
-                    checked={options.chat}
-                    disabled={saving}
-                    onChange={(chat) => setOptions((o) => ({ ...o, chat }))}
-                  >
-                    Your conversation with Copilot, so they can see how the app was built.
-                  </Part>
-                )}
               </div>
 
-              <div className="handoff-note">
+              <div className="project-file-note">
                 <span className="codicon codicon-lock" aria-hidden="true" />
                 <span>
-                  Never included: secret values
-                  {secrets.length > 0 && ` (${listNames(secrets)})`}, the app’s data on this
-                  computer and your sign-ins.
+                  Never included: your chat, secret values
+                  {secrets.length > 0 && ` (${listNames(secrets)})`}, local app data or sign-ins.
                   {keptOut.length > 0 && (
-                    <span className="handoff-note-extra">
+                    <span className="project-file-note-extra">
                       Also left out in case they hold secrets: {listNames(keptOutShown)}.
                     </span>
                   )}
@@ -334,8 +304,8 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
               </div>
 
               {busy && (
-                <p className="handoff-busy" role="status">
-                  <span className="handoff-dot" aria-hidden="true" />
+                <p className="project-file-busy" role="status">
+                  <span className="project-file-dot" aria-hidden="true" />
                   {busy}
                 </p>
               )}
@@ -349,46 +319,29 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
           )}
 
           {saving && progress && (
-            <div className="handoff-packing" role="status">
-              <span className="handoff-packing-text">
-                <span className="ws-spinner" aria-hidden="true" />
-                Packing {project.name}…
-              </span>
-              <span
-                className="handoff-bar"
-                role="progressbar"
-                aria-label="Hand-off progress"
-                aria-valuemin={0}
-                aria-valuemax={progress.total}
-                aria-valuenow={progress.processed}
-              >
-                <span
-                  style={{
-                    width: `${progress.total ? Math.max(2, (progress.processed / progress.total) * 100) : 2}%`
-                  }}
-                />
-              </span>
-              <span className="handoff-packing-count">
-                {progress.processed.toLocaleString('en-US')} of {count(progress.total, 'file')}
-              </span>
-            </div>
+            <ProjectFileProgress
+              label={`Exporting ${project.name}…`}
+              name="Export progress"
+              processed={progress.processed}
+              total={progress.total}
+            />
           )}
 
           {phase === 'done' && saved?.path && (
             <>
-              <div className="handoff-saved">
+              <div className="project-file-saved">
                 <span
-                  className="codicon codicon-pass-filled handoff-saved-icon"
+                  className="codicon codicon-pass-filled project-file-saved-icon"
                   aria-hidden="true"
                 />
-                <span className="handoff-saved-text">
+                <span className="project-file-saved-text">
                   <strong>Saved {fileName(saved.path)}</strong>
                   <span>
                     {formatBytes(saved.bytes ?? 0)} · {count(saved.files ?? 0, 'file')}
                   </span>
                 </span>
               </div>
-              <div className="handoff-path" title={saved.path}>
+              <div className="project-file-path" title={saved.path}>
                 {saved.path}
               </div>
               {error && (
@@ -397,16 +350,23 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
                 </p>
               )}
 
-              <section className="handoff-next" aria-labelledby={`${titleId}-next`}>
+              <section className="project-file-next" aria-labelledby={`${titleId}-next`}>
                 <h3 className="project-manage-heading" id={`${titleId}-next`}>
                   What happens next
                 </h3>
-                <ol className="handoff-steps">
-                  <li>Send them the .zip, by email, chat or a shared folder.</li>
+                <ol className="project-file-steps">
+                  <li>Send them the file, by email, chat or a shared folder.</li>
                   <li>
-                    In Fabricator, they select <strong>Open existing</strong>, then{' '}
-                    <strong>Open a hand-off</strong>. The HANDOFF.md inside walks them through it
-                    too.
+                    They double-click it to import it into Fabricator, or select{' '}
+                    <strong>Open existing</strong>, then <strong>Import a project</strong>. New to
+                    Fabricator?{' '}
+                    <button type="button" className="project-file-link" onClick={copyInstallLink}>
+                      {linkCopied ? 'Install link copied' : 'Copy the install link'}
+                      <span
+                        className={`codicon codicon-${linkCopied ? 'check' : 'copy'}`}
+                        aria-hidden="true"
+                      />
+                    </button>
                   </li>
                   {options.deployment && deployment && (
                     <li>
@@ -417,7 +377,7 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
                           {' '}
                           <button
                             type="button"
-                            className="handoff-link"
+                            className="project-file-link"
                             onClick={() => void window.api.openExternal(workspaceUrl)}
                           >
                             Open the workspace
@@ -441,8 +401,8 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
                 className="btn"
                 onClick={() => {
                   if (saved.path) {
-                    window.api.projects.handoff.reveal(saved.path).catch((reason) => {
-                      setError(errorMessage(reason, 'Fabricator couldn’t show the .zip.'))
+                    window.api.projects.revealExport(saved.path).catch((reason) => {
+                      setError(errorMessage(reason, 'Fabricator couldn’t show the file.'))
                     })
                   }
                 }}
@@ -458,7 +418,7 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
             <button
               type="button"
               className="btn"
-              onClick={() => void window.api.projects.handoff.stop(project.id)}
+              onClick={() => void window.api.projects.stopExport(project.id)}
             >
               Stop
             </button>
@@ -468,13 +428,13 @@ export default function HandoffProjectModal({ project, busy, onClose }: Props): 
                 Cancel
               </button>
               <button
-                ref={saveRef}
+                ref={exportRef}
                 type="button"
                 className="btn btn--primary"
                 disabled={!canSave}
                 onClick={() => void save()}
               >
-                {saving ? 'Saving…' : 'Save .zip…'}
+                {saving ? 'Exporting…' : 'Export…'}
               </button>
             </>
           )}

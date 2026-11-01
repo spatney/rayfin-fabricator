@@ -37,8 +37,22 @@
     "category": "DeveloperTool",
     "copyright": "Copyright © 2026 Sachin Patney",
     "resources": {
-      "../resources/telemetry*.json": "resources/"
+      "../resources/telemetry*.json": "resources/",
+      "icons/project-file.ico": "resources/project-file.ico"
     },
+    "fileAssociations": [
+      {
+        "ext": ["fabricator"],
+        "name": "RayfinFabricator.Project",
+        "description": "Fabricator project",
+        "role": "Editor",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "com.rayfin.fabricator.project",
+          "conformsTo": ["public.data"]
+        }
+      }
+    ],
     "externalBin": ["binaries/rayfin-local"],
     "icon": [
       "icons/32x32.png",
@@ -54,7 +68,10 @@
       }
     },
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "files": {
+        "Resources/project-file.icns": "icons/project-file.icns"
+      }
     }
   },
   "plugins": {

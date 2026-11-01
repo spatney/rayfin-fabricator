@@ -12,11 +12,11 @@ export interface ActionHandlers {
   newProject(): void
   openFolder(): void
   cloneFromGitHub(): void
-  openHandoff(): void
+  importProject(): void
   migrateReport(): void
   openGallery(): void
   manageProject(): void
-  handOff(): void
+  exportProject(): void
   openOverview(): void
   deploy(): void
   share(): void
@@ -247,12 +247,12 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
     run: run.cloneFromGitHub
   })
   add({
-    id: 'action:open-handoff',
-    title: 'Open a hand-off',
-    subtitle: 'Open a project someone sent you as a .zip',
-    keywords: ['handoff', 'zip', 'import', 'received', 'continue'],
+    id: 'action:import-project',
+    title: 'Import a project',
+    subtitle: 'Open a .fabricator file someone sent you',
+    keywords: ['fabricator file', 'zip', 'received', 'sent to me'],
     icon: { kind: 'codicon', name: 'package' },
-    run: run.openHandoff
+    run: run.importProject
   })
   if (ctx.migrationEnabled) {
     add({
@@ -278,7 +278,7 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
     add({
       id: 'action:manage-project',
       title: `Manage ${project.name}`,
-      subtitle: 'Rename it, hand it off, or remove it from Fabricator',
+      subtitle: 'Rename it, export it, or remove it from Fabricator',
       keywords: ['rename', 'remove', 'delete', 'trash'],
       icon: { kind: 'codicon', name: 'gear' },
       run: run.manageProject
@@ -286,12 +286,12 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
   }
   if (project && !project.team && !project.missing) {
     add({
-      id: 'action:handoff',
-      title: `Hand off ${project.name}`,
-      subtitle: 'Save a .zip someone else can pick it up from',
-      keywords: ['handoff', 'export', 'zip', 'send', 'transfer', 'give'],
+      id: 'action:export-project',
+      title: `Export ${project.name}`,
+      subtitle: 'Save it as a file someone else can import',
+      keywords: ['send', 'share a copy', 'transfer', 'give', 'hand off', 'handoff', 'zip'],
       icon: { kind: 'codicon', name: 'package' },
-      run: run.handOff
+      run: run.exportProject
     })
   }
   if (project?.team) {

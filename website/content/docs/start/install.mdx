@@ -19,6 +19,8 @@ The Windows release workflow signs the installer when the signing configuration 
 
 The installer also puts rayfin-local next to Fabricator in its install folder, `%LOCALAPPDATA%\Rayfin Fabricator` by default. rayfin-local is the local backend that runs your apps on this computer; see [Develop on this computer](/docs/build/local-development). The release workflow signs it with the same certificate as the installer, and there's nothing else to install for it. On a PC your organization manages, Windows can block it; see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local).
 
+The installer also has Windows open `.fabricator` files with Fabricator. They're projects someone exported for you; see [Import a project](/docs/build/projects#import-a-project).
+
 ## macOS
 
 Fabricator's macOS build is for Apple Silicon.
@@ -33,6 +35,8 @@ Fabricator's macOS build is for Apple Silicon.
    ```
 
 The release workflow builds an Apple Silicon DMG. When Apple notarization is not configured, macOS can quarantine the downloaded app even though it is the expected release artifact. Removing the quarantine flag lets macOS open the app. rayfin-local, the local backend that runs your apps on this computer, is inside the app, so the same command clears its flag too.
+
+Once you've opened Fabricator, macOS opens `.fabricator` files with it. They're projects someone exported for you; see [Import a project](/docs/build/projects#import-a-project).
 
 ## First launch
 

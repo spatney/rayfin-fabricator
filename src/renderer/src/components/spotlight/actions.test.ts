@@ -115,23 +115,25 @@ describe('Search actions', () => {
     expect(rank(prepare(buildActions(ctx)), 'mcp')[0]?.item.id).toBe('action:mcp-servers')
   })
 
-  it('hands off the open app, and opens one handed to you from anywhere', () => {
+  it('exports the open app, and imports one from anywhere', () => {
     const ctx = context()
     const prepared = prepare(buildActions(ctx))
     const top = (query: string): string | undefined => rank(prepared, query)[0]?.item.id
-    expect(top('hand off')).toBe('action:handoff')
+    expect(top('export contoso')).toBe('action:export-project')
+    expect(top('hand off')).toBe('action:export-project')
+    expect(top('import')).toBe('action:import-project')
     buildActions(ctx)
-      .find((a) => a.id === 'action:handoff')!
+      .find((a) => a.id === 'action:export-project')!
       .run()
-    expect(ctx.do.handOff).toHaveBeenCalled()
+    expect(ctx.do.exportProject).toHaveBeenCalled()
 
     const none = context({ project: null, onProjectScreen: false, onHome: true })
-    expect(ids(none)).not.toContain('action:handoff')
-    expect(ids(none)).toContain('action:open-handoff')
+    expect(ids(none)).not.toContain('action:export-project')
+    expect(ids(none)).toContain('action:import-project')
     const team = {
       ...project,
       team: { workspaceId: 'w1', folder: 'apps/contoso' }
     } as StudioProject
-    expect(ids(context({ project: team }))).not.toContain('action:handoff')
+    expect(ids(context({ project: team }))).not.toContain('action:export-project')
   })
 })

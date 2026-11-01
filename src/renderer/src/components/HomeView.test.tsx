@@ -46,22 +46,20 @@ describe('HomeView project launcher', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /clone from github/i }))
     expect(props.onCloneFromGitHub).toHaveBeenCalledTimes(1)
     expect(document.querySelectorAll('.home-action-icon > svg')).toHaveLength(2)
-    expect(screen.queryByRole('menuitem', { name: /open a hand-off/i })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: /import a project/i })).toBeNull()
   })
 
-  it('opens a hand-off someone sent, and says so while it unpacks', () => {
+  it('imports a project someone exported', () => {
     const props = baseProps()
-    props.onOpenHandoff = vi.fn()
-    const { rerender } = render(<HomeView {...props} />)
+    props.onImportProject = vi.fn()
+    render(<HomeView {...props} />)
 
     const existing = screen.getByRole('button', { name: /open existing/i })
-    expect(existing.textContent).toContain('From a folder, GitHub or a hand-off')
+    expect(existing.textContent).toContain('From a folder, GitHub or a file')
     fireEvent.click(existing)
-    fireEvent.click(screen.getByRole('menuitem', { name: /open a hand-off/i }))
-    expect(props.onOpenHandoff).toHaveBeenCalledTimes(1)
-
-    rerender(<HomeView {...props} opening openingLabel="Unpacking… 40%" />)
-    expect(screen.getByRole('button', { name: /unpacking… 40%/i })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: /import a project/i }))
+    expect(props.onImportProject).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).toBeNull()
   })
 
   it('offers to migrate a Power BI report only when the experiment provides it', () => {

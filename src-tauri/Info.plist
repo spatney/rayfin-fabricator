@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged over the Info.plist Tauri writes for the macOS app (tauri build reads this file from
+  src-tauri). Tauri writes these two keys from bundle > fileAssociations in tauri.conf.json, but
+  without a document icon, so a .fabricator file would look like the app. These replace them,
+  with the icon bundle > macOS > files puts in Contents/Resources (icons/project-file.icns).
+  Keep the extension and type in step with tauri.conf.json and EXTENSION in
+  src/commands/export.rs.
+-->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>Fabricator project</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>LSHandlerRank</key>
+      <string>Owner</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>com.rayfin.fabricator.project</string>
+      </array>
+      <key>CFBundleTypeExtensions</key>
+      <array>
+        <string>fabricator</string>
+      </array>
+      <key>CFBundleTypeIconFile</key>
+      <string>project-file.icns</string>
+    </dict>
+  </array>
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key>
+      <string>com.rayfin.fabricator.project</string>
+      <key>UTTypeDescription</key>
+      <string>Fabricator project</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.data</string>
+      </array>
+      <key>UTTypeIconFile</key>
+      <string>project-file.icns</string>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>fabricator</string>
+        </array>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>

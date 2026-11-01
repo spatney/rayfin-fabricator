@@ -67,7 +67,7 @@ describe('ManageProjectModal', () => {
     const props = baseProps()
     renderModal(props)
 
-    expect(screen.getByText(/choose whether to delete the published app too/i)).toBeTruthy()
+    expect(screen.getByText('Trash the folder, and optionally its published app.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Review options' }))
 
     expect(props.onClose).toHaveBeenCalledTimes(1)
@@ -80,7 +80,7 @@ describe('ManageProjectModal', () => {
     props.project = makeProject('p1', { lastDeploy: undefined })
     renderModal(props)
 
-    expect(screen.getByText(/No Fabric app is changed/)).toBeTruthy()
+    expect(screen.getByText('Trash the folder. No Fabric app is changed.')).toBeTruthy()
     expect(screen.getByText('Hide from your recent list. Files stay intact.')).toBeTruthy()
     expect(screen.queryByText(/published app/i)).toBeNull()
   })
@@ -88,37 +88,35 @@ describe('ManageProjectModal', () => {
   it('only offers to forget a project whose folder is gone', () => {
     const props = baseProps()
     props.project = makeProject('p1', { missing: true })
-    props.onHandOff = vi.fn()
+    props.onExport = vi.fn()
     renderModal(props)
 
     expect(screen.getByText(/can’t find this project on this computer/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remove from recent projects' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Review options' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Create .zip' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Export' })).toBeNull()
   })
 
-  it('opens Hand off project for a local project, saying what the .zip holds', () => {
+  it('opens Export project for a local project', () => {
     const props = baseProps()
-    props.onHandOff = vi.fn()
+    props.onExport = vi.fn()
     renderModal(props)
 
-    expect(
-      screen.getByText(/the code and where it’s published, so someone else can pick it up/)
-    ).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Create .zip' }))
+    expect(screen.getByText('Save a copy someone else can import into Fabricator.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
 
     expect(props.onClose).toHaveBeenCalledTimes(1)
-    expect(props.onHandOff).toHaveBeenCalledWith(props.project)
+    expect(props.onExport).toHaveBeenCalledWith(props.project)
   })
 
-  it('leaves a team app to its team workspace instead of a hand-off', () => {
+  it('leaves a team app to its team workspace instead of an export', () => {
     const props = baseProps()
-    props.onHandOff = vi.fn()
+    props.onExport = vi.fn()
     props.project = makeProject('p1', {
       team: { workspaceId: 'w1', folder: 'sales', worktree: 'C:/team/sales' }
     })
     renderModal(props)
 
-    expect(screen.queryByRole('button', { name: 'Create .zip' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Export' })).toBeNull()
   })
 })

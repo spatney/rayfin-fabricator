@@ -101,7 +101,19 @@ pub fn run() {
   // installs inherit it.
   services::npm_env::configure_env();
 
-  tauri::Builder::default()
+  let builder = tauri::Builder::default();
+  // One Fabricator at a time on Windows, where opening a .fabricator file starts
+  // the app again with the file: that launch hands the file to the running app
+  // and exits. Release builds only, so a development build still runs beside
+  // the installed app.
+  #[cfg(all(windows, not(debug_assertions)))]
+  let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+    let files = commands::export::exports_in(args.into_iter().skip(1), Some(std::path::Path::new(&cwd)));
+    commands::export::queue_opened(app, files);
+    commands::misc::bring_forward(app);
+  }));
+
+  builder
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
@@ -122,6 +134,12 @@ pub fn run() {
       }
       let version = app.package_info().version.to_string();
       services::telemetry::init(telemetry_connection_string(app), version);
+
+      // A .fabricator file Fabricator was started to open: Windows passes it as
+      // an argument. The workbench imports it once it's showing.
+      let cwd = std::env::current_dir().ok();
+      let opened = commands::export::exports_in(std::env::args_os().skip(1), cwd.as_deref());
+      commands::export::queue_opened(app.handle(), opened);
 
       // Watch for main-thread freezes (Parallels/VM hangs) and record them. The
       // monitor actively probes the main thread, so an idle (event-starved) loop
@@ -326,11 +344,14 @@ pub fn run() {
       commands::projects::projects_set_workspace,
       commands::projects::projects_set_preview_mode,
       commands::projects::projects_remove,
-      commands::handoff::projects_handoff_preview,
-      commands::handoff::projects_handoff_save,
-      commands::handoff::projects_handoff_stop,
-      commands::handoff::projects_handoff_reveal,
-      commands::handoff::projects_handoff_open,
+      commands::export::projects_export_preview,
+      commands::export::projects_export,
+      commands::export::projects_export_stop,
+      commands::export::projects_export_reveal,
+      commands::export::projects_import_pick,
+      commands::export::projects_import_inspect,
+      commands::export::projects_import,
+      commands::export::projects_opened_exports,
       commands::projects::projects_git_status,
       commands::projects::projects_git_commit,
       commands::commit_message::projects_git_message,
@@ -481,6 +502,15 @@ pub fn run() {
     .expect("error while building tauri application")
     .run(|app, event| {
       services::watchdog::beat();
+      // macOS hands Fabricator the .fabricator files opened with it as events,
+      // at launch and while it runs.
+      #[cfg(target_os = "macos")]
+      {
+        if let tauri::RunEvent::Opened { urls } = &event {
+          let files = urls.iter().filter_map(|url| url.to_file_path().ok());
+          commands::export::queue_opened(app, commands::export::exports_in(files, None));
+        }
+      }
       // Kill any live Vite dev servers when the app exits so they never orphan.
       if let tauri::RunEvent::Exit = event {
         services::dev_server::kill_all(app);

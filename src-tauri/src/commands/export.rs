@@ -1,25 +1,28 @@
-//! Handing a project off to someone else: a .zip with what they need to carry
-//! on in Fabricator, and opening one.
+//! Exporting a project as a `.fabricator` file someone else imports to carry on
+//! in Fabricator, and importing one.
 //!
-//! A hand-off holds the app's files as its version history sees them, what git
-//! tracks or would add, so installed packages, build output and local settings
-//! stay out. As the sender chooses, it also holds the history itself (`.git`),
-//! the record of where the app is published (`rayfin/.deployments.json`, which
-//! `rayfin up` reads, so the recipient's publishes update the same app) and the
-//! chat. Files that may hold secrets, the app's data on this computer
-//! (`.rayfin-local`) and Fabricator's working files never go in, whatever
-//! `.gitignore` says, and the history loses credentials, hooks and the sender's
-//! git identity on the way.
+//! An export is a .zip with an extension of its own. It holds the app's files as
+//! its version history sees them, what git tracks or would add, so installed
+//! packages, build output and local settings stay out. As the person exporting
+//! chooses, it also holds the history itself (`.git`) and the record of where the
+//! app is published (`rayfin/.deployments.json`, which `rayfin up` reads, so the
+//! recipient's publishes update the same app). Files that may hold secrets, the
+//! app's data on this computer (`.rayfin-local`) and Fabricator's working files
+//! never go in, whatever `.gitignore` says, and the history loses credentials,
+//! hooks and the sender's git identity on the way. Who exported it, and where it's
+//! published, is in `.fabricator/export.json`, which only Fabricator reads.
 //!
-//! `HANDOFF.md` at the top says what the .zip is and how to carry on, for someone
-//! without Fabricator too. `.fabricator/handoff/` holds what only Fabricator
-//! reads: who handed the app off, and its chat.
+//! Importing shows what a file brings in first ([`projects_import_inspect`]), then
+//! unpacks it into a new folder in the projects folder and opens it. A folder
+//! unpacked by hand gets the same when Open folder first opens it ([`adopt`]).
 //!
-//! Opening a hand-off unpacks it into the projects folder and opens it with its
-//! chat. A folder unpacked by hand and opened with Open folder gets its chat too
-//! ([`adopt`]).
+//! The installer has the system open `.fabricator` files with Fabricator
+//! (`bundle > fileAssociations` in tauri.conf.json; their icon comes from
+//! `Info.plist` on macOS and `windows/installer-hooks.nsh` on Windows), and
+//! [`queue_opened`] holds the files it's handed until the workbench imports them.
 
 use std::collections::{BTreeSet, HashMap};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Component, Path, PathBuf};
@@ -40,45 +43,43 @@ use crate::commands::projects_impl::register_project;
 use crate::commands::util::{annotate_project, is_rayfin_project, normalize, now_iso, same_path, slugify};
 use crate::services::exec::RunOptions;
 use crate::services::journal::{self, Area, Level};
-use crate::services::{emit, git, history, store, version_history};
+use crate::services::{emit, git, store, version_history};
 use crate::state::AppState;
 use crate::types::{
-  ChatMessage, HandoffDeployment, HandoffHistory, HandoffOpenResult, HandoffOptions, HandoffPreview,
-  HandoffProgressEvent, HandoffSaveResult, StudioProject,
+  ExportDeployment, ExportHistory, ExportOptions, ExportPreview, ExportResult, ImportPreview, ImportResult,
+  StudioProject, ZipProgressEvent,
 };
 
-/// The guide at the top of every hand-off.
-const GUIDE: &str = "HANDOFF.md";
+/// The extension of an exported project.
+pub(crate) const EXTENSION: &str = "fabricator";
 /// What only Fabricator reads, relative to the app.
-const PAYLOAD: &str = ".fabricator/handoff";
-const MANIFEST: &str = "handoff.json";
-const CHAT: &str = "chat.json";
+const MANIFEST: &str = ".fabricator/export.json";
 /// Where `rayfin up` records where the app is published.
 const REGISTRY: &str = "rayfin/.deployments.json";
-/// The hand-off format this Fabricator writes.
+/// The export format this Fabricator writes.
 const FORMAT: u32 = 1;
-/// The progress id while a hand-off opens: it has no project yet.
-const OPENING: &str = "open";
+/// The progress id while a file imports: it has no project yet.
+const IMPORTING: &str = "import";
 const PROGRESS_EVERY: Duration = Duration::from_millis(90);
-const SITE: &str = "https://spatney.github.io/rayfin-fabricator/";
-const OPEN_DOCS: &str = "https://spatney.github.io/rayfin-fabricator/docs/build/projects#open-a-hand-off";
-/// Opening stops past these, so a damaged or hostile .zip can't fill the disk.
+/// Importing stops past these, so a damaged or hostile file can't fill the disk.
 const MAX_UNPACKED_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 const MAX_ENTRIES: usize = 500_000;
-/// The most read of a hand-off's record or `rayfin.yml` before it's unpacked.
+/// The most read of an export's record, `rayfin.yml` or publishing record before it's unpacked.
 const MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;
 
 const TEAM_APP: &str = "A team app is shared through its team workspace. Invite people to the workspace instead.";
 const MISSING: &str = "Fabricator can’t find this project’s folder.";
-const NOT_AN_APP: &str = "This .zip doesn’t hold a Rayfin project: there’s no rayfin/rayfin.yml in it.";
+const UNREADABLE: &str =
+  "Fabricator can’t read this file. Import a .fabricator file someone exported, or a .zip of a Rayfin project.";
+const NOT_AN_APP: &str = "This file doesn’t hold a Rayfin project: there’s no rayfin/rayfin.yml in it.";
 const MANY_APPS: &str =
-  "This .zip holds more than one Rayfin project. Unpack it, then open the one you want with Open folder.";
-const TOO_BIG: &str = "This .zip unpacks to more than 16 GB, so Fabricator didn’t open it.";
-const TOO_MANY: &str = "This .zip holds more than 500,000 files, so Fabricator didn’t open it.";
+  "This file holds more than one Rayfin project. Unzip it, then open the one you want with Open folder.";
+const TOO_BIG: &str = "This file unpacks to more than 16 GB, so Fabricator didn’t import it.";
+const TOO_MANY: &str = "This file holds more than 500,000 files, so Fabricator didn’t import it.";
 
 /// Folders that never go in, at any depth: installed packages, git data (the
-/// history goes in only as the sender chooses), and what belongs to this
-/// computer: the app's local data and keys, and Rayfin's and Fabricator's
+/// history goes in only as the person exporting chooses), and what belongs to
+/// this computer: the app's local data and keys, and Rayfin's and Fabricator's
 /// working files.
 const NEVER_FOLDERS: &[&str] = &["node_modules", ".git", ".rayfin-local", ".micro-fabric", ".rayfin", ".fabricator"];
 
@@ -117,10 +118,13 @@ const COMPRESSED: &[&str] = &[
 static URL_CREDENTIALS: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?i)\b(https?://)[^/@\s"']+@"#).unwrap());
 static YAML_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^name:\s*(.+)$").unwrap());
 
-/// Hand-offs being packed, by project, with the flag that stops them.
+/// Exports being written, by project, with the flag that stops them.
 static PACKING: Lazy<Mutex<HashMap<String, Arc<AtomicBool>>>> = Lazy::new(Default::default);
 
-/// What a hand-off records for Fabricator (`.fabricator/handoff/handoff.json`).
+/// Exports the system asked Fabricator to open, waiting for the workbench to import them.
+static OPENED: Lazy<Mutex<Vec<String>>> = Lazy::new(Default::default);
+
+/// What an export records for Fabricator (`.fabricator/export.json`).
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Manifest {
@@ -128,20 +132,18 @@ pub(crate) struct Manifest {
   pub format: u32,
   #[serde(default)]
   pub name: String,
-  /// Who handed it off: their Fabric account.
+  /// Who exported it: their Fabric account.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub from: Option<String>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub created_at: Option<String>,
-  /// The Fabricator version that packed it.
+  /// The Fabricator version that exported it.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub fabricator: Option<String>,
   #[serde(default)]
   pub history: bool,
   #[serde(default)]
   pub deployment: bool,
-  #[serde(default)]
-  pub chat: bool,
   /// The workspace its publishes go to, when `deployment`.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub workspace: Option<String>,
@@ -152,21 +154,24 @@ pub(crate) struct Manifest {
 
 /* ------------------------------ what goes in ------------------------------ */
 
-/// Never in a hand-off, and not worth a mention: this computer's files, and
-/// what the hand-off writes itself or adds only when chosen.
+/// Never in an export, and not worth a mention: this computer's files, other
+/// exports, and what the export adds only when chosen.
 fn never(rel: &str) -> bool {
   let parts: Vec<&str> = rel.split('/').collect();
   let Some((name, folders)) = parts.split_last() else {
     return true;
   };
+  let lower = name.to_ascii_lowercase();
   folders.iter().any(|f| NEVER_FOLDERS.contains(f))
-    || rel == GUIDE
     || rel == REGISTRY
     // Rayfin's environment for this computer, its secrets included, and its scratch files.
     || rel.starts_with("rayfin/.env")
     || rel.starts_with("rayfin/.temp/")
     || (folders == ["rayfin"] && name.starts_with('.') && name.ends_with(".tmp"))
     || *name == "rayfin.config.json"
+    // An export saved in the app's own folder.
+    || lower.ends_with(".fabricator")
+    || lower.ends_with(".fabricator.partial")
 }
 
 /// May hold a secret: environment files (not their examples), local settings,
@@ -192,14 +197,14 @@ fn compressed(rel: &str) -> bool {
       .is_some_and(|(_, ext)| COMPRESSED.iter().any(|c| c.eq_ignore_ascii_case(ext)))
 }
 
-/// What a file in the .zip is made from.
+/// What a file in the export is made from.
 enum Source {
   Disk(PathBuf),
   Text(Vec<u8>),
 }
 
 struct Item {
-  /// Its path in the .zip.
+  /// Its path in the export.
   name: String,
   source: Source,
   size: u64,
@@ -300,7 +305,7 @@ async fn count_versions(dir: &Path) -> u32 {
 }
 
 /// The app's own files from `listed`, and the ones kept out because they may
-/// hold secrets. `skip` is the .zip being written, should it be saved in the app.
+/// hold secrets. `skip` is the file being written, should it be saved in the app.
 fn code_items(dir: &Path, listed: &[String], skip: Option<&Path>) -> (Vec<Item>, Vec<String>) {
   let skip = skip.map(|s| s.to_string_lossy().to_string());
   let mut items = Vec::new();
@@ -366,30 +371,24 @@ fn scrub_config(text: &str) -> String {
   scrub_credentials(&out)
 }
 
-/// The recipient's git ignores the hand-off's own files.
-fn with_handoff_exclusions(exclude: &str) -> String {
-  let has = |patterns: &[&str]| exclude.lines().any(|l| patterns.contains(&l.trim()));
-  let mut block = String::new();
-  if !has(&["/HANDOFF.md", "HANDOFF.md"]) {
-    block.push_str("/HANDOFF.md\n");
-  }
-  if !has(&[".fabricator/", ".fabricator", "/.fabricator/", "/.fabricator"]) {
-    block.push_str(".fabricator/\n");
+/// The recipient's git ignores the export's record of itself, should they unzip
+/// it by hand.
+fn with_import_exclusions(exclude: &str) -> String {
+  let has = exclude.lines().any(|l| matches!(l.trim(), ".fabricator/" | ".fabricator" | "/.fabricator/" | "/.fabricator"));
+  if has {
+    return exclude.to_string();
   }
   let mut next = exclude.to_string();
-  if !block.is_empty() {
-    if !next.is_empty() && !next.ends_with('\n') {
-      next.push('\n');
-    }
-    next.push_str("\n# Added by Fabricator to a hand-off: its guide, and the files Fabricator reads when it opens the app\n");
-    next.push_str(&block);
+  if !next.is_empty() && !next.ends_with('\n') {
+    next.push('\n');
   }
+  next.push_str("\n# Added by Fabricator to an export: the files Fabricator reads when it imports the app\n.fabricator/\n");
   next
 }
 
 /// The version history: the app's `.git` folder, without its hooks, locks or
 /// other worktrees, with sign-ins and the sender's identity taken out of its
-/// settings and logs, and ignoring the hand-off's own files.
+/// settings and logs, and ignoring the export's record of itself.
 fn history_items(dir: &Path) -> Vec<Item> {
   let mut items = Vec::new();
   let mut has_exclude = false;
@@ -424,7 +423,7 @@ fn history_items(dir: &Path) -> Vec<Item> {
       };
       let rewritten = if rel == ".git/info/exclude" {
         has_exclude = true;
-        rewrite(with_handoff_exclusions)
+        rewrite(with_import_exclusions)
       } else if name == "config" {
         rewrite(scrub_config)
       } else if rel.starts_with(".git/logs/") {
@@ -439,16 +438,16 @@ fn history_items(dir: &Path) -> Vec<Item> {
     }
   }
   if !has_exclude {
-    items.push(Item::text(".git/info/exclude", with_handoff_exclusions("").into_bytes()));
+    items.push(Item::text(".git/info/exclude", with_import_exclusions("").into_bytes()));
   }
   items
 }
 
 /// Where the app is published, as `rayfin up` records it: its active
 /// deployment, or the first it records.
-fn published(dir: &Path) -> Option<HandoffDeployment> {
+fn published(dir: &Path) -> Option<ExportDeployment> {
   if let Some(Some(active)) = crate::commands::deploy::registry_active(dir) {
-    return Some(HandoffDeployment {
+    return Some(ExportDeployment {
       workspace: active.workspace_name,
       workspace_id: active.workspace_id,
       url: active.hosting,
@@ -456,7 +455,7 @@ fn published(dir: &Path) -> Option<HandoffDeployment> {
     });
   }
   let first = crate::commands::deploy::recorded_deployments(dir).into_iter().next()?;
-  Some(HandoffDeployment {
+  Some(ExportDeployment {
     workspace: first.workspace_name,
     workspace_id: first.workspace_id,
     url: first.hosting_url,
@@ -464,7 +463,7 @@ fn published(dir: &Path) -> Option<HandoffDeployment> {
   })
 }
 
-/// Who's handing the app off: the Fabric account in use.
+/// Who's exporting the app: the Fabric account in use.
 fn sender() -> Option<String> {
   crate::services::fabric_accounts::list()
     .into_iter()
@@ -474,127 +473,26 @@ fn sender() -> Option<String> {
     .filter(|user| user.contains('@'))
 }
 
-/// What the guide and the record say about a hand-off.
+/// What an export records about itself.
 struct Facts {
   name: String,
   from: Option<String>,
-  /// When, as the guide says it.
-  date: String,
   created_at: String,
   fabricator: String,
-  published: Option<HandoffDeployment>,
-  secrets: Vec<String>,
+  published: Option<ExportDeployment>,
   deployment_names: Option<HashMap<String, String>>,
 }
 
-/// `A`, `A and B`, `A, B and C`.
-fn list(names: &[String]) -> String {
-  match names {
-    [] => String::new(),
-    [one] => one.clone(),
-    [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
-  }
-}
-
-/// `HANDOFF.md`: what the hand-off is and how to carry on, for someone reading
-/// it with or without Fabricator.
-fn guide(facts: &Facts, manifest: &Manifest) -> String {
-  let mut out = format!("# {}\n\n", facts.name);
-  match &facts.from {
-    Some(from) => out.push_str(&format!("{from} handed this Rayfin app off to you from Fabricator on {}.\n", facts.date)),
-    None => out.push_str(&format!("This Rayfin app was handed off to you from Fabricator on {}.\n", facts.date)),
-  }
-
-  out.push_str("\n## Open it in Fabricator\n\n");
-  out.push_str(&format!("1. Install Fabricator if you don't have it: {SITE}\n"));
-  out.push_str("2. In Fabricator, on **Your projects**, select **Open existing**, then **Open a hand-off**.\n");
-  out.push_str("3. Pick this .zip file.\n\n");
-  out.push_str("Fabricator unpacks the app into your projects folder, installs its packages and opens it");
-  out.push_str(if manifest.chat { ", with the chat that built it.\n\n" } else { ".\n\n" });
-  out.push_str("Unpacked it already? Select **Open existing**, then **Open folder**, and pick the unpacked folder.\n\n");
-  out.push_str(&format!("More about hand-offs: {OPEN_DOCS}\n"));
-
-  match (&facts.published, manifest.deployment) {
-    (Some(published), true) => {
-      out.push_str("\n## Where it's published\n\n");
-      out.push_str(&format!("It's published in the Fabric workspace **{}**.\n\n", published.workspace));
-      if let Some(url) = &published.url {
-        out.push_str(&format!("- App: {url}\n"));
-      }
-      if let Some(url) = &published.portal_url {
-        out.push_str(&format!("- In Fabric: {url}\n"));
-      }
-      if published.url.is_some() || published.portal_url.is_some() {
-        out.push('\n');
-      }
-      let who = facts.from.as_deref().unwrap_or("whoever handed it off");
-      out.push_str(&format!(
-        "When you publish, you update this app. To publish, you need to be a Contributor, Member or Admin of the \
-         workspace: ask {who} to add you in its **Manage access** in Fabric.\n"
-      ));
-    }
-    (Some(_), false) => out.push_str(
-      "\n## Publishing\n\nThis hand-off doesn't say where the app is published. When you publish it, Fabricator asks \
-       which Fabric workspace to publish it to, and publishes it as a new app.\n",
-    ),
-    (None, _) => out.push_str(
-      "\n## Publishing\n\nThe app isn't published yet. When you publish it, Fabricator asks which Fabric workspace to \
-       publish it to.\n",
-    ),
-  }
-
-  if !facts.secrets.is_empty() {
-    let names: Vec<String> = facts.secrets.iter().map(|s| format!("`{s}`")).collect();
-    let these = if names.len() == 1 { "this secret" } else { "these secrets" };
-    out.push_str(&format!(
-      "\n## Secrets\n\nThe app's functions use {these}: {}. Their values aren't in this hand-off.",
-      list(&names)
-    ));
-    if manifest.deployment {
-      out.push_str(" The published app keeps its values.");
-    }
-    out.push_str(" To run the app on your computer, set your own: in Fabricator, select **Code**, then **Secrets**.\n");
-  }
-
-  out.push_str("\n## What's in this hand-off\n\n- The app's code\n");
-  if manifest.history {
-    out.push_str("- Its version history, in `.git`\n");
-  }
-  if manifest.deployment {
-    out.push_str("- Where it's published, in `rayfin/.deployments.json`\n");
-  }
-  if manifest.chat {
-    out.push_str("- The chat that built it, which Fabricator restores when it opens the app\n");
-  }
-  out.push_str(
-    "\nNever in a hand-off: secret values and files that may hold them (such as `.env` files), the app's data on the \
-     sender's computer (`.rayfin-local`), installed packages (`node_modules`), build output, and anyone's sign-ins.\n",
-  );
-  out.push_str(
-    "\n## Without Fabricator\n\nIn a terminal in this folder, run `npm install`, then `npx rayfin up` to publish the \
-     app. Rayfin's documentation: https://rayfin.ai/docs\n",
-  );
-  out
-}
-
-/// Everything a hand-off holds, in the order it's written.
+/// Everything an export holds, in the order it's written.
 struct Plan {
   items: Vec<Item>,
   /// How many of the app's own files it holds.
   files: u64,
-  kept_out: Vec<String>,
 }
 
-fn plan(
-  dir: &Path,
-  listed: &[String],
-  choice: HandoffOptions,
-  facts: &Facts,
-  chat: &[ChatMessage],
-  skip: Option<&Path>,
-) -> Plan {
-  let (code, kept_out) = code_items(dir, listed, skip);
-  let files = code.len() as u64;
+fn plan(dir: &Path, listed: &[String], choice: ExportOptions, facts: &Facts, skip: Option<&Path>) -> Plan {
+  let (mut items, _kept_out) = code_items(dir, listed, skip);
+  let files = items.len() as u64;
   let registry = std::fs::symlink_metadata(dir.join(REGISTRY)).ok().filter(|m| m.is_file());
   let deployment = choice.deployment && facts.published.is_some() && registry.is_some();
   let manifest = Manifest {
@@ -605,24 +503,18 @@ fn plan(
     fabricator: Some(facts.fabricator.clone()),
     history: choice.history && has_own_history(dir),
     deployment,
-    chat: choice.chat && !chat.is_empty(),
     workspace: facts.published.as_ref().filter(|_| deployment).map(|p| p.workspace.clone()),
     deployment_names: facts.deployment_names.clone().filter(|names| deployment && !names.is_empty()),
   };
 
-  let mut items = vec![Item::text(GUIDE, guide(facts, &manifest).into_bytes())];
-  items.extend(code);
   if let Some(meta) = registry.filter(|_| deployment) {
     items.push(Item::disk(REGISTRY, dir.join(REGISTRY), &meta));
   }
   if manifest.history {
     items.extend(history_items(dir));
   }
-  items.push(Item::text(format!("{PAYLOAD}/{MANIFEST}"), serde_json::to_vec_pretty(&manifest).unwrap_or_default()));
-  if manifest.chat {
-    items.push(Item::text(format!("{PAYLOAD}/{CHAT}"), serde_json::to_vec(chat).unwrap_or_default()));
-  }
-  Plan { items, files, kept_out }
+  items.push(Item::text(MANIFEST, serde_json::to_vec_pretty(&manifest).unwrap_or_default()));
+  Plan { items, files }
 }
 
 /* -------------------------------- packing -------------------------------- */
@@ -652,14 +544,17 @@ fn zip_time(modified: Option<SystemTime>) -> zip::DateTime {
     .unwrap_or_default()
 }
 
-/// Where the .zip is written until it's complete, so a failed or stopped
-/// hand-off never leaves a broken one behind.
+/// Where the export is written until it's complete, so a failed or stopped
+/// export never leaves a broken file behind.
 fn partial_path(dest: &Path) -> PathBuf {
-  let name = dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "handoff.zip".into());
+  let name = dest
+    .file_name()
+    .map(|n| n.to_string_lossy().to_string())
+    .unwrap_or_else(|| format!("export.{EXTENSION}"));
   dest.with_file_name(format!("{name}.partial"))
 }
 
-/// Write `items` to the .zip at `dest`. Returns its size.
+/// Write `items` to the export at `dest`. Returns its size.
 fn write_zip(dest: &Path, items: &[Item], stop: &AtomicBool, mut progress: impl FnMut(u64, u64)) -> Result<u64, PackError> {
   let partial = partial_path(dest);
   let failed = |what: String| PackError::Failed(what);
@@ -695,8 +590,8 @@ fn write_zip(dest: &Path, items: &[Item], stop: &AtomicBool, mut progress: impl 
         progress(done, total);
       }
     }
-    let mut out = writer.finish().map_err(|e| failed(format!("Couldn’t finish the .zip: {e}")))?;
-    out.flush().map_err(|e| failed(format!("Couldn’t finish the .zip: {e}")))?;
+    let mut out = writer.finish().map_err(|e| failed(format!("Couldn’t finish the file: {e}")))?;
+    out.flush().map_err(|e| failed(format!("Couldn’t finish the file: {e}")))?;
     Ok(())
   })();
   if let Err(error) = written {
@@ -710,7 +605,7 @@ fn write_zip(dest: &Path, items: &[Item], stop: &AtomicBool, mut progress: impl 
   Ok(std::fs::metadata(dest).map(|m| m.len()).unwrap_or(0))
 }
 
-/// Marks a project as being packed until dropped, so Stop can find it.
+/// Marks a project as being exported until dropped, so Stop can find it.
 struct Packing {
   id: String,
   stop: Arc<AtomicBool>,
@@ -733,7 +628,7 @@ impl Drop for Packing {
   }
 }
 
-/* -------------------------------- opening -------------------------------- */
+/* ------------------------------- importing ------------------------------- */
 
 /// An entry's safe path, `/`-separated.
 fn slash_path(path: &Path) -> String {
@@ -747,7 +642,7 @@ fn slash_path(path: &Path) -> String {
     .join("/")
 }
 
-/// Where the app is in the .zip: at its top, or in the one folder at its top
+/// Where the app is in the file: at its top, or in the one folder at its top
 /// that holds it, as a folder the OS zipped does.
 fn app_prefix(files: &[&str]) -> Result<String, String> {
   if files.contains(&"rayfin/rayfin.yml") {
@@ -765,8 +660,8 @@ fn app_prefix(files: &[&str]) -> Result<String, String> {
   }
 }
 
-/// Left behind when a hand-off opens: installed packages (Fabricator installs
-/// them again), git hooks (a hand-off never has them; they'd run on the next
+/// Left behind when a file imports: installed packages (Fabricator installs
+/// them again), git hooks (an export never has them; they'd run on the next
 /// commit) and what macOS adds to the .zips it makes.
 fn skip_on_open(rel: &str) -> bool {
   rel.split('/').any(|part| part == "node_modules")
@@ -781,7 +676,15 @@ fn name_in_yaml(text: &str) -> Option<String> {
   Some(raw.trim_matches(['"', '\'']).trim().to_string()).filter(|n| !n.is_empty())
 }
 
-/// A small text file from the .zip.
+/// The workspace a publishing record says the app is published to.
+fn recorded_workspace(registry: &str) -> Option<String> {
+  let json: serde_json::Value = serde_json::from_str(registry).ok()?;
+  let active = json.get("active")?.as_str()?.trim();
+  json.get("deployments")?.get(active)?;
+  Some(active.to_string()).filter(|a| !a.is_empty())
+}
+
+/// A small text file from the archive.
 fn read_text<R: Read + std::io::Seek>(archive: &mut zip::ZipArchive<R>, index: usize) -> Option<String> {
   let entry = archive.by_index(index).ok()?;
   let mut text = String::new();
@@ -790,25 +693,41 @@ fn read_text<R: Read + std::io::Seek>(archive: &mut zip::ZipArchive<R>, index: u
 }
 
 /// The first folder in `root` named `slug`, or `slug-2`, `slug-3`… that's free.
-fn free_folder(root: &Path, slug: &str) -> Option<PathBuf> {
+fn free_folder(root: &Path, slug: &str) -> Result<PathBuf, String> {
   (1..100)
     .map(|n| if n == 1 { root.join(slug) } else { root.join(format!("{slug}-{n}")) })
     .find(|path| !path.exists())
+    .ok_or_else(|| format!("Your projects folder already has folders named {slug} to {slug}-99."))
 }
 
-/// Unpack the app in the .zip at `source` into a new folder in `root`, named
-/// after it. Anything that would land outside that folder, and links, stay
-/// behind. On failure, nothing is left.
-fn unpack(source: &Path, root: &Path, mut progress: impl FnMut(u64, u64)) -> Result<PathBuf, String> {
-  let unreadable = |e: &dyn std::fmt::Display| format!("Couldn’t read this .zip: {e}");
+/// One entry to unpack: where it is in the archive, its path in the app
+/// (`/`-separated), whether it's a folder, and its size.
+struct Entry {
+  index: usize,
+  path: String,
+  folder: bool,
+  size: u64,
+}
+
+/// What a file holds, read without unpacking it: an export, or any .zip of a
+/// Rayfin project.
+struct Contents {
+  archive: zip::ZipArchive<BufReader<File>>,
+  /// What to unpack. Links and anything that would land outside the app's
+  /// folder are never among them.
+  entries: Vec<Entry>,
+  manifest: Option<Manifest>,
+  rayfin_yml: Option<String>,
+  registry: Option<String>,
+}
+
+fn read_contents(source: &Path) -> Result<Contents, String> {
   let file = File::open(source).map_err(|e| format!("Couldn’t open {}: {e}", source.display()))?;
-  let mut archive = zip::ZipArchive::new(BufReader::new(file)).map_err(|e| unreadable(&e))?;
+  let mut archive = zip::ZipArchive::new(BufReader::new(file)).map_err(|_| UNREADABLE.to_string())?;
   if archive.len() > MAX_ENTRIES {
     return Err(TOO_MANY.into());
   }
-
-  // (index, safe path, folder)
-  let mut entries: Vec<(usize, String, bool)> = Vec::new();
+  let mut all: Vec<Entry> = Vec::new();
   for index in 0..archive.len() {
     let Ok(entry) = archive.by_index_data(index) else {
       continue;
@@ -819,56 +738,97 @@ fn unpack(source: &Path, root: &Path, mut progress: impl FnMut(u64, u64)) -> Res
     let Some(path) = entry.enclosed_name() else {
       continue;
     };
-    let rel = slash_path(&path);
-    if !rel.is_empty() {
-      entries.push((index, rel, entry.is_dir()));
+    let path = slash_path(&path);
+    if !path.is_empty() {
+      all.push(Entry { index, path, folder: entry.is_dir(), size: entry.size() });
     }
   }
-  let files: Vec<&str> = entries.iter().filter(|e| !e.2).map(|e| e.1.as_str()).collect();
+  let files: Vec<&str> = all.iter().filter(|e| !e.folder).map(|e| e.path.as_str()).collect();
   let prefix = app_prefix(&files)?;
-  let find = |rel: &str| entries.iter().find(|e| !e.2 && e.1 == rel).map(|e| e.0);
-  let manifest_at = find(&format!("{prefix}{PAYLOAD}/{MANIFEST}"));
-  let yaml_at = find(&format!("{prefix}rayfin/rayfin.yml"));
-  let recorded = manifest_at
-    .and_then(|i| read_text(&mut archive, i))
-    .and_then(|text| serde_json::from_str::<Manifest>(&text).ok())
-    .map(|m| m.name.trim().to_string())
-    .filter(|n| !n.is_empty());
-  let name = recorded
-    .or_else(|| yaml_at.and_then(|i| read_text(&mut archive, i)).and_then(|text| name_in_yaml(&text)))
-    .or_else(|| source.file_stem().map(|s| s.to_string_lossy().trim_end_matches("-handoff").to_string()))
-    .unwrap_or_default();
-  let slug = Some(slugify(&name)).filter(|s| !s.is_empty()).unwrap_or_else(|| "app".into());
+  let entries: Vec<Entry> = all
+    .into_iter()
+    .filter_map(|entry| {
+      let rel = entry.path.strip_prefix(prefix.as_str())?.to_string();
+      (!rel.is_empty() && !skip_on_open(&rel)).then_some(Entry { path: rel, ..entry })
+    })
+    .collect();
+  let find = |rel: &str| entries.iter().find(|e| !e.folder && e.path == rel).map(|e| e.index);
+  let (manifest_at, yml_at, registry_at) = (find(MANIFEST), find("rayfin/rayfin.yml"), find(REGISTRY));
+  let manifest = manifest_at.and_then(|i| read_text(&mut archive, i)).and_then(|text| serde_json::from_str(&text).ok());
+  let rayfin_yml = yml_at.and_then(|i| read_text(&mut archive, i));
+  let registry = registry_at.and_then(|i| read_text(&mut archive, i));
+  Ok(Contents { archive, entries, manifest, rayfin_yml, registry })
+}
 
+impl Contents {
+  /// The project's name: as the export records it, else as its `rayfin.yml`
+  /// says, else the file's.
+  fn name(&self, source: &Path) -> String {
+    self
+      .manifest
+      .as_ref()
+      .map(|m| m.name.trim().to_string())
+      .filter(|n| !n.is_empty())
+      .or_else(|| self.rayfin_yml.as_deref().and_then(name_in_yaml))
+      .or_else(|| source.file_stem().map(|s| s.to_string_lossy().to_string()))
+      .unwrap_or_default()
+  }
+
+  /// The folder it would be unpacked into.
+  fn destination(&self, source: &Path, root: &Path) -> Result<PathBuf, String> {
+    let name = self.name(source);
+    let slug = Some(slugify(&name)).filter(|s| !s.is_empty()).unwrap_or_else(|| "app".into());
+    free_folder(root, &slug)
+  }
+}
+
+/// What importing `source` into `root` would bring in.
+fn inspect(source: &Path, root: &Path) -> Result<ImportPreview, String> {
+  let contents = read_contents(source)?;
+  let manifest = contents.manifest.clone().unwrap_or_default();
+  let own = contents.entries.iter().filter(|e| !e.folder && !e.path.starts_with(".git/") && e.path != MANIFEST);
+  let (files, bytes) = own.fold((0u64, 0u64), |(n, size), e| (n + 1, size + e.size));
+  Ok(ImportPreview {
+    name: contents.name(source),
+    from: manifest.from,
+    exported_at: manifest.created_at,
+    files,
+    bytes,
+    history: contents.entries.iter().any(|e| e.path == ".git/HEAD"),
+    workspace: manifest.workspace.or_else(|| contents.registry.as_deref().and_then(recorded_workspace)),
+    secrets: contents.rayfin_yml.as_deref().map(crate::commands::secrets::declared_names_in).unwrap_or_default(),
+    folder: contents.destination(source, root)?.to_string_lossy().to_string(),
+  })
+}
+
+/// Unpack the app in the file at `source` into a new folder in `root`, named
+/// after it. On failure, nothing is left.
+fn unpack(source: &Path, root: &Path, mut progress: impl FnMut(u64, u64)) -> Result<PathBuf, String> {
+  let mut contents = read_contents(source)?;
   std::fs::create_dir_all(root).map_err(|e| format!("Couldn’t create your projects folder {}: {e}", root.display()))?;
-  let target = free_folder(root, &slug)
-    .ok_or_else(|| format!("Your projects folder already has folders named {slug} to {slug}-99."))?;
+  let target = contents.destination(source, root)?;
   std::fs::create_dir(&target).map_err(|e| format!("Couldn’t create {}: {e}", target.display()))?;
 
   let unpacked = (|| {
-    let wanted: Vec<&(usize, String, bool)> = entries
-      .iter()
-      .filter(|(_, rel, _)| rel.len() > prefix.len() && rel.starts_with(&prefix) && !skip_on_open(&rel[prefix.len()..]))
-      .collect();
-    let total = wanted.iter().filter(|e| !e.2).count() as u64;
+    let total = contents.entries.iter().filter(|e| !e.folder).count() as u64;
     let (mut done, mut written) = (0u64, 0u64);
     let mut shown = Instant::now();
     progress(0, total);
-    for (index, rel, folder) in wanted {
-      let out = rel[prefix.len()..].split('/').fold(target.clone(), |path, part| path.join(part));
+    for entry in &contents.entries {
+      let out = entry.path.split('/').fold(target.clone(), |path, part| path.join(part));
       let create = |dir: &Path| std::fs::create_dir_all(dir).map_err(|e| format!("Couldn’t create {}: {e}", dir.display()));
-      if *folder {
+      if entry.folder {
         create(&out)?;
         continue;
       }
       if let Some(parent) = out.parent() {
         create(parent)?;
       }
-      let mut entry = archive.by_index(*index).map_err(|e| unreadable(&e))?;
+      let mut from = contents.archive.by_index(entry.index).map_err(|_| UNREADABLE.to_string())?;
       let mut file = File::create(&out).map_err(|e| format!("Couldn’t create {}: {e}", out.display()))?;
       let room = MAX_UNPACKED_BYTES - written;
-      let copied = std::io::copy(&mut (&mut entry).take(room + 1), &mut file)
-        .map_err(|e| format!("Couldn’t unpack {}: {e}", &rel[prefix.len()..]))?;
+      let copied = std::io::copy(&mut (&mut from).take(room + 1), &mut file)
+        .map_err(|e| format!("Couldn’t unpack {}: {e}", entry.path))?;
       if copied > room {
         return Err(TOO_BIG.to_string());
       }
@@ -893,64 +853,92 @@ fn unpack(source: &Path, root: &Path, mut progress: impl FnMut(u64, u64)) -> Res
   }
 }
 
-/// What a hand-off left for Fabricator in a folder it was unpacked into.
-struct Payload {
-  manifest: Manifest,
-  chat: Vec<ChatMessage>,
-}
-
-/// Take the hand-off's files for Fabricator out of `dir`, so they don't end up
-/// in the app's history. `None` when the folder didn't come from a hand-off.
-fn take_payload(dir: &Path) -> Option<Payload> {
-  let fabricator = dir.join(".fabricator");
-  let folder = fabricator.join("handoff");
-  let manifest = serde_json::from_str::<Manifest>(&std::fs::read_to_string(folder.join(MANIFEST)).ok()?).ok()?;
-  let chat = std::fs::read_to_string(folder.join(CHAT))
-    .ok()
-    .and_then(|text| serde_json::from_str::<Vec<ChatMessage>>(&text).ok())
-    .unwrap_or_default();
-  if let Err(e) = std::fs::remove_dir_all(&folder) {
-    log::warn!("Couldn't remove {}: {e}", folder.display());
+/// Take the export's record of itself out of `dir`, so it doesn't end up in the
+/// app's history. `None` when the folder didn't come from an export.
+fn take_manifest(dir: &Path) -> Option<Manifest> {
+  let file = dir.join(MANIFEST);
+  let manifest = serde_json::from_str::<Manifest>(&std::fs::read_to_string(&file).ok()?).ok()?;
+  if let Err(e) = std::fs::remove_file(&file) {
+    log::warn!("Couldn't remove {}: {e}", file.display());
   }
+  let fabricator = dir.join(".fabricator");
   if std::fs::read_dir(&fabricator).is_ok_and(|mut rest| rest.next().is_none()) {
     let _ = std::fs::remove_dir(&fabricator);
   }
-  Some(Payload { manifest, chat })
+  Some(manifest)
 }
 
-/// Give a project just registered from a folder a hand-off was unpacked into
-/// what came with it: its chat, unless it has one, and the names its
-/// deployments had. Returns the hand-off's record and the messages restored.
-pub(crate) fn adopt(dir: &Path, project_id: &str) -> Option<(Manifest, u32)> {
-  let payload = take_payload(dir)?;
-  let mut restored = 0;
-  if !payload.chat.is_empty() && history::load_history(project_id).is_empty() {
-    restored = payload.chat.len() as u32;
-    history::save_history(project_id, payload.chat);
-  }
-  if let Some(names) = payload.manifest.deployment_names.clone().filter(|n| !n.is_empty()) {
+/// Give a project just registered from a folder an export was unpacked into
+/// what came with it: the names its deployments had. Returns the export's record.
+pub(crate) fn adopt(dir: &Path, project_id: &str) -> Option<Manifest> {
+  let manifest = take_manifest(dir)?;
+  if let Some(names) = manifest.deployment_names.clone().filter(|n| !n.is_empty()) {
     store::mutate_project(project_id, |p| {
       if p.deployment_names.as_ref().is_none_or(|known| known.is_empty()) {
         p.deployment_names = Some(names);
       }
     });
   }
-  let from = payload.manifest.from.as_deref().map(|f| format!(" from {f}")).unwrap_or_default();
-  journal::entry(
-    Level::Info,
-    Area::Project,
-    "project.handoff-opened",
-    &format!("Opened the hand-off of \"{}\"{from}.", payload.manifest.name),
-  )
-  .project(Some(project_id.to_string()))
-  .write();
-  Some((payload.manifest, restored))
+  let from = manifest.from.as_deref().map(|f| format!(", exported by {f}")).unwrap_or_default();
+  journal::entry(Level::Info, Area::Project, "project.imported", &format!("Imported \"{}\"{from}.", manifest.name))
+    .project(Some(project_id.to_string()))
+    .write();
+  Some(manifest)
+}
+
+/* --------------------------- opened by the system -------------------------- */
+
+fn is_export(path: &Path) -> bool {
+  path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case(EXTENSION))
+}
+
+/// The exports among a launch's arguments: `.fabricator` files that exist,
+/// relative ones resolved against `cwd`.
+pub(crate) fn exports_in<A: Into<OsString>>(args: impl IntoIterator<Item = A>, cwd: Option<&Path>) -> Vec<PathBuf> {
+  args
+    .into_iter()
+    .map(|arg| PathBuf::from(arg.into()))
+    .filter(|path| is_export(path))
+    .map(|path| match cwd {
+      Some(cwd) if path.is_relative() => cwd.join(path),
+      _ => path,
+    })
+    .filter(|path| path.is_file())
+    .collect()
+}
+
+/// Add `files` to those waiting to be imported. Returns whether any is new.
+fn hold(files: Vec<PathBuf>) -> bool {
+  let mut opened = OPENED.lock().unwrap();
+  let before = opened.len();
+  for file in files {
+    let file = normalize(&file).to_string_lossy().to_string();
+    if !opened.iter().any(|known| same_path(known, &file)) {
+      opened.push(file);
+    }
+  }
+  opened.len() > before
+}
+
+/// Hold exports the system asked Fabricator to open, from its command line, a
+/// second launch or macOS, and tell the workbench, which imports them once it's
+/// showing.
+pub(crate) fn queue_opened(app: &AppHandle, files: Vec<PathBuf>) {
+  if hold(files) {
+    let _ = app.emit(emit::EXPORT_OPENED, ());
+  }
+}
+
+/// The exports waiting to be imported. Each is returned once.
+#[tauri::command]
+pub fn projects_opened_exports() -> Vec<String> {
+  std::mem::take(&mut *OPENED.lock().unwrap())
 }
 
 /* -------------------------------- commands -------------------------------- */
 
-/// The project, when it can be handed off from here.
-fn handoff_project(id: &str) -> Result<StudioProject, String> {
+/// The project, when it can be exported from here.
+fn exportable_project(id: &str) -> Result<StudioProject, String> {
   let project = store::find_project(id).ok_or("Project not found.")?;
   if project.team.is_some() {
     return Err(TEAM_APP.into());
@@ -963,30 +951,28 @@ fn handoff_project(id: &str) -> Result<StudioProject, String> {
 
 fn emit_progress(app: &AppHandle, id: &str, phase: &str, processed: u64, total: u64) {
   let _ = app.emit(
-    emit::HANDOFF_PROGRESS,
-    HandoffProgressEvent { id: id.to_string(), phase: phase.to_string(), processed, total },
+    emit::ZIP_PROGRESS,
+    ZipProgressEvent { id: id.to_string(), phase: phase.to_string(), processed, total },
   );
 }
 
-/// What a hand-off of the project would hold, for the hand-off dialog.
+/// What exporting the project would put in its file, for the export dialog.
 #[tauri::command]
-pub async fn projects_handoff_preview(id: String) -> Result<HandoffPreview, String> {
-  let project = handoff_project(&id)?;
+pub async fn projects_export_preview(id: String) -> Result<ExportPreview, String> {
+  let project = exportable_project(&id)?;
   let dir = PathBuf::from(&project.path);
   let listed = app_files(&dir).await;
   let versions = if has_own_history(&dir) { Some(count_versions(&dir).await) } else { None };
-  let chat_messages = history::load_history(&id).len() as u32;
   tokio::task::spawn_blocking(move || {
     let (code, kept_out) = code_items(&dir, &listed, None);
-    HandoffPreview {
+    ExportPreview {
       files: code.len() as u64,
       bytes: code.iter().map(|i| i.size).sum(),
-      history: versions.map(|versions| HandoffHistory {
+      history: versions.map(|versions| ExportHistory {
         versions,
         bytes: history_items(&dir).iter().map(|i| i.size).sum(),
       }),
       deployment: published(&dir),
-      chat_messages,
       secrets: crate::commands::secrets::declared_names(&dir),
       kept_out,
     }
@@ -995,28 +981,27 @@ pub async fn projects_handoff_preview(id: String) -> Result<HandoffPreview, Stri
   .map_err(|e| format!("Couldn’t look at the project: {e}"))
 }
 
-/// Ask where to save a hand-off of the project, then pack it there. The
-/// project's lease keeps chat turns and publishes from changing its files
-/// meanwhile; progress streams on `handoff:progress`.
+/// Ask where to save the project's export, then write it there. The project's
+/// lease keeps chat turns and publishes from changing its files meanwhile;
+/// progress streams on `zip:progress`.
 #[tauri::command]
-pub async fn projects_handoff_save(
+pub async fn projects_export(
   app: AppHandle,
   state: State<'_, AppState>,
   id: String,
-  options: HandoffOptions,
-) -> Result<HandoffSaveResult, String> {
-  let failed = |error: String| -> Result<HandoffSaveResult, String> {
-    Ok(HandoffSaveResult { error: Some(error), ..Default::default() })
-  };
-  let project = match handoff_project(&id) {
+  options: ExportOptions,
+) -> Result<ExportResult, String> {
+  let failed =
+    |error: String| -> Result<ExportResult, String> { Ok(ExportResult { error: Some(error), ..Default::default() }) };
+  let project = match exportable_project(&id) {
     Ok(project) => project,
     Err(error) => return failed(error),
   };
   let slug = Some(slugify(&project.name)).filter(|s| !s.is_empty()).unwrap_or_else(|| "app".into());
-  let Some(dest) = pick_destination(&app, &format!("{slug}-handoff.zip")).await else {
-    return Ok(HandoffSaveResult { cancelled: true, ..Default::default() });
+  let Some(dest) = pick_destination(&app, &format!("{slug}.{EXTENSION}")).await else {
+    return Ok(ExportResult { cancelled: true, ..Default::default() });
   };
-  let _lease = match state.mutations.handoff(&id) {
+  let _lease = match state.mutations.export(&id) {
     Ok(lease) => lease,
     Err(error) => return failed(error),
   };
@@ -1024,8 +1009,7 @@ pub async fn projects_handoff_save(
   let dir = PathBuf::from(&project.path);
   let project_name = project.name.clone();
   let listed = app_files(&dir).await;
-  let chat = if options.chat { history::load_history(&id) } else { Vec::new() };
-  let facts_base = (sender(), app.package_info().version.to_string());
+  let (from, fabricator) = (sender(), app.package_info().version.to_string());
   let packing = Packing::start(&id);
   let stop = packing.stop.clone();
   let emitter = app.clone();
@@ -1033,15 +1017,13 @@ pub async fn projects_handoff_save(
   let packed = tokio::task::spawn_blocking(move || {
     let facts = Facts {
       name: project.name.clone(),
-      from: facts_base.0,
-      date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+      from,
       created_at: now_iso(),
-      fabricator: facts_base.1,
+      fabricator,
       published: published(&dir),
-      secrets: crate::commands::secrets::declared_names(&dir),
       deployment_names: project.deployment_names.clone(),
     };
-    let plan = plan(&dir, &listed, options, &facts, &chat, Some(&target));
+    let plan = plan(&dir, &listed, options, &facts, Some(&target));
     let bytes = write_zip(&target, &plan.items, &stop, |processed, total| {
       emit_progress(&emitter, &project_id, "packing", processed, total)
     })?;
@@ -1055,12 +1037,12 @@ pub async fn projects_handoff_save(
       journal::entry(
         Level::Info,
         Area::Project,
-        "project.handed-off",
-        &format!("Saved a hand-off of \"{}\" with {own} of its files.", project_name),
+        "project.exported",
+        &format!("Exported \"{project_name}\" with {own} of its files."),
       )
       .project(Some(id.clone()))
       .write();
-      Ok(HandoffSaveResult {
+      Ok(ExportResult {
         ok: true,
         path: Some(dest.to_string_lossy().to_string()),
         bytes: Some(bytes),
@@ -1068,42 +1050,65 @@ pub async fn projects_handoff_save(
         ..Default::default()
       })
     }
-    Ok(Err(PackError::Stopped)) => Ok(HandoffSaveResult { cancelled: true, ..Default::default() }),
+    Ok(Err(PackError::Stopped)) => Ok(ExportResult { cancelled: true, ..Default::default() }),
     Ok(Err(PackError::Failed(error))) => failed(error),
-    Err(error) => failed(format!("Couldn’t pack the project: {error}")),
+    Err(error) => failed(format!("Couldn’t export the project: {error}")),
   }
 }
 
-/// Stop packing the project's hand-off. The half-written .zip is removed.
+/// Stop exporting the project. The half-written file is removed.
 #[tauri::command]
-pub fn projects_handoff_stop(id: String) {
+pub fn projects_export_stop(id: String) {
   if let Some(stop) = PACKING.lock().unwrap().get(&id) {
     stop.store(true, Ordering::Relaxed);
   }
 }
 
-/// Show a saved hand-off in the file manager.
+/// Show a saved export in the file manager.
 #[tauri::command]
-pub fn projects_handoff_reveal(app: AppHandle, path: String) -> Result<(), String> {
+pub fn projects_export_reveal(app: AppHandle, path: String) -> Result<(), String> {
   let file = PathBuf::from(&path);
-  let zip = file.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
-  if !zip || !file.is_file() {
-    return Err("That hand-off isn’t there anymore.".into());
+  if !is_export(&file) || !file.is_file() {
+    return Err("That file isn’t there anymore.".into());
   }
   app.opener().reveal_item_in_dir(&file).map_err(|e| e.to_string())
 }
 
-/// Pick a hand-off (or any .zip of a Rayfin project), unpack it into the
-/// projects folder and open it.
+/// Ask for a file to import: a `.fabricator` file, or a .zip of a Rayfin project.
 #[tauri::command]
-pub async fn projects_handoff_open(app: AppHandle) -> HandoffOpenResult {
-  let Some(zip) = pick_zip(&app).await else {
-    return HandoffOpenResult { cancelled: true, ..Default::default() };
-  };
+pub async fn projects_import_pick(app: AppHandle) -> Option<String> {
+  let (tx, rx) = tokio::sync::oneshot::channel();
+  app
+    .dialog()
+    .file()
+    .set_title("Import a project")
+    .add_filter("Fabricator project", &[EXTENSION])
+    .add_filter("Zip archive", &["zip"])
+    .pick_file(move |picked| {
+      let _ = tx.send(picked);
+    });
+  let path = rx.await.ok().flatten()?.into_path().ok()?;
+  Some(path.to_string_lossy().to_string())
+}
+
+/// What importing the file would bring in, for the import dialog.
+#[tauri::command]
+pub async fn projects_import_inspect(path: String) -> Result<ImportPreview, String> {
+  let root = PathBuf::from(store::get_state().workspace_root);
+  tokio::task::spawn_blocking(move || inspect(Path::new(&path), &root))
+    .await
+    .map_err(|e| format!("Couldn’t read the file: {e}"))?
+}
+
+/// Unpack the file into a new folder in the projects folder, and open it.
+#[tauri::command]
+pub async fn projects_import(app: AppHandle, path: String) -> ImportResult {
+  let source = PathBuf::from(&path);
   let root = PathBuf::from(store::get_state().workspace_root);
   let emitter = app.clone();
+  let from = source.clone();
   let unpacked = tokio::task::spawn_blocking(move || {
-    unpack(&zip, &root, |processed, total| emit_progress(&emitter, OPENING, "unpacking", processed, total))
+    unpack(&from, &root, |processed, total| emit_progress(&emitter, IMPORTING, "unpacking", processed, total))
   })
   .await
   .map_err(|e| e.to_string())
@@ -1111,56 +1116,37 @@ pub async fn projects_handoff_open(app: AppHandle) -> HandoffOpenResult {
   let dir = match unpacked {
     Ok(dir) => normalize(&dir),
     Err(error) => {
-      journal::entry(Level::Warn, Area::Project, "project.handoff-open.failed", &error).write();
-      return HandoffOpenResult { error: Some(error), ..Default::default() };
+      journal::entry(Level::Warn, Area::Project, "project.import.failed", &error).write();
+      return ImportResult { error: Some(error), ..Default::default() };
     }
   };
 
   crate::commands::skills::ensure_project_skills(&dir.to_string_lossy());
   let project = register_project(&dir, None);
-  let adopted = adopt(&dir, &project.id);
-  store::set_active(Some(project.id.clone()));
-  let (manifest, chat_messages) = adopted.unwrap_or_default();
-  HandoffOpenResult {
-    ok: true,
-    project: store::find_project(&project.id).map(annotate_project),
-    from: manifest.from,
-    at: manifest.created_at,
-    chat_messages,
-    workspace: manifest.workspace.filter(|_| manifest.deployment),
-    ..Default::default()
+  if adopt(&dir, &project.id).is_none() {
+    let file = source.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    journal::entry(Level::Info, Area::Project, "project.imported", &format!("Imported \"{}\" from {file}.", project.name))
+      .project(Some(project.id.clone()))
+      .write();
   }
+  store::set_active(Some(project.id.clone()));
+  ImportResult { ok: true, error: None, project: store::find_project(&project.id).map(annotate_project) }
 }
 
-/// Ask where to save a hand-off. `None` when the dialog is closed.
+/// Ask where to save an export. `None` when the dialog is closed.
 async fn pick_destination(app: &AppHandle, suggested: &str) -> Option<PathBuf> {
   let (tx, rx) = tokio::sync::oneshot::channel();
   app
     .dialog()
     .file()
-    .set_title("Save hand-off")
-    .add_filter("Zip archive", &["zip"])
+    .set_title("Export project")
+    .add_filter("Fabricator project", &[EXTENSION])
     .set_file_name(suggested)
     .save_file(move |picked| {
       let _ = tx.send(picked);
     });
   let path = rx.await.ok().flatten()?.into_path().ok()?;
-  let zip = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
-  Some(if zip { path } else { PathBuf::from(format!("{}.zip", path.display())) })
-}
-
-/// Ask for a hand-off to open. `None` when the dialog is closed.
-async fn pick_zip(app: &AppHandle) -> Option<PathBuf> {
-  let (tx, rx) = tokio::sync::oneshot::channel();
-  app
-    .dialog()
-    .file()
-    .set_title("Open a hand-off")
-    .add_filter("Hand-off (.zip)", &["zip"])
-    .pick_file(move |picked| {
-      let _ = tx.send(picked);
-    });
-  rx.await.ok().flatten()?.into_path().ok()
+  Some(if is_export(&path) { path } else { PathBuf::from(format!("{}.{EXTENSION}", path.display())) })
 }
 
 #[cfg(test)]
@@ -1171,7 +1157,7 @@ mod tests {
 
   impl TempDir {
     fn new() -> Self {
-      let dir = std::env::temp_dir().join(format!("fabricator-handoff-{}", uuid::Uuid::new_v4()));
+      let dir = std::env::temp_dir().join(format!("fabricator-export-{}", uuid::Uuid::new_v4()));
       std::fs::create_dir_all(&dir).unwrap();
       Self(dir)
     }
@@ -1183,9 +1169,7 @@ mod tests {
     }
 
     fn git(&self, args: &[&str]) -> String {
-      let out = std::process::Command::new("git").args(args).current_dir(&self.0).output().expect("git runs");
-      assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
-      String::from_utf8_lossy(&out.stdout).to_string()
+      git_in(&self.0, args)
     }
   }
 
@@ -1195,35 +1179,40 @@ mod tests {
     }
   }
 
-  fn facts(published: Option<HandoffDeployment>) -> Facts {
+  fn git_in(dir: &Path, args: &[&str]) -> String {
+    let out = std::process::Command::new("git").args(args).current_dir(dir).output().expect("git runs");
+    assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+    String::from_utf8_lossy(&out.stdout).to_string()
+  }
+
+  fn facts(published: Option<ExportDeployment>) -> Facts {
     Facts {
       name: "Toy Story".into(),
       from: Some("amy@contoso.com".into()),
-      date: "2026-11-01".into(),
       created_at: "2026-11-01T19:40:00.000Z".into(),
-      fabricator: "1.36.0".into(),
+      fabricator: "1.37.0".into(),
       published,
-      secrets: vec!["OPENAI_KEY".into(), "STRIPE_KEY".into()],
       deployment_names: Some(HashMap::from([("ws-1".to_string(), "Production".to_string())])),
     }
   }
 
-  fn fabcon() -> HandoffDeployment {
-    HandoffDeployment {
-      workspace: "fabcon".into(),
-      workspace_id: Some("ws-1".into()),
-      url: Some("https://toy.example.app".into()),
-      portal_url: Some("https://app.fabric.microsoft.com/groups/ws-1/appbackends/item".into()),
-    }
+  fn export(app: &Path, choice: ExportOptions, facts: &Facts, dest: &Path) -> Plan {
+    let plan = plan(app, &walk(app), choice, facts, Some(dest));
+    write_zip(dest, &plan.items, &AtomicBool::new(false), |_, _| {}).unwrap_or_else(|_| panic!("exports"));
+    plan
   }
 
-  fn chat() -> Vec<ChatMessage> {
-    serde_json::from_value(serde_json::json!([
-      {"id":"u1","role":"user","text":"Build a toy catalog"},
-      {"id":"a1","role":"assistant","text":"Done."}
-    ]))
-    .unwrap()
+  /// A .zip written entry by entry, as another tool would.
+  fn zip_of(dest: &Path, files: &[(&str, &str)]) {
+    let mut zip = zip::ZipWriter::new(File::create(dest).unwrap());
+    for (name, content) in files {
+      zip.start_file(*name, SimpleFileOptions::default()).unwrap();
+      zip.write_all(content.as_bytes()).unwrap();
+    }
+    zip.finish().unwrap();
   }
+
+  const BOTH: ExportOptions = ExportOptions { history: true, deployment: true };
 
   #[test]
   fn secrets_and_this_computers_files_never_go_in() {
@@ -1238,15 +1227,17 @@ mod tests {
       "rayfin/.temp/build.json",
       "rayfin/.deploy.tmp",
       "rayfin/.deployments.json",
-      "HANDOFF.md",
       "rayfin.config.json",
+      "toy-story.fabricator",
+      "exports/Toy Story.FABRICATOR",
+      "toy-story.fabricator.partial",
     ] {
       assert!(never(left), "{left}");
     }
     for secret in [".env", "packages/web/.env.production", ".env.local", "server.key", "certs/dev.pem", "packages/functions/local.settings.json"] {
       assert!(!never(secret) && may_hold_secret(secret), "{secret}");
     }
-    for kept in ["rayfin/rayfin.yml", ".env.example", "src/App.tsx", "docs/HANDOFF.md", "src/keys.ts", ".gitignore", "rayfin/.lockfile.json"] {
+    for kept in ["rayfin/rayfin.yml", ".env.example", "src/App.tsx", "HANDOFF.md", "src/keys.ts", ".gitignore", "rayfin/.lockfile.json"] {
       assert!(!never(kept) && !may_hold_secret(kept), "{kept}");
     }
   }
@@ -1268,32 +1259,14 @@ mod tests {
       "0000 1111 Amy <amy@contoso.com> 1700000000 +0000\tclone: from https://github.com/contoso/toy.git\n"
     );
 
-    let exclude = with_handoff_exclusions("# git ls-files --others --exclude-from=.git/info/exclude\n.fabricator/\n");
-    assert!(exclude.ends_with("/HANDOFF.md\n"));
-    assert_eq!(exclude.matches(".fabricator/").count(), 1);
-    assert_eq!(with_handoff_exclusions(&exclude), exclude, "added once");
+    let exclude = with_import_exclusions("# git ls-files --others --exclude-from=.git/info/exclude");
+    assert!(exclude.starts_with("# git ls-files --others --exclude-from=.git/info/exclude\n"));
+    assert!(exclude.ends_with("\n.fabricator/\n"));
+    assert_eq!(with_import_exclusions(&exclude), exclude, "added once");
   }
 
   #[test]
-  fn the_guide_says_where_it_is_published_and_what_the_recipient_needs() {
-    let manifest = |deployment: bool| Manifest { deployment, history: true, chat: true, ..Default::default() };
-    let text = guide(&facts(Some(fabcon())), &manifest(true));
-    assert!(text.starts_with("# Toy Story\n\namy@contoso.com handed this Rayfin app off to you from Fabricator on 2026-11-01."));
-    assert!(text.contains("**Open existing**, then **Open a hand-off**"));
-    assert!(text.contains("with the chat that built it"));
-    assert!(text.contains("It's published in the Fabric workspace **fabcon**."));
-    assert!(text.contains("- App: https://toy.example.app\n"));
-    assert!(text.contains("ask amy@contoso.com to add you"));
-    assert!(text.contains("`OPENAI_KEY` and `STRIPE_KEY`. Their values aren't in this hand-off. The published app keeps its values."));
-    assert!(text.contains("- Its version history, in `.git`\n- Where it's published, in `rayfin/.deployments.json`\n"));
-
-    let unlinked = guide(&facts(Some(fabcon())), &manifest(false));
-    assert!(unlinked.contains("doesn't say where the app is published") && !unlinked.contains("fabcon"));
-    assert!(guide(&facts(None), &manifest(false)).contains("The app isn't published yet."));
-  }
-
-  #[test]
-  fn an_opened_zip_finds_the_app_at_its_top_or_in_one_folder() {
+  fn an_import_finds_the_app_at_its_top_or_in_one_folder() {
     assert_eq!(app_prefix(&["rayfin/rayfin.yml", "src/a.ts"]), Ok(String::new()));
     assert_eq!(app_prefix(&["toy/rayfin/rayfin.yml", "__MACOSX/toy/rayfin/rayfin.yml"]), Ok("toy/".into()));
     assert_eq!(app_prefix(&["src/a.ts"]), Err(NOT_AN_APP.into()));
@@ -1304,92 +1277,166 @@ mod tests {
   }
 
   #[test]
-  fn a_handoff_without_git_round_trips_without_secrets() {
+  fn an_export_without_git_imports_without_its_secrets() {
     let app = TempDir::new();
-    app.write("rayfin/rayfin.yml", "id: toy-story\nname: Toy Story\n");
+    let yml = "id: toy-story\nname: Toy Story\nsecrets:\n  - name: OPENAI_KEY\n";
+    let registry = r#"{"active":"fabcon","deployments":{"fabcon":{"fabricItemId":"item","fabricWorkspaceId":"ws-1","hostingUrl":"https://toy.example.app"}}}"#;
+    app.write("rayfin/rayfin.yml", yml);
     app.write("src/App.tsx", "export default 1\n");
     app.write("public/logo.png", "png");
     app.write(".env", "SECRET=1\n");
     app.write("rayfin/.env", "RAYFIN_PUBLIC_KEY=1\n");
-    app.write("rayfin/.deployments.json", r#"{"active":"fabcon","deployments":{"fabcon":{"fabricItemId":"item","fabricWorkspaceId":"ws-1","hostingUrl":"https://toy.example.app"}}}"#);
+    app.write("rayfin/.deployments.json", registry);
     app.write(".rayfin-local/db.sqlite", "local data");
     app.write("node_modules/react/index.js", "x");
     app.write("dist/index.html", "built");
     app.write(".fabricator/migration/page.png", "real data");
+    app.write("old.fabricator", "an earlier export");
     let out = TempDir::new();
-    let dest = out.0.join("toy-story-handoff.zip");
+    let dest = out.0.join("toy-story.fabricator");
 
-    let listed = walk(&app.0);
     let facts = Facts { published: published(&app.0), ..facts(None) };
     assert_eq!(facts.published.as_ref().map(|p| p.workspace.as_str()), Some("fabcon"));
-    let choice = HandoffOptions { history: true, deployment: true, chat: true };
-    let plan = plan(&app.0, &listed, choice, &facts, &chat(), Some(&dest));
-    assert_eq!((plan.files, plan.kept_out.clone()), (3, vec![".env".to_string()]));
+    let plan = plan(&app.0, &walk(&app.0), BOTH, &facts, Some(&dest));
+    assert_eq!(plan.files, 3);
+    assert_eq!(code_items(&app.0, &walk(&app.0), None).1, vec![".env".to_string()], "named in the dialog");
     let mut seen = Vec::new();
     write_zip(&dest, &plan.items, &AtomicBool::new(false), |done, total| seen.push((done, total)))
-      .unwrap_or_else(|_| panic!("packs"));
-    // The guide, three files, the publishing record, the record for Fabricator and the chat.
-    assert_eq!(seen.last(), Some(&(7, 7)));
+      .unwrap_or_else(|_| panic!("exports"));
+    // Three of the app's files, its publishing record and the export's record of itself.
+    assert_eq!(seen.last(), Some(&(5, 5)));
     assert!(!partial_path(&dest).exists());
 
     let projects = TempDir::new();
     std::fs::create_dir_all(projects.0.join("toy-story")).unwrap();
-    let opened = unpack(&dest, &projects.0, |_, _| {}).unwrap();
+    let preview = inspect(&dest, &projects.0).unwrap();
+    let own_bytes = (yml.len() + "export default 1\n".len() + "png".len() + registry.len()) as u64;
+    assert_eq!(
+      preview,
+      ImportPreview {
+        name: "Toy Story".into(),
+        from: Some("amy@contoso.com".into()),
+        exported_at: Some("2026-11-01T19:40:00.000Z".into()),
+        files: 4,
+        bytes: own_bytes,
+        history: false,
+        workspace: Some("fabcon".into()),
+        secrets: vec!["OPENAI_KEY".into()],
+        folder: projects.0.join("toy-story-2").to_string_lossy().to_string(),
+      }
+    );
+
+    let mut progress = Vec::new();
+    let opened = unpack(&dest, &projects.0, |done, total| progress.push((done, total))).unwrap();
     assert_eq!(opened, projects.0.join("toy-story-2"), "an existing folder is left alone");
-    for kept in ["rayfin/rayfin.yml", "src/App.tsx", "public/logo.png", "rayfin/.deployments.json", "HANDOFF.md"] {
+    assert_eq!(progress.last(), Some(&(5, 5)));
+    for kept in ["rayfin/rayfin.yml", "src/App.tsx", "public/logo.png", "rayfin/.deployments.json", MANIFEST] {
       assert!(opened.join(kept).is_file(), "{kept}");
     }
-    for left in [".env", "rayfin/.env", ".rayfin-local", "node_modules", "dist", ".fabricator/migration", ".git"] {
+    for left in [".env", "rayfin/.env", ".rayfin-local", "node_modules", "dist", ".fabricator/migration", ".git", "old.fabricator"] {
       assert!(!opened.join(left).exists(), "{left}");
     }
 
-    let payload = take_payload(&opened).expect("a hand-off");
-    assert_eq!(payload.manifest.name, "Toy Story");
-    assert_eq!(payload.manifest.from.as_deref(), Some("amy@contoso.com"));
-    assert!(payload.manifest.deployment && payload.manifest.chat && !payload.manifest.history, "no history to send");
-    assert_eq!(payload.manifest.workspace.as_deref(), Some("fabcon"));
-    assert_eq!(payload.chat.len(), 2);
-    assert!(!opened.join(".fabricator").exists(), "its files are taken out");
-    assert!(take_payload(&opened).is_none());
+    let manifest = take_manifest(&opened).expect("an export");
+    assert_eq!(manifest.name, "Toy Story");
+    assert_eq!(manifest.from.as_deref(), Some("amy@contoso.com"));
+    assert!(manifest.deployment && !manifest.history, "no history to export");
+    assert_eq!(manifest.workspace.as_deref(), Some("fabcon"));
+    assert_eq!(manifest.deployment_names.and_then(|n| n.get("ws-1").cloned()).as_deref(), Some("Production"));
+    assert!(!opened.join(".fabricator").exists(), "its record is taken out");
+    assert!(take_manifest(&opened).is_none());
   }
 
   #[test]
-  fn leaving_out_the_publishing_record_and_chat_leaves_them_out() {
+  fn leaving_out_the_publishing_record_leaves_it_out() {
     let app = TempDir::new();
     app.write("rayfin/rayfin.yml", "name: Toy Story\n");
     app.write("rayfin/.deployments.json", r#"{"active":"fabcon","deployments":{"fabcon":{"fabricItemId":"item","fabricWorkspaceId":"ws-1"}}}"#);
     let facts = Facts { published: published(&app.0), ..facts(None) };
-    let plan = plan(&app.0, &walk(&app.0), HandoffOptions::default(), &facts, &chat(), None);
+    let plan = plan(&app.0, &walk(&app.0), ExportOptions::default(), &facts, None);
     let names: Vec<&str> = plan.items.iter().map(|i| i.name.as_str()).collect();
-    assert_eq!(names, vec!["HANDOFF.md", "rayfin/rayfin.yml", ".fabricator/handoff/handoff.json"]);
+    assert_eq!(names, vec!["rayfin/rayfin.yml", MANIFEST]);
+
+    let out = TempDir::new();
+    let dest = out.0.join("toy.fabricator");
+    write_zip(&dest, &plan.items, &AtomicBool::new(false), |_, _| {}).unwrap_or_else(|_| panic!("exports"));
+    assert_eq!(inspect(&dest, &out.0).unwrap().workspace, None);
   }
 
   #[test]
-  fn a_stopped_handoff_leaves_nothing_behind() {
+  fn a_stopped_export_leaves_nothing_behind() {
     let app = TempDir::new();
     app.write("rayfin/rayfin.yml", "name: Toy Story\n");
     let out = TempDir::new();
-    let dest = out.0.join("toy.zip");
-    let plan = plan(&app.0, &walk(&app.0), HandoffOptions::default(), &facts(None), &[], None);
+    let dest = out.0.join("toy.fabricator");
+    let plan = plan(&app.0, &walk(&app.0), ExportOptions::default(), &facts(None), None);
     assert!(matches!(write_zip(&dest, &plan.items, &AtomicBool::new(true), |_, _| {}), Err(PackError::Stopped)));
     assert!(!dest.exists() && !partial_path(&dest).exists());
   }
 
   #[test]
-  fn opening_a_zip_that_isnt_an_app_creates_nothing() {
+  fn a_zip_of_a_project_imports_with_where_it_is_published() {
     let out = TempDir::new();
-    let dest = out.0.join("photos.zip");
-    {
-      let mut zip = zip::ZipWriter::new(File::create(&dest).unwrap());
-      zip.start_file("../escape.txt", SimpleFileOptions::default()).unwrap();
-      zip.write_all(b"evil").unwrap();
-      zip.start_file("photo.jpg", SimpleFileOptions::default()).unwrap();
-      zip.finish().unwrap();
-    }
+    let dest = out.0.join("toy.zip");
+    zip_of(
+      &dest,
+      &[
+        ("toy/rayfin/rayfin.yml", "name: Toy Story\n"),
+        ("toy/rayfin/.deployments.json", r#"{"active":"fabcon","deployments":{"fabcon":{"fabricItemId":"item"}}}"#),
+        ("toy/node_modules/react/index.js", "x"),
+        ("__MACOSX/toy/._rayfin", "x"),
+      ],
+    );
     let projects = TempDir::new();
-    assert_eq!(unpack(&dest, &projects.0, |_, _| {}), Err(NOT_AN_APP.to_string()));
+    let preview = inspect(&dest, &projects.0).unwrap();
+    assert_eq!((preview.name.as_str(), preview.from.clone(), preview.files), ("Toy Story", None, 2));
+    assert_eq!(preview.workspace.as_deref(), Some("fabcon"));
+
+    let opened = unpack(&dest, &projects.0, |_, _| {}).unwrap();
+    assert_eq!(opened, projects.0.join("toy-story"));
+    assert!(opened.join("rayfin/.deployments.json").is_file());
+    assert!(!opened.join("node_modules").exists() && !projects.0.join("__MACOSX").exists());
+    assert!(take_manifest(&opened).is_none(), "not an export");
+  }
+
+  #[test]
+  fn importing_a_file_that_isnt_an_app_creates_nothing() {
+    let out = TempDir::new();
+    let photos = out.0.join("photos.zip");
+    zip_of(&photos, &[("../escape.txt", "evil"), ("photo.jpg", "jpg")]);
+    let broken = out.0.join("broken.fabricator");
+    std::fs::write(&broken, "not a zip").unwrap();
+    let projects = TempDir::new();
+    assert_eq!(inspect(&photos, &projects.0), Err(NOT_AN_APP.to_string()));
+    assert_eq!(unpack(&photos, &projects.0, |_, _| {}), Err(NOT_AN_APP.to_string()));
+    assert_eq!(unpack(&broken, &projects.0, |_, _| {}), Err(UNREADABLE.to_string()));
     assert_eq!(std::fs::read_dir(&projects.0).unwrap().count(), 0);
     assert!(!out.0.parent().unwrap().join("escape.txt").exists());
+  }
+
+  #[test]
+  fn exports_opened_with_fabricator_are_held_until_the_workbench_takes_them() {
+    let dir = TempDir::new();
+    dir.write("Toy Story.fabricator", "zip");
+    dir.write("other/LEADS.FABRICATOR", "zip");
+    dir.write("photos.zip", "zip");
+    let leads = dir.0.join("other").join("LEADS.FABRICATOR");
+    let args: Vec<OsString> = vec![
+      "--flag".into(),
+      "Toy Story.fabricator".into(),
+      leads.clone().into(),
+      "missing.fabricator".into(),
+      "photos.zip".into(),
+    ];
+    let found = exports_in(args, Some(&dir.0));
+    assert_eq!(found, vec![dir.0.join("Toy Story.fabricator"), leads.clone()]);
+
+    assert!(hold(found.clone()));
+    assert!(!hold(vec![leads]), "already waiting");
+    let taken = projects_opened_exports();
+    assert_eq!(taken.len(), 2);
+    assert!(taken[0].ends_with("Toy Story.fabricator") && taken[1].ends_with("LEADS.FABRICATOR"));
+    assert!(projects_opened_exports().is_empty(), "each is handed over once");
   }
 
   /// Git is installed, and the temp folder isn't inside a repository.
@@ -1398,7 +1445,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn a_handoff_with_its_history_opens_as_a_working_repository() {
+  async fn an_export_with_its_history_imports_as_a_working_repository() {
     if !can_test_git() {
       return;
     }
@@ -1422,24 +1469,23 @@ mod tests {
     assert_eq!(listed, vec![".gitignore", "rayfin/rayfin.yml", "src/App.tsx", "src/new.ts"]);
     assert_eq!(count_versions(&app.0).await, 1);
     let out = TempDir::new();
-    let dest = out.0.join("toy.zip");
-    let choice = HandoffOptions { history: true, deployment: true, chat: false };
-    let plan = plan(&app.0, &listed, choice, &facts(None), &[], None);
-    write_zip(&dest, &plan.items, &AtomicBool::new(false), |_, _| {}).unwrap_or_else(|_| panic!("packs"));
+    let dest = out.0.join("toy.fabricator");
+    export(&app.0, BOTH, &facts(None), &dest);
 
     let projects = TempDir::new();
+    assert!(inspect(&dest, &projects.0).unwrap().history);
     let opened = unpack(&dest, &projects.0, |_, _| {}).unwrap();
-    take_payload(&opened).expect("a hand-off");
-    let git = |args: &[&str]| {
-      let out = std::process::Command::new("git").args(args).current_dir(&opened).output().unwrap();
-      assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
-      String::from_utf8_lossy(&out.stdout).to_string()
+    let changes = || {
+      let status = git_in(&opened, &["status", "--porcelain", "--untracked-files=all"]);
+      let mut lines: Vec<String> = status.lines().map(String::from).collect();
+      lines.sort();
+      lines
     };
-    assert_eq!(git(&["log", "--format=%s"]).trim(), "First");
-    let status = git(&["status", "--porcelain", "--untracked-files=all"]);
-    let mut changes: Vec<&str> = status.lines().collect();
-    changes.sort();
-    assert_eq!(changes, vec![" M src/App.tsx", "?? src/new.ts"], "the guide is ignored, unsaved changes come along");
+    let unsaved = vec![" M src/App.tsx".to_string(), "?? src/new.ts".to_string()];
+    assert_eq!(changes(), unsaved, "its record is ignored, unsaved changes come along");
+    take_manifest(&opened).expect("an export");
+    assert_eq!(changes(), unsaved);
+    assert_eq!(git_in(&opened, &["log", "--format=%s"]).trim(), "First");
     let config = std::fs::read_to_string(opened.join(".git/config")).unwrap();
     assert!(!config.contains("ghp_secret") && !config.contains("amy@contoso.com"), "{config}");
     assert!(!opened.join(".git/hooks").exists());

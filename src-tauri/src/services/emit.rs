@@ -27,8 +27,11 @@ pub const DESIGN_VARIATION: &str = "design:variation";
 pub const UPDATE_PROGRESS: &str = "update:progress";
 /// Event name for project-delete file-count progress (matches `IpcChannels.deleteProgress`).
 pub const DELETE_PROGRESS: &str = "delete:progress";
-/// Event name for packing or opening a hand-off (matches `IpcChannels.handoffProgress`).
-pub const HANDOFF_PROGRESS: &str = "handoff:progress";
+/// Event name for exporting or importing a project's file (matches `IpcChannels.zipProgress`).
+pub const ZIP_PROGRESS: &str = "zip:progress";
+/// Event name for an exported project the system asked Fabricator to open (matches
+/// `IpcChannels.exportOpened`).
+pub const EXPORT_OPENED: &str = "export:opened";
 
 /// How long buffered output is held before a batched `proc:log` is emitted. A
 /// couple of frames: long enough to collapse a burst of small reads into one

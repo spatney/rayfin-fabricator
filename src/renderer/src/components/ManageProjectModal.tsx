@@ -19,8 +19,8 @@ interface Props {
   onRemoveFromList: (project: StudioProject) => void
   /** Open Remove project, which asks what to remove. */
   onReviewRemoval: (project: StudioProject) => void
-  /** Open Hand off project, which packs a .zip for someone else. */
-  onHandOff?: (project: StudioProject) => void
+  /** Open Export project, which saves the project as a file for someone else. */
+  onExport?: (project: StudioProject) => void
   onClose: () => void
   /** Team workspaces this project can move into (experimental). */
   teamWorkspaces?: TeamWorkspace[]
@@ -50,7 +50,9 @@ function Action({
 }): JSX.Element {
   return (
     <div className={`project-action${danger ? ' project-action--danger' : ''}`}>
-      <span className={`project-action-icon codicon codicon-${icon}`} aria-hidden="true" />
+      <span className="project-action-icon" aria-hidden="true">
+        <span className={`codicon codicon-${icon}`} />
+      </span>
       <div className="project-action-text">
         <span className="project-action-title">{title}</span>
         {children}
@@ -60,13 +62,13 @@ function Action({
   )
 }
 
-/** The project's name, then what you can do with it: hand it off, hide it from recents, or remove it. */
+/** The project's name, then what you can do with it: export it, hide it from recents, or remove it. */
 export default function ManageProjectModal({
   project,
   onRename,
   onRemoveFromList,
   onReviewRemoval,
-  onHandOff,
+  onExport,
   onClose,
   teamWorkspaces,
   onMoveToTeam
@@ -158,9 +160,9 @@ export default function ManageProjectModal({
     onReviewRemoval(project)
   }
 
-  function handOff(): void {
+  function exportProject(): void {
     onClose()
-    onHandOff?.(project)
+    onExport?.(project)
   }
 
   const recentsHint = project.team
@@ -171,7 +173,7 @@ export default function ManageProjectModal({
         ? 'Hide from your recent list. Files and the Fabric app stay intact.'
         : 'Hide from your recent list. Files stay intact.'
   const canMove = !project.team && onMoveToTeam && moveTargets.length > 0
-  const canHandOff = Boolean(onHandOff) && !project.team && !project.missing
+  const canExport = Boolean(onExport) && !project.team && !project.missing
 
   return (
     <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
@@ -292,26 +294,24 @@ export default function ManageProjectModal({
               </Action>
             )}
 
-            {canHandOff && (
+            {canExport && (
               <Action
                 icon="package"
-                title="Hand off project"
+                title="Export project"
                 control={
                   <button
                     type="button"
                     className="btn project-manage-next"
                     disabled={saving}
-                    onClick={handOff}
+                    onClick={exportProject}
                   >
-                    Create .zip
+                    Export
                     <span className="codicon codicon-chevron-right" aria-hidden="true" />
                   </button>
                 }
               >
                 <span className="project-action-desc">
-                  {hasDeploy
-                    ? 'Save a .zip with the code and where it’s published, so someone else can pick it up in Fabricator.'
-                    : 'Save a .zip with the code, so someone else can pick it up in Fabricator.'}
+                  Save a copy someone else can import into Fabricator.
                 </span>
               </Action>
             )}
@@ -361,8 +361,8 @@ export default function ManageProjectModal({
               >
                 <span className="project-action-desc">
                   {hasDeploy
-                    ? 'Move the folder to your system trash, and choose whether to delete the published app too.'
-                    : 'Move the folder to your system trash. No Fabric app is changed.'}
+                    ? 'Trash the folder, and optionally its published app.'
+                    : 'Trash the folder. No Fabric app is changed.'}
                 </span>
               </Action>
             )}

@@ -154,6 +154,11 @@ pub(crate) fn declared_names(dir: &Path) -> Vec<String> {
   read_config(dir).declared.into_iter().map(|(name, _)| name).collect()
 }
 
+/// The names of the secrets a `rayfin.yml` declares, in file order.
+pub(crate) fn declared_names_in(rayfin_yml: &str) -> Vec<String> {
+  parse_config(rayfin_yml).declared.into_iter().map(|(name, _)| name).collect()
+}
+
 /// The version of the app's own Rayfin CLI, the one Fabricator runs.
 fn installed_version(dir: &Path) -> Option<String> {
   let text = std::fs::read_to_string(dir.join("node_modules/@microsoft/rayfin-cli/package.json")).ok()?;

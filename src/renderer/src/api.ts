@@ -44,8 +44,7 @@ import {
   type ProcLogEvent,
   type DeleteProgressEvent,
   type DesignVariationsOptions,
-  type HandoffOptions,
-  type HandoffProgressEvent,
+  type ExportOptions,
   type RayfinStudioApi,
   type ReasoningEffort,
   type TeamCreateRequest,
@@ -55,7 +54,8 @@ import {
   type TeamResourceRequest,
   type TeamRunner,
   type ToolId,
-  type UpdateProgress
+  type UpdateProgress,
+  type ZipProgressEvent
 } from '@shared/ipc'
 import type {
   DesignCommand,
@@ -253,16 +253,18 @@ export const api: RayfinStudioApi = {
       invoke('projects_set_workspace', { id, workspace, workspaceName }),
     setPreviewMode: (id: string, mode: string) => invoke('projects_set_preview_mode', { id, mode }),
     remove: (id: string, deleteFiles?: boolean) => invoke('projects_remove', { id, deleteFiles }),
-    handoff: {
-      preview: (id: string) => invoke('projects_handoff_preview', { id }),
-      save: (id: string, options: HandoffOptions) =>
-        invoke('projects_handoff_save', { id, options }),
-      stop: (id: string) => invoke('projects_handoff_stop', { id }),
-      reveal: (path: string) => invoke('projects_handoff_reveal', { path }),
-      open: () => invoke('projects_handoff_open'),
-      onProgress: (cb: (event: HandoffProgressEvent) => void) =>
-        subscribe<HandoffProgressEvent>(IpcChannels.handoffProgress, cb)
-    },
+    exportPreview: (id: string) => invoke('projects_export_preview', { id }),
+    exportProject: (id: string, options: ExportOptions) =>
+      invoke('projects_export', { id, options }),
+    stopExport: (id: string) => invoke('projects_export_stop', { id }),
+    revealExport: (path: string) => invoke('projects_export_reveal', { path }),
+    pickImport: () => invoke('projects_import_pick'),
+    inspectImport: (path: string) => invoke('projects_import_inspect', { path }),
+    importProject: (path: string) => invoke('projects_import', { path }),
+    openedExports: () => invoke('projects_opened_exports'),
+    onExportOpened: (cb: () => void) => subscribe<null>(IpcChannels.exportOpened, () => cb()),
+    onZipProgress: (cb: (event: ZipProgressEvent) => void) =>
+      subscribe<ZipProgressEvent>(IpcChannels.zipProgress, cb),
     git: {
       status: (id: string) => invoke('projects_git_status', { id }),
       commit: (id: string, message: string) => invoke('projects_git_commit', { id, message }),

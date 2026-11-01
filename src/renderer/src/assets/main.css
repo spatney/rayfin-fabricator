@@ -7737,7 +7737,7 @@ button.deploy-trouble-ray:focus-visible {
 .project-action {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   padding: 14px 0;
 }
 
@@ -7745,18 +7745,25 @@ button.deploy-trouble-ray:focus-visible {
   border-top: 1px solid var(--border);
 }
 
+/* A tile as tall as the action's title and the first line under it. */
 .project-action-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
   flex: none;
   align-self: flex-start;
-  width: 20px;
-  margin-top: 1px;
+  place-items: center;
   color: var(--text-dim);
   font-size: 18px;
-  text-align: center;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
 }
 
 .project-action--danger .project-action-icon {
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
 }
 
 .project-action-text {
@@ -8292,27 +8299,27 @@ button.deploy-trouble-ray:focus-visible {
   font-size: 15px;
 }
 
-/* Hand off project: the parts of the .zip in one list, what never goes in, then
-   what the recipient needs once it's saved. Flat, like Remove project. */
-.handoff-modal {
+/* Export project and Import project: the parts of a project's file in one list,
+   what never goes in, then what happens next. Flat, like Remove project. */
+.project-file-modal {
   max-width: 500px;
 }
 
-.handoff-modal .modal-header .icon-btn {
+.project-file-modal .modal-header .icon-btn {
   font-size: 16px;
 }
 
-.handoff-body {
+.project-file-body {
   gap: 14px;
 }
 
-.handoff-lead {
+.project-file-lead {
   color: var(--text-dim);
   font-size: 12.5px;
   line-height: 1.4;
 }
 
-.handoff-status {
+.project-file-status {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -8321,21 +8328,21 @@ button.deploy-trouble-ray:focus-visible {
   font-size: 12.5px;
 }
 
-.handoff-error {
+.project-file-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.handoff-parts {
+.project-file-parts {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
-.handoff-part {
+.project-file-part {
   position: relative;
   display: flex;
   align-items: flex-start;
@@ -8344,17 +8351,17 @@ button.deploy-trouble-ray:focus-visible {
   cursor: pointer;
 }
 
-.handoff-part + .handoff-part {
+.project-file-part + .project-file-part {
   border-top: 1px solid var(--border);
 }
 
-.handoff-part--locked,
-.handoff-part:has(.handoff-part-input:disabled) {
+.project-file-part--locked,
+.project-file-part:has(.project-file-part-input:disabled) {
   cursor: default;
 }
 
 /* The real checkbox stays focusable under the drawn one. */
-.handoff-part-input {
+.project-file-part-input {
   position: absolute;
   top: 13px;
   left: 14px;
@@ -8364,7 +8371,7 @@ button.deploy-trouble-ray:focus-visible {
   opacity: 0;
 }
 
-.handoff-check {
+.project-file-check {
   display: grid;
   width: 18px;
   height: 18px;
@@ -8381,28 +8388,28 @@ button.deploy-trouble-ray:focus-visible {
     color 0.12s ease;
 }
 
-.handoff-check svg {
+.project-file-check svg {
   width: 12px;
   height: 12px;
 }
 
-.handoff-part--on .handoff-check {
+.project-file-part--on .project-file-check {
   color: var(--on-accent);
   background: var(--accent);
   border-color: var(--accent);
 }
 
 /* Always in a hand-off: checked, but quieter than a choice. */
-.handoff-part--locked .handoff-check {
+.project-file-part--locked .project-file-check {
   opacity: 0.55;
 }
 
-.handoff-part-input:focus-visible + .handoff-check {
+.project-file-part-input:focus-visible + .project-file-check {
   outline: 2px solid var(--accent-ring);
   outline-offset: 2px;
 }
 
-.handoff-part-text {
+.project-file-part-text {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -8410,20 +8417,20 @@ button.deploy-trouble-ray:focus-visible {
   gap: 3px;
 }
 
-.handoff-part-head {
+.project-file-part-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
 }
 
-.handoff-part-title {
+.project-file-part-title {
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
 }
 
-.handoff-part-detail {
+.project-file-part-detail {
   overflow: hidden;
   color: var(--text-faint);
   font-size: 11.5px;
@@ -8432,20 +8439,21 @@ button.deploy-trouble-ray:focus-visible {
   white-space: nowrap;
 }
 
-.handoff-part-desc {
+.project-file-part-desc {
   color: var(--text-dim);
   font-size: 12px;
   line-height: 1.45;
   text-wrap: pretty;
 }
 
-.handoff-part-desc strong {
+.project-file-part-desc strong {
   color: var(--text);
   font-weight: 600;
 }
 
-.handoff-note {
+.project-file-note {
   display: flex;
+  margin: 0;
   align-items: flex-start;
   gap: 8px;
   color: var(--text-dim);
@@ -8453,18 +8461,18 @@ button.deploy-trouble-ray:focus-visible {
   line-height: 1.45;
 }
 
-.handoff-note .codicon {
+.project-file-note .codicon {
   flex: none;
   margin-top: 1px;
   font-size: 14px;
 }
 
-.handoff-note-extra {
+.project-file-note-extra {
   display: block;
   margin-top: 2px;
 }
 
-.handoff-busy {
+.project-file-busy {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -8473,7 +8481,7 @@ button.deploy-trouble-ray:focus-visible {
   font-size: 12.5px;
 }
 
-.handoff-dot {
+.project-file-dot {
   width: 7px;
   height: 7px;
   flex: none;
@@ -8481,14 +8489,14 @@ button.deploy-trouble-ray:focus-visible {
   border-radius: 50%;
 }
 
-.handoff-packing {
+.project-file-progress {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 4px 0 2px;
 }
 
-.handoff-packing-text {
+.project-file-progress-text {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -8496,7 +8504,7 @@ button.deploy-trouble-ray:focus-visible {
   font-size: 13px;
 }
 
-.handoff-bar {
+.project-file-bar {
   display: block;
   height: 4px;
   overflow: hidden;
@@ -8504,33 +8512,33 @@ button.deploy-trouble-ray:focus-visible {
   border-radius: 2px;
 }
 
-.handoff-bar > span {
+.project-file-bar > span {
   display: block;
   height: 100%;
   background: var(--accent);
   transition: width 0.2s ease;
 }
 
-.handoff-packing-count {
+.project-file-count {
   color: var(--text-dim);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-.handoff-saved {
+.project-file-saved {
   display: flex;
   align-items: flex-start;
   gap: 10px;
 }
 
-.handoff-saved-icon {
+.project-file-saved-icon {
   flex: none;
   margin-top: 1px;
   color: var(--ok);
   font-size: 18px;
 }
 
-.handoff-saved-text {
+.project-file-saved-text {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -8539,7 +8547,7 @@ button.deploy-trouble-ray:focus-visible {
   font-size: 12px;
 }
 
-.handoff-saved-text strong {
+.project-file-saved-text strong {
   overflow: hidden;
   color: var(--text);
   font-size: 13.5px;
@@ -8548,7 +8556,7 @@ button.deploy-trouble-ray:focus-visible {
   white-space: nowrap;
 }
 
-.handoff-path {
+.project-file-path {
   overflow: hidden;
   padding: 6px 10px;
   color: var(--text-dim);
@@ -8561,7 +8569,7 @@ button.deploy-trouble-ray:focus-visible {
   border-radius: 7px;
 }
 
-.handoff-next {
+.project-file-next {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -8569,7 +8577,7 @@ button.deploy-trouble-ray:focus-visible {
   border-top: 1px solid var(--border);
 }
 
-.handoff-steps {
+.project-file-steps {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -8580,12 +8588,12 @@ button.deploy-trouble-ray:focus-visible {
   line-height: 1.45;
 }
 
-.handoff-steps strong {
+.project-file-steps strong {
   color: var(--text);
   font-weight: 600;
 }
 
-.handoff-link {
+.project-file-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -8597,12 +8605,33 @@ button.deploy-trouble-ray:focus-visible {
   cursor: pointer;
 }
 
-.handoff-link:hover {
+.project-file-link:hover {
   text-decoration: underline;
 }
 
-.handoff-link .codicon {
+.project-file-link .codicon {
   font-size: 12px;
+}
+
+/* Import project lists what a file brings in, each with an icon instead of a box. */
+.project-file-part--fact {
+  cursor: default;
+}
+
+.project-file-part-icon {
+  flex: none;
+  width: 18px;
+  margin-top: 1px;
+  color: var(--text-dim);
+  font-size: 16px;
+  text-align: center;
+}
+
+.project-file-code {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  word-break: break-all;
 }
 
 .modal-header {

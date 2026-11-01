@@ -1005,24 +1005,22 @@ pub struct ProjectActionResult {
   pub project: Option<StudioProject>,
 }
 
-/* ----------------------------- hand-offs ----------------------------- */
+/* ------------------------- exporting and importing ------------------------- */
 
-/// What a hand-off of a project can hold, for the hand-off dialog.
+/// What exporting a project would put in its `.fabricator` file, for the export dialog.
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct HandoffPreview {
+pub struct ExportPreview {
   /// The app's files: how many, and their size in bytes.
   pub files: u64,
   pub bytes: u64,
   /// Its version history, when the project has its own git repository.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub history: Option<HandoffHistory>,
+  pub history: Option<ExportHistory>,
   /// Where it's published, when it is.
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub deployment: Option<HandoffDeployment>,
-  /// Messages in the project's chat.
-  pub chat_messages: u32,
-  /// Secrets the app declares. Their values never go in a hand-off.
+  pub deployment: Option<ExportDeployment>,
+  /// Secrets the app declares. Their values never go in an export.
   pub secrets: Vec<String>,
   /// Files git would keep that stay out because they may hold secrets.
   pub kept_out: Vec<String>,
@@ -1030,15 +1028,15 @@ pub struct HandoffPreview {
 
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct HandoffHistory {
+pub struct ExportHistory {
   pub versions: u32,
   pub bytes: u64,
 }
 
-/// The published app a hand-off can point the recipient's publishes at.
+/// The published app an export can point the recipient's publishes at.
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct HandoffDeployment {
+pub struct ExportDeployment {
   /// The workspace, by the name Rayfin records it under.
   pub workspace: String,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -1051,23 +1049,22 @@ pub struct HandoffDeployment {
   pub portal_url: Option<String>,
 }
 
-/// What goes in a hand-off besides the app's code.
+/// What goes in an export besides the app's code.
 #[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct HandoffOptions {
+pub struct ExportOptions {
   pub history: bool,
   pub deployment: bool,
-  pub chat: bool,
 }
 
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct HandoffSaveResult {
+pub struct ExportResult {
   pub ok: bool,
-  /// Nothing was saved: the save dialog was closed, or packing was stopped.
+  /// Nothing was saved: the save dialog was closed, or the export was stopped.
   #[serde(skip_serializing_if = "std::ops::Not::not")]
   pub cancelled: bool,
-  /// Where the .zip was saved.
+  /// Where the file was saved.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub path: Option<String>,
   /// Its size in bytes.
@@ -1080,10 +1077,10 @@ pub struct HandoffSaveResult {
   pub error: Option<String>,
 }
 
-/// Progress while a hand-off is packed (`id` is the project) or opened (`id` is `open`).
+/// Progress while a project is exported (`id` is the project) or imported (`id` is `import`).
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct HandoffProgressEvent {
+pub struct ZipProgressEvent {
   pub id: String,
   /// `"packing"` or `"unpacking"`.
   pub phase: String,
@@ -1091,28 +1088,39 @@ pub struct HandoffProgressEvent {
   pub total: u64,
 }
 
+/// What importing a file would bring in, read without unpacking it.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportPreview {
+  pub name: String,
+  /// Who exported it, as the export records it.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub from: Option<String>,
+  /// When it was exported (ISO 8601).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub exported_at: Option<String>,
+  /// The app's files: how many, and their size in bytes.
+  pub files: u64,
+  pub bytes: u64,
+  /// It comes with its version history.
+  pub history: bool,
+  /// The workspace its publishes go to, when it says where it's published.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub workspace: Option<String>,
+  /// Secrets the app declares, which need values on this computer.
+  pub secrets: Vec<String>,
+  /// The new folder it would be unpacked into.
+  pub folder: String,
+}
+
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct HandoffOpenResult {
+pub struct ImportResult {
   pub ok: bool,
-  /// No .zip was picked.
-  #[serde(skip_serializing_if = "std::ops::Not::not")]
-  pub cancelled: bool,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub project: Option<StudioProject>,
-  /// Who handed it off, as the hand-off records it.
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub from: Option<String>,
-  /// When it was handed off (ISO 8601).
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub at: Option<String>,
-  /// Chat messages that came with it.
-  pub chat_messages: u32,
-  /// The workspace its publishes go to, when the hand-off says where it's published.
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub workspace: Option<String>,
 }
 
 /// Whether a new project's name is free where it will be saved.

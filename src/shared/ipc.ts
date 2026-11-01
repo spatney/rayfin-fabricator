@@ -1852,25 +1852,23 @@ export interface ProjectActionResult {
   project?: StudioProject
 }
 
-/** What a hand-off of a project can hold (`projects.handoff.preview`). */
-export interface HandoffPreview {
+/** What exporting a project would put in its `.fabricator` file (`projects.exportPreview`). */
+export interface ExportPreview {
   /** The app's files: how many, and their total size in bytes. */
   files: number
   bytes: number
   /** Its version history, when the project has its own git repository. */
   history?: { versions: number; bytes: number }
   /** Where it's published, when it is. */
-  deployment?: HandoffDeployment
-  /** Messages in the project's chat. */
-  chatMessages: number
-  /** Secrets the app declares. Their values never go in a hand-off. */
+  deployment?: ExportDeployment
+  /** Secrets the app declares. Their values never go in an export. */
   secrets: string[]
   /** Files git would keep that stay out because they may hold secrets. */
   keptOut: string[]
 }
 
-/** The published app a hand-off can point the recipient's publishes at. */
-export interface HandoffDeployment {
+/** The published app an export can point the recipient's publishes at. */
+export interface ExportDeployment {
   /** The workspace, by the name Rayfin records it under. */
   workspace: string
   workspaceId?: string
@@ -1880,18 +1878,17 @@ export interface HandoffDeployment {
   portalUrl?: string
 }
 
-/** What goes in a hand-off besides the app's code. */
-export interface HandoffOptions {
+/** What goes in an export besides the app's code. */
+export interface ExportOptions {
   history: boolean
   deployment: boolean
-  chat: boolean
 }
 
-export interface HandoffSaveResult {
+export interface ExportResult {
   ok: boolean
-  /** Nothing was saved: the save dialog was closed, or packing was stopped. */
+  /** Nothing was saved: the save dialog was closed, or the export was stopped. */
   cancelled?: boolean
-  /** Where the .zip was saved. */
+  /** Where the file was saved. */
   path?: string
   /** Its size in bytes. */
   bytes?: number
@@ -1900,28 +1897,38 @@ export interface HandoffSaveResult {
   error?: string
 }
 
-/** Progress while a hand-off is packed (`id` is the project) or opened (`id` is `open`). */
-export interface HandoffProgressEvent {
+/** Progress while a project is exported (`id` is the project) or imported (`id` is `import`). */
+export interface ZipProgressEvent {
   id: string
   phase: 'packing' | 'unpacking'
   processed: number
   total: number
 }
 
-export interface HandoffOpenResult {
+/** What importing a file would bring in, read without unpacking it (`projects.inspectImport`). */
+export interface ImportPreview {
+  name: string
+  /** Who exported it, as the export records it. */
+  from?: string
+  /** When it was exported (ISO 8601). */
+  exportedAt?: string
+  /** The app's files: how many, and their total size in bytes. */
+  files: number
+  bytes: number
+  /** It comes with its version history. */
+  history: boolean
+  /** The workspace its publishes go to, when it says where it's published. */
+  workspace?: string
+  /** Secrets the app declares, which need values on this computer. */
+  secrets: string[]
+  /** The new folder it would be unpacked into. */
+  folder: string
+}
+
+export interface ImportResult {
   ok: boolean
-  /** No .zip was picked. */
-  cancelled?: boolean
   error?: string
   project?: StudioProject
-  /** Who handed it off, as the hand-off records it. */
-  from?: string
-  /** When it was handed off (ISO 8601). */
-  at?: string
-  /** Chat messages that came with it. */
-  chatMessages: number
-  /** The workspace its publishes go to, when the hand-off says where it's published. */
-  workspace?: string
 }
 
 /** Whether a new project's name is free where it will be saved. */
@@ -3301,7 +3308,8 @@ export const IpcChannels = {
   previewAgent: 'preview:agent',
   updateProgress: 'update:progress',
   deleteProgress: 'delete:progress',
-  handoffProgress: 'handoff:progress',
+  zipProgress: 'zip:progress',
+  exportOpened: 'export:opened',
   teamProgress: 'team:progress',
   teamDiagnosis: 'team:diagnosis',
   devState: 'dev:state',
@@ -3617,26 +3625,31 @@ export interface RayfinStudioApi {
      * pass `deleteFiles: true` to also move the project folder to the OS trash.
      */
     remove: (id: string, deleteFiles?: boolean) => Promise<ProjectsState>
-    /** Hand a project off to someone else as a .zip, or open one handed to you. */
-    handoff: {
-      /** What a hand-off of the project would hold. Rejects for a team or missing project. */
-      preview: (id: string) => Promise<HandoffPreview>
-      /**
-       * Ask where to save the hand-off, then pack it there (progress on
-       * `onProgress`). Never rejects: a failure is in `error`.
-       */
-      save: (id: string, options: HandoffOptions) => Promise<HandoffSaveResult>
-      /** Stop packing the project's hand-off; `save` then resolves as cancelled. */
-      stop: (id: string) => Promise<void>
-      /** Show a saved hand-off in the file manager. */
-      reveal: (path: string) => Promise<void>
-      /**
-       * Pick a hand-off (or any .zip of a Rayfin project), unpack it into the
-       * projects folder and make it the active project, with its chat.
-       */
-      open: () => Promise<HandoffOpenResult>
-      onProgress: (cb: (event: HandoffProgressEvent) => void) => () => void
-    }
+    /** What exporting the project would put in its file. Rejects for a team or missing project. */
+    exportPreview: (id: string) => Promise<ExportPreview>
+    /**
+     * Ask where to save the project's `.fabricator` file, then write it (progress
+     * on `onZipProgress`). Never rejects: a failure is in `error`.
+     */
+    exportProject: (id: string, options: ExportOptions) => Promise<ExportResult>
+    /** Stop exporting the project; `exportProject` then resolves as cancelled. */
+    stopExport: (id: string) => Promise<void>
+    /** Show a saved export in the file manager. */
+    revealExport: (path: string) => Promise<void>
+    /** Pick a `.fabricator` file, or a .zip of a Rayfin project, to import; null when cancelled. */
+    pickImport: () => Promise<string | null>
+    /** What importing the file would bring in. Rejects when it isn't a Rayfin project. */
+    inspectImport: (path: string) => Promise<ImportPreview>
+    /**
+     * Unpack the file into a new folder in the projects folder and make it the
+     * active project (progress on `onZipProgress`). Never rejects.
+     */
+    importProject: (path: string) => Promise<ImportResult>
+    /** The `.fabricator` files the system asked Fabricator to open. Each is returned once. */
+    openedExports: () => Promise<string[]>
+    /** A `.fabricator` file was opened with Fabricator: read it with `openedExports`. */
+    onExportOpened: (cb: () => void) => () => void
+    onZipProgress: (cb: (event: ZipProgressEvent) => void) => () => void
     git: {
       /** Snapshot of the project's git working tree (branch + change count). */
       status: (id: string) => Promise<GitStatus>

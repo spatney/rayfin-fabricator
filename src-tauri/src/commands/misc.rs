@@ -131,6 +131,17 @@ pub fn reveal(window: &tauri::Window) {
   let _ = window.set_focus();
 }
 
+/// Bring the main window to the front, for a second launch that handed it a file.
+#[cfg_attr(any(debug_assertions, not(windows)), allow(dead_code))]
+pub fn bring_forward(app: &AppHandle) {
+  use tauri::Manager;
+  if let Some(window) = app.get_window("main") {
+    let _ = window.unminimize();
+    reveal(&window);
+    let _ = window.set_focus();
+  }
+}
+
 fn parse_hex_color(value: &str) -> Option<tauri::window::Color> {
   let hex = value.strip_prefix('#')?;
   if hex.len() != 6 || !hex.is_ascii() {

@@ -645,9 +645,9 @@ pub async fn open_project(path: String) -> ProjectActionResult {
   crate::commands::skills::ensure_project_skills(&abs_str);
   let known = store::get_state().projects.iter().any(|p| same_path(&p.path, &abs_str));
   let project = register_project(&abs, None);
-  // A folder unpacked from a hand-off brings its chat the first time it opens.
+  // A folder unpacked from an export brings its record the first time it opens.
   if !known {
-    crate::commands::handoff::adopt(&abs, &project.id);
+    crate::commands::export::adopt(&abs, &project.id);
   }
   store::set_active(Some(project.id.clone()));
   ProjectActionResult {

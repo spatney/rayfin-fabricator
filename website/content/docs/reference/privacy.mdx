@@ -105,8 +105,8 @@ Fabricator keeps the values of a server's environment variables and headers in W
 
 When you publish, Fabricator runs the project-pinned Rayfin CLI. The app and its platform configuration are sent to the Microsoft Fabric workspace you choose. Fabric sign-in and deployment are handled by Rayfin and Microsoft Fabric.
 
-## Hand-offs stay with you until you send them
+## Exported projects stay with you until you send them
 
-When you hand a project off, Fabricator saves a .zip where you choose and sends nothing anywhere: you decide who gets it. It holds the app's code, and, as you choose, its version history, where it's published, and its chat. Anything in those goes to whoever you send it to, including what you and Copilot said in the chat.
+When you export a project, Fabricator saves a `.fabricator` file where you choose and sends nothing anywhere: you decide who gets it. It holds the app's code, and, as you choose, its version history and where it's published. Anything in those goes to whoever you send it to.
 
-A hand-off never holds secret values, files that may hold them such as `.env` files, the app's data on this computer, or your sign-ins. Its version history still names who saved each version, as git records it, but leaves behind your git settings and any sign-ins saved in them. It names you as the sender with the account you use for Fabric. See [Hand off a project](/docs/build/projects#hand-off-a-project).
+An export never holds your chat, secret values, files that may hold them such as `.env` files, the app's data on this computer, or your sign-ins. Its version history still names who saved each version, as git records it, but leaves behind your git settings and any sign-ins saved in them. It names you as the one who exported it, with the account you use for Fabric. See [Export a project](/docs/build/projects#export-a-project).

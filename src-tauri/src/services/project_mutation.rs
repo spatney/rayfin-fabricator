@@ -11,7 +11,7 @@ enum Owner {
   Deploy,
   Team,
   Secrets,
-  Handoff,
+  Export,
 }
 
 impl Owner {
@@ -21,7 +21,7 @@ impl Owner {
       Owner::Deploy => "Fabricator is publishing this project. Wait for it to finish, then try again.",
       Owner::Team => "Fabricator is saving or publishing this project. Wait for it to finish, then try again.",
       Owner::Secrets => "Fabricator is updating this app's secrets. Wait for it to finish, then try again.",
-      Owner::Handoff => "Fabricator is packing this project for a hand-off. Wait for it to finish, then try again.",
+      Owner::Export => "Fabricator is exporting this project. Wait for it to finish, then try again.",
     }
   }
 }
@@ -85,10 +85,10 @@ impl ProjectMutations {
     self.acquire(project_id, Owner::Secrets)
   }
 
-  /// Lease the project while its files are packed into a hand-off, so the .zip
+  /// Lease the project while its files are written to an export, so the file
   /// never holds a half-written turn or a half-updated publishing record.
-  pub fn handoff(&self, project_id: &str) -> Result<MutationGuard, String> {
-    self.acquire(project_id, Owner::Handoff)
+  pub fn export(&self, project_id: &str) -> Result<MutationGuard, String> {
+    self.acquire(project_id, Owner::Export)
   }
 
   #[cfg(test)]

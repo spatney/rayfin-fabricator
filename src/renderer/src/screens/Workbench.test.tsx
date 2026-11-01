@@ -286,6 +286,8 @@ function installApi(active = false) {
     projects: {
       state: vi.fn().mockResolvedValue(state),
       setActive: vi.fn<RayfinStudioApi['projects']['setActive']>(),
+      openedExports: vi.fn<RayfinStudioApi['projects']['openedExports']>().mockResolvedValue([]),
+      onExportOpened: vi.fn<RayfinStudioApi['projects']['onExportOpened']>(() => () => {}),
       git: {
         divergence: vi.fn().mockResolvedValue({ behind: 0 }),
         saveTurn: vi.fn<RayfinStudioApi['projects']['git']['saveTurn']>().mockResolvedValue({})
@@ -2658,5 +2660,52 @@ describe('Workbench before the first publish', () => {
     expect(chatProps.mock.lastCall?.[0].project.id).toBe(fresh.id)
     expect(screen.queryByPlaceholderText('My Rayfin App')).toBeNull()
     expect(screen.queryByText('Publish your app')).toBeNull()
+  })
+})
+
+describe('Workbench importing exported projects', () => {
+  it('asks before importing a .fabricator file opened with Fabricator, then opens it', async () => {
+    const api = installApi(false)
+    const path = 'C:\\Users\\sam\\Downloads\\leads.fabricator'
+    const leads: StudioProject = {
+      id: 'leads',
+      name: 'Leads',
+      path: 'C:\\projects\\leads',
+      addedAt: '2026-11-01T00:00:00.000Z'
+    }
+    api.projects.openedExports.mockResolvedValueOnce([path])
+    const importProject = vi.fn().mockResolvedValue({ ok: true, project: leads })
+    Object.assign(api.projects, {
+      inspectImport: vi.fn().mockResolvedValue({
+        name: 'Leads',
+        from: 'amy@contoso.com',
+        files: 12,
+        bytes: 4096,
+        history: false,
+        secrets: [],
+        folder: 'C:\\projects\\leads'
+      }),
+      importProject,
+      onZipProgress: vi.fn(() => () => {})
+    })
+    render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
+
+    const dialog = await screen.findByRole('dialog', { name: 'Import project' })
+    expect(await within(dialog).findByText(/^Exported by amy@contoso\.com/)).toBeTruthy()
+    expect(api.projects.onExportOpened).toHaveBeenCalled()
+    expect(importProject).not.toHaveBeenCalled()
+
+    api.projects.state.mockResolvedValue({
+      workspaceRoot: 'C:\\projects',
+      activeProjectId: leads.id,
+      projects: [leads]
+    })
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Import' }))
+    })
+    expect(importProject).toHaveBeenCalledWith(path)
+    expect(await screen.findByText('Imported Leads')).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Import project' })).toBeNull()
+    await waitFor(() => expect(chatProps.mock.lastCall?.[0].project.id).toBe(leads.id))
   })
 })

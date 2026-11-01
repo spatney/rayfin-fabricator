@@ -80,7 +80,10 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 # Windows-only: capture the native WebView2 preview to a PNG or JPEG (ICoreWebView2::CapturePreview).
 # webview2-com / windows versions are pinned to what the vendored wry (and tauri) resolve to,
 # so Cargo unifies them rather than pulling a second copy. See services/preview.rs.
+# tauri-plugin-single-instance: opening a .fabricator file while Fabricator runs hands the file
+# to the running app instead of starting a second one (lib.rs; release builds only).
 [target.'cfg(windows)'.dependencies]
+tauri-plugin-single-instance = "2.5"
 webview2-com = "0.39"
 windows = { version = "0.62", features = [
   "Wdk_System_Threading",

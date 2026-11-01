@@ -41,3 +41,19 @@
   !insertmacro RAYFIN_FABRICATOR_CLOSE_APP
   !insertmacro RAYFIN_FABRICATOR_STOP_SIDECAR
 !macroend
+
+; Tauri associates .fabricator files, exported projects, with the app (bundle > fileAssociations
+; in tauri.conf.json, whose name is the file class below), but gives them the app's own icon, so
+; a project file would look like the app. This gives them their document icon, which the
+; installer puts in resources (bundle > resources), and tells Explorer to show it. Uninstalling
+; removes the file class with its icon. Make the icon again from icons/project-file.png with
+; `npx tauri icon icons/project-file.png -o <folder>`: copy its icon.ico to project-file.ico, and
+; its icon.icns, which macOS uses (Info.plist), to project-file.icns.
+!macro RAYFIN_FABRICATOR_FILE_ICON
+  WriteRegStr SHCTX "Software\Classes\RayfinFabricator.Project\DefaultIcon" "" "$INSTDIR\resources\project-file.ico"
+  !insertmacro UPDATEFILEASSOC
+!macroend
+
+!macro NSIS_HOOK_POSTINSTALL
+  !insertmacro RAYFIN_FABRICATOR_FILE_ICON
+!macroend
