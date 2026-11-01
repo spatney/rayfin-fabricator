@@ -42,10 +42,11 @@ use crate::services::exec::CancelToken;
 use crate::services::iq::{self, IqConfig};
 use crate::services::mcp::{self, McpServers};
 use crate::services::store;
+use crate::services::usage;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
   ChatEvent, ChatMessage, ChatOptions, ChatPlanDependency, ChatPlanTodo, ChatToolCall, ChatToolState, ChatTurnResult,
-  CopilotModel, SteerResult, StudioProject,
+  ChatUsage, CopilotModel, CopilotQuota, SteerResult, StudioProject,
 };
 
 /// Up to this many copilot invocations per turn on a transient pre-work failure.
@@ -1176,6 +1177,14 @@ pub(crate) async fn run_turn(
   state.plan.reject_pending_plan(&session_key);
   state.plan.reject_pending_question(&session_key);
 
+  // Keep what the chat has used so far, for when its session isn't open. Saved
+  // before the turn's result goes out, so the chat reads the new totals.
+  if !ctx.stream_closed {
+    if let Ok(Some(used)) = tokio::time::timeout(Duration::from_secs(5), usage::read(&session)).await {
+      history::save_usage(&project_id, &used);
+    }
+  }
+
   // Record one lightweight diagnostics line for this turn (off the streaming hot
   // path, best-effort). `outcome` mirrors the branches below.
   let outcome = if send_error.is_some() {
@@ -1594,6 +1603,29 @@ pub async fn chat_models(state: State<'_, AppState>) -> Result<Vec<CopilotModel>
 #[tauri::command]
 pub async fn chat_auto_tiers(state: State<'_, AppState>) -> Result<Option<crate::types::AutoTiers>, String> {
   state.copilot.auto_tiers().await
+}
+
+/// What this project's chat has used: live from its Copilot session while that's
+/// open, else as of its last turn. `None` before the chat has a session.
+#[tauri::command]
+pub async fn chat_usage(state: State<'_, AppState>, project_id: String) -> Result<Option<ChatUsage>, String> {
+  let Some(session_id) = store::find_project(&project_id).and_then(|p| p.copilot_session_id) else {
+    return Ok(None);
+  };
+  let open = state.copilot.peek_session(&project_id).await.filter(|s| s.id().as_str() == session_id);
+  if let Some(session) = open {
+    if let Ok(Some(used)) = tokio::time::timeout(Duration::from_secs(5), usage::read(&session)).await {
+      history::save_usage(&project_id, &used);
+      return Ok(Some(used));
+    }
+  }
+  Ok(history::load_usage(&project_id).filter(|used| used.session_id == session_id))
+}
+
+/// The signed-in account's Copilot allowance, read fresh: how much of it is left.
+#[tauri::command]
+pub async fn chat_quota(state: State<'_, AppState>) -> Result<Option<CopilotQuota>, String> {
+  state.copilot.account_quota().await
 }
 
 #[cfg(test)]

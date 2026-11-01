@@ -52,6 +52,7 @@ import type { OutboundPrompt, UIChatMessage } from './chat/types'
 import { suggestionsFor, useGeneratedSuggestions } from './chat/suggestions'
 import { SendIcon } from './chat/icons'
 import { AddMenu, PluginsMenu } from './chat/ComposerMenus'
+import { UsageMeter } from './chat/UsageMeter'
 import { offeredPlugins } from './chat/plugins'
 import { useMcpServers } from '../mcpServers'
 import { ModelPicker } from './models/ModelPicker'
@@ -1533,6 +1534,13 @@ export default function ChatPanel({
           </button>
         )}
         <span className="chat-toolbar-spacer" />
+        <UsageMeter
+          key={project.id}
+          projectId={project.id}
+          sending={sending}
+          hidden={messages.length === 0}
+          host={copilotAuth?.host}
+        />
         <button
           type="button"
           className="chat-tool chat-tool--label"

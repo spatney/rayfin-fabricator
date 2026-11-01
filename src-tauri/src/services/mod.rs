@@ -38,6 +38,7 @@ pub mod store;
 pub mod team;
 pub mod telemetry;
 pub mod updater;
+pub mod usage;
 pub mod version_history;
 pub mod watchdog;
 pub mod rayfin_sdk;

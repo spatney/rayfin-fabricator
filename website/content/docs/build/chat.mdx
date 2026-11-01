@@ -93,6 +93,20 @@ Use **New chat** to clear the conversation. Fabricator asks **Start a new chat?*
 
 If a turn failed, use **Retry**. If Fabricator closed during a response, use **Resume** when it appears.
 
+## See what a chat has used
+
+Once a chat has used Copilot, a button next to **New chat** shows how much: AI credits on Copilot's models, and tokens on models on your own API keys, such as `24.8 credits · 1.2M tokens`. One AI credit is US$0.01. If your Copilot plan counts premium requests instead of AI credits, the button shows premium requests.
+
+Select the button to open **Session credits**:
+
+- The chat's total, such as `39.6 credits used`, and about what that costs, such as `≈ $0.40`. A bar under it shows each model's share in that model's color.
+- **Usage by model** lists each model the chat used, with its credits and its share. A model on your own key shows its provider with a key, such as **Anthropic**: the provider bills it, so it uses no credits. When a chat used only your own keys, the view is called **Session usage** and counts tokens instead.
+- **Token details** shows what each model read and wrote, such as `1.2M in · 18K out`. Hover a model's tokens to see exact counts, including the tokens read from the prompt cache.
+- **Copilot plan** shows how much of your plan's allowance is left, such as `998,000 of 1,000,000 credits remaining`, and when it resets.
+- **View usage** opens your Copilot usage on GitHub.
+
+The count covers this chat since it started and updates after each turn. **New chat** starts it again. Other features that use Copilot, such as Design, the Advisor and Help, aren't counted here.
+
 ## Plans and Autopilot
 
 Plans can appear when Copilot proposes one. A plan card can show structured steps, progress, clarifying questions, and actions such as **Build plan**, **Run in Autopilot**, **Run with fleet**, or **Approve plan** when Copilot offers them.

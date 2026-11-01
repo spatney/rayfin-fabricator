@@ -1091,6 +1091,22 @@ impl CopilotManager {
     Ok(listed.auto.and_then(map_auto_tiers))
   }
 
+  /// The signed-in account's Copilot allowance, read fresh from GitHub. Read
+  /// raw: the SDK's typed quota leaves out whether it counts AI credits.
+  /// `None` when the account has no premium quota.
+  pub async fn account_quota(&self) -> Result<Option<crate::types::CopilotQuota>, String> {
+    let client = {
+      let mut engine = self.engine.lock().await;
+      self.check_available()?;
+      engine.ensure_client().await?
+    };
+    let raw = client
+      .call("account.getQuota", Some(serde_json::json!({})))
+      .await
+      .map_err(|e| format!("Couldn't check your Copilot plan: {e}"))?;
+    Ok(crate::services::usage::parse_quota(&raw))
+  }
+
   async fn probe_auth(&self) -> Result<CopilotAuthStatus, String> {
     let (client, auth) = {
       let mut engine = self.engine.lock().await;

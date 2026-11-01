@@ -395,6 +395,8 @@ pub fn run() {
       commands::chat::chat_set_plugin,
       commands::chat::chat_models,
       commands::chat::chat_auto_tiers,
+      commands::chat::chat_usage,
+      commands::chat::chat_quota,
       // suggestions
       commands::suggest::chat_suggest,
       commands::suggest::chat_suggest_cancel,

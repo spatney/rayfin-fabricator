@@ -2582,6 +2582,79 @@ pub struct ChatTurnResult {
   pub ran_deploy: bool,
 }
 
+/// How the signed-in account pays for Copilot's models.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CopilotBilling {
+  /// Token-based billing, in AI credits (one credit is US$0.01).
+  AiCredits,
+  /// Premium requests, each model's multiplier applied.
+  PremiumRequests,
+}
+
+/// What a project's Build chat has used, from its Copilot session's own
+/// accounting. Saved after each turn, so it shows before the session reopens.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatUsage {
+  /// The Copilot session the totals are for: another session's are stale.
+  pub session_id: String,
+  pub billing: CopilotBilling,
+  /// AI credits Copilot's models used.
+  pub ai_credits: f64,
+  /// Some of Copilot's calls reported no credits, so `ai_credits` is a floor.
+  #[serde(default)]
+  pub credits_partial: bool,
+  /// Premium requests Copilot's models used.
+  pub premium_requests: f64,
+  /// Each model's share, Copilot's first.
+  #[serde(default)]
+  pub models: Vec<ChatModelUsage>,
+}
+
+/// One model's share of a chat's usage.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatModelUsage {
+  /// The model's id, as the session called it.
+  pub model: String,
+  /// Its name when it was called.
+  pub name: String,
+  /// Ran on the user's own API key: its provider bills it, so only tokens are known.
+  pub own_key: bool,
+  /// For a model on the user's own key, the provider that bills it ("Anthropic").
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub provider: Option<String>,
+  /// Input tokens, including those read from the prompt cache.
+  pub input_tokens: i64,
+  /// Input tokens read from the prompt cache.
+  pub cached_tokens: i64,
+  pub output_tokens: i64,
+  pub ai_credits: f64,
+  pub premium_requests: f64,
+}
+
+/// The signed-in account's Copilot allowance (its premium interactions quota).
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CopilotQuota {
+  /// What the allowance counts.
+  pub unit: CopilotBilling,
+  pub unlimited: bool,
+  /// The allowance for the current period.
+  pub entitlement: f64,
+  /// How much of it is used.
+  pub used: f64,
+  pub remaining_percent: f64,
+  /// Usage past the allowance.
+  pub overage: f64,
+  /// Usage may go on past the allowance, billed as additional usage.
+  pub overage_allowed: bool,
+  /// When the allowance resets (ISO 8601).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub reset_date: Option<String>,
+}
+
 /// Result of a `chat_steer` call: whether the message interrupted a running turn.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]

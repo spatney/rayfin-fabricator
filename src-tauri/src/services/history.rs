@@ -1,9 +1,10 @@
 //! Per-project chat-history persistence — the Rust counterpart to
 //! `src/main/services/history.ts`. Each project's transcript is a JSON file
-//! `<projectId>.json` under `<dataDir>/chats/`.
+//! `<projectId>.json` under `<dataDir>/chats/`, and what its chat has used is
+//! `<projectId>.usage.json` beside it.
 
 use super::paths;
-use crate::types::ChatMessage;
+use crate::types::{ChatMessage, ChatUsage};
 
 /// Keep transcripts bounded; older messages beyond this are dropped on save.
 const MAX_MESSAGES: usize = 1000;
@@ -23,6 +24,10 @@ fn safe_slug(input: &str, fallback: &str) -> String {
 
 fn history_file(project_id: &str) -> std::path::PathBuf {
   paths::chats_dir().join(format!("{}.json", safe_slug(project_id, "unknown")))
+}
+
+fn usage_file(project_id: &str) -> std::path::PathBuf {
+  paths::chats_dir().join(format!("{}.usage.json", safe_slug(project_id, "unknown")))
 }
 
 /// Coerce arbitrary persisted JSON into a clean `Vec<ChatMessage>`, dropping
@@ -65,9 +70,33 @@ pub fn save_history(project_id: &str, messages: Vec<ChatMessage>) {
   }
 }
 
-/// Delete a project's persisted conversation (used on removal).
+/// Delete a project's persisted conversation and what it used (used on removal
+/// and when the chat starts over).
 pub fn clear_history(project_id: &str) {
   let _ = std::fs::remove_file(history_file(project_id));
+  let _ = std::fs::remove_file(usage_file(project_id));
+}
+
+/// What a project's chat used, as of its last save (`None` when never saved).
+pub fn load_usage(project_id: &str) -> Option<ChatUsage> {
+  let raw = std::fs::read_to_string(usage_file(project_id)).ok()?;
+  serde_json::from_str(&raw).ok()
+}
+
+/// Keep what a project's chat has used, for when its session isn't open.
+pub fn save_usage(project_id: &str, usage: &ChatUsage) {
+  if load_usage(project_id).as_ref() == Some(usage) {
+    return;
+  }
+  if let Err(e) = std::fs::create_dir_all(paths::chats_dir()) {
+    log::warn!("failed to create chats dir {}: {e}", paths::chats_dir().display());
+  }
+  let file = usage_file(project_id);
+  if let Ok(text) = serde_json::to_string(usage) {
+    if let Err(e) = std::fs::write(&file, text) {
+      log::warn!("failed to save chat usage to {}: {e}", file.display());
+    }
+  }
 }
 
 /// Copy one project's conversation to another (used when a project moves into

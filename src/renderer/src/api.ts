@@ -373,6 +373,8 @@ export const api: RayfinStudioApi = {
       invoke('chat_set_plugin', { projectId, plugin, on }),
     listModels: () => invoke('chat_models'),
     autoTiers: () => invoke('chat_auto_tiers'),
+    usage: (projectId: string) => invoke('chat_usage', { projectId }),
+    quota: () => invoke('chat_quota'),
     suggest: (projectId: string) => invoke('chat_suggest', { projectId }),
     cancelSuggest: (projectId: string) => invoke('chat_suggest_cancel', { projectId })
   },

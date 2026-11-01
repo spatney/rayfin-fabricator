@@ -43,6 +43,7 @@
   padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
+  container: chat-toolbar / inline-size;
 }
 
 .chat-toolbar-spacer {
@@ -91,6 +92,432 @@
 
 .chat-tool--label {
   padding: 0 10px 0 8px;
+}
+
+/* Usage meter: what this chat has used, and what's left of the Copilot plan.
+   In a narrow chat it gives way, and the toolbar's buttons keep their size. */
+.chat-toolbar > .chat-tool {
+  flex: none;
+}
+
+.usage-meter {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.usage-chip.chat-tool {
+  max-width: 100%;
+  gap: 7px;
+  padding: 0 8px 0 9px;
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--text) 13%, transparent);
+  border-radius: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-chip.chat-tool:hover:not(:disabled),
+.usage-chip.chat-tool.is-open {
+  background: var(--bg-elev-2);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+.usage-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-chip .usage-chip-chev {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Too narrow to read: the icon alone, with the totals in its tooltip. */
+@container chat-toolbar (max-width: 230px) {
+  .usage-chip-label,
+  .usage-chip .usage-chip-chev {
+    display: none;
+  }
+}
+
+/* The session view. Model colors are flat and keep their contrast in both themes.
+   Scoped with .mp-panel so it wins over the shared panel's look in any load order. */
+.mp-panel.usage-panel {
+  --usage-c1: #2ec4f5;
+  --usage-c2: #a99bf8;
+  --usage-c3: #f4b759;
+  --usage-c4: #f283b5;
+  --usage-c5: #5fd6ab;
+  --usage-c6: #8d9bb4;
+  --usage-left: #5fd6ab;
+  width: 320px;
+  gap: 0;
+  padding: 14px 14px 12px;
+  overflow-y: auto;
+  background: var(--bg-elev);
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 12px;
+  outline: none;
+}
+
+[data-theme='light'] .usage-panel {
+  --usage-c1: #0b98cf;
+  --usage-c2: #7563e8;
+  --usage-c3: #c08313;
+  --usage-c4: #cf4f87;
+  --usage-c5: #13936a;
+  --usage-c6: #69778f;
+  --usage-left: #13936a;
+}
+
+.usage-c1 {
+  background: var(--usage-c1);
+}
+
+.usage-c2 {
+  background: var(--usage-c2);
+}
+
+.usage-c3 {
+  background: var(--usage-c3);
+}
+
+.usage-c4 {
+  background: var(--usage-c4);
+}
+
+.usage-c5 {
+  background: var(--usage-c5);
+}
+
+.usage-c6 {
+  background: var(--usage-c6);
+}
+
+.usage-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.usage-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.usage-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: -3px -4px -3px 0;
+  padding: 0;
+  color: var(--text-dim);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.usage-info:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.usage-info .codicon[class*='codicon-'] {
+  font-size: 14px;
+}
+
+.usage-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.usage-hero-num {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-hero-unit {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.usage-cost {
+  align-self: center;
+  margin-left: auto;
+  padding: 2px 7px;
+  font-size: 11.5px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-stack {
+  display: flex;
+  gap: 2px;
+  height: 5px;
+  margin-top: 11px;
+}
+
+.usage-stack > span {
+  min-width: 4px;
+  border-radius: 2.5px;
+}
+
+.usage-cols {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.usage-models {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.usage-model {
+  display: grid;
+  grid-template-columns: 16px 6px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 9px;
+}
+
+.usage-model > .brand-logo {
+  width: 16px;
+  height: 16px;
+}
+
+.usage-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.usage-model-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.usage-model-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-model-amount strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.usage-model-amount span {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.usage-key {
+  max-width: 130px;
+}
+
+.usage-rule {
+  height: 1px;
+  margin: 12px 0;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.usage-disclosure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.usage-disclosure:hover {
+  color: var(--text);
+}
+
+.usage-disclosure .codicon[class*='codicon-'] {
+  font-size: 12px;
+  transition: transform 0.12s ease;
+}
+
+.usage-disclosure[aria-expanded='true'] .codicon[class*='codicon-'] {
+  transform: rotate(90deg);
+}
+
+.usage-tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0 0 0 20px;
+  list-style: none;
+}
+
+.usage-tokens > li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+}
+
+.usage-tokens-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+  color: var(--text-dim);
+}
+
+.usage-tokens-val {
+  flex: none;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.usage-plan-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.usage-pill {
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--usage-left);
+  background: color-mix(in srgb, var(--usage-left) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--usage-left) 34%, transparent);
+  border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-pill.is-low {
+  color: var(--pending);
+  background: color-mix(in srgb, var(--pending) 12%, transparent);
+  border-color: color-mix(in srgb, var(--pending) 34%, transparent);
+}
+
+.usage-pill.is-out {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 34%, transparent);
+}
+
+.usage-plan-line {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-plan-line strong {
+  margin-right: 2px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.usage-bar {
+  height: 5px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.usage-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2.5px;
+  background: var(--usage-left);
+}
+
+.usage-bar.is-low > span {
+  background: var(--pending);
+}
+
+.usage-foot {
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+.usage-links {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.usage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.usage-link:hover {
+  text-decoration: underline;
+}
+
+.usage-link .codicon[class*='codicon-'] {
+  font-size: 12px;
 }
 
 .chat-scroll {

@@ -2173,6 +2173,61 @@ export interface SteerResult {
   steered: boolean
 }
 
+/** How the signed-in account pays for Copilot's models. */
+export type CopilotBilling = 'ai_credits' | 'premium_requests'
+
+/** One model's share of a chat's usage. */
+export interface ChatModelUsage {
+  /** The model's id, as the session called it. */
+  model: string
+  /** Its name when it was called. */
+  name: string
+  /** Ran on your own API key: its provider bills it, so only tokens are known. */
+  ownKey: boolean
+  /** For a model on your own key, the provider that bills it ("Anthropic"). */
+  provider?: string
+  /** Input tokens, including those read from the prompt cache. */
+  inputTokens: number
+  /** Input tokens read from the prompt cache. */
+  cachedTokens: number
+  outputTokens: number
+  aiCredits: number
+  premiumRequests: number
+}
+
+/** What a project's Build chat has used, from its Copilot session. */
+export interface ChatUsage {
+  /** The Copilot session the totals are for. */
+  sessionId: string
+  billing: CopilotBilling
+  /** AI credits Copilot's models used (one credit is US$0.01). */
+  aiCredits: number
+  /** Some of Copilot's calls reported no credits, so `aiCredits` is a floor. */
+  creditsPartial: boolean
+  /** Premium requests Copilot's models used. */
+  premiumRequests: number
+  /** Each model's share, Copilot's first. */
+  models: ChatModelUsage[]
+}
+
+/** The signed-in account's Copilot allowance (its premium interactions quota). */
+export interface CopilotQuota {
+  /** What the allowance counts. */
+  unit: CopilotBilling
+  unlimited: boolean
+  /** The allowance for the current period. */
+  entitlement: number
+  /** How much of it is used. */
+  used: number
+  remainingPercent: number
+  /** Usage past the allowance. */
+  overage: number
+  /** Usage may go on past the allowance, billed as additional usage. */
+  overageAllowed: boolean
+  /** When the allowance resets (ISO 8601). */
+  resetDate?: string
+}
+
 /* ------------------------------------------------------------------ *
  * Rayfin CLI / SDK versions
  * ------------------------------------------------------------------ */
@@ -3758,6 +3813,14 @@ export interface RayfinStudioApi {
      * Intelligence…), or null when Copilot offers no choice.
      */
     autoTiers: () => Promise<AutoTiers | null>
+    /**
+     * What a project's chat has used: AI credits or premium requests on
+     * Copilot's models, and tokens by model, including models on your own keys.
+     * Null before the chat has a Copilot session.
+     */
+    usage: (projectId: string) => Promise<ChatUsage | null>
+    /** The signed-in account's Copilot allowance, read fresh, or null when it has none. */
+    quota: () => Promise<CopilotQuota | null>
     /**
      * Generate (or return cached) Copilot starter suggestions for a project's
      * empty Build chat, grounded in the app's code. `ok: false` means the
