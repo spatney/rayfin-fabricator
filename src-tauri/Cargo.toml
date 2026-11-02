@@ -76,12 +76,17 @@ anyhow = "1"
 # Extract user-uploaded custom-skill `.zip` bundles (see commands/custom_skills.rs).
 # `enclosed_name()` is used on entries to guard against zip-slip path traversal.
 zip = { version = "9", default-features = false, features = ["deflate"] }
+# Decode an installed app's icon for its window (services/apps). Already in the tree
+# through Tauri's build tooling, so no new crates.
+png = "0.18"
 
 # Windows-only: capture the native WebView2 preview to a PNG or JPEG (ICoreWebView2::CapturePreview).
 # webview2-com / windows versions are pinned to what the vendored wry (and tauri) resolve to,
 # so Cargo unifies them rather than pulling a second copy. See services/preview.rs.
-# tauri-plugin-single-instance: opening a .fabricator file while Fabricator runs hands the file
-# to the running app instead of starting a second one (lib.rs; release builds only).
+# tauri-plugin-single-instance: opening a .fabricator or .rayfin file, or an installed app's
+# shortcut, while Fabricator runs hands it to the running app instead of starting a second one
+# (lib.rs; release builds only). The shell features give an installed app its own taskbar button
+# and Start menu shortcut (services/apps/shell.rs).
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-single-instance = "2.5"
 webview2-com = "0.39"
@@ -90,12 +95,16 @@ windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_NetworkManagement_IpHelper",
   "Win32_Security_Credentials",
+  "Win32_Storage_EnhancedStorage",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Memory",
   "Win32_System_ProcessStatus",
   "Win32_System_Registry",
   "Win32_System_Threading",
+  "Win32_System_Variant",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_PropertiesSystem",
 ] }
 
 # macOS-only: capture the native WKWebView preview to a PNG via

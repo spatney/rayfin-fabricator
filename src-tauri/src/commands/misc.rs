@@ -131,15 +131,58 @@ pub fn reveal(window: &tauri::Window) {
   let _ = window.set_focus();
 }
 
-/// Bring the main window to the front, for a second launch that handed it a file.
-#[cfg_attr(any(debug_assertions, not(windows)), allow(dead_code))]
+/// Bring the main window to the front, for a second launch that handed it a file,
+/// or that asked for Fabricator itself. Opens it when Fabricator started only to
+/// run apps (see [`open_main_window`]).
 pub fn bring_forward(app: &AppHandle) {
   use tauri::Manager;
   if let Some(window) = app.get_window("main") {
     let _ = window.unminimize();
     reveal(&window);
     let _ = window.set_focus();
+    return;
   }
+  // Not on the event loop: making a web view there can deadlock on Windows.
+  let app = app.clone();
+  tauri::async_runtime::spawn(async move {
+    if let Err(error) = open_main_window(&app) {
+      log::error!("could not open the main window: {error}");
+    }
+  });
+}
+
+/// Open Fabricator's own window (`app > windows` in tauri.conf.json, which
+/// doesn't create it, as a launch that only runs apps never shows it). Like
+/// the configured window it starts hidden, and the renderer shows it once its
+/// first screen is painted (see `window_reveal`); should the page never get
+/// that far, it shows anyway after a few seconds. Closing it while app windows
+/// stay open stops the projects' local backends and dev servers, which nothing
+/// shows anymore.
+pub fn open_main_window(app: &AppHandle) -> tauri::Result<()> {
+  use tauri::Manager;
+  if app.get_webview_window("main").is_some() {
+    return Ok(());
+  }
+  let Some(config) = app.config().app.windows.iter().find(|w| w.label == "main").cloned() else {
+    return Err(tauri::Error::WindowNotFound);
+  };
+  let window = tauri::WebviewWindowBuilder::from_config(app, &config)?.build()?;
+  let handle = app.clone();
+  window.on_window_event(move |event| {
+    if let tauri::WindowEvent::Destroyed = event {
+      let handle = handle.clone();
+      tauri::async_runtime::spawn(async move {
+        crate::services::dev_server::kill_all(&handle);
+        crate::services::local_backend::stop_all(&handle).await;
+      });
+    }
+  });
+  let shown = window.as_ref().window();
+  std::thread::spawn(move || {
+    std::thread::sleep(std::time::Duration::from_secs(4));
+    reveal(&shown);
+  });
+  Ok(())
 }
 
 fn parse_hex_color(value: &str) -> Option<tauri::window::Color> {

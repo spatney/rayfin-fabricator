@@ -1,7 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { api } from './api'
 import App from './App'
+import AppWindow from './AppWindow'
 import ErrorBoundary from './components/ErrorBoundary'
 import { OverlayProvider } from './overlay'
 import { UpdateProvider } from './update'
@@ -21,16 +23,29 @@ installGlobalErrorCapture()
 
 applyRememberedAppearance()
 
+/** The window of an app installed from a `.rayfin` file shows Fabricator's page for it, not the workbench. */
+function isAppWindow(): boolean {
+  try {
+    return getCurrentWindow().label.startsWith('app-')
+  } catch {
+    return false
+  }
+}
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <OverlayProvider>
-        <UpdateProvider>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
-        </UpdateProvider>
-      </OverlayProvider>
+      {isAppWindow() ? (
+        <AppWindow />
+      ) : (
+        <OverlayProvider>
+          <UpdateProvider>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </UpdateProvider>
+        </OverlayProvider>
+      )}
     </ErrorBoundary>
   </React.StrictMode>
 )

@@ -253,14 +253,36 @@ describe('SettingsModal retired controls', () => {
         expect(screen.queryByText(label)).toBeNull()
       }
       expect(screen.queryByRole('dialog', { name: 'Restart required' })).toBeNull()
-      expect(screen.getAllByRole('checkbox')).toHaveLength(5)
+      expect(screen.getAllByRole('checkbox')).toHaveLength(6)
       expect(screen.getByText('Team workspaces')).toBeTruthy()
       expect(screen.getByText('Migrate Power BI reports')).toBeTruthy()
       expect(screen.getByText('Work IQ')).toBeTruthy()
       expect(screen.getByText('MCP servers')).toBeTruthy()
+      expect(screen.getByText('Export as an app')).toBeTruthy()
       expect(screen.getByText('Full diagnostics')).toBeTruthy()
     }
   )
+})
+
+describe('SettingsModal Export as an app experiment', () => {
+  it('is off by default and turns on through its own flag', async () => {
+    installApi()
+    const { onChange } = await renderModal()
+    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
+    const checkbox = screen.getByRole('checkbox', { name: /Export as an app/ }) as HTMLInputElement
+    expect(checkbox.checked).toBe(false)
+    fireEvent.click(checkbox)
+    expect(onChange).toHaveBeenCalledWith({ experiments: { appExport: true } })
+  })
+
+  it('reflects the persisted flag', async () => {
+    installApi()
+    await renderModal({ settings: { theme: 'system', experiments: { appExport: true } } })
+    fireEvent.click(screen.getByRole('button', { name: /Experiments/ }))
+    expect(
+      (screen.getByRole('checkbox', { name: /Export as an app/ }) as HTMLInputElement).checked
+    ).toBe(true)
+  })
 })
 
 describe('SettingsModal API keys', () => {

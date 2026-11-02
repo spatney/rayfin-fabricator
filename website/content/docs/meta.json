@@ -28,6 +28,7 @@
     "---Ship---",
     "ship/deploy",
     "ship/share",
+    "ship/app-files",
     "ship/advisor",
     "ship/rayfin-versions",
     "---Team workspaces---",

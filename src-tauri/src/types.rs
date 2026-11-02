@@ -780,6 +780,11 @@ pub struct ExperimentFlags {
   /// it's turned on there.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub mcp_servers: Option<bool>,
+  /// Export as an app: Export project also offers a `.rayfin` app file,
+  /// which Fabricator installs and runs in a window of its own. Opt-in (off by
+  /// default). It gates exporting only: `.rayfin` files open either way.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub app_export: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -1024,6 +1029,32 @@ pub struct ExportPreview {
   pub secrets: Vec<String>,
   /// Files git would keep that stay out because they may hold secrets.
   pub kept_out: Vec<String>,
+  /// What exporting it as an app (`.rayfin`) would say about it.
+  pub app: ExportApp,
+}
+
+/// The app an app export (`.rayfin`) installs, for the export dialog.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportApp {
+  pub name: String,
+  /// Its `rayfin.yml` version.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub version: Option<String>,
+  /// The icon its page names, as a `data:` URL, for the dialog to draw at
+  /// each size. `None` when it has none: the dialog draws one.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub icon: Option<String>,
+}
+
+/// The app's icon at one size, drawn by the export dialog.
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppIconImage {
+  /// Its width and height in pixels.
+  pub size: u32,
+  /// A PNG, as base64.
+  pub png: String,
 }
 
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
@@ -1121,6 +1152,99 @@ pub struct ImportResult {
   pub error: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub project: Option<StudioProject>,
+}
+
+/* ------------------------------ installed apps ------------------------------ */
+
+/// An app installed from a `.rayfin` file (`apps.list`).
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledApp {
+  /// Who the app is: a file with the same key updates it.
+  pub key: String,
+  pub name: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub version: Option<String>,
+  /// Who exported it.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub from: Option<String>,
+  /// When the file it came from was exported (ISO 8601).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub exported_at: Option<String>,
+  pub installed_at: String,
+  pub updated_at: String,
+  /// Its icon, as a `data:` URL.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub icon: Option<String>,
+  /// Its window is open.
+  pub open: bool,
+}
+
+/// An app file (`.rayfin`), read before it's installed.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppFilePreview {
+  pub path: String,
+  pub key: String,
+  pub name: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub version: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub from: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub exported_at: Option<String>,
+  /// The app's files: how many, and their size in bytes.
+  pub files: u64,
+  pub bytes: u64,
+  /// Secrets the app declares, which have no values on this computer.
+  pub secrets: Vec<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub icon: Option<String>,
+}
+
+/// What an app's window is for, for the page Fabricator shows in it (`apps.window`).
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppWindowInfo {
+  /// The app's key; empty when the window only says why a file can't be opened.
+  pub key: String,
+  /// `install`: a file to install, after asking. `update`: a file of an
+  /// installed app that isn't what's installed, to install after asking.
+  /// `run`: the installed app. `error`: nothing to run (`error` says why).
+  pub mode: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub file: Option<AppFilePreview>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub installed: Option<InstalledApp>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  /// Its local backend.
+  pub status: LocalStatus,
+}
+
+/// Installing or starting an app, as it goes (`apps:progress`).
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppProgressEvent {
+  pub key: String,
+  /// `unpacking` (with `processed` of `total` files) or `packages` (with npm's `line`s).
+  pub phase: String,
+  pub processed: u64,
+  pub total: u64,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub line: Option<String>,
+}
+
+/// How installing, starting or removing an app went.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppActionResult {
+  pub ok: bool,
+  /// Stable, to act on: `not-installed`, `busy`, `install-failed`, `no-port`, `remove-failed`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub code: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 /// Whether a new project's name is free where it will be saved.
@@ -4159,6 +4283,22 @@ pub struct LocalStartOptions {
   /// (`--sign-in-as`). Restarts keep it.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub sign_in_as: Option<String>,
+  /// How `serve` runs the app. Only Fabricator sets it (installed apps), never
+  /// the renderer. Restarts keep it.
+  #[serde(skip)]
+  pub serve: ServeMode,
+}
+
+/// How rayfin-local serves an app installed from a `.rayfin` file: its build,
+/// from the backend's origin, on a port that stays the same.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ServeMode {
+  /// `--static`: build the app and serve it from the backend, without Vite.
+  pub static_build: bool,
+  /// `--reuse-build`: with `static_build`, serve the build already there.
+  pub reuse_build: bool,
+  /// `--port`.
+  pub port: Option<u16>,
 }
 
 /// The Rayfin SDK an app uses, and whether rayfin-local implements it.

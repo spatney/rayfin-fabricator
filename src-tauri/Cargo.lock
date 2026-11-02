@@ -3077,6 +3077,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-web-kit",
  "once_cell",
+ "png 0.18.1",
  "regex",
  "reqwest",
  "security-framework",

@@ -179,6 +179,12 @@ fn version_json(output: &CliOutput) -> Option<VersionInfo> {
   (!info.version.is_empty() || info.contract.is_some()).then_some(info)
 }
 
+/// Whether a rayfin-local of `version` knows `serve --static --reuse-build`,
+/// which serves the build an earlier start left instead of building again.
+pub fn reuses_builds(version: &str) -> bool {
+  semver::Version::parse(version.trim().trim_start_matches('v')).is_ok_and(|v| v >= semver::Version::new(0, 2, 4))
+}
+
 fn judge(info: VersionInfo) -> Result<VersionInfo, LocalProblem> {
   match info.contract {
     Some(CONTRACT) => Ok(info),
@@ -345,6 +351,16 @@ mod tests {
     assert_eq!(newer.code, "binary-incompatible");
     let unversioned = judge(version_json(&output(0, r#"{"version":"0.1.5"}"#, "")).unwrap()).unwrap_err();
     assert_eq!(unversioned.code, "binary-too-old");
+  }
+
+  #[test]
+  fn only_0_2_4_and_later_reuse_a_static_build() {
+    for yes in ["0.2.4", "v0.2.4", "0.3.0", "1.0.0", "9.9.9-fake"] {
+      assert!(reuses_builds(yes), "{yes}");
+    }
+    for no in ["0.2.3", "0.2.4-rc.1", "0.1.0", "", "unknown"] {
+      assert!(!reuses_builds(no), "{no}");
+    }
   }
 
   #[test]

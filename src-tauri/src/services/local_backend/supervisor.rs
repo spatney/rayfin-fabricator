@@ -128,6 +128,17 @@ pub fn serve_args(dir: &Path, options: &LocalStartOptions) -> Vec<OsString> {
     args.push("--sign-in-as".into());
     args.push(who.into());
   }
+  let serve = &options.serve;
+  if serve.static_build {
+    args.push("--static".into());
+    if serve.reuse_build {
+      args.push("--reuse-build".into());
+    }
+  }
+  if let Some(port) = serve.port {
+    args.push("--port".into());
+    args.push(port.to_string().into());
+  }
   args
 }
 
@@ -242,7 +253,7 @@ impl Supervisor {
             break;
           }
         }
-        self.rt.update(|m| m.begin(&self.options, fresh));
+        self.rt.begin(&self.options, fresh);
       }
       first = false;
 
@@ -438,7 +449,7 @@ mod tests {
       config_dir: Some(PathBuf::from("C:\\Users\\me\\.rayfin")),
     };
     let binary = Binary::executable(PathBuf::from("C:\\Fabricator\\rayfin-local.exe"));
-    let options = LocalStartOptions { force_schema: true, reset: false, sign_in_as: Some("user:ana@example.com".into()) };
+    let options = LocalStartOptions { force_schema: true, reset: false, sign_in_as: Some("user:ana@example.com".into()), ..Default::default() };
     let dir = PathBuf::from("C:\\apps\\my notes");
     let spec = launch_spec(&binary, &dir, &options, &token, &host);
 

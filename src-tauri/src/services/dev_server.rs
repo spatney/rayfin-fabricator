@@ -248,7 +248,7 @@ fn resolve_port(
 
 /// The folder the project's frontend is served from: rayfin.yml's
 /// `services.staticHosting.path` when that folder exists, else the project root.
-fn frontend_dir(project_dir: &Path) -> PathBuf {
+pub(crate) fn frontend_dir(project_dir: &Path) -> PathBuf {
     let root = ProjectLayout::read(project_dir).frontend_root;
     let dir = root.split('/').filter(|s| !s.is_empty()).fold(project_dir.to_path_buf(), |dir, s| dir.join(s));
     if dir.is_dir() { dir } else { project_dir.to_path_buf() }

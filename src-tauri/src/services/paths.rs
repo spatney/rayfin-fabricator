@@ -163,6 +163,19 @@ pub fn store_file() -> PathBuf {
   data_dir().join("studio.json")
 }
 
+/// Where apps installed from `.rayfin` files live, with their packages and
+/// data: on this computer only (`%LOCALAPPDATA%\com.rayfin.fabricator\apps`,
+/// `~/Library/Application Support/com.rayfin.fabricator/apps`), never in the
+/// roaming app data, which would carry their packages from computer to
+/// computer. A debug build with `FABRICATOR_DEV_DATA_DIR` keeps them there.
+pub fn apps_dir() -> PathBuf {
+  #[cfg(debug_assertions)]
+  if std::env::var_os("FABRICATOR_DEV_DATA_DIR").is_some() {
+    return data_dir().join("apps");
+  }
+  dirs::data_local_dir().unwrap_or_else(data_base).join(IDENTIFIER).join("apps")
+}
+
 /// Storage left behind by the retired Design Studio experiment (drafts,
 /// receipts, imported assets). Removed best-effort at startup.
 pub fn retired_design_studio_dir() -> PathBuf {

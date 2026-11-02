@@ -124,15 +124,16 @@ Renaming updates Fabricator's project list and the `name:` field in `rayfin/rayf
 
 ### Export a project
 
-When someone else is taking a project over, export it: Fabricator saves it as a `.fabricator` file they import into their own Fabricator, with what they need to carry on.
+When someone else is taking a project over, export it: Fabricator saves it as a `.fabricator` file they import into their own Fabricator, with what they need to carry on. If they only want to use the app, you can export it as an app instead, with the **Export as an app** experiment; see [Share an app as a file](/docs/ship/app-files).
 
 1. Select **Manage** on the project card.
 2. Next to **Export project**, select **Export**.
-3. Choose what goes in besides **App code**, which is always included:
+3. With the **Export as an app** experiment on, select **Project**.
+4. Choose what goes in besides **App code**, which is always included:
    - **Version history**: every saved version, so **History** and **Restore this version** work for them too.
    - **Published app**: where the app is published, so their publishes update the same app. Clear it to have them publish it as a new app.
-4. Select **Export…**, then choose where to save the file.
-5. Send them the file, for example by email, chat or a shared folder.
+5. Select **Export…**, then choose where to save the file.
+6. Send them the file, for example by email, chat or a shared folder.
 
 The file holds what the project's version history keeps, so installed packages and build output stay out: Fabricator installs them again when the project is imported. It never includes your chat, secret values, files that may hold them such as `.env` files, the app's data on this computer, or your sign-ins, and the dialog names any file it left out because it may hold a secret. The version history still names who saved each version, but leaves your git settings and sign-ins behind, so their changes aren't saved under your name.
 

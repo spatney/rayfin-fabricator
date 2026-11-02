@@ -4,6 +4,7 @@
 
 pub mod accounts;
 pub mod advisor;
+pub mod apps;
 pub mod auth;
 pub mod byok;
 pub mod chat;

@@ -272,10 +272,12 @@ async fn crashes_restart_with_backoff_then_give_up() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_crash_restarts_and_keeps_the_sign_in_but_not_one_time_options() {
+async fn a_crash_restarts_and_keeps_the_sign_in_and_serve_mode_but_not_one_time_options() {
   let Some(h) = harness(fast()) else { return };
   let dir = h.project("once", "crash-once");
-  let options = LocalStartOptions { force_schema: true, reset: true, sign_in_as: Some("user:ana@example.com".into()) };
+  let serve = crate::types::ServeMode { static_build: true, reuse_build: true, port: Some(47_123) };
+  let options =
+    LocalStartOptions { force_schema: true, reset: true, sign_in_as: Some("user:ana@example.com".into()), serve };
   h.backends.start("p", dir.clone(), options).await;
   let status = h.until("p", "the restart", |s| s.state == State::Running && starts(&dir) == 2).await;
   assert_eq!(status.crashes, 1);
@@ -285,6 +287,10 @@ async fn a_crash_restarts_and_keeps_the_sign_in_but_not_one_time_options() {
   let second = args_of(&dir, 2);
   assert!(!second.contains(&"--reset".to_string()) && !second.contains(&"--force-schema".to_string()), "{second:?}");
   assert!(second.windows(2).any(|w| w == ["--sign-in-as", "user:ana@example.com"]));
+  for args in [&first, &second] {
+    assert!(args.windows(2).any(|w| w == ["--static", "--reuse-build"]), "{args:?}");
+    assert!(args.windows(2).any(|w| w == ["--port", "47123"]), "{args:?}");
+  }
 
   // An identity set through the control API is what a restart signs in as.
   let identity = LocalIdentity { kind: "none".into(), user: None };

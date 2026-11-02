@@ -3,10 +3,10 @@
 <!--
   Merged over the Info.plist Tauri writes for the macOS app (tauri build reads this file from
   src-tauri). Tauri writes these two keys from bundle > fileAssociations in tauri.conf.json, but
-  without a document icon, so a .fabricator file would look like the app. These replace them,
-  with the icon bundle > macOS > files puts in Contents/Resources (icons/project-file.icns).
-  Keep the extension and type in step with tauri.conf.json and EXTENSION in
-  src/commands/export.rs.
+  without document icons, so a .fabricator or .rayfin file would look like the app. These replace
+  them, with the icons bundle > macOS > files puts in Contents/Resources (icons/project-file.icns,
+  icons/app-file.icns). Keep the extensions and types in step with tauri.conf.json and EXTENSION
+  and APP_EXTENSION in src/commands/export.rs.
 -->
 <plist version="1.0">
 <dict>
@@ -30,6 +30,24 @@
       <key>CFBundleTypeIconFile</key>
       <string>project-file.icns</string>
     </dict>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>Rayfin app</string>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>LSHandlerRank</key>
+      <string>Owner</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>com.rayfin.fabricator.app</string>
+      </array>
+      <key>CFBundleTypeExtensions</key>
+      <array>
+        <string>rayfin</string>
+      </array>
+      <key>CFBundleTypeIconFile</key>
+      <string>app-file.icns</string>
+    </dict>
   </array>
   <key>UTExportedTypeDeclarations</key>
   <array>
@@ -49,6 +67,25 @@
         <key>public.filename-extension</key>
         <array>
           <string>fabricator</string>
+        </array>
+      </dict>
+    </dict>
+    <dict>
+      <key>UTTypeIdentifier</key>
+      <string>com.rayfin.fabricator.app</string>
+      <key>UTTypeDescription</key>
+      <string>Rayfin app</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.data</string>
+      </array>
+      <key>UTTypeIconFile</key>
+      <string>app-file.icns</string>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>rayfin</string>
         </array>
       </dict>
     </dict>

@@ -14,6 +14,8 @@ import { serializePreviewMutations } from './previewSurface'
 import {
   IpcChannels,
   type AdvisorModelChoice,
+  type AppIconImage,
+  type AppProgressEvent,
   type AppSettings,
   type AuthProvider,
   type AdvisorEventEnvelope,
@@ -256,6 +258,7 @@ export const api: RayfinStudioApi = {
     exportPreview: (id: string) => invoke('projects_export_preview', { id }),
     exportProject: (id: string, options: ExportOptions) =>
       invoke('projects_export', { id, options }),
+    exportApp: (id: string, icons: AppIconImage[]) => invoke('projects_export_app', { id, icons }),
     stopExport: (id: string) => invoke('projects_export_stop', { id }),
     revealExport: (path: string) => invoke('projects_export_reveal', { path }),
     pickImport: () => invoke('projects_import_pick'),
@@ -672,6 +675,24 @@ export const api: RayfinStudioApi = {
       code: 'sdk-unsupported' | 'connector-unsupported',
       reason: string
     ) => localInvoke('local_report_fallback', { projectId, code, reason })
+  },
+
+  apps: {
+    list: () => invoke('apps_list'),
+    open: (key: string) => invoke('apps_open', { key }),
+    remove: (key: string) => invoke('apps_remove', { key }),
+    onChanged: (cb: () => void) => subscribe<null>(IpcChannels.appsChanged, () => cb()),
+    window: () => invoke('apps_window'),
+    install: () => invoke('apps_install'),
+    run: () => invoke('apps_run'),
+    logs: () => invoke('apps_logs'),
+    close: () => invoke('apps_close'),
+    onState: (cb: (status: LocalStatus) => void) =>
+      subscribe<LocalStatus>(IpcChannels.appsState, cb),
+    onLog: (cb: (line: LocalLogEvent) => void) => subscribe<LocalLogEvent>(IpcChannels.appsLog, cb),
+    onProgress: (cb: (event: AppProgressEvent) => void) =>
+      subscribe<AppProgressEvent>(IpcChannels.appsProgress, cb),
+    onWindow: (cb: (label: string) => void) => subscribe<string>(IpcChannels.appsWindow, cb)
   }
 }
 

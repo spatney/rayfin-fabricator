@@ -40,6 +40,7 @@ fn default_flags() -> ExperimentFlags {
     report_migration: Some(false),
     work_iq: Some(false),
     mcp_servers: Some(false),
+    app_export: Some(false),
   }
 }
 
@@ -178,6 +179,7 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
   if let Some(v) = patch.work_iq { current.work_iq = Some(v); }
   if let Some(v) = patch.mcp_servers { current.mcp_servers = Some(v); }
+  if let Some(v) = patch.app_export { current.app_export = Some(v); }
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -468,6 +470,18 @@ mod tests {
     assert_eq!(
       serde_json::to_value(flags.unwrap()).unwrap(),
       serde_json::json!({"workIq":true,"mcpServers":true})
+    );
+  }
+
+  #[test]
+  fn app_export_flag_merges_and_defaults_off() {
+    assert_eq!(default_settings().experiments.unwrap().app_export, Some(false));
+    let mut flags: Option<ExperimentFlags> =
+      Some(serde_json::from_value(serde_json::json!({"mcpServers":true})).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"appExport":true})).unwrap());
+    assert_eq!(
+      serde_json::to_value(flags.unwrap()).unwrap(),
+      serde_json::json!({"mcpServers":true,"appExport":true})
     );
   }
 

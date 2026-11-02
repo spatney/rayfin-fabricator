@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "app-windows",
+  "description": "Capabilities for the windows of apps installed from .rayfin files, while they show Fabricator's own page. The apps themselves load from a remote origin, which no capability names.",
+  "windows": ["app-*"],
+  "permissions": ["core:event:default"]
+}

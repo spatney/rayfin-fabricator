@@ -16,9 +16,48 @@ use tauri::Manager;
 
 use state::AppState;
 
+use services::apps::Opened;
 use services::preview::PreviewState;
 use services::updater::UpdaterState;
 use services::dev_server::DevServers;
+
+/// What the system asked Fabricator to open before it was ready: macOS can
+/// hand over a launch's files before `setup` runs.
+static EARLY_OPENED: std::sync::Mutex<Option<Vec<Opened>>> = std::sync::Mutex::new(Some(Vec::new()));
+
+/// Hold `opened` until `setup` takes it; `false` once it has, to open it now.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn hold_early(opened: &[Opened]) -> bool {
+  match EARLY_OPENED.lock().unwrap().as_mut() {
+    Some(held) => {
+      held.extend(opened.iter().cloned());
+      true
+    }
+    None => false,
+  }
+}
+
+/// Open what Fabricator was asked to open: projects in its own window, which
+/// imports them, and apps in theirs. With nothing to open, a later launch
+/// (`asked`) brings Fabricator's own window forward.
+fn open_requested(app: &tauri::AppHandle, opened: Vec<Opened>, asked: bool) {
+  let mut projects = Vec::new();
+  let mut apps = false;
+  for item in opened {
+    match item {
+      Opened::Project(path) => projects.push(path),
+      other => {
+        apps = true;
+        services::apps::open(app, other);
+      }
+    }
+  }
+  let any_project = !projects.is_empty();
+  commands::export::queue_opened(app, projects);
+  if any_project || (asked && !apps) {
+    commands::misc::bring_forward(app);
+  }
+}
 
 /// Read the bundled telemetry connection string (App Insights) if present.
 /// Mirrors the Electron build, which injects `resources/telemetry.json` at
@@ -102,15 +141,14 @@ pub fn run() {
   services::npm_env::configure_env();
 
   let builder = tauri::Builder::default();
-  // One Fabricator at a time on Windows, where opening a .fabricator file starts
-  // the app again with the file: that launch hands the file to the running app
-  // and exits. Release builds only, so a development build still runs beside
-  // the installed app.
+  // One Fabricator at a time on Windows, where opening a .fabricator or .rayfin
+  // file, or an installed app's shortcut, starts the app again with it: that
+  // launch hands it to the running app and exits. Release builds only, so a
+  // development build still runs beside the installed app.
   #[cfg(all(windows, not(debug_assertions)))]
   let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-    let files = commands::export::exports_in(args.into_iter().skip(1), Some(std::path::Path::new(&cwd)));
-    commands::export::queue_opened(app, files);
-    commands::misc::bring_forward(app);
+    let opened = services::apps::opened_in(args.into_iter().skip(1), Some(std::path::Path::new(&cwd)));
+    open_requested(app, opened, true);
   }));
 
   builder
@@ -122,6 +160,7 @@ pub fn run() {
     .manage(UpdaterState::default())
     .manage(DevServers::default())
     .manage(services::local_backend::LocalBackends::default())
+    .manage(services::apps::Apps::default())
     // The stills the preview leaves in its place under an HTML overlay.
     .register_uri_scheme_protocol(services::preview::STILL_SCHEME, services::preview::serve_still)
     .setup(|app| {
@@ -135,11 +174,17 @@ pub fn run() {
       let version = app.package_info().version.to_string();
       services::telemetry::init(telemetry_connection_string(app), version);
 
-      // A .fabricator file Fabricator was started to open: Windows passes it as
-      // an argument. The workbench imports it once it's showing.
+      // What Fabricator was started to open: Windows passes files and
+      // `--app <key>` as arguments, and macOS may have handed files over
+      // already. Started only to run apps, Fabricator's own window never opens.
       let cwd = std::env::current_dir().ok();
-      let opened = commands::export::exports_in(std::env::args_os().skip(1), cwd.as_deref());
-      commands::export::queue_opened(app.handle(), opened);
+      let mut opened = services::apps::opened_in(std::env::args_os().skip(1), cwd.as_deref());
+      opened.extend(EARLY_OPENED.lock().unwrap().take().unwrap_or_default());
+      let apps_only = !opened.is_empty() && opened.iter().all(|o| !matches!(o, Opened::Project(_)));
+      if !apps_only {
+        commands::misc::open_main_window(app.handle())?;
+      }
+      open_requested(app.handle(), opened, false);
 
       // Watch for main-thread freezes (Parallels/VM hangs) and record them. The
       // monitor actively probes the main thread, so an idle (event-starved) loop
@@ -149,18 +194,6 @@ pub fn run() {
       // Journal the local backends' problems that their supervisor only reports
       // in its status, so Help can see them (see commands::help::local_journal).
       commands::help::watch_local_backends(app.handle());
-
-      // The main window starts hidden; the renderer shows it once its first
-      // screen is painted (see `window_reveal`). Should the page never get that
-      // far, show it anyway rather than leave the app invisible. (`get_window`:
-      // with the preview added, it's no longer a single-webview window.)
-      let handle = app.handle().clone();
-      std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(4));
-        if let Some(window) = handle.get_window("main") {
-          commands::misc::reveal(&window);
-        }
-      });
 
       // Housekeeping nothing needs during startup runs off the main thread, so
       // the window and the first commands aren't kept waiting on the disk:
@@ -174,7 +207,9 @@ pub fn run() {
       //     the app (a no-op once they're gone);
       //   - delete the packages set aside for new projects that are out of
       //     use, and what setting them aside left behind when Fabricator
-      //     stopped part way (last: a spare is tens of thousands of files).
+      //     stopped part way (last: a spare is tens of thousands of files);
+      //   - delete what installing, updating or removing an installed app left
+      //     when Fabricator stopped part way.
       std::thread::spawn(|| {
         services::agent_skills::ensure_materialized();
         services::diagnostics::prune();
@@ -189,6 +224,7 @@ pub fn run() {
           }
         }
         services::new_project_cache::clean_up();
+        services::apps::clean_up();
       });
 
       Ok(())
@@ -346,12 +382,22 @@ pub fn run() {
       commands::projects::projects_remove,
       commands::export::projects_export_preview,
       commands::export::projects_export,
+      commands::export::projects_export_app,
       commands::export::projects_export_stop,
       commands::export::projects_export_reveal,
       commands::export::projects_import_pick,
       commands::export::projects_import_inspect,
       commands::export::projects_import,
       commands::export::projects_opened_exports,
+      // apps installed from .rayfin files
+      commands::apps::apps_window,
+      commands::apps::apps_install,
+      commands::apps::apps_run,
+      commands::apps::apps_logs,
+      commands::apps::apps_close,
+      commands::apps::apps_list,
+      commands::apps::apps_open,
+      commands::apps::apps_remove,
       commands::projects::projects_git_status,
       commands::projects::projects_git_commit,
       commands::commit_message::projects_git_message,
@@ -502,19 +548,30 @@ pub fn run() {
     .expect("error while building tauri application")
     .run(|app, event| {
       services::watchdog::beat();
-      // macOS hands Fabricator the .fabricator files opened with it as events,
-      // at launch and while it runs.
+      // macOS hands Fabricator the files opened with it as events, at launch
+      // (possibly before `setup`) and while it runs.
       #[cfg(target_os = "macos")]
       {
         if let tauri::RunEvent::Opened { urls } = &event {
           let files = urls.iter().filter_map(|url| url.to_file_path().ok());
-          commands::export::queue_opened(app, commands::export::exports_in(files, None));
+          let opened = services::apps::opened_in(files, None);
+          if !hold_early(&opened) {
+            open_requested(app, opened, false);
+          }
+        }
+        // The Dock icon was clicked: show Fabricator's own window when it's
+        // closed, or when nothing of Fabricator's shows.
+        if let tauri::RunEvent::Reopen { has_visible_windows, .. } = &event {
+          if !has_visible_windows || app.get_window("main").is_none() {
+            commands::misc::bring_forward(app);
+          }
         }
       }
       // Kill any live Vite dev servers when the app exits so they never orphan.
       if let tauri::RunEvent::Exit = event {
         services::dev_server::kill_all(app);
         services::local_backend::kill_all(app);
+        services::apps::kill_all(app);
       }
     });
 }

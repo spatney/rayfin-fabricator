@@ -49,6 +49,17 @@ The folder has its own `.gitignore`, so git ignores it: it isn't in History, and
 
 To see or clear the data, use Blueprint's **Data explorer**; see [See your app's local data](/docs/build/data-model#see-your-apps-local-data). Moving a project folder to the trash takes its local data with it. Team apps run on their Fabric deployment, so their data lives in Fabric instead.
 
+## Installed apps
+
+Apps you install from `.rayfin` files live in a folder that stays on this computer, one folder per app:
+
+| OS | Installed apps folder |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\com.rayfin.fabricator\apps` |
+| macOS | `~/Library/Application Support/com.rayfin.fabricator/apps` |
+
+Each app's folder holds its code, its installed packages and its build, and its data in a `.rayfin-local` folder, as a project's does. Updating the app keeps its data. Removing the app from **Installed apps** on **Your projects** deletes its folder. The logs folder keeps each installed app's output in an `apps` folder. See [Share an app as a file](/docs/ship/app-files).
+
 ## Report migration material
 
 A project you created with **Migrate a Power BI report** keeps what Copilot works from in `.fabricator/migration/` in the project folder: the report's definition, its semantic model's tables and measures, and an image and the text of each page. Fabricator keeps the folder out of git, because the page images and text show real data. The app doesn't use it, so you can delete it once every page is migrated. See [Migrate a Power BI report](/docs/build/migrate-power-bi#where-the-reports-material-lives).

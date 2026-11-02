@@ -293,6 +293,12 @@ function installApi(active = false) {
         saveTurn: vi.fn<RayfinStudioApi['projects']['git']['saveTurn']>().mockResolvedValue({})
       }
     },
+    apps: {
+      list: vi.fn<RayfinStudioApi['apps']['list']>().mockResolvedValue([]),
+      onChanged: vi.fn<RayfinStudioApi['apps']['onChanged']>(() => () => {}),
+      open: vi.fn<RayfinStudioApi['apps']['open']>().mockResolvedValue(undefined),
+      remove: vi.fn<RayfinStudioApi['apps']['remove']>().mockResolvedValue({ ok: true })
+    },
     deploy: {
       reconcile: vi.fn().mockResolvedValue(state),
       hasChanges: vi.fn().mockResolvedValue(false),

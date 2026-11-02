@@ -5,20 +5,84 @@ import { useModalFocus } from '../modalFocus'
 import { errorMessage } from '../errorReport'
 import { fabricWorkspaceUrl } from '../fabric'
 import { docsUrl } from '../docsLinks'
+import { drawAppIcon } from '../appIcon'
 import { formatBytes, listNames } from './blueprint/localData'
 import { ProjectFileProgress, ProjectFileSummary, count, fileName } from './projectFile'
+import AppIcon from './AppIcon'
 
 interface Props {
   project: StudioProject
   /** Why it can't be exported right now: Copilot is working on it, or it's publishing. */
   busy?: string
+  /** It can be exported as an app (`.rayfin`) too: the Export as an app experiment is on. */
+  appExport?: boolean
   onClose: () => void
 }
 
 type Phase = 'loading' | 'choose' | 'saving' | 'done'
 
+/** What the export is: a project to keep building (`.fabricator`), or an app to use (`.rayfin`). */
+type Format = 'project' | 'app'
+
+const FORMATS: { id: Format; title: string; desc: string; icon: string }[] = [
+  {
+    id: 'project',
+    title: 'Project',
+    desc: 'To keep building it in Fabricator · .fabricator',
+    icon: 'tools'
+  },
+  { id: 'app', title: 'App', desc: 'To use it, in a window of its own · .rayfin', icon: 'window' }
+]
+
 /** Files that may hold secrets named before "and N more". */
 const KEPT_OUT_SHOWN = 3
+
+/** Choose what the export is. */
+function FormatChoice({
+  format,
+  disabled,
+  onChange
+}: {
+  format: Format
+  disabled: boolean
+  onChange: (format: Format) => void
+}): JSX.Element {
+  const id = useId()
+  return (
+    <div className="project-file-formats" role="radiogroup" aria-label="Export it as">
+      {FORMATS.map((option) => (
+        <label
+          key={option.id}
+          className={`project-file-format${format === option.id ? ' project-file-format--on' : ''}`}
+        >
+          <input
+            type="radio"
+            className="project-file-format-input"
+            name={`${id}-format`}
+            value={option.id}
+            checked={format === option.id}
+            disabled={disabled}
+            aria-labelledby={`${id}-${option.id}`}
+            aria-describedby={`${id}-${option.id}-desc`}
+            onChange={() => onChange(option.id)}
+          />
+          <span
+            className={`codicon codicon-${option.icon} project-file-format-icon`}
+            aria-hidden="true"
+          />
+          <span className="project-file-format-text">
+            <span className="project-file-format-title" id={`${id}-${option.id}`}>
+              {option.title}
+            </span>
+            <span className="project-file-format-desc" id={`${id}-${option.id}-desc`}>
+              {option.desc}
+            </span>
+          </span>
+        </label>
+      ))}
+    </div>
+  )
+}
 
 function CheckMark(): JSX.Element {
   return (
@@ -86,12 +150,18 @@ function Part({
 }
 
 /**
- * Export a project for someone else: choose what its `.fabricator` file holds
- * besides the code (its version history, where it's published), save it, then
- * see what the recipient needs to carry on. Secret values, the app's local data
- * and sign-ins never go in.
+ * Export a project for someone else: as a `.fabricator` file to keep building
+ * it, with what they choose besides the code (its version history, where it's
+ * published), or, with `appExport`, as a `.rayfin` app to use it, which
+ * Fabricator installs and opens in a window of its own. Save it, then see what
+ * the recipient needs. Secret values, the app's local data and sign-ins never go in.
  */
-export default function ExportProjectModal({ project, busy, onClose }: Props): JSX.Element {
+export default function ExportProjectModal({
+  project,
+  busy,
+  appExport,
+  onClose
+}: Props): JSX.Element {
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -100,12 +170,15 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
   const [phase, setPhase] = useState<Phase>('loading')
   const [preview, setPreview] = useState<ExportPreview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [chosen, setFormat] = useState<Format>('project')
+  const format: Format = appExport ? chosen : 'project'
   const [options, setOptions] = useState<ExportOptions>({ history: false, deployment: false })
   const [progress, setProgress] = useState<{ processed: number; total: number } | null>(null)
   const [saved, setSaved] = useState<ExportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
   const saving = phase === 'saving'
+  const asApp = format === 'app'
 
   useEffect(() => {
     mountedRef.current = true
@@ -162,11 +235,19 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
     setPhase('saving')
     setProgress(null)
     setError(null)
+    const failure = asApp
+      ? 'Fabricator couldn’t export the app.'
+      : 'Fabricator couldn’t export the project.'
     let result: ExportResult
     try {
-      result = await window.api.projects.exportProject(project.id, options)
+      if (asApp && preview) {
+        const icons = await drawAppIcon(preview.app.icon, preview.app.name)
+        result = await window.api.projects.exportApp(project.id, icons)
+      } else {
+        result = await window.api.projects.exportProject(project.id, options)
+      }
     } catch (reason) {
-      result = { ok: false, error: errorMessage(reason, 'Fabricator couldn’t export the project.') }
+      result = { ok: false, error: errorMessage(reason, failure) }
     }
     if (!mountedRef.current) return
     setProgress(null)
@@ -175,7 +256,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
       setPhase('done')
       return
     }
-    if (!result.cancelled) setError(result.error ?? 'Fabricator couldn’t export the project.')
+    if (!result.cancelled) setError(result.error ?? failure)
     setPhase('choose')
   }
 
@@ -230,7 +311,9 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
           <ProjectFileSummary name={project.name}>
             {phase === 'done'
               ? 'It’s exported and ready to send.'
-              : 'Save a copy someone else can import into Fabricator.'}
+              : asApp
+                ? 'Save it as an app someone else can install and use.'
+                : 'Save a copy someone else can import into Fabricator.'}
           </ProjectFileSummary>
 
           {phase === 'loading' && (
@@ -251,6 +334,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
 
           {preview && (phase === 'choose' || (saving && !progress)) && (
             <>
+              {appExport && <FormatChoice format={format} disabled={saving} onChange={setFormat} />}
               <div
                 className="project-file-parts"
                 role="group"
@@ -264,7 +348,26 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                 >
                   Source and settings. Installed packages and build output stay out.
                 </Part>
-                {preview.history && (
+                {asApp && (
+                  <div className="project-file-part project-file-part--fact">
+                    <AppIcon name={preview.app.name} src={preview.app.icon} size={20} />
+                    <span className="project-file-part-text">
+                      <span className="project-file-part-head">
+                        <span className="project-file-part-title">{preview.app.name}</span>
+                        {preview.app.version && (
+                          <span className="project-file-part-detail">
+                            Version {preview.app.version}
+                          </span>
+                        )}
+                      </span>
+                      <span className="project-file-part-desc">
+                        It opens in a window of its own, with this name and icon. Its data stays on
+                        the computer it’s installed on.
+                      </span>
+                    </span>
+                  </div>
+                )}
+                {!asApp && preview.history && (
                   <Part
                     title="Version history"
                     detail={`${count(preview.history.versions, 'version')} · ${formatBytes(preview.history.bytes)}`}
@@ -275,7 +378,7 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                     Every saved version, so History and Restore work for them too.
                   </Part>
                 )}
-                {deployment && (
+                {!asApp && deployment && (
                   <Part
                     title="Published app"
                     detail={deployment.workspace}
@@ -293,7 +396,8 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
               <div className="project-file-note">
                 <span className="codicon codicon-lock" aria-hidden="true" />
                 <span>
-                  Never included: your chat, secret values
+                  Never included: your chat, {asApp && 'version history, where it’s published, '}
+                  secret values
                   {secrets.length > 0 && ` (${listNames(secrets)})`}, local app data or sign-ins.
                   {keptOut.length > 0 && (
                     <span className="project-file-note-extra">
@@ -302,6 +406,15 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
                   )}
                 </span>
               </div>
+              {asApp && secrets.length > 0 && (
+                <p className="project-file-note">
+                  <span className="codicon codicon-warning" aria-hidden="true" />
+                  <span>
+                    It uses secrets that don’t come with it, so what needs them won’t work where
+                    it’s installed.
+                  </span>
+                </p>
+              )}
 
               {busy && (
                 <p className="project-file-busy" role="status">
@@ -327,7 +440,57 @@ export default function ExportProjectModal({ project, busy, onClose }: Props): J
             />
           )}
 
-          {phase === 'done' && saved?.path && (
+          {phase === 'done' && saved?.path && asApp && (
+            <>
+              <div className="project-file-saved">
+                <span
+                  className="codicon codicon-pass-filled project-file-saved-icon"
+                  aria-hidden="true"
+                />
+                <span className="project-file-saved-text">
+                  <strong>Saved {fileName(saved.path)}</strong>
+                  <span>
+                    {formatBytes(saved.bytes ?? 0)} · {count(saved.files ?? 0, 'file')}
+                  </span>
+                </span>
+              </div>
+              <div className="project-file-path" title={saved.path}>
+                {saved.path}
+              </div>
+              {error && (
+                <p className="project-manage-error" role="alert">
+                  {error}
+                </p>
+              )}
+
+              <section className="project-file-next" aria-labelledby={`${titleId}-next`}>
+                <h3 className="project-manage-heading" id={`${titleId}-next`}>
+                  What happens next
+                </h3>
+                <ol className="project-file-steps">
+                  <li>Send them the file, by email, chat or a shared folder.</li>
+                  <li>
+                    They double-click it. Fabricator asks before it installs the app, then opens it
+                    in a window of its own. The first time takes a minute or two. Don’t have
+                    Fabricator?{' '}
+                    <button type="button" className="project-file-link" onClick={copyInstallLink}>
+                      {linkCopied ? 'Install link copied' : 'Copy the install link'}
+                      <span
+                        className={`codicon codicon-${linkCopied ? 'check' : 'copy'}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </li>
+                  <li>
+                    After that it opens like any app. On Windows it’s in the Start menu, under
+                    Rayfin apps.
+                  </li>
+                </ol>
+              </section>
+            </>
+          )}
+
+          {phase === 'done' && saved?.path && !asApp && (
             <>
               <div className="project-file-saved">
                 <span

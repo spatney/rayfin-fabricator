@@ -13,6 +13,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "Fabricator",
         "width": 1360,
         "height": 880,
@@ -38,7 +39,8 @@
     "copyright": "Copyright © 2026 Sachin Patney",
     "resources": {
       "../resources/telemetry*.json": "resources/",
-      "icons/project-file.ico": "resources/project-file.ico"
+      "icons/project-file.ico": "resources/project-file.ico",
+      "icons/app-file.ico": "resources/app-file.ico"
     },
     "fileAssociations": [
       {
@@ -49,6 +51,17 @@
         "rank": "Owner",
         "exportedType": {
           "identifier": "com.rayfin.fabricator.project",
+          "conformsTo": ["public.data"]
+        }
+      },
+      {
+        "ext": ["rayfin"],
+        "name": "RayfinFabricator.App",
+        "description": "Rayfin app",
+        "role": "Viewer",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "com.rayfin.fabricator.app",
           "conformsTo": ["public.data"]
         }
       }
@@ -70,7 +83,8 @@
     "macOS": {
       "minimumSystemVersion": "11.0",
       "files": {
-        "Resources/project-file.icns": "icons/project-file.icns"
+        "Resources/project-file.icns": "icons/project-file.icns",
+        "Resources/app-file.icns": "icons/app-file.icns"
       }
     }
   },

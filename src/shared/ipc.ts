@@ -1750,6 +1750,12 @@ export interface ExperimentFlags {
    * Each chat still has a server off until it's turned on there.
    */
   mcpServers?: boolean
+  /**
+   * Export as an app: Export project also offers App, a `.rayfin` file that
+   * Fabricator installs and runs in a window of its own. It gates exporting
+   * only: `.rayfin` files open whether it's on or off.
+   */
+  appExport?: boolean
 }
 
 /**
@@ -1865,6 +1871,28 @@ export interface ExportPreview {
   secrets: string[]
   /** Files git would keep that stay out because they may hold secrets. */
   keptOut: string[]
+  /** What exporting it as an app (`.rayfin`) would say about it. */
+  app: ExportApp
+}
+
+/** The app an app export (`.rayfin`) installs, for the export dialog. */
+export interface ExportApp {
+  name: string
+  /** Its `rayfin.yml` version. */
+  version?: string
+  /**
+   * The icon its page names, as a `data:` URL, for the dialog to draw at each
+   * size. Absent when it has none: the dialog draws one.
+   */
+  icon?: string
+}
+
+/** The app's icon at one size, as the export dialog drew it. */
+export interface AppIconImage {
+  /** Its width and height in pixels. */
+  size: number
+  /** A PNG, as base64. */
+  png: string
 }
 
 /** The published app an export can point the recipient's publishes at. */
@@ -1929,6 +1957,75 @@ export interface ImportResult {
   ok: boolean
   error?: string
   project?: StudioProject
+}
+
+/** An app installed from a `.rayfin` file (`apps.list`). */
+export interface InstalledApp {
+  /** Who the app is: a file with the same key updates it. */
+  key: string
+  name: string
+  version?: string
+  /** Who exported it. */
+  from?: string
+  /** When the file it came from was exported (ISO 8601). */
+  exportedAt?: string
+  installedAt: string
+  updatedAt: string
+  /** Its icon, as a `data:` URL. */
+  icon?: string
+  /** Its window is open. */
+  open: boolean
+}
+
+/** An app file (`.rayfin`), read before it's installed. */
+export interface AppFilePreview {
+  path: string
+  key: string
+  name: string
+  version?: string
+  from?: string
+  exportedAt?: string
+  /** The app's files: how many, and their total size in bytes. */
+  files: number
+  bytes: number
+  /** Secrets the app declares, which have no values on this computer. */
+  secrets: string[]
+  icon?: string
+}
+
+/** What an app's window is for, for the page Fabricator shows in it (`apps.window`). */
+export interface AppWindowInfo {
+  /** The app's key; empty when the window only says why a file can't be opened. */
+  key: string
+  /**
+   * `install`: a file to install, after asking. `update`: a file of an
+   * installed app that isn't what's installed. `run`: the installed app.
+   * `error`: nothing to run (`error` says why).
+   */
+  mode: 'install' | 'update' | 'run' | 'error'
+  file?: AppFilePreview
+  installed?: InstalledApp
+  error?: string
+  /** Its local backend. */
+  status: LocalStatus
+}
+
+/** Installing an app, as it goes (`apps.onProgress`). */
+export interface AppProgressEvent {
+  key: string
+  /** `unpacking` (`processed` of `total` files) or `packages` (npm's `line`s). */
+  phase: 'unpacking' | 'packages'
+  processed: number
+  total: number
+  line?: string
+}
+
+/** How installing, starting or removing an app went. */
+export interface AppActionResult {
+  ok: boolean
+  /** `not-installed`, `busy`, `install-failed`, `node-missing`, `no-port` or `remove-failed`. */
+  code?: string
+  error?: string
 }
 
 /** Whether a new project's name is free where it will be saved. */
@@ -3310,6 +3407,11 @@ export const IpcChannels = {
   deleteProgress: 'delete:progress',
   zipProgress: 'zip:progress',
   exportOpened: 'export:opened',
+  appsState: 'apps:state',
+  appsLog: 'apps:log',
+  appsProgress: 'apps:progress',
+  appsChanged: 'apps:changed',
+  appsWindow: 'apps:window',
   teamProgress: 'team:progress',
   teamDiagnosis: 'team:diagnosis',
   devState: 'dev:state',
@@ -3632,6 +3734,12 @@ export interface RayfinStudioApi {
      * on `onZipProgress`). Never rejects: a failure is in `error`.
      */
     exportProject: (id: string, options: ExportOptions) => Promise<ExportResult>
+    /**
+     * Ask where to save the project as an app (`.rayfin`), then write it with
+     * `icons`, the app's icon drawn at each size (progress on `onZipProgress`).
+     * Never rejects: a failure is in `error`.
+     */
+    exportApp: (id: string, icons: AppIconImage[]) => Promise<ExportResult>
     /** Stop exporting the project; `exportProject` then resolves as cancelled. */
     stopExport: (id: string) => Promise<void>
     /** Show a saved export in the file manager. */
@@ -4392,6 +4500,7 @@ export interface RayfinStudioApi {
 
   /** Each project's local backend (rayfin-local); see {@link LocalBackendApi}. */
   local: LocalBackendApi
+  apps: InstalledAppsApi
 }
 
 /* ------------------------------------------------------------------ *
@@ -4822,4 +4931,36 @@ export interface LocalBackendApi {
     code: 'sdk-unsupported' | 'connector-unsupported',
     reason: string
   ) => Promise<void>
+}
+
+/**
+ * `window.api.apps`: apps installed from `.rayfin` files, each run on its own,
+ * in a window of its own. The window's commands act on the window that calls
+ * them: the page Fabricator shows in an app's window (`AppWindow`) uses them.
+ */
+export interface InstalledAppsApi {
+  /** Every installed app, by name. */
+  list: () => Promise<InstalledApp[]>
+  /** Open an installed app in its window. */
+  open: (key: string) => Promise<void>
+  /** Remove an installed app, with its data and shortcut. Never rejects. */
+  remove: (key: string) => Promise<AppActionResult>
+  /** An app was installed, updated or removed, or its window opened or closed. */
+  onChanged: (cb: () => void) => () => void
+  /** What this app window is for. */
+  window: () => Promise<AppWindowInfo>
+  /** Install the file this window was opened with (progress on `onProgress`). Never rejects. */
+  install: () => Promise<AppActionResult>
+  /** Start this window's app (its state on `onState`); the window shows it once it's ready. */
+  run: () => Promise<AppActionResult>
+  /** This window's app's last output lines, oldest first. */
+  logs: () => Promise<LocalLogEvent[]>
+  /** Close this window, which stops its app. */
+  close: () => Promise<void>
+  /** Every installed app's backend status (`projectId` is the app's key). */
+  onState: (cb: (status: LocalStatus) => void) => () => void
+  onLog: (cb: (line: LocalLogEvent) => void) => () => void
+  onProgress: (cb: (event: AppProgressEvent) => void) => () => void
+  /** Fabricator asks the window `label` to look again at what it's for. */
+  onWindow: (cb: (label: string) => void) => () => void
 }

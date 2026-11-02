@@ -20,9 +20,13 @@
 //! (`bundle > fileAssociations` in tauri.conf.json; their icon comes from
 //! `Info.plist` on macOS and `windows/installer-hooks.nsh` on Windows), and
 //! [`queue_opened`] holds the files it's handed until the workbench imports them.
+//!
+//! A project can also be exported as an app (`.rayfin`): the same code, never
+//! its history or publishing record, with what installing it needs in
+//! `.fabricator/`: who and what the app is ([`AppManifest`]) and its icon.
+//! Opening one installs and runs the app on its own (`services::apps`).
 
 use std::collections::{BTreeSet, HashMap};
-use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Component, Path, PathBuf};
@@ -46,18 +50,30 @@ use crate::services::journal::{self, Area, Level};
 use crate::services::{emit, git, store, version_history};
 use crate::state::AppState;
 use crate::types::{
-  ExportDeployment, ExportHistory, ExportOptions, ExportPreview, ExportResult, ImportPreview, ImportResult,
-  StudioProject, ZipProgressEvent,
+  AppIconImage, ExportApp, ExportDeployment, ExportHistory, ExportOptions, ExportPreview, ExportResult, ImportPreview,
+  ImportResult, StudioProject, ZipProgressEvent,
 };
 
 /// The extension of an exported project.
 pub(crate) const EXTENSION: &str = "fabricator";
+/// The extension of a project exported as an app, to be used rather than built.
+pub(crate) const APP_EXTENSION: &str = "rayfin";
 /// What only Fabricator reads, relative to the app.
 const MANIFEST: &str = ".fabricator/export.json";
+/// What an app export says about the app, and its icon, relative to the app.
+pub(crate) const APP_MANIFEST: &str = ".fabricator/app.json";
+pub(crate) const APP_ICON_PNG: &str = ".fabricator/app-icon.png";
+pub(crate) const APP_ICON_ICO: &str = ".fabricator/app-icon.ico";
 /// Where `rayfin up` records where the app is published.
 const REGISTRY: &str = "rayfin/.deployments.json";
 /// The export format this Fabricator writes.
 const FORMAT: u32 = 1;
+/// The app export format this Fabricator writes.
+pub(crate) const APP_FORMAT: u32 = 1;
+/// The sizes an app's icon comes in (px), smallest first; the largest is its `.png`.
+pub(crate) const ICON_SIZES: [u32; 7] = [16, 24, 32, 48, 64, 128, 256];
+/// The most an app's icon file or its source on the page may weigh.
+pub(crate) const MAX_ICON_BYTES: u64 = 1024 * 1024;
 /// The progress id while a file imports: it has no project yet.
 const IMPORTING: &str = "import";
 const PROGRESS_EVERY: Duration = Duration::from_millis(90);
@@ -117,6 +133,12 @@ const COMPRESSED: &[&str] = &[
 /// A sign-in in a URL: `https://user:token@host/…`.
 static URL_CREDENTIALS: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?i)\b(https?://)[^/@\s"']+@"#).unwrap());
 static YAML_NAME: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^name:\s*(.+)$").unwrap());
+static YAML_ID: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^id:\s*(.+)$").unwrap());
+static YAML_VERSION: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^version:\s*(.+)$").unwrap());
+/// A `<link>` tag, and its `rel` and `href`.
+static LINK_TAG: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?is)<link\b[^>]*>").unwrap());
+static LINK_REL: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?i)\brel\s*=\s*["']([^"']*)["']"#).unwrap());
+static LINK_HREF: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?i)\bhref\s*=\s*["']([^"']*)["']"#).unwrap());
 
 /// Exports being written, by project, with the flag that stops them.
 static PACKING: Lazy<Mutex<HashMap<String, Arc<AtomicBool>>>> = Lazy::new(Default::default);
@@ -152,6 +174,31 @@ pub(crate) struct Manifest {
   pub deployment_names: Option<HashMap<String, String>>,
 }
 
+/// What an app export says about the app (`.fabricator/app.json`).
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AppManifest {
+  #[serde(default)]
+  pub format: u32,
+  /// Who the app is to the computers it's installed on: a file with the same
+  /// key updates the app it installed. See [`app_key`].
+  #[serde(default)]
+  pub key: String,
+  #[serde(default)]
+  pub name: String,
+  /// Its `rayfin.yml` version.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub version: Option<String>,
+  /// Who exported it: their Fabric account.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub from: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub created_at: Option<String>,
+  /// The Fabricator version that exported it.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub fabricator: Option<String>,
+}
+
 /* ------------------------------ what goes in ------------------------------ */
 
 /// Never in an export, and not worth a mention: this computer's files, other
@@ -170,8 +217,9 @@ fn never(rel: &str) -> bool {
     || (folders == ["rayfin"] && name.starts_with('.') && name.ends_with(".tmp"))
     || *name == "rayfin.config.json"
     // An export saved in the app's own folder.
-    || lower.ends_with(".fabricator")
-    || lower.ends_with(".fabricator.partial")
+    || [EXTENSION, APP_EXTENSION]
+      .iter()
+      .any(|ext| lower.ends_with(&format!(".{ext}")) || lower.ends_with(&format!(".{ext}.partial")))
 }
 
 /// May hold a secret: environment files (not their examples), local settings,
@@ -517,6 +565,198 @@ fn plan(dir: &Path, listed: &[String], choice: ExportOptions, facts: &Facts, ski
   Plan { items, files }
 }
 
+/* ------------------------------ as an app ------------------------------- */
+
+const BAD_ICON: &str = "Fabricator couldn’t make the app’s icon. Try exporting it again.";
+
+/// A top-level `key: value` of `rayfin.yml`, unquoted.
+fn yaml_value(re: &Regex, text: &str) -> Option<String> {
+  let raw = re.captures(text)?.get(1)?.as_str().trim();
+  Some(raw.trim_matches(['"', '\'']).trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// The key an app installs under: its `rayfin.yml` id, so a later export of
+/// the same app updates it, and who exported it, so two people's apps with the
+/// same id don't. Short and readable (it names a folder and a window), and the
+/// same on every computer.
+pub(crate) fn app_key(id: &str, from: Option<&str>) -> String {
+  let slug: String = slugify(id).chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(24).collect();
+  let slug = slug.trim_matches('-');
+  let slug = if slug.is_empty() { "app" } else { slug };
+  let who = from.unwrap_or_default().trim().to_lowercase();
+  let digest = <sha2::Sha256 as sha2::Digest>::digest(format!("{who}\n{}", id.trim().to_lowercase()));
+  format!("{slug}-{}", &hex::encode(digest)[..8])
+}
+
+/// A key [`app_key`] could have made: it names folders and windows.
+pub(crate) fn valid_app_key(key: &str) -> bool {
+  (3..=64).contains(&key.len())
+    && key.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+    && !key.starts_with('-')
+}
+
+/// What an app export says about the project in `dir`.
+fn app_manifest(dir: &Path, name: &str, from: Option<String>, fabricator: String) -> AppManifest {
+  let yml = std::fs::read_to_string(dir.join("rayfin").join("rayfin.yml")).unwrap_or_default();
+  let id = yaml_value(&YAML_ID, &yml).unwrap_or_else(|| name.to_string());
+  AppManifest {
+    format: APP_FORMAT,
+    key: app_key(&id, from.as_deref()),
+    name: name.to_string(),
+    version: yaml_value(&YAML_VERSION, &yml),
+    from,
+    created_at: Some(now_iso()),
+    fabricator: Some(fabricator),
+  }
+}
+
+/// The app's icon as its page names it (`<link rel="icon">` in the frontend's
+/// `index.html`), else a usual favicon file, as a `data:` URL the export
+/// dialog draws at each size.
+fn page_icon(dir: &Path) -> Option<String> {
+  let frontend = crate::services::dev_server::frontend_dir(dir);
+  let html = std::fs::read_to_string(frontend.join("index.html")).unwrap_or_default();
+  let usual = ["favicon.svg", "favicon.png", "icon.svg", "icon.png", "logo.svg", "logo.png", "favicon.ico"];
+  icon_hrefs(&html)
+    .iter()
+    .flat_map(|href| icon_candidates(&frontend, href))
+    .chain(usual.iter().map(|name| frontend.join("public").join(name)))
+    .find_map(|path| icon_data_url(dir, &path))
+}
+
+/// The icons a page's `<link rel="icon">` and touch icon tags name, best
+/// first: a drawing, which scales, then the touch icon, which is large.
+fn icon_hrefs(html: &str) -> Vec<String> {
+  let mut found: Vec<(u8, String)> = LINK_TAG
+    .find_iter(html)
+    .filter_map(|tag| {
+      let rel = LINK_REL.captures(tag.as_str())?.get(1)?.as_str().to_ascii_lowercase();
+      let href = LINK_HREF.captures(tag.as_str())?.get(1)?.as_str().trim().to_string();
+      let touch = rel.split_whitespace().any(|r| r == "apple-touch-icon");
+      if href.is_empty() || !(touch || rel.split_whitespace().any(|r| r == "icon")) {
+        return None;
+      }
+      let path = href.split(['?', '#']).next().unwrap_or_default().to_ascii_lowercase();
+      let rank = if path.ends_with(".svg") {
+        0
+      } else if touch {
+        1
+      } else if path.ends_with(".ico") {
+        3
+      } else {
+        2
+      };
+      Some((rank, href))
+    })
+    .collect();
+  found.sort_by_key(|(rank, _)| *rank);
+  found.into_iter().map(|(_, href)| href).collect()
+}
+
+/// Where a page's icon `href` is on disk: Vite serves `public/` at the root,
+/// and other paths from the frontend's folder. Nothing for other sites' icons.
+fn icon_candidates(frontend: &Path, href: &str) -> Vec<PathBuf> {
+  let lower = href.to_ascii_lowercase();
+  if href.starts_with("//") || ["data:", "http:", "https:", "blob:"].iter().any(|s| lower.starts_with(s)) {
+    return Vec::new();
+  }
+  let path = href.split(['?', '#']).next().unwrap_or_default();
+  let rel = path.trim_start_matches("./").trim_start_matches('/');
+  if rel.is_empty() {
+    return Vec::new();
+  }
+  let join = |base: PathBuf| rel.split('/').filter(|p| !p.is_empty()).fold(base, |p, part| p.join(part));
+  vec![join(frontend.join("public")), join(frontend.to_path_buf())]
+}
+
+/// An image of the app's own as a `data:` URL, when it's one a page can draw.
+fn icon_data_url(app: &Path, path: &Path) -> Option<String> {
+  use base64::Engine as _;
+  let mime = match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+    "svg" => "image/svg+xml",
+    "png" => "image/png",
+    "ico" => "image/x-icon",
+    "jpg" | "jpeg" => "image/jpeg",
+    "webp" => "image/webp",
+    "gif" => "image/gif",
+    _ => return None,
+  };
+  std::fs::metadata(path).ok().filter(|m| m.is_file() && m.len() <= MAX_ICON_BYTES)?;
+  // An href can't reach outside the app.
+  if !path.canonicalize().ok()?.starts_with(app.canonicalize().ok()?) {
+    return None;
+  }
+  let bytes = std::fs::read(path).ok()?;
+  Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
+/// The width and height a PNG says it has.
+pub(crate) fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
+  if bytes.len() < 24 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") || &bytes[12..16] != b"IHDR" {
+    return None;
+  }
+  let read = |at: usize| u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
+  Some((read(16), read(20)))
+}
+
+/// An `.ico` of square PNG `images` (size, bytes), which Windows reads at any size.
+pub(crate) fn ico(images: &[(u32, Vec<u8>)]) -> Vec<u8> {
+  let count = images.len().min(usize::from(u16::MAX));
+  let mut out = Vec::new();
+  out.extend(0u16.to_le_bytes());
+  out.extend(1u16.to_le_bytes());
+  out.extend((count as u16).to_le_bytes());
+  let mut offset = 6 + 16 * count;
+  for (size, png) in &images[..count] {
+    // 0 means 256 or more.
+    let side = u8::try_from(*size).unwrap_or(0);
+    out.extend([side, side, 0, 0]);
+    out.extend(1u16.to_le_bytes());
+    out.extend(32u16.to_le_bytes());
+    out.extend((png.len() as u32).to_le_bytes());
+    out.extend((offset as u32).to_le_bytes());
+    offset += png.len();
+  }
+  for (_, png) in &images[..count] {
+    out.extend(png);
+  }
+  out
+}
+
+/// The app's icon at each size the export dialog drew it: square PNGs of
+/// sizes in [`ICON_SIZES`], with the largest. `(size, png)`, smallest first.
+fn checked_icons(icons: &[AppIconImage]) -> Result<Vec<(u32, Vec<u8>)>, String> {
+  use base64::Engine as _;
+  let mut out: Vec<(u32, Vec<u8>)> = Vec::new();
+  for icon in icons {
+    if !ICON_SIZES.contains(&icon.size) || out.iter().any(|(size, _)| *size == icon.size) {
+      return Err(BAD_ICON.into());
+    }
+    let png = base64::engine::general_purpose::STANDARD.decode(icon.png.trim()).map_err(|_| BAD_ICON.to_string())?;
+    if png.len() as u64 > MAX_ICON_BYTES || png_size(&png) != Some((icon.size, icon.size)) {
+      return Err(BAD_ICON.into());
+    }
+    out.push((icon.size, png));
+  }
+  out.sort_by_key(|(size, _)| *size);
+  if out.last().map(|(size, _)| *size) != ICON_SIZES.last().copied() {
+    return Err(BAD_ICON.into());
+  }
+  Ok(out)
+}
+
+/// What an app export holds: the app's code, then its icon and what it is.
+fn app_plan(dir: &Path, listed: &[String], manifest: &AppManifest, icons: &[(u32, Vec<u8>)], skip: Option<&Path>) -> Plan {
+  let (mut items, _kept_out) = code_items(dir, listed, skip);
+  let files = items.len() as u64;
+  if let Some((_, png)) = icons.last() {
+    items.push(Item::text(APP_ICON_PNG, png.clone()));
+    items.push(Item::text(APP_ICON_ICO, ico(icons)));
+  }
+  items.push(Item::text(APP_MANIFEST, serde_json::to_vec_pretty(manifest).unwrap_or_default()));
+  Plan { items, files }
+}
+
 /* -------------------------------- packing -------------------------------- */
 
 enum PackError {
@@ -803,53 +1043,128 @@ fn inspect(source: &Path, root: &Path) -> Result<ImportPreview, String> {
 
 /// Unpack the app in the file at `source` into a new folder in `root`, named
 /// after it. On failure, nothing is left.
-fn unpack(source: &Path, root: &Path, mut progress: impl FnMut(u64, u64)) -> Result<PathBuf, String> {
+fn unpack(source: &Path, root: &Path, progress: impl FnMut(u64, u64)) -> Result<PathBuf, String> {
   let mut contents = read_contents(source)?;
   std::fs::create_dir_all(root).map_err(|e| format!("Couldn’t create your projects folder {}: {e}", root.display()))?;
   let target = contents.destination(source, root)?;
   std::fs::create_dir(&target).map_err(|e| format!("Couldn’t create {}: {e}", target.display()))?;
-
-  let unpacked = (|| {
-    let total = contents.entries.iter().filter(|e| !e.folder).count() as u64;
-    let (mut done, mut written) = (0u64, 0u64);
-    let mut shown = Instant::now();
-    progress(0, total);
-    for entry in &contents.entries {
-      let out = entry.path.split('/').fold(target.clone(), |path, part| path.join(part));
-      let create = |dir: &Path| std::fs::create_dir_all(dir).map_err(|e| format!("Couldn’t create {}: {e}", dir.display()));
-      if entry.folder {
-        create(&out)?;
-        continue;
-      }
-      if let Some(parent) = out.parent() {
-        create(parent)?;
-      }
-      let mut from = contents.archive.by_index(entry.index).map_err(|_| UNREADABLE.to_string())?;
-      let mut file = File::create(&out).map_err(|e| format!("Couldn’t create {}: {e}", out.display()))?;
-      let room = MAX_UNPACKED_BYTES - written;
-      let copied = std::io::copy(&mut (&mut from).take(room + 1), &mut file)
-        .map_err(|e| format!("Couldn’t unpack {}: {e}", entry.path))?;
-      if copied > room {
-        return Err(TOO_BIG.to_string());
-      }
-      written += copied;
-      done += 1;
-      if done == total || shown.elapsed() >= PROGRESS_EVERY {
-        shown = Instant::now();
-        progress(done, total);
-      }
-    }
-    if !target.join("rayfin").join("rayfin.yml").is_file() {
-      return Err(NOT_AN_APP.to_string());
-    }
-    Ok(())
-  })();
-  match unpacked {
+  match extract(&mut contents, &target, |_| false, progress) {
     Ok(()) => Ok(target),
     Err(error) => {
       let _ = std::fs::remove_dir_all(&target);
       Err(error)
     }
+  }
+}
+
+/// Write what `contents` holds, but the entries `leave` names, into `target`,
+/// which exists. Fails past [`MAX_UNPACKED_BYTES`], or when no app came out.
+fn extract(
+  contents: &mut Contents,
+  target: &Path,
+  leave: impl Fn(&str) -> bool,
+  mut progress: impl FnMut(u64, u64),
+) -> Result<(), String> {
+  let total = contents.entries.iter().filter(|e| !e.folder && !leave(&e.path)).count() as u64;
+  let (mut done, mut written) = (0u64, 0u64);
+  let mut shown = Instant::now();
+  progress(0, total);
+  for entry in &contents.entries {
+    if leave(&entry.path) {
+      continue;
+    }
+    let out = entry.path.split('/').fold(target.to_path_buf(), |path, part| path.join(part));
+    let create = |dir: &Path| std::fs::create_dir_all(dir).map_err(|e| format!("Couldn’t create {}: {e}", dir.display()));
+    if entry.folder {
+      create(&out)?;
+      continue;
+    }
+    if let Some(parent) = out.parent() {
+      create(parent)?;
+    }
+    let mut from = contents.archive.by_index(entry.index).map_err(|_| UNREADABLE.to_string())?;
+    let mut file = File::create(&out).map_err(|e| format!("Couldn’t create {}: {e}", out.display()))?;
+    let room = MAX_UNPACKED_BYTES - written;
+    let copied =
+      std::io::copy(&mut (&mut from).take(room + 1), &mut file).map_err(|e| format!("Couldn’t unpack {}: {e}", entry.path))?;
+    if copied > room {
+      return Err(TOO_BIG.to_string());
+    }
+    written += copied;
+    done += 1;
+    if done == total || shown.elapsed() >= PROGRESS_EVERY {
+      shown = Instant::now();
+      progress(done, total);
+    }
+  }
+  if !target.join("rayfin").join("rayfin.yml").is_file() {
+    return Err(NOT_AN_APP.to_string());
+  }
+  Ok(())
+}
+
+/* ---------------------------- reading an app ---------------------------- */
+
+const NOT_AN_APP_FILE: &str =
+  "This file isn’t an app Fabricator can install. Ask for the project to be exported again, as an app.";
+const DAMAGED_APP_FILE: &str = "This app file is damaged. Ask for it to be exported again.";
+
+/// An app file (`.rayfin`), read without unpacking it.
+pub(crate) struct AppFile {
+  contents: Contents,
+  pub manifest: AppManifest,
+  /// Its icon, as a PNG (the largest size) and an `.ico` (every size).
+  pub icon_png: Option<Vec<u8>>,
+  pub icon_ico: Option<Vec<u8>>,
+  /// The app's files: how many, and their size in bytes.
+  pub files: u64,
+  pub bytes: u64,
+  /// Secrets the app declares, which need values where it runs.
+  pub secrets: Vec<String>,
+}
+
+impl Contents {
+  /// A file of the archive, when it's there and no bigger than `max`.
+  fn bytes_of(&mut self, rel: &str, max: u64) -> Option<Vec<u8>> {
+    let index = self.entries.iter().find(|e| !e.folder && e.path == rel)?.index;
+    let entry = self.archive.by_index(index).ok()?;
+    if entry.size() > max {
+      return None;
+    }
+    let mut bytes = Vec::new();
+    entry.take(max).read_to_end(&mut bytes).ok()?;
+    Some(bytes)
+  }
+}
+
+/// Read the app file at `source`: what it says it is, and its icon.
+pub(crate) fn read_app(source: &Path) -> Result<AppFile, String> {
+  let mut contents = read_contents(source)?;
+  let manifest: AppManifest = contents
+    .bytes_of(APP_MANIFEST, MAX_TEXT_BYTES)
+    .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+    .ok_or_else(|| NOT_AN_APP_FILE.to_string())?;
+  if !valid_app_key(&manifest.key) || manifest.name.trim().is_empty() {
+    return Err(DAMAGED_APP_FILE.into());
+  }
+  let icon_png = contents.bytes_of(APP_ICON_PNG, MAX_ICON_BYTES).filter(|png| png_size(png).is_some());
+  let icon_ico = contents.bytes_of(APP_ICON_ICO, MAX_ICON_BYTES * 2);
+  let own = contents.entries.iter().filter(|e| !e.folder && !app_file_record(&e.path));
+  let (files, bytes) = own.fold((0u64, 0u64), |(n, size), e| (n + 1, size + e.size));
+  let secrets = contents.rayfin_yml.as_deref().map(crate::commands::secrets::declared_names_in).unwrap_or_default();
+  Ok(AppFile { contents, manifest, icon_png, icon_ico, files, bytes, secrets })
+}
+
+/// What an app file holds for Fabricator, not for the app: `.fabricator/`.
+fn app_file_record(rel: &str) -> bool {
+  rel == ".fabricator" || rel.starts_with(".fabricator/")
+}
+
+impl AppFile {
+  /// Unpack the app into `target`, which exists and is empty. On failure,
+  /// what was written stays: the caller removes `target`.
+  pub(crate) fn unpack_into(&mut self, target: &Path, progress: impl FnMut(u64, u64)) -> Result<(), String> {
+    extract(&mut self.contents, target, app_file_record, progress)
   }
 }
 
@@ -888,23 +1203,13 @@ pub(crate) fn adopt(dir: &Path, project_id: &str) -> Option<Manifest> {
 
 /* --------------------------- opened by the system -------------------------- */
 
-fn is_export(path: &Path) -> bool {
+pub(crate) fn is_export(path: &Path) -> bool {
   path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case(EXTENSION))
 }
 
-/// The exports among a launch's arguments: `.fabricator` files that exist,
-/// relative ones resolved against `cwd`.
-pub(crate) fn exports_in<A: Into<OsString>>(args: impl IntoIterator<Item = A>, cwd: Option<&Path>) -> Vec<PathBuf> {
-  args
-    .into_iter()
-    .map(|arg| PathBuf::from(arg.into()))
-    .filter(|path| is_export(path))
-    .map(|path| match cwd {
-      Some(cwd) if path.is_relative() => cwd.join(path),
-      _ => path,
-    })
-    .filter(|path| path.is_file())
-    .collect()
+/// An app file (`.rayfin`), by its extension.
+pub(crate) fn is_app_file(path: &Path) -> bool {
+  path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case(APP_EXTENSION))
 }
 
 /// Add `files` to those waiting to be imported. Returns whether any is new.
@@ -963,8 +1268,10 @@ pub async fn projects_export_preview(id: String) -> Result<ExportPreview, String
   let dir = PathBuf::from(&project.path);
   let listed = app_files(&dir).await;
   let versions = if has_own_history(&dir) { Some(count_versions(&dir).await) } else { None };
+  let name = project.name.clone();
   tokio::task::spawn_blocking(move || {
     let (code, kept_out) = code_items(&dir, &listed, None);
+    let yml = std::fs::read_to_string(dir.join("rayfin").join("rayfin.yml")).unwrap_or_default();
     ExportPreview {
       files: code.len() as u64,
       bytes: code.iter().map(|i| i.size).sum(),
@@ -975,10 +1282,81 @@ pub async fn projects_export_preview(id: String) -> Result<ExportPreview, String
       deployment: published(&dir),
       secrets: crate::commands::secrets::declared_names(&dir),
       kept_out,
+      app: ExportApp { name, version: yaml_value(&YAML_VERSION, &yml), icon: page_icon(&dir) },
     }
   })
   .await
   .map_err(|e| format!("Couldn’t look at the project: {e}"))
+}
+
+/// Ask where to save the project's app file (`.rayfin`), then write it there,
+/// with `icons`, the app's icon the export dialog drew at each size. As
+/// [`projects_export`], under the project's lease, with progress on `zip:progress`.
+#[tauri::command]
+pub async fn projects_export_app(
+  app: AppHandle,
+  state: State<'_, AppState>,
+  id: String,
+  icons: Vec<AppIconImage>,
+) -> Result<ExportResult, String> {
+  let failed =
+    |error: String| -> Result<ExportResult, String> { Ok(ExportResult { error: Some(error), ..Default::default() }) };
+  let project = match exportable_project(&id) {
+    Ok(project) => project,
+    Err(error) => return failed(error),
+  };
+  let icons = match checked_icons(&icons) {
+    Ok(icons) => icons,
+    Err(error) => return failed(error),
+  };
+  let slug = Some(slugify(&project.name)).filter(|s| !s.is_empty()).unwrap_or_else(|| "app".into());
+  let Some(dest) = pick_destination(&app, &format!("{slug}.{APP_EXTENSION}"), APP_EXTENSION, "Rayfin app").await else {
+    return Ok(ExportResult { cancelled: true, ..Default::default() });
+  };
+  let _lease = match state.mutations.export(&id) {
+    Ok(lease) => lease,
+    Err(error) => return failed(error),
+  };
+
+  let dir = PathBuf::from(&project.path);
+  let listed = app_files(&dir).await;
+  let manifest = app_manifest(&dir, &project.name, sender(), app.package_info().version.to_string());
+  let packing = Packing::start(&id);
+  let stop = packing.stop.clone();
+  let emitter = app.clone();
+  let (project_id, target) = (id.clone(), dest.clone());
+  let packed = tokio::task::spawn_blocking(move || {
+    let plan = app_plan(&dir, &listed, &manifest, &icons, Some(&target));
+    let bytes = write_zip(&target, &plan.items, &stop, |processed, total| {
+      emit_progress(&emitter, &project_id, "packing", processed, total)
+    })?;
+    Ok::<_, PackError>((bytes, plan.files))
+  })
+  .await;
+  drop(packing);
+
+  match packed {
+    Ok(Ok((bytes, files))) => {
+      journal::entry(
+        Level::Info,
+        Area::Project,
+        "project.exported_app",
+        &format!("Exported \"{}\" as an app with {files} of its files.", project.name),
+      )
+      .project(Some(id.clone()))
+      .write();
+      Ok(ExportResult {
+        ok: true,
+        path: Some(dest.to_string_lossy().to_string()),
+        bytes: Some(bytes),
+        files: Some(files),
+        ..Default::default()
+      })
+    }
+    Ok(Err(PackError::Stopped)) => Ok(ExportResult { cancelled: true, ..Default::default() }),
+    Ok(Err(PackError::Failed(error))) => failed(error),
+    Err(error) => failed(format!("Couldn’t export the app: {error}")),
+  }
 }
 
 /// Ask where to save the project's export, then write it there. The project's
@@ -998,7 +1376,7 @@ pub async fn projects_export(
     Err(error) => return failed(error),
   };
   let slug = Some(slugify(&project.name)).filter(|s| !s.is_empty()).unwrap_or_else(|| "app".into());
-  let Some(dest) = pick_destination(&app, &format!("{slug}.{EXTENSION}")).await else {
+  let Some(dest) = pick_destination(&app, &format!("{slug}.{EXTENSION}"), EXTENSION, "Fabricator project").await else {
     return Ok(ExportResult { cancelled: true, ..Default::default() });
   };
   let _lease = match state.mutations.export(&id) {
@@ -1068,7 +1446,7 @@ pub fn projects_export_stop(id: String) {
 #[tauri::command]
 pub fn projects_export_reveal(app: AppHandle, path: String) -> Result<(), String> {
   let file = PathBuf::from(&path);
-  if !is_export(&file) || !file.is_file() {
+  if !(is_export(&file) || is_app_file(&file)) || !file.is_file() {
     return Err("That file isn’t there anymore.".into());
   }
   app.opener().reveal_item_in_dir(&file).map_err(|e| e.to_string())
@@ -1133,24 +1511,27 @@ pub async fn projects_import(app: AppHandle, path: String) -> ImportResult {
   ImportResult { ok: true, error: None, project: store::find_project(&project.id).map(annotate_project) }
 }
 
-/// Ask where to save an export. `None` when the dialog is closed.
-async fn pick_destination(app: &AppHandle, suggested: &str) -> Option<PathBuf> {
+/// Ask where to save an export with `extension`. `None` when the dialog is closed.
+async fn pick_destination(app: &AppHandle, suggested: &str, extension: &str, kind: &str) -> Option<PathBuf> {
   let (tx, rx) = tokio::sync::oneshot::channel();
   app
     .dialog()
     .file()
     .set_title("Export project")
-    .add_filter("Fabricator project", &[EXTENSION])
+    .add_filter(kind, &[extension])
     .set_file_name(suggested)
     .save_file(move |picked| {
       let _ = tx.send(picked);
     });
   let path = rx.await.ok().flatten()?.into_path().ok()?;
-  Some(if is_export(&path) { path } else { PathBuf::from(format!("{}.{EXTENSION}", path.display())) })
+  let named = path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case(extension));
+  Some(if named { path } else { PathBuf::from(format!("{}.{extension}", path.display())) })
 }
 
 #[cfg(test)]
 mod tests {
+  use std::ffi::OsString;
+
   use super::*;
 
   struct TempDir(PathBuf);
@@ -1231,6 +1612,8 @@ mod tests {
       "toy-story.fabricator",
       "exports/Toy Story.FABRICATOR",
       "toy-story.fabricator.partial",
+      "toy-story.rayfin",
+      "toy-story.rayfin.partial",
     ] {
       assert!(never(left), "{left}");
     }
@@ -1428,7 +1811,13 @@ mod tests {
       "missing.fabricator".into(),
       "photos.zip".into(),
     ];
-    let found = exports_in(args, Some(&dir.0));
+    let found: Vec<PathBuf> = crate::services::apps::opened_in(args, Some(&dir.0))
+      .into_iter()
+      .filter_map(|opened| match opened {
+        crate::services::apps::Opened::Project(path) => Some(path),
+        _ => None,
+      })
+      .collect();
     assert_eq!(found, vec![dir.0.join("Toy Story.fabricator"), leads.clone()]);
 
     assert!(hold(found.clone()));
@@ -1442,6 +1831,129 @@ mod tests {
   /// Git is installed, and the temp folder isn't inside a repository.
   fn can_test_git() -> bool {
     which::which("git").is_ok() && !version_history::is_tracked(&std::env::temp_dir())
+  }
+
+  /// A square RGBA PNG of `size`.
+  fn png_of(size: u32) -> Vec<u8> {
+    let mut png = Vec::new();
+    let mut encoder = ::png::Encoder::new(&mut png, size, size);
+    encoder.set_color(::png::ColorType::Rgba);
+    encoder.set_depth(::png::BitDepth::Eight);
+    let mut writer = encoder.write_header().unwrap();
+    writer.write_image_data(&vec![200; (size * size * 4) as usize]).unwrap();
+    writer.finish().unwrap();
+    png
+  }
+
+  fn icon_images(sizes: &[u32]) -> Vec<AppIconImage> {
+    use base64::Engine as _;
+    sizes
+      .iter()
+      .map(|size| AppIconImage { size: *size, png: base64::engine::general_purpose::STANDARD.encode(png_of(*size)) })
+      .collect()
+  }
+
+  #[test]
+  fn an_app_is_the_same_app_wherever_its_sender_exports_it() {
+    let key = app_key("recipe-book", Some("Amy@Contoso.com"));
+    assert!(key.starts_with("recipe-book-") && valid_app_key(&key), "{key}");
+    assert_eq!(key, app_key("recipe-book", Some("amy@contoso.com ")), "the same sender, any case");
+    assert_ne!(key, app_key("recipe-book", Some("ben@contoso.com")), "someone else's app of the same id");
+    assert_ne!(key, app_key("recipe-box", Some("amy@contoso.com")));
+    assert!(valid_app_key(&app_key("Ünïcode Ápp ✨", None)));
+    assert!(app_key("***", None).starts_with("app-"));
+    for bad in ["", "ab", "../escape-12345678", "-leading", "UPPER-12345678", "with space"] {
+      assert!(!valid_app_key(bad), "{bad:?}");
+    }
+  }
+
+  #[test]
+  fn an_apps_icon_is_the_one_its_page_names() {
+    let html = r#"<link rel="stylesheet" href="/app.css"><link rel="icon" type="image/png" href="/favicon.png?v=2">
+      <LINK REL="apple-touch-icon" HREF="/touch.png"><link href="/logo.svg" rel="icon" type="image/svg+xml">
+      <link rel="icon" href="https://cdn.example.com/x.png">"#;
+    assert_eq!(icon_hrefs(html), ["/logo.svg", "/touch.png", "/favicon.png?v=2", "https://cdn.example.com/x.png"]);
+    let frontend = Path::new("app");
+    assert_eq!(icon_candidates(frontend, "/logo.svg?v=1"), [frontend.join("public").join("logo.svg"), frontend.join("logo.svg")]);
+    assert!(icon_candidates(frontend, "https://cdn.example.com/x.png").is_empty());
+    assert!(icon_candidates(frontend, "data:image/png;base64,AA==").is_empty());
+
+    let root = TempDir::new();
+    root.write("secret.svg", "<svg>not the app's</svg>");
+    root.write("app/rayfin/rayfin.yml", "name: Toy\nservices:\n  staticHosting:\n    path: web\n");
+    root.write("app/web/index.html", r#"<link rel="icon" href="/../../secret.svg"><link rel="icon" href="/brand/toy.svg">"#);
+    root.write("app/web/public/brand/toy.svg", "<svg/>");
+    let icon = page_icon(&root.0.join("app")).expect("its icon");
+    use base64::Engine as _;
+    let svg = base64::engine::general_purpose::STANDARD.encode("<svg/>");
+    assert_eq!(icon, format!("data:image/svg+xml;base64,{svg}"), "not the file outside the app");
+
+    let plain = TempDir::new();
+    plain.write("rayfin/rayfin.yml", "name: Plain\n");
+    plain.write("index.html", "<title>Plain</title>");
+    assert_eq!(page_icon(&plain.0), None);
+    plain.write("public/favicon.ico", "ico");
+    assert!(page_icon(&plain.0).unwrap().starts_with("data:image/x-icon;base64,"));
+  }
+
+  #[test]
+  fn an_apps_icon_must_be_the_pngs_it_says() {
+    let icons = checked_icons(&icon_images(&[256, 16, 32])).unwrap();
+    assert_eq!(icons.iter().map(|(size, _)| *size).collect::<Vec<_>>(), [16, 32, 256]);
+    assert_eq!(png_size(&icons[2].1), Some((256, 256)));
+
+    let ico = ico(&icons);
+    assert_eq!(&ico[..6], &[0, 0, 1, 0, 3, 0]);
+    assert_eq!((ico[6], ico[7]), (16, 16));
+    assert_eq!((ico[6 + 32], ico[7 + 32]), (0, 0), "256 is written as 0");
+    let first = u32::from_le_bytes(ico[18..22].try_into().unwrap()) as usize;
+    assert_eq!(first, 6 + 16 * 3);
+    assert!(ico[first..].starts_with(b"\x89PNG"));
+
+    assert_eq!(checked_icons(&icon_images(&[16, 32])), Err(BAD_ICON.to_string()), "no large icon");
+    assert_eq!(checked_icons(&icon_images(&[100, 256])), Err(BAD_ICON.to_string()), "not a size it draws");
+    let mut lying = icon_images(&[32, 256]);
+    lying[0].size = 48;
+    assert_eq!(checked_icons(&lying), Err(BAD_ICON.to_string()), "a 32px PNG said to be 48");
+    let junk = AppIconImage { size: 256, png: "bm90IGEgcG5n".into() };
+    assert_eq!(checked_icons(&[junk]), Err(BAD_ICON.to_string()));
+  }
+
+  #[test]
+  fn an_app_export_installs_its_code_without_what_it_says_about_itself() {
+    let app = TempDir::new();
+    app.write("rayfin/rayfin.yml", "id: toy-story\nname: Toy Story\nversion: 1.2.0\nsecrets:\n  - name: OPENAI_KEY\n");
+    app.write("rayfin/.deployments.json", r#"{"active":"fabcon","deployments":{"fabcon":{"fabricItemId":"item"}}}"#);
+    app.write("src/App.tsx", "export default 1\n");
+    app.write(".env", "SECRET=1\n");
+    app.write(".rayfin-local/db.sqlite", "local data");
+    app.write("old.rayfin", "an earlier app export");
+    let manifest = app_manifest(&app.0, "Toy Story", Some("amy@contoso.com".into()), "1.38.0".into());
+    assert_eq!((manifest.key.as_str(), manifest.version.as_deref()), (app_key("toy-story", Some("amy@contoso.com")).as_str(), Some("1.2.0")));
+    let icons = checked_icons(&icon_images(&[16, 256])).unwrap();
+    let out = TempDir::new();
+    let dest = out.0.join("toy-story.rayfin");
+    let plan = app_plan(&app.0, &walk(&app.0), &manifest, &icons, Some(&dest));
+    assert_eq!(plan.files, 2, "rayfin.yml and App.tsx");
+    let names: Vec<&str> = plan.items.iter().map(|i| i.name.as_str()).collect();
+    assert_eq!(names, ["rayfin/rayfin.yml", "src/App.tsx", APP_ICON_PNG, APP_ICON_ICO, APP_MANIFEST]);
+    write_zip(&dest, &plan.items, &AtomicBool::new(false), |_, _| {}).unwrap_or_else(|_| panic!("exports"));
+
+    let mut read = read_app(&dest).unwrap();
+    assert_eq!(read.manifest, manifest);
+    assert_eq!((read.files, read.secrets.clone()), (2, vec!["OPENAI_KEY".to_string()]));
+    assert_eq!(read.icon_png.as_deref().and_then(png_size), Some((256, 256)));
+    assert!(read.icon_ico.as_deref().is_some_and(|ico| ico.starts_with(&[0, 0, 1, 0, 2, 0])));
+    let target = out.0.join("installed");
+    std::fs::create_dir(&target).unwrap();
+    read.unpack_into(&target, |_, _| {}).unwrap();
+    assert!(target.join("src/App.tsx").is_file() && target.join("rayfin/rayfin.yml").is_file());
+    assert!(!target.join(".fabricator").exists(), "what it says about itself stays out of the app");
+
+    // A project export isn't an app to install.
+    let project = out.0.join("toy.fabricator");
+    export(&app.0, ExportOptions::default(), &facts(None), &project);
+    assert_eq!(read_app(&project).err(), Some(NOT_AN_APP_FILE.to_string()));
   }
 
   #[tokio::test]

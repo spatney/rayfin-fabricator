@@ -129,17 +129,30 @@
 !macro NSIS_HOOK_PREUNINSTALL
   !insertmacro RAYFIN_FABRICATOR_CLOSE_APP
   !insertmacro RAYFIN_FABRICATOR_STOP_SIDECAR
+  !insertmacro RAYFIN_FABRICATOR_REMOVE_APP_SHORTCUTS
 !macroend
 
-; Tauri associates .fabricator files, exported projects, with the app (bundle > fileAssociations
-; in tauri.conf.json, whose name is the file class below), but gives them the app's own icon, so
-; a project file would look like the app. This gives them their document icon, which the
-; installer puts in resources (bundle > resources), and tells Explorer to show it. Uninstalling
-; removes the file class with its icon. Make the icon again from icons/project-file.png with
+; Apps installed from .rayfin files have Start menu shortcuts that open them with Fabricator
+; (services/apps/shell.rs puts them in the "Rayfin apps" folder). Without Fabricator they can't
+; run, so uninstalling removes the folder. Not in an update, which uninstalls the old version
+; before it installs the new one.
+!macro RAYFIN_FABRICATOR_REMOVE_APP_SHORTCUTS
+  ${If} $UpdateMode <> 1
+    RMDir /r "$SMPROGRAMS\Rayfin apps"
+  ${EndIf}
+!macroend
+
+; Tauri associates .fabricator files, exported projects, and .rayfin files, exported apps, with
+; the app (bundle > fileAssociations in tauri.conf.json, whose names are the file classes below),
+; but gives them the app's own icon, so a project or app file would look like the app. This gives
+; them their document icons, which the installer puts in resources (bundle > resources), and tells
+; Explorer to show them. Uninstalling removes the file classes with their icons. Make an icon again
+; from icons/project-file.png (or icons/app-file.png) with
 ; `npx tauri icon icons/project-file.png -o <folder>`: copy its icon.ico to project-file.ico, and
 ; its icon.icns, which macOS uses (Info.plist), to project-file.icns.
 !macro RAYFIN_FABRICATOR_FILE_ICON
   WriteRegStr SHCTX "Software\Classes\RayfinFabricator.Project\DefaultIcon" "" "$INSTDIR\resources\project-file.ico"
+  WriteRegStr SHCTX "Software\Classes\RayfinFabricator.App\DefaultIcon" "" "$INSTDIR\resources\app-file.ico"
   !insertmacro UPDATEFILEASSOC
 !macroend
 

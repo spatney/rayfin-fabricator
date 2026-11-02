@@ -6,11 +6,12 @@ import {
   type JSX,
   type KeyboardEvent
 } from 'react'
-import type { StudioProject, TeamWorkspace } from '@shared/ipc'
+import type { AppActionResult, InstalledApp, StudioProject, TeamWorkspace } from '@shared/ipc'
 import { moveMenuFocus } from '../menuFocus'
 import { removalStatus, type ProjectRemoval } from '../projectRemovals'
 import { FabricatorMark } from './FabricatorMark'
 import { AddIcon, BranchIcon, Codicon, FolderIcon, GearIcon, PackageIcon } from './icons'
+import InstalledApps from './InstalledApps'
 import { displayPath } from './projectDisplay'
 import TeamSection from './team/TeamSection'
 import { hueOf } from './team/map/parts'
@@ -177,6 +178,12 @@ interface Props {
   /** Browse every Rayfin app you can open in Fabric. */
   onOpenGallery: () => void
   onChangeWorkspaceRoot: () => void
+  /** Apps installed from `.rayfin` files; the section shows once there's one. */
+  installedApps?: {
+    apps: InstalledApp[]
+    onOpen: (key: string) => void
+    onRemove: (key: string) => Promise<AppActionResult>
+  }
   /** Team workspaces (experimental); the section shows only when set. */
   team?: {
     workspaces: TeamWorkspace[]
@@ -206,6 +213,7 @@ export default function HomeView({
   onMigrateReport,
   onOpenGallery,
   onChangeWorkspaceRoot,
+  installedApps,
   team
 }: Props): JSX.Element {
   const projectCount = `${projects.length} project${projects.length === 1 ? '' : 's'}`
@@ -416,6 +424,14 @@ export default function HomeView({
             </button>
           )}
         </section>
+
+        {installedApps && (
+          <InstalledApps
+            apps={installedApps.apps}
+            onOpen={installedApps.onOpen}
+            onRemove={installedApps.onRemove}
+          />
+        )}
 
         {workspaceRoot && (
           <section className="home-workspace" aria-labelledby="home-workspace-title">

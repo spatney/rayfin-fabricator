@@ -105,7 +105,7 @@ import { workbenchSearch } from '../components/spotlight/workbenchSearch'
 import { isMac, modKey, shortcut } from '../platform'
 import { errorMessage, setErrorProject } from '../errorReport'
 import { accountFacts, workbenchFacts } from '../helpFacts'
-import type { HelpAction, HelpIssueDraft } from '@shared/ipc'
+import type { HelpAction, HelpIssueDraft, InstalledApp } from '@shared/ipc'
 import { Codicon } from '../components/icons'
 import { FabricatorMark } from '../components/FabricatorMark'
 import AccountMenu from '../components/AccountMenu'
@@ -750,6 +750,26 @@ export default function Workbench({
     take()
     return window.api.projects.onExportOpened(take)
   }, [queueImports])
+
+  // Apps installed from .rayfin files, which Home lists.
+  const [installedApps, setInstalledApps] = useState<InstalledApp[]>([])
+  useEffect(() => {
+    let alive = true
+    const load = (): void => {
+      window.api.apps.list().then(
+        (apps) => {
+          if (alive) setInstalledApps(apps)
+        },
+        () => {}
+      )
+    }
+    load()
+    const stop = window.api.apps.onChanged(load)
+    return () => {
+      alive = false
+      stop()
+    }
+  }, [])
 
   /** Team workspaces (experimental): the backend hides them while this is off. */
   const teamEnabled = Boolean(settings?.experiments?.teamWorkspaces)
@@ -3244,6 +3264,11 @@ export default function Workbench({
                   onMigrateReport={migrationEnabled ? () => setShowMigrate(true) : undefined}
                   onOpenGallery={() => openGallery('home')}
                   onChangeWorkspaceRoot={changeWorkspaceRoot}
+                  installedApps={{
+                    apps: installedApps,
+                    onOpen: (key) => void window.api.apps.open(key),
+                    onRemove: (key) => window.api.apps.remove(key)
+                  }}
                   team={
                     teamEnabled
                       ? {
@@ -3476,6 +3501,7 @@ export default function Workbench({
                 ? `${exporting.name} is publishing. Export it once it finishes.`
                 : undefined
           }
+          appExport={Boolean(settings?.experiments?.appExport)}
           onClose={() => setExporting(null)}
         />
       )}

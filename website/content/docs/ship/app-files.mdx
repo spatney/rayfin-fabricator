@@ -1,0 +1,100 @@
+---
+title: Share an app as a file
+description: Export a project as a .rayfin app, an experiment, that someone installs and opens in a window of its own with its data on their computer, and open, update or remove apps you install.
+---
+
+> [!WARNING]
+> Exporting apps is an experiment. Turn it on in **Settings → Experiments**. It may change or be
+> removed in a future update. Opening `.rayfin` files doesn't need it: anyone with Fabricator can
+> install and open the apps you send.
+
+When someone wants to use your app rather than build it, export it as an app. Fabricator saves a `.rayfin` file. When they double-click it, Fabricator installs the app and opens it in a window of its own, like any app on their computer. The app runs on their computer, with its own data, and nothing is published to Microsoft Fabric.
+
+To hand a project to someone who'll keep building it, export it as a project instead. See [Export a project](/docs/build/projects#export-a-project).
+
+## Turn on the experiment
+
+1. Open **Settings**.
+2. Open **Experiments**.
+3. Turn on **Export as an app**.
+
+![The Experiments section of Settings, with its note that experiments are off by default and may change, and the Team workspaces, Migrate Power BI reports, Work IQ, MCP servers and Export as an app switches, all off.](/screenshots/settings-experiments.webp)
+
+**Export project** now offers **App** next to **Project**. Turning the experiment off hides **App** again. The apps you installed keep working, and `.rayfin` files still open.
+
+## Export a project as an app
+
+1. On **Your projects**, select **Manage** on the project card.
+2. Next to **Export project**, select **Export**.
+3. Select **App**.
+4. Check the app's name and icon. The app keeps the icon its page shows in a browser tab. An app without one gets a tile in its colour with its first letter.
+5. Select **Export…**, then choose where to save the file.
+6. Send them the file, for example by email, chat or a shared folder.
+
+The file holds the same app code as a project export, so installed packages and build output stay out. It never includes your chat, the version history, where the app is published, secret values, files that may hold them such as `.env` files, the app's data on this computer, or your sign-ins.
+
+> [!NOTE]
+> Secret values don't come with the app, and an installed app has nowhere to set them. If the app uses secrets, the export dialog says so: the parts of the app that need them won't work on the other person's computer.
+
+When the file is saved, **What happens next** says how they open it. If they don't have Fabricator yet, select **Copy the install link** and send them the link too.
+
+## What the other person needs
+
+- Fabricator, on Windows or macOS. They don't need to finish its setup or sign in to GitHub Copilot.
+- Node.js, which the app runs on. If it's missing, the app's window offers to install it.
+- An internet connection the first time the app opens, to install its packages.
+
+The app signs them in as themselves when they're signed in to the Azure CLI, and otherwise as a local account on their computer. An app that reads data from Fabric reads it with their own access, so they need to be signed in to the Azure CLI with access to that data.
+
+## Install an app someone sent you
+
+1. Double-click the `.rayfin` file. A window opens with the app's name and icon, who exported it, and what it brings.
+2. Select **Install**.
+3. Wait while Fabricator gets the app ready. The first time, it installs the app's packages and builds the app, which takes a minute or two. Then the app opens in the window.
+
+Only install apps from people you trust: the app's code runs on your computer, as you.
+
+If Fabricator wasn't open, only the app's window opens, and closing it closes Fabricator. If Fabricator was open, the app opens beside it.
+
+On Windows, the app gets a shortcut in the Start menu, in the **Rayfin apps** folder, and its own button on the taskbar, with its icon. Pin either one to open the app from there. On macOS, the app's window belongs to Fabricator in the Dock.
+
+### If the app needs Node.js
+
+If Node.js isn't installed, the window says "This app needs Node.js". Select **Install Node.js**. When it's installed, the app starts. If Fabricator asks you to restart so it can use Node.js, select **Restart**.
+
+## Open an installed app
+
+Open an installed app in any of these ways:
+
+- On Windows, select it in the Start menu, under **Rayfin apps**, or on the taskbar if you pinned it.
+- Double-click its `.rayfin` file again.
+- On **Your projects**, under **Installed apps**, select the app.
+
+After the first time, the app opens in seconds: Fabricator keeps the app's build and starts it again.
+
+The app's data, such as what you add in it and the files you upload, stays on your computer and survives updates. See [Installed apps](/docs/reference/files#installed-apps) for where it's kept.
+
+## Update an installed app
+
+When you open a `.rayfin` file of an app you've installed, and it holds another version, the window shows when each was exported.
+
+- Select **Update** to replace the app with the version in the file. Its data stays.
+- Select **Open the installed one** to keep the version you have.
+
+A file exported from the same project by the same person, with the same Fabric account, updates the app it installed. Files exported by other people install as other apps, even when the apps have the same name.
+
+## Remove an installed app
+
+1. On **Your projects**, under **Installed apps**, select **Remove** on the app.
+2. Select **Remove**.
+
+Fabricator closes the app, then deletes it, its data on your computer and its Start menu shortcut. Uninstalling Fabricator removes the Start menu shortcuts of the apps it installed.
+
+## When an app doesn't start
+
+If the app can't start, its window says "`<app name>` didn't start" with the reason.
+
+1. Select **Show details** to see the app's last output.
+2. Select **Try again**.
+
+If the file can't be opened, the window says "Fabricator can't open this app" with the reason, such as a damaged file. Ask for the app to be exported again. If the problem stays, see [Report a problem](/docs/troubleshooting/report-a-problem).

@@ -413,6 +413,12 @@ export default function SettingsModal({
                       checked={Boolean(settings.experiments?.mcpServers)}
                       onChange={(v) => onChange({ experiments: { mcpServers: v } })}
                     />
+                    <ToggleRow
+                      label="Export as an app"
+                      hint="Export project also offers App: a .rayfin file someone opens to install your app and use it in a window of its own, with its data on their computer. Anyone with Fabricator can open .rayfin files, whether this is on or off."
+                      checked={Boolean(settings.experiments?.appExport)}
+                      onChange={(v) => onChange({ experiments: { appExport: v } })}
+                    />
                   </div>
                 )}
               </div>

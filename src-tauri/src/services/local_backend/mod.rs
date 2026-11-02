@@ -48,7 +48,7 @@ use supervisor::{Command, HostEnv, Stream, Supervisor};
 
 use crate::services::journal::{self, Area, Level};
 use crate::services::store;
-use crate::types::{LocalCommandError, LocalIdentity, LocalLogEvent, LocalProblem, LocalSecret, LocalStartOptions, LocalStatus};
+use crate::types::{LocalCommandError, LocalIdentity, LocalLogEvent, LocalProblem, LocalSecret, LocalStartOptions, LocalStatus, ServeMode};
 use crate::types::LocalBackendState as State;
 
 /// Tauri event with a project's full [`LocalStatus`] whenever it changes.
@@ -131,6 +131,8 @@ pub(crate) struct Runtime {
   file: Mutex<Option<LogFile>>,
   run: Mutex<Option<Run>>,
   last_used: Mutex<Instant>,
+  /// How the last start served the app, which restarts keep.
+  serve: Mutex<ServeMode>,
   /// Serializes start, restart and stop.
   lifecycle: tokio::sync::Mutex<()>,
   sink: SinkCell,
@@ -145,6 +147,7 @@ impl Runtime {
       file: Mutex::new(log_dir.map(|dir| LogFile::new(dir, id))),
       run: Mutex::new(None),
       last_used: Mutex::new(Instant::now()),
+      serve: Mutex::new(ServeMode::default()),
       lifecycle: tokio::sync::Mutex::new(()),
       sink,
     }
@@ -316,14 +319,20 @@ impl Runtime {
     self.machine.lock().unwrap().status().sign_in_as.clone()
   }
 
-  /// The options a restart Fabricator decides on uses: the sign-in identity only.
+  /// The options a restart Fabricator decides on uses: the sign-in identity and how it serves.
   fn sticky_options(&self) -> LocalStartOptions {
-    LocalStartOptions { sign_in_as: self.sign_in_as(), ..Default::default() }
+    LocalStartOptions { sign_in_as: self.sign_in_as(), serve: self.serve.lock().unwrap().clone(), ..Default::default() }
   }
 
   /// `options`, keeping the remembered sign-in identity unless they name one.
   fn with_sticky(&self, options: LocalStartOptions) -> LocalStartOptions {
     LocalStartOptions { sign_in_as: options.sign_in_as.clone().or_else(|| self.sign_in_as()), ..options }
+  }
+
+  /// A run begins with `options`: remember how it serves, for restarts.
+  fn begin(&self, options: &LocalStartOptions, fresh: bool) {
+    *self.serve.lock().unwrap() = options.serve.clone();
+    self.update(|m| m.begin(options, fresh));
   }
 
   fn with_run<R>(&self, generation: u64, f: impl FnOnce(&mut Run) -> R) -> Option<R> {
@@ -373,8 +382,8 @@ struct Inner {
   /// Fabricator is exiting: nothing restarts.
   closing: AtomicBool,
   generation: AtomicU64,
-  /// The last binary that passed the contract check, and its file's stamp.
-  probed: Mutex<Option<(Binary, Option<(SystemTime, u64)>)>>,
+  /// The last binary that passed the contract check, its file's stamp, and what it said it is.
+  probed: Mutex<Option<(Binary, Option<(SystemTime, u64)>, VersionInfo)>>,
 }
 
 /// Every project's local backend (Tauri managed state).
@@ -406,6 +415,15 @@ impl LocalBackends {
   #[cfg(test)]
   pub(crate) fn set_sink(&self, sink: Sink) {
     *self.inner.sink.write().unwrap() = Some(sink);
+  }
+
+  /// Send state, output and milestones to `sink` instead of the renderer's
+  /// project events: installed apps have their own (see `services::apps`).
+  pub(crate) fn attach_sink(&self, sink: Sink) {
+    let mut slot = self.inner.sink.write().unwrap();
+    if slot.is_none() {
+      *slot = Some(sink);
+    }
   }
 
   /// Send state and output to the renderer, and milestones to the activity
@@ -485,12 +503,22 @@ impl LocalBackends {
       None => binary::locate()?,
     };
     let stamp = std::fs::metadata(binary.file()).ok().and_then(|m| Some((m.modified().ok()?, m.len())));
-    if self.inner.probed.lock().unwrap().as_ref().is_some_and(|(known, known_stamp)| *known == binary && *known_stamp == stamp) {
+    if self.inner.probed.lock().unwrap().as_ref().is_some_and(|(known, known_stamp, _)| *known == binary && *known_stamp == stamp) {
       return Ok(binary);
     }
-    binary::probe(&binary).await?;
-    *self.inner.probed.lock().unwrap() = Some((binary.clone(), stamp));
+    let info = binary::probe(&binary).await?;
+    *self.inner.probed.lock().unwrap() = Some((binary.clone(), stamp, info));
     Ok(binary)
+  }
+
+  /// Whether rayfin-local can serve the build an earlier `--static` start left
+  /// (`--reuse-build`, from 0.2.4).
+  pub async fn reuses_builds(&self) -> bool {
+    if self.binary().await.is_err() {
+      return false;
+    }
+    let version = self.inner.probed.lock().unwrap().as_ref().map(|(_, _, info)| info.version.clone());
+    version.as_deref().is_some_and(binary::reuses_builds)
   }
 
   /// The project's status (`stopped` for one never started).
@@ -541,7 +569,7 @@ impl LocalBackends {
 
   async fn launch(&self, rt: &Arc<Runtime>, dir: PathBuf, options: LocalStartOptions) -> LocalStatus {
     let options = rt.with_sticky(options);
-    rt.update(|m| m.begin(&options, true));
+    rt.begin(&options, true);
     let binary = match self.binary().await {
       Ok(binary) => binary,
       Err(problem) => {

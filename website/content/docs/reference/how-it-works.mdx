@@ -113,6 +113,14 @@ rayfin-local is a local Rayfin backend: it answers the same requests as an app's
 - **Signed in as you.** Apps built from Rayfin's templates sign in automatically, without a sign-in page. They sign in as your Microsoft Entra account from the Azure CLI or, when the Azure CLI isn't signed in, from the Rayfin CLI's sign-in for the Fabric account in use, which Fabricator passes in `RAYFIN_CONFIG_DIR`. With neither, they sign in as a local account, `developer@example.com`. **Preview as** in the preview's toolbar signs the app in as a test user, or signs it out, instead. "Sign in with Fabric" opens a local sign-in window instead of Fabric's, which signs in as the person **Preview as** shows without asking, and asks only when it's **Signed out**.
 - **Your Azure access.** Functions' tokens, and connectors to Power BI semantic models, Fabric SQL databases, warehouses and SQL analytics endpoints, run as you, with that same account, even for connections set to application access. A function or query can reach what your account can reach. Kusto connectors run only on Fabric.
 
+## Installed apps
+
+An app installed from a `.rayfin` file runs on the same bundled rayfin-local, but on its own, with no Vite dev server. See [Share an app as a file](/docs/ship/app-files).
+
+- **Built once.** The first time it opens, Fabricator installs the app's packages, and rayfin-local builds the app and serves the build from its backend (`rayfin-local serve --static`). Each app keeps a port of its own, from 47100 up, away from your projects' ports. As long as that port stays the same, the next start serves the same build again (`--reuse-build`) instead of building it again. Updating the app builds it again.
+- **A window of its own.** The window shows the app from its backend's `localhost` address. Fabricator's own pages are on another origin, so the app can't use Fabricator's commands. Links to other sites open in your browser, and sign-in popups open as they do in the preview. On Windows, each app's window has its own taskbar identity and icon, and a Start menu shortcut opens Fabricator with the app.
+- **Apart from your projects.** Installed apps don't count toward the two projects that run at once. Each stops when its window closes, and when Fabricator exits or installs an update. Started only to open apps, Fabricator doesn't show its own window, and exits with the last app's window.
+
 ## What runs on your computer
 
 Fabricator stores settings, project lists, chat history, Advisor state, logs, and diagnostics exports under the app data folder. Your Rayfin apps live in the workspace folder, which defaults to `RayfinProjects` in your home directory. The logs folder also keeps each project's local backend output, and each app's local data lives in its project's `.rayfin-local/` folder. See [Files and folders](/docs/reference/files).
