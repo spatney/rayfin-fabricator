@@ -363,6 +363,33 @@ fn packages_install_only_in_folders_of_the_project() {
   let _ = std::fs::remove_dir_all(&root);
 }
 
+#[test]
+fn rayfin_core_is_found_where_the_backend_looks_for_it() {
+  let project = std::env::temp_dir().join(format!("fab-local-core-{}", uuid::Uuid::new_v4()));
+  let frontend = project.join("packages").join("frontend");
+  std::fs::create_dir_all(project.join("rayfin")).unwrap();
+  std::fs::create_dir_all(&frontend).unwrap();
+  std::fs::write(project.join("rayfin").join("rayfin.yml"), "services:\n  staticHosting:\n    path: packages/frontend\n").unwrap();
+  let core_in = |dir: &Path| dir.join("node_modules").join("@microsoft").join("rayfin-core");
+  let install_core = |dir: &Path| {
+    std::fs::create_dir_all(core_in(dir)).unwrap();
+    std::fs::write(core_in(dir).join("package.json"), "{}").unwrap();
+  };
+
+  // After the app moved to another Rayfin version, npm left it only inside the packages that use it.
+  install_core(&project.join("packages").join("data"));
+  install_core(&project.join("node_modules").join("@microsoft").join("rayfin-cli"));
+  assert!(!rayfin_core_found(&project));
+
+  // The frontend folder's own copy counts, and so does one in a folder above it.
+  install_core(&frontend);
+  assert!(rayfin_core_found(&project));
+  std::fs::remove_dir_all(core_in(&frontend)).unwrap();
+  install_core(&project);
+  assert!(rayfin_core_found(&project));
+  let _ = std::fs::remove_dir_all(&project);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_backend_that_ignores_stdin_is_killed_after_the_grace_period() {
   let Some(h) = harness(fast()) else { return };

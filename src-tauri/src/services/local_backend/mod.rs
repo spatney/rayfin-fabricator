@@ -47,6 +47,7 @@ use machine::{CrashPolicy, Machine, Next, Outcome};
 use supervisor::{Command, HostEnv, Stream, Supervisor};
 
 use crate::services::journal::{self, Area, Level};
+use crate::services::project_layout::ProjectLayout;
 use crate::services::store;
 use crate::types::{LocalCommandError, LocalIdentity, LocalLogEvent, LocalProblem, LocalSecret, LocalStartOptions, LocalStatus, ServeMode};
 use crate::types::LocalBackendState as State;
@@ -646,8 +647,9 @@ impl LocalBackends {
   /// Install the npm packages the project's backend reported missing
   /// (`packages-missing`): `npm install` in the folder it named, or, without
   /// one, what Fabricator installs when a project opens (the project's packages
-  /// with its pinned Rayfin CLI, and the functions folder's). npm's output goes
-  /// to the project's output.
+  /// with its pinned Rayfin CLI, and the functions folder's). Then `npm dedupe`
+  /// there when the backend still wouldn't find `@microsoft/rayfin-core` (see
+  /// [`hoist_rayfin_core`]). npm's output goes to the project's output.
   pub async fn install_packages(&self, project_id: &str, project: &Path) -> Result<(), LocalCommandError> {
     let rt = self.runtime(project_id);
     let output = install_output(rt.clone());
@@ -658,18 +660,24 @@ impl LocalBackends {
       .and_then(|e| e.details)
       .and_then(|details| details.get("dir").and_then(|dir| dir.as_str()).map(PathBuf::from))
       .and_then(|dir| folder_within(project, &dir));
-    let result = match reported {
+    let (dir, installed) = match reported {
       Some(dir) => {
         rt.log("fabricator", "info", &format!("Installing the npm packages in {}…", dir.display()), None);
-        npm_install(&dir, output).await
+        let installed = npm("install", &dir, output.clone()).await;
+        (dir, installed)
       }
       None => {
         rt.log("fabricator", "info", "Installing the app's npm packages…", None);
-        match crate::services::exec::ensure_project_dependencies(project, Some(output.clone())).await {
-          Ok(()) => crate::commands::projects_impl::ensure_functions_dependencies(project, Some(output)).await,
+        let installed = match crate::services::exec::ensure_project_dependencies(project, Some(output.clone())).await {
+          Ok(()) => crate::commands::projects_impl::ensure_functions_dependencies(project, Some(output.clone())).await,
           Err(message) => Err(message),
-        }
+        };
+        (project.to_path_buf(), installed)
       }
+    };
+    let result = match installed {
+      Ok(()) => hoist_rayfin_core(&rt, project, &dir, output).await,
+      Err(message) => Err(message),
     };
     match result {
       Ok(()) => {
@@ -865,10 +873,10 @@ fn install_output(rt: Arc<Runtime>) -> crate::services::exec::OnData {
   })
 }
 
-/// `npm install` in `dir`, streaming its output.
-async fn npm_install(dir: &Path, output: crate::services::exec::OnData) -> Result<(), String> {
+/// `npm <command>` (`install` or `dedupe`) in `dir`, streaming its output.
+async fn npm(command: &str, dir: &Path, output: crate::services::exec::OnData) -> Result<(), String> {
   let result = crate::services::exec::npm_install(
-    &["install", "--no-audit", "--no-fund"],
+    &[command, "--no-audit", "--no-fund"],
     crate::services::exec::RunOptions {
       cwd: Some(dir.to_path_buf()),
       env: crate::services::npm_env::fresh_registry_env(),
@@ -884,7 +892,47 @@ async fn npm_install(dir: &Path, output: crate::services::exec::OnData) -> Resul
   if result.not_found {
     return Err("npm wasn't found. Install Node.js, which includes npm, then try again.".into());
   }
-  Err(crate::services::exec::npm_install_failure(&result, Some(&dir.display().to_string())))
+  Err(crate::services::exec::npm_failure(command, &result, Some(&dir.display().to_string())))
+}
+
+/// After an install, make sure the backend finds `@microsoft/rayfin-core`, the
+/// Rayfin package it runs the app with. When an app moves its Rayfin packages
+/// to another version, npm can leave the new copies only inside the packages
+/// that use them: it puts each one beside its user while the old version still
+/// fills the root `node_modules`, then removes the old one. The lockfile keeps
+/// that layout, so `npm install` again changes nothing, and the backend stops
+/// on `packages-missing` each time. `npm dedupe` in the folder npm installed in
+/// moves the copies up. The restarted backend says whether that was enough.
+async fn hoist_rayfin_core(
+  rt: &Runtime,
+  project: &Path,
+  dir: &Path,
+  output: crate::services::exec::OnData,
+) -> Result<(), String> {
+  if rayfin_core_found(project) {
+    return Ok(());
+  }
+  rt.log(
+    "fabricator",
+    "info",
+    "npm left @microsoft/rayfin-core where your app's backend can't find it. Moving it up with npm dedupe…",
+    None,
+  );
+  npm("dedupe", dir, output).await?;
+  if !rayfin_core_found(project) {
+    rt.log("fabricator", "warn", "@microsoft/rayfin-core still isn't where your app's backend looks for it.", None);
+  }
+  Ok(())
+}
+
+/// Whether the backend finds `@microsoft/rayfin-core` where it looks, the way
+/// Node.js does: in the `node_modules` of the app's frontend folder or of a
+/// folder above it.
+fn rayfin_core_found(project: &Path) -> bool {
+  let frontend = project.join(ProjectLayout::read(project).frontend_root);
+  frontend
+    .ancestors()
+    .any(|dir| dir.join("node_modules").join("@microsoft").join("rayfin-core").join("package.json").is_file())
 }
 
 /// `dir` (absolute, or relative to `project`) when it's a folder of the project

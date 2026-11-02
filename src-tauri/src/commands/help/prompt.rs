@@ -64,7 +64,9 @@ output, and **Find out why**, which opens Help to ask about it.\n\n\
 - `packages-missing`: the app's npm packages, or its functions', aren't installed (`details.dir` \
 is the folder). Fix: in the preview, select **Install dependencies**. Fabricator installs them, \
 with npm's messages in the output, and starts the app again. If that fails, npm's messages say \
-why, such as no network connection.\n\
+why, such as no network connection. When npm leaves `@microsoft/rayfin-core` inside the app's \
+packages, where the backend can't find it, as can happen after the app moves to another Rayfin \
+version, installing again changes nothing, so Fabricator also runs `npm dedupe`, which moves it up.\n\
 - `schema-refused`: a change to the data model would delete local data, and `losses` lists \
 exactly what. Nothing is lost until the user decides. In the preview, **Review the change** opens \
 a dialog with that list and three choices: **Delete this data and apply** deletes only what's \

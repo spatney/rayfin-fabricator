@@ -118,7 +118,7 @@ Fabricator runs your app on this computer with rayfin-local, the local backend t
 
 | The card says | What to do |
 | --- | --- |
-| "Your app’s packages aren’t installed" | Select **Install dependencies**. Fabricator installs the app's packages and starts it again. If npm can't install them, npm's messages in the output say why, such as no network connection. |
+| "Your app’s packages aren’t installed" | Select **Install dependencies**. Fabricator installs the app's packages and starts it again. When npm left the Rayfin packages where your app can't load them, as can happen after the app moves to another Rayfin version, Fabricator also runs `npm dedupe` to move them. If npm can't install them, npm's messages in the output say why, such as no network connection. |
 | "This app is already running" | Another program runs this app on this computer, such as rayfin-local in a terminal. Select **Stop the other one**: Fabricator checks that it's rayfin-local, stops it and starts your app here. Or close the program that started it, then select **Try again**. |
 | "Node.js isn’t installed" or "Node.js needs an update" | Your app needs Node.js 20 or later. Select **Set up Node.js** to install or update it in setup, then select **Try again**. If your app still can't find it, restart Fabricator. |
 | "This change would delete local data" | A change to the data model is waiting for you. Select **Review the change**, and see [A data model change would delete local data](/docs/troubleshooting/preview#a-data-model-change-would-delete-local-data). |

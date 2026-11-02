@@ -720,7 +720,7 @@ where
   run_npm(args).await
 }
 
-/// `npm <args>` for an install (`install` or `ci`), retried with
+/// `npm <args>` for an install (`install`, `ci` or `dedupe`), retried with
 /// `--legacy-peer-deps` when npm couldn't work out the packages' peer
 /// dependencies. Every npm install Fabricator runs in a project goes through it.
 pub async fn npm_install(args: &[&str], options: RunOptions) -> RunResult {
@@ -773,9 +773,14 @@ pub fn npm_error_summary(result: &RunResult) -> Option<String> {
 /// "npm install failed in packages/api (exit code 1): Cannot read properties of
 /// null (reading 'edgesOut'). npm's full log: C:\…\debug-0.log".
 pub fn npm_install_failure(result: &RunResult, folder: Option<&str>) -> String {
+  npm_failure("install", result, folder)
+}
+
+/// Why `npm <command>` failed, the way [`npm_install_failure`] says it.
+pub fn npm_failure(command: &str, result: &RunResult, folder: Option<&str>) -> String {
   let code = result.exit_code.map(|code| code.to_string()).unwrap_or_else(|| "unknown".to_string());
   let place = folder.map(|folder| format!(" in {folder}")).unwrap_or_default();
-  let mut message = format!("npm install failed{place} (exit code {code})");
+  let mut message = format!("npm {command} failed{place} (exit code {code})");
   if let Some(cause) = npm_error_summary(result) {
     message.push_str(": ");
     message.push_str(&cause);
