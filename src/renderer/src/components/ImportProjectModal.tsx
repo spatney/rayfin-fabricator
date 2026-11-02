@@ -6,6 +6,8 @@ import { errorMessage } from '../errorReport'
 import { formatBytes, listNames } from './blueprint/localData'
 import { displayPath } from './projectDisplay'
 import { ProjectFileProgress, ProjectFileSummary, count, fileName } from './projectFile'
+import SecurityCheckPanel from './security/SecurityCheck'
+import { useSecurityCheck } from './security/useSecurityCheck'
 
 interface Props {
   /** The `.fabricator` file, or .zip of a Rayfin project, to import. */
@@ -54,19 +56,24 @@ function exportedOn(iso: string | undefined): string | undefined {
  * it, where it's published, the secrets it needs) and where it will go, then
  * unpack it into the projects folder and open it. Opening a project installs its
  * packages and runs it, so this asks first, whether the file was picked here or
- * opened with Fabricator.
+ * opened with Fabricator, and offers to check the file for security risks first.
  */
 export default function ImportProjectModal({ path, onImported, onClose }: Props): JSX.Element {
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
   const importRef = useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
   const mountedRef = useRef(true)
   const [phase, setPhase] = useState<Phase>('loading')
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ processed: number; total: number } | null>(null)
+  const check = useSecurityCheck(path, 'project')
   const importing = phase === 'importing'
+  const checking = check.state.phase === 'running'
+  const checked = check.state.phase === 'done' ? check.state.report : null
+  const risky = checked?.verdict === 'danger'
   const file = fileName(path)
 
   useEffect(() => {
@@ -96,6 +103,13 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
   useEffect(() => {
     if (phase === 'review' && preview) importRef.current?.focus()
   }, [phase, preview])
+
+  // When the check ends, its verdict decides what Enter does: import, or
+  // after a serious risk, nothing until you choose.
+  useEffect(() => {
+    if (!checked) return
+    ;(risky ? cancelRef : importRef).current?.focus()
+  }, [checked, risky])
 
   useEffect(
     () =>
@@ -239,6 +253,8 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
                 </span>
               </p>
 
+              <SecurityCheckPanel check={check} kind="project" disabled={importing} />
+
               {error && (
                 <p className="project-manage-error" role="alert">
                   {error}
@@ -249,18 +265,24 @@ export default function ImportProjectModal({ path, onImported, onClose }: Props)
         </div>
 
         <div className="modal-footer">
-          <button type="button" className="btn" disabled={importing} onClick={onClose}>
+          <button
+            ref={cancelRef}
+            type="button"
+            className="btn"
+            disabled={importing}
+            onClick={onClose}
+          >
             {preview ? 'Cancel' : 'Close'}
           </button>
           {preview && (
             <button
               ref={importRef}
               type="button"
-              className="btn btn--primary"
-              disabled={importing}
+              className={risky ? 'btn btn--danger' : 'btn btn--primary'}
+              disabled={importing || checking}
               onClick={() => void importIt()}
             >
-              {importing ? 'Importing…' : 'Import'}
+              {importing ? 'Importing…' : risky ? 'Import anyway' : 'Import'}
             </button>
           )}
         </div>

@@ -146,7 +146,7 @@ When you open Fabricator after setup has passed, it shows your work at once and 
 
 Fabricator and the tools it runs can contact these services:
 
-- GitHub Copilot for chat, model access, design options, deep Advisor reviews, and team workspace diagnoses.
+- GitHub Copilot for chat, model access, design options, deep Advisor reviews, security checks of project and app files, and team workspace diagnoses.
 - Microsoft Fabric and Rayfin services when you sign in, publish, preview published apps, share apps, or inspect Fabric items.
 - GitHub for update checks, release downloads, cloning repositories, issue reporting, and team workspace repositories.
 - The npm registry when creating a project from the Rayfin CLI's template and when installing project dependencies. Fabricator also asks it for the newest Rayfin release the local backend runs.
@@ -161,3 +161,11 @@ Fabricator and the tools it runs can contact these services:
 ## What the Advisor can read
 
 Quick checks run locally against the project snapshot. **Run deep review** starts a read-only Copilot review. That review can read your project and rayfin.ai documentation, but it is not allowed to edit files, run commands, or open `.env` files or the `.rayfin-local` folder.
+
+## What a security check can read
+
+**Check for security risks** unpacks the project or app file into a folder of its own under Fabricator's cache folder (`%LOCALAPPDATA%\com.rayfin.fabricator\checks` on Windows, `~/Library/Caches/com.rayfin.fabricator/checks` on macOS), and deletes it when the check ends, or the next time Fabricator starts. Nothing in the file runs. Fabricator leaves out programs, media, large files, `.env` files, keys and certificates, and of git's data it keeps only its settings. It replaces the sign-ins in `.npmrc` files before anything reads them.
+
+Fabricator's own checks then read the files the way npm, git and VS Code read them, whatever case their names are in: the scripts npm runs when it installs packages, and `binding.gyp` files; where each dependency and lockfile entry comes from; `.npmrc` settings that name a program or another settings file; git settings, `.gitmodules` entries, and `.git` and `commondir` files that run programs or send git to another folder; programs, by their first bytes; obfuscated code; text aimed at AI tools; and, for projects, git hooks, VS Code tasks that run when the folder opens, and MCP server configurations. A `package.json`, lockfile, `.npmrc` or git settings file it can't read, because it's too large or not plain text, is a finding of its own, and a serious one for settings that can name programs. These files get more room than others, so padding the file can't push them out.
+
+Then a separate Copilot session, on **Auto**, reviews the code. Its permission policy lets it read only that folder: it has no tools that edit files, run commands, fetch web pages or call MCP servers. The session takes nothing in the folder as its own setup: it loads none of its custom instructions, skills, hooks or MCP configurations, and runs no git operations and no memory. The prompt tells Copilot that the files are untrusted, and Copilot reports only through Fabricator's tools: each finding must quote lines that are in the file, its assessment can't rate one of Fabricator's findings below the level Fabricator set, and its verdict can only make the result stricter.

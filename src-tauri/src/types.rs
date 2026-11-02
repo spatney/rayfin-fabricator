@@ -1247,6 +1247,115 @@ pub struct AppActionResult {
   pub error: Option<String>,
 }
 
+/* ----------------------- security check of a package ----------------------- */
+
+/// One risk a security check found in a project or app file before it's
+/// imported or installed (`commands::security`).
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityFinding {
+  /// Unique within a check: `check:<rule>` for Fabricator's own checks,
+  /// `ai:<hash>` for what Copilot reported.
+  pub id: String,
+  /// `install`, `packages`, `network`, `hidden`, `system` or `agents`.
+  pub area: String,
+  /// `high` | `medium` | `low` | `note`.
+  pub severity: String,
+  /// `fabricator`: found by reading the files directly. `copilot`: reported,
+  /// with its evidence checked against the file, by Copilot's review.
+  pub source: String,
+  pub title: String,
+  pub detail: String,
+  /// What to do about it.
+  #[serde(skip_serializing_if = "String::is_empty")]
+  pub advice: String,
+  /// What Copilot made of one of Fabricator's findings, having read the code it points at.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub assessment: Option<String>,
+  /// Path in the package, `/`-separated.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub file: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub line: Option<u32>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub end_line: Option<u32>,
+  /// The lines around it (secret-looking values masked), from `excerpt_start`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub excerpt: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub excerpt_start: Option<u32>,
+  /// More places it occurs: `path` or `path:line`.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub places: Vec<String>,
+}
+
+/// How one area of a security check came out.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityAreaResult {
+  pub area: String,
+  /// `clear` | `flagged` | `skipped`.
+  pub status: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub note: Option<String>,
+}
+
+/// What a security check of a project or app file found (`security_check`).
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityReport {
+  /// Copilot's review finished. Fabricator's own checks ran either way, and
+  /// their findings are in `findings`.
+  pub ok: bool,
+  /// `clear` | `caution` | `danger`: set by the worst finding, and raised, never
+  /// lowered, by Copilot's own verdict.
+  pub verdict: String,
+  pub summary: String,
+  pub findings: Vec<SecurityFinding>,
+  pub areas: Vec<SecurityAreaResult>,
+  /// Files in the package, and those Copilot could read.
+  pub files: u64,
+  pub readable: u64,
+  pub duration_ms: u64,
+  /// Why Copilot's review didn't finish.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  /// The review stopped before it covered every area.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub partial: bool,
+  /// The user stopped it.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub cancelled: bool,
+}
+
+/// A security check as it goes, on `security:event`.
+#[derive(Serialize, Clone)]
+#[serde(tag = "type")]
+pub enum SecurityEvent {
+  /// The file is unpacked for the review: where (steps name files in it), how
+  /// many files it holds, and the areas the check covers.
+  #[serde(rename = "started")]
+  Started { root: String, files: u64, areas: Vec<String> },
+  /// A tool call Copilot made (sent on start and again when it ends).
+  #[serde(rename = "activity")]
+  Activity { tool: ChatToolCall },
+  /// A finding, new or updated (the same `id`).
+  #[serde(rename = "finding")]
+  Finding { finding: SecurityFinding },
+  #[serde(rename = "areas")]
+  Areas { results: Vec<SecurityAreaResult> },
+  #[serde(rename = "summary")]
+  Summary { text: String },
+}
+
+/// Routes a [`SecurityEvent`] to the check that produced it.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityEventEnvelope {
+  pub check_id: String,
+  pub event: SecurityEvent,
+}
+
 /// Whether a new project's name is free where it will be saved.
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]

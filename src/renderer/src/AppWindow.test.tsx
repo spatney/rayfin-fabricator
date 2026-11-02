@@ -6,7 +6,8 @@ import type {
   AppWindowInfo,
   InstalledApp,
   LocalLogEvent,
-  LocalStatus
+  LocalStatus,
+  SecurityReport
 } from '@shared/ipc'
 import AppWindow, { PROMPT_DELAY_MS } from './AppWindow'
 
@@ -114,6 +115,38 @@ async function armPrompt(): Promise<void> {
   })
 }
 
+/** A security check of the app file that ends when the test says. */
+function installSecurityCheck() {
+  let resolve: (report: SecurityReport) => void = () => {}
+  const security = {
+    check: vi.fn(
+      (_checkId: string, _path: string) =>
+        new Promise<SecurityReport>((done) => {
+          resolve = done
+        })
+    ),
+    cancel: vi.fn((_checkId: string) => Promise.resolve(true)),
+    onEvent: vi.fn(() => () => {})
+  }
+  Object.assign((window as unknown as { api: object }).api, { security })
+  return {
+    security,
+    finish: (verdict: SecurityReport['verdict']) =>
+      act(async () => {
+        resolve({
+          ok: true,
+          verdict,
+          summary: 'It sends what you type to a server that has nothing to do with the app.',
+          findings: [],
+          areas: [],
+          files: 214,
+          readable: 200,
+          durationMs: 61_000
+        })
+      })
+  }
+}
+
 describe('AppWindow', () => {
   it('asks before installing an app someone sent, then installs it and starts it', async () => {
     const api = installApi({ key: KEY, mode: 'install', file: FILE, status: status() })
@@ -190,6 +223,41 @@ describe('AppWindow', () => {
     expect(install.disabled).toBe(true)
     await armPrompt()
     expect(install.disabled).toBe(false)
+  })
+
+  it('can check the file for security risks first, and installs anyway only when asked', async () => {
+    const api = installApi({ key: KEY, mode: 'install', file: FILE, status: status() })
+    const check = installSecurityCheck()
+    render(<AppWindow />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Check' }))
+    expect(check.security.check).toHaveBeenCalledWith(expect.any(String), FILE.path)
+    await armPrompt()
+    const install = screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement
+    expect(install.disabled).toBe(true)
+
+    await check.finish('danger')
+    const anyway = screen.getByRole('button', { name: 'Install anyway' }) as HTMLButtonElement
+    expect(anyway.disabled).toBe(false)
+    expect(anyway.className).toContain('btn--danger')
+    expect(document.activeElement).not.toBe(anyway)
+    await act(async () => {
+      fireEvent.click(anyway)
+    })
+    expect(api.apps.install).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops a check when you open the installed version instead', async () => {
+    installApi({ key: KEY, mode: 'update', file: FILE, installed: INSTALLED, status: status() })
+    const check = installSecurityCheck()
+    render(<AppWindow />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Check' }))
+    const id = check.security.check.mock.calls[0][0]
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Open the installed one' }))
+    })
+    expect(check.security.cancel).toHaveBeenCalledWith(id)
   })
 
   it('shows unpacking progress while it installs', async () => {

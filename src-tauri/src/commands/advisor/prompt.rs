@@ -9,7 +9,7 @@ use super::tools::{COMPLETE_TOOL, FINDING_TOOL, PROGRESS_TOOL, VERDICT_TOOL};
 use crate::types::{AdvisorFinding, AdvisorRunRequest};
 
 /// What a Rayfin app is and where its parts live, for the reviewer's bearings.
-const APP_SHAPE: &str = "a Microsoft Fabric app: a TypeScript/React frontend plus a Rayfin backend configured in `rayfin/rayfin.yml`. \
+pub(crate) const APP_SHAPE: &str = "a Microsoft Fabric app: a TypeScript/React frontend plus a Rayfin backend configured in `rayfin/rayfin.yml`. \
 Single-package apps keep the frontend in `src/` and the data model and functions under `rayfin/`. Workspace apps, such as \
 those from the Rayfin CLI's Universal App, keep each in the npm package `rayfin.yml` names with `services.<service>.path`, \
 such as `packages/frontend`, `packages/data` and `packages/functions`";

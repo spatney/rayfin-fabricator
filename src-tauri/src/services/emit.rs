@@ -11,6 +11,7 @@ use super::exec::{OnData, Stream};
 use crate::types::{ChatEvent, ChatEventEnvelope, ProcLogEvent};
 use crate::types::{AdvisorEvent, AdvisorEventEnvelope};
 use crate::types::{HelpEvent, HelpEventEnvelope};
+use crate::types::{SecurityEvent, SecurityEventEnvelope};
 
 /// Event name for streamed process output (matches `IpcChannels.procLog`).
 pub const PROC_LOG: &str = "proc:log";
@@ -20,6 +21,8 @@ pub const CHAT_EVENT: &str = "chat:event";
 pub const ADVISOR_EVENT: &str = "advisor:event";
 /// Event name for streamed Help assistant events (matches `IpcChannels.helpEvent`).
 pub const HELP_EVENT: &str = "help:event";
+/// Event name for a package's security check as it goes (matches `IpcChannels.securityEvent`).
+pub const SECURITY_EVENT: &str = "security:event";
 /// Event name for an Options request's options as they stream in (matches
 /// `IpcChannels.designVariation`).
 pub const DESIGN_VARIATION: &str = "design:variation";
@@ -148,6 +151,11 @@ pub fn emit_advisor_event(app: &AppHandle, project_id: &str, event: AdvisorEvent
 /// Emit one Help assistant event, routed to the question that produced it.
 pub fn emit_help_event(app: &AppHandle, ask_id: &str, event: HelpEvent) {
   let _ = app.emit(HELP_EVENT, HelpEventEnvelope { ask_id: ask_id.to_string(), event });
+}
+
+/// Emit one security check event, routed to the check that produced it.
+pub fn emit_security_event(app: &AppHandle, check_id: &str, event: SecurityEvent) {
+  let _ = app.emit(SECURITY_EVENT, SecurityEventEnvelope { check_id: check_id.to_string(), event });
 }
 
 #[cfg(test)]

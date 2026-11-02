@@ -14,11 +14,12 @@
 
 mod catalog;
 mod collect;
-mod evidence;
+pub(crate) mod evidence;
 mod prompt;
 mod tools;
 
 pub(crate) use evidence::mask_secrets;
+pub(crate) use prompt::APP_SHAPE;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -67,7 +68,7 @@ const SNAPSHOT_SCHEMA: u32 = 2;
 
 /// Built-in tools an Advisor session must not use. The permission policy
 /// enforces read-only regardless; excluding them keeps the model from trying.
-const EXCLUDED_TOOLS: &[&str] = &[
+pub(crate) const EXCLUDED_TOOLS: &[&str] = &[
   "edit",
   "create",
   "apply_patch",

@@ -5,6 +5,8 @@ import { errorMessage } from './errorReport'
 import { formatBytes, listNames } from './components/blueprint/localData'
 import { ProjectFileProgress, count } from './components/projectFile'
 import AppIcon from './components/AppIcon'
+import SecurityCheckPanel from './components/security/SecurityCheck'
+import { useSecurityCheck } from './components/security/useSecurityCheck'
 
 /** What the window shows while the app isn't on screen. */
 type Stage =
@@ -72,9 +74,10 @@ function Fact({
 
 /**
  * Fabricator's page in the window of an app installed from a `.rayfin` file.
- * It asks before installing (or updating) the app, then shows it getting
- * ready, until Fabricator puts the app itself in the window; it comes back
- * when the app stops on an error, to say why and offer to try again.
+ * It asks before installing (or updating) the app, offering to check the file
+ * for security risks first, then shows it getting ready, until Fabricator puts
+ * the app itself in the window; it comes back when the app stops on an error,
+ * to say why and offer to try again.
  */
 export default function AppWindow(): JSX.Element {
   const label = useRef(windowLabel()).current
@@ -91,6 +94,10 @@ export default function AppWindow(): JSX.Element {
   const key = info?.key ?? ''
   const keyRef = useRef(key)
   keyRef.current = key
+  const check = useSecurityCheck(info?.file?.path ?? '', 'app')
+  const checking = check.state.phase === 'running'
+  const checked = check.state.phase === 'done' ? check.state.report : null
+  const risky = checked?.verdict === 'danger'
 
   // Install and Update work only once the prompt has been in front for a moment.
   const asking = stage.kind === 'ask'
@@ -110,6 +117,12 @@ export default function AppWindow(): JSX.Element {
       setArmed(false)
     }
   }, [asking])
+
+  // The check belongs to the prompt: opening the installed version instead stops it.
+  const stopCheck = check.stop
+  useEffect(() => {
+    if (!asking) stopCheck()
+  }, [asking, stopCheck])
 
   const fail = useCallback(
     (result: AppActionResult | { code?: string; error?: string; hint?: string }) => {
@@ -295,6 +308,7 @@ export default function AppWindow(): JSX.Element {
                 Only install apps from people you trust. Its code runs on this computer, as you.
               </span>
             </p>
+            <SecurityCheckPanel check={check} kind="app" />
             <div className="app-window-actions">
               <button
                 type="button"
@@ -305,11 +319,17 @@ export default function AppWindow(): JSX.Element {
               </button>
               <button
                 type="button"
-                className="btn btn--primary"
-                disabled={!armed}
+                className={risky ? 'btn btn--danger' : 'btn btn--primary'}
+                disabled={!armed || checking}
                 onClick={() => void install()}
               >
-                {updating ? 'Update' : 'Install'}
+                {updating
+                  ? risky
+                    ? 'Update anyway'
+                    : 'Update'
+                  : risky
+                    ? 'Install anyway'
+                    : 'Install'}
               </button>
             </div>
           </>

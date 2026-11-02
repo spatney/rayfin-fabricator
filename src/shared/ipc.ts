@@ -2028,6 +2028,108 @@ export interface AppActionResult {
   error?: string
 }
 
+/* ------------------------------------------------------------------ *
+ * Security check of a project or app file, before it's imported or installed
+ * ------------------------------------------------------------------ */
+
+/**
+ * What a security check covers. `install`: what npm runs on install.
+ * `packages`: where its packages come from. `network`: what it sends where.
+ * `hidden`: obfuscated code and text aimed at AI tools. `system`: what reaches
+ * outside the app. `agents`: instructions for coding agents (projects only).
+ */
+export type SecurityAreaId = 'install' | 'packages' | 'network' | 'hidden' | 'system' | 'agents'
+export type SecuritySeverity = 'high' | 'medium' | 'low' | 'note'
+/** `clear`: nothing risky. `caution`: worth a look first. `danger`: could do harm. */
+export type SecurityVerdict = 'clear' | 'caution' | 'danger'
+
+/** One risk a security check found. */
+export interface SecurityFinding {
+  /** `check:<rule>` for Fabricator's own checks, `ai:<hash>` for Copilot's. */
+  id: string
+  area: SecurityAreaId
+  severity: SecuritySeverity
+  /** `fabricator`: found by reading the files. `copilot`: Copilot's review, its evidence checked against the file. */
+  source: 'fabricator' | 'copilot'
+  title: string
+  /** Plain text; `code` is in backticks. */
+  detail: string
+  /** What to do about it. */
+  advice?: string
+  /** What Copilot made of one of Fabricator's findings, having read the code it points at. */
+  assessment?: string
+  /** Path in the package. */
+  file?: string
+  line?: number
+  endLine?: number
+  /** The lines around it, secret-looking values masked, from `excerptStart`. */
+  excerpt?: string
+  excerptStart?: number
+  /** More places it occurs: `path` or `path:line`. */
+  places?: string[]
+}
+
+export interface SecurityAreaResult {
+  area: SecurityAreaId
+  status: 'clear' | 'flagged' | 'skipped'
+  note?: string
+}
+
+/** What a security check found (`security.check`). */
+export interface SecurityReport {
+  /** Copilot's review finished. Fabricator's own checks ran either way. */
+  ok: boolean
+  /** Set by the worst finding, and made stricter, never looser, by Copilot's own verdict. */
+  verdict: SecurityVerdict
+  summary: string
+  findings: SecurityFinding[]
+  areas: SecurityAreaResult[]
+  /** Files in the package, and those Copilot could read. */
+  files: number
+  readable: number
+  durationMs: number
+  /** Why Copilot's review didn't finish. */
+  error?: string
+  /** Copilot stopped before it covered every area. */
+  partial?: boolean
+  /** The user stopped the check. */
+  cancelled?: boolean
+}
+
+/** A security check as it goes (`security.onEvent`). */
+export type SecurityEvent =
+  /** Unpacked for the review: where (steps name files in it), how many files, and the areas covered. */
+  | { type: 'started'; root: string; files: number; areas: SecurityAreaId[] }
+  /** A tool call Copilot made (sent on start and again when it finishes). */
+  | { type: 'activity'; tool: ChatToolCall }
+  /** A finding, new or updated (the same `id`). */
+  | { type: 'finding'; finding: SecurityFinding }
+  | { type: 'areas'; results: SecurityAreaResult[] }
+  | { type: 'summary'; text: string }
+
+export interface SecurityEventEnvelope {
+  checkId: string
+  event: SecurityEvent
+}
+
+/**
+ * `window.api.security`: check a `.fabricator`, `.rayfin` or project `.zip`
+ * file for security risks before it's imported or installed. Fabricator's own
+ * checks read the files; Copilot, on Auto, reviews the code without running
+ * any of it, in a session that can only read the unpacked file.
+ */
+export interface SecurityCheckApi {
+  /**
+   * Check the file at `path`, streaming events under `checkId`. Resolves with
+   * the report however the check ends (stopped, or Copilot unavailable, too);
+   * rejects only when the file can't be checked at all.
+   */
+  check: (checkId: string, path: string) => Promise<SecurityReport>
+  /** Stop a check. Resolves with whether one was running. */
+  cancel: (checkId: string) => Promise<boolean>
+  onEvent: (cb: (envelope: SecurityEventEnvelope) => void) => () => void
+}
+
 /** Whether a new project's name is free where it will be saved. */
 export interface ProjectNameCheck {
   ok: boolean
@@ -3412,6 +3514,7 @@ export const IpcChannels = {
   appsProgress: 'apps:progress',
   appsChanged: 'apps:changed',
   appsWindow: 'apps:window',
+  securityEvent: 'security:event',
   teamProgress: 'team:progress',
   teamDiagnosis: 'team:diagnosis',
   devState: 'dev:state',
@@ -4501,6 +4604,7 @@ export interface RayfinStudioApi {
   /** Each project's local backend (rayfin-local); see {@link LocalBackendApi}. */
   local: LocalBackendApi
   apps: InstalledAppsApi
+  security: SecurityCheckApi
 }
 
 /* ------------------------------------------------------------------ *

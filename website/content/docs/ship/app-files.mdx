@@ -40,7 +40,7 @@ When the file is saved, **What happens next** says how they open it. If they don
 
 ## What the other person needs
 
-- Fabricator, on Windows or macOS. They don't need to finish its setup or sign in to GitHub Copilot.
+- Fabricator, on Windows or macOS. They don't need to finish its setup or sign in to GitHub Copilot, unless they want Copilot to check the app for security risks before they install it.
 - Node.js, which the app runs on. If it's missing, the app's window offers to install it.
 - An internet connection the first time the app opens, to install its packages.
 
@@ -49,10 +49,11 @@ The app signs them in as themselves when they're signed in to the Azure CLI, and
 ## Install an app someone sent you
 
 1. Double-click the `.rayfin` file. A window opens with the app's name and icon, who exported it, and what it brings.
-2. Select **Install**.
-3. Wait while Fabricator gets the app ready. The first time, it installs the app's packages and builds the app, which takes a minute or two. Then the app opens in the window.
+2. To have the file checked for security risks first, under **Check for security risks**, select **Check**, then wait for the result. See [Check a project or app for security risks](/docs/build/security-check).
+3. Select **Install**.
+4. Wait while Fabricator gets the app ready. The first time, it installs the app's packages and builds the app, which takes a minute or two. Then the app opens in the window.
 
-Only install apps from people you trust: the app's code runs on your computer, as you.
+Only install apps from people you trust: the app's code runs on your computer, as you. If the check finds a serious risk, **Install** becomes **Install anyway**.
 
 If Fabricator wasn't open, only the app's window opens, and closing it closes Fabricator. If Fabricator was open, the app opens beside it.
 
@@ -80,6 +81,8 @@ When you open a `.rayfin` file of an app you've installed, and it holds another 
 
 - Select **Update** to replace the app with the version in the file. Its data stays.
 - Select **Open the installed one** to keep the version you have.
+
+As when you install an app, you can have the file checked for security risks first: select **Check**.
 
 A file exported from the same project by the same person, with the same Fabric account, updates the app it installed. Files exported by other people install as other apps, even when the apps have the same name.
 

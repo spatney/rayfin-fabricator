@@ -224,7 +224,7 @@ fn never(rel: &str) -> bool {
 
 /// May hold a secret: environment files (not their examples), local settings,
 /// keys and certificates.
-fn may_hold_secret(rel: &str) -> bool {
+pub(crate) fn may_hold_secret(rel: &str) -> bool {
   let name = file_name(rel).to_ascii_lowercase();
   let env = name == ".env"
     || (name.starts_with(".env.") && !matches!(name.as_str(), ".env.example" | ".env.sample" | ".env.template"));
@@ -902,13 +902,29 @@ fn app_prefix(files: &[&str]) -> Result<String, String> {
 
 /// Left behind when a file imports: installed packages (Fabricator installs
 /// them again), git hooks (an export never has them; they'd run on the next
-/// commit) and what macOS adds to the .zips it makes.
+/// commit) and a `commondir` that would send git to hooks elsewhere (a
+/// repository's own git folder never has one), what macOS adds to the .zips
+/// it makes, and names Windows would take for another file's (see
+/// [`windows_alias`]). Whatever case their names are in, since Windows and
+/// macOS find them in any.
 fn skip_on_open(rel: &str) -> bool {
-  rel.split('/').any(|part| part == "node_modules")
+  let rel = rel.to_ascii_lowercase();
+  rel.split('/').any(|part| part == "node_modules" || windows_alias(part))
     || rel == ".git/hooks"
     || rel.starts_with(".git/hooks/")
-    || rel.starts_with("__MACOSX/")
-    || file_name(rel) == ".DS_Store"
+    || rel == ".git/commondir"
+    || rel.starts_with("__macosx/")
+    || file_name(&rel) == ".ds_store"
+}
+
+/// Whether Windows would take this part of a path for another name: it drops
+/// the dots and spaces that end a name (`.git.` is `.git`), writes `name:x` to
+/// a stream of `name` (`.git::$INDEX_ALLOCATION` is the `.git` folder), and
+/// finds a file by its short name (`GIT~1`) too. Projects don't have such names.
+fn windows_alias(part: &str) -> bool {
+  part.ends_with(['.', ' '])
+    || part.contains(':')
+    || part.split('~').skip(1).any(|after| after.starts_with(|c: char| c.is_ascii_digit()))
 }
 
 fn name_in_yaml(text: &str) -> Option<String> {
@@ -1166,6 +1182,116 @@ impl AppFile {
   pub(crate) fn unpack_into(&mut self, target: &Path, progress: impl FnMut(u64, u64)) -> Result<(), String> {
     extract(&mut self.contents, target, app_file_record, progress)
   }
+}
+
+/* ------------------------ unpacking for a security check ------------------------ */
+
+/// A file in a project or app file being checked for security risks
+/// (`commands::security`).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PackageFile {
+  /// Its path in the app, `/`-separated.
+  pub path: String,
+  pub size: u64,
+  /// It was unpacked for the check.
+  pub unpacked: bool,
+  /// Its first bytes make it a program: a Windows, Linux or macOS executable
+  /// or library, or Java bytecode.
+  pub program: bool,
+}
+
+/// Whether a file starting with `head` is a program, by its magic number.
+fn is_program(head: &[u8]) -> bool {
+  head.starts_with(b"MZ")
+    || head.starts_with(b"\x7fELF")
+    || [[0xFE, 0xED, 0xFA, 0xCE], [0xFE, 0xED, 0xFA, 0xCF], [0xCE, 0xFA, 0xED, 0xFE], [0xCF, 0xFA, 0xED, 0xFE], [0xCA, 0xFE, 0xBA, 0xBE]]
+      .iter()
+      .any(|magic| head.starts_with(magic))
+}
+
+/// Unpack the project or app file at `source` into `target`, which exists and
+/// is empty, to check it for security risks before it's imported or
+/// installed. Nothing in it runs. Of its files, only those `keep` chooses by
+/// path and size are written, never a program but for the files `essential`
+/// chooses (settings npm and git read as text whatever they start with), and
+/// of git's data only what tells git what to run: its settings, a `.git` file
+/// pointing it elsewhere, and `commondir` files. Up to `max_bytes` in all,
+/// with room kept for the files `essential` chooses, so the others can't use
+/// it up. Returns its name and every file it holds, but Fabricator's own
+/// record, which importing or installing leaves out.
+pub(crate) fn unpack_for_check(
+  source: &Path,
+  target: &Path,
+  keep: impl Fn(&str, u64) -> bool,
+  essential: impl Fn(&str) -> bool,
+  max_bytes: u64,
+) -> Result<(String, Vec<PackageFile>), String> {
+  let mut contents = read_contents(source)?;
+  let app = is_app_file(source);
+  let app_name = app
+    .then(|| contents.bytes_of(APP_MANIFEST, MAX_TEXT_BYTES))
+    .flatten()
+    .and_then(|bytes| serde_json::from_slice::<AppManifest>(&bytes).ok())
+    .map(|manifest| manifest.name.trim().to_string())
+    .filter(|name| !name.is_empty());
+  let name = app_name.unwrap_or_else(|| contents.name(source));
+  // What installing an app (`AppFile::unpack_into`) or importing a project (`take_manifest`) leaves out.
+  let record = |rel: &str| if app { app_file_record(rel) } else { rel == MANIFEST };
+  // Git's folders, in any case and at any depth (a submodule's too).
+  let git_settings = |rel: &str| {
+    let rel = rel.to_ascii_lowercase();
+    let in_git = rel.starts_with(".git/") || rel.contains("/.git/");
+    !in_git || matches!(file_name(&rel), "config" | "config.worktree" | "commondir")
+  };
+  let listed: Vec<(usize, String, u64)> = contents
+    .entries
+    .iter()
+    .filter(|e| !e.folder && !record(&e.path) && git_settings(&e.path))
+    .map(|e| (e.index, e.path.clone(), e.size))
+    .collect();
+  // Files are written in the order importing writes them, so where two names
+  // are one file to the system, the check reads what importing would leave.
+  let reserved: u64 =
+    listed.iter().filter(|(_, path, size)| essential(path) && keep(path, *size)).map(|(_, _, size)| *size).sum();
+  let others_room = max_bytes.saturating_sub(reserved);
+  let mut files = Vec::with_capacity(listed.len());
+  let (mut written, mut others) = (0u64, 0u64);
+  for (index, path, size) in listed {
+    let Ok(mut entry) = contents.archive.by_index(index) else {
+      files.push(PackageFile { path, size, unpacked: false, program: false });
+      continue;
+    };
+    let mut head = [0u8; 4];
+    let mut read = 0;
+    while read < head.len() {
+      match entry.read(&mut head[read..]) {
+        Ok(0) | Err(_) => break,
+        Ok(n) => read += n,
+      }
+    }
+    let program = is_program(&head[..read]);
+    let essential = essential(&path);
+    let room = written + size <= max_bytes && (essential || others + size <= others_room);
+    // npm and git read their settings as text whatever bytes they start with, so the check does too.
+    let wanted = (essential || !program) && room && keep(&path, size);
+    let out = path.split('/').fold(target.to_path_buf(), |dir, part| dir.join(part));
+    let unpacked = wanted
+      && out.parent().is_some_and(|parent| std::fs::create_dir_all(parent).is_ok())
+      && File::create(&out).is_ok_and(|mut file| {
+        file.write_all(&head[..read]).is_ok()
+          && std::io::copy(&mut (&mut entry).take(size.saturating_sub(read as u64)), &mut file).is_ok()
+      });
+    if unpacked {
+      written += size;
+      if !essential {
+        others += size;
+      }
+    } else if wanted {
+      let _ = std::fs::remove_file(&out);
+    }
+    files.push(PackageFile { path, size, unpacked, program });
+  }
+  Ok((name, files))
 }
 
 /// Take the export's record of itself out of `dir`, so it doesn't end up in the
@@ -1660,6 +1786,21 @@ mod tests {
   }
 
   #[test]
+  fn an_import_leaves_out_what_windows_would_find_under_another_name() {
+    // Windows finds a file whatever case its name is in, so these are git's hooks and installed packages.
+    assert!(skip_on_open(".GIT/hooks/pre-commit") && skip_on_open(".Git/HOOKS") && skip_on_open("NODE_MODULES/x/index.js"));
+    // It drops a name's last dots and spaces, takes `name:stream` for `name`, and finds `.git` by its short name.
+    for alias in [".git./hooks/pre-commit", ".git /hooks/pre-commit", "GIT~1/hooks/pre-commit", ".git::$INDEX_ALLOCATION/hooks/x"] {
+      assert!(skip_on_open(alias), "{alias}");
+    }
+    assert!(skip_on_open(".npmrc::$DATA") && skip_on_open("NPMRC~1") && skip_on_open("src/.npmrc."));
+    assert!(!skip_on_open("src/App.tsx") && !skip_on_open("docs/v1.2/notes.md") && !skip_on_open("backup~/a.ts"));
+    // A `commondir` would send git to hooks outside `.git/hooks`; a worktree's own is fine.
+    assert!(skip_on_open(".git/commondir") && skip_on_open(".GIT/CommonDir"));
+    assert!(!skip_on_open(".git/worktrees/w/commondir"));
+  }
+
+  #[test]
   fn an_export_without_git_imports_without_its_secrets() {
     let app = TempDir::new();
     let yml = "id: toy-story\nname: Toy Story\nsecrets:\n  - name: OPENAI_KEY\n";
@@ -2001,5 +2142,81 @@ mod tests {
     let config = std::fs::read_to_string(opened.join(".git/config")).unwrap();
     assert!(!config.contains("ghp_secret") && !config.contains("amy@contoso.com"), "{config}");
     assert!(!opened.join(".git/hooks").exists());
+  }
+
+  #[test]
+  fn a_security_check_unpacks_what_it_reads_and_lists_everything_else() {
+    let out = TempDir::new();
+    let file = out.0.join("sales.rayfin");
+    let big = "x".repeat(64);
+    zip_of(
+      &file,
+      &[
+        ("sales/rayfin/rayfin.yml", "name: Sales\n"),
+        ("sales/package.json", "{\"scripts\":{\"postinstall\":\"node x.js\"}}"),
+        ("sales/tools/run.exe", "MZ\u{90}\0 not text"),
+        ("sales/assets/big.txt", &big),
+        ("sales/.git/config", "[core]\n\tfsmonitor = ./x.sh\n"),
+        ("sales/.git/objects/ab/cdef", "blob"),
+        ("sales/.git/hooks/pre-commit", "#!/bin/sh\n"),
+        ("sales/node_modules/left-pad/index.js", "module.exports = 1\n"),
+        ("sales/.fabricator/app.json", "{\"key\":\"sales-1a2b3c4d\",\"name\":\"Sales app\"}"),
+      ],
+    );
+    let target = TempDir::new();
+    let (name, files) = unpack_for_check(&file, &target.0, |_, size| size < 48, |_| false, 1 << 20).unwrap();
+
+    assert_eq!(name, "Sales app", "an app file is named by its record");
+    let listed: Vec<(&str, bool, bool)> = files.iter().map(|f| (f.path.as_str(), f.unpacked, f.program)).collect();
+    assert_eq!(
+      listed,
+      [
+        ("rayfin/rayfin.yml", true, false),
+        ("package.json", true, false),
+        ("tools/run.exe", false, true),
+        ("assets/big.txt", false, false),
+        (".git/config", true, false),
+      ]
+    );
+    assert_eq!(std::fs::read_to_string(target.0.join(".git/config")).unwrap(), "[core]\n\tfsmonitor = ./x.sh\n");
+    assert!(!target.0.join("tools").exists() && !target.0.join("node_modules").exists() && !target.0.join(".fabricator").exists());
+
+    let none = TempDir::new();
+    let (_, files) = unpack_for_check(&file, &none.0, |_, _| true, |_| false, 60).unwrap();
+    let unpacked: Vec<&str> = files.iter().filter(|f| f.unpacked).map(|f| f.path.as_str()).collect();
+    assert_eq!(unpacked, ["rayfin/rayfin.yml", "package.json"], "it stops at the size it may write");
+    // Room is kept for what the checks decide by, so other files can't use it up.
+    let kept = TempDir::new();
+    let (_, files) = unpack_for_check(&file, &kept.0, |_, _| true, |path| path == ".git/config", 60).unwrap();
+    let unpacked: Vec<&str> = files.iter().filter(|f| f.unpacked).map(|f| f.path.as_str()).collect();
+    assert_eq!(unpacked, ["rayfin/rayfin.yml", ".git/config"]);
+
+    // Importing a project leaves out only its export record, so the check does too.
+    let project = out.0.join("sales.fabricator");
+    zip_of(
+      &project,
+      &[
+        ("rayfin/rayfin.yml", "name: Sales\n"),
+        (".fabricator/export.json", "{\"format\":1,\"name\":\"Sales\"}"),
+        (".fabricator/setup.js", "require('child_process')\n"),
+        (".git/modules/lib/config", "[core]\n\tfsmonitor = ./x.sh\n"),
+        (".git/modules/lib/commondir", "../../../tools/common\n"),
+        (".git/objects/ab/cdef", "blob"),
+        (".GIT/objects/cd/ef01", "blob"),
+        ("lib/.git", "gitdir: ../tools/repo\n"),
+        // npm reads an `.npmrc` as text, whatever bytes it starts with.
+        ("tools/.npmrc", "MZ\u{90}\0 x\nscript-shell=./sh.cmd\n"),
+      ],
+    );
+    let target = TempDir::new();
+    let (name, files) = unpack_for_check(&project, &target.0, |_, _| true, |path| path.ends_with(".npmrc"), 1 << 20).unwrap();
+    assert_eq!(name, "Sales");
+    let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(
+      paths,
+      ["rayfin/rayfin.yml", ".fabricator/setup.js", ".git/modules/lib/config", ".git/modules/lib/commondir", "lib/.git", "tools/.npmrc"]
+    );
+    let npmrc = files.last().unwrap();
+    assert!(npmrc.unpacked && npmrc.program, "{npmrc:?}");
   }
 }

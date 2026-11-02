@@ -49,6 +49,7 @@ import {
   type ExportOptions,
   type RayfinStudioApi,
   type ReasoningEffort,
+  type SecurityEventEnvelope,
   type TeamCreateRequest,
   type TeamDiagnoseRequest,
   type TeamDiagnosisEnvelope,
@@ -693,6 +694,13 @@ export const api: RayfinStudioApi = {
     onProgress: (cb: (event: AppProgressEvent) => void) =>
       subscribe<AppProgressEvent>(IpcChannels.appsProgress, cb),
     onWindow: (cb: (label: string) => void) => subscribe<string>(IpcChannels.appsWindow, cb)
+  },
+
+  security: {
+    check: (checkId: string, path: string) => invoke('security_check', { checkId, path }),
+    cancel: (checkId: string) => invoke('security_check_cancel', { checkId }),
+    onEvent: (cb: (envelope: SecurityEventEnvelope) => void) =>
+      subscribe<SecurityEventEnvelope>(IpcChannels.securityEvent, cb)
   }
 }
 

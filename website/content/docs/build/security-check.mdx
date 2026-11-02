@@ -1,0 +1,63 @@
+---
+title: Check a project or app for security risks
+description: Before you import a project or install an app someone sent you, have Fabricator and GitHub Copilot check its file for code that could harm your computer, accounts or data.
+---
+
+When someone sends you a project or an app, its code runs on your computer once you import or install it: npm installs its packages, Vite builds it and its backend runs its functions, all as you. Before you go ahead, you can have Fabricator check the file for security risks. Nothing in the file runs while it's checked.
+
+## Check a file before you go ahead
+
+1. Open the file. For a project, **Import project** opens. For an app, a `.rayfin` file, the app's own window opens.
+2. Under **Check for security risks**, select **Check**.
+3. Wait while it checks. You see what Copilot is reading, each area as it's checked, and what it finds as it finds it. A check takes up to 6 minutes.
+4. Read the result, then select **Import**, **Install** or **Update** to go ahead, or **Cancel**.
+
+While the check runs, **Import**, **Install** and **Update** wait for it. To go ahead without waiting, select **Stop**: the check ends with what it found so far. To run it again, select **Check again**.
+
+The check uses GitHub Copilot, so you need to be signed in to Copilot in Fabricator. Without it, only Fabricator's own checks run. See [Manage your accounts](/docs/start/accounts).
+
+## What it checks
+
+The check has two parts:
+
+1. Fabricator reads the files for what would run on your computer without anyone choosing to run it, and where the packages come from. It doesn't use Copilot, so it finishes at once.
+2. Copilot reads the code, on **Auto**, which picks the model. It can only read the file's code: it can't run anything, change files or go online.
+
+Each finding belongs to one of these areas:
+
+| Area | What it looks for |
+| --- | --- |
+| **Install scripts** | Commands npm runs when Fabricator installs the packages, and what those commands do |
+| **Packages** | Packages from git, websites, folders or servers other than npm's, packages under other names, and names that imitate popular packages |
+| **Data sent out** | Your data, sign-ins or files sent to servers the app has no reason to use, and fake sign-in forms |
+| **Hidden code** | Code written so people can't read it, and text that tries to steer AI tools |
+| **System access** | Code, settings and programs that reach outside the app, such as git or npm settings that run programs, and code that reads your files or starts programs |
+| **Copilot instructions** | Projects only: instructions in the project that would have Copilot do something harmful while you build the app |
+
+## Read the result
+
+The result is one of these:
+
+- **No security risks found**: nothing in it looks risky. A green dot shows each area that was checked.
+- **Found 2 things to look at** (or another number): read each one before you go ahead.
+- **Found 1 serious risk** (or another number): it has code that could harm your computer, accounts or data. **Import** becomes **Import anyway**, and **Install** and **Update** become **Install anyway** and **Update anyway**. Don't go ahead unless you trust who sent it and know why it does this.
+
+Under the result, Copilot sums up what the file does that matters. Select a finding to see what it does, the lines of code it's in, where else it happens, and what to do. Findings from Fabricator's own checks show what Copilot made of them after it read the code. To see every file Copilot read and searched, select the steps link, such as **12 steps**.
+
+Copilot can make the result stricter, but never looser: it can't take away what Fabricator's own checks found or rate it below the level they set. Text in the file that tries to talk an AI into calling the file safe is itself a finding.
+
+> [!IMPORTANT]
+> A check helps you decide, but it can't prove that a file is safe. Only import projects and install apps from people you trust.
+
+## If Copilot can't check it
+
+If Copilot can't check the file, the result says "Copilot couldn't check it", with the reason, and shows what Fabricator's own checks found. For example, you see "GitHub Copilot isn't signed in. Sign in to Copilot in Fabricator, then check again."
+
+1. Fix what the reason says, such as signing in to Copilot.
+2. Select **Check again**.
+
+If Copilot stops before it checks every area, the result says why, and the areas it didn't check have hollow dots.
+
+## What's sent to Copilot
+
+Fabricator unpacks the file into a folder of its own, on your computer, and deletes the folder when the check ends. Copilot reads the code from there, so the code goes to GitHub Copilot, like chat content. Fabricator doesn't unpack programs, images and other media, large files, `.env` files, or keys and certificates, and it hides the sign-ins in `.npmrc` files. Excerpts the result shows hide values that look like secrets. See [Privacy](/docs/reference/privacy#chat-content-goes-to-github-copilot).

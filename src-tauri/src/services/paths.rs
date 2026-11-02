@@ -176,6 +176,13 @@ pub fn apps_dir() -> PathBuf {
   dirs::data_local_dir().unwrap_or_else(data_base).join(IDENTIFIER).join("apps")
 }
 
+/// Where a project or app file is unpacked while it's checked for security
+/// risks before it's imported or installed, one folder per check, removed when
+/// the check ends. On this computer only, beside the other caches.
+pub fn package_checks_dir() -> PathBuf {
+  cache_dir().join("checks")
+}
+
 /// Storage left behind by the retired Design Studio experiment (drafts,
 /// receipts, imported assets). Removed best-effort at startup.
 pub fn retired_design_studio_dir() -> PathBuf {

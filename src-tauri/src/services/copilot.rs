@@ -29,8 +29,9 @@ use github_copilot_sdk::rpc::{
 use github_copilot_sdk::session::Session;
 use github_copilot_sdk::types::{GetAuthStatusResponse, McpServerConfig};
 use github_copilot_sdk::{
-  CliProgram, Client, ClientOptions, Error as SdkError, ExitPlanModeData, IndexMap, Model, PermissionRequestData,
-  PermissionRequestKind, RequestId, ResumeSessionConfig, SessionConfig, SessionId, Tool, Transport,
+  CliProgram, Client, ClientOptions, Error as SdkError, ExitPlanModeData, IndexMap, MemoryConfiguration, Model,
+  PermissionRequestData, PermissionRequestKind, RequestId, ResumeSessionConfig, SessionConfig, SessionId, Tool,
+  Transport,
 };
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -123,6 +124,13 @@ impl ModelChoice {
   /// A model and effort, with no tiers.
   pub fn of(model: Option<String>, effort: Option<String>) -> Self {
     Self::new(model, effort, None, None)
+  }
+
+  /// Copilot's Auto router, named on the session itself, so a one-off session
+  /// routes with Auto whatever the runtime would pick by default. Only for
+  /// [`CopilotManager::transient_session_with`]: everywhere else Auto is `None`.
+  pub fn auto() -> Self {
+    ModelChoice { model: Some(AUTO_MODEL_ID.to_string()), ..Default::default() }
   }
 }
 
@@ -391,6 +399,10 @@ pub struct SessionOptions {
   /// The MCP servers the user added that are on in a Build chat, or the one a
   /// check connects to. Re-supplied on every resume too.
   pub mcp: McpServers,
+  /// The working directory holds someone else's files, such as a package being
+  /// checked before it's imported: the session reads none of them as its own
+  /// instructions, skills, hooks or settings, and keeps git and memory off.
+  pub untrusted: bool,
 }
 
 /* ----------------------------- Build chat sandbox ----------------------------- */
@@ -662,6 +674,16 @@ async fn open_session(
     if let Some(byok) = &opts.byok {
       cfg = cfg.with_providers(byok.providers.clone()).with_models(byok.models.clone());
     }
+    if opts.untrusted {
+      cfg = cfg
+        .with_skip_custom_instructions(true)
+        .with_enable_config_discovery(false)
+        .with_enable_on_demand_instruction_discovery(false)
+        .with_enable_skills(false)
+        .with_enable_file_hooks(false)
+        .with_enable_host_git_operations(false)
+        .with_memory(MemoryConfiguration::disabled());
+    }
     cfg.reasoning_effort = choice.effort.clone();
     match client.resume_session(cfg).await {
       Ok(session) => {
@@ -717,6 +739,16 @@ async fn open_session(
   }
   if let Some(byok) = &opts.byok {
     cfg = cfg.with_providers(byok.providers.clone()).with_models(byok.models.clone());
+  }
+  if opts.untrusted {
+    cfg = cfg
+      .with_skip_custom_instructions(true)
+      .with_enable_config_discovery(false)
+      .with_enable_on_demand_instruction_discovery(false)
+      .with_enable_skills(false)
+      .with_enable_file_hooks(false)
+      .with_enable_host_git_operations(false)
+      .with_memory(MemoryConfiguration::disabled());
   }
   cfg.reasoning_effort = choice.effort.clone();
   if let Some(m) = &choice.model {
@@ -1630,6 +1662,34 @@ pub(crate) mod tests {
     assert_eq!(requests[1]["params"]["sessionId"], "saved-session");
     // With Fabric IQ and Work IQ off, a session gets no MCP servers.
     assert!(requests.iter().all(|r| r["params"].get("mcpServers").is_none()), "{requests:?}");
+    client.force_stop();
+  }
+
+  /// A session over someone else's files, such as a package checked before it's
+  /// imported, names Auto itself and takes none of those files as its own
+  /// instructions, skills, hooks or settings.
+  #[tokio::test]
+  async fn a_session_over_someone_elses_files_takes_none_of_them_as_its_own_setup() {
+    let (client, server) = fake_client(vec![
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+      ("session.options.update", json!({ "result": { "success": true } })),
+    ]);
+    let opts = SessionOptions { untrusted: true, ..Default::default() };
+    open_session(&client, ".", "s", &ModelChoice::auto(), &opts, false).await.unwrap();
+    let requests = server.await.unwrap();
+    let create = &requests[0]["params"];
+    assert_eq!(create["model"], "auto", "{create}");
+    for flag in [
+      "enableConfigDiscovery",
+      "enableOnDemandInstructionDiscovery",
+      "enableSkills",
+      "enableFileHooks",
+      "enableHostGitOperations",
+    ] {
+      assert_eq!(create[flag], false, "{flag}: {create}");
+    }
+    assert_eq!(create["memory"]["enabled"], false, "{create}");
+    assert_eq!(requests[1]["params"]["skipCustomInstructions"], true, "{}", requests[1]);
     client.force_stop();
   }
 

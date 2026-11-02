@@ -209,7 +209,8 @@ pub fn run() {
       //     use, and what setting them aside left behind when Fabricator
       //     stopped part way (last: a spare is tens of thousands of files);
       //   - delete what installing, updating or removing an installed app left
-      //     when Fabricator stopped part way.
+      //     when Fabricator stopped part way, and the folders security checks
+      //     of project and app files unpacked them into.
       std::thread::spawn(|| {
         services::agent_skills::ensure_materialized();
         services::diagnostics::prune();
@@ -225,6 +226,7 @@ pub fn run() {
         }
         services::new_project_cache::clean_up();
         services::apps::clean_up();
+        commands::security::clean_up();
       });
 
       Ok(())
@@ -388,6 +390,8 @@ pub fn run() {
       commands::export::projects_import_pick,
       commands::export::projects_import_inspect,
       commands::export::projects_import,
+      commands::security::security_check,
+      commands::security::security_check_cancel,
       commands::export::projects_opened_exports,
       // apps installed from .rayfin files
       commands::apps::apps_window,

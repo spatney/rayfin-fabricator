@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import type { ImportPreview, ImportResult, ZipProgressEvent } from '@shared/ipc'
+import type { ImportPreview, ImportResult, SecurityReport, ZipProgressEvent } from '@shared/ipc'
 import { OverlayProvider } from '../overlay'
 import ImportProjectModal from './ImportProjectModal'
 import { makeProject } from '../../test/harness'
@@ -149,4 +149,86 @@ describe('ImportProjectModal', () => {
     expect(onImported).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
   })
+
+  it('waits for a security check, and after a serious risk imports only when you choose to', async () => {
+    const api = installApi()
+    const security = installSecurity()
+    renderModal()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Check' }))
+    expect(security.check).toHaveBeenCalledWith(expect.any(String), FILE)
+    expect((screen.getByRole('button', { name: 'Import' }) as HTMLButtonElement).disabled).toBe(
+      true
+    )
+
+    await security.finish({ ok: true, verdict: 'danger' })
+    const anyway = screen.getByRole('button', { name: 'Import anyway' }) as HTMLButtonElement
+    expect(anyway.disabled).toBe(false)
+    expect(anyway.className).toContain('btn--danger')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(anyway)
+    expect(api.projects.importProject).toHaveBeenCalledWith(FILE)
+  })
+
+  it('keeps a serious risk it found in view when you stop the check', async () => {
+    installApi()
+    const security = installSecurity()
+    renderModal()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Check' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    expect(security.cancel).toHaveBeenCalledTimes(1)
+    await security.finish({
+      ok: false,
+      cancelled: true,
+      verdict: 'danger',
+      findings: [
+        {
+          id: 'check:git-settings',
+          area: 'system',
+          severity: 'high',
+          source: 'fabricator',
+          title: 'Has git settings that run programs',
+          detail: 'Its git settings set `core.fsmonitor` = `./tools/watch.sh`.'
+        }
+      ]
+    })
+    expect(screen.getByText('Check stopped')).toBeTruthy()
+    expect(screen.getByText('It had found 1 thing to look at when you stopped it.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Import anyway' })).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }))
+  })
 })
+
+/** A security check of the file that ends when the test says. */
+function installSecurity() {
+  let resolve: (report: SecurityReport) => void = () => {}
+  const security = {
+    check: vi.fn(
+      (_checkId: string, _path: string) =>
+        new Promise<SecurityReport>((done) => {
+          resolve = done
+        })
+    ),
+    cancel: vi.fn(() => Promise.resolve(true)),
+    onEvent: vi.fn(() => () => {})
+  }
+  Object.assign((window as unknown as { api: object }).api, { security })
+  return {
+    ...security,
+    finish: (patch: Partial<SecurityReport>) =>
+      act(async () => {
+        resolve({
+          ok: true,
+          verdict: 'clear',
+          summary: 'Its install script downloads and runs a program.',
+          findings: [],
+          areas: [],
+          files: 214,
+          readable: 200,
+          durationMs: 61_000,
+          ...patch
+        })
+      })
+  }
+}

@@ -160,6 +160,8 @@ A React renderer drives the workbench, chat, editor, Blueprint, preview, publish
 
 Fabricator wraps the tools you'd otherwise run by hand. It drives the GitHub Copilot CLI to author, runs each app on this computer with rayfin-local while you build, shells out to the Rayfin CLI to publish to Microsoft Fabric, tracks your project with git, and loads the running app — on this computer, or published to Fabric — into the embedded preview. Copilot checks the app through Fabricator's `fabricator_local_status` and `fabricator_local_call` tools, and its chat sandbox keeps it out of `.rayfin-local/`. The Advisor closes the loop: instant rule checks plus an on-demand, read-only Copilot review flag issues like unguarded routes, loose database policies, or unbounded text columns, and it tells you when a review has gone stale.
 
+Before a project is imported or an app installed from a file, the user can check the file for security risks (`src-tauri/src/commands/security/`): Fabricator unpacks it into a folder of its own where nothing runs, its own checks read the files, and a read-only Copilot review on Auto, which takes nothing in the folder as its own instructions or settings, reports through tools that check its evidence against the files.
+
 ## Documentation site
 
 The user docs at <https://spatney.github.io/rayfin-fabricator/> are built from [`website/`](./website) (Next.js + Fumadocs, static export). `.github/workflows/docs.yml` builds it on pull requests and publishes it to GitHub Pages on every push to `master` that touches the site.

@@ -11,6 +11,7 @@
     "start/search",
     "---Build---",
     "build/projects",
+    "build/security-check",
     "build/chat",
     "build/your-own-api-keys",
     "build/prompt-ideas",

@@ -68,6 +68,17 @@ A project you created with **Migrate a Power BI report** keeps what Copilot work
 
 Fabricator stores temporary screenshot attachments under the operating system temp folder in a `rayfin-fabricator-shots` directory. It deletes the screenshot files it owns after they are no longer needed.
 
+## Files being checked for security risks
+
+While it checks a project or app file for security risks, Fabricator unpacks it into a folder of its own in a cache folder that stays on this computer:
+
+| OS | Cache folder |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\com.rayfin.fabricator\checks` |
+| macOS | `~/Library/Caches/com.rayfin.fabricator/checks` |
+
+It deletes each folder when its check ends, and anything left there the next time it starts. See [Check a project or app for security risks](/docs/build/security-check).
+
 ## Packages for new projects
 
 Fabricator keeps what it needs to create projects faster in a cache folder that stays on this computer:
