@@ -8737,12 +8737,17 @@ button.deploy-trouble-ray:focus-visible {
   white-space: nowrap;
 }
 
-/* The window of an app installed from a .rayfin file, before the app shows. */
+/* The window of an app installed from a .rayfin file, before the app shows.
+   Its one column is the window's width, so a long line can't widen it, and
+   the card's top stays put, a little above the middle, while what's under it
+   changes: from asking to installing to getting ready, and as lines come in. */
 .app-window {
   display: grid;
   min-height: 100vh;
-  place-items: center;
-  padding: 32px 24px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  justify-items: center;
+  padding: max(32px, calc(40vh - 80px)) 24px 32px;
   box-sizing: border-box;
   background: var(--bg);
 }
