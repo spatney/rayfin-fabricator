@@ -8738,23 +8738,26 @@ button.deploy-trouble-ray:focus-visible {
 }
 
 /* The window of an app installed from a .rayfin file, before the app shows.
-   Its one column is the window's width, so a long line can't widen it, and
-   the card's top stays put, a little above the middle, while what's under it
-   changes: from asking to installing to getting ready, and as lines come in. */
+   It scrolls on its own, since the workbench's body doesn't. Its one column
+   starts near the top and grows down, so nothing above moves as the security
+   check adds to it, and the column's actions stay in view at the bottom
+   while what's above them scrolls. A wide window splits the install prompt
+   in two (see `.app-window--split`). */
 .app-window {
-  display: grid;
-  min-height: 100vh;
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  justify-items: center;
-  padding: max(32px, calc(40vh - 80px)) 24px 32px;
-  box-sizing: border-box;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  padding: clamp(24px, 7vh, 64px) 24px 0;
+  /* Keep what's scrolled to clear of the actions held at the bottom. */
+  scroll-padding-bottom: 96px;
   background: var(--bg);
 }
 
 .app-window-card {
   display: flex;
-  width: min(460px, 100%);
+  width: min(560px, 100%);
+  margin: 0 auto;
+  padding-bottom: 24px;
   flex-direction: column;
   gap: 16px;
 }
@@ -8799,11 +8802,69 @@ button.deploy-trouble-ray:focus-visible {
   line-height: 1.5;
 }
 
+/* Like a dialog's footer; held at the window's bottom while the column is taller than it. */
 .app-window-actions {
+  position: sticky;
+  z-index: 1;
+  bottom: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 4px;
+  padding: 14px 0 16px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+/* A wide window asks with the app and its buttons on the left, and the
+   security check beside them, as tall as the window, scrolling on its own. */
+@media (min-width: 960px) and (min-height: 540px) {
+  .app-window--split {
+    overflow: hidden;
+  }
+
+  .app-window--split .app-window-card {
+    display: grid;
+    width: min(1080px, 100%);
+    height: 100%;
+    grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+    grid-template-rows: repeat(5, auto) minmax(0, 1fr);
+    grid-template-areas:
+      'head side'
+      'text side'
+      'facts side'
+      'note side'
+      'actions side'
+      '. side';
+    gap: 16px 40px;
+  }
+
+  .app-window--split .app-window-head {
+    grid-area: head;
+  }
+
+  .app-window--split .app-window-text {
+    grid-area: text;
+  }
+
+  .app-window--split .project-file-parts {
+    grid-area: facts;
+  }
+
+  .app-window--split .project-file-note {
+    grid-area: note;
+  }
+
+  .app-window--split .app-window-actions {
+    position: static;
+    grid-area: actions;
+  }
+
+  .app-window--split .app-window-side {
+    min-height: 0;
+    grid-area: side;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
 }
 
 .app-window-status {

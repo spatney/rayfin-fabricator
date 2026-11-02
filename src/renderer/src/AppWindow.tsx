@@ -265,21 +265,25 @@ export default function AppWindow(): JSX.Element {
   const updating = info?.mode === 'update'
   const failed = stage.kind === 'failed' ? stage : null
   const needsNode = failed?.code !== undefined && NODE_CODES.has(failed.code)
+  const asks = stage.kind === 'ask' && file !== undefined
 
   return (
     <main
-      className="app-window"
+      className={`app-window${asks ? ' app-window--split' : ''}`}
       aria-labelledby={titleId}
       aria-busy={stage.kind === 'loading' || undefined}
     >
       <div className="app-window-card">
-        <header className="app-window-head">
-          <AppIcon name={name} src={icon} size={64} />
-          <div className="app-window-title">
-            <h1 id={titleId}>{stage.kind === 'loading' ? '' : name}</h1>
-            {lead && <p className="app-window-lead">{lead}</p>}
-          </div>
-        </header>
+        {/* Nothing shows until it's known what to show, so nothing moves when it is. */}
+        {stage.kind !== 'loading' && (
+          <header className="app-window-head">
+            <AppIcon name={name} src={icon} size={64} />
+            <div className="app-window-title">
+              <h1 id={titleId}>{name}</h1>
+              {lead && <p className="app-window-lead">{lead}</p>}
+            </div>
+          </header>
+        )}
 
         {stage.kind === 'ask' && file && (
           <>
@@ -308,7 +312,9 @@ export default function AppWindow(): JSX.Element {
                 Only install apps from people you trust. Its code runs on this computer, as you.
               </span>
             </p>
-            <SecurityCheckPanel check={check} kind="app" />
+            <div className="app-window-side">
+              <SecurityCheckPanel check={check} kind="app" />
+            </div>
             <div className="app-window-actions">
               <button
                 type="button"

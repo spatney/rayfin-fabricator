@@ -36,6 +36,13 @@ const SEVERITY: Record<SecuritySeverity, string> = {
 
 const RANK: Record<SecuritySeverity, number> = { high: 3, medium: 2, low: 1, note: 0 }
 
+/** Scroll what just opened into view, as much of it as fits, from its top. */
+function reveal(el: HTMLElement | null): void {
+  if (!el || typeof el.scrollIntoView !== 'function') return
+  const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  el.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' })
+}
+
 type Tone = 'running' | 'clear' | 'caution' | 'danger' | 'idle'
 
 function useNow(active: boolean): number {
@@ -192,8 +199,15 @@ function FindingRow({
     fullWhere.length <= 28
       ? fullWhere || undefined
       : `${finding.file?.split('/').pop()}${finding.line ? `:${finding.line}` : ''}`
+  const ref = useRef<HTMLLIElement>(null)
+  useEffect(() => {
+    if (open) reveal(ref.current)
+  }, [open])
   return (
-    <li className={`sec-finding sec-finding--${finding.severity}${open ? ' is-open' : ''}`}>
+    <li
+      ref={ref}
+      className={`sec-finding sec-finding--${finding.severity}${open ? ' is-open' : ''}`}
+    >
       <button
         type="button"
         className="sec-finding-line"
@@ -264,6 +278,7 @@ function FindingRow({
 function Steps({ tools, root }: { tools: ChatToolCall[]; root: string }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
+  useEffect(() => reveal(ref.current), [])
   useEffect(() => {
     const el = ref.current
     if (el && follow.current) el.scrollTop = el.scrollHeight
