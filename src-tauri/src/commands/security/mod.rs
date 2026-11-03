@@ -231,7 +231,7 @@ async fn review(
   opts.untrusted = true;
   opts.excluded_tools.extend(ALSO_EXCLUDED.iter().map(|t| t.to_string()));
   opts.tools = tools::check_tools(ctx.clone());
-  let session = copilot.transient_session_with(root, ModelChoice::auto(), opts).await?;
+  let session = copilot.transient_session_with(root, ModelChoice::default(), opts).await?;
   let sub = session.subscribe();
   if let Err(e) = session.send(MessageOptions::new(prompt)).await {
     let _ = session.disconnect().await;

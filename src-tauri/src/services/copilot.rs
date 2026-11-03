@@ -51,8 +51,9 @@ use crate::types::{ChatEvent, CopilotAuthStatus};
 const CLIENT_NAME: &str = "rayfin-fabricator";
 
 /// The SDK's "auto" router pseudo-model id. Selecting Auto (no explicit project
-/// model) resolves to this when we must issue an explicit `set_model` — e.g. to
-/// switch a resumed session, which otherwise keeps its last concrete model.
+/// model) resolves to this when creating a session, which otherwise starts on
+/// the runtime's default model, and when switching a live or resumed session,
+/// which otherwise keeps its last concrete model.
 const AUTO_MODEL_ID: &str = "auto";
 const AUTH_TIMEOUT: Duration = Duration::from_secs(30);
 const AUTH_RETRY_DELAY: Duration = Duration::from_millis(600);
@@ -124,13 +125,6 @@ impl ModelChoice {
   /// A model and effort, with no tiers.
   pub fn of(model: Option<String>, effort: Option<String>) -> Self {
     Self::new(model, effort, None, None)
-  }
-
-  /// Copilot's Auto router, named on the session itself, so a one-off session
-  /// routes with Auto whatever the runtime would pick by default. Only for
-  /// [`CopilotManager::transient_session_with`]: everywhere else Auto is `None`.
-  pub fn auto() -> Self {
-    ModelChoice { model: Some(AUTO_MODEL_ID.to_string()), ..Default::default() }
   }
 }
 
@@ -207,10 +201,10 @@ fn concrete_model(model: &Option<String>) -> Option<String> {
     .map(str::to_string)
 }
 
-/// The model id to hand `set_model` for a live session: the concrete model, or
-/// the SDK's `"auto"` router when the project has no explicit model. Switching a
-/// resumed session back to Auto requires this explicit `set_model("auto")` — the
-/// session keeps its last concrete model otherwise.
+/// The model id to create a session with or hand `set_model` for a live one:
+/// the concrete model, or the SDK's `"auto"` router when the project has no
+/// explicit model. Auto has to be named — a new session starts on the runtime's
+/// default model otherwise, and a resumed one keeps its last concrete model.
 fn set_model_target(model: &Option<String>) -> String {
   concrete_model(model).unwrap_or_else(|| AUTO_MODEL_ID.to_string())
 }
@@ -751,10 +745,20 @@ async fn open_session(
       .with_memory(MemoryConfiguration::disabled());
   }
   cfg.reasoning_effort = choice.effort.clone();
-  if let Some(m) = &choice.model {
-    cfg = cfg.with_model(m.clone());
-  }
-  let session = client.create_session(cfg).await?;
+  // Auto is named too: a session created without a model starts on the
+  // runtime's default model, not the Auto router, and keeps it for the thread.
+  cfg = cfg.with_model(set_model_target(&choice.model));
+  let session = match client.create_session(cfg.clone()).await {
+    Ok(session) => session,
+    // The runtime checks the model on create; one without Auto for this
+    // account still opens the session, on its default model.
+    Err(e) if choice.model.is_none() && !e.is_transport_failure() => {
+      log::warn!("Copilot couldn't start a session on Auto ({e}); starting it on its default model");
+      cfg.model = None;
+      client.create_session(cfg).await?
+    }
+    Err(e) => return Err(e),
+  };
   // Tiers go on with a switch rather than in the config, so a runtime that
   // rejects one still opens the session (see `apply_options`).
   if choice.auto_tier.is_some() || choice.context_tier.is_some() {
@@ -1666,7 +1670,7 @@ pub(crate) mod tests {
   }
 
   /// A session over someone else's files, such as a package checked before it's
-  /// imported, names Auto itself and takes none of those files as its own
+  /// imported, runs on Auto and takes none of those files as its own
   /// instructions, skills, hooks or settings.
   #[tokio::test]
   async fn a_session_over_someone_elses_files_takes_none_of_them_as_its_own_setup() {
@@ -1675,7 +1679,7 @@ pub(crate) mod tests {
       ("session.options.update", json!({ "result": { "success": true } })),
     ]);
     let opts = SessionOptions { untrusted: true, ..Default::default() };
-    open_session(&client, ".", "s", &ModelChoice::auto(), &opts, false).await.unwrap();
+    open_session(&client, ".", "s", &ModelChoice::default(), &opts, false).await.unwrap();
     let requests = server.await.unwrap();
     let create = &requests[0]["params"];
     assert_eq!(create["model"], "auto", "{create}");
@@ -1690,6 +1694,40 @@ pub(crate) mod tests {
     }
     assert_eq!(create["memory"]["enabled"], false, "{create}");
     assert_eq!(requests[1]["params"]["skipCustomInstructions"], true, "{}", requests[1]);
+    client.force_stop();
+  }
+
+  /// A session created without a model starts on the runtime's default model,
+  /// not the Auto router, so Auto is named on create like any model.
+  #[tokio::test]
+  async fn a_new_session_is_created_on_its_model_auto_included() {
+    let (client, server) = fake_client(vec![
+      ("session.create", json!({ "result": { "sessionId": "on-auto" } })),
+      ("session.create", json!({ "result": { "sessionId": "on-a-model" } })),
+    ]);
+    let none = SessionOptions::default();
+    open_session(&client, ".", "on-auto", &ModelChoice::default(), &none, false).await.unwrap();
+    open_session(&client, ".", "on-a-model", &ModelChoice::of(m("gpt-6-astra"), None), &none, false).await.unwrap();
+    let requests = server.await.unwrap();
+    assert_eq!(requests[0]["params"]["model"], "auto");
+    assert_eq!(requests[1]["params"]["model"], "gpt-6-astra");
+    client.force_stop();
+  }
+
+  /// The runtime checks the model on create; one without Auto for the account
+  /// still opens the session, on its default model.
+  #[tokio::test]
+  async fn a_runtime_without_auto_still_opens_a_new_session() {
+    let (client, server) = fake_client(vec![
+      ("session.create", rpc_error("Model \"auto\" is not available.")),
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+    ]);
+    let opened = open_session(&client, ".", "s", &ModelChoice::default(), &SessionOptions::default(), false).await.unwrap();
+    assert_eq!(opened.session.id().as_str(), "s");
+    let requests = server.await.unwrap();
+    assert_eq!(requests[0]["params"]["model"], "auto");
+    assert!(requests[1]["params"].get("model").is_none(), "{}", requests[1]);
+    assert_eq!(requests[1]["params"]["sessionId"], "s");
     client.force_stop();
   }
 
