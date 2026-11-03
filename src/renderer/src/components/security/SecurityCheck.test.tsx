@@ -123,6 +123,15 @@ describe('SecurityCheckPanel', () => {
     render(<Harness />)
 
     expect(screen.getByText('Check for security risks')).toBeTruthy()
+    // What it covers shows before it starts, every area still to check.
+    expect(areaClasses()).toEqual({
+      'Install scripts': 'idle',
+      Packages: 'idle',
+      'Data sent out': 'idle',
+      'Hidden code': 'idle',
+      'System access': 'idle',
+      'Copilot instructions': 'idle'
+    })
     expect(api.security.check).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Check' }))
 
@@ -202,11 +211,11 @@ describe('SecurityCheckPanel', () => {
     })
     expect(screen.getByText('Checked by Copilot (Auto) · 214 files · 1m 23s')).toBeTruthy()
 
-    // The worst comes first, and opens to what it does, where, and what to do.
+    // The worst comes first, its severity in words too, and opens to what it does, where, and what to do.
     const rows = within(screen.getByRole('list', { name: 'What it found' })).getAllByRole('button')
     expect(rows.map((row) => row.textContent)).toEqual([
-      'High: Sends what you type to an unknown serversrc/lib/telemetry.ts:14',
-      'Low: Runs commands when its packages installpackage.json:7'
+      'High: Sends what you type to an unknown serversrc/lib/telemetry.ts:14High',
+      'Low: Runs commands when its packages installpackage.json:7Low'
     ])
     fireEvent.click(rows[0])
     expect(rows[0].getAttribute('aria-expanded')).toBe('true')
@@ -282,6 +291,9 @@ describe('SecurityCheckPanel', () => {
     expect(screen.getByText('Fabricator couldn’t check it')).toBeTruthy()
     expect(screen.getByText('That file isn’t there anymore.')).toBeTruthy()
     expect(screen.queryByRole('list', { name: 'What it checks' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+    expect(api.security.check).toHaveBeenCalledTimes(2)
   })
 
   it('stops a check that’s running when the dialog closes', () => {

@@ -13,7 +13,12 @@ import { formatTurnDuration } from '../chat/format'
 import { EvidenceView } from '../advisor/EvidenceView'
 import { CodeText, clock, plainText, plural } from '../advisor/format'
 import { ChevronRightIcon, Codicon } from '../icons'
-import type { SecurityCheck, SecurityCheckKind, SecurityProgress } from './useSecurityCheck'
+import {
+  areasFor,
+  type SecurityCheck,
+  type SecurityCheckKind,
+  type SecurityProgress
+} from './useSecurityCheck'
 import '../chat/chat.css'
 import '../advisor/advisor.css'
 import './securityCheck.css'
@@ -128,16 +133,35 @@ function outcome(
   }
 }
 
+/** The check's mark, in one slot so its title stays put as the check starts
+ *  and ends: a shield before it starts, a spinner while it runs, then the
+ *  verdict's dot. */
+function Mark({ tone }: { tone: Tone | null }): JSX.Element {
+  return (
+    <span className="sec-mark" aria-hidden="true">
+      {tone === 'running' ? (
+        <span className="ws-spinner" />
+      ) : tone ? (
+        <span className={`sec-dot sec-dot--${tone}`} />
+      ) : (
+        <Codicon name="shield" />
+      )}
+    </span>
+  )
+}
+
+/** The areas, from before the check starts, so you see what it covers; each
+ *  dot fills as its area is cleared or flagged. */
 function AreaStrip({
   areas,
   results,
   findings,
-  running
+  phase
 }: {
   areas: SecurityAreaId[]
   results: Partial<Record<SecurityAreaId, SecurityAreaResult>>
   findings: SecurityFinding[]
-  running: boolean
+  phase: SecurityCheck['state']['phase']
 }): JSX.Element {
   return (
     <ul className="sec-areas" aria-label="What it checks">
@@ -154,9 +178,11 @@ function AreaStrip({
             ? 'clear'
             : result?.status === 'flagged'
               ? 'medium'
-              : running && !result
-                ? 'waiting'
-                : 'skipped'
+              : phase === 'idle'
+                ? 'idle'
+                : phase === 'running' && !result
+                  ? 'waiting'
+                  : 'skipped'
         const said = found.length
           ? plural(found.length, 'thing') + ' to look at'
           : status === 'clear'
@@ -165,18 +191,20 @@ function AreaStrip({
               ? 'worth a look'
               : status === 'waiting'
                 ? 'not checked yet'
-                : 'not checked'
+                : status === 'skipped'
+                  ? 'not checked'
+                  : null
         const tip = [AREAS[area].about, result?.note].filter(Boolean).join('. ')
         return (
           <li key={area} className={`sec-area sec-area--${status}`} title={tip}>
             <span className="sec-area-dot" aria-hidden="true" />
-            {AREAS[area].label}
+            <span className="sec-area-name">{AREAS[area].label}</span>
             {found.length > 0 && (
               <span className="sec-area-count" aria-hidden="true">
                 {found.length}
               </span>
             )}
-            <span className="sr-only">: {said}</span>
+            {said && <span className="sr-only">: {said}</span>}
           </li>
         )
       })}
@@ -194,9 +222,9 @@ function FindingRow({
   onToggle: () => void
 }): JSX.Element {
   const fullWhere = finding.file ? `${finding.file}${finding.line ? `:${finding.line}` : ''}` : ''
-  // A short path reads best whole; a long one by its file's name.
+  // Under the title there's room for most paths whole; a long one reads best by its file's name.
   const where =
-    fullWhere.length <= 28
+    fullWhere.length <= 48
       ? fullWhere || undefined
       : `${finding.file?.split('/').pop()}${finding.line ? `:${finding.line}` : ''}`
   const ref = useRef<HTMLLIElement>(null)
@@ -217,12 +245,17 @@ function FindingRow({
       >
         <span className="sec-sev" aria-hidden="true" />
         <span className="sr-only">{SEVERITY[finding.severity]}: </span>
-        <span className="sec-finding-title">{finding.title}</span>
-        {where && (
-          <span className="sec-finding-where" title={fullWhere}>
-            {where}
-          </span>
-        )}
+        <span className="sec-finding-text">
+          <span className="sec-finding-title">{finding.title}</span>
+          {where && (
+            <span className="sec-finding-where" title={fullWhere}>
+              {where}
+            </span>
+          )}
+        </span>
+        <span className="sec-finding-level" aria-hidden="true">
+          {SEVERITY[finding.severity]}
+        </span>
         <ChevronRightIcon className="sec-finding-caret" />
       </button>
       {open && (
@@ -347,6 +380,7 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
     return (
       <section className="sec" aria-label="Security check">
         <div className="sec-head">
+          <Mark tone={null} />
           <div className="sec-head-text">
             <strong className="sec-title">Check for security risks</strong>
             <span className="sec-sub">
@@ -358,6 +392,7 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
             <Codicon name="sparkle" /> Check
           </button>
         </div>
+        <AreaStrip areas={areasFor(kind)} results={{}} findings={[]} phase="idle" />
       </section>
     )
   }
@@ -378,6 +413,11 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
   const root = progress.root
   const steps = progress.activity
   const files = report?.files || progress.files
+  const about = report?.ok
+    ? `Checked by Copilot (Auto)${files ? ` · ${plural(files, 'file')}` : ''} · ${formatTurnDuration(report.durationMs)}`
+    : running
+      ? `Copilot (Auto)${files ? ` · ${plural(files, 'file')}` : ''}`
+      : null
 
   return (
     <section
@@ -386,11 +426,7 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
       aria-busy={running || undefined}
     >
       <div className="sec-head">
-        {running ? (
-          <span className="ws-spinner sec-spinner" aria-hidden="true" />
-        ) : (
-          <span className={`sec-dot sec-dot--${told.tone}`} aria-hidden="true" />
-        )}
+        <Mark tone={told.tone} />
         <div className="sec-head-text" aria-live="polite">
           <strong className="sec-title">{told.title}</strong>
           {told.sub && (
@@ -402,7 +438,7 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
             </span>
           )}
         </div>
-        {running ? (
+        {running && (
           <>
             <span className="sec-clock" aria-label="Elapsed time">
               {clock(now - progress.startedAt)}
@@ -416,15 +452,6 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
               <Codicon name="debug-stop" /> Stop
             </button>
           </>
-        ) : (
-          <button
-            type="button"
-            className="btn btn--sm btn--ghost"
-            disabled={disabled}
-            onClick={check.start}
-          >
-            <Codicon name="refresh" /> Check again
-          </button>
         )}
       </div>
 
@@ -436,7 +463,12 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
       )}
 
       {(running || (report && report.files > 0)) && (
-        <AreaStrip areas={progress.areas} results={results} findings={findings} running={running} />
+        <AreaStrip
+          areas={progress.areas}
+          results={results}
+          findings={findings}
+          phase={state.phase}
+        />
       )}
 
       {findings.length > 0 && (
@@ -452,26 +484,32 @@ export default function SecurityCheckPanel({ check, kind, disabled = false }: Pr
         </ul>
       )}
 
-      {(steps.length > 0 || (report && report.ok)) && (
+      {(steps.length > 0 || report) && (
         <div className="sec-meta">
-          {report?.ok && (
-            <span>
-              Checked by Copilot (Auto){files ? ` · ${plural(files, 'file')}` : ''} ·{' '}
-              {formatTurnDuration(report.durationMs)}
-            </span>
-          )}
-          {running && <span>Copilot (Auto){files ? ` · ${plural(files, 'file')}` : ''}</span>}
-          {steps.length > 0 && root && (
-            <button
-              type="button"
-              className="sec-link"
-              aria-expanded={showSteps}
-              onClick={() => setShowSteps((open) => !open)}
-            >
-              <Codicon name="list-unordered" /> {plural(steps.length, 'step')}
-              <ChevronRightIcon className="sec-link-caret" />
-            </button>
-          )}
+          {about && <span className="sec-meta-about">{about}</span>}
+          <span className="sec-meta-actions">
+            {steps.length > 0 && root && (
+              <button
+                type="button"
+                className="sec-action sec-action--steps"
+                aria-expanded={showSteps}
+                onClick={() => setShowSteps((open) => !open)}
+              >
+                <Codicon name="list-unordered" /> {plural(steps.length, 'step')}
+                <ChevronRightIcon className="sec-action-caret" />
+              </button>
+            )}
+            {report && (
+              <button
+                type="button"
+                className="sec-action"
+                disabled={disabled}
+                onClick={check.start}
+              >
+                <Codicon name="refresh" /> Check again
+              </button>
+            )}
+          </span>
         </div>
       )}
       {showSteps && root && <Steps tools={steps} root={root} />}
