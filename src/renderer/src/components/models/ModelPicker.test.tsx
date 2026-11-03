@@ -43,6 +43,39 @@ const TIERS: AutoTiers = {
   ]
 }
 
+const FUSION: AutoTiers = {
+  defaultTier: 'balance',
+  tiers: [
+    {
+      id: 'balance',
+      name: 'Standard',
+      description: 'Everyday coding.',
+      enabled: true,
+      fusion: true
+    },
+    {
+      id: 'hydrafusion',
+      name: 'High',
+      description: 'Challenging tasks.',
+      enabled: true,
+      fusion: true
+    },
+    {
+      id: 'hydrafusion-max',
+      name: 'Max',
+      description: 'The hardest tasks.',
+      enabled: true,
+      fusion: true
+    }
+  ]
+}
+
+const offerTiers = (tiers: AutoTiers): void => {
+  ;(window as unknown as { api: { chat: { autoTiers: unknown } } }).api.chat.autoTiers = vi.fn(
+    async () => tiers
+  )
+}
+
 /** The picker with its selection in state, reporting each change. */
 function Picker({ initial, onChange }: { initial: ModelSelection; onChange: (s: ModelSelection) => void }) {
   const [value, setValue] = useState(initial)
@@ -95,6 +128,30 @@ describe('ModelPicker', () => {
     fireEvent.click(within(group).getByRole('menuitemradio', { name: /Efficiency/ }))
     expect(onChange).toHaveBeenLastCalledWith({ ...AUTO_SELECTION, autoTier: 'efficiency' })
     expect(pill().textContent).toContain('Auto · Efficiency')
+  })
+
+  it('offers Copilot Fusion’s effort levels under Auto, named as Copilot names them', async () => {
+    offerTiers(FUSION)
+    const onChange = renderPicker(AUTO_SELECTION)
+    fireEvent.click(pill())
+
+    const group = await screen.findByRole('group', { name: 'Copilot Fusion' })
+    expect(
+      within(group)
+        .getByRole('menuitemradio', { name: /Standard/ })
+        .getAttribute('aria-checked')
+    ).toBe('true')
+    expect(group.textContent).toContain('so a request can take longer and cost more')
+
+    fireEvent.click(within(group).getByRole('menuitemradio', { name: /High/ }))
+    expect(onChange).toHaveBeenLastCalledWith({ ...AUTO_SELECTION, autoTier: 'hydrafusion' })
+    expect(pill().textContent).toBe('Fusion High')
+  })
+
+  it('names a saved Fusion level in the pill without opening the menu', async () => {
+    offerTiers(FUSION)
+    renderPicker({ ...AUTO_SELECTION, autoTier: 'hydrafusion-max' })
+    await waitFor(() => expect(pill().textContent).toBe('Fusion Max'))
   })
 
   it('turns Auto off on Copilot’s first model and opens the list, with your keys’ models in their own section', async () => {

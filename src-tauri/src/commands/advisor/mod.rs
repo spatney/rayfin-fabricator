@@ -266,6 +266,8 @@ pub(crate) async fn drain(
           return DrainEnd::Cancelled;
         }
         recv = sub.recv() => match recv {
+          // A Fusion draft may yet be revised: its settled answer follows.
+          Ok(ev) if crate::services::copilot::is_fusion_draft(&ev) => {}
           Ok(ev) => {
             if on_event(&ev.event_type, &ev.data) {
               return DrainEnd::Finished;

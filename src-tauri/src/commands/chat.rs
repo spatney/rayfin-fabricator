@@ -1055,6 +1055,8 @@ pub(crate) async fn run_turn(
             return DrainEnd::Cancelled;
           }
           recv = sub.recv() => match recv {
+            // A Fusion draft may yet be revised: its settled answer follows.
+            Ok(ev) if crate::services::copilot::is_fusion_draft(&ev) => {}
             Ok(ev) => match classify_plan_event(&ev.event_type, plan_context) {
               // Signal-only (no payload): defer the actual read/emit until the
               // burst settles (see `todos_dirty` above).

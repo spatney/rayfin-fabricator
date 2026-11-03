@@ -55,10 +55,11 @@ function missingName(id: string): string {
 
 /**
  * The model picker, after GitHub Copilot's: a small menu with an Auto switch
- * (and, on Auto, what it optimizes for) or the chosen model's Model, Effort and
- * Context window, each opening a list beside the menu. The model list has a
- * search, Copilot's first models, the user's own-key models and the rest of
- * Copilot's under More models. Loads the models when it needs them.
+ * (and, on Auto, Copilot Fusion's effort levels, or what it optimizes for) or
+ * the chosen model's Model, Effort and Context window, each opening a list
+ * beside the menu. The model list has a search, Copilot's first models, the
+ * user's own-key models and the rest of Copilot's under More models. Loads the
+ * models when it needs them.
  */
 export function ModelPicker({
   value,
@@ -73,7 +74,7 @@ export function ModelPicker({
   value: ModelSelection
   disabled: boolean
   onChange: (next: ModelSelection) => void
-  /** Offer what Auto optimizes for, and context windows. */
+  /** Offer Auto's tiers (Copilot Fusion's effort levels), and context windows. */
   tiers?: boolean
   /** Open above the trigger (the composer) or below it (a toolbar). */
   placement?: 'up' | 'down'
@@ -103,7 +104,8 @@ export function ModelPicker({
 
   const isAuto = !value.model
   const { models, loading } = useCopilotModels(open || !isAuto)
-  const autoTiers = useAutoTiers(tiers && open)
+  // A chosen tier is named in the pill, so its name is needed before the menu opens.
+  const autoTiers = useAutoTiers(tiers && (open || Boolean(value.autoTier)))
   // A flyout reaches past the chat column, over the native preview; a menu
   // opening down from a toolbar covers it too.
   useSuppressPreview(open && (flyout !== null || placement === 'down'))
@@ -124,12 +126,18 @@ export function ModelPicker({
   const activeWindow =
     windows.find((w) => w.tier === (value.contextTier || 'default')) ?? windows[0]
   const activeTier = value.autoTier || autoTiers?.defaultTier || ''
-  const tierName = (id: string): string =>
-    autoTiers?.tiers.find((t) => t.id === id)?.name ?? (id ? id[0].toUpperCase() + id.slice(1) : '')
+  // Copilot offers Copilot Fusion's effort levels as Auto's tiers.
+  const fusion = autoTiers?.tiers.some((t) => t.fusion) ?? false
+  const tiersLabel = fusion ? 'Copilot Fusion' : 'Optimized for'
+  const chosenTier =
+    tiers && value.autoTier ? autoTiers?.tiers.find((t) => t.id === value.autoTier) : undefined
 
   // Auto names its tier only when one was chosen; Copilot's default goes unsaid.
+  // A Fusion level goes by Copilot's name for it, such as Fusion High.
   const summary = isAuto
-    ? ['Auto', tiers && value.autoTier ? tierName(value.autoTier) : '']
+    ? chosenTier?.fusion
+      ? [`Fusion ${chosenTier.name}`]
+      : ['Auto', chosenTier?.name ?? '']
     : [
         selected?.name ?? missingName(value.model),
         effort ? EFFORT_LABEL[effort].label : '',
@@ -587,9 +595,9 @@ export function ModelPicker({
                 </span>
               </button>
               {isAuto && tiers && autoTiers && (
-                <div className="mp-group" role="group" aria-label="Optimized for">
+                <div className="mp-group" role="group" aria-label={tiersLabel}>
                   <div className="mp-heading" aria-hidden="true">
-                    Optimized for
+                    {tiersLabel}
                   </div>
                   {autoTiers.tiers.map((t) => {
                     const on = activeTier === t.id
@@ -612,6 +620,12 @@ export function ModelPicker({
                       </button>
                     )
                   })}
+                  {fusion && (
+                    <p className="mp-note">
+                      High and Max can use more than one model, such as one to review another’s
+                      work, so a request can take longer and cost more.
+                    </p>
+                  )}
                 </div>
               )}
               {!isAuto && (

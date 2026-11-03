@@ -1515,7 +1515,8 @@ export interface ByokModelMeta {
   note?: string
 }
 
-/** What Auto can optimize for ("Optimized for"), as Copilot offers it to the account. */
+/** What Auto can optimize for, as Copilot offers it to the account: Copilot
+ *  Fusion's effort levels, or "Optimized for" preferences. */
 export interface AutoTiers {
   /** The tier Auto uses when none is chosen. */
   defaultTier: string
@@ -1532,6 +1533,8 @@ export interface AutoTierOption {
   enabled: boolean
   /** Why it can't be chosen, in Copilot's words. */
   note?: string
+  /** One of Copilot Fusion's effort levels: Standard, High or Max. */
+  fusion?: boolean
 }
 
 /** Preview pane view selection: the direct app URL, or the app embedded in the

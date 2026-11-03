@@ -30,8 +30,8 @@ use github_copilot_sdk::session::Session;
 use github_copilot_sdk::types::{GetAuthStatusResponse, McpServerConfig};
 use github_copilot_sdk::{
   CliProgram, Client, ClientOptions, Error as SdkError, ExitPlanModeData, IndexMap, MemoryConfiguration, Model,
-  PermissionRequestData, PermissionRequestKind, RequestId, ResumeSessionConfig, SessionConfig, SessionId, Tool,
-  Transport,
+  PermissionRequestData, PermissionRequestKind, RequestId, ResumeSessionConfig, SessionConfig, SessionEvent, SessionId,
+  Tool, Transport,
 };
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -55,6 +55,12 @@ const CLIENT_NAME: &str = "rayfin-fabricator";
 /// the runtime's default model, and when switching a live or resumed session,
 /// which otherwise keeps its last concrete model.
 const AUTO_MODEL_ID: &str = "auto";
+/// Runtime features every session turns on. Copilot lists what Auto can
+/// optimize for, Copilot Fusion's effort levels among them, only with
+/// `DYNAMIC_AUTO_TIERS`, and runs Fusion Max only with `HYDRAFUSION_PLAN_V2`.
+/// The Copilot CLI gets both from GitHub's rollout, which reaches only a
+/// trusted host, so Fabricator asks for them itself.
+const FEATURE_FLAGS: [&str; 2] = ["DYNAMIC_AUTO_TIERS", "HYDRAFUSION_PLAN_V2"];
 const AUTH_TIMEOUT: Duration = Duration::from_secs(30);
 const AUTH_RETRY_DELAY: Duration = Duration::from_millis(600);
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -238,21 +244,25 @@ fn norm_effort(effort: &Option<String>) -> Option<String> {
 /// named model actually takes effect (a live/resumed session keeps its last
 /// model otherwise). The effort and tiers ride along on the switch.
 ///
-/// The switch always carries `reasoningEffort`, as `null` when unset: omitting
-/// it keeps the session's previous effort, so moving from a model run at "low"
-/// to one without reasoning effort failed ("Reasoning effort 'low' is not
-/// supported"). Null resets it to the new model's default, which is what the
-/// picker's default effort means. On Auto, `autoTier` is always sent too, as
-/// `null` for Copilot's default routing: omitted, the runtime reuses the tier
-/// chosen last. A runtime that rejects a tier (Auto routing tiers must be
-/// enabled for the account) still gets the model switch.
+/// A switch to a model always carries `reasoningEffort`, as `null` when unset:
+/// omitting it keeps the session's previous effort, so moving from a model run
+/// at "low" to one without reasoning effort failed ("Reasoning effort 'low' is
+/// not supported"). Null resets it to the new model's default, which is what
+/// the picker's default effort means. A switch to Auto carries none: Copilot
+/// decides how hard Auto thinks, the switch drops the session's previous
+/// effort, and Copilot Fusion's tiers refuse one, even `null` ("HydraFusion
+/// models do not support reasoning effort"). On Auto, `autoTier` is always
+/// sent, as `null` for Copilot's default routing: omitted, the runtime reuses
+/// the tier chosen last. A runtime that rejects a tier (Auto routing tiers must
+/// be enabled for the account) still gets the model switch.
 async fn apply_options(session: &Session, choice: &ModelChoice) -> Result<(), SdkError> {
   let mut params = serde_json::json!({
     "sessionId": session.id().as_str(),
     "modelId": set_model_target(&choice.model),
-    "reasoningEffort": choice.effort,
   });
-  if choice.model.is_none() {
+  if choice.model.is_some() {
+    params["reasoningEffort"] = serde_json::json!(choice.effort);
+  } else {
     params["autoTier"] = serde_json::json!(choice.auto_tier);
   }
   if let Some(tier) = &choice.context_tier {
@@ -616,6 +626,12 @@ fn session_mcp_servers(opts: &SessionOptions) -> IndexMap<String, McpServerConfi
   servers
 }
 
+/// The runtime features a session turns on ([`FEATURE_FLAGS`]). They go with
+/// every resume too: a runtime that restarted doesn't remember them.
+fn feature_flags() -> HashMap<String, bool> {
+  FEATURE_FLAGS.iter().map(|flag| (flag.to_string(), true)).collect()
+}
+
 /// Ask the runtime to resume, or create a session bound to `session_id`,
 /// streaming enabled, scoped to `cwd`, with the extras in `opts`.
 async fn open_session(
@@ -637,7 +653,8 @@ async fn open_session(
       .with_streaming(true)
       .with_client_name(CLIENT_NAME)
       .with_working_directory(cwd_pb.clone())
-      .with_permission_handler(handler.clone());
+      .with_permission_handler(handler.clone())
+      .with_feature_flags(feature_flags());
     if !mcp_servers.is_empty() {
       cfg = cfg
         .with_mcp_servers(mcp_servers.clone())
@@ -703,7 +720,8 @@ async fn open_session(
     .with_streaming(true)
     .with_client_name(CLIENT_NAME)
     .with_working_directory(cwd_pb)
-    .with_permission_handler(handler);
+    .with_permission_handler(handler)
+    .with_feature_flags(feature_flags());
   if !mcp_servers.is_empty() {
     cfg = cfg
       .with_mcp_servers(mcp_servers)
@@ -834,22 +852,35 @@ fn context_tiers(m: &Model) -> Vec<crate::types::ContextTierOption> {
   if tiers.len() > 1 { tiers } else { Vec::new() }
 }
 
-/// Copilot's Auto routing metadata as the picker's "Optimized for" options: its
-/// `auto` preferences, in Copilot's order. `None` when it offers none.
+/// Copilot's Auto routing metadata as the picker's options: its `auto`
+/// preferences and Copilot Fusion's effort levels, in Copilot's order, less
+/// those Copilot keeps out of pickers. `None` when it offers none.
 fn map_auto_tiers(meta: AutoTierMetadata) -> Option<crate::types::AutoTiers> {
   let tiers: Vec<crate::types::AutoTierOption> = meta
     .tiers
     .into_iter()
-    .filter(|t| t.r#type == "auto" && auto_tier_id(Some(t.id.clone())).as_deref() == Some(t.id.as_str()))
+    .filter(|t| matches!(t.r#type.as_str(), "auto" | "fusion") && t.status.picker_visible != Some(false))
+    .filter(|t| auto_tier_id(Some(t.id.clone())).as_deref() == Some(t.id.as_str()))
     .map(|t| crate::types::AutoTierOption {
       name: if t.display_name.trim().is_empty() { t.id.clone() } else { t.display_name },
       id: t.id,
       description: t.description,
       enabled: t.status.enabled,
       note: t.status.message.filter(|m| !m.trim().is_empty()),
+      fusion: t.fusion_tier.is_some(),
     })
     .collect();
   (!tiers.is_empty()).then(|| crate::types::AutoTiers { default_tier: meta.default_tier, tiers })
+}
+
+/// Whether `event` is a Copilot Fusion draft: an answer Fusion stages while it
+/// works, which a review may revise or discard. The answer Fusion settles on
+/// comes again, kept, so a draft is never shown, as Copilot shows only the
+/// final response.
+pub fn is_fusion_draft(event: &SessionEvent) -> bool {
+  event.ephemeral == Some(true)
+    && event.event_type == "assistant.message"
+    && event.data.get("fusion").is_some_and(|fusion| !fusion.is_null())
 }
 
 /// The wire string of an SDK enum (`"lightweight"`, `"low"`…), or `None` for the
@@ -1714,6 +1745,23 @@ pub(crate) mod tests {
     client.force_stop();
   }
 
+  /// Copilot lists Copilot Fusion's effort levels, and runs Fusion Max, only for
+  /// a session with these features, so they go with every resume and create.
+  #[tokio::test]
+  async fn copilot_fusion_is_on_for_every_resume_and_create() {
+    let (client, server) = fake_client(vec![
+      ("session.resume", rpc_error("Session not found s")),
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+    ]);
+    open_session(&client, ".", "s", &ModelChoice::default(), &SessionOptions::default(), true).await.unwrap();
+    let requests = server.await.unwrap();
+    for request in &requests[..2] {
+      let flags = &request["params"]["featureFlags"];
+      assert_eq!(flags, &json!({ "DYNAMIC_AUTO_TIERS": true, "HYDRAFUSION_PLAN_V2": true }), "{request}");
+    }
+    client.force_stop();
+  }
+
   /// The runtime checks the model on create; one without Auto for the account
   /// still opens the session, on its default model.
   #[tokio::test]
@@ -2065,6 +2113,7 @@ pub(crate) mod tests {
     // A model takes a context tier; an Auto tier only goes with Auto.
     assert_eq!((concrete["modelId"].as_str(), concrete["contextTier"].as_str()), (Some("gpt-6-astra"), Some("long_context")));
     assert!(!concrete.contains_key("autoTier"));
+    assert_eq!(concrete["reasoningEffort"], "high");
     let auto = requests[2]["params"].as_object().unwrap();
     assert_eq!((auto["modelId"].as_str(), auto["autoTier"].as_str()), (Some("auto"), Some("intelligence")));
     assert!(!auto.contains_key("contextTier"));
@@ -2074,6 +2123,8 @@ pub(crate) mod tests {
     // Plain Auto says so, or the runtime would keep the tier chosen before.
     let plain = requests[4]["params"].as_object().unwrap();
     assert_eq!((plain["modelId"].as_str(), plain.get("autoTier")), (Some("auto"), Some(&Value::Null)));
+    // Auto names no effort: Copilot Fusion's tiers refuse one, even null.
+    assert!([auto, retried, plain].iter().all(|params| !params.contains_key("reasoningEffort")));
     client.force_stop();
   }
 
@@ -2122,6 +2173,46 @@ pub(crate) mod tests {
     ]);
     let none: AutoTierMetadata = serde_json::from_value(json!({ "defaultTier": "balance", "tiers": [] })).unwrap();
     assert!(map_auto_tiers(none).is_none());
+  }
+
+  /// Copilot offers Copilot Fusion's effort levels as Auto's tiers, beside a
+  /// tier it keeps out of pickers.
+  #[test]
+  fn auto_offers_copilot_fusions_effort_levels() {
+    let meta: AutoTierMetadata = serde_json::from_value(json!({
+      "defaultTier": "balance",
+      "providerId": "copilot",
+      "tiers": [
+        { "id": "balance", "displayName": "Standard", "description": "Everyday coding.", "type": "auto", "fusionTier": "standard", "status": { "enabled": true, "pickerVisible": true } },
+        { "id": "hydrafusion", "displayName": "High", "description": "Challenging tasks.", "type": "fusion", "fusionTier": "high", "status": { "enabled": true, "pickerVisible": true } },
+        { "id": "hydrafusion-max", "displayName": "Max", "description": "The hardest tasks.", "type": "fusion", "fusionTier": "max", "status": { "enabled": false, "message": "Not on your plan" } },
+        { "id": "fast", "displayName": "Fast", "description": "Latency.", "type": "auto", "status": { "enabled": true, "pickerVisible": false } }
+      ]
+    }))
+    .unwrap();
+    let tiers = map_auto_tiers(meta).unwrap();
+    let shown: Vec<(&str, &str, bool, bool)> =
+      tiers.tiers.iter().map(|t| (t.id.as_str(), t.name.as_str(), t.enabled, t.fusion)).collect();
+    assert_eq!(shown, [
+      ("balance", "Standard", true, true),
+      ("hydrafusion", "High", true, true),
+      ("hydrafusion-max", "Max", false, true),
+    ]);
+  }
+
+  /// A Fusion draft is staged, and the answer Fusion settles on comes again,
+  /// kept, under the same message id: only that one is the answer.
+  #[test]
+  fn only_the_answer_fusion_settles_on_is_shown() {
+    let event = |ephemeral: Option<bool>, data: Value| -> SessionEvent {
+      serde_json::from_value(json!({ "id": "e", "timestamp": "t", "ephemeral": ephemeral, "type": "assistant.message", "data": data }))
+        .unwrap()
+    };
+    let fusion = json!({ "fusionId": "f", "pattern": "critique", "policy": "standard" });
+    let answer = json!({ "messageId": "m", "content": "ok", "fusion": fusion });
+    assert!(is_fusion_draft(&event(Some(true), answer.clone())));
+    assert!(!is_fusion_draft(&event(None, answer)));
+    assert!(!is_fusion_draft(&event(Some(true), json!({ "messageId": "m", "content": "ok" }))));
   }
 
   #[test]

@@ -3119,8 +3119,8 @@ pub struct ContextTierOption {
   pub tokens: u64,
 }
 
-/// What Auto can optimize for ("Optimized for"), as Copilot offers it to the
-/// signed-in account.
+/// What Auto can optimize for, as Copilot offers it to the signed-in account:
+/// Copilot Fusion's effort levels, or "Optimized for" preferences.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AutoTiers {
@@ -3142,6 +3142,9 @@ pub struct AutoTierOption {
   /// Why it can't be chosen, in Copilot's words.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub note: Option<String>,
+  /// One of Copilot Fusion's effort levels: Standard, High or Max.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub fusion: bool,
 }
 
 /// How a model on the user's own key appears in the model picker.
