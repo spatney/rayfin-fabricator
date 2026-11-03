@@ -365,14 +365,15 @@ fn git_opts(dir: &str, ms: u64) -> RunOptions {
   }
 }
 
-/// Commit the current working tree as a deploy checkpoint (best-effort).
+/// Commit the app's folder as a deploy checkpoint (best-effort). Changes
+/// elsewhere in a repository the app shares with other apps stay as they are.
 async fn commit_checkpoint(dir: &str, message: &str) {
-  let status = git::run(&["status", "--porcelain"], git_opts(dir, 30_000)).await;
+  let status = git::run(&["status", "--porcelain", "--", "."], git_opts(dir, 30_000)).await;
   if !status.ok || status.stdout.trim().is_empty() {
     return;
   }
-  let _ = git::run(&["add", "-A"], git_opts(dir, 30_000)).await;
-  let _ = git::run(&["commit", "-m", message], git_opts(dir, 30_000)).await;
+  let _ = git::run(&["add", "-A", "--", "."], git_opts(dir, 30_000)).await;
+  let _ = git::run(&["commit", "-m", message, "--", "."], git_opts(dir, 30_000)).await;
 }
 
 /// Resolve the project's current HEAD commit sha (None when unavailable).
@@ -390,9 +391,11 @@ async fn head_sha(dir: &str) -> Option<String> {
   }
 }
 
+/// Whether the app's folder differs from the deployed version. Only the folder
+/// counts (git runs there): an app can share its repository with other apps.
 async fn has_changes_since_deploy(dir: &str, deployed_commit: Option<&str>) -> Result<bool, String> {
   let status = git::run(
-    &["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"],
+    &["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none", "--", "."],
     git_opts(dir, 30_000),
   )
   .await;
@@ -412,7 +415,7 @@ async fn has_changes_since_deploy(dir: &str, deployed_commit: Option<&str>) -> R
     return Ok(true);
   };
   let diff = git::run(
-    &["diff", "--quiet", "--no-ext-diff", "--ignore-submodules=none", commit, "HEAD", "--"],
+    &["diff", "--quiet", "--no-ext-diff", "--ignore-submodules=none", commit, "HEAD", "--", "."],
     git_opts(dir, 30_000),
   )
   .await;
@@ -445,14 +448,15 @@ fn porcelain_paths(stdout: &str) -> Vec<String> {
   paths
 }
 
-/// What a deploy would ship: every file that differs from the deployed version,
-/// edited, staged, new or removed, committed or not. Without a known deployed
-/// version something always would (as [`has_changes_since_deploy`] says), but
-/// how much isn't known. Both listings are NUL-separated, so a path is spelled
-/// the same in each (porcelain output quotes unusual names otherwise).
+/// What a deploy would ship: every file in the app's folder that differs from
+/// the deployed version, edited, staged, new or removed, committed or not.
+/// Without a known deployed version something always would (as
+/// [`has_changes_since_deploy`] says), but how much isn't known. Both listings
+/// are NUL-separated, so a path is spelled the same in each (porcelain output
+/// quotes unusual names otherwise).
 async fn pending_since_deploy(dir: &str, deployed_commit: Option<&str>) -> Result<PendingChanges, String> {
   let status = git::run(
-    &["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none"],
+    &["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none", "--", "."],
     git_opts(dir, 30_000),
   )
   .await;
@@ -467,7 +471,7 @@ async fn pending_since_deploy(dir: &str, deployed_commit: Option<&str>) -> Resul
     return Ok(PendingChanges { changed: true, files: None });
   };
   let diff = git::run(
-    &["diff", "--name-only", "-z", "--no-ext-diff", "--ignore-submodules=none", commit, "HEAD", "--"],
+    &["diff", "--name-only", "-z", "--no-ext-diff", "--ignore-submodules=none", commit, "HEAD", "--", "."],
     git_opts(dir, 30_000),
   )
   .await;
@@ -1398,7 +1402,9 @@ mod tests {
     }
 
     fn write(&self, name: &str, content: &str) {
-      std::fs::write(self.0.join(name), content).unwrap();
+      let path = self.0.join(name);
+      std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+      std::fs::write(path, content).unwrap();
     }
 
     fn commit(&self) -> String {
@@ -1468,6 +1474,41 @@ mod tests {
     repo.commit();
     assert!(has_changes_since_deploy(repo.dir(), None).await.unwrap());
     assert!(has_changes_since_deploy(repo.dir(), Some(" ")).await.unwrap());
+  }
+
+  /// An app can share its repository with other apps (a monorepo). What it
+  /// publishes, counts and checkpoints is its own folder only.
+  #[tokio::test]
+  async fn changes_elsewhere_in_a_shared_repository_are_not_the_apps() {
+    let repo = TestRepo::new();
+    repo.git(&["config", "user.name", "Fabricator Tests"]);
+    repo.git(&["config", "user.email", "tests@rayfin.local"]);
+    repo.git(&["config", "commit.gpgsign", "false"]);
+    repo.write("apps/explorer/app.ts", "export const version = 1;\n");
+    repo.write("apps/other/app.ts", "export const version = 1;\n");
+    let deployed = repo.commit();
+    let app = repo.0.join("apps").join("explorer");
+    let app = app.to_str().unwrap();
+
+    // Another app's committed, edited and new files, and the repository's own.
+    repo.write("apps/other/app.ts", "export const version = 2;\n");
+    repo.commit();
+    repo.write("apps/other/app.ts", "export const version = 3;\n");
+    repo.write("apps/other/new.ts", "export {};\n");
+    repo.write("README.md", "# Apps\n");
+    assert_eq!(pending_since_deploy(app, Some(&deployed)).await.unwrap(), PendingChanges { changed: false, files: Some(0) });
+    assert!(!has_changes_since_deploy(app, Some(&deployed)).await.unwrap());
+
+    repo.write("apps/explorer/app.ts", "export const version = 2;\n");
+    assert_eq!(pending_since_deploy(app, Some(&deployed)).await.unwrap(), PendingChanges { changed: true, files: Some(1) });
+    assert!(has_changes_since_deploy(app, Some(&deployed)).await.unwrap());
+
+    // The publish checkpoint saves the app's folder and leaves the rest as it was.
+    commit_checkpoint(app, "Publish explorer").await;
+    assert_eq!(repo.git(&["show", "--name-only", "--format=", "HEAD"]), "apps/explorer/app.ts");
+    assert_eq!(repo.git(&["status", "--porcelain", "--untracked-files=all", "--", "apps/other", "README.md"]).lines().count(), 3);
+    let published = repo.git(&["rev-parse", "HEAD"]);
+    assert!(!has_changes_since_deploy(app, Some(&published)).await.unwrap());
   }
 
   /// A folder opened from disk with no repository (issue #37): the check used
