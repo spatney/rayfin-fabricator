@@ -1,8 +1,11 @@
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type JSX } from 'react'
+import type { ChatFusion } from '@shared/ipc'
+import { useAutoTiers, useCopilotModels } from '@renderer/copilotModels'
 import { ClockIcon, Codicon, ReloadIcon } from '../icons'
 import { CopyButton } from './CopyButton'
 import { DiffView } from './DiffView'
 import { formatClock, formatFullDate, formatTurnDuration } from './format'
+import { describeFusion } from './fusion'
 import { ToolKindIcon } from './icons'
 import { basename } from './paths'
 import { answerText, filesChanged, type FileChange } from './turnLayout'
@@ -141,8 +144,26 @@ function FileDiff({
 }
 
 /**
+ * What Copilot Fusion chose for a turn, on a line of its own so every turn shows
+ * it, with Copilot's description of how it ran the request on hover.
+ */
+function FusionLine({ fusion }: { fusion: ChatFusion }): JSX.Element {
+  const { models } = useCopilotModels(true)
+  const tiers = useAutoTiers(true)
+  const level = tiers?.tiers.find((t) => t.id === fusion.level)?.name
+  const text = describeFusion(fusion, (id) => models.find((m) => m.id === id)?.name ?? id, level)
+  return (
+    <div className="turn-fusion" title={fusion.hint}>
+      <Codicon name="sparkle" />
+      <span>{text}</span>
+    </div>
+  )
+}
+
+/**
  * The foot of a finished assistant turn, in one wrapping row: the files it
- * changed, then its duration, timestamp, and actions (Copy, Try again).
+ * changed, then its duration, timestamp, and actions (Copy, Try again). What
+ * Copilot Fusion chose goes on a line above it.
  */
 export const TurnFooter = memo(function TurnFooter({
   message: m,
@@ -163,7 +184,8 @@ export const TurnFooter = memo(function TurnFooter({
   const panelId = useId()
   const toggle = useCallback((path: string) => setShown((cur) => (cur === path ? null : path)), [])
   const hasActions = Boolean(copy || onTryAgain || m.elapsedMs != null || m.createdAt != null)
-  if (files.length === 0 && !hasActions) return null
+  const fusion = m.fusion ? <FusionLine fusion={m.fusion} /> : null
+  if (files.length === 0 && !hasActions) return fusion
   const open = files.find((f) => f.path === shown && f.diff != null)
   const diff = open ? (
     <FileDiff
@@ -231,15 +253,23 @@ export const TurnFooter = memo(function TurnFooter({
   if (float) {
     return (
       <>
+        {fusion}
         {chips}
         {diff}
         {actions}
       </>
     )
   }
-  if (!chips) return <div className="turn-footer">{actions}</div>
+  if (!chips)
+    return (
+      <>
+        {fusion}
+        <div className="turn-footer">{actions}</div>
+      </>
+    )
   return (
     <>
+      {fusion}
       {chips}
       {diff}
     </>

@@ -143,6 +143,9 @@ export function reduceChatMessage(msg: UIChatMessage, ev: ChatEvent): UIChatMess
     case 'notice':
       next = { ...msg, notice: ev.text }
       break
+    case 'fusion':
+      next = { ...msg, fusion: ev.fusion }
+      break
     case 'error':
       next = {
         ...msg,

@@ -2883,6 +2883,9 @@ pub enum ChatEvent {
   Reasoning { id: String, text: String },
   #[serde(rename = "notice")]
   Notice { text: String },
+  /// What Copilot Fusion has chosen for the turn so far; each replaces the last.
+  #[serde(rename = "fusion")]
+  Fusion { fusion: ChatFusion },
   #[serde(rename = "error")]
   Error { text: String },
   #[serde(rename = "result")]
@@ -3263,6 +3266,42 @@ pub struct ChatMessage {
   /// Try again / Resume.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub prompt: Option<String>,
+  /// What Copilot Fusion chose for an assistant turn, shown under it.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub fusion: Option<ChatFusion>,
+}
+
+/// What Copilot Fusion chose for an assistant turn: the tier it ran at, how it
+/// ran each request and the models that worked on it.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatFusion {
+  /// Auto's tier the turn ran at, as Copilot names its Fusion model
+  /// (`"hydrafusion-max"`).
+  #[serde(default)]
+  pub level: String,
+  /// How Fusion ran each request in the turn, in order without repeats:
+  /// `"single"`, `"cascade"` or `"critique"`, or `"fallback"` when it couldn't
+  /// plan one and fell back to one model.
+  #[serde(default)]
+  pub patterns: Vec<String>,
+  /// The models that worked on the turn, in the order they started.
+  #[serde(default)]
+  pub models: Vec<ChatFusionModel>,
+  /// Copilot's description of how it ran the latest request ("Using Single:
+  /// one solver will work on your request.").
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub hint: Option<String>,
+}
+
+/// A model in a Copilot Fusion turn and the phases it ran (`"draft"`,
+/// `"critic"`, `"revision"`…).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatFusionModel {
+  pub id: String,
+  #[serde(default)]
+  pub phases: Vec<String>,
 }
 
 /* ----------------------------- rayfin versions ----------------------------- */
@@ -4137,6 +4176,7 @@ mod tests {
       data: None,
       migration: None,
       prompt: None,
+      fusion: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
     let back: ChatMessage = serde_json::from_str(&json).unwrap();
@@ -4177,6 +4217,7 @@ mod tests {
       data: None,
       migration: None,
       prompt: None,
+      fusion: None,
     };
     let json = serde_json::to_string(&msg).unwrap();
     let back: ChatMessage = serde_json::from_str(&json).unwrap();
@@ -4281,6 +4322,10 @@ mod tests {
       "text": "Done",
       "elapsedMs": 83000,
       "createdAt": 1790412554990.0,
+      "fusion": {
+        "level": "hydrafusion", "patterns": ["critique"], "hint": "Using Critique.",
+        "models": [{ "id": "claude-sonnet-5", "phases": ["draft"] }, { "id": "gpt-5.6-sol", "phases": ["critic"] }]
+      },
       "tools": [{
         "id": "t1", "name": "edit", "title": "src/App.tsx", "state": "success",
         "output": "ok", "command": "npm run build", "paths": ["C:/p/src/App.tsx"],
@@ -4294,7 +4339,7 @@ mod tests {
         {"kind": "text", "text": "Done"}
       ]
     });
-    let msg: ChatMessage = serde_json::from_value(raw).unwrap();
+    let msg: ChatMessage = serde_json::from_value(raw.clone()).unwrap();
     let back = serde_json::to_value(&msg).unwrap();
     assert_eq!(back["elapsedMs"], 83000.0);
     assert_eq!(back["createdAt"], 1790412554990.0);
@@ -4310,6 +4355,7 @@ mod tests {
     assert_eq!(back["segments"][0]["id"], "r1");
     assert_eq!(back["segments"][0]["elapsedMs"], 1200.0);
     assert_eq!(back["segments"][1]["thumbs"][0], "data:image/png;base64,AA");
+    assert_eq!(back["fusion"], raw["fusion"]);
   }
 
   #[test]

@@ -45,8 +45,8 @@ use crate::services::store;
 use crate::services::usage;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
-  ChatEvent, ChatMessage, ChatOptions, ChatPlanDependency, ChatPlanTodo, ChatToolCall, ChatToolState, ChatTurnResult,
-  ChatUsage, CopilotModel, CopilotQuota, SteerResult, StudioProject,
+  ChatEvent, ChatFusion, ChatFusionModel, ChatMessage, ChatOptions, ChatPlanDependency, ChatPlanTodo, ChatToolCall,
+  ChatToolState, ChatTurnResult, ChatUsage, CopilotModel, CopilotQuota, SteerResult, StudioProject,
 };
 
 /// Up to this many copilot invocations per turn on a transient pre-work failure.
@@ -331,6 +331,8 @@ struct TurnCtx {
   /// The id and name of each MCP server the user added that's on in the chat,
   /// so the work log names the server a tool came from.
   mcp_servers: Vec<(String, String)>,
+  /// What Copilot Fusion chose for the turn so far, on a Fusion tier.
+  fusion: Option<ChatFusion>,
 }
 
 impl TurnCtx {
@@ -353,6 +355,7 @@ impl TurnCtx {
       ended_empty: false,
       provider: None,
       mcp_servers: vec![],
+      fusion: None,
     }
   }
 
@@ -569,6 +572,45 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
       // here rather than in the drain loop's async plan_changed/todos_changed path.
       if let Some(mode) = data.get("newMode").and_then(|v| v.as_str()).and_then(map_sdk_mode) {
         sink(ChatEvent::ModeChanged { mode });
+      }
+    }
+    // Copilot Fusion planned a request, couldn't plan one and fell back to one
+    // model, or started a model on a phase: what it chose goes under the turn.
+    "session.fusion_resolved" | "session.fusion_route_failed" | "assistant.fusion_phase_started" => {
+      let field = |key: &str| data.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+      let before = ctx.fusion.clone();
+      let fusion = ctx.fusion.get_or_insert_with(ChatFusion::default);
+      if let Some(level) = field("syntheticModel") {
+        fusion.level = level.to_string();
+      }
+      let (pattern, model, phase) = match event_type {
+        "session.fusion_resolved" => (field("pattern"), None, None),
+        "session.fusion_route_failed" => (Some("fallback"), field("fallbackModel"), None),
+        _ => (None, field("model"), field("phaseKind")),
+      };
+      if let Some(pattern) = pattern.filter(|p| !fusion.patterns.iter().any(|known| known == p)) {
+        fusion.patterns.push(pattern.to_string());
+      }
+      if let Some(hint) = field("hint") {
+        fusion.hint = Some(hint.to_string());
+      }
+      if let Some(model) = model {
+        let known = match fusion.models.iter().position(|m| m.id == model) {
+          Some(i) => i,
+          None => {
+            fusion.models.push(ChatFusionModel { id: model.to_string(), phases: vec![] });
+            fusion.models.len() - 1
+          }
+        };
+        let phases = &mut fusion.models[known].phases;
+        if let Some(phase) = phase.filter(|p| !phases.iter().any(|known| known == p)) {
+          phases.push(phase.to_string());
+        }
+      }
+      if ctx.fusion != before {
+        if let Some(fusion) = &ctx.fusion {
+          sink(ChatEvent::Fusion { fusion: fusion.clone() });
+        }
       }
     }
     "session.idle" => {
@@ -1642,6 +1684,39 @@ mod tests {
       map_event(event_type, data, &mut sink, ctx);
     }
     out
+  }
+
+  /// What Copilot Fusion chose goes under the turn: each change once, with a
+  /// request it couldn't plan shown as a fallback.
+  #[test]
+  fn what_copilot_fusion_chose_goes_under_the_turn() {
+    let mut ctx = TurnCtx::new(false);
+    let phase = |kind: &str, model: &str| json!({ "phaseKind": kind, "model": model });
+    let events = collect(
+      &[
+        ("session.fusion_resolved", json!({ "syntheticModel": "hydrafusion", "pattern": "critique", "hint": "Using Critique." })),
+        ("assistant.fusion_phase_started", phase("draft", "claude-sonnet-5")),
+        ("assistant.fusion_phase_started", phase("draft", "claude-sonnet-5")),
+        ("assistant.fusion_phase_started", phase("critic", "gpt-5.6-sol")),
+        ("assistant.fusion_phase_started", phase("revision", "claude-sonnet-5")),
+        ("session.fusion_route_failed", json!({ "syntheticModel": "hydrafusion", "fallbackModel": "gpt-5.6-sol" })),
+      ],
+      &mut ctx,
+    );
+    let fusions: Vec<ChatFusion> = events
+      .into_iter()
+      .filter_map(|e| match e {
+        ChatEvent::Fusion { fusion } => Some(fusion),
+        _ => None,
+      })
+      .collect();
+    assert_eq!(fusions.len(), 5, "a phase seen before changes nothing");
+    let last = fusions.last().unwrap();
+    assert_eq!((last.level.as_str(), last.hint.as_deref()), ("hydrafusion", Some("Using Critique.")));
+    assert_eq!(last.patterns, ["critique", "fallback"]);
+    let models: Vec<(&str, Vec<&str>)> =
+      last.models.iter().map(|m| (m.id.as_str(), m.phases.iter().map(String::as_str).collect())).collect();
+    assert_eq!(models, [("claude-sonnet-5", vec!["draft", "revision"]), ("gpt-5.6-sol", vec!["critic"])]);
   }
 
   #[test]

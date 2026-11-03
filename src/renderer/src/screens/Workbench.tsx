@@ -183,7 +183,8 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       advisor,
       data,
       migration,
-      prompt
+      prompt,
+      fusion
     }) => {
       const cutOff = (role === 'assistant' && pending) || interrupted
       return {
@@ -212,7 +213,8 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         advisor,
         data,
         migration,
-        prompt
+        prompt,
+        fusion
       }
     }
   )

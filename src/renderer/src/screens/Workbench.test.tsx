@@ -2176,6 +2176,26 @@ describe('Workbench chat history', () => {
     const saved = api.chat.saveHistory.mock.lastCall?.[1] as { migration?: unknown }[]
     expect(saved[0]).toMatchObject({ migration })
   })
+
+  it('keeps what Copilot Fusion chose for a turn when it saves the transcript', async () => {
+    const api = installApi(true)
+    render(<Workbench {...makeProps()} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    const fusion = {
+      level: 'hydrafusion-max',
+      patterns: ['single'],
+      models: [{ id: 'gpt-6-luna', phases: ['primary'] }]
+    }
+    act(() =>
+      chatProps.mock.lastCall![0].onChange(() => [
+        { id: 'u1', role: 'user', text: 'Default to the system theme', tools: [], pending: false },
+        { id: 'a1', role: 'assistant', text: 'Done.', tools: [], pending: false, fusion }
+      ])
+    )
+    await act(async () => completeTurn())
+    const saved = api.chat.saveHistory.mock.lastCall?.[1] as { fusion?: unknown }[]
+    expect(saved[1]).toMatchObject({ fusion })
+  })
 })
 
 describe('Workbench team workspaces', () => {

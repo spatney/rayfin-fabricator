@@ -1798,6 +1798,23 @@ button.thinking-head:hover {
   margin-top: -2px;
 }
 
+/* What Copilot Fusion chose for a turn: a quiet line under the answer. */
+.turn-fusion {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: -2px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-faint);
+}
+
+.turn-fusion .codicon[class*='codicon-'] {
+  flex: none;
+  margin-top: 2px;
+  font-size: 14px;
+}
+
 .files-changed {
   min-width: 0;
   display: flex;

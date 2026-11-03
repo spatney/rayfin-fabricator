@@ -2405,6 +2405,27 @@ export type ChatSegment =
   | { kind: 'interjection'; text: string; thumbs?: string[] }
   | { kind: 'reasoning'; id?: string; text: string; startedAt?: number; elapsedMs?: number }
 
+/** What Copilot Fusion chose for an assistant turn, shown under it. */
+export interface ChatFusion {
+  /** Auto's tier the turn ran at, as Copilot names its Fusion model ("hydrafusion-max"). */
+  level: string
+  /**
+   * How Fusion ran each request in the turn, in order without repeats: "single",
+   * "cascade" or "critique", or "fallback" when it couldn't plan one.
+   */
+  patterns: string[]
+  /** The models that worked on the turn, in the order they started. */
+  models: ChatFusionModel[]
+  /** Copilot's description of how it ran the latest request. */
+  hint?: string
+}
+
+/** A model in a Copilot Fusion turn and the phases it ran ("draft", "critic"…). */
+export interface ChatFusionModel {
+  id: string
+  phases: string[]
+}
+
 /**
  * Streamed chat events sent from main -> renderer during a turn. The renderer
  * appends 'delta' text to the active assistant bubble and tracks tool calls by id.
@@ -2426,6 +2447,7 @@ export type ChatEvent =
       exitCode?: number
     }
   | { type: 'notice'; text: string }
+  | { type: 'fusion'; fusion: ChatFusion }
   | { type: 'error'; text: string }
   | { type: 'result'; ok: boolean; filesModified: string[]; ranDeploy: boolean }
   | {
@@ -2914,6 +2936,8 @@ export interface ChatMessage {
   interrupted?: boolean
   /** Wall-clock duration of the assistant turn, in ms. Set when the turn finishes. */
   elapsedMs?: number
+  /** What Copilot Fusion chose for this assistant turn, on a Fusion tier. */
+  fusion?: ChatFusion
   /** Epoch ms the message was created (shown as its timestamp). */
   createdAt?: number
   /** Durable Plan-mode artifact owned by this assistant turn, when present. */
