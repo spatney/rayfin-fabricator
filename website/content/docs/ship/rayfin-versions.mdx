@@ -45,10 +45,10 @@ The update reaches your published app the way any chat change does: when the tur
 Fabricator runs your app on this computer with a local backend that runs one line of Rayfin releases, such as 1.36.x. So:
 
 - **Update with Copilot** offers the newest release on that line, and asks Copilot to upgrade to "the newest version Fabricator runs on this computer". For a team app, which doesn't run on this computer, it offers the latest release.
-- New projects, team apps included, pin every `@microsoft/rayfin-*` package to that line with a `~` range, such as `~1.36.0`, so a later `npm install` doesn't move them to a release Fabricator can't run yet.
+- New projects, team apps included, pin every `@microsoft/rayfin-*` package to that line with a `~` range, such as `~1.36.0`, so a later `npm install` doesn't move them to a newer release the local backend doesn't support yet.
 - The Advisor flags **Rayfin packages aren't pinned to a release Fabricator runs locally** when a package is outside that line, or declared with a range that lets the next install leave it.
 
-An app on another release can misbehave on this computer. Once it's published, its preview uses the published app's backend instead. See [What runs only on Fabric](/docs/build/local-development#what-runs-only-on-fabric).
+An app on a newer release still runs on this computer, but a note above the preview says some things might not work as expected. See [The preview says some things might not work](/docs/troubleshooting/preview#the-preview-says-some-things-might-not-work). An app on an older release can misbehave on this computer. Once it's published, its preview uses the published app's backend instead. See [What runs only on Fabric](/docs/build/local-development#what-runs-only-on-fabric).
 
 ## Why lockstep matters
 
@@ -80,4 +80,4 @@ Use this for a team app if you want to start the upgrade yourself from the chat 
 Upgrade this app to the latest Rayfin release. Keep all Rayfin SDK packages on the same exact version, update the Rayfin CLI package too, run npm install, then check the installed Rayfin docs for deprecations or known limitations and update the app so it still builds.
 ```
 
-For other apps, use **Update with Copilot** instead: the latest release may be one Fabricator can't run on this computer yet.
+For other apps, use **Update with Copilot** instead: the latest release may be newer than the releases Fabricator supports on this computer.

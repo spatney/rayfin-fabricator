@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use super::events::Event;
+use crate::services::rayfin_sdk;
 use crate::types::{LocalBackendState as State, LocalProblem, LocalStartOptions, LocalStatus};
 
 /// Most warnings kept per run; the oldest go first.
@@ -76,6 +77,21 @@ impl CrashPolicy {
   }
 }
 
+/// Whether the app's Rayfin SDK is one rayfin-local doesn't implement because
+/// it's of a newer line: the version `ready` or the analysis reported, else
+/// the one the `sdk-unsupported` warning names (it comes before the analysis).
+fn newer_sdk(s: &LocalStatus) -> bool {
+  let sdk = s.ready.as_ref().and_then(|r| r.sdk.as_ref()).or_else(|| s.analysis.as_ref().and_then(|a| a.sdk.as_ref()));
+  if let Some(sdk) = sdk.filter(|sdk| sdk.version.is_some()) {
+    return !sdk.supported && sdk.version.as_deref().is_some_and(rayfin_sdk::is_newer_than_supported);
+  }
+  s.warnings
+    .iter()
+    .filter(|w| w.code == "sdk-unsupported")
+    .filter_map(|w| w.details.as_ref()?.get("version")?.as_str())
+    .any(rayfin_sdk::is_newer_than_supported)
+}
+
 pub struct Machine {
   status: LocalStatus,
   crashes: VecDeque<Instant>,
@@ -99,6 +115,7 @@ impl Machine {
   }
 
   fn changed(&mut self) {
+    self.status.newer_sdk = newer_sdk(&self.status);
     self.status.revision += 1;
     self.status.updated_at = Some(crate::commands::util::now_iso());
   }
@@ -381,6 +398,26 @@ mod tests {
     assert_eq!(status.state, State::Running);
     assert_eq!(status.error.as_ref().unwrap().code, "vite-failed");
     assert_eq!(status.warnings.len(), 1, "a repeated warning is kept once");
+  }
+
+  #[test]
+  fn an_sdk_of_a_newer_line_is_flagged_from_its_warning_on() {
+    let warned = |version: &str| {
+      format!(r#"{{"v":1,"type":"warning","code":"sdk-unsupported","message":"Not the SDK it implements.","details":{{"version":"{version}","supported":">=1.36.0 <1.37.0"}}}}"#)
+    };
+    let analysis = |version: &str| format!(r#"{{"v":1,"type":"analysis","ok":true,"sdk":{{"version":"{version}","supported":false}}}}"#);
+    let mut machine = started();
+    machine.apply(&event(&warned("99.0.0-alpha.1")));
+    assert!(machine.status().newer_sdk, "known before the analysis");
+    machine.apply(&event(&analysis("99.0.0-alpha.1")));
+    machine.apply(&event(READY));
+    assert!(machine.status().newer_sdk && machine.status().state == State::Running);
+
+    machine.begin(&LocalStartOptions::default(), true);
+    assert!(!machine.status().newer_sdk, "a new run reports afresh");
+    machine.apply(&event(&warned("0.1.0")));
+    machine.apply(&event(&analysis("0.1.0")));
+    assert!(!machine.status().newer_sdk, "an older line isn't newer");
   }
 
   #[test]

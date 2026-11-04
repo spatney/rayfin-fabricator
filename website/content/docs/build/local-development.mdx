@@ -38,7 +38,9 @@ At most two apps run at once: the one you have open and the one you had open bef
 A few things don't run on this computer:
 
 - **KQL database (Kusto) connectors.** Until the app is published, its calls to them fail in the preview.
-- **Rayfin releases outside the line Fabricator runs**, such as 1.36.x. An app on another release can misbehave here. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
+- **Rayfin releases older than the line Fabricator runs**, such as 1.36.x. An app on an older release can misbehave here. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
+
+An app on a newer Rayfin release runs on this computer anyway, and a note above the preview says "This app uses Rayfin `<version>`, which is newer than the Rayfin versions Fabricator runs on this computer, so some things might not work as expected." If a published app on a newer release can't start here, its preview uses the published app's backend instead. See [The preview says some things might not work](/docs/troubleshooting/preview#the-preview-says-some-things-might-not-work).
 
 When a published app needs one of these, its preview uses the published app's backend instead, and says why, for example "The logs connector runs only on Fabric, so the preview uses your published app’s backend." The preview then runs your app's frontend on this computer against the published backend, so changes to data, permissions or functions reach that backend when you publish. While **Publish after each chat turn** is on, it does that only during chat turns, and shows your published app the rest of the time. There's no **Local** and **Published** switch, and the **Data explorer** still shows only the local data. After a chat turn that changes the app's packages or `rayfin/rayfin.yml`, Fabricator checks again whether this computer can run it. An app that was never published has no published backend to use, so it runs on this computer anyway. See [The preview uses your published app's backend](/docs/troubleshooting/preview#the-preview-uses-your-published-apps-backend).
 

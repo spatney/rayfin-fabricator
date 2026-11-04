@@ -225,16 +225,28 @@ const localReady: LocalReady = {
   },
   time: '2026-10-30T03:00:00.000Z'
 }
-/** What a published app's backend says when this computer can't run its Rayfin version. */
-const tooNew: Partial<LocalStatus> = {
+/** What a published app's backend says when this computer can't run its (older) Rayfin version. */
+const tooOld: Partial<LocalStatus> = {
   analysis: {
     ok: true,
-    sdk: { version: '1.40.0', supported: false },
+    sdk: { version: '1.35.1', supported: false },
     entities: [],
     storageFolders: [],
     message: null,
     time: '2026-10-30T03:00:00.000Z'
   }
+}
+/** A Rayfin version of a newer line than the local backend implements: it runs here anyway. */
+const newerSdk: Partial<LocalStatus> = {
+  analysis: {
+    ok: true,
+    sdk: { version: '1.37.0-alpha.2159', supported: false },
+    entities: [],
+    storageFolders: [],
+    message: null,
+    time: '2026-10-30T03:00:00.000Z'
+  },
+  newerSdk: true
 }
 
 /** Each project's local backend, as the fake `window.api.local` reports it. */
@@ -260,6 +272,7 @@ function nextLocal(projectId: string, patch: Partial<LocalStatus> = {}): LocalSt
     vite: null,
     config: null,
     warnings: [],
+    newerSdk: false,
     error: null,
     stopped: null,
     crashes: 0,
@@ -1317,17 +1330,17 @@ describe('Workbench live preview on the published backend, for an app this compu
     needsPush: true
   }
 
-  /** The app falls back: its Rayfin version is newer than this computer runs. */
+  /** The app falls back: its Rayfin version is older than this computer runs. */
   async function waitForFallback(): Promise<void> {
     await waitFor(() =>
-      expect(previewProps.mock.lastCall?.[0].fallbackReason).toContain('Rayfin 1.40.0')
+      expect(previewProps.mock.lastCall?.[0].fallbackReason).toContain('Rayfin 1.35.1')
     )
     await act(async () => {})
   }
 
   async function mount(settings: AppSettings | null = autoSettings) {
     const api = installApi(true)
-    nextLocal(project.id, tooNew)
+    nextLocal(project.id, tooOld)
     const dev = api.dev
     dev.plan.mockResolvedValue({ conflict })
     const view = render(<Workbench {...makeProps({ settings })} />, {
@@ -1614,7 +1627,7 @@ describe('Workbench live preview on the published backend, for an app this compu
   /** Turns don't publish, with a free port, so the open app's live preview starts. */
   async function mountManual() {
     const api = installApi(true)
-    nextLocal(project.id, tooNew)
+    nextLocal(project.id, tooOld)
     api.dev.plan.mockResolvedValue({ port: 5174 })
     const view = render(<Workbench {...makeProps({ settings: manualSettings })} />, {
       wrapper: Wrapper
@@ -1692,8 +1705,8 @@ describe('Workbench live preview on the published backend, for an app this compu
   it('moves the live preview to the app you switch to, once the old one has stopped', async () => {
     const api = installApi(true)
     const other: StudioProject = { ...project, id: 'p2', name: 'Project Two', path: 'C:\\projects\\p2' }
-    nextLocal(project.id, tooNew)
-    nextLocal(other.id, tooNew)
+    nextLocal(project.id, tooOld)
+    nextLocal(other.id, tooOld)
     let current = {
       workspaceRoot: 'C:\\projects',
       activeProjectId: project.id as string | null,
@@ -2040,7 +2053,7 @@ describe('Workbench local backend', () => {
 
   it('checks again after a turn changes the app’s packages, and runs it here once it can', async () => {
     const api = installApi(true)
-    nextLocal(project.id, tooNew)
+    nextLocal(project.id, tooOld)
     api.dev.plan.mockResolvedValue({ port: 5174 })
     render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
@@ -2057,7 +2070,7 @@ describe('Workbench local backend', () => {
     expect(api.local.start).toHaveBeenCalledWith(project.id)
     emitLocal({ state: 'starting', phase: 'analysis' })
     expect(preview().fallbackReason, 'the preview stays put while it checks').toContain(
-      'Rayfin 1.40.0'
+      'Rayfin 1.35.1'
     )
 
     emitLocal({ state: 'running', ready: localReady })
@@ -2072,13 +2085,59 @@ describe('Workbench local backend', () => {
     const state = { workspaceRoot: 'C:\\projects', activeProjectId: fresh.id, projects: [fresh] }
     api.projects.state.mockResolvedValue(state)
     api.deploy.reconcile.mockResolvedValue(state)
-    nextLocal(project.id, tooNew)
+    nextLocal(project.id, tooOld)
     render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
     await waitFor(() => expect(api.local.start).toHaveBeenCalledTimes(1))
     expect(preview().local).toBeDefined()
     expect(preview().fallbackReason).toBeNull()
     expect(api.local.reportFallback).not.toHaveBeenCalled()
+  })
+
+  it('runs a published app on a newer Rayfin version here, without falling back', async () => {
+    const api = installApi(true)
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledTimes(1))
+    emitLocal({
+      ...newerSdk,
+      state: 'running',
+      ready: { ...localReady, sdk: { version: '1.37.0-alpha.2159', supported: false } }
+    })
+    await waitFor(() => expect(preview().local?.state).toBe('running'))
+    expect(preview().fallbackReason).toBeNull()
+    expect(api.local.stop).not.toHaveBeenCalled()
+    expect(api.local.reportFallback).not.toHaveBeenCalled()
+    expect(api.dev.start, 'no live preview on the published backend').not.toHaveBeenCalled()
+  })
+
+  it('falls back on a newer Rayfin version once the app can’t start with it', async () => {
+    const api = installApi(true)
+    api.dev.plan.mockResolvedValue({ port: 5174 })
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledTimes(1))
+    emitLocal({
+      ...newerSdk,
+      state: 'error',
+      error: {
+        code: 'analysis-failed',
+        message:
+          'This app uses @microsoft/rayfin-core 1.37.0-alpha.2159; rayfin-local implements 1.36.x.',
+        hint: null,
+        fatal: true,
+        details: null,
+        time: '2026-10-30T03:03:00.000Z'
+      }
+    })
+    await waitFor(() => expect(preview().fallbackReason).toContain('couldn’t start here'))
+    expect(preview().local, 'no local view').toBeUndefined()
+    await waitFor(() => expect(api.dev.start).toHaveBeenCalledWith(project.id, 5174))
+    expect(api.local.reportFallback).toHaveBeenCalledWith(
+      project.id,
+      'sdk-unsupported',
+      preview().fallbackReason
+    )
   })
 
   it('asks Help why the app didn’t start, opens setup, and remembers which app the preview shows', async () => {

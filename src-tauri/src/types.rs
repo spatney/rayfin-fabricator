@@ -4741,6 +4741,10 @@ pub struct LocalStatus {
   pub config: Option<LocalConfigChanged>,
   /// This run's warnings, oldest first.
   pub warnings: Vec<LocalProblem>,
+  /// Set by Fabricator: the app's Rayfin SDK, which rayfin-local doesn't
+  /// implement (`sdk-unsupported`), is of a newer line than the one it does.
+  /// It runs the app anyway, as rayfin-local does; some things may not work.
+  pub newer_sdk: bool,
   /// The last error. With `state: error`, why the backend isn't running.
   pub error: Option<LocalProblem>,
   pub stopped: Option<LocalStopped>,

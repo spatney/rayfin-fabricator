@@ -9,7 +9,7 @@ import type {
 } from '@shared/ipc'
 import { usePreviewSuppressed } from '../overlay'
 import { measurePreviewBounds, watchPreviewPixelRatio } from '../previewBounds'
-import { refusedSchemaLosses, type LocalBackend } from '../localBackend'
+import { localSdkWarning, refusedSchemaLosses, type LocalBackend } from '../localBackend'
 import { DEVICES, deviceHostHeight, deviceHostWidth, type DeviceId } from '../design/devices'
 import { readFabricatorTheme } from '../design/hostTheme'
 import type { DesignSession, DesignSurface } from '../design/useDesignSession'
@@ -43,6 +43,7 @@ import LocalOutput from './local/LocalOutput'
 import {
   FallbackNote,
   SchemaWaitingNote,
+  SdkWarningNote,
   localNoticeSeen,
   markLocalNoticeSeen
 } from './local/LocalNotes'
@@ -411,6 +412,10 @@ export default function PreviewPane({
     setNoticeSeenTick((n) => n + 1)
   }, [project.id])
   const showLocalNotice = localView && Boolean(deployedUrl) && !noticeSeen
+  // The app runs here on a Rayfin version the local backend doesn't implement,
+  // such as a newer one: say some things might not work, once it has run or failed.
+  const sdkWarning =
+    local?.state === 'running' || local?.state === 'error' ? localSdkWarning(local.status) : null
 
   const hostRef = useRef<HTMLDivElement>(null)
   const prevRunningRef = useRef(running)
@@ -1428,6 +1433,7 @@ export default function PreviewPane({
       )}
 
       {fallbackReason && !localMode && !team && <FallbackNote reason={fallbackReason} />}
+      {localView && sdkWarning && <SdkWarningNote warning={sdkWarning} />}
       {localView &&
         local?.state === 'running' &&
         refusedSchemaLosses(local.status) &&

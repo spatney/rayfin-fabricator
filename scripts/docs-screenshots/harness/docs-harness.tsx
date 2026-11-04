@@ -470,6 +470,7 @@ function localStatus(projectId: string): LocalStatus {
     vite: { state: 'ready', url: LOCAL_APP_URL, version: '7.1.3', message: null, time: started },
     config: null,
     warnings: [],
+    newerSdk: false,
     error: null,
     stopped: null,
     crashes: 0,

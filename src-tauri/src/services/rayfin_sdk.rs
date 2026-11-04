@@ -94,6 +94,23 @@ pub fn newest_supported(published: &[String]) -> Option<Version> {
   supported_releases(published, &PIN.supported).pop()
 }
 
+/// Whether `version` (installed, or the range a package.json declares, such
+/// as `^1.37.0`) is of a Rayfin line newer than the one rayfin-local runs.
+/// rayfin-local runs such an app anyway, with an `sdk-unsupported` warning, and
+/// so does Fabricator: some things may not work as expected.
+pub fn is_newer_than_supported(version: &str) -> bool {
+  let tested = tested_release();
+  release_line(version).is_some_and(|line| line > (tested.major, tested.minor))
+}
+
+/// The major and minor version of a version or a range: `(1, 37)` for
+/// `1.37.0-alpha.2159` or `^1.37.0`.
+fn release_line(version: &str) -> Option<(u64, u64)> {
+  let version = version.trim().trim_start_matches(|c: char| !c.is_ascii_digit());
+  let mut parts = version.split(['.', '-', '+']);
+  Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
+}
+
 /// [`new_project_sdk`] over npm's list of versions (`None` when it couldn't be read).
 fn choose(published: Option<&[String]>, supported: &str, tested: Version) -> NewProjectSdk {
   let releases = published.map(|list| supported_releases(list, supported)).unwrap_or_default();
@@ -506,6 +523,19 @@ mod tests {
     assert_eq!(newest_supported(&published), Some(tested));
     assert_eq!(newest_supported(&list(&["999.0.0", "0.1.0"])), None);
     assert_eq!(newest_supported(&[]), None);
+  }
+
+  #[test]
+  fn releases_of_a_later_line_are_newer_than_the_local_backend_runs() {
+    let tested = tested_release();
+    let next = format!("{}.{}", tested.major, tested.minor + 1);
+    for newer in [format!("{next}.0-alpha.2159"), format!("{next}.0"), format!("^{next}.0"), format!("{}.0.0", tested.major + 1)] {
+      assert!(is_newer_than_supported(&newer), "{newer}");
+    }
+    let older = format!("{}.{}.9", tested.major, tested.minor - 1);
+    for not_newer in [tested.to_string(), older, "latest".into(), "workspace:*".into(), "".into()] {
+      assert!(!is_newer_than_supported(&not_newer), "{not_newer}");
+    }
   }
 
   #[test]

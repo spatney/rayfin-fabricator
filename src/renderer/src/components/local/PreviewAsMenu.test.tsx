@@ -74,6 +74,7 @@ function status(patch: Partial<LocalStatus>): LocalStatus {
     vite: null,
     config: null,
     warnings: [],
+    newerSdk: false,
     error: null,
     stopped: null,
     crashes: 0,

@@ -1,6 +1,6 @@
 {
   "$comment": "The rayfin-local release Fabricator bundles as a sidecar (scripts/rayfin-local/fetch.mjs), and the Rayfin SDK versions it runs. New projects get the newest Rayfin version within sdk.supported (sdk.tested when npm can't be reached).",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "repository": "spatney/rayfin-local",
   "sdk": {
     "supported": ">=1.36.0 <1.37.0",
@@ -8,12 +8,12 @@
   },
   "targets": {
     "x86_64-pc-windows-msvc": {
-      "archive": "rayfin-local-0.2.4-x86_64-pc-windows-msvc.zip",
-      "sha256": "485ddabe72a638f8a958428fc574c6a120511abdfd5398036bb4a8f02e6a29a4"
+      "archive": "rayfin-local-0.2.5-x86_64-pc-windows-msvc.zip",
+      "sha256": "a30578c76f04c1223bece60b526106796aad6b75d8ff91d4d34ca1d870e66c30"
     },
     "aarch64-apple-darwin": {
-      "archive": "rayfin-local-0.2.4-aarch64-apple-darwin.tar.gz",
-      "sha256": "429e236441f6959d97a9a1832095777aca6a92fffe02e4387b382770b2033f51"
+      "archive": "rayfin-local-0.2.5-aarch64-apple-darwin.tar.gz",
+      "sha256": "2c0c84a2e546684d8562fbda6d6a2de4799bd96a49046b067283d4b57cae3b73"
     }
   }
 }

@@ -245,6 +245,7 @@ describe('the app on this computer', () => {
       vite: null,
       config: null,
       warnings: [],
+      newerSdk: false,
       error: null,
       stopped: null,
       crashes: 0,

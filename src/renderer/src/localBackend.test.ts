@@ -10,6 +10,7 @@ import {
   localBackendStore,
   localFallbackCode,
   localFallbackReason,
+  localSdkWarning,
   localStateLabel,
   refusedSchemaLosses,
   retriesAfterTurn,
@@ -38,6 +39,7 @@ function status(patch: Partial<LocalStatus> = {}): LocalStatus {
     vite: null,
     config: null,
     warnings: [],
+    newerSdk: false,
     error: null,
     stopped: null,
     crashes: 0,
@@ -375,15 +377,15 @@ describe('local backend helpers', () => {
       message: null,
       time: null
     })
-    const tooNew = status({ state: 'starting', analysis: analysis('1.40.1', false) })
-    expect(localFallbackReason(tooNew)).toBe(
-      'This app uses Rayfin 1.40.1, which Fabricator can’t run on this computer yet, so the preview uses your published app’s backend.'
+    const tooOld = status({ state: 'starting', analysis: analysis('1.35.1', false) })
+    expect(localFallbackReason(tooOld)).toBe(
+      'This app uses Rayfin 1.35.1, which Fabricator can’t run on this computer, so the preview uses your published app’s backend.'
     )
-    expect(localFallbackCode(tooNew)).toBe('sdk-unsupported')
+    expect(localFallbackCode(tooOld)).toBe('sdk-unsupported')
     const warned = status({
-      warnings: [{ ...problem('sdk-unsupported', { version: '1.37.0' }), fatal: false }]
+      warnings: [{ ...problem('sdk-unsupported', { version: '1.35.0' }), fatal: false }]
     })
-    expect(localFallbackReason(warned)).toContain('Rayfin 1.37.0')
+    expect(localFallbackReason(warned)).toContain('Rayfin 1.35.0')
     // Packages that aren't installed have no version: another problem, not a fallback.
     expect(localFallbackReason(status({ analysis: analysis(null, false) }))).toBeNull()
 
@@ -416,6 +418,54 @@ describe('local backend helpers', () => {
     )
     expect(localFallbackReason(status({ state: 'running', ready }))).toBeNull()
     expect(localFallbackCode(status({ state: 'running', ready }))).toBeNull()
+  })
+
+  it('runs a newer Rayfin version here, warning that some things might not work', () => {
+    const newer = status({
+      state: 'running',
+      ready: { ...ready, sdk: { version: '1.37.0-alpha.2159', supported: false } },
+      warnings: [{ ...problem('sdk-unsupported', { version: '1.37.0-alpha.2159' }), fatal: false }],
+      newerSdk: true
+    })
+    expect(localFallbackReason(newer)).toBeNull()
+    expect(localFallbackCode(newer)).toBeNull()
+    expect(localSdkWarning(newer)).toBe(
+      'This app uses Rayfin 1.37.0-alpha.2159, which is newer than the Rayfin versions Fabricator runs on this computer, so some things might not work as expected.'
+    )
+    // An older one runs here only without a published backend to use instead.
+    const older = status({
+      state: 'running',
+      ready: { ...ready, sdk: { version: '1.35.1', supported: false } }
+    })
+    expect(localSdkWarning(older)).toBe(
+      'This app uses Rayfin 1.35.1, which isn’t one of the Rayfin versions Fabricator runs on this computer, so some things might not work as expected.'
+    )
+    expect(localSdkWarning(status({ state: 'running', ready }))).toBeNull()
+  })
+
+  it('falls back on a newer Rayfin version only once the app couldn’t start with it', () => {
+    const newer = {
+      ready: null,
+      analysis: {
+        ok: false,
+        sdk: { version: '1.37.0-alpha.2159', supported: false },
+        entities: [],
+        storageFolders: [],
+        message: 'helper `analyze` failed',
+        time: null
+      },
+      newerSdk: true
+    }
+    const stopped = (code: string): LocalStatus =>
+      status({ ...newer, state: 'error', error: problem(code) })
+    expect(localFallbackReason(status({ ...newer, state: 'starting' }))).toBeNull()
+    expect(localFallbackReason(stopped('analysis-failed'))).toBe(
+      'This app uses Rayfin 1.37.0-alpha.2159, which is newer than the Rayfin versions Fabricator runs on this computer and couldn’t start here, so the preview uses your published app’s backend.'
+    )
+    expect(localFallbackCode(stopped('analysis-failed'))).toBe('sdk-unsupported')
+    // The preview has the user settle these, and these aren't the app's doing.
+    for (const code of ['packages-missing', 'schema-refused', 'node-missing', 'already-serving'])
+      expect(localFallbackReason(stopped(code)), code).toBeNull()
   })
 
   it('tells which changed files can change whether this computer runs the app', () => {

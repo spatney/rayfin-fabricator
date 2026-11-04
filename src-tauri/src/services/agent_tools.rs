@@ -501,7 +501,7 @@ impl Default for Waits {
 /// Problems a change to the app can't fix, so the tools don't start the
 /// backend again after them: the preview offers the fix. As the renderer's
 /// `retriesAfterTurn`.
-const OUTSIDE_THE_APP: &[&str] = &[
+pub(crate) const OUTSIDE_THE_APP: &[&str] = &[
   "already-serving",
   "node-missing",
   "node-too-old",
@@ -894,6 +894,9 @@ fn sdk_report(status: &LocalStatus) -> Option<Value> {
   let mut out = Map::new();
   out.insert("version".into(), json!(sdk.and_then(|s| s.version.clone()).or_else(|| detail("version"))));
   out.insert("supported".into(), json!(sdk.is_some_and(|s| s.supported) && warning.is_none()));
+  if status.newer_sdk {
+    out.insert("newer".into(), json!(true));
+  }
   if let Some(range) = detail("supported") {
     out.insert("supportedRange".into(), json!(range));
   }
@@ -995,10 +998,17 @@ fn advice(status: &LocalStatus, output: &[LocalLogEvent]) -> Vec<String> {
         }
       }
       "connector-unsupported" => format!("The {name} connector runs only on Microsoft Fabric, so you can't call it here."),
+      "sdk-unsupported" if !seen.contains(&"sdk-unsupported") && status.newer_sdk => {
+        "The app's Rayfin packages are newer than the versions the local backend implements (`sdk.newer`). It runs \
+         the app anyway, but some things may not work as expected here. Don't upgrade them further. If something \
+         fails here, tell the user it may be the newer Rayfin version, and move every `@microsoft/rayfin-*` package \
+         back to one `~` range the local backend runs only if they agree."
+          .to_string()
+      }
       "sdk-unsupported" if !seen.contains(&"sdk-unsupported") => {
         "The app's Rayfin packages are outside the versions the local backend runs (`sdk`), so parts of the app may \
-         not work here. Don't upgrade them further. Tell the user, and move every `@microsoft/rayfin-*` package back \
-         to one `~` range the local backend runs only if they agree."
+         not work here. Tell the user, and move every `@microsoft/rayfin-*` package to one `~` range the local \
+         backend runs only if they agree."
           .to_string()
       }
       _ => continue,
@@ -1608,6 +1618,30 @@ mod tests {
     assert_eq!(never["state"], "stopped");
     assert_eq!(never["summary"], "The local backend isn't running.");
     assert!(never.get("advice").is_none() && never.get("recentOutput").is_none());
+  }
+
+  #[test]
+  fn an_sdk_of_a_newer_line_runs_with_a_warning() {
+    let mut status: LocalStatus = serde_json::from_value(json!({
+      "state": "running",
+      "analysis": { "ok": true, "sdk": { "version": "1.37.0-alpha.2159", "supported": false } },
+      "warnings": [{
+        "code": "sdk-unsupported", "message": "Not the SDK rayfin-local implements.",
+        "details": { "version": "1.37.0-alpha.2159", "supported": ">=1.36.0 <1.37.0" }
+      }],
+      "newerSdk": true
+    }))
+    .unwrap();
+    let report: Value = serde_json::from_str(&status_report(&status, &[], &[])).unwrap();
+    assert_eq!(report["sdk"]["newer"], true);
+    let advice = report["advice"].to_string();
+    assert!(advice.contains("runs the app anyway") && advice.contains("Don't upgrade them further"), "{advice}");
+
+    status.newer_sdk = false;
+    let report: Value = serde_json::from_str(&status_report(&status, &[], &[])).unwrap();
+    assert!(report["sdk"].get("newer").is_none());
+    let advice = report["advice"].to_string();
+    assert!(advice.contains("outside the versions") && !advice.contains("anyway"), "{advice}");
   }
 
   #[test]

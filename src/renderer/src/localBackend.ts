@@ -233,14 +233,39 @@ function detailText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-/** The Rayfin version the app uses when rayfin-local can't run it, or `null`. */
-function unsupportedSdk(status: LocalStatus): { version: string | null } | null {
+/**
+ * The Rayfin version the app uses when rayfin-local doesn't implement it, and
+ * whether it's of a newer line (`newerSdk`), or `null`.
+ */
+function unsupportedSdk(status: LocalStatus): { version: string | null; newer: boolean } | null {
   const warning = status.warnings.find((w) => w.code === 'sdk-unsupported')
   const sdk = status.ready?.sdk ?? status.analysis?.sdk ?? null
   // Without a version the packages aren't installed: that's another problem.
   const version = sdk && !sdk.supported && sdk.version ? sdk.version : null
   if (!version && !warning) return null
-  return { version: version ?? detailText(warning?.details?.version) }
+  return { version: version ?? detailText(warning?.details?.version), newer: status.newerSdk }
+}
+
+/** Why a backend stops that has nothing to do with the app's Rayfin version. */
+const NOT_THE_SDK = new Set(['port-in-use', 'schema-refused', 'packages-missing'])
+
+/**
+ * The backend stopped on a problem in the app, as a Rayfin version of a newer
+ * line can cause: not one outside the app, nor one the preview has the user
+ * settle (a refused data model change, packages to install).
+ */
+function stoppedInTheApp(status: LocalStatus): boolean {
+  const code = status.state === 'error' ? (status.error?.code ?? '') : null
+  return code !== null && !OUTSIDE_THE_APP.has(code) && !NOT_THE_SDK.has(code)
+}
+
+/**
+ * The app's Rayfin version is why it runs on its published backend: a version
+ * older than rayfin-local implements, or a newer one it couldn't start with.
+ */
+function sdkFallback(status: LocalStatus): { version: string | null; newer: boolean } | null {
+  const sdk = unsupportedSdk(status)
+  return sdk && (!sdk.newer || stoppedInTheApp(status)) ? sdk : null
 }
 
 /** The connectors that run only on Fabric, by name. */
@@ -261,15 +286,21 @@ function unsupportedConnectors(status: LocalStatus): string[] {
  * computer's, as a sentence; `null` when the local backend can run the app.
  * rayfin-local says so in `analysis` and `ready` (the SDK, and each
  * connector's `supported`) and with `sdk-unsupported` and
- * `connector-unsupported` warnings.
+ * `connector-unsupported` warnings. A Rayfin version of a newer line runs here
+ * anyway, with {@link localSdkWarning}, unless the app couldn't start with it.
  */
 export function localFallbackReason(status: LocalStatus | null | undefined): string | null {
   if (!status) return null
-  const sdk = unsupportedSdk(status)
+  const sdk = sdkFallback(status)
+  if (sdk?.newer) {
+    return sdk.version
+      ? `This app uses Rayfin ${sdk.version}, which is newer than the Rayfin versions Fabricator runs on this computer and couldn’t start here, so the preview uses your published app’s backend.`
+      : 'This app’s newer Rayfin version couldn’t start on this computer, so the preview uses your published app’s backend.'
+  }
   if (sdk) {
     return sdk.version
-      ? `This app uses Rayfin ${sdk.version}, which Fabricator can’t run on this computer yet, so the preview uses your published app’s backend.`
-      : 'This app’s Rayfin version can’t run on this computer yet, so the preview uses your published app’s backend.'
+      ? `This app uses Rayfin ${sdk.version}, which Fabricator can’t run on this computer, so the preview uses your published app’s backend.`
+      : 'This app’s Rayfin version can’t run on this computer, so the preview uses your published app’s backend.'
   }
   const names = unsupportedConnectors(status)
   if (names.length === 0) return null
@@ -283,8 +314,27 @@ export function localFallbackCode(
   status: LocalStatus | null | undefined
 ): 'sdk-unsupported' | 'connector-unsupported' | null {
   if (!status) return null
-  if (unsupportedSdk(status)) return 'sdk-unsupported'
+  if (sdkFallback(status)) return 'sdk-unsupported'
   return unsupportedConnectors(status).length > 0 ? 'connector-unsupported' : null
+}
+
+/**
+ * A warning for an app that runs on this computer on a Rayfin version the
+ * local backend doesn't implement, as a sentence: one of a newer line runs
+ * here anyway, as it does in rayfin-local, and so does any version of an app
+ * with no published backend to use instead. `null` otherwise.
+ */
+export function localSdkWarning(status: LocalStatus | null | undefined): string | null {
+  const sdk = status ? unsupportedSdk(status) : null
+  if (!sdk) return null
+  if (sdk.newer) {
+    return sdk.version
+      ? `This app uses Rayfin ${sdk.version}, which is newer than the Rayfin versions Fabricator runs on this computer, so some things might not work as expected.`
+      : 'This app uses a newer Rayfin version than Fabricator runs on this computer, so some things might not work as expected.'
+  }
+  return sdk.version
+    ? `This app uses Rayfin ${sdk.version}, which isn’t one of the Rayfin versions Fabricator runs on this computer, so some things might not work as expected.`
+    : 'This app’s Rayfin version isn’t one Fabricator runs on this computer, so some things might not work as expected.'
 }
 
 /**

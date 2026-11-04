@@ -26,8 +26,9 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::services::agent_tools::OUTSIDE_THE_APP;
 use crate::services::paths;
-use crate::types::{LocalStatus, StudioProject};
+use crate::types::{LocalBackendState, LocalStatus, StudioProject};
 
 /// Which set of guidance a chat session gets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -67,16 +68,31 @@ pub fn is_published(project: &StudioProject) -> bool {
 }
 
 /// Whether the local backend reported that it can't run the whole app: its
-/// Rayfin SDK is outside the range rayfin-local implements, or a connector is of
-/// a type that runs only on Fabric, such as Kusto.
+/// Rayfin SDK is outside the range rayfin-local implements (one of a newer line
+/// runs anyway, with a warning, unless the app stopped on a problem it may well
+/// have caused), or a connector is of a type that runs only on Fabric, such as
+/// Kusto. As the renderer's `localFallbackReason`.
 pub fn needs_fabric(local: &LocalStatus) -> bool {
   let reported = |code: &str| local.warnings.iter().chain(local.error.as_ref()).any(|problem| problem.code == code);
   let sdk = local.ready.as_ref().and_then(|r| r.sdk.as_ref()).or_else(|| local.analysis.as_ref().and_then(|a| a.sdk.as_ref()));
   // Without a version the packages aren't installed, which says nothing about the range.
-  let sdk_unsupported = sdk.is_some_and(|sdk| sdk.version.is_some() && !sdk.supported) || reported("sdk-unsupported");
+  let sdk_unsupported = (sdk.is_some_and(|sdk| sdk.version.is_some() && !sdk.supported) || reported("sdk-unsupported"))
+    && (!local.newer_sdk || stopped_in_the_app(local));
   let connector_unsupported =
     local.ready.as_ref().is_some_and(|r| r.features.connectors.iter().any(|c| !c.supported)) || reported("connector-unsupported");
   sdk_unsupported || connector_unsupported
+}
+
+/// The backend stopped on a problem in the app, as a Rayfin SDK of a newer line
+/// can cause: not one outside the app, nor one the preview has the user settle
+/// (a refused data model change, packages to install). As the renderer's
+/// `stoppedInTheApp`.
+pub(crate) fn stopped_in_the_app(local: &LocalStatus) -> bool {
+  local.state == LocalBackendState::Error
+    && local.error.as_ref().is_some_and(|error| {
+      let code = error.code.as_str();
+      !OUTSIDE_THE_APP.contains(&code) && !matches!(code, "port-in-use" | "schema-refused" | "packages-missing")
+    })
 }
 
 /// Root for all Fabricator-injected agent guidance, under the app data dir.
@@ -1245,17 +1261,33 @@ mod tests {
     assert_eq!(local(&project(false, true), &running), Guidance::FabricBacked);
 
     // A published app the local backend can't run all of falls back to its published backend.
-    let newer_sdk = LocalStatus { analysis: Some(crate::types::LocalAnalysis { sdk: sdk(Some("1.37.0"), false), ..Default::default() }), ..Default::default() };
+    let older_sdk = LocalStatus { analysis: Some(crate::types::LocalAnalysis { sdk: sdk(Some("1.35.1"), false), ..Default::default() }), ..Default::default() };
     let sdk_warning = LocalStatus { warnings: vec![warning("sdk-unsupported")], ..Default::default() };
     let mut kusto = running.clone();
     kusto.ready.as_mut().unwrap().features.connectors =
       vec![LocalConnector { name: "logs".into(), kind: "kusto".into(), supported: false }];
     let kusto_warning = LocalStatus { warnings: vec![warning("connector-unsupported")], ..Default::default() };
-    for status in [&newer_sdk, &sdk_warning, &kusto, &kusto_warning] {
+    for status in [&older_sdk, &sdk_warning, &kusto, &kusto_warning] {
       assert!(needs_fabric(status), "{status:?}");
       assert_eq!(local(&project(true, false), status), Guidance::FabricBacked);
       // Never published: nothing to fall back to, so it keeps running locally.
       assert_eq!(local(&project(false, false), status), Guidance::Local);
+    }
+    // An SDK of a newer line runs locally anyway, with a warning.
+    let newer_sdk = LocalStatus {
+      analysis: Some(crate::types::LocalAnalysis { sdk: sdk(Some("1.37.0-alpha.2159"), false), ..Default::default() }),
+      warnings: vec![warning("sdk-unsupported")],
+      newer_sdk: true,
+      ..Default::default()
+    };
+    assert!(!needs_fabric(&newer_sdk));
+    assert_eq!(local(&project(true, false), &newer_sdk), Guidance::Local);
+    // Unless the app stopped on a problem it may well have caused.
+    let stopped = |code: &str| LocalStatus { state: LocalBackendState::Error, error: Some(warning(code)), ..newer_sdk.clone() };
+    assert!(needs_fabric(&stopped("analysis-failed")));
+    assert_eq!(local(&project(true, false), &stopped("analysis-failed")), Guidance::FabricBacked);
+    for unrelated in ["packages-missing", "schema-refused", "node-missing", "port-in-use"] {
+      assert!(!needs_fabric(&stopped(unrelated)), "{unrelated}");
     }
     // Packages that aren't installed say nothing about the version.
     let not_installed = LocalStatus { analysis: Some(crate::types::LocalAnalysis { sdk: sdk(None, false), ..Default::default() }), ..Default::default() };

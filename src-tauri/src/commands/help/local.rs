@@ -88,7 +88,8 @@ fn sign_in(status: &LocalStatus) -> Option<String> {
 }
 
 /// Why the local backend can't run all of this app, if it can't: an SDK
-/// outside its supported range, and connectors that run only on Fabric.
+/// outside its supported range (one of a newer line runs anyway, unless the
+/// app couldn't start with it), and connectors that run only on Fabric.
 fn limits(status: &LocalStatus) -> Vec<String> {
   let mut out = Vec::new();
   let sdk = status
@@ -98,7 +99,8 @@ fn limits(status: &LocalStatus) -> Vec<String> {
     .or_else(|| status.analysis.as_ref().and_then(|a| a.sdk.clone()));
   let warning = status.warnings.iter().find(|w| w.code == "sdk-unsupported");
   let detail = |key: &str| warning.and_then(|w| w.details.as_ref()).and_then(|d| d.get(key)).and_then(Value::as_str);
-  if sdk.as_ref().is_some_and(|s| s.version.is_some() && !s.supported) || warning.is_some() {
+  let runs_anyway = status.newer_sdk && !crate::services::agent_skills::stopped_in_the_app(status);
+  if !runs_anyway && (sdk.as_ref().is_some_and(|s| s.version.is_some() && !s.supported) || warning.is_some()) {
     let version = sdk.as_ref().and_then(|s| s.version.clone()).or_else(|| detail("version").map(str::to_string));
     let version = version.map(|v| format!(" ({})", quote(&v))).unwrap_or_default();
     let range = detail("supported").map(|r| format!(" ({})", quote(r))).unwrap_or_default();
@@ -201,6 +203,11 @@ present: it outranks anything older in the journal. Read its output with `help_l
   if let Some(sdk) = sdk {
     line(match (&sdk.version, sdk.supported) {
       (Some(v), true) => format!("Rayfin packages: {}, which the local backend supports.", quote(v)),
+      (Some(v), false) if status.newer_sdk => format!(
+        "Rayfin packages: {}, newer than the versions the local backend supports. It runs the app anyway, and the \
+         preview warns that some things might not work as expected.",
+        quote(v)
+      ),
       (Some(v), false) => format!("Rayfin packages: {}, which the local backend does not support.", quote(v)),
       (None, _) => "Rayfin packages: not installed.".into(),
     });
@@ -452,13 +459,13 @@ mod tests {
   fn what_only_fabric_runs_explains_the_fallback() {
     let mut status = running();
     let ready = status.ready.as_mut().unwrap();
-    ready.sdk = Some(LocalSdk { version: Some("1.38.0".into()), supported: false });
+    ready.sdk = Some(LocalSdk { version: Some("1.35.1".into()), supported: false });
     ready.features.connectors = vec![
       LocalConnector { name: "sales".into(), kind: "fabric-semanticmodel".into(), supported: true },
       LocalConnector { name: "logs".into(), kind: "kusto".into(), supported: false },
     ];
     let published = describe(&status, true);
-    assert!(published.contains("1.38.0, which the local backend does not support"));
+    assert!(published.contains("1.35.1, which the local backend does not support"));
     assert!(
       published.contains("connectors that run only on Microsoft Fabric: logs (kusto). The app has been published"),
       "only the connector Fabric alone runs is a limit: {published}"
@@ -466,6 +473,16 @@ mod tests {
     assert!(published.contains("the preview can use the published app's backend instead"));
     let never = describe(&status, false);
     assert!(never.contains("never been published, so there is no published backend to fall back to"));
+  }
+
+  #[test]
+  fn an_sdk_of_a_newer_line_runs_here_with_a_warning() {
+    let mut status = running();
+    status.ready.as_mut().unwrap().sdk = Some(LocalSdk { version: Some("1.37.0-alpha.2159".into()), supported: false });
+    status.newer_sdk = true;
+    let text = describe(&status, true);
+    assert!(text.contains("1.37.0-alpha.2159, newer than the versions the local backend supports. It runs the app anyway"));
+    assert!(!text.contains("fall back"), "it isn't a reason to use the published backend: {text}");
   }
 
   #[test]

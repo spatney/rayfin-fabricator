@@ -4987,6 +4987,12 @@ export interface LocalStatus {
   config: LocalConfigChanged | null
   /** This run's warnings, oldest first. */
   warnings: LocalProblem[]
+  /**
+   * Set by Fabricator: the app's Rayfin SDK, which rayfin-local doesn't
+   * implement (`sdk-unsupported`), is of a newer line than the one it does. It
+   * runs the app anyway, as rayfin-local does; some things may not work.
+   */
+  newerSdk: boolean
   /** The last error. With `state: 'error'`, why the backend isn't running. */
   error: LocalProblem | null
   stopped: LocalStopped | null

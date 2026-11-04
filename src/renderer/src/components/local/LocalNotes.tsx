@@ -35,6 +35,19 @@ export function FallbackNote({ reason }: { reason: string }): JSX.Element {
 }
 
 /**
+ * The app runs on this computer on a Rayfin version the local backend doesn't
+ * implement, such as a newer one: some things might not work as expected.
+ */
+export function SdkWarningNote({ warning }: { warning: string }): JSX.Element {
+  return (
+    <section className="local-note" aria-label="Rayfin version">
+      <Codicon name="warning" className="local-note-icon local-note-icon--warn" />
+      <p className="local-note-text">{warning}</p>
+    </section>
+  )
+}
+
+/**
  * A data model change the running backend refused because it would delete
  * local data: the app keeps the previous data model until the user decides.
  */

@@ -277,6 +277,10 @@
   font-size: 14px;
 }
 
+.local-note-icon--warn {
+  color: var(--pending);
+}
+
 .local-note-text {
   flex: 1;
   min-width: 0;

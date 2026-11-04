@@ -102,9 +102,11 @@ without it. Fix: sign in to Azure (offer `open-accounts`).\n\
 Fabric, such as Kusto (`details.name`, `details.type`), so calls to it fail on this computer. To \
 use it, the app must be published; once it is, the preview uses the published app's backend.\n\
 - `sdk-unsupported`: the app's Rayfin packages are a version the local backend doesn't support \
-(`details.version`, `details.supported`). It may run, but parts can misbehave, and a published \
-app falls back to the published backend. Fix: move the app to a supported Rayfin version, or \
-publish it.\n\
+(`details.version`, `details.supported`). A newer version runs on this computer anyway, and the \
+preview warns that some things might not work as expected; if the app can't start with it, a \
+published app falls back to the published backend. An older one may run too, but parts can \
+misbehave, and a published app falls back to the published backend. Fix: move the app to a \
+supported Rayfin version, or publish it.\n\
 - `secret-missing`: a secret the app declares has no value on this computer (`details.name`). \
 Fix: give it a local value in the Secrets view.\n\
 - `anonymous-role`: entities let anonymous users in. That works locally, but most Fabric tenants \

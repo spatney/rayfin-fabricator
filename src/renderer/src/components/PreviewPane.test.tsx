@@ -1480,6 +1480,7 @@ function localBackend(patch: Partial<LocalStatus>): LocalBackend {
     vite: null,
     config: null,
     warnings: [],
+    newerSdk: false,
     error: null,
     stopped: null,
     crashes: 0,
@@ -1974,5 +1975,24 @@ describe('PreviewPane on this computer', () => {
     expect(screen.getByRole('region', { name: 'Preview backend' }).textContent).toBe(reason)
     expect(lastShowUrl(e)?.url).toBe('https://p1.example.app/')
     expect(screen.queryByRole('group', { name: 'App to show' })).toBeNull()
+  })
+
+  it('warns that some things might not work on a newer Rayfin version, above the app here', async () => {
+    const newer = runningLocally({
+      ready: { ...localReady, sdk: { version: '1.37.0-alpha.2159', supported: false } },
+      newerSdk: true
+    })
+    const project = makeProject('p1')
+    const { rerender } = render(<OnThisComputer project={project} local={newer} />)
+    await settle(e)
+    expect(lastShowUrl(e)?.url).toBe(LOCAL_APP)
+    expect(screen.getByRole('region', { name: 'Rayfin version' }).textContent).toBe(
+      'This app uses Rayfin 1.37.0-alpha.2159, which is newer than the Rayfin versions Fabricator runs on this computer, so some things might not work as expected.'
+    )
+    // The published app runs on its own backend: nothing to warn about there.
+    rerender(<OnThisComputer project={project} local={newer} view="published" />)
+    expect(screen.queryByRole('region', { name: 'Rayfin version' })).toBeNull()
+    rerender(<OnThisComputer project={project} local={runningLocally()} />)
+    expect(screen.queryByRole('region', { name: 'Rayfin version' })).toBeNull()
   })
 })
