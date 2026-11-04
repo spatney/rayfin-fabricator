@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ExportPreview, ExportResult, StudioProject, ZipProgressEvent } from '@shared/ipc'
 import { OverlayProvider } from '../overlay'
 import { drawAppIcon } from '../appIcon'
@@ -96,7 +96,10 @@ describe('ExportProjectModal', () => {
     const { onClose } = renderModal()
 
     await screen.findByRole('checkbox', { name: 'Version history' })
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Export…' }))
+    // Focus moves in an effect, which can run a moment after the checkbox appears.
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Export…' }))
+    )
     expect(box('App code').checked).toBe(true)
     expect(box('App code').disabled).toBe(true)
     expect(screen.getByText('214 files · 1.3 MB')).toBeTruthy()

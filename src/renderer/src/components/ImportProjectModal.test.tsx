@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ImportPreview, ImportResult, SecurityReport, ZipProgressEvent } from '@shared/ipc'
 import { OverlayProvider } from '../overlay'
 import ImportProjectModal from './ImportProjectModal'
@@ -86,7 +86,10 @@ describe('ImportProjectModal', () => {
     expect(facts.getByText('OPENAI_KEY')).toBeTruthy()
     expect(screen.getByText('D:\\apps\\sales')).toBeTruthy()
     expect(screen.getByText(/Only import projects from people you trust/)).toBeTruthy()
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Import' }))
+    // Focus moves in an effect, which can run a moment after the facts appear.
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Import' }))
+    )
     expect(api.projects.importProject).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Import' }))
