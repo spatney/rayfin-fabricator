@@ -2744,6 +2744,15 @@ pub struct DirEntryInfo {
   pub dir: bool,
 }
 
+/// A file or folder dropped on the chat composer, or picked on this computer, to reference.
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPathInfo {
+  /// As dropped or picked: an absolute path.
+  pub path: String,
+  pub dir: bool,
+}
+
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct FileContent {

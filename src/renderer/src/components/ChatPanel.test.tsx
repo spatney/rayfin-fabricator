@@ -6,7 +6,8 @@ import type {
   ChatAdvisorSummary,
   ChatEventEnvelope,
   ChatPlanArtifact,
-  ChatPlanQuestion
+  ChatPlanQuestion,
+  FileDropEvent
 } from '@shared/ipc'
 import { makeProject } from '../../test/harness'
 import { deferred } from '../../test/deferred'
@@ -22,6 +23,11 @@ import { setPendingData } from '../fabricData'
 vi.mock('../monaco', () => ({}))
 vi.mock('@monaco-editor/react', () => ({
   default: () => <textarea data-testid="plan-editor" />
+}))
+// jsdom has no canvas to re-encode an attached image with.
+vi.mock('./chat/images', async (original) => ({
+  ...(await original<typeof import('./chat/images')>()),
+  toPngAndThumb: async (src: string) => ({ png: src, thumb: `${src}#thumb` })
 }))
 
 /**
@@ -1436,6 +1442,131 @@ describe('ChatPanel @ references outside the project', () => {
         'To reference something outside the project, type ../ or a full path.'
       )
     ).toBeTruthy()
+  })
+
+  it('keeps the option the arrow keys reach in view, and leaves the list be on hover', async () => {
+    installApi()
+    const entries = Array.from({ length: 30 }, (_, i) => ({
+      name: `note-${String(i).padStart(2, '0')}.md`,
+      dir: false
+    }))
+    ;(window.api.projects.files as unknown as Record<string, unknown>).listDir = vi.fn(
+      async () => ({ dir: 'C:\\code', entries })
+    )
+    const shown: string[] = []
+    const proto = Element.prototype as unknown as { scrollIntoView?: unknown }
+    const had = proto.scrollIntoView
+    proto.scrollIntoView = function (this: Element) {
+      shown.push(this.querySelector('.mention-name')?.textContent ?? '')
+    }
+    try {
+      render(<ChatPanel project={makeProject('p1')} messages={[]} onChange={vi.fn()} draft="" />)
+      const composer = screen.getByPlaceholderText(PLACEHOLDER)
+      fireEvent.change(composer, { target: { value: '@../' } })
+      await waitFor(async () => expect(await names()).toHaveLength(31))
+
+      fireEvent.keyDown(composer, { key: 'ArrowDown' })
+      fireEvent.keyDown(composer, { key: 'ArrowDown' })
+      expect(shown).toEqual(['note-00.md', 'note-01.md'])
+      fireEvent.mouseEnter(screen.getAllByRole('option')[20])
+      expect(shown, 'hovering doesn’t scroll').toHaveLength(2)
+      fireEvent.keyDown(composer, { key: 'ArrowUp' })
+      expect(shown[shown.length - 1]).toBe('note-18.md')
+    } finally {
+      proto.scrollIntoView = had
+    }
+  })
+})
+
+describe('ChatPanel files and folders from this computer', () => {
+  /** The composer, with the window's drops and the system's file dialog faked. */
+  function installComputer(picked: string[] = []) {
+    const api = installApi() as unknown as {
+      chat: Record<string, ReturnType<typeof vi.fn>>
+      screenshot: Record<string, ReturnType<typeof vi.fn>>
+      onFileDrop?: unknown
+    }
+    let listener: ((event: FileDropEvent) => void) | undefined
+    api.onFileDrop = vi.fn((cb: (event: FileDropEvent) => void) => {
+      listener = cb
+      return () => {
+        listener = undefined
+      }
+    })
+    api.chat.pickPaths = vi.fn(async () => picked)
+    api.chat.inspectPaths = vi.fn(async (paths: string[]) =>
+      paths.map((path) => ({ path, dir: !/\.\w+$/.test(path) }))
+    )
+    api.screenshot.read = vi.fn(async () => 'data:image/png;base64,QUJD')
+    const drag = (event: FileDropEvent): void => act(() => listener?.(event))
+    return { api, drag }
+  }
+
+  /** What's under the pointer: the composer left of x = 100, the page elsewhere. */
+  function pointAtComposer(): void {
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: (x: number) => (x < 100 ? screen.getByPlaceholderText(PLACEHOLDER) : document.body)
+    })
+  }
+  afterEach(() => {
+    delete (document as unknown as { elementFromPoint?: unknown }).elementFromPoint
+  })
+
+  it('references the files and folders dropped on the composer, and attaches images', async () => {
+    const { api, drag } = installComputer()
+    const onAddAttachment = vi.fn()
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[]}
+        onChange={vi.fn()}
+        draft="Use"
+        onAddAttachment={onAddAttachment}
+      />
+    )
+    pointAtComposer()
+    const composer = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    const paths = [
+      'C:\\Users\\me\\Design docs',
+      'C:\\Users\\me\\brief.md',
+      'C:\\Users\\me\\mockup.png'
+    ]
+
+    drag({ type: 'enter', paths, point: { x: 10, y: 10 } })
+    expect(screen.getByText('Drop to attach')).toBeTruthy()
+    drag({ type: 'over', paths: [], point: { x: 500, y: 10 } })
+    expect(screen.queryByText('Drop to attach')).toBeNull()
+    drag({ type: 'drop', paths, point: { x: 500, y: 10 } })
+    expect(api.chat.inspectPaths, 'dropped elsewhere').not.toHaveBeenCalled()
+
+    drag({ type: 'drop', paths, point: { x: 10, y: 10 } })
+    await waitFor(() =>
+      expect(composer.value).toBe('Use @"C:\\Users\\me\\Design docs\\" @C:\\Users\\me\\brief.md ')
+    )
+    await waitFor(() =>
+      expect(onAddAttachment).toHaveBeenCalledWith({
+        path: 'C:/tmp/shot.png',
+        thumb: 'data:image/png;base64,QUJD#thumb'
+      })
+    )
+    expect(api.screenshot.read).toHaveBeenCalledWith('C:\\Users\\me\\mockup.png')
+    expect(screen.queryByText('Drop to attach')).toBeNull()
+  })
+
+  it('references folders picked in the system’s file dialog at the caret', async () => {
+    const { api } = installComputer(['C:\\Users\\me\\Team notes', 'C:/projects/p1/src/data'])
+    render(
+      <ChatPanel project={makeProject('p1')} messages={[]} onChange={vi.fn()} draft="Read  first" />
+    )
+    const composer = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
+    composer.setSelectionRange(5, 5)
+    fireEvent.click(screen.getByRole('button', { name: 'Add images, files or data' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Folder on this computer…' }))
+    await waitFor(() =>
+      expect(composer.value).toBe('Read @"C:\\Users\\me\\Team notes\\" @./src/data/ first')
+    )
+    expect(api.chat.pickPaths).toHaveBeenCalledWith(true)
   })
 })
 

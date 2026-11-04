@@ -480,6 +480,8 @@ pub fn run() {
       commands::chat::chat_resolve_plan,
       commands::chat::chat_resolve_question,
       commands::chat::chat_export_plan,
+      commands::chat::chat_pick_paths,
+      commands::chat::chat_inspect_paths,
       commands::chat::chat_history,
       commands::chat::chat_save_history,
       commands::chat::chat_set_options,
@@ -493,6 +495,7 @@ pub fn run() {
       commands::suggest::chat_suggest_cancel,
       // screenshot
       commands::screenshot::screenshot_save,
+      commands::screenshot::screenshot_read,
       commands::screenshot::screenshot_cleanup,
       // deploy
       commands::deploy::deploy_run,

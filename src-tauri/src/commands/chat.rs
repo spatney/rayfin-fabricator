@@ -45,8 +45,8 @@ use crate::services::store;
 use crate::services::usage;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
-  ChatEvent, ChatFusion, ChatFusionModel, ChatMessage, ChatOptions, ChatPlanDependency, ChatPlanTodo, ChatToolCall,
-  ChatToolState, ChatTurnResult, ChatUsage, CopilotModel, CopilotQuota, SteerResult, StudioProject,
+  ChatEvent, ChatFusion, ChatFusionModel, ChatMessage, ChatOptions, ChatPathInfo, ChatPlanDependency, ChatPlanTodo,
+  ChatToolCall, ChatToolState, ChatTurnResult, ChatUsage, CopilotModel, CopilotQuota, SteerResult, StudioProject,
 };
 
 /// Up to this many copilot invocations per turn on a transient pre-work failure.
@@ -1587,6 +1587,32 @@ pub async fn chat_export_plan(app: AppHandle, suggested_name: String, content: S
   Ok(Some(path.display().to_string()))
 }
 
+/// Let the user pick files, or folders, on this computer with the system's file
+/// dialog, to reference in a message: the composer puts an `@` reference to each
+/// in the message. Empty when the dialog is closed.
+#[tauri::command]
+pub async fn chat_pick_paths(app: AppHandle, directory: bool) -> Vec<String> {
+  let title = if directory { "Choose folders for Copilot to read" } else { "Choose files for Copilot to read" };
+  crate::commands::help::help_pick_paths(app, directory, Some(title.into())).await
+}
+
+/// Which of `paths`, dropped on the composer or picked on this computer, are
+/// folders. Paths that don't exist are left out.
+#[tauri::command]
+pub async fn chat_inspect_paths(paths: Vec<String>) -> Vec<ChatPathInfo> {
+  tokio::task::spawn_blocking(move || inspect_paths(&paths)).await.unwrap_or_default()
+}
+
+fn inspect_paths(paths: &[String]) -> Vec<ChatPathInfo> {
+  paths
+    .iter()
+    .filter_map(|path| {
+      let meta = std::fs::metadata(path).ok()?;
+      Some(ChatPathInfo { path: path.clone(), dir: meta.is_dir() })
+    })
+    .collect()
+}
+
 #[tauri::command]
 pub fn chat_set_options(project_id: String, options: ChatOptions) {
   let choice = ModelChoice::new(options.model, options.effort, options.auto_tier, options.context_tier);
@@ -2288,5 +2314,19 @@ mod tests {
     assert_eq!(sanitize_export_name("  "), "plan");
     assert_eq!(sanitize_export_name("💥💥"), "plan");
     assert_eq!(sanitize_export_name("normal-name_1"), "normal-name_1");
+  }
+
+  #[test]
+  fn dropped_paths_say_which_are_folders_and_skip_what_is_gone() {
+    let dir = std::env::temp_dir().join(format!("fabricator-drop-test-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(dir.join("Design docs")).unwrap();
+    std::fs::write(dir.join("brief.md"), "# Brief").unwrap();
+    let at = |name: &str| dir.join(name).to_string_lossy().to_string();
+    let paths = vec![at("Design docs"), at("brief.md"), at("missing.md")];
+    assert_eq!(
+      inspect_paths(&paths),
+      vec![ChatPathInfo { path: at("Design docs"), dir: true }, ChatPathInfo { path: at("brief.md"), dir: false }]
+    );
+    std::fs::remove_dir_all(dir).unwrap();
   }
 }

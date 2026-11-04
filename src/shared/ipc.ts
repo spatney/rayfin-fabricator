@@ -2383,6 +2383,23 @@ export interface DirListing {
   error?: string
 }
 
+/** A file or folder dropped on the chat composer, or picked on this computer, to reference. */
+export interface ChatPathInfo {
+  /** As dropped or picked: an absolute path. */
+  path: string
+  dir: boolean
+}
+
+/** Files and folders dragged onto Fabricator's window from the OS ({@link RayfinStudioApi.onFileDrop}). */
+export interface FileDropEvent {
+  /** `enter` and `over` as the drag moves over the window, `drop` when it's let go there, `leave` when it leaves or is cancelled. */
+  type: 'enter' | 'over' | 'drop' | 'leave'
+  /** What's dragged, as absolute paths: with `enter` and `drop`, else empty. */
+  paths: string[]
+  /** Where the pointer is, in the page's coordinates (`clientX`/`clientY`); `null` with `leave`. */
+  point: { x: number; y: number } | null
+}
+
 /** The result of reading one project file for the viewer. */
 export interface FileContent {
   path: string
@@ -3681,6 +3698,13 @@ export interface RayfinStudioApi {
    * `background` (`#rrggbb`) is that screen's colour. Later calls do nothing.
    */
   revealWindow: (background?: string) => Promise<void>
+  /**
+   * Files and folders dragged onto Fabricator's window from the OS. The page
+   * gets no drag events of its own for them (the window takes the drop to
+   * learn their paths), so a drop target hit-tests `point` itself. Returns an
+   * unsubscribe fn.
+   */
+  onFileDrop: (cb: (event: FileDropEvent) => void) => () => void
 
   /** In-app auto-update (Tauri updater, backed by GitHub Releases). */
   updates: {
@@ -4346,11 +4370,26 @@ export interface RayfinStudioApi {
     suggest: (projectId: string) => Promise<SuggestionSet>
     /** Cancel an in-flight suggestion generation (e.g. the user started typing). */
     cancelSuggest: (projectId: string) => Promise<boolean>
+    /**
+     * Let the user pick files, or folders, on this computer with the system's
+     * file dialog, to reference in a message. Empty when the dialog is closed.
+     */
+    pickPaths: (directory: boolean) => Promise<string[]>
+    /**
+     * Which of `paths`, dropped on the composer or picked on this computer, are
+     * folders. Paths that don't exist are left out.
+     */
+    inspectPaths: (paths: string[]) => Promise<ChatPathInfo[]>
   }
 
   screenshot: {
     /** Persist a captured PNG (data URL) to a temp file; returns its path. */
     save: (dataUrl: string) => Promise<string>
+    /**
+     * Read an image file on this computer (PNG, JPEG, GIF, WebP or BMP, at
+     * most 20 MB) as a data URL, to attach it like a pasted one.
+     */
+    read: (path: string) => Promise<string>
     /** Delete temp screenshot files (best-effort; only within Studio's temp dir). */
     cleanup: (paths: string[]) => Promise<void>
   }

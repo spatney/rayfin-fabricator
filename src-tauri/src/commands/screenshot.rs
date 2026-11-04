@@ -2,13 +2,16 @@
 //! `src/main/services/screenshot.ts`. Deferred for the MVP per the migration
 //! plan, but the save/cleanup plumbing is implemented so chat attachments work.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use base64::Engine;
 
 use crate::services::paths;
 
 const PENDING: &str = "Screenshot capture is deferred in the Tauri build.";
+
+/// The most an image read to attach may weigh.
+const MAX_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
 
 /// Persist a PNG data URL to a temp file under Studio's shots dir; returns its path.
 #[tauri::command]
@@ -24,6 +27,31 @@ pub async fn screenshot_save(data_url: String) -> Result<String, String> {
   let path = dir.join(name);
   std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
   Ok(path.to_string_lossy().to_string())
+}
+
+/// An image file on this computer, dropped on or picked in the chat composer,
+/// as a data URL: the renderer attaches it as it does a pasted image.
+#[tauri::command]
+pub async fn screenshot_read(path: String) -> Result<String, String> {
+  tokio::task::spawn_blocking(move || read_image(Path::new(&path))).await.map_err(|e| e.to_string())?
+}
+
+fn read_image(path: &Path) -> Result<String, String> {
+  let extension = path.extension().and_then(|e| e.to_str()).unwrap_or_default().to_ascii_lowercase();
+  let mime = match extension.as_str() {
+    "png" => "image/png",
+    "jpg" | "jpeg" => "image/jpeg",
+    "gif" => "image/gif",
+    "webp" => "image/webp",
+    "bmp" => "image/bmp",
+    _ => return Err("Only PNG, JPEG, GIF, WebP and BMP images can be attached.".into()),
+  };
+  let size = std::fs::metadata(path).map_err(|e| format!("Couldn't read the image: {e}"))?.len();
+  if size > MAX_IMAGE_BYTES {
+    return Err("The image is too large to attach: the limit is 20 MB.".into());
+  }
+  let bytes = std::fs::read(path).map_err(|e| format!("Couldn't read the image: {e}"))?;
+  Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
 }
 
 /// Best-effort delete of temp screenshot files (only within Studio's shots dir).
@@ -76,6 +104,18 @@ mod tests {
     assert!(owned_capture(&canonical, &shots.join("shot-1.png")).is_some());
     assert!(owned_capture(&canonical, &shots.join("..").join("assets").join("original.bin")).is_none());
     assert_eq!(std::fs::read(assets.join("original.bin")).unwrap(), b"persistent");
+    std::fs::remove_dir_all(dir).unwrap();
+  }
+
+  #[test]
+  fn only_images_are_read_to_attach() {
+    let dir = std::env::temp_dir().join(format!("fabricator-read-image-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("Shot.PNG"), b"\x89PNG").unwrap();
+    std::fs::write(dir.join("notes.txt"), b"secret").unwrap();
+    assert_eq!(read_image(&dir.join("Shot.PNG")).unwrap(), "data:image/png;base64,iVBORw==");
+    assert!(read_image(&dir.join("notes.txt")).unwrap_err().contains("Only PNG"));
+    assert!(read_image(&dir.join("missing.jpg")).unwrap_err().starts_with("Couldn't read the image"));
     std::fs::remove_dir_all(dir).unwrap();
   }
 }

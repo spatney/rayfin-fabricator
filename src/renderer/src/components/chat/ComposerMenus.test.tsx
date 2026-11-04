@@ -7,7 +7,13 @@ import { offeredPlugins } from './plugins'
 afterEach(cleanup)
 
 function renderMenu(over: { imageNote?: string } = {}) {
-  const handlers = { onImage: vi.fn(), onConnectData: vi.fn(), onReferenceFile: vi.fn() }
+  const handlers = {
+    onImage: vi.fn(),
+    onConnectData: vi.fn(),
+    onReferenceFile: vi.fn(),
+    onBrowseFiles: vi.fn(),
+    onBrowseFolders: vi.fn()
+  }
   render(<AddMenu attaching={false} imageNote={over.imageNote} {...handlers} />)
   const open = (): HTMLElement => {
     fireEvent.click(screen.getByRole('button', { name: 'Add images, files or data' }))
@@ -20,7 +26,17 @@ describe('AddMenu', () => {
   it('opens the kinds of Fabric data beside the menu, each opening the data picker on its kind', () => {
     const { open, onConnectData } = renderMenu()
     const menu = open()
-    expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['ImageOr paste', 'File@', 'Fabric data'])
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((i) => i.textContent)
+    ).toEqual([
+      'ImageOr paste',
+      'File@',
+      'Files on this computer…',
+      'Folder on this computer…',
+      'Fabric data'
+    ])
 
     fireEvent.click(within(menu).getByRole('menuitem', { name: /Fabric data/ }))
     const kinds = screen.getByRole('menu', { name: 'Fabric data' })
@@ -45,16 +61,23 @@ describe('AddMenu', () => {
     expect(onConnectData).toHaveBeenLastCalledWith()
   })
 
-  it('says why images can’t be added, and references a file', () => {
-    const { open, onImage, onReferenceFile } = renderMenu({ imageNote: 'o3-mini can’t read images' })
+  it('says why images can’t be added, references a file, and browses this computer', () => {
+    const { open, onImage, onReferenceFile, onBrowseFiles, onBrowseFolders } = renderMenu({
+      imageNote: 'o3-mini can’t read images'
+    })
     const menu = open()
     const image = within(menu).getByRole('menuitem', { name: /Image/ }) as HTMLButtonElement
     expect(image.disabled).toBe(true)
     expect(image.textContent).toContain('o3-mini can’t read images')
     fireEvent.click(image)
     expect(onImage).not.toHaveBeenCalled()
-    fireEvent.click(within(menu).getByRole('menuitem', { name: /File/ }))
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^File\s*@$/ }))
     expect(onReferenceFile).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(open()).getByRole('menuitem', { name: 'Files on this computer…' }))
+    expect(onBrowseFiles).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(open()).getByRole('menuitem', { name: 'Folder on this computer…' }))
+    expect(onBrowseFolders).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu'), 'each closes the menu').toBeNull()
   })
 })
 

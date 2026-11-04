@@ -1712,6 +1712,8 @@ function ComposerPicker({
                   onImage={noop}
                   onConnectData={noop}
                   onReferenceFile={noop}
+                  onBrowseFiles={noop}
+                  onBrowseFolders={noop}
                 />
                 <PluginsMenu
                   plugins={offeredPlugins({ workIq, mcpServers: Boolean(servers) })}

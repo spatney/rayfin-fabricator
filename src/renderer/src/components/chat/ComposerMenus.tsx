@@ -25,16 +25,19 @@ const DATA_HINT: Record<DataKind, string> = {
 }
 
 /**
- * The composer's "+" menu, after the model picker: an image, a file, or Fabric
- * data, whose kinds open in a list beside it. Each kind opens the data picker on
- * that kind; "Browse all" opens it on every kind.
+ * The composer's "+" menu, after the model picker: an image, a project file,
+ * files or a folder anywhere on this computer (the system's file dialog), or
+ * Fabric data, whose kinds open in a list beside it. Each kind opens the data
+ * picker on that kind; "Browse all" opens it on every kind.
  */
 export function AddMenu({
   attaching,
   imageNote,
   onImage,
   onConnectData,
-  onReferenceFile
+  onReferenceFile,
+  onBrowseFiles,
+  onBrowseFolders
 }: {
   attaching: boolean
   /** Why images can't be added (the chosen model can't read them). */
@@ -43,6 +46,10 @@ export function AddMenu({
   /** Open the data picker on one kind of data, or on every kind. */
   onConnectData: (kind?: DataKind) => void
   onReferenceFile: () => void
+  /** Pick files on this computer with the system's file dialog. */
+  onBrowseFiles: () => void
+  /** Pick folders on this computer with the system's file dialog. */
+  onBrowseFolders: () => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const [fly, setFly] = useState(false)
@@ -188,6 +195,24 @@ export function AddMenu({
                 <span className="am-hint">
                   <kbd>@</kbd>
                 </span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="mp-item"
+                onClick={() => pick(onBrowseFiles)}
+              >
+                <Codicon name="files" className="am-icon" />
+                <span className="mp-item-label am-label">Files on this computer…</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="mp-item"
+                onClick={() => pick(onBrowseFolders)}
+              >
+                <Codicon name="folder-opened" className="am-icon" />
+                <span className="mp-item-label am-label">Folder on this computer…</span>
               </button>
               <div className="mp-sep" role="separator" />
               <button

@@ -10,7 +10,9 @@
  */
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { serializePreviewMutations } from './previewSurface'
+import { isMac } from './platform'
 import {
   IpcChannels,
   type AdvisorModelChoice,
@@ -47,6 +49,7 @@ import {
   type DeleteProgressEvent,
   type DesignVariationsOptions,
   type ExportOptions,
+  type FileDropEvent,
   type RayfinStudioApi,
   type ReasoningEffort,
   type SecurityEventEnvelope,
@@ -79,6 +82,40 @@ function subscribe<T>(name: string, cb: (payload: T) => void): () => void {
     if (cancelled) fn()
     else unlisten = fn
   })
+  return () => {
+    cancelled = true
+    unlisten?.()
+    unlisten = undefined
+  }
+}
+
+/**
+ * Where a drag from the OS is, in the page's coordinates. Windows reports it in
+ * physical pixels; macOS already in points, which the page uses as they are.
+ */
+function dropPoint(position: { x: number; y: number }): { x: number; y: number } {
+  const scale = isMac() ? 1 : window.devicePixelRatio || 1
+  return { x: position.x / scale, y: position.y / scale }
+}
+
+/** Files and folders dragged onto the window from the OS, through the webview's drop handler. */
+function subscribeFileDrop(cb: (event: FileDropEvent) => void): () => void {
+  let unlisten: UnlistenFn | undefined
+  let cancelled = false
+  void getCurrentWebview()
+    .onDragDropEvent(({ payload }) => {
+      if (payload.type === 'leave') cb({ type: 'leave', paths: [], point: null })
+      else
+        cb({
+          type: payload.type,
+          paths: payload.type === 'over' ? [] : payload.paths,
+          point: dropPoint(payload.position)
+        })
+    })
+    .then((fn) => {
+      if (cancelled) fn()
+      else unlisten = fn
+    })
   return () => {
     cancelled = true
     unlisten?.()
@@ -134,6 +171,7 @@ export const api: RayfinStudioApi = {
   openInEditor: (id: string) => invoke('open_in_editor', { id }),
   relaunch: () => invoke('relaunch'),
   revealWindow: (background?: string) => invoke('window_reveal', { background: background ?? null }),
+  onFileDrop: subscribeFileDrop,
 
   updates: {
     check: () => invoke('update_check'),
@@ -420,11 +458,14 @@ export const api: RayfinStudioApi = {
     usage: (projectId: string) => invoke('chat_usage', { projectId }),
     quota: () => invoke('chat_quota'),
     suggest: (projectId: string) => invoke('chat_suggest', { projectId }),
-    cancelSuggest: (projectId: string) => invoke('chat_suggest_cancel', { projectId })
+    cancelSuggest: (projectId: string) => invoke('chat_suggest_cancel', { projectId }),
+    pickPaths: (directory: boolean) => invoke('chat_pick_paths', { directory }),
+    inspectPaths: (paths: string[]) => invoke('chat_inspect_paths', { paths })
   },
 
   screenshot: {
     save: (dataUrl: string) => invoke('screenshot_save', { dataUrl }),
+    read: (path: string) => invoke('screenshot_read', { path }),
     cleanup: (paths: string[]) => invoke('screenshot_cleanup', { paths })
   },
 

@@ -1,4 +1,5 @@
 import type { FileNode } from '@shared/ipc'
+import { projectRelative } from './paths'
 
 /** A file the composer can reference via @-mention. */
 export interface MentionFile {
@@ -117,4 +118,22 @@ export function rankEntries(entries: readonly DirEntry[], partial: string, limit
 export function mentionText(path: string, quoted = false, open = false): string {
   if (!quoted && !/\s/.test(path)) return `@${path}`
   return `@"${path}${open ? '' : '"'}`
+}
+
+/**
+ * The reference to a file or folder on this computer, dropped on the composer
+ * or picked in the system's file dialog: inside the project, its path there (a
+ * folder as `./folder/`, as the picker spells it); outside, the full path. A
+ * folder ends with a separator.
+ */
+export function pathReference(path: string, projectRoot: string, dir: boolean): string {
+  const rel = projectRelative(path, projectRoot)
+  if (rel !== null) return mentionText(dir ? (rel ? `./${rel}/` : './') : rel)
+  const sep = path.includes('\\') ? '\\' : '/'
+  return mentionText(dir && !/[\\/]$/.test(path) ? `${path}${sep}` : path)
+}
+
+/** An image the composer attaches rather than references: PNG, JPEG, GIF, WebP or BMP. */
+export function isImagePath(path: string): boolean {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(path)
 }

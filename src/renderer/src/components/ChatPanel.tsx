@@ -7,7 +7,6 @@ import {
   type KeyboardEvent,
   type ChangeEvent,
   type ClipboardEvent,
-  type DragEvent,
   type JSX,
   type ReactNode,
 } from 'react'
@@ -16,6 +15,7 @@ import {
   type ChatDataRef,
   type ChatMigrationRef,
   type ChatMode,
+  type ChatPathInfo,
   type ChatPlanArtifact,
   type ChatPluginId,
   type ChatTurnResult,
@@ -67,8 +67,10 @@ import { ChatEventBuffer, isStreamingEvent } from './chat/eventCoalescer'
 import {
   activeMention,
   flattenFiles,
+  isImagePath,
   isPathQuery,
   mentionText,
+  pathReference,
   rankEntries,
   rankFiles,
   splitPathQuery,
@@ -81,6 +83,7 @@ import { tryAgainPrompt } from './chat/prompts'
 import type { ChatDesignSummary, DesignItem } from '@shared/design'
 import type { DesignTurn } from '../design/useDesignSession'
 import { DesignTray } from '../design/DesignTray'
+import { useFileDrop } from '../fileDrop'
 import './chat/chat.css'
 
 export type { OutboundPrompt, UIChatMessage } from './chat/types'
@@ -356,8 +359,9 @@ export default function ChatPanel({
   const stick = useRef(true)
   const [showJump, setShowJump] = useState(false)
   const [jumpNew, setJumpNew] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
-  const dragDepth = useRef(0)
+  /** The composer box: where files and folders dragged from this computer drop. */
+  const boxRef = useRef<HTMLDivElement>(null)
+  const dragOver = useFileDrop(boxRef, (paths) => void addPaths(paths, 'end'), !sending)
   const [fileList, setFileList] = useState<MentionFile[] | null>(null)
   const knownFiles = useMemo(() => (fileList ? new Set(fileList.map((f) => f.path)) : undefined), [fileList])
   const [atOpen, setAtOpen] = useState(false)
@@ -367,6 +371,9 @@ export default function ChatPanel({
   const [atQuoted, setAtQuoted] = useState(false)
   const [atIdx, setAtIdx] = useState(0)
   const [atDismissed, setAtDismissed] = useState(false)
+  const atMenuRef = useRef<HTMLDivElement>(null)
+  /** The arrow keys moved the @-picker's selection: scroll it into view. */
+  const revealAtSel = useRef(false)
   /** The folder an @-path browses (as typed), and what's in it once listed. */
   const [listing, setListing] = useState<{ dir: string; result?: DirListing } | null>(null)
   const listingDir = useRef<string | null>(null)
@@ -642,20 +649,23 @@ export default function ChatPanel({
   // scrollport shared by the textarea and the highlight overlay, so the two can
   // never scroll out of sync; `revealCaretSoon` (above) keeps the caret visible.
 
-  // Stage one or more images (from the file picker, paste, or drag-drop) as chat
-  // attachments — re-encoded to PNG and saved to a temp file, reusing the same
-  // pending-attachment flow as annotated screenshots.
+  // Stage one or more images (from the file picker, paste, or a drop from this
+  // computer) as chat attachments — re-encoded to PNG and saved to a temp file,
+  // reusing the same pending-attachment flow as annotated screenshots.
   async function stageImages(files: Iterable<File | null | undefined>): Promise<void> {
-    if (!onAddAttachment) return
     const images = Array.from(files).filter(
       (f): f is File => !!f && f.type.startsWith('image/')
     )
-    if (images.length === 0) return
+    await attachImages(images.map((file) => () => readAsDataUrl(file)))
+  }
+
+  /** Attach images, each read as a data URL when its turn comes. */
+  async function attachImages(reads: Array<() => Promise<string>>): Promise<void> {
+    if (!onAddAttachment || reads.length === 0) return
     setAttaching(true)
     try {
-      for (const file of images) {
-        const src = await readAsDataUrl(file)
-        const { png, thumb } = await toPngAndThumb(src)
+      for (const read of reads) {
+        const { png, thumb } = await toPngAndThumb(await read())
         const path = await window.api.screenshot.save(png)
         onAddAttachment({ path, thumb })
       }
@@ -682,54 +692,49 @@ export default function ChatPanel({
     }
   }
 
-  function dragHasFiles(e: DragEvent<HTMLDivElement>): boolean {
-    return Array.from(e.dataTransfer?.items ?? []).some((it) => it.kind === 'file')
+  /**
+   * Add files and folders from this computer, dropped on the composer or picked
+   * in the system's file dialog: images are attached, like pasted ones, and the
+   * rest get an `@` reference Copilot reads, at the caret or after what's typed.
+   */
+  async function addPaths(paths: string[], where: 'caret' | 'end'): Promise<void> {
+    if (paths.length === 0) return
+    let found: ChatPathInfo[]
+    try {
+      found = await window.api.chat.inspectPaths(paths)
+    } catch (err) {
+      console.error('Failed to look at the files to add', err)
+      return
+    }
+    const images = onAddAttachment ? found.filter((f) => !f.dir && isImagePath(f.path)) : []
+    const refs = found
+      .filter((f) => !images.includes(f))
+      .map((f) => pathReference(f.path, project.path, f.dir))
+    if (refs.length > 0) insertReferences(refs, where)
+    await attachImages(images.map((f) => () => window.api.screenshot.read(f.path)))
   }
 
-  function onComposerDragEnter(e: DragEvent<HTMLDivElement>): void {
-    if (!dragHasFiles(e) || sending) return
-    e.preventDefault()
-    dragDepth.current += 1
-    setDragOver(true)
-  }
-
-  function onComposerDragOver(e: DragEvent<HTMLDivElement>): void {
-    if (dragHasFiles(e) && !sending) e.preventDefault()
-  }
-
-  function onComposerDragLeave(): void {
-    if (dragDepth.current === 0) return
-    dragDepth.current -= 1
-    if (dragDepth.current <= 0) {
-      dragDepth.current = 0
-      setDragOver(false)
+  /** Add files, or folders, picked in the system's file dialog (the "+" menu). */
+  async function browse(directory: boolean): Promise<void> {
+    try {
+      await addPaths(await window.api.chat.pickPaths(directory), 'caret')
+    } catch (err) {
+      console.error('Failed to pick files', err)
     }
   }
 
-  async function onComposerDrop(e: DragEvent<HTMLDivElement>): Promise<void> {
-    dragDepth.current = 0
-    setDragOver(false)
-    const all = Array.from(e.dataTransfer?.files ?? [])
-    if (all.length === 0) return
-    e.preventDefault()
-    const images = all.filter((f) => f.type.startsWith('image/'))
-    const others = all.filter((f) => !f.type.startsWith('image/'))
-    if (images.length > 0) void stageImages(images)
-    if (others.length > 0) {
-      // Match dropped files to project files by basename and insert references.
-      const list = await ensureFiles()
-      const refs: string[] = []
-      for (const f of others) {
-        const hits = list
-          .filter((x) => x.name === f.name)
-          .sort((a, b) => a.path.length - b.path.length)
-        if (hits.length > 0) refs.push(`@${hits[0].path}`)
-      }
-      if (refs.length > 0) {
-        setInput((prev) => `${prev}${prev && !prev.endsWith(' ') ? ' ' : ''}${refs.join(' ')} `)
-        taRef.current?.focus()
-      }
-    }
+  /** Put `@` references in the message, at the caret or after what's typed, and type on after them. */
+  function insertReferences(refs: string[], where: 'caret' | 'end'): void {
+    const text = inputRef.current
+    const caret = taRef.current?.selectionStart ?? text.length
+    const at = where === 'caret' ? Math.min(caret, text.length) : text.length
+    const before = text.slice(0, at)
+    const after = text.slice(at)
+    const lead = before && !/\s$/.test(before) ? ' ' : ''
+    const insert = `${lead}${refs.join(' ')}${/^\s/.test(after) ? '' : ' '}`
+    setInput(before + insert + after)
+    setAtOpen(false)
+    pendingCaret.current = before.length + insert.length
   }
 
   // A deploy in progress pauses *submitting* a new turn (typing stays enabled) when
@@ -1451,6 +1456,22 @@ export default function ChatPanel({
   const atLoading = atOpen && (pathParts ? !pathListing : fileList == null)
   const atCapture = atOpen && atOptions.length > 0
   const atSel = Math.max(0, Math.min(atIdx, atOptions.length - 1))
+  // A new query, or another folder, lists from the top.
+  useEffect(() => {
+    if (atMenuRef.current) atMenuRef.current.scrollTop = 0
+  }, [atQuery, pathListing])
+  // The arrow keys keep the selection in view; hovering leaves the list where it is.
+  useEffect(() => {
+    if (!revealAtSel.current) return
+    revealAtSel.current = false
+    const menu = atMenuRef.current
+    if (!menu) return
+    if (atSel === 0) menu.scrollTop = 0
+    else
+      menu
+        .querySelector<HTMLElement>('[aria-selected="true"]')
+        ?.scrollIntoView?.({ block: 'nearest' })
+  }, [atSel])
 
   /** Replace the active @-token with `option`'s reference; a folder goes on to list what's in it. */
   function pickMention(option: MentionOption): void {
@@ -1485,11 +1506,13 @@ export default function ChatPanel({
       const len = atOptions.length
       if (e.key === 'ArrowDown') {
         e.preventDefault()
+        revealAtSel.current = true
         setAtIdx((i) => (Math.max(0, Math.min(i, len - 1)) + 1) % len)
         return
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault()
+        revealAtSel.current = true
         setAtIdx((i) => (Math.max(0, Math.min(i, len - 1)) - 1 + len) % len)
         return
       }
@@ -1683,13 +1706,7 @@ export default function ChatPanel({
 
       <div className={`composer${sending ? ' composer--busy' : ''}`}>
         {banner}
-        <div
-          className={`composer-box${dragOver ? ' composer-box--drag' : ''}`}
-          onDrop={onComposerDrop}
-          onDragEnter={onComposerDragEnter}
-          onDragOver={onComposerDragOver}
-          onDragLeave={onComposerDragLeave}
-        >
+        <div ref={boxRef} className={`composer-box${dragOver ? ' composer-box--drag' : ''}`}>
           {sending && <div className="composer-busyline" aria-hidden="true" />}
           {dragOver && (
             <div className="composer-drop" aria-hidden="true">
@@ -1699,6 +1716,7 @@ export default function ChatPanel({
           )}
           {atOpen && (
             <div
+              ref={atMenuRef}
               className="mention-menu"
               role="listbox"
               aria-label={pathParts ? 'Files and folders' : 'Project files'}
@@ -1834,6 +1852,8 @@ export default function ChatPanel({
                 onImage={() => fileRef.current?.click()}
                 onConnectData={(kind) => setConnect({ kind })}
                 onReferenceFile={insertMention}
+                onBrowseFiles={() => void browse(false)}
+                onBrowseFolders={() => void browse(true)}
               />
               <PluginsMenu
                 plugins={offeredPlugins(experiments)}
