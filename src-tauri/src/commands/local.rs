@@ -253,6 +253,15 @@ pub async fn local_install_packages(app: AppHandle, project_id: String) -> Local
   local_backend::state(&app).install_packages(&project_id, &dir).await
 }
 
+/// Install the app's npm packages again after git changed its `package.json`
+/// or lockfile, with npm's output in the project's output. A backend that runs
+/// stops for it and starts again after.
+#[tauri::command]
+pub async fn local_reinstall_packages(app: AppHandle, project_id: String) -> LocalResult<()> {
+  let dir = project_dir(&project_id)?;
+  local_backend::state(&app).reinstall_packages(&project_id, &dir).await
+}
+
 /// The preview of a published app uses its published backend, because this
 /// computer can't run the app (`code`: `sdk-unsupported` or
 /// `connector-unsupported`; `reason` is what the preview says). Journals it as

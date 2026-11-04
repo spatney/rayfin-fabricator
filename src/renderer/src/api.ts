@@ -293,7 +293,12 @@ export const api: RayfinStudioApi = {
       remoteStatus: (id: string) => invoke('projects_git_remote_status', { id }),
       divergence: (id: string) => invoke('projects_git_divergence', { id }),
       pull: (id: string) => invoke('projects_git_pull', { id }),
-      push: (id: string) => invoke('projects_git_push', { id })
+      push: (id: string) => invoke('projects_git_push', { id }),
+      branches: (id: string) => invoke('projects_git_branches', { id }),
+      switchBranch: (id: string, branch: string) => invoke('projects_git_switch', { id, branch }),
+      mergeLatest: (id: string) => invoke('projects_git_merge_latest', { id }),
+      finishMerge: (id: string) => invoke('projects_git_finish_merge', { id }),
+      abortMerge: (id: string) => invoke('projects_git_abort_merge', { id })
     },
     files: {
       tree: (id: string) => invoke('projects_files_tree', { id }),
@@ -677,6 +682,8 @@ export const api: RayfinStudioApi = {
     onLog: (cb: (line: LocalLogEvent) => void) =>
       subscribe<LocalLogEvent>(IpcChannels.localLog, cb),
     installPackages: (projectId: string) => localInvoke('local_install_packages', { projectId }),
+    reinstallPackages: (projectId: string) =>
+      localInvoke('local_reinstall_packages', { projectId }),
     reportFallback: (
       projectId: string,
       code: 'sdk-unsupported' | 'connector-unsupported',

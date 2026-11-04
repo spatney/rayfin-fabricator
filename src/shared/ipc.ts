@@ -2181,6 +2181,29 @@ export interface GitStatus {
   changedCount: number
   /** True when the repo has no commits yet (unborn HEAD). */
   noCommits?: boolean
+  /** A merge is waiting to be finished. */
+  merging?: boolean
+  /**
+   * Files that still have conflicts, relative to the project folder: ones the
+   * merge left unmerged, and, during a merge, ones with conflict markers left.
+   */
+  conflicts?: string[]
+}
+
+/** A branch the app can switch to. */
+export interface GitBranch {
+  /** A local branch's name, or a remote branch's, such as `origin/feature`. */
+  name: string
+  /** The remote branch a local branch follows, such as `origin/main`. */
+  upstream?: string
+  /** Only on the remote: switching to it makes a local branch that follows it. */
+  remote?: boolean
+}
+
+export interface GitBranches {
+  current?: string
+  /** The local branches, then remote ones without a local branch, each most recently changed first. */
+  branches: GitBranch[]
 }
 
 export interface GitCommitResult {
@@ -2284,12 +2307,14 @@ export interface GitRemoteStatus {
   fetchError?: string
 }
 
-/** Outcome of a pull or push, carrying refreshed working-tree + remote status. */
+/** Outcome of a pull, push, merge or branch switch, carrying refreshed working-tree + remote status. */
 export interface GitSyncResult {
   ok: boolean
   error?: string
-  /** True when a pull couldn't be combined automatically (rebase conflict). */
+  /** True when a pull couldn't be combined automatically (rebase conflict), or a merge stopped at conflicts. */
   conflict?: boolean
+  /** It changed the app's packages (a `package.json` or npm lockfile), so they need installing again. */
+  packagesChanged?: boolean
   status: GitStatus
   remote: GitRemoteStatus
 }
@@ -3977,6 +4002,22 @@ export interface RayfinStudioApi {
       pull: (id: string) => Promise<GitSyncResult>
       /** Push local commits to the remote (only when an upstream exists). */
       push: (id: string) => Promise<GitSyncResult>
+      /** The branches to switch to: local ones, then remote ones without a local branch. */
+      branches: (id: string) => Promise<GitBranches>
+      /**
+       * Switch to a branch from `branches`, saving uncommitted changes on the
+       * current branch first. A remote branch gets a local branch that follows it.
+       */
+      switchBranch: (id: string, branch: string) => Promise<GitSyncResult>
+      /**
+       * After a pull whose changes overlapped yours: merge the latest changes,
+       * leaving their conflicts (`status.conflicts`) for Copilot or you.
+       */
+      mergeLatest: (id: string) => Promise<GitSyncResult>
+      /** Commit a merge whose conflicts are all resolved. */
+      finishMerge: (id: string) => Promise<GitSyncResult>
+      /** Cancel a merge, back to how things were before it. */
+      abortMerge: (id: string) => Promise<GitSyncResult>
     }
     files: {
       /** The project's pruned, sorted file tree (read-only browsing). */
@@ -5079,6 +5120,12 @@ export interface LocalBackendApi {
    * start it again once this resolves.
    */
   installPackages: (projectId: string) => Promise<void>
+  /**
+   * Install the app's npm packages again after git changed its `package.json`
+   * or lockfile (a pull, a merge or a switch of branch), with npm's output in
+   * the project's output. A backend that runs stops for it and starts again.
+   */
+  reinstallPackages: (projectId: string) => Promise<void>
   /**
    * A published app's preview uses its published backend because this computer
    * can't run the app: journal it (`local.fallback`, for Help) and count it.

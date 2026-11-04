@@ -2506,7 +2506,7 @@ pub struct TeamDiagnosisResult {
 
 /* ----------------------------- git ----------------------------- */
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GitStatus {
   pub is_repo: bool,
@@ -2515,6 +2515,37 @@ pub struct GitStatus {
   pub changed_count: u32,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub no_commits: Option<bool>,
+  /// A merge is waiting to be finished (git has a `MERGE_HEAD`).
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub merging: bool,
+  /// Files that still have conflicts, relative to the project folder: ones the
+  /// merge left unmerged, and, during a merge, ones with conflict markers left.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub conflicts: Vec<String>,
+}
+
+/// A branch the app can switch to.
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranch {
+  /// A local branch's name, or a remote branch's, such as `origin/feature`.
+  pub name: String,
+  /// The remote branch a local branch follows, such as `origin/main`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub upstream: Option<String>,
+  /// Only on the remote: switching to it makes a local branch that follows it.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub remote: bool,
+}
+
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranches {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub current: Option<String>,
+  /// The local branches, then the remote ones without a local branch, each
+  /// most recently changed first.
+  pub branches: Vec<GitBranch>,
 }
 
 #[derive(Serialize, Clone)]
@@ -2651,9 +2682,14 @@ pub struct GitSyncResult {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
   /// `Some(true)` when a pull couldn't be combined automatically (rebase conflict,
-  /// aborted and restored). Distinct from a generic error so the UI can phrase it.
+  /// aborted and restored), or a merge stopped at conflicts. Distinct from a
+  /// generic error so the UI can phrase it and offer Copilot.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub conflict: Option<bool>,
+  /// The pull, switch or merge changed the app's packages (a `package.json` or
+  /// npm lockfile in its folder), so they need installing again.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub packages_changed: bool,
   pub status: GitStatus,
   pub remote: GitRemoteStatus,
 }

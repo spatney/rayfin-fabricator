@@ -14,8 +14,8 @@ use crate::services::journal::{self, Area, Level};
 use crate::services::store::find_project;
 use crate::services::version_history;
 use crate::types::{
-  GitChange, GitCommitResult, GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus,
-  GitSyncResult, RevertResult, SavedTurn,
+  GitBranch, GitBranches, GitChange, GitCommitResult, GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus,
+  GitStatus, GitSyncResult, RevertResult, SavedTurn,
 };
 
 /// Working-tree sentinel ref (matches `GIT_WORKING_REF` in src/shared/ipc.ts).
@@ -64,6 +64,19 @@ struct ParsedStatus {
   branch: Option<String>,
   changed_count: u32,
   no_commits: bool,
+  /// Files a merge left unmerged, with git's code for how (`UU`, `UD`, …), from the repository's root.
+  unmerged: Vec<(String, String)>,
+}
+
+/// `git status`'s codes for a file a merge left unmerged.
+const UNMERGED: [&str; 7] = ["DD", "AU", "UD", "UA", "DU", "AA", "UU"];
+
+/// A path as git prints it, without the quotes it puts around unusual ones.
+fn unquote(path: &str) -> String {
+  match path.strip_prefix('"').and_then(|p| p.strip_suffix('"')) {
+    Some(inner) => inner.replace("\\\"", "\"").replace("\\\\", "\\"),
+    None => path.to_string(),
+  }
 }
 
 /// Parse `git status --porcelain=v1 --branch` into branch + change count.
@@ -71,6 +84,7 @@ fn parse_git_status(stdout: &str) -> ParsedStatus {
   let mut branch: Option<String> = None;
   let mut no_commits = false;
   let mut changed_count = 0u32;
+  let mut unmerged = Vec::new();
   for line in stdout.split('\n') {
     if line.is_empty() {
       continue;
@@ -89,48 +103,121 @@ fn parse_git_status(stdout: &str) -> ParsedStatus {
       }
     } else {
       changed_count += 1;
+      if let (Some(code), Some(path)) = (line.get(..2), line.get(3..)) {
+        if UNMERGED.contains(&code) {
+          unmerged.push((code.to_string(), unquote(path.trim_end_matches('\r'))));
+        }
+      }
     }
   }
   ParsedStatus {
     branch,
     changed_count,
     no_commits,
+    unmerged,
+  }
+}
+
+/// A path from the repository's root, relative to the folder `prefix` names
+/// (`git rev-parse --show-prefix`, such as `apps/explorer/`).
+fn from_prefix(path: &str, prefix: &str) -> String {
+  if prefix.is_empty() {
+    return path.to_string();
+  }
+  if let Some(inside) = path.strip_prefix(prefix) {
+    return inside.to_string();
+  }
+  let up = prefix.trim_end_matches('/').split('/').count();
+  format!("{}{path}", "../".repeat(up))
+}
+
+static MARKER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(.+):\d+: leftover conflict marker$").unwrap());
+
+/// Files whose changes since `HEAD` still hold conflict markers, from the
+/// repository's root, unmerged or not: git counts a file resolved once it's
+/// added, markers or not, and one resolved but not added as still unmerged.
+async fn marker_files(cwd: &str) -> Vec<String> {
+  let check = git(cwd, &["diff", "--check", "HEAD"]).await;
+  let mut files: Vec<String> = check
+    .stdout
+    .lines()
+    .filter_map(|line| MARKER_RE.captures(line.trim_end()).map(|c| unquote(&c[1])))
+    .collect();
+  files.dedup();
+  files
+}
+
+/// Whether a merge is waiting to be finished.
+async fn merging(cwd: &str) -> bool {
+  git(cwd, &["rev-parse", "-q", "--verify", "MERGE_HEAD"]).await.ok
+}
+
+/// The working tree of the repository `cwd` is in: its branch, changes, and a
+/// merge waiting to be finished with the files that still have conflicts.
+async fn status_in(cwd: &str) -> GitStatus {
+  let res = git(cwd, &["status", "--porcelain=v1", "--branch"]).await;
+  if !res.ok {
+    return GitStatus::default();
+  }
+  let parsed = parse_git_status(&res.stdout);
+  let merging = merging(cwd).await;
+  let mut conflicts: Vec<String> = if merging {
+    // A conflict in a file's content lasts while its markers do; one over a
+    // file deleted or added on one side, until it's added or removed.
+    let mut files: Vec<String> = parsed
+      .unmerged
+      .into_iter()
+      .filter(|(code, _)| code != "UU" && code != "AA")
+      .map(|(_, path)| path)
+      .collect();
+    files.extend(marker_files(cwd).await);
+    files
+  } else {
+    parsed.unmerged.into_iter().map(|(_, path)| path).collect()
+  };
+  if !conflicts.is_empty() {
+    let prefix = git(cwd, &["rev-parse", "--show-prefix"]).await.stdout.trim().to_string();
+    conflicts = conflicts.iter().map(|path| from_prefix(path, &prefix)).collect();
+    conflicts.sort();
+    conflicts.dedup();
+  }
+  GitStatus {
+    is_repo: true,
+    branch: parsed.branch,
+    changed_count: parsed.changed_count,
+    no_commits: parsed.no_commits.then_some(true),
+    merging,
+    conflicts,
   }
 }
 
 pub async fn git_status(id: String) -> GitStatus {
   let Some(project) = find_project(&id) else {
-    return GitStatus { is_repo: false, branch: None, changed_count: 0, no_commits: None };
+    return GitStatus::default();
   };
   if !Path::new(&project.path).exists() {
-    return GitStatus { is_repo: false, branch: None, changed_count: 0, no_commits: None };
+    return GitStatus::default();
   }
-  let res = git(&project.path, &["status", "--porcelain=v1", "--branch"]).await;
-  if !res.ok {
-    return GitStatus { is_repo: false, branch: None, changed_count: 0, no_commits: None };
-  }
-  let parsed = parse_git_status(&res.stdout);
-  GitStatus {
-    is_repo: true,
-    branch: parsed.branch,
-    changed_count: parsed.changed_count,
-    no_commits: if parsed.no_commits { Some(true) } else { None },
-  }
+  status_in(&project.path).await
 }
 
 pub async fn git_commit(id: String, message: String) -> GitCommitResult {
-  let no_repo = || GitStatus { is_repo: false, branch: None, changed_count: 0, no_commits: None };
   let Some(project) = find_project(&id) else {
-    return GitCommitResult { ok: false, error: Some("Project folder not found.".into()), status: no_repo() };
+    return GitCommitResult { ok: false, error: Some("Project folder not found.".into()), status: GitStatus::default() };
   };
   if !Path::new(&project.path).exists() {
-    return GitCommitResult { ok: false, error: Some("Project folder not found.".into()), status: no_repo() };
+    return GitCommitResult { ok: false, error: Some("Project folder not found.".into()), status: GitStatus::default() };
   }
   let msg = message.trim().to_string();
   if msg.is_empty() {
     return GitCommitResult { ok: false, error: Some("Enter a commit message.".into()), status: git_status(id).await };
   }
   let dir = project.path.clone();
+  // Adding everything would count a file's conflict markers as its resolution.
+  let current = status_in(&dir).await;
+  if current.merging && !current.conflicts.is_empty() {
+    return GitCommitResult { ok: false, error: Some(STILL_CONFLICTED.into()), status: current };
+  }
 
   let email = git(&dir, &["config", "user.email"]).await;
   if !email.ok || email.stdout.trim().is_empty() {
@@ -1012,6 +1099,198 @@ mod tests {
     assert_eq!(parse_ahead_behind("5   3"), (5, 3));
     assert_eq!(parse_ahead_behind(""), (0, 0));
   }
+
+  #[test]
+  fn parse_status_lists_what_a_merge_left_unmerged() {
+    let p = parse_git_status("## main...origin/main [ahead 1, behind 1]\nUU app.txt\nUD \"odd \\\"name\\\".txt\"\n M other.txt\n");
+    assert_eq!(p.changed_count, 3);
+    let unmerged: Vec<(&str, &str)> = p.unmerged.iter().map(|(c, f)| (c.as_str(), f.as_str())).collect();
+    assert_eq!(unmerged, [("UU", "app.txt"), ("UD", "odd \"name\".txt")]);
+  }
+
+  #[test]
+  fn conflicts_are_named_from_the_app_folder() {
+    assert_eq!(from_prefix("apps/explorer/src/a.ts", "apps/explorer/"), "src/a.ts");
+    assert_eq!(from_prefix("shared/b.ts", "apps/explorer/"), "../../shared/b.ts");
+    assert_eq!(from_prefix("a.ts", ""), "a.ts");
+  }
+
+  #[test]
+  fn package_manifests_are_what_npm_installs_from() {
+    for path in ["package.json", "rayfin/functions/package-lock.json", "npm-shrinkwrap.json"] {
+      assert!(is_package_manifest(path), "{path}");
+    }
+    for path in ["node_modules/x/package.json", "src/package.ts", "yarn.lock", "README.md"] {
+      assert!(!is_package_manifest(path), "{path}");
+    }
+  }
+
+  #[test]
+  fn branches_are_local_then_remote_ones_without_a_local_branch() {
+    let refs = [
+      "refs/heads/main\x1forigin/main",
+      "refs/heads/topic\x1f",
+      "refs/remotes/origin/HEAD\x1f",
+      "refs/remotes/origin\x1f",
+      "refs/remotes/origin/main\x1f",
+      "refs/remotes/origin/topic\x1f",
+      "refs/remotes/origin/feature\x1f",
+    ]
+    .join("\n");
+    let names: Vec<(String, bool)> = parse_branches(&refs).into_iter().map(|b| (b.name, b.remote)).collect();
+    assert_eq!(names, [("main".into(), false), ("topic".into(), false), ("origin/feature".into(), true)]);
+  }
+
+  /// A bare repository standing in for GitHub, and clones of it to work in.
+  struct Origin {
+    root: PathBuf,
+    bare: PathBuf,
+  }
+
+  impl Origin {
+    /// `main` holds the files in `files`.
+    fn with(files: &[(&str, &str)]) -> Self {
+      let root = std::env::temp_dir().join(format!("fab-sync-{}", uuid::Uuid::new_v4()));
+      std::fs::create_dir_all(&root).unwrap();
+      let bare = root.join("origin.git");
+      run_git(&root, &["init", "-q", "--bare", "-b", "main", bare.to_str().unwrap()]);
+      let origin = Self { root, bare };
+      let seed = origin.clone_as("seed");
+      origin.commit(&seed, files, "First");
+      run_git(&seed, &["push", "-q", "-u", "origin", "main"]);
+      origin
+    }
+
+    fn clone_as(&self, name: &str) -> PathBuf {
+      let dir = self.root.join(name);
+      // Set while cloning, so a global core.autocrlf doesn't check files out changed.
+      run_git(&self.root, &["clone", "-q", "-c", "core.autocrlf=false", self.bare.to_str().unwrap(), dir.to_str().unwrap()]);
+      for (key, value) in [("user.name", "Test"), ("user.email", "test@example.invalid")] {
+        run_git(&dir, &["config", key, value]);
+      }
+      dir
+    }
+
+    fn commit(&self, dir: &Path, files: &[(&str, &str)], message: &str) {
+      for (path, text) in files {
+        std::fs::write(dir.join(path), text).unwrap();
+      }
+      run_git(dir, &["add", "-A"]);
+      run_git(dir, &["commit", "-qm", message]);
+    }
+
+    /// Someone else pushes `files` to `branch`.
+    fn push(&self, branch: &str, files: &[(&str, &str)]) {
+      let seed = self.root.join("seed");
+      run_git(&seed, &["switch", "-q", branch]);
+      run_git(&seed, &["pull", "-q", "--ff-only"]);
+      self.commit(&seed, files, "Theirs");
+      run_git(&seed, &["push", "-q"]);
+    }
+  }
+
+  impl Drop for Origin {
+    fn drop(&mut self) {
+      let _ = std::fs::remove_dir_all(&self.root);
+    }
+  }
+
+  fn read(dir: &Path, path: &str) -> String {
+    std::fs::read_to_string(dir.join(path)).unwrap()
+  }
+
+  #[tokio::test]
+  async fn the_latest_changes_say_when_they_change_the_apps_packages() {
+    let origin = Origin::with(&[("app.txt", "v1\n"), ("package.json", "{}\n")]);
+    let me = origin.clone_as("me");
+    let cwd = me.to_str().unwrap();
+
+    origin.push("main", &[("app.txt", "v2\n")]);
+    let pulled = pull_in(cwd).await;
+    assert!(pulled.ok, "{:?}", pulled.error);
+    assert!(!pulled.packages_changed);
+    assert_eq!(read(&me, "app.txt"), "v2\n");
+
+    origin.push("main", &[("package.json", "{ \"dependencies\": { \"zod\": \"^4.0.0\" } }\n")]);
+    let pulled = pull_in(cwd).await;
+    assert!(pulled.ok && pulled.packages_changed, "{:?}", pulled.error);
+  }
+
+  #[tokio::test]
+  async fn overlapping_changes_merge_for_copilot_then_finish_or_cancel() {
+    let origin = Origin::with(&[("app.txt", "base\n")]);
+    let me = origin.clone_as("me");
+    let cwd = me.to_str().unwrap();
+    origin.push("main", &[("app.txt", "theirs\n")]);
+    std::fs::write(me.join("app.txt"), "mine\n").unwrap();
+
+    // Getting them leaves everything as it was, with your change saved.
+    let pulled = pull_in(cwd).await;
+    assert_eq!((pulled.ok, pulled.conflict), (false, Some(true)));
+    assert!(!pulled.status.merging);
+    assert_eq!(read(&me, "app.txt"), "mine\n");
+
+    let merged = merge_latest_in(cwd).await;
+    assert_eq!((merged.ok, merged.conflict), (false, Some(true)));
+    assert!(merged.status.merging);
+    assert_eq!(merged.status.conflicts, ["app.txt"]);
+    assert!(read(&me, "app.txt").contains("<<<<<<<"));
+
+    // Added with its markers still in, the file still has conflicts.
+    run_git(&me, &["add", "app.txt"]);
+    assert_eq!(status_in(cwd).await.conflicts, ["app.txt"]);
+    let refused = finish_merge_in(cwd).await;
+    assert_eq!((refused.ok, refused.conflict), (false, Some(true)));
+
+    let cancelled = abort_merge_in(cwd).await;
+    assert!(cancelled.ok && !cancelled.status.merging, "{:?}", cancelled.error);
+    assert_eq!(read(&me, "app.txt"), "mine\n");
+
+    merge_latest_in(cwd).await;
+    // Resolved, though not added yet: ready to finish.
+    std::fs::write(me.join("app.txt"), "mine and theirs\n").unwrap();
+    let ready = status_in(cwd).await;
+    assert!(ready.merging && ready.conflicts.is_empty(), "{:?}", ready.conflicts);
+    let finished = finish_merge_in(cwd).await;
+    assert!(finished.ok && !finished.status.merging, "{:?}", finished.error);
+    let parents = run_git(&me, &["rev-list", "--parents", "-n", "1", "HEAD"]);
+    assert_eq!(parents.split_whitespace().count(), 3, "a merge commit: {parents}");
+    assert_eq!(finished.remote.behind, 0);
+  }
+
+  #[tokio::test]
+  async fn switching_branches_saves_your_changes_and_follows_remote_ones() {
+    let origin = Origin::with(&[("app.txt", "main\n"), ("package.json", "{}\n")]);
+    let seed = origin.root.join("seed");
+    run_git(&seed, &["switch", "-q", "-c", "feature"]);
+    origin.commit(&seed, &[("app.txt", "feature\n"), ("package.json", "{ \"private\": true }\n")], "Feature");
+    run_git(&seed, &["push", "-q", "-u", "origin", "feature"]);
+    let me = origin.clone_as("me");
+    let cwd = me.to_str().unwrap();
+
+    let listed = branches_in(cwd).await;
+    assert_eq!(listed.current.as_deref(), Some("main"));
+    let names: Vec<&str> = listed.branches.iter().map(|b| b.name.as_str()).collect();
+    assert_eq!(names, ["main", "origin/feature"]);
+
+    std::fs::write(me.join("app.txt"), "unsaved\n").unwrap();
+    let switched = switch_in(cwd, "origin/feature").await;
+    assert!(switched.ok && switched.packages_changed, "{:?}", switched.error);
+    assert_eq!(switched.status.branch.as_deref(), Some("feature"));
+    assert_eq!(run_git(&me, &["rev-parse", "--abbrev-ref", "feature@{u}"]), "origin/feature");
+    assert_eq!(read(&me, "app.txt"), "feature\n");
+    assert_eq!(run_git(&me, &["log", "-1", "--format=%s", "main"]), "Save before switching to feature");
+
+    let back = switch_in(cwd, "main").await;
+    assert!(back.ok && back.packages_changed, "{:?}", back.error);
+    assert_eq!(read(&me, "app.txt"), "unsaved\n");
+    let names: Vec<String> = branches_in(cwd).await.branches.into_iter().map(|b| b.name).collect();
+    assert_eq!(names.len(), 2, "{names:?}");
+    assert!(names.contains(&"feature".to_string()) && names.contains(&"main".to_string()));
+
+    let missing = switch_in(cwd, "nope").await;
+    assert_eq!(missing.error.as_deref(), Some("There’s no branch named nope."));
+  }
 }
 
 fn revert_err(message: &str) -> RevertResult {
@@ -1270,98 +1549,398 @@ pub async fn git_divergence(id: String) -> GitRemoteStatus {
 }
 
 fn no_repo_status() -> GitStatus {
-  GitStatus { is_repo: false, branch: None, changed_count: 0, no_commits: None }
+  GitStatus::default()
 }
 
 /// Team projects sync through their working branch (see `commands::team`).
 const TEAM_SYNC: &str = "Fabricator saves this team app to GitHub for you after each change. Use Update and Publish instead.";
+const MERGING: &str = "A merge is waiting to be finished. Finish it or cancel it first.";
+const STILL_CONFLICTED: &str = "Some files still have conflicts. Resolve them, or cancel the merge, first.";
+const OVERLAP: &str = "Your changes and the latest changes overlap and couldn’t be combined automatically.";
 
 fn sync_err(message: &str, status: GitStatus, remote: GitRemoteStatus) -> GitSyncResult {
-  GitSyncResult { ok: false, error: Some(message.to_string()), conflict: None, status, remote }
+  GitSyncResult { ok: false, error: Some(message.to_string()), conflict: None, packages_changed: false, status, remote }
 }
 
-pub async fn git_pull(id: String) -> GitSyncResult {
-  let Some(project) = find_project(&id) else {
-    return sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default());
-  };
-  if project.team.is_some() {
-    return sync_err(TEAM_SYNC, git_status(id.clone()).await, GitRemoteStatus::default());
-  }
-  if !Path::new(&project.path).exists() {
-    return sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default());
-  }
-  let cwd = project.path.clone();
+/// What git said went wrong, in a line.
+fn reason(res: &Git) -> String {
+  let said = [res.stderr.as_str(), res.stdout.as_str()]
+    .into_iter()
+    .flat_map(str::lines)
+    .map(str::trim)
+    .find(|line| !line.is_empty())
+    .unwrap_or("git gave no reason.");
+  let said = said.strip_prefix("error: ").or_else(|| said.strip_prefix("fatal: ")).unwrap_or(said);
+  said.chars().take(300).collect()
+}
 
-  let inside = git(&cwd, &["rev-parse", "--is-inside-work-tree"]).await;
-  if !inside.ok || inside.stdout.trim() != "true" {
-    return sync_err("This project isn’t tracked by git.", git_status(id.clone()).await, GitRemoteStatus::default());
-  }
-  if !has_upstream(&cwd).await {
-    return sync_err(
-      "This branch isn’t linked to a remote branch yet.",
-      git_status(id.clone()).await,
-      compute_remote_status(&cwd, false).await,
-    );
-  }
+/// The commit `HEAD` names, or "" when there's none yet.
+async fn head(cwd: &str) -> String {
+  let res = git(cwd, &["rev-parse", "HEAD"]).await;
+  if res.ok { res.stdout.trim().to_string() } else { String::new() }
+}
 
-  // Don't lose uncommitted work — commit it first (mirrors git_revert).
-  let dirty = git(&cwd, &["status", "--porcelain"]).await;
-  if dirty.ok && !dirty.stdout.trim().is_empty() {
-    git(&cwd, &["add", "-A"]).await;
-    let mut args: Vec<&str> = COMMIT_IDENT.to_vec();
-    args.extend_from_slice(&["commit", "-m", "Save before getting the latest changes"]);
-    let saved = git(&cwd, &args).await;
-    if !saved.ok {
-      return sync_err(
-        "Could not save your current changes before updating.",
-        git_status(id.clone()).await,
-        compute_remote_status(&cwd, false).await,
-      );
-    }
+/// A `package.json` or npm lockfile, outside `node_modules`: a change to one
+/// changes what `npm install` puts there.
+fn is_package_manifest(path: &str) -> bool {
+  let path = path.trim().replace('\\', "/");
+  if path.split('/').any(|part| part == "node_modules") {
+    return false;
   }
+  let name = path.rsplit('/').next().unwrap_or(&path);
+  matches!(name, "package.json" | "package-lock.json" | "npm-shrinkwrap.json")
+}
 
-  // Refresh remote-tracking refs before merging.
-  let fetched = git_net(&cwd, &["fetch", "--no-tags", "--quiet"]).await;
-  if !fetched.ok {
-    let e = fetched.stderr.trim();
-    return sync_err(
-      if e.is_empty() { "Could not reach the remote." } else { e },
-      git_status(id.clone()).await,
-      compute_remote_status(&cwd, false).await,
-    );
+/// Whether going from commit `before` to `after` changed the app's packages.
+async fn packages_changed(cwd: &str, before: &str, after: &str) -> bool {
+  if before.is_empty() || after.is_empty() || before == after {
+    return false;
   }
+  let diff = git(cwd, &["diff", "--name-only", "--relative", before, after, "--", "."]).await;
+  diff.ok && diff.stdout.lines().any(is_package_manifest)
+}
 
-  // Fast-forward when possible; fall back to a rebase when histories diverged.
-  let ff = git(&cwd, &["merge", "--ff-only", "@{u}"]).await;
-  if !ff.ok {
-    let orig = git(&cwd, &["rev-parse", "HEAD"]).await;
-    let orig = orig.stdout.trim().to_string();
-    let rebased = git(&cwd, &["rebase", "@{u}"]).await;
-    if !rebased.ok {
-      // Leave no half-applied state: abort and restore exactly where we were.
-      git(&cwd, &["rebase", "--abort"]).await;
-      if !orig.is_empty() {
-        git(&cwd, &["reset", "--hard", &orig]).await;
-      }
-      return GitSyncResult {
-        ok: false,
-        error: Some(
-          "Your changes and the latest changes overlap and couldn’t be combined automatically.".to_string(),
-        ),
-        conflict: Some(true),
-        status: git_status(id.clone()).await,
-        remote: compute_remote_status(&cwd, false).await,
-      };
-    }
+/// Commit any uncommitted changes first, so none are lost (as Restore does).
+async fn save_first(cwd: &str, message: &str) -> bool {
+  let dirty = git(cwd, &["status", "--porcelain"]).await;
+  if !dirty.ok || dirty.stdout.trim().is_empty() {
+    return true;
   }
+  git(cwd, &["add", "-A"]).await;
+  let mut args: Vec<&str> = COMMIT_IDENT.to_vec();
+  args.extend_from_slice(&["commit", "-m", message]);
+  git(cwd, &args).await.ok
+}
 
+/// A sync that went through from commit `before`: where things stand after it,
+/// and whether it changed the app's packages.
+async fn synced(cwd: &str, before: &str) -> GitSyncResult {
+  let after = head(cwd).await;
   GitSyncResult {
     ok: true,
     error: None,
     conflict: None,
-    status: git_status(id.clone()).await,
-    remote: compute_remote_status(&cwd, false).await,
+    packages_changed: packages_changed(cwd, before, &after).await,
+    status: status_in(cwd).await,
+    remote: compute_remote_status(cwd, false).await,
   }
+}
+
+/// A merge that stopped at conflicts, for Copilot or you to resolve.
+async fn conflicted(cwd: &str, status: GitStatus) -> GitSyncResult {
+  let count = status.conflicts.len();
+  GitSyncResult {
+    ok: false,
+    error: Some(format!(
+      "Your changes and the latest changes overlap in {count} file{}.",
+      if count == 1 { "" } else { "s" }
+    )),
+    conflict: Some(true),
+    packages_changed: false,
+    status,
+    remote: compute_remote_status(cwd, false).await,
+  }
+}
+
+/// The folder of the personal app `id` names, in a git repository, or why it
+/// can't sync. Team apps sync through their working branch instead.
+async fn sync_folder(id: &str) -> Result<String, Box<GitSyncResult>> {
+  let Some(project) = find_project(id) else {
+    return Err(Box::new(sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default())));
+  };
+  if project.team.is_some() {
+    return Err(Box::new(sync_err(TEAM_SYNC, status_in(&project.path).await, GitRemoteStatus::default())));
+  }
+  if !Path::new(&project.path).exists() {
+    return Err(Box::new(sync_err("Project folder not found.", no_repo_status(), GitRemoteStatus::default())));
+  }
+  let inside = git(&project.path, &["rev-parse", "--is-inside-work-tree"]).await;
+  if !inside.ok || inside.stdout.trim() != "true" {
+    return Err(Box::new(sync_err(
+      "This project isn’t tracked by git.",
+      status_in(&project.path).await,
+      GitRemoteStatus::default(),
+    )));
+  }
+  Ok(project.path)
+}
+
+pub async fn git_pull(id: String) -> GitSyncResult {
+  match sync_folder(&id).await {
+    Ok(cwd) => pull_in(&cwd).await,
+    Err(result) => *result,
+  }
+}
+
+/// Get the latest changes: fast-forward when possible, else rebase your
+/// commits onto them. When they overlap, everything goes back as it was and
+/// the result says so; [`merge_latest_in`] then merges them for Copilot.
+async fn pull_in(cwd: &str) -> GitSyncResult {
+  if merging(cwd).await {
+    return sync_err(MERGING, status_in(cwd).await, compute_remote_status(cwd, false).await);
+  }
+  if !has_upstream(cwd).await {
+    return sync_err(
+      "This branch isn’t linked to a remote branch yet.",
+      status_in(cwd).await,
+      compute_remote_status(cwd, false).await,
+    );
+  }
+  if !save_first(cwd, "Save before getting the latest changes").await {
+    return sync_err(
+      "Could not save your current changes before updating.",
+      status_in(cwd).await,
+      compute_remote_status(cwd, false).await,
+    );
+  }
+
+  // Refresh remote-tracking refs before merging.
+  let fetched = git_net(cwd, &["fetch", "--no-tags", "--quiet"]).await;
+  if !fetched.ok {
+    let e = fetched.stderr.trim();
+    return sync_err(
+      if e.is_empty() { "Could not reach the remote." } else { e },
+      status_in(cwd).await,
+      compute_remote_status(cwd, false).await,
+    );
+  }
+
+  // Fast-forward when possible; fall back to a rebase when histories diverged.
+  let before = head(cwd).await;
+  let ff = git(cwd, &["merge", "--ff-only", "@{u}"]).await;
+  if !ff.ok {
+    let rebased = git(cwd, &["rebase", "@{u}"]).await;
+    if !rebased.ok {
+      // Leave no half-applied state: abort and restore exactly where we were.
+      git(cwd, &["rebase", "--abort"]).await;
+      if !before.is_empty() {
+        git(cwd, &["reset", "--hard", &before]).await;
+      }
+      return GitSyncResult {
+        ok: false,
+        error: Some(OVERLAP.to_string()),
+        conflict: Some(true),
+        packages_changed: false,
+        status: status_in(cwd).await,
+        remote: compute_remote_status(cwd, false).await,
+      };
+    }
+  }
+  synced(cwd, &before).await
+}
+
+/// After a pull found that your changes and the latest ones overlap: merge the
+/// latest changes in, leaving git's conflict markers for Copilot (or you) to
+/// resolve. A merge that goes through on its own is simply done.
+pub async fn git_merge_latest(id: String) -> GitSyncResult {
+  match sync_folder(&id).await {
+    Ok(cwd) => merge_latest_in(&cwd).await,
+    Err(result) => *result,
+  }
+}
+
+async fn merge_latest_in(cwd: &str) -> GitSyncResult {
+  let status = status_in(cwd).await;
+  if status.merging {
+    return if status.conflicts.is_empty() {
+      sync_err(MERGING, status, compute_remote_status(cwd, false).await)
+    } else {
+      conflicted(cwd, status).await
+    };
+  }
+  if !has_upstream(cwd).await {
+    return sync_err(
+      "This branch isn’t linked to a remote branch yet.",
+      status,
+      compute_remote_status(cwd, false).await,
+    );
+  }
+  if !save_first(cwd, "Save before getting the latest changes").await {
+    return sync_err(
+      "Could not save your current changes before updating.",
+      status_in(cwd).await,
+      compute_remote_status(cwd, false).await,
+    );
+  }
+  // Whoever finishes the merge, Copilot included, commits it.
+  version_history::ensure_identity(Path::new(cwd)).await;
+  let before = head(cwd).await;
+  let merged = git(cwd, &["merge", "--no-edit", "@{u}"]).await;
+  if merged.ok {
+    return synced(cwd, &before).await;
+  }
+  let status = status_in(cwd).await;
+  if status.merging && !status.conflicts.is_empty() {
+    return conflicted(cwd, status).await;
+  }
+  // It stopped for another reason, such as files it would overwrite: leave nothing half done.
+  if status.merging {
+    git(cwd, &["merge", "--abort"]).await;
+  }
+  sync_err(
+    &format!("Couldn’t combine the latest changes: {}", reason(&merged)),
+    status_in(cwd).await,
+    compute_remote_status(cwd, false).await,
+  )
+}
+
+/// Finish a merge whose conflicts are all resolved: commit it, with git's message.
+pub async fn git_finish_merge(id: String) -> GitSyncResult {
+  match sync_folder(&id).await {
+    Ok(cwd) => finish_merge_in(&cwd).await,
+    Err(result) => *result,
+  }
+}
+
+async fn finish_merge_in(cwd: &str) -> GitSyncResult {
+  let status = status_in(cwd).await;
+  if !status.merging {
+    return synced(cwd, "").await;
+  }
+  if !status.conflicts.is_empty() {
+    let mut result = conflicted(cwd, status).await;
+    result.error = Some(STILL_CONFLICTED.to_string());
+    return result;
+  }
+  version_history::ensure_identity(Path::new(cwd)).await;
+  let before = head(cwd).await;
+  let added = git(cwd, &["add", "-A"]).await;
+  let committed = if added.ok { git(cwd, &["commit", "--no-edit"]).await } else { added };
+  if !committed.ok {
+    return sync_err(
+      &format!("Couldn’t finish the merge: {}", reason(&committed)),
+      status_in(cwd).await,
+      compute_remote_status(cwd, false).await,
+    );
+  }
+  synced(cwd, &before).await
+}
+
+/// Cancel a merge: everything goes back to how it was before it started.
+pub async fn git_abort_merge(id: String) -> GitSyncResult {
+  match sync_folder(&id).await {
+    Ok(cwd) => abort_merge_in(&cwd).await,
+    Err(result) => *result,
+  }
+}
+
+async fn abort_merge_in(cwd: &str) -> GitSyncResult {
+  if !merging(cwd).await {
+    return synced(cwd, "").await;
+  }
+  // Packages installed for the merged package.json go back out with it.
+  let touched = git(cwd, &["diff", "--name-only", "--relative", "HEAD", "--", "."]).await;
+  let packages = touched.ok && touched.stdout.lines().any(is_package_manifest);
+  let aborted = git(cwd, &["merge", "--abort"]).await;
+  if !aborted.ok {
+    return sync_err(
+      &format!("Couldn’t cancel the merge: {}", reason(&aborted)),
+      status_in(cwd).await,
+      compute_remote_status(cwd, false).await,
+    );
+  }
+  let mut result = synced(cwd, "").await;
+  result.packages_changed = packages;
+  result
+}
+
+/// The branches to switch to (see [`GitBranches`]).
+pub async fn git_branches(id: String) -> GitBranches {
+  match sync_folder(&id).await {
+    Ok(cwd) => branches_in(&cwd).await,
+    Err(_) => GitBranches::default(),
+  }
+}
+
+async fn branches_in(cwd: &str) -> GitBranches {
+  let refs = git(
+    cwd,
+    &["for-each-ref", "--sort=-committerdate", "--format=%(refname)%1f%(upstream:short)", "refs/heads", "refs/remotes"],
+  )
+  .await;
+  GitBranches {
+    current: current_branch(cwd).await,
+    branches: if refs.ok { parse_branches(&refs.stdout) } else { Vec::new() },
+  }
+}
+
+/// `git for-each-ref` lines (`<refname>\x1f<upstream>`) as branches: the local
+/// ones, then the remote ones no local branch follows or shares a name with.
+fn parse_branches(stdout: &str) -> Vec<GitBranch> {
+  let mut local = Vec::new();
+  let mut remote = Vec::new();
+  for line in stdout.lines() {
+    let mut fields = line.trim_end_matches('\r').split('\x1f');
+    let Some(full) = fields.next() else { continue };
+    let upstream = fields.next().map(str::trim).filter(|u| !u.is_empty()).map(str::to_string);
+    if let Some(name) = full.strip_prefix("refs/heads/") {
+      local.push(GitBranch { name: name.to_string(), upstream, remote: false });
+    } else if let Some(name) = full.strip_prefix("refs/remotes/") {
+      if name.contains('/') && !name.ends_with("/HEAD") {
+        remote.push(GitBranch { name: name.to_string(), upstream: None, remote: true });
+      }
+    }
+  }
+  remote.retain(|r| {
+    let short = r.name.split_once('/').map_or(r.name.as_str(), |(_, name)| name);
+    !local.iter().any(|l| l.upstream.as_deref() == Some(r.name.as_str()) || l.name == short)
+  });
+  local.extend(remote);
+  local
+}
+
+/// Switch to `branch`, a local branch or a remote one (which gets a local
+/// branch that follows it), saving any uncommitted changes on the current
+/// branch first.
+pub async fn git_switch(id: String, branch: String) -> GitSyncResult {
+  match sync_folder(&id).await {
+    Ok(cwd) => switch_in(&cwd, branch.trim()).await,
+    Err(result) => *result,
+  }
+}
+
+async fn switch_in(cwd: &str, branch: &str) -> GitSyncResult {
+  if merging(cwd).await {
+    return sync_err(MERGING, status_in(cwd).await, compute_remote_status(cwd, false).await);
+  }
+  let known = branches_in(cwd).await;
+  let Some(target) = known.branches.into_iter().find(|b| b.name == branch) else {
+    return sync_err(
+      &format!("There’s no branch named {branch}."),
+      status_in(cwd).await,
+      compute_remote_status(cwd, false).await,
+    );
+  };
+  let name = if target.remote {
+    target.name.split_once('/').map_or(target.name.as_str(), |(_, name)| name)
+  } else {
+    target.name.as_str()
+  };
+  let before = head(cwd).await;
+  if known.current.as_deref() == Some(name) {
+    return synced(cwd, &before).await;
+  }
+  if !save_first(cwd, &format!("Save before switching to {name}")).await {
+    return sync_err(
+      "Could not save your current changes before switching.",
+      status_in(cwd).await,
+      compute_remote_status(cwd, false).await,
+    );
+  }
+  let before = head(cwd).await;
+  let switched = if target.remote {
+    git(cwd, &["switch", "--track", &target.name]).await
+  } else {
+    git(cwd, &["switch", &target.name]).await
+  };
+  if !switched.ok {
+    return sync_err(
+      &format!("Couldn’t switch to {name}: {}", reason(&switched)),
+      status_in(cwd).await,
+      compute_remote_status(cwd, false).await,
+    );
+  }
+  synced(cwd, &before).await
 }
 
 pub async fn git_push(id: String) -> GitSyncResult {
@@ -1404,6 +1983,7 @@ pub async fn git_push(id: String) -> GitSyncResult {
         e
       }),
       conflict: None,
+      packages_changed: false,
       status: git_status(id.clone()).await,
       remote: compute_remote_status(&cwd, false).await,
     };
@@ -1413,6 +1993,7 @@ pub async fn git_push(id: String) -> GitSyncResult {
     ok: true,
     error: None,
     conflict: None,
+    packages_changed: false,
     status: git_status(id.clone()).await,
     remote: compute_remote_status(&cwd, false).await,
   }

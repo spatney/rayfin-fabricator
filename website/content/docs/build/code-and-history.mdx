@@ -39,10 +39,11 @@ If the `code` command is not available, Fabricator opens the project folder in t
 
 ## Use the git status pill
 
-The project header can show a git pill with the branch and the number of uncommitted changes. When the repository has a remote, it can also show changes to get or push.
+The status bar starts with a git item: the branch and the number of uncommitted changes. When the repository has a remote, it can also show changes to get or push.
 
-Open the pill to use:
+Open it to use:
 
+- **Switch…**, next to the branch, to switch branches.
 - **Get latest** for remote changes waiting to be pulled.
 - **Push** for local commits ready to push.
 - **Commit all** after entering a **Commit message**.
@@ -50,6 +51,30 @@ Open the pill to use:
 To have Copilot write the message, select the sparkle button at the end of the message box, **Write a message with Copilot**. Copilot reads what the commit would include and writes one line on its Auto model, which you can edit before you select **Commit all**. It doesn't read lockfiles, `.env` files or the local backend's data in `.rayfin-local`.
 
 For team apps, Fabricator saves changes through the team workflow instead of using these local push and pull actions.
+
+### Switch branches
+
+Select **Switch…** to list the branches: yours first, then, under **On the remote**, the ones only on the remote. Type in **Filter branches** to find one, then select it. A branch that's only on the remote becomes a branch of yours that follows it, so **Get latest** and **Push** work with it.
+
+Before it switches, Fabricator saves your uncommitted changes on the branch you're on, as "Save before switching to `<branch>`", so they're there when you come back. Branches, **Get latest** and merges wait while Copilot is working.
+
+### When your app's packages change
+
+When getting the latest changes, a merge or a switch of branch changes your app's `package.json` or npm lockfile, including the functions folder's, Fabricator installs the packages again with npm and restarts your app on them. A notice says so while it works, and npm's output is in the preview's **Output**.
+
+### When your changes and the latest changes overlap
+
+**Get latest** saves your uncommitted changes, then puts your commits after the latest ones. When both change the same lines, it puts everything back as it was and says "Your changes and the latest changes overlap and couldn’t be combined automatically."
+
+Select **Ask Copilot to resolve**. Fabricator merges the latest changes, and git marks where they overlap in each file. A merge can sometimes combine what the first try couldn't, and then that's it. Otherwise chat asks Copilot to resolve every conflict, check that the app still builds, and finish the merge.
+
+Until the merge is finished, the git item counts the files with conflicts, such as **2 conflicts**. Open it to see them, with:
+
+- **Ask Copilot to resolve**, to ask Copilot again.
+- **Finish merge**, once no conflicts are left and the merge still waits to be finished.
+- **Cancel merge**, to go back to how things were before the merge.
+
+Then select **Push** to share the merge.
 
 ## Review history
 

@@ -2880,6 +2880,174 @@ code {
   margin: 2px 0;
 }
 
+/* A merge waiting on its conflicts: the pill says how many. */
+.git-chip--conflict,
+.statusbar .git-chip.git-chip--conflict {
+  color: var(--pending);
+}
+
+.git-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.git-current .codicon {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.git-branch-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The branch list: back to the popover, a filter, then the branches. */
+.git-branches-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-back {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.git-back:hover,
+.git-back:focus-visible {
+  color: var(--text);
+  background: var(--bg-elev-3);
+  outline: none;
+}
+
+.git-branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 240px;
+  margin: 0 -6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.git-branch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.git-branch-item:hover:not(:disabled),
+.git-branch-item:focus-visible {
+  background: var(--bg-elev-3);
+  outline: none;
+}
+
+.git-branch-item:disabled {
+  cursor: default;
+}
+
+.git-branch-item:disabled:not([aria-current]) {
+  opacity: 0.55;
+}
+
+.git-branch-item .git-branch-ico {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.git-branch-item[aria-current] .git-branch-ico {
+  color: var(--accent);
+}
+
+.git-branch-item .git-branch-name {
+  flex: 1;
+}
+
+.git-branch-note {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.git-branch-heading {
+  padding: 8px 8px 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.git-branch-empty {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* A merge waiting on its conflicts, or on being finished. */
+.git-merge,
+.git-overlap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.git-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 6px 8px;
+  list-style: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.git-conflicts li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-conflicts .git-conflicts-more {
+  font-family: inherit;
+  color: var(--text-dim);
+}
+
+.git-popover-actions .btn .codicon {
+  font-size: 12px;
+}
+
 /* Fabric workspace pill + popover (project header) */
 .ws-control {
   position: relative;

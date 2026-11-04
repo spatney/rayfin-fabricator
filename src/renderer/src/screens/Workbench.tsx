@@ -65,6 +65,7 @@ import {
   localFallbackReason,
   refusedSchemaLosses,
   retriesAfterTurn,
+  toLocalBackendError,
   useLocalBackend
 } from '../localBackend'
 import DeploymentsControl from '../components/DeploymentsControl'
@@ -1406,6 +1407,46 @@ export default function Workbench({
     [handleTurnStart, isTurnRunning, stopDevServer]
   )
 
+  /**
+   * After git changed the open app's files (a commit, pull, merge or switch of
+   * branch): History and the rest read them again, and when its packages
+   * changed, Fabricator installs them again and restarts the app on them. Its
+   * local backend stops for the install and starts again after; a preview on
+   * its published backend has its own dev server, which does the same.
+   */
+  const afterGitSync = useCallback(
+    async (projectId: string, packagesChanged = false): Promise<void> => {
+      setGitRefresh((n) => n + 1)
+      if (!packagesChanged) return
+      const notice = toast.info('Installing them and restarting your app…', {
+        title: 'Your app’s packages changed',
+        duration: 0
+      })
+      const kept = Boolean(devServersRef.current[projectId]?.kept)
+      if (kept) {
+        stopDevServer(projectId)
+        await stoppingRef.current.get(projectId)
+      }
+      try {
+        await window.api.local.reinstallPackages(projectId)
+        toast.success('Your app runs on its new packages.', { title: 'Installed the packages' })
+      } catch (reason) {
+        const failed = toLocalBackendError(reason)
+        toast.error(failed.hint ? `${failed.message} ${failed.hint}` : failed.message, {
+          title: 'Couldn’t install your app’s packages'
+        })
+      } finally {
+        toast.dismiss(notice)
+        const project = projectsRef.current?.projects.find((p) => p.id === projectId)
+        if (kept && project && mountedRef.current) {
+          keptAttemptRef.current = null
+          void keepLocalPreview(projectId, deploymentKey(project))
+        }
+      }
+    },
+    [toast, stopDevServer, keepLocalPreview]
+  )
+
   // After a chat turn, persist the transcript, save what a personal app's turn
   // changed as a version, and, when chat turns publish (see
   // `publishesAfterTurn`), publish what the agent changed.
@@ -1749,6 +1790,14 @@ export default function Workbench({
       prompt,
       stage
     })
+  }, [])
+  /** The git item's requests, such as resolving a merge's conflicts: sent at once. */
+  const sendGitToChat = useCallback((display: string, prompt: string): void => {
+    const id = activeIdRef.current
+    if (!id) return
+    setViewMode('build')
+    setFocusPane(null)
+    setChatOutbound({ id: `git-${Date.now()}`, projectId: id, display, prompt })
   }, [])
   /** Blueprint's Add Fabric data: the chat's own picker, whose picks wait in the composer. */
   const connectModelData = useCallback((): void => {
@@ -3316,7 +3365,9 @@ export default function Workbench({
               <GitControl
                 projectId={active.id}
                 refreshKey={gitRefresh}
-                onSynced={() => setGitRefresh((n) => n + 1)}
+                busy={activeChatBusy}
+                onSynced={(packagesChanged) => void afterGitSync(active.id, packagesChanged)}
+                onSendToChat={sendGitToChat}
               />
             )}
             <RayfinVersionControl

@@ -41,6 +41,7 @@ import type DeploymentsControl from '../components/DeploymentsControl'
 import type MigrateReportScreen from '../components/migrate/MigrateReportScreen'
 import type AppGalleryView from '../components/gallery/AppGalleryView'
 import type HomeView from '../components/HomeView'
+import type GitControl from '../components/GitControl'
 import type { HelpView } from '../components/help/HelpView'
 import type Spotlight from '../components/spotlight/Spotlight'
 import type { AdvisorFixLinks } from '../components/advisor/AdvisorFixSummary'
@@ -62,6 +63,7 @@ const galleryProps = vi.hoisted(() =>
   vi.fn<(props: ComponentProps<typeof AppGalleryView>) => void>()
 )
 const homeProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof HomeView>) => void>())
+const gitProps = vi.hoisted(() => vi.fn<(props: ComponentProps<typeof GitControl>) => void>())
 /** The Advisor state the mocked `useAdvisor` reports, and what the chat's fix cards see. */
 const advisorMock = vi.hoisted(() => ({
   derived: { badge: null, items: [], open: [], resolved: [] } as Pick<
@@ -93,7 +95,12 @@ vi.mock('../components/advisor/AdvisorView', () => ({
 vi.mock('../advisor/store', () => ({
   useAdvisor: () => ({ derived: advisorMock.derived, handOff: advisorMock.handOff })
 }))
-vi.mock('../components/GitControl', () => ({ default: () => null }))
+vi.mock('../components/GitControl', () => ({
+  default: (props: ComponentProps<typeof GitControl>) => {
+    gitProps(props)
+    return null
+  }
+}))
 vi.mock('../components/WorkspaceStatus', () => ({ default: () => null }))
 vi.mock('../components/RayfinVersionControl', () => ({ default: () => null }))
 vi.mock('../components/ProjectDependencyGuard', async () => {
@@ -345,6 +352,9 @@ function installApi(active = false) {
       installPackages: vi
         .fn<RayfinStudioApi['local']['installPackages']>()
         .mockResolvedValue(undefined),
+      reinstallPackages: vi
+        .fn<RayfinStudioApi['local']['reinstallPackages']>()
+        .mockResolvedValue(undefined),
       stopExternal: vi.fn<RayfinStudioApi['local']['stopExternal']>().mockResolvedValue(undefined),
       logs: vi.fn<RayfinStudioApi['local']['logs']>().mockResolvedValue([]),
       onState: vi.fn<RayfinStudioApi['local']['onState']>((callback) => {
@@ -445,6 +455,7 @@ beforeEach(() => {
   migrateProps.mockClear()
   galleryProps.mockClear()
   homeProps.mockClear()
+  gitProps.mockClear()
   advisorMock.derived = { badge: null, items: [], open: [], resolved: [] }
   advisorMock.handOff.mockClear()
   advisorMock.links = null
@@ -1795,6 +1806,25 @@ describe('Workbench local backend', () => {
     expect(api.local.start).toHaveBeenCalledTimes(1)
     expect(api.deploy.hasChanges, 'publishing waits for the user').not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('installs the packages again when git changed them, and sends a merge’s conflicts to the chat', async () => {
+    const { api } = await mountLocal()
+    const git = (): ComponentProps<typeof GitControl> => gitProps.mock.lastCall![0]
+    expect(git().busy).toBe(false)
+
+    await act(async () => git().onSynced?.(false))
+    expect(api.local.reinstallPackages).not.toHaveBeenCalled()
+    await act(async () => git().onSynced?.(true))
+    expect(api.local.reinstallPackages).toHaveBeenCalledWith(project.id)
+    expect(await screen.findByText('Your app runs on its new packages.')).toBeTruthy()
+
+    act(() => git().onSendToChat?.('Resolve the merge conflict in src/App.tsx', 'Resolve it'))
+    expect(chatProps.mock.lastCall?.[0].outbound).toMatchObject({
+      projectId: project.id,
+      display: 'Resolve the merge conflict in src/App.tsx',
+      prompt: 'Resolve it'
+    })
   })
 
   it('starts the backend of the app you switch to, and doesn’t restart one that runs', async () => {

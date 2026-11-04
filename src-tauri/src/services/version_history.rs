@@ -313,7 +313,7 @@ fn append(file: &Path, text: &str) -> Result<(), String> {
 }
 
 /// Commits need a name and email; use Fabricator's when git has none.
-async fn ensure_identity(dir: &Path) {
+pub(crate) async fn ensure_identity(dir: &Path) {
   for (key, fallback) in [("user.email", "fabricator@rayfin.local"), ("user.name", "Fabricator")] {
     let current = run(dir, &["config", key], 15_000).await;
     if current.stdout.trim().is_empty() {

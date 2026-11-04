@@ -691,6 +691,41 @@ impl LocalBackends {
     }
   }
 
+  /// Install the app's npm packages again after git changed them (a pull, a
+  /// merge or a switch of branch): `npm install` in the project, and in its
+  /// functions folder when that has packages of its own, then the check
+  /// [`Self::install_packages`] makes for `@microsoft/rayfin-core`. A backend
+  /// that runs stops first, so npm can replace the files it holds open (on
+  /// Windows it can't otherwise), and starts again after, even when npm fails:
+  /// the packages it had may still do.
+  pub async fn reinstall_packages(&self, project_id: &str, project: &Path) -> Result<(), LocalCommandError> {
+    let rt = self.runtime(project_id);
+    let was_live = rt.is_live();
+    if was_live {
+      self.stop(project_id).await;
+    }
+    let output = install_output(rt.clone());
+    rt.log("fabricator", "info", "The app's packages changed. Installing them again…", None);
+    let mut installed = npm("install", project, output.clone()).await;
+    if installed.is_ok() {
+      if let Some(functions) = crate::services::rayfin_sdk::separate_functions_dir(project) {
+        installed = npm("install", &functions, output.clone()).await;
+      }
+    }
+    let result = match installed {
+      Ok(()) => hoist_rayfin_core(&rt, project, project, output).await,
+      Err(message) => Err(message),
+    };
+    match &result {
+      Ok(()) => rt.log("fabricator", "info", "Installed the npm packages.", None),
+      Err(message) => rt.log("fabricator", "error", message, None),
+    }
+    if was_live && !self.closing() {
+      self.start(project_id, project.to_path_buf(), LocalStartOptions::default()).await;
+    }
+    result.map_err(|message| error("install-failed", message, Some("Check the output for npm's messages, then try again.")))
+  }
+
   /// A client for the project's control API, while its backend runs.
   pub fn control(&self, project_id: &str) -> Result<ControlClient, LocalCommandError> {
     let Some(rt) = self.existing(project_id) else {

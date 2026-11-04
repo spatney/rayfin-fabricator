@@ -9,7 +9,7 @@ use crate::services::store;
 use crate::state::AppState;
 use crate::types::{
   CommunityGalleryResult, CreateProjectInput, FileContent, FileNode, GitChange, GitCommitResult,
-  GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus, GitSyncResult,
+  GitBranches, GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus, GitSyncResult,
   ProjectActionResult, ProjectLocationCheck, ProjectNameCheck, ProjectsState, RevertResult, SavedTurn,
 };
 
@@ -276,6 +276,31 @@ pub async fn projects_git_pull(id: String) -> GitSyncResult {
 #[tauri::command]
 pub async fn projects_git_push(id: String) -> GitSyncResult {
   crate::commands::git::git_push(id).await
+}
+
+#[tauri::command]
+pub async fn projects_git_branches(id: String) -> GitBranches {
+  crate::commands::git::git_branches(id).await
+}
+
+#[tauri::command]
+pub async fn projects_git_switch(id: String, branch: String) -> GitSyncResult {
+  crate::commands::git::git_switch(id, branch).await
+}
+
+#[tauri::command]
+pub async fn projects_git_merge_latest(id: String) -> GitSyncResult {
+  crate::commands::git::git_merge_latest(id).await
+}
+
+#[tauri::command]
+pub async fn projects_git_finish_merge(id: String) -> GitSyncResult {
+  crate::commands::git::git_finish_merge(id).await
+}
+
+#[tauri::command]
+pub async fn projects_git_abort_merge(id: String) -> GitSyncResult {
+  crate::commands::git::git_abort_merge(id).await
 }
 
 /* ----------------------------- files (ported in Phase 3) ----------------------------- */

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { GitMessageResult, GitRemoteStatus, GitStatus } from '@shared/ipc'
 import GitControl from './GitControl'
 import { deferred } from '../../test/deferred'
@@ -71,5 +71,141 @@ describe('GitControl commit message', () => {
     expect(
       (screen.getByRole('textbox', { name: 'Commit message' }) as HTMLInputElement).value
     ).toBe('')
+  })
+})
+
+const upstream: GitRemoteStatus = {
+  isRepo: true,
+  hasRemote: true,
+  hasUpstream: true,
+  ahead: 0,
+  behind: 2
+}
+
+function installGit<T extends Record<string, unknown>>(git: T) {
+  const api = {
+    status: vi.fn().mockResolvedValue(clean),
+    remoteStatus: vi.fn().mockResolvedValue(local),
+    ...git
+  }
+  ;(window as unknown as { api: unknown }).api = { projects: { git: api } }
+  return api
+}
+
+describe('GitControl branches and merges', () => {
+  it('switches to a branch from its list, saving uncommitted changes on this one first', async () => {
+    const git = installGit({
+      status: vi.fn().mockResolvedValue({ ...dirty, branch: 'main' }),
+      branches: vi.fn().mockResolvedValue({
+        current: 'main',
+        branches: [
+          { name: 'main', upstream: 'origin/main' },
+          { name: 'origin/feature', remote: true }
+        ]
+      }),
+      switchBranch: vi.fn().mockResolvedValue({
+        ok: true,
+        packagesChanged: true,
+        status: { ...clean, branch: 'feature' },
+        remote: local
+      })
+    })
+    const onSynced = vi.fn()
+    const { rerender } = render(
+      <GitControl projectId="p1" refreshKey={0} busy onSynced={onSynced} />
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /1 uncommitted/ }))
+    const switcher = screen.getByRole('button', { name: 'Switch…' }) as HTMLButtonElement
+    expect(switcher.disabled, 'not while Copilot works on the app').toBe(true)
+    rerender(<GitControl projectId="p1" refreshKey={0} onSynced={onSynced} />)
+    fireEvent.click(switcher)
+
+    const list = await screen.findByRole('group', { name: 'Branches' })
+    const feature = await within(list).findByRole('button', { name: /origin\/feature/ })
+    expect(within(list).getByRole('button', { name: /main/ }).getAttribute('aria-current')).toBe(
+      'true'
+    )
+    expect(screen.getByText('Your 1 uncommitted change is saved on main first.')).toBeTruthy()
+    fireEvent.click(feature)
+    await waitFor(() => expect(onSynced).toHaveBeenCalledWith(true))
+    expect(git.switchBranch).toHaveBeenCalledWith('p1', 'origin/feature')
+    expect(screen.queryByRole('dialog', { name: 'Git' })).toBeNull()
+  })
+
+  it('offers Copilot when the latest changes overlap yours, and hands it the conflicts', async () => {
+    const merging: GitStatus = {
+      ...clean,
+      changedCount: 1,
+      merging: true,
+      conflicts: ['src/App.tsx']
+    }
+    const git = installGit({
+      remoteStatus: vi.fn().mockResolvedValue(upstream),
+      pull: vi.fn().mockResolvedValue({
+        ok: false,
+        conflict: true,
+        error:
+          'Your changes and the latest changes overlap and couldn’t be combined automatically.',
+        status: clean,
+        remote: upstream
+      }),
+      mergeLatest: vi.fn().mockResolvedValue({
+        ok: false,
+        conflict: true,
+        error: 'Your changes and the latest changes overlap in 1 file.',
+        status: merging,
+        remote: upstream
+      })
+    })
+    const onSendToChat = vi.fn()
+    render(<GitControl projectId="p1" refreshKey={0} onSendToChat={onSendToChat} />)
+    fireEvent.click(await screen.findByRole('button', { name: /clean/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Get latest' }))
+    expect(await screen.findByText(/overlap and couldn’t be combined/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Copilot to resolve' }))
+    await waitFor(() => expect(onSendToChat).toHaveBeenCalledTimes(1))
+    expect(git.mergeLatest).toHaveBeenCalledWith('p1')
+    const [display, prompt] = onSendToChat.mock.lastCall!
+    expect(display).toBe('Resolve the merge conflict in src/App.tsx')
+    expect(prompt).toContain('- src/App.tsx')
+    expect(prompt).toContain('git commit --no-edit')
+    expect(screen.getByRole('button', { name: /1 conflict/ })).toBeTruthy()
+  })
+
+  it('sends a merge’s conflicts to Copilot, and finishes the merge once they’re resolved', async () => {
+    const git = installGit({
+      status: vi
+        .fn()
+        .mockResolvedValue({
+          ...clean,
+          changedCount: 2,
+          merging: true,
+          conflicts: ['a.ts', 'b.ts']
+        }),
+      finishMerge: vi
+        .fn()
+        .mockResolvedValue({ ok: true, packagesChanged: true, status: clean, remote: local })
+    })
+    const onSynced = vi.fn()
+    const onSendToChat = vi.fn()
+    render(
+      <GitControl projectId="p1" refreshKey={0} onSynced={onSynced} onSendToChat={onSendToChat} />
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /2 conflicts/ }))
+    expect(screen.getByText('2 files have conflicts')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancel merge' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Finish merge' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Copilot to resolve' }))
+    expect(onSendToChat).toHaveBeenCalledWith(
+      'Resolve the merge conflicts in 2 files',
+      expect.stringContaining('- b.ts')
+    )
+
+    git.status.mockResolvedValue({ ...clean, changedCount: 2, merging: true })
+    fireEvent.click(screen.getByRole('button', { name: /2 conflicts/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Finish merge' }))
+    await waitFor(() => expect(onSynced).toHaveBeenCalledWith(true))
+    expect(git.finishMerge).toHaveBeenCalledWith('p1')
   })
 })
