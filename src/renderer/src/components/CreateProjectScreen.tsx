@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useId, useRef, useState, type JSX } from 'react'
 import type {
   CommunityGallery,
   ProjectActionResult,
+  ProjectLocationCheck,
   ProjectNameCheck,
   TeamActionResult,
   TeamWorkspace
@@ -11,6 +12,7 @@ import type { ModelSelection } from '../modelSelection'
 import { projectNameProblem } from '../projectName'
 import { useMascotInstall } from './mascot/stage'
 import { ModelPicker } from './models/ModelPicker'
+import { displayPath } from './projectDisplay'
 
 /** `scratch` = the Rayfin CLI's Universal App that grows into anything; `example` = a community template. */
 type Start = 'scratch' | 'example'
@@ -39,9 +41,17 @@ interface Props {
   initialName?: string
   /** The Copilot model the new app's first turns use, chosen here (a report migration's). */
   model?: { value: ModelSelection; onChange: (next: ModelSelection) => void; onManageKeys?: () => void }
+  /** The projects folder, where a new project goes unless another folder is chosen. */
+  projectsFolder?: string
+  /** Other folders earlier new projects went in, most recent first. */
+  recentLocations?: string[]
 }
 
 const keyOf = (t: { path?: string; name: string }): string => t.path || t.name
+
+/** A folder as Windows and macOS compare them: in any case, with either slash. */
+const comparable = (path: string): string =>
+  path.trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
 
 /** The coarse stages a scaffold goes through, in order. `done` is authoritative. */
 type CreatePhase = 'preparing' | 'customizing' | 'installing' | 'finalizing' | 'done'
@@ -127,7 +137,9 @@ export default function CreateProjectScreen({
   onTeamCreated,
   source,
   initialName,
-  model
+  model,
+  projectsFolder,
+  recentLocations
 }: Props): JSX.Element {
   // The native preview webview floats above HTML; suppress it while this covers the body.
   useSuppressPreview()
@@ -141,6 +153,13 @@ export default function CreateProjectScreen({
   )
 
   const [name, setName] = useState(initialName ?? '')
+  /** The folder the project goes in; blank is the projects folder. */
+  const [location, setLocation] = useState(projectsFolder ?? '')
+  const [locationCheck, setLocationCheck] = useState<
+    (ProjectLocationCheck & { key: string }) | null
+  >(null)
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const locationId = useId()
   const [start, setStart] = useState<Start>('scratch')
   const [gallery, setGallery] = useState<CommunityGallery | null>(null)
   const [loadingGallery, setLoadingGallery] = useState(false)
@@ -222,6 +241,40 @@ export default function CreateProjectScreen({
 
   const selectedEntry = gallery?.templates.find((t) => keyOf(t) === communitySel) ?? null
 
+  // The projects folder can arrive after the screen opens.
+  useEffect(() => {
+    if (projectsFolder) setLocation((current) => current || projectsFolder)
+  }, [projectsFolder])
+
+  /** The folder chosen for the project, when it isn't the projects folder. */
+  const customLocation =
+    !destination && location.trim() && comparable(location) !== comparable(projectsFolder ?? '')
+      ? location.trim()
+      : ''
+
+  async function browse(): Promise<void> {
+    const picked = await window.api.projects.pickFolder()
+    if (picked) setLocation(picked)
+  }
+
+  /** Create the chosen folder when it doesn't exist yet. */
+  async function createFolder(): Promise<void> {
+    const path = customLocation
+    setCreatingFolder(true)
+    try {
+      setLocationCheck({ ...(await window.api.projects.createLocation(path)), key: path })
+    } catch {
+      setLocationCheck({
+        ok: false,
+        missing: true,
+        message: 'Couldn’t create the folder.',
+        key: path
+      })
+    } finally {
+      setCreatingFolder(false)
+    }
+  }
+
   async function create(): Promise<void> {
     setBusy(true)
     setError(null)
@@ -260,7 +313,8 @@ export default function CreateProjectScreen({
       const result = await window.api.projects.create({
         name,
         template: tmpl,
-        templateName: tmplName
+        templateName: tmplName,
+        ...(customLocation ? { location: customLocation } : {})
       })
       if (result.ok) {
         setDone(true)
@@ -286,10 +340,11 @@ export default function CreateProjectScreen({
   /** The Rayfin CLI would refuse this name: said right away, so Create stays off. */
   const nameProblem = projectNameProblem(name)
 
-  // Is the name free where the project will be saved (the projects folder, or
-  // the team workspace)? Checked shortly after typing stops. Only a confirmed
-  // conflict blocks Create; creating still refuses a taken folder on its own.
-  const checkKey = `${destination}\u0000${name.trim()}`
+  // Is the name free where the project will be saved (the projects folder, the
+  // folder chosen instead, or the team workspace)? Checked shortly after typing
+  // stops. Only a confirmed conflict blocks Create; creating still refuses a
+  // taken folder on its own.
+  const checkKey = `${destination}\u0000${customLocation}\u0000${name.trim()}`
   const [nameCheck, setNameCheck] = useState<(ProjectNameCheck & { key: string }) | null>(null)
   useEffect(() => {
     if (!slug || nameProblem || busy || done) return
@@ -298,7 +353,11 @@ export default function CreateProjectScreen({
       void (async () => {
         let result: ProjectNameCheck = { ok: true }
         try {
-          result = await window.api.projects.checkName(name.trim(), destination || undefined)
+          result = await window.api.projects.checkName(
+            name.trim(),
+            destination || undefined,
+            customLocation || undefined
+          )
         } catch {
           // A failed check never blocks creating.
         }
@@ -313,10 +372,44 @@ export default function CreateProjectScreen({
   const nameTaken = nameCheck?.key === checkKey && !nameCheck.ok ? (nameCheck.message ?? 'That name is taken.') : null
   const nameWarning = nameProblem ?? nameTaken
 
+  // Can the chosen folder take the project? Checked shortly after typing stops;
+  // a missing folder is offered for creating, and Create waits for an answer.
+  useEffect(() => {
+    if (!customLocation || busy || done) return
+    let stale = false
+    const timer = window.setTimeout(() => {
+      void window.api.projects
+        .checkLocation(customLocation)
+        .then((result) => {
+          if (!stale) setLocationCheck({ ...result, key: customLocation })
+        })
+        // A failed check doesn't block creating, which checks the folder again.
+        .catch(() => {
+          if (!stale) setLocationCheck({ ok: true, key: customLocation })
+        })
+    }, 300)
+    return () => {
+      stale = true
+      window.clearTimeout(timer)
+    }
+  }, [customLocation, busy, done])
+  const locationState =
+    customLocation && locationCheck?.key === customLocation ? locationCheck : null
+  const locationReady = !customLocation || Boolean(locationState?.ok)
+  const projectsKey = comparable(projectsFolder ?? '')
+  /** Quick picks: the projects folder, when another is chosen, then recent folders. */
+  const locationChoices = [
+    ...(customLocation && projectsFolder ? [projectsFolder] : []),
+    ...(recentLocations ?? []).filter((path) => comparable(path) !== projectsKey)
+  ]
+    .filter((path) => comparable(path) !== comparable(location))
+    .slice(0, 5)
+
   const urlValid = /^(https?:\/\/|git@|git\+)/i.test(url.trim())
   const canCreate =
     Boolean(slug) &&
     !nameWarning &&
+    locationReady &&
     (start === 'scratch' || (customMode ? urlValid : Boolean(selectedEntry)))
 
   // ----- Create progress (cosmetic; completion is driven by `done`) -----
@@ -410,6 +503,70 @@ export default function CreateProjectScreen({
                   : 'It runs on this computer. Publish it to a Fabric workspace whenever you’re ready.'}
               </span>
             </label>
+          )}
+          {!destination && (
+            <div className={`field${hideFields ? ' create-field-hidden' : ''}`}>
+              <label className="field-label" htmlFor={locationId}>
+                Location
+              </label>
+              <div className="create-location">
+                <input
+                  id={locationId}
+                  className="field-input"
+                  type="text"
+                  value={location}
+                  placeholder={projectsFolder || 'Your projects folder'}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  disabled={busy}
+                  aria-invalid={locationState && !locationState.ok ? true : undefined}
+                  onChange={(e) => setLocation(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  disabled={busy}
+                  onClick={() => void browse()}
+                >
+                  Browse…
+                </button>
+              </div>
+              {locationState && !locationState.ok && (
+                <span className="field-hint field-hint--warn create-location-problem" role="alert">
+                  {locationState.message}
+                  {locationState.missing && (
+                    <button
+                      type="button"
+                      className="link-btn"
+                      disabled={busy || creatingFolder}
+                      onClick={() => void createFolder()}
+                    >
+                      {creatingFolder ? 'Creating…' : 'Create folder'}
+                    </button>
+                  )}
+                </span>
+              )}
+              {locationChoices.length > 0 && (
+                <div className="create-recents" role="group" aria-label="Recent locations">
+                  <span className="create-recents-label" aria-hidden="true">
+                    Recent
+                  </span>
+                  {locationChoices.map((path) => (
+                    <button
+                      key={path}
+                      type="button"
+                      className="create-recent"
+                      title={path}
+                      disabled={busy}
+                      onClick={() => setLocation(path)}
+                    >
+                      {comparable(path) === projectsKey ? 'Projects folder' : displayPath(path)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           <div className={`field${hideFields ? ' create-field-hidden' : ''}`}>

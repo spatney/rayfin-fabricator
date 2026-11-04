@@ -1612,6 +1612,8 @@ export interface StudioProject {
   team?: TeamBinding
   /** True when the folder no longer exists / is no longer a Rayfin project. */
   missing?: boolean
+  /** The Rayfin version the project has installed (its CLI's), read when projects are listed. */
+  rayfinVersion?: string
 }
 
 export interface ProjectsState {
@@ -1622,6 +1624,8 @@ export interface ProjectsState {
   projects: StudioProject[]
   /** Team workspaces on this computer (empty while the experiment is off). */
   teamWorkspaces?: TeamWorkspace[]
+  /** Folders other than the projects folder that new projects went in, most recent first. */
+  recentLocations?: string[]
 }
 
 export type ThemePreference = 'dark' | 'light' | 'system'
@@ -1853,6 +1857,11 @@ export interface CreateProjectInput {
    * built-in templates.
    */
   templateName?: string
+  /**
+   * The folder the project goes in, when it isn't the projects folder. It must
+   * exist: New project offers to create it.
+   */
+  location?: string
 }
 
 export interface ProjectActionResult {
@@ -2137,6 +2146,15 @@ export interface SecurityCheckApi {
 export interface ProjectNameCheck {
   ok: boolean
   /** Why the name can't be used, in plain language. */
+  message?: string
+}
+
+/** Whether a folder a new project could go in can take it. */
+export interface ProjectLocationCheck {
+  ok: boolean
+  /** The folder doesn't exist yet, so it can be created. */
+  missing?: boolean
+  /** Why it can't take the project, in plain language. */
   message?: string
 }
 
@@ -3822,12 +3840,21 @@ export interface RayfinStudioApi {
     /** Fetch a community template gallery (defaults to microsoft/awesome-rayfin). */
     communityTemplates: (repoUrl?: string) => Promise<CommunityGalleryResult>
     /**
-     * Whether a new project's name is free: in the projects folder, or in a
-     * team workspace (its apps and its published-apps Fabric workspace).
+     * Whether a new project's name is free: in the projects folder (or the
+     * folder chosen instead, `location`), or in a team workspace (its apps and
+     * its published-apps Fabric workspace).
      */
-    checkName: (name: string, teamWorkspaceId?: string) => Promise<ProjectNameCheck>
+    checkName: (
+      name: string,
+      teamWorkspaceId?: string,
+      location?: string
+    ) => Promise<ProjectNameCheck>
     /** Native folder picker; returns the chosen path or null if cancelled. */
     pickFolder: () => Promise<string | null>
+    /** Whether a folder can take a new project; blank is the projects folder. */
+    checkLocation: (path: string) => Promise<ProjectLocationCheck>
+    /** Create a missing folder for a new project to go in. */
+    createLocation: (path: string) => Promise<ProjectLocationCheck>
     /** Native folder picker for the workspace root; persists and returns state. */
     pickWorkspaceRoot: () => Promise<ProjectsState>
     setWorkspaceRoot: (path: string) => Promise<ProjectsState>

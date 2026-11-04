@@ -16,11 +16,11 @@ use tauri::{AppHandle, Emitter};
 use crate::commands::util::{annotate_project, is_rayfin_project, normalize, same_path};
 use crate::services::exec::{run, OnData, RunOptions, RunResult, Stream};
 use crate::services::rayfin_sdk::{self, Pinning};
-use crate::services::{emit, git, history, store};
+use crate::services::{emit, git, history, store, version_history};
 use crate::state::AppState;
 use crate::types::{
-  CommunityGallery, CommunityGalleryResult, CommunityTemplate, CreateProjectInput,
-  DeleteProgressEvent, ProjectActionResult, ProjectNameCheck, ProjectsState, StudioProject,
+  CommunityGallery, CommunityGalleryResult, CommunityTemplate, CreateProjectInput, DeleteProgressEvent,
+  ProjectActionResult, ProjectLocationCheck, ProjectNameCheck, ProjectsState, StudioProject,
 };
 
 const CREATE_CHANNEL: &str = "create:project";
@@ -227,6 +227,7 @@ pub(crate) fn register_project(dir: &Path, display_name: Option<&str>) -> Studio
     needs_fabric_portal: None,
     team: None,
     missing: None,
+    rayfin_version: None,
   };
   store::upsert_project(project.clone());
   project
@@ -322,7 +323,7 @@ pub(crate) fn project_name_problem(name: &str) -> Option<&'static str> {
 
 /// Whether a new local project named `name` can be created under `root`: its
 /// folder (the same slug [`create_project`] uses) must not exist yet.
-pub(crate) fn check_local_name_in(root: &Path, name: &str) -> ProjectNameCheck {
+pub(crate) fn check_local_name_in(root: &Path, name: &str, place: &str) -> ProjectNameCheck {
   if let Some(problem) = project_name_problem(name) {
     return ProjectNameCheck { ok: false, message: Some(problem.into()) };
   }
@@ -333,16 +334,62 @@ pub(crate) fn check_local_name_in(root: &Path, name: &str) -> ProjectNameCheck {
   if root.join(&slug).exists() {
     return ProjectNameCheck {
       ok: false,
-      message: Some(format!("A folder named “{slug}” is already in your projects folder. Choose another name.")),
+      message: Some(format!("A folder named “{slug}” is already in {place}. Choose another name.")),
     };
   }
   ProjectNameCheck { ok: true, message: None }
 }
 
-/// [`check_local_name_in`] for the workspace root new projects are saved in.
-pub fn check_local_name(name: &str) -> ProjectNameCheck {
-  let root = store::get_state().workspace_root;
-  check_local_name_in(Path::new(&root), name)
+/// [`check_local_name_in`] for where a new project is saved: the folder the
+/// user chose, or the projects folder.
+pub fn check_local_name(name: &str, location: Option<&str>) -> ProjectNameCheck {
+  match chosen_location(location) {
+    Some(folder) => check_local_name_in(&folder, name, "that folder"),
+    None => check_local_name_in(Path::new(&store::get_state().workspace_root), name, "your projects folder"),
+  }
+}
+
+/// The folder the user chose for a new project, when it isn't the projects folder.
+fn chosen_location(location: Option<&str>) -> Option<PathBuf> {
+  let projects_folder = store::get_state().workspace_root;
+  location
+    .map(str::trim)
+    .filter(|l| !l.is_empty())
+    .map(|l| normalize(Path::new(l)))
+    .filter(|l| !same_path(&l.to_string_lossy(), &projects_folder))
+}
+
+/// Whether `path` can take a new project: a folder that exists, given in full.
+/// Blank is the projects folder, which is always fine.
+pub fn check_location(path: &str) -> ProjectLocationCheck {
+  let path = path.trim();
+  let problem = |message: &str| ProjectLocationCheck { ok: false, missing: false, message: Some(message.into()) };
+  if path.is_empty() {
+    return ProjectLocationCheck { ok: true, ..Default::default() };
+  }
+  let folder = Path::new(path);
+  if !folder.is_absolute() {
+    return problem("Enter the folder’s full path, or choose it with Browse.");
+  }
+  if folder.is_dir() {
+    return ProjectLocationCheck { ok: true, ..Default::default() };
+  }
+  if folder.exists() {
+    return problem("That’s a file, not a folder.");
+  }
+  ProjectLocationCheck { ok: false, missing: true, message: Some("This folder doesn’t exist yet.".into()) }
+}
+
+/// Create a missing folder for a new project to go in.
+pub fn create_location(path: &str) -> ProjectLocationCheck {
+  let check = check_location(path);
+  if !check.missing {
+    return check;
+  }
+  match std::fs::create_dir_all(path.trim()) {
+    Ok(()) => check_location(path),
+    Err(e) => ProjectLocationCheck { message: Some(format!("Couldn’t create the folder: {e}")), ..check },
+  }
 }
 
 /// Validate a New Project request (name, template) into a [`ScaffoldRequest`].
@@ -594,30 +641,60 @@ pub(crate) async fn ensure_functions_dependencies(project: &Path, on: Option<OnD
   }
 }
 
-/// Scaffold a new Rayfin project, git-init it, and make it active.
+/// Scaffold a new Rayfin project, start its history, and make it active.
 pub async fn create_project(app: &AppHandle, input: CreateProjectInput) -> ProjectActionResult {
   let request = match scaffold_request(&input) {
     Ok(r) => r,
     Err(e) => return err(e),
   };
 
-  let root = store::get_state().workspace_root;
-  if !Path::new(&root).exists() {
-    if let Err(e) = std::fs::create_dir_all(&root) {
-      return err(format!("Could not create workspace folder: {e}"));
+  // The folder the user chose, which New project has them create when it's
+  // missing; or else the projects folder, created here when it's missing.
+  let chosen = chosen_location(input.location.as_deref());
+  let root = match &chosen {
+    Some(folder) => {
+      let check = check_location(&folder.to_string_lossy());
+      if !check.ok {
+        return err(check.message.unwrap_or_else(|| "Choose another folder for the project.".into()));
+      }
+      folder.clone()
     }
-  }
-  let dir = Path::new(&root).join(&request.slug);
+    None => {
+      let root = PathBuf::from(store::get_state().workspace_root);
+      if !root.exists() {
+        if let Err(e) = std::fs::create_dir_all(&root) {
+          return err(format!("Could not create workspace folder: {e}"));
+        }
+      }
+      root
+    }
+  };
+  let dir = root.join(&request.slug);
   if dir.exists() {
-    return err(format!("A folder named \"{}\" already exists in your workspace.", request.slug));
+    let place = if chosen.is_some() { "that folder" } else { "your workspace" };
+    return err(format!("A folder named \"{}\" already exists in {place}.", request.slug));
   }
 
   let on = emit::proc_streamer(app, CREATE_CHANNEL);
-  let dir = match scaffold_project(Path::new(&root), &request.slug, &request, &on).await {
+  let dir = match scaffold_project(&root, &request.slug, &request, &on).await {
     Ok(dir) => dir,
     Err(e) => return err(e),
   };
-  init_git_repo(&dir, &format!("Initial commit ({})", request.label()), &on).await;
+  let summary = format!("Initial commit ({})", request.label());
+  // In a folder git already tracks, such as a repository's apps folder, the app
+  // joins that repository: a second one nested in it would hide the app's
+  // files from it. Its first version is saved there, of its own folder only.
+  if version_history::is_tracked(&root) {
+    say(&on, "Saving the first version in the folder's git repository…\n");
+    if let Err(e) = version_history::save_version(&dir, &summary).await {
+      say(&on, &format!("⚠️ {e}\n"));
+    }
+  } else {
+    init_git_repo(&dir, &summary, &on).await;
+  }
+  if let Some(folder) = &chosen {
+    store::remember_location(&folder.to_string_lossy());
+  }
 
   // The app runs on this computer from the start. The preview mode is left at
   // its default (direct view); a project that later connects a semantic model
@@ -878,6 +955,7 @@ entries:
       name: "Trip Logger".into(),
       template: template.into(),
       template_name: template_name.map(String::from),
+      location: None,
     };
     let args = |request: &ScaffoldRequest| create_args(&request.slug, request, "1.36.2", true).join(" ");
 
@@ -927,12 +1005,29 @@ entries:
   fn local_names_must_not_reuse_an_existing_folder() {
     let root = std::env::temp_dir().join(format!("fab-name-check-{}", std::process::id()));
     std::fs::create_dir_all(root.join("trip-logger")).unwrap();
-    let taken = check_local_name_in(&root, "Trip Logger");
+    let taken = check_local_name_in(&root, "Trip Logger", "your projects folder");
     assert!(!taken.ok);
-    assert!(taken.message.as_deref().unwrap_or_default().contains("“trip-logger”"));
-    assert_eq!(check_local_name_in(&root, "Trip Planner"), ProjectNameCheck { ok: true, message: None });
-    assert!(!check_local_name_in(&root, "!!!").ok);
+    assert!(taken.message.as_deref().unwrap_or_default().contains("“trip-logger” is already in your projects folder"));
+    assert_eq!(check_local_name_in(&root, "Trip Planner", "that folder"), ProjectNameCheck { ok: true, message: None });
+    assert!(!check_local_name_in(&root, "!!!", "that folder").ok);
     let _ = std::fs::remove_dir_all(&root);
+  }
+
+  #[test]
+  fn a_new_projects_folder_is_given_in_full_and_offered_for_creating_when_missing() {
+    let base = std::env::temp_dir().join(format!("fab-location-{}", uuid::Uuid::new_v4()));
+    let missing = base.join("apps").join("new");
+    let check = check_location(&missing.to_string_lossy());
+    assert_eq!((check.ok, check.missing), (false, true));
+    assert_eq!(create_location(&missing.to_string_lossy()), ProjectLocationCheck { ok: true, ..Default::default() });
+    assert!(missing.is_dir());
+    std::fs::write(base.join("notes.txt"), "x").unwrap();
+    let file = check_location(&base.join("notes.txt").to_string_lossy());
+    assert!(!file.ok && !file.missing, "{file:?}");
+    assert_eq!(create_location(&base.join("notes.txt").to_string_lossy()), file, "a file isn't replaced");
+    assert!(!check_location("relative/apps").ok);
+    assert!(check_location("  ").ok, "blank is the projects folder");
+    let _ = std::fs::remove_dir_all(&base);
   }
 
   #[test]
@@ -948,6 +1043,7 @@ entries:
       name: "SalesBenchmark (migrated)".into(),
       template: String::new(),
       template_name: None,
+      location: None,
     };
     assert_eq!(
       scaffold_request(&input).err().as_deref(),

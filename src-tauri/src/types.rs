@@ -741,6 +741,11 @@ pub struct StudioProject {
   pub team: Option<TeamBinding>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub missing: Option<bool>,
+  /// The Rayfin version the project has installed (its CLI's, or else an SDK
+  /// package's), read from its folder when projects are listed, like `missing`,
+  /// for Home. Never read back from the store.
+  #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+  pub rayfin_version: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -752,6 +757,10 @@ pub struct ProjectsState {
   /// GitHub-backed team workspaces this machine has created or joined.
   #[serde(default)]
   pub team_workspaces: Vec<TeamWorkspace>,
+  /// Folders other than the projects folder that new projects went in, most
+  /// recent first.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub recent_locations: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -998,6 +1007,10 @@ pub struct CreateProjectInput {
   pub template: String,
   #[serde(default)]
   pub template_name: Option<String>,
+  /// The folder the project goes in, when it isn't the projects folder. It
+  /// must exist (New project offers to create it).
+  #[serde(default)]
+  pub location: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -1362,6 +1375,19 @@ pub struct SecurityEventEnvelope {
 pub struct ProjectNameCheck {
   pub ok: bool,
   /// Why the name can't be used, in plain language (when `ok` is false).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub message: Option<String>,
+}
+
+/// Whether a folder a new project could go in can take it.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectLocationCheck {
+  pub ok: bool,
+  /// The folder doesn't exist yet, so it can be created.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub missing: bool,
+  /// Why it can't take the project, in plain language (when `ok` is false).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub message: Option<String>,
 }

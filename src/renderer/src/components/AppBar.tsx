@@ -32,11 +32,12 @@ export function ProjectMark({ name, className }: { name: string; className: stri
 }
 
 /**
- * The project's identity doubles as the way to switch: it opens a menu of the
- * most recently used projects, and All projects shows Home over the
- * still-running project. A project whose folder is missing can't be opened, so
- * it's left to Home, where it can be managed. The path lives in the tooltip
- * (the OS title bar shows the name).
+ * The project's identity doubles as the way around, as a split button: its name
+ * shows every project on Home over the still-running project, in one click, and
+ * its caret opens a menu of the most recently used projects to switch to (and
+ * All projects again, for the keyboard). A project whose folder is missing can't
+ * be opened, so it's left to Home, where it can be managed. The path lives in
+ * the tooltip (the OS title bar shows the name).
  */
 export function ProjectSwitcher({
   project,
@@ -110,21 +111,34 @@ export function ProjectSwitcher({
         moveMenuFocus(e, ITEM)
       }}
     >
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`project-switcher${open ? ' is-open' : ''}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        aria-label={`${project.name} — Switch projects`}
-        title={`${project.path}\nSwitch projects`}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <ProjectMark name={project.name} className="project-switcher-mark" />
-        <span className="project-switcher-name">{project.name}</span>
-        <Codicon name="chevron-down" className="project-switcher-caret" />
-      </button>
+      <div className={`project-split${open ? ' is-open' : ''}`}>
+        <button
+          type="button"
+          className="project-switcher"
+          aria-label={`${project.name} — All projects`}
+          title={`${project.path}\nAll projects`}
+          onClick={() => {
+            setOpen(false)
+            onShowAll()
+          }}
+        >
+          <ProjectMark name={project.name} className="project-switcher-mark" />
+          <span className="project-switcher-name">{project.name}</span>
+        </button>
+        <button
+          ref={triggerRef}
+          type="button"
+          className="project-switcher-more"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          aria-label={`${project.name} — Switch projects`}
+          title="Switch projects"
+          onClick={() => setOpen((o) => !o)}
+        >
+          <Codicon name="chevron-down" className="project-switcher-caret" />
+        </button>
+      </div>
 
       {open && (
         <div className="project-menu">

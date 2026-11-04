@@ -875,7 +875,7 @@ mod tests {
       let (root, on, said) = (root.clone(), on.clone(), said.clone());
       async move {
         said.lock().unwrap().clear();
-        let input = crate::types::CreateProjectInput { name: name.into(), template: String::new(), template_name: None };
+        let input = crate::types::CreateProjectInput { name: name.into(), template: String::new(), template_name: None, location: None };
         let request = scaffold_request(&input).unwrap();
         let began = Instant::now();
         let dir = scaffold_project(&root, &request.slug, &request, &on).await.unwrap();

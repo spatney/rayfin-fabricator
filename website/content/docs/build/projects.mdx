@@ -3,7 +3,7 @@ title: "Create and manage projects"
 description: "Start a new Rayfin app, open or clone an existing one, export a project for someone else or import one, switch between projects, and rename or remove them."
 ---
 
-Projects are the Rayfin apps Fabricator can open. From **Your projects**, you can start a new app, open a local folder, clone a GitHub repository, import a project someone exported, or return to a recent project.
+Projects are the Rayfin apps Fabricator can open. From **Your projects**, you can start a new app, open a local folder, clone a GitHub repository, import a project someone exported, or return to a recent project. Each recent project shows its folder and the Rayfin version it has installed, such as `Rayfin 1.36.2`.
 
 ![Home, with the New project, Open folder and Clone from GitHub actions above a list of three recent projects.](/screenshots/home.webp)
 
@@ -15,9 +15,10 @@ A new Fabricator project starts from the Universal App, the default template tha
 2. Type a **Project name**. Use letters, numbers, spaces, hyphens and underscores; Fabricator says
    so under the name when it has other characters, and **Create project** stays off until you
    change it.
-3. Check the folder hint. Fabricator turns the name into a folder name and checks whether that folder already exists in your projects folder.
+3. Check the folder hint. Fabricator turns the name into a folder name and checks whether that folder already exists where the project goes.
 4. If team workspaces are enabled, under **Where**, choose **Just me, on this computer** unless you are creating a team app. Its hint says "It runs on this computer. Publish it to a Fabric workspace whenever you’re ready."
-5. Select **Create project**.
+5. Under **Location**, keep your projects folder, or put this project in another folder: type the folder's full path, select **Browse…**, or select one of the folders under **Recent**. If the folder doesn't exist yet, Fabricator says "This folder doesn’t exist yet." Select **Create folder** to create it.
+6. Select **Create project**.
 
 ![The New project screen with Contoso Expenses typed as the project name, the folder name below it, the Details and Publish steps, and the Create project button.](/screenshots/new-project.webp)
 
@@ -28,7 +29,9 @@ The first project you create on a Rayfin release takes the longest, because npm 
 While the project installs its packages, Ray, Fabricator's stingray, keeps you company with facts about Rayfin and tips for Fabricator. When the app is ready, he says "Your app is ready! It runs right here on your computer. Let’s build." He also turns up when a cloned or opened project takes a while to install. To find out what else he does, and how to send him away, see [Ray](/docs/start/tour#ray).
 
 > [!NOTE]
-> New local projects are saved under the **Workspace folder** in **Settings**. You can also use **Change folder** on **Your projects**.
+> New local projects are saved under the **Workspace folder** in **Settings**, unless you choose another **Location**. You can also use **Change folder** on **Your projects**.
+
+**Recent** lists the last five folders, other than your projects folder, that you created projects in. A project created in a folder that's already in a git repository, such as the apps folder of a repository that holds several apps, keeps its version history in that repository instead of starting its own.
 
 ## Start from a community example
 
@@ -102,12 +105,12 @@ The Fabricator installer has your computer open `.fabricator` files with Fabrica
 
 While a project is open, you can switch to another one from the app bar.
 
-1. In the app bar, select the project name.
+1. In the app bar, select the arrow beside the project name.
 2. Under **Recent projects**, select the project you want to open.
 
 The menu lists up to six of your most recently opened projects. A project whose folder is missing isn't listed there; it appears on **Your projects** marked **Missing**.
 
-To see every project, select **All projects**. The project you had open keeps running behind **Your projects**, and the `Back to <project name>` button returns you to it.
+To see every project, select the project name itself, or **All projects** in the menu. The project you had open keeps running behind **Your projects**, and the `Back to <project name>` button returns you to it.
 
 Fabricator runs at most two apps on this computer at once: the project you have open and the one you had open before it. When you open a third, it stops the app you used longest ago, and starts it again when you go back to it.
 
@@ -168,4 +171,4 @@ The current projects folder appears at the bottom of **Your projects** and in **
 3. Select **Change…**.
 4. Pick a folder.
 
-Existing projects stay where they are. New projects and cloned repositories use the new folder.
+Existing projects stay where they are. New projects and cloned repositories use the new folder. To put one new project somewhere else, use **Location** when you create it.

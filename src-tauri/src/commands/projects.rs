@@ -10,7 +10,7 @@ use crate::state::AppState;
 use crate::types::{
   CommunityGalleryResult, CreateProjectInput, FileContent, FileNode, GitChange, GitCommitResult,
   GitCommitSummary, GitFileDiff, GitHistory, GitRemoteStatus, GitStatus, GitSyncResult,
-  ProjectActionResult, ProjectNameCheck, ProjectsState, RevertResult, SavedTurn,
+  ProjectActionResult, ProjectLocationCheck, ProjectNameCheck, ProjectsState, RevertResult, SavedTurn,
 };
 
 /// Show a native folder picker, returning the chosen absolute path (or None).
@@ -33,15 +33,20 @@ pub fn projects_state() -> ProjectsState {
 }
 
 /// Whether a new project's name is free where it will be saved: the projects
-/// folder on this computer, or the chosen team workspace (its apps and the
-/// Fabric workspace its pipeline publishes to).
+/// folder on this computer, or the folder chosen instead (`location`), or the
+/// chosen team workspace (its apps and the Fabric workspace its pipeline
+/// publishes to).
 #[tauri::command]
-pub async fn projects_check_name(name: String, team_workspace_id: Option<String>) -> ProjectNameCheck {
+pub async fn projects_check_name(
+  name: String,
+  team_workspace_id: Option<String>,
+  location: Option<String>,
+) -> ProjectNameCheck {
   if let Some(problem) = crate::commands::projects_impl::project_name_problem(&name) {
     return ProjectNameCheck { ok: false, message: Some(problem.into()) };
   }
   let Some(id) = team_workspace_id.filter(|id| !id.trim().is_empty()) else {
-    return crate::commands::projects_impl::check_local_name(&name);
+    return crate::commands::projects_impl::check_local_name(&name, location.as_deref());
   };
   let Some(ws) = store::find_team_workspace(&id) else {
     return ProjectNameCheck { ok: false, message: Some("That team workspace is no longer on this computer.".into()) };
@@ -60,6 +65,18 @@ pub async fn projects_community_templates(repo_url: Option<String>) -> Community
 #[tauri::command]
 pub async fn projects_pick_folder(app: AppHandle) -> Option<String> {
   pick_folder_dialog(&app).await
+}
+
+/// Whether a folder can take a new project: it exists, or is missing and can be created.
+#[tauri::command(async)]
+pub fn projects_check_location(path: String) -> ProjectLocationCheck {
+  crate::commands::projects_impl::check_location(&path)
+}
+
+/// Create a missing folder for a new project to go in.
+#[tauri::command(async)]
+pub fn projects_create_location(path: String) -> ProjectLocationCheck {
+  crate::commands::projects_impl::create_location(&path)
 }
 
 #[tauri::command]

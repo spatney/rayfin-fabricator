@@ -315,11 +315,17 @@ code {
   line-height: 1;
 }
 
-/* The project's identity is the switcher: initial + name + caret, opening a menu
-   of recent projects. */
+/* The project's identity is a split button: its initial and name show every
+   project on Home, and its caret opens a menu of recent projects. */
 .project-switch {
   position: relative;
   display: flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.project-split {
+  display: inline-flex;
   min-width: 0;
   max-width: 100%;
 }
@@ -333,7 +339,7 @@ code {
   height: var(--bar-h);
   padding: 0 8px 0 3px;
   border: 1px solid transparent;
-  border-radius: var(--bar-radius);
+  border-radius: var(--bar-radius) 0 0 var(--bar-radius);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -343,13 +349,39 @@ code {
     border-color 0.15s ease;
 }
 
-.project-switcher:hover,
-.project-switcher.is-open {
-  background: var(--bg-elev-2);
+.project-switcher-more {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: var(--bar-h);
+  margin-left: -1px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0 var(--bar-radius) var(--bar-radius) 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+/* Either half outlines both, so they read as one control with two parts. */
+.project-split:hover > button,
+.project-split.is-open > button {
   border-color: var(--border);
 }
 
-.project-switcher:active {
+.project-switcher:hover,
+.project-switcher-more:hover,
+.project-split.is-open > .project-switcher-more {
+  background: var(--bg-elev-2);
+}
+
+.project-switcher:active,
+.project-switcher-more:active {
   transform: translateY(0.5px);
 }
 
@@ -387,15 +419,15 @@ code {
   line-height: 1.2;
 }
 
-.project-switcher .codicon.project-switcher-caret {
+.project-switcher-more .codicon.project-switcher-caret {
   flex: none;
   font-size: var(--bar-caret);
   color: var(--text-faint);
   transition: color 0.15s ease;
 }
 
-.project-switcher:hover .codicon.project-switcher-caret,
-.project-switcher.is-open .codicon.project-switcher-caret {
+.project-switcher-more:hover .codicon.project-switcher-caret,
+.project-split.is-open .codicon.project-switcher-caret {
   color: var(--text-dim);
 }
 
@@ -7408,6 +7440,25 @@ button.deploy-trouble-ray:focus-visible {
   white-space: nowrap;
 }
 
+/* A project's folder, then the Rayfin version it has installed. */
+.home-project-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.home-project-meta > .home-project-path {
+  min-width: 0;
+}
+
+.home-project-version {
+  flex: none;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* A team app's workspace, in place of a folder. */
 .home-project-path .codicon {
   margin-right: 5px;
@@ -11709,6 +11760,61 @@ select.ws-input:disabled {
    template picker. */
 .create-field-hidden {
   display: none;
+}
+
+/* New project's Location: the folder, Browse, and recent folders to pick from. */
+.create-location {
+  display: flex;
+  gap: 8px;
+}
+
+.create-location .field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.create-location > .btn {
+  align-self: stretch;
+  height: auto;
+}
+
+.create-location-problem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.create-recents {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.create-recents-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.create-recent {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 9px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.create-recent:hover:not(:disabled),
+.create-recent:focus-visible {
+  border-color: var(--accent);
 }
 
 .create-foot {

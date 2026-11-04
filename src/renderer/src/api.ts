@@ -242,9 +242,15 @@ export const api: RayfinStudioApi = {
   projects: {
     state: () => invoke('projects_state'),
     communityTemplates: (repoUrl?: string) => invoke('projects_community_templates', { repoUrl }),
-    checkName: (name: string, teamWorkspaceId?: string) =>
-      invoke('projects_check_name', { name, teamWorkspaceId: teamWorkspaceId ?? null }),
+    checkName: (name: string, teamWorkspaceId?: string, location?: string) =>
+      invoke('projects_check_name', {
+        name,
+        teamWorkspaceId: teamWorkspaceId ?? null,
+        location: location ?? null
+      }),
     pickFolder: () => invoke('projects_pick_folder'),
+    checkLocation: (path: string) => invoke('projects_check_location', { path }),
+    createLocation: (path: string) => invoke('projects_create_location', { path }),
     pickWorkspaceRoot: () => invoke('projects_pick_workspace_root'),
     setWorkspaceRoot: (path: string) => invoke('projects_set_workspace_root', { path }),
     create: (input: CreateProjectInput) => invoke('projects_create', { input }),

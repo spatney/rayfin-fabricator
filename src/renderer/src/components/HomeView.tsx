@@ -368,14 +368,27 @@ export default function HomeView({
                             <span className="home-project-removal-text">{status}</span>
                           </span>
                         ) : (
-                          <span className="home-project-path" title={project.path}>
-                            {teamName ? (
-                              <>
-                                <span className="codicon codicon-organization" aria-hidden="true" />
-                                {teamName} · saved to GitHub as you work
-                              </>
-                            ) : (
-                              displayPath(project.path)
+                          <span className="home-project-meta">
+                            <span className="home-project-path" title={project.path}>
+                              {teamName ? (
+                                <>
+                                  <span
+                                    className="codicon codicon-organization"
+                                    aria-hidden="true"
+                                  />
+                                  {teamName} · saved to GitHub as you work
+                                </>
+                              ) : (
+                                displayPath(project.path)
+                              )}
+                            </span>
+                            {project.rayfinVersion && (
+                              <span
+                                className="home-project-version"
+                                title={`Rayfin ${project.rayfinVersion} is installed in this project`}
+                              >
+                                Rayfin {project.rayfinVersion}
+                              </span>
                             )}
                           </span>
                         )}

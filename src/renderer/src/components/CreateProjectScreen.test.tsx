@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { OverlayProvider } from '../overlay'
 import CreateProjectScreen from './CreateProjectScreen'
 
@@ -143,6 +143,72 @@ describe('CreateProjectScreen after creating', () => {
   })
 })
 
+describe('CreateProjectScreen location', () => {
+  it('creates a project in another folder, offering to create it, with recent folders to pick', async () => {
+    const projects = (
+      window as unknown as { api: { projects: Record<string, ReturnType<typeof vi.fn>> } }
+    ).api.projects
+    projects.checkLocation = vi.fn(async (path: string) =>
+      path === 'C:\\code\\apps'
+        ? { ok: false, missing: true, message: 'This folder doesn’t exist yet.' }
+        : { ok: true }
+    )
+    projects.createLocation = vi.fn(async () => ({ ok: true }))
+    await act(async () => {
+      render(
+        <OverlayProvider>
+          <CreateProjectScreen
+            onCancel={() => {}}
+            projectsFolder="C:\Users\me\RayfinProjects"
+            recentLocations={['C:\\code\\demos', 'c:\\users\\me\\rayfinprojects\\']}
+          />
+        </OverlayProvider>
+      )
+    })
+    const location = screen.getByLabelText('Location') as HTMLInputElement
+    expect(location.value).toBe('C:\\Users\\me\\RayfinProjects')
+    // Folders other than the projects folder are offered.
+    const recents = screen.getByRole('group', { name: 'Recent locations' })
+    expect(
+      within(recents)
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+    ).toEqual(['C:\\code\\demos'])
+
+    fireEvent.change(screen.getByPlaceholderText('My Rayfin App'), {
+      target: { value: 'Trip Logger' }
+    })
+    fireEvent.change(location, { target: { value: 'C:\\code\\apps' } })
+    const create = screen.getByRole('button', { name: 'Create project' }) as HTMLButtonElement
+    const offer = await screen.findByRole('button', { name: 'Create folder' })
+    expect(create.disabled).toBe(true)
+    await act(async () => {
+      fireEvent.click(offer)
+    })
+    expect(projects.createLocation).toHaveBeenCalledWith('C:\\code\\apps')
+    await waitFor(() => expect(create.disabled).toBe(false))
+    await waitFor(() =>
+      expect(projects.checkName).toHaveBeenLastCalledWith(
+        'Trip Logger',
+        undefined,
+        'C:\\code\\apps'
+      )
+    )
+    expect(
+      within(screen.getByRole('group', { name: 'Recent locations' }))
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+    ).toEqual(['Projects folder', 'C:\\code\\demos'])
+
+    await act(async () => {
+      fireEvent.click(create)
+    })
+    expect(projects.create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Trip Logger', location: 'C:\\code\\apps' })
+    )
+  })
+})
+
 describe('CreateProjectScreen starting point', () => {
   function renderCreate(): void {
     render(
@@ -169,7 +235,7 @@ describe('CreateProjectScreen starting point', () => {
     fireEvent.change(screen.getByPlaceholderText('My Rayfin App'), { target: { value: 'Trip Logger' } })
 
     expect((await screen.findByRole('alert')).textContent).toContain('“trip-logger”')
-    expect(api().checkName).toHaveBeenCalledWith('Trip Logger', undefined)
+    expect(api().checkName).toHaveBeenCalledWith('Trip Logger', undefined, undefined)
     expect(screen.getByPlaceholderText('My Rayfin App').getAttribute('aria-invalid')).toBe('true')
     expect((screen.getByRole('button', { name: 'Create project' }) as HTMLButtonElement).disabled).toBe(true)
 
@@ -187,7 +253,11 @@ describe('CreateProjectScreen starting point', () => {
     expect(screen.getByRole('alert').textContent).toBe('Use only letters, numbers, spaces, hyphens and underscores.')
     expect((screen.getByRole('button', { name: 'Create project' }) as HTMLButtonElement).disabled).toBe(true)
     await new Promise((resolve) => setTimeout(resolve, 350))
-    expect(api().checkName).not.toHaveBeenCalledWith('SalesBenchmark (migrated)', undefined)
+    expect(api().checkName).not.toHaveBeenCalledWith(
+      'SalesBenchmark (migrated)',
+      undefined,
+      undefined
+    )
   })
 
   it('offers a Copilot model for an app made from a report', async () => {

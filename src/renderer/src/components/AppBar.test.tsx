@@ -42,6 +42,8 @@ function renderSwitcher(overrides: Partial<Props> = {}): Props {
 
 const trigger = (): HTMLButtonElement =>
   screen.getByRole('button', { name: 'Tpm board — Switch projects' }) as HTMLButtonElement
+const home = (): HTMLButtonElement =>
+  screen.getByRole('button', { name: 'Tpm board — All projects' }) as HTMLButtonElement
 const item = (name: string): HTMLButtonElement =>
   screen.getByRole('menuitem', { name }) as HTMLButtonElement
 const itemNames = (): string[] =>
@@ -57,10 +59,19 @@ async function frame(): Promise<void> {
 afterEach(cleanup)
 
 describe('ProjectSwitcher', () => {
-  it('opens a menu of the other recent projects, most recent first', async () => {
+  it('shows every project on Home in one click from the project’s name', () => {
+    const props = renderSwitcher()
+    expect(home().textContent).toBe('TTpm board')
+    expect(home().title).toBe('C:\\Users\\amy\\RayfinProjects\\tpm-board\nAll projects')
+    fireEvent.click(home())
+    expect(props.onShowAll).toHaveBeenCalledTimes(1)
+    expect(props.onSelect).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('opens a menu of the other recent projects, most recent first, from its caret', async () => {
     renderSwitcher()
-    expect(trigger().textContent).toBe('TTpm board')
-    expect(trigger().title).toBe('C:\\Users\\amy\\RayfinProjects\\tpm-board\nSwitch projects')
+    expect(trigger().title).toBe('Switch projects')
     expect(trigger().getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryByRole('menu')).toBeNull()
 

@@ -2938,6 +2938,8 @@ export default function Workbench({
           }}
           teamWorkspaces={teamEnabled ? projects?.teamWorkspaces : undefined}
           initialTeamWorkspaceId={newAppTeamId ?? undefined}
+          projectsFolder={projects?.workspaceRoot}
+          recentLocations={projects?.recentLocations}
           onTeamCreated={(result) => {
             setShowCreate(false)
             setNewAppTeamId(null)

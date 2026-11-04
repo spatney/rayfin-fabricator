@@ -31,6 +31,7 @@ fn default_state() -> ProjectsState {
     active_project_id: None,
     projects: vec![],
     team_workspaces: vec![],
+    recent_locations: vec![],
   }
 }
 
@@ -66,6 +67,8 @@ struct RawStore {
   projects: Vec<StudioProject>,
   #[serde(default)]
   team_workspaces: Vec<TeamWorkspace>,
+  #[serde(default)]
+  recent_locations: Vec<String>,
   /// Read as JSON first, so settings that can't be read fall back to the
   /// defaults without losing the projects (see [`settings_from`]).
   #[serde(default)]
@@ -91,6 +94,7 @@ fn load() -> Cache {
         state.active_project_id = parsed.active_project_id;
         state.projects = parsed.projects;
         state.team_workspaces = parsed.team_workspaces;
+        state.recent_locations = parsed.recent_locations;
         let settings = settings_from(parsed.settings);
         Cache { state, settings }
       }
@@ -333,6 +337,27 @@ pub fn set_workspace_root(path: String) -> ProjectsState {
   })
 }
 
+/// How many folders New project remembers.
+const RECENT_LOCATIONS: usize = 5;
+
+/// `recent` with `path` first, without another spelling of it, keeping the
+/// most recent [`RECENT_LOCATIONS`].
+fn with_recent(mut recent: Vec<String>, path: &str) -> Vec<String> {
+  recent.retain(|known| !crate::commands::util::same_path(known, path));
+  recent.insert(0, path.to_string());
+  recent.truncate(RECENT_LOCATIONS);
+  recent
+}
+
+/// Remember a folder, other than the projects folder, that a new project went in.
+pub fn remember_location(path: &str) -> ProjectsState {
+  with_cache(|c| {
+    c.state.recent_locations = with_recent(std::mem::take(&mut c.state.recent_locations), path);
+    persist(c);
+    c.state.clone()
+  })
+}
+
 pub fn set_active(id: Option<String>) -> ProjectsState {
   with_cache(|c| {
     if let Some(ref want) = id {
@@ -404,6 +429,20 @@ pub fn active_project() -> Option<StudioProject> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn new_project_locations_are_remembered_newest_first_once_each() {
+    let recent = (1..=5).fold(vec![], |list, n| with_recent(list, &format!("/work/apps/{n}")));
+    assert_eq!(recent[0], "/work/apps/5");
+    // Used again, under another spelling, it moves to the front rather than repeating.
+    let recent = with_recent(recent, "/Work/Apps/2/");
+    assert_eq!(recent[..2], ["/Work/Apps/2/", "/work/apps/5"]);
+    assert_eq!(recent.len(), 5);
+    // A new one pushes the oldest out.
+    let recent = with_recent(recent, "/other");
+    assert_eq!((recent.len(), recent[0].as_str()), (5, "/other"));
+    assert!(!recent.contains(&"/work/apps/1".to_string()));
+  }
 
   #[test]
   fn experiment_patch_preserves_unmentioned_flags() {

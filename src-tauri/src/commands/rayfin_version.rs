@@ -75,6 +75,15 @@ fn installed_version(project_path: &str, pkg: &str) -> Option<String> {
   read_json(&path).and_then(|p| p.version)
 }
 
+/// The Rayfin version a project has installed, as Home shows it: its CLI's, or
+/// else the first SDK package's that's installed. Read from the project's own
+/// files, without asking npm, so listing projects stays quick.
+pub(crate) fn local_version(project_path: &str) -> Option<String> {
+  let names = rayfin_dependencies(project_path);
+  let cli = names.iter().filter(|name| name.as_str() == CLI_PACKAGE);
+  cli.chain(names.iter()).find_map(|name| installed_version(project_path, name))
+}
+
 /// The npm `latest` dist-tag version for a package, cached, None when unreachable.
 async fn latest_version(pkg: &str) -> Option<String> {
   if let Some((version, at)) = LATEST_CACHE.lock().unwrap().get(pkg) {
@@ -197,6 +206,27 @@ pub async fn rayfin_versions(id: String) -> RayfinVersionInfo {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn home_shows_the_installed_rayfin_version_without_asking_npm() {
+    let dir = std::env::temp_dir().join(format!("fab-rayfin-version-{}", uuid::Uuid::new_v4()));
+    let write = |rel: &str, body: &str| {
+      let path = dir.join(rel);
+      std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+      std::fs::write(path, body).unwrap();
+    };
+    write(
+      "package.json",
+      r#"{"dependencies":{"@microsoft/rayfin-sdk":"~1.36.0"},"devDependencies":{"@microsoft/rayfin-cli":"~1.36.0"}}"#,
+    );
+    let path = dir.to_string_lossy().to_string();
+    assert_eq!(local_version(&path), None, "nothing installed yet");
+    write("node_modules/@microsoft/rayfin-sdk/package.json", r#"{"version":"1.36.1"}"#);
+    assert_eq!(local_version(&path).as_deref(), Some("1.36.1"));
+    write("node_modules/@microsoft/rayfin-cli/package.json", r#"{"version":"1.36.2"}"#);
+    assert_eq!(local_version(&path).as_deref(), Some("1.36.2"), "the CLI's comes first");
+    let _ = std::fs::remove_dir_all(&dir);
+  }
 
   #[test]
   fn parse_core_ignores_prerelease() {

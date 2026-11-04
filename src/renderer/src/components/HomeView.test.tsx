@@ -105,6 +105,18 @@ describe('HomeView project launcher', () => {
     expect(props.onManageProject).toHaveBeenCalledWith(project)
   })
 
+  it('shows the Rayfin version each project has installed', () => {
+    const props = baseProps()
+    props.projects = [
+      makeProject('p1', { name: 'Sales', rayfinVersion: '1.36.2' }),
+      makeProject('p2', { name: 'Notes' })
+    ]
+    render(<HomeView {...props} />)
+    const [sales, notes] = screen.getAllByRole('listitem')
+    expect(within(sales).getByText('Rayfin 1.36.2')).toBeTruthy()
+    expect(within(notes).queryByText(/^Rayfin \d/)).toBeNull()
+  })
+
   it('shows projects being removed in the background, and what to do when one stops', () => {
     const props = baseProps()
     const sales = makeProject('p1', { name: 'Sales', workspaceName: 'fabcon' })
