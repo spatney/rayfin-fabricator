@@ -13,7 +13,7 @@
 //! projects on this computer by the Fabric item each project's deployment
 //! registry records, and to team workspaces by their Fabric workspaces.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -100,6 +100,10 @@ pub struct GalleryApp {
   pub local: Option<GalleryLocal>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub team: Option<GalleryTeam>,
+  /// The account can change the app: it's an Admin, Member or Contributor of
+  /// its workspace. Absent when Fabric didn't say.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub can_edit: Option<bool>,
 }
 
 /// Every app the account can open. Never an error across IPC.
@@ -139,6 +143,9 @@ pub struct GalleryStatus {
   /// When it last published successfully (RFC 3339).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub published_at: Option<String>,
+  /// Its latest publish, when Fabric says: `in-progress`, `completed` or `failed`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub deploy_state: Option<String>,
   /// Fabric couldn't say: no access to the app's status, or the read failed.
   #[serde(skip_serializing_if = "std::ops::Not::not")]
   pub unknown: bool,
@@ -370,6 +377,14 @@ fn status_from(id: &str, body: &Value) -> GalleryStatus {
       .and_then(Value::as_str)
       .and_then(|t| chrono::DateTime::parse_from_rfc3339(t.trim()).ok())
       .map(|t| t.with_timezone(&chrono::Utc).to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+    deploy_state: body.get("status").and_then(Value::as_str).and_then(|s| {
+      match s.trim().to_ascii_lowercase().as_str() {
+        "inprogress" | "in_progress" | "running" => Some("in-progress".to_string()),
+        "completed" | "succeeded" => Some("completed".to_string()),
+        "failed" => Some("failed".to_string()),
+        _ => None,
+      }
+    }),
     unknown: false,
   }
 }
@@ -558,7 +573,26 @@ fn decorate(app: RawApp, index: &LocalIndex, tenant: Option<&str>) -> GalleryApp
     hosting_url,
     local,
     team,
+    can_edit: None,
   }
+}
+
+/// Whether the account can change each app: the workspaces it's an Admin,
+/// Member or Contributor of (Fabric lists them by role). `None` when Fabric
+/// didn't say, so nothing is hidden on a guess.
+async fn editable_workspaces(client: &reqwest::Client, token: &str) -> Option<HashSet<String>> {
+  let url = format!("{API}/workspaces?roles=Admin,Member,Contributor");
+  let (items, truncated) = list_all(client, token, &url).await.ok()??;
+  // A partial list would call some editable apps read-only.
+  if truncated {
+    return None;
+  }
+  Some(items.iter().filter_map(|w| text(w, "id")).map(|id| id.to_ascii_lowercase()).collect())
+}
+
+fn with_edit_rights(mut app: GalleryApp, editable: Option<&HashSet<String>>) -> GalleryApp {
+  app.can_edit = editable.map(|ids| ids.contains(&app.workspace_id.to_ascii_lowercase()));
+  app
 }
 
 fn recorded(project: &StudioProject) -> Vec<FabricDeployment> {
@@ -594,7 +628,8 @@ pub async fn list(refresh: bool) -> GalleryResult {
     Ok(s) => s,
     Err(f) => return failed(f),
   };
-  let mut listing = fetch(&client, &current.token).await;
+  let (mut listing, mut editable) =
+    tokio::join!(fetch(&client, &current.token), editable_workspaces(&client, &current.token));
   // A reused token Fabric no longer accepts: try once with a fresh one.
   if matches!(listing, Err(Failure::NeedsAz(_))) && !refresh {
     forget_session();
@@ -602,7 +637,8 @@ pub async fn list(refresh: bool) -> GalleryResult {
       Ok(s) => s,
       Err(f) => return failed(f),
     };
-    listing = fetch(&client, &current.token).await;
+    (listing, editable) =
+      tokio::join!(fetch(&client, &current.token), editable_workspaces(&client, &current.token));
   }
   let listing = match listing {
     Ok(l) => l,
@@ -616,7 +652,7 @@ pub async fn list(refresh: bool) -> GalleryResult {
     .apps
     .into_iter()
     .filter(|a| seen.insert(a.id.to_ascii_lowercase()))
-    .map(|a| decorate(a, &index, tenant))
+    .map(|a| with_edit_rights(decorate(a, &index, tenant), editable.as_ref()))
     .collect();
   apps.sort_by_cached_key(|a| (a.name.to_lowercase(), a.workspace_name.to_lowercase()));
   if refresh {
@@ -688,6 +724,67 @@ pub async fn status(apps: Vec<GalleryRef>) -> Vec<GalleryStatus> {
     }
   }
   apps.iter().zip(out).map(|(a, s)| s.unwrap_or_else(|| unknown(&a.id))).collect()
+}
+
+/* ------------------------------ descriptions ------------------------------ */
+
+/// The longest description Fabric keeps on an app.
+pub const DESCRIPTION_MAX: usize = 256;
+
+fn said(failure: Failure) -> String {
+  match failure {
+    Failure::NeedsAz(message) | Failure::Failed(message) => message,
+  }
+}
+
+/// The Fabric app a project on this computer publishes to, as its deployment
+/// registry records it (the active deployment first): workspace and item ids.
+pub fn published_item(project: &StudioProject) -> Option<(String, String)> {
+  let deployments = recorded(project);
+  let deployment = deployments.iter().find(|d| d.active).or_else(|| deployments.first())?;
+  let (workspace, item) = (deployment.workspace_id.clone()?, deployment.item_id.clone()?);
+  (is_guid(&workspace) && is_guid(&item)).then_some((workspace, item))
+}
+
+fn app_url(workspace_id: &str, item_id: &str) -> Result<String, String> {
+  if !is_guid(workspace_id) || !is_guid(item_id) {
+    return Err("That isn't a Fabric app.".into());
+  }
+  Ok(format!("{API}/workspaces/{workspace_id}/appBackends/{item_id}"))
+}
+
+/// An app's description in Fabric, as the Azure CLI's account reads it; empty
+/// when it has none.
+pub async fn app_description(workspace_id: &str, item_id: &str) -> Result<String, String> {
+  let url = app_url(workspace_id, item_id)?;
+  let client = client().map_err(said)?;
+  let current = session(false).await.map_err(said)?;
+  match call(&client, &current.token, reqwest::Method::GET, &url, None, None).await.map_err(said)? {
+    (200, body) => Ok(text(&body, "description").unwrap_or_default()),
+    (401, _) => {
+      forget_session();
+      Err(said(rejected()))
+    }
+    (status, body) => Err(format!("Couldn't read the app from Fabric: {}", fabric_message(status, &body))),
+  }
+}
+
+/// Give an app a description in Fabric (Rayfin's own publish never sets one).
+pub async fn set_description(workspace_id: &str, item_id: &str, description: &str) -> Result<(), String> {
+  let url = app_url(workspace_id, item_id)?;
+  let description: String = description.trim().chars().take(DESCRIPTION_MAX).collect();
+  let client = client().map_err(said)?;
+  let current = session(false).await.map_err(said)?;
+  let body = json!({ "description": description });
+  match call(&client, &current.token, reqwest::Method::PATCH, &url, Some(&body), None).await.map_err(said)? {
+    (200, _) => Ok(()),
+    (401, _) => {
+      forget_session();
+      Err(said(rejected()))
+    }
+    (403, _) => Err("Only an Admin, Member or Contributor of the app's workspace can change its description.".into()),
+    (status, body) => Err(format!("Fabric didn't save the description: {}", fabric_message(status, &body))),
+  }
 }
 
 #[cfg(test)]
@@ -769,6 +866,27 @@ mod tests {
     let unsafe_status = status_from(ITEM, &json!({ "hostingUrl": "javascript:alert(1)", "lastSuccessfulDeploymentAt": "soon" }));
     assert_eq!(unsafe_status.hosting_url, None);
     assert_eq!(unsafe_status.published_at, None);
+  }
+
+  #[test]
+  fn deploy_status_says_how_the_latest_publish_went_when_fabric_does() {
+    let state = |value: Value| status_from(ITEM, &json!({ "status": value })).deploy_state;
+    assert_eq!(state(json!("Failed")).as_deref(), Some("failed"));
+    assert_eq!(state(json!("InProgress")).as_deref(), Some("in-progress"));
+    assert_eq!(state(json!("Completed")).as_deref(), Some("completed"));
+    assert_eq!(state(json!(null)), None);
+    assert_eq!(state(json!("Something new")), None);
+    assert_eq!(status_from(ITEM, &json!({})).deploy_state, None);
+  }
+
+  #[test]
+  fn apps_say_whether_the_account_can_change_them_only_when_fabric_said() {
+    // Fabric may spell a workspace's id in either case.
+    let app = || decorate(raw(ITEM, "dashy", &WS.to_ascii_uppercase()), &LocalIndex::default(), None);
+    assert_eq!(with_edit_rights(app(), None).can_edit, None);
+    let editable: HashSet<String> = [WS.to_string()].into_iter().collect();
+    assert_eq!(with_edit_rights(app(), Some(&editable)).can_edit, Some(true));
+    assert_eq!(with_edit_rights(app(), Some(&HashSet::new())).can_edit, Some(false));
   }
 
   fn project(id: &str, name: &str) -> StudioProject {

@@ -75,13 +75,14 @@ pub fn looks_binary(buf: &[u8]) -> bool {
 
 /// Annotate a project with what its folder says now: whether it's still a Rayfin
 /// project (`missing`), whether its published app works only inside the
-/// Fabric portal shell (`needs_fabric_portal`), and the Rayfin version it has
-/// installed (`rayfin_version`).
+/// Fabric portal shell (`needs_fabric_portal`), the Rayfin version it has
+/// installed (`rayfin_version`), and when its thumbnail was saved (`thumbnail_at`).
 pub fn annotate_project(mut project: StudioProject) -> StudioProject {
   project.missing = Some(!is_rayfin_project(&project.path));
   project.needs_fabric_portal =
     Some(crate::commands::fabric::needs_fabric_portal(Path::new(&project.path)));
   project.rayfin_version = crate::commands::rayfin_version::local_version(&project.path);
+  project.thumbnail_at = crate::services::thumbnails::saved_at(&project.id);
   project
 }
 

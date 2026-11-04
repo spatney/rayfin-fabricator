@@ -1,9 +1,10 @@
-// Search, as the workbench offers it: its projects and team workspaces, what can be
-// done from where you are, and what's worth suggesting before you type.
-import type { StudioProject, TeamWorkspace } from '@shared/ipc'
+// Search, as the workbench offers it: its projects and team workspaces, the Fabric
+// apps the gallery last read, what can be done from where you are, and what's
+// worth suggesting before you type.
+import type { GalleryApp, StudioProject, TeamWorkspace } from '@shared/ipc'
 import { DEPLOY_QUESTION, PROMPTS } from '../help/parts'
 import { buildActions, type ActionContext, type ActionHandlers } from './actions'
-import { projectItems, workspaceItems } from './sources'
+import { galleryAppItems, projectItems, workspaceItems } from './sources'
 import type { AskSuggestion, SearchItem } from './model'
 
 export interface WorkbenchSearchContext extends Omit<ActionContext, 'do'> {
@@ -11,6 +12,8 @@ export interface WorkbenchSearchContext extends Omit<ActionContext, 'do'> {
   projects: readonly StudioProject[]
   /** Team workspaces, when that experiment is on. */
   teamWorkspaces: readonly TeamWorkspace[]
+  /** The Fabric apps the gallery last read, with their own addresses once known. */
+  galleryApps?: ReadonlyArray<{ app: GalleryApp; address?: string }>
   /** The open app's last publish didn't finish. */
   deployFailed: boolean
   /** Open high and medium Advisor issues in the open app. */
@@ -22,6 +25,10 @@ export interface WorkbenchSearchContext extends Omit<ActionContext, 'do'> {
     /** Open any project's folder in VS Code. */
     openInEditor(project: StudioProject): void
     openWorkspace(workspace: TeamWorkspace): void
+    /** Open a Fabric app's page (or its page in Fabric) in the browser. */
+    openGalleryApp?(app: GalleryApp, url: string): void
+    /** Open the project on this computer that publishes a Fabric app. */
+    openProjectById?(projectId: string): void
   }
 }
 
@@ -86,10 +93,18 @@ export function workbenchSearch(ctx: WorkbenchSearchContext): WorkbenchSearch {
     if (prompt !== DEPLOY_QUESTION) questions.push({ id: `prompt:${prompt}`, question: prompt })
   }
 
+  const openGalleryApp = ctx.do.openGalleryApp
+  const openProjectById = ctx.do.openProjectById
+  const apps =
+    ctx.galleryApps && openGalleryApp && openProjectById
+      ? galleryAppItems(ctx.galleryApps, { open: openGalleryApp, openProject: openProjectById })
+      : []
+
   return {
     items: [
       ...projectItems(ctx.projects, projectOptions),
       ...workspaceItems(ctx.teamWorkspaces, ctx.do.openWorkspace),
+      ...apps,
       ...actions
     ],
     recentProjects: projectItems(

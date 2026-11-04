@@ -10,7 +10,7 @@ import {
 import type { StudioProject, TeamWorkspace } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
-import { hueOf } from './team/map/parts'
+import { initials, markHue } from './gallery/model'
 
 interface Props {
   project: StudioProject
@@ -203,9 +203,9 @@ export default function ManageProjectModal({
             <span
               className="home-project-mark project-manage-mark"
               aria-hidden="true"
-              style={{ '--hue': hueOf(project.name) } as CSSProperties}
+              style={{ '--hue': markHue(project.name) } as CSSProperties}
             >
-              {project.name.trim()[0]?.toUpperCase() ?? '?'}
+              {initials(project.name)}
             </span>
             <span className="project-manage-summary-text">
               <strong>{project.name}</strong>

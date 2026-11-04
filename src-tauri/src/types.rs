@@ -746,6 +746,18 @@ pub struct StudioProject {
   /// for Home. Never read back from the store.
   #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
   pub rayfin_version: Option<String>,
+  /// When the project was last opened in Fabricator (ISO 8601): Home's "Opened
+  /// 3 hours ago" and its Today / This week / Earlier groups.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub last_opened_at: Option<String>,
+  /// Pinned to the top of Home's recent projects.
+  #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+  pub pinned: bool,
+  /// When the project's thumbnail was last saved (RFC 3339), read when projects
+  /// are listed, like `missing`; absent while it has none. Never read back
+  /// from the store.
+  #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+  pub thumbnail_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -3389,6 +3401,19 @@ pub struct RayfinVersionInfo {
   /// local backend runs (`rayfin-local.json` `sdk.supported`), for the headline
   /// package: where a personal app's upgrades stop, so it keeps running on this
   /// computer. Absent when npm couldn't list them or none is in the range.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub latest_supported_locally: Option<String>,
+}
+
+/// The newest Rayfin releases, for Home: it offers an update on the projects
+/// behind them, without asking npm about each one.
+#[derive(Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RayfinLatest {
+  /// The newest stable release on npm (a team app's upgrades go here).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub latest: Option<String>,
+  /// The newest release the bundled local backend runs (a personal app's go here).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub latest_supported_locally: Option<String>,
 }

@@ -367,7 +367,7 @@ const STAGE_STATUS: Record<StartupStage, { text: string; ongoing: boolean }> = {
 /**
  * The plain line under the wordmark: where the app is headed once that's known
  * (`opening` is the open project's name, or null for Home), and otherwise, at a
- * first launch, how the checks are going. The project shows with its initial
+ * first launch, how the checks are going. The project shows with its letters
  * on its own hue, as it then appears in the app bar.
  */
 function SplashStatus({

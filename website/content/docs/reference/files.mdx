@@ -18,7 +18,7 @@ Fabricator creates this folder when it needs to save app-owned files.
 
 | Path | What it contains | Safe to delete? |
 | --- | --- | --- |
-| `studio.json` | Settings, the workspace folder path, recent projects, active project, and team workspace list. With the **MCP servers** experiment, also the MCP servers you added: each one's name, command or URL, and the names of its environment variables or headers. | Yes, but Fabricator forgets settings and project lists. It does not delete the project folders. |
+| `studio.json` | Settings, the workspace folder path, recent projects with when you last opened and whether you pinned each, the active project, and team workspace list. With the **MCP servers** experiment, also the MCP servers you added: each one's name, command or URL, and the names of its environment variables or headers. | Yes, but Fabricator forgets settings and project lists. It does not delete the project folders. |
 | `chats/` | Saved chat history, one JSON file per project. | Yes, if you no longer need chat history. |
 | `advisor/` | Saved Advisor reports and Advisor UI state for projects. | Yes, if you are comfortable losing saved findings, dismissals, and baselines. |
 | `suggestions/` | Cached starter suggestion sets for projects. | Yes. Fabricator can recreate suggestions. |
@@ -91,6 +91,17 @@ Fabricator keeps what it needs to create projects faster in a cache folder that 
 It holds the package versions recorded for the last four combinations of Rayfin release and template you created projects with, a few hundred kilobytes each, and the packages installed ahead of time for your next new project, about 500 MB. Recorded versions are used for a week. The first time Fabricator starts after that, it deletes them, with any packages installed ahead of time from them. Those packages move into the new project's folder, so they're used only when that folder is on the same drive as the cache folder. Otherwise, the new project installs the recorded versions.
 
 The folder is safe to delete. The next project you create then installs its packages from npm, which takes longer, and Fabricator fills the folder again. See [Create a new project](/docs/build/projects#create-a-new-project).
+
+## Pictures of your apps
+
+The pictures **Your projects** and the app gallery show, which Fabricator draws from each app's preview, are in a cache folder that stays on this computer, one small WebP file per project:
+
+| OS | Cache folder |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\com.rayfin.fabricator\thumbnails` |
+| macOS | `~/Library/Caches/com.rayfin.fabricator/thumbnails` |
+
+Fabricator deletes a project's picture when you remove the project from **Your projects**. The folder is safe to delete: projects show their letters until Fabricator draws their pictures again. See [Find your way around recent projects](/docs/build/projects#find-your-way-around-recent-projects).
 
 ## Credentials
 

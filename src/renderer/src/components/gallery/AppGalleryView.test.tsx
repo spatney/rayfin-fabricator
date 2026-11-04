@@ -41,7 +41,40 @@ function installApi(
       list: vi.fn(typeof list === 'function' ? list : async () => list),
       status: vi.fn(async (wanted: Array<{ id: string }>) =>
         wanted.map((w) => statuses[w.id] ?? { id: w.id })
-      )
+      ),
+      describe: vi.fn(async () => ({
+        ok: true,
+        description: 'Tracks team expenses and approvals.'
+      })),
+      quickLook: {
+        show: vi.fn().mockResolvedValue(undefined),
+        setBounds: vi.fn().mockResolvedValue(undefined),
+        close: vi.fn().mockResolvedValue(undefined)
+      }
+    },
+    projects: {
+      communityTemplates: vi.fn(async () => ({
+        ok: true,
+        gallery: {
+          repoUrl: 'https://github.com/microsoft/awesome-rayfin',
+          displayName: 'Awesome Rayfin',
+          templates: [
+            {
+              repoUrl: 'https://github.com/microsoft/awesome-rayfin',
+              path: 'apps/expenses',
+              name: 'Expense tracker',
+              description: 'Submit and approve expenses'
+            }
+          ]
+        }
+      })),
+      thumbnails: vi.fn().mockResolvedValue({})
+    },
+    rayfin: { latest: vi.fn().mockResolvedValue({}) },
+    deploy: { hasChanges: vi.fn().mockResolvedValue(false) },
+    local: {
+      status: vi.fn(async (projectId: string) => ({ projectId, state: 'stopped', revision: 1 })),
+      onState: vi.fn(() => () => {})
     },
     auth: { loginAz: vi.fn().mockResolvedValue({ ok: true }) },
     openExternal: vi.fn().mockResolvedValue(undefined)
@@ -260,7 +293,7 @@ describe('AppGalleryView', () => {
       'expense-tracker, in Sales',
       'sales-dashboard, in Sales'
     ])
-    expect(saved()).toEqual({ where: 'all', sort: 'name', pinned: ['c'] })
+    expect(saved()).toMatchObject({ where: 'all', sort: 'name', pinned: ['c'] })
     first.unmount()
 
     installApi()
@@ -290,7 +323,7 @@ describe('AppGalleryView', () => {
     installApi()
     renderGallery()
     await screen.findByRole('button', { name: /^expense-tracker/ })
-    expect(saved()).toEqual({ where: 'all', sort: 'workspace', pinned: ['c'] })
+    expect(saved()).toMatchObject({ where: 'all', sort: 'workspace', pinned: ['c'] })
     expect(screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual([
       'Pinned',
       'Sales'
@@ -325,5 +358,142 @@ describe('AppGalleryView', () => {
     const { props } = renderGallery()
     fireEvent.click(await screen.findByRole('button', { name: 'New project' }))
     expect(props.onNewProject).toHaveBeenCalledTimes(1)
+  })
+
+  it('lists the apps as a table, and remembers the layout', async () => {
+    installApi(ok, { b: { id: 'b', publishedAt: new Date(Date.now() - 2 * DAY).toISOString() } })
+    renderGallery()
+    await screen.findByRole('button', { name: /^expense-tracker/ })
+    fireEvent.click(screen.getByRole('button', { name: 'Table' }))
+    const table = screen.getByRole('table', { name: 'Apps' })
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(
+      rows.map((row) => within(row).getAllByRole('button')[0].getAttribute('aria-label'))
+    ).toEqual(['expense-tracker, in Sales', 'sales-dashboard, in Sales', 'Trip logger, in Travel'])
+    expect(await within(rows[1]).findByText('2 days ago')).toBeTruthy()
+    fireEvent.click(within(rows[1]).getByRole('button', { name: 'sales-dashboard, in Sales' }))
+    expect(screen.getByRole('complementary', { name: 'About sales-dashboard' })).toBeTruthy()
+    expect(saved()).toMatchObject({ view: 'table' })
+  })
+
+  it('finds the apps that need attention, and the ones you can change', async () => {
+    const editable: GalleryApp[] = [
+      { ...apps[0], canEdit: true },
+      { ...apps[1], canEdit: false },
+      { ...apps[2], canEdit: true }
+    ]
+    installApi(
+      { ...ok, apps: editable },
+      {
+        a: {
+          id: 'a',
+          hostingUrl: 'https://expenses.example.net',
+          publishedAt: new Date().toISOString()
+        },
+        b: { id: 'b' },
+        c: { id: 'c', publishedAt: new Date().toISOString(), deployState: 'failed' }
+      }
+    )
+    const failed = {
+      id: 'p1',
+      name: 'Expenses',
+      path: 'C:/p1',
+      addedAt: '2026-01-01',
+      lastDeploy: { status: 'error', error: 'It broke' }
+    }
+    renderGallery({ projects: [failed] })
+    await screen.findByRole('button', { name: /^expense-tracker/ })
+    const attention = screen.getByRole('button', { name: /^Needs attention/ })
+    fireEvent.click(attention)
+    expect(attention.getAttribute('aria-pressed')).toBe('true')
+    // Its last publish from here failed; one never published; one Fabric says failed.
+    await waitFor(() =>
+      expect(shownNames()).toEqual([
+        'expense-tracker, in Sales',
+        'sales-dashboard, in Sales',
+        'Trip logger, in Travel'
+      ])
+    )
+    expect(
+      within(screen.getByRole('list', { name: 'Apps' })).getAllByText('Publish failed')
+    ).toHaveLength(2)
+    fireEvent.click(attention)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Apps I can edit/ }))
+    expect(shownNames()).toEqual(['expense-tracker, in Sales', 'Trip logger, in Travel'])
+  })
+
+  it('puts the apps opened last first under Recently opened', async () => {
+    installApi(ok, { b: { id: 'b', hostingUrl: 'https://sales.example.net' } })
+    renderGallery()
+    await screen.findByRole('button', { name: /^expense-tracker/ })
+    fireEvent.click(card(/^sales-dashboard/))
+    const details = screen.getByRole('complementary', { name: 'About sales-dashboard' })
+    fireEvent.click(await within(details).findByRole('button', { name: 'Open app' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Sort/ }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Recently opened/ }))
+    expect(shownNames()[0]).toBe('sales-dashboard, in Sales')
+  })
+
+  it('looks at a live app with Space, and Escape puts it away', async () => {
+    const api = installApi()
+    const box = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 10,
+      y: 20,
+      left: 10,
+      top: 20,
+      right: 810,
+      bottom: 620,
+      width: 800,
+      height: 600,
+      toJSON: () => ({})
+    })
+    try {
+      renderGallery()
+      const expenses = await screen.findByRole('button', { name: /^expense-tracker/ })
+      fireEvent.keyDown(expenses, { key: ' ' })
+      const look = await screen.findByRole('dialog', { name: 'Quick look at expense-tracker' })
+      expect(api.gallery.quickLook.show).toHaveBeenCalledWith(
+        'https://expenses.example.net',
+        expect.objectContaining({ width: 800, height: 600 })
+      )
+      // Space didn't select it: no details opened.
+      expect(screen.queryByRole('complementary')).toBeNull()
+      fireEvent.click(within(look).getByRole('button', { name: 'Open app' }))
+      expect(api.openExternal).toHaveBeenLastCalledWith('https://expenses.example.net')
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(screen.queryByRole('dialog')).toBeNull()
+      await waitFor(() => expect(api.gallery.quickLook.close).toHaveBeenCalled())
+    } finally {
+      box.mockRestore()
+    }
+  })
+
+  it('has Copilot describe an app published from this computer that has no description', async () => {
+    const api = installApi({
+      ...ok,
+      apps: [{ ...apps[0], description: undefined, canEdit: true }, apps[1]]
+    })
+    renderGallery()
+    fireEvent.click(await screen.findByRole('button', { name: /^expense-tracker/ }))
+    const details = screen.getByRole('complementary', { name: 'About expense-tracker' })
+    fireEvent.click(within(details).getByRole('button', { name: 'Write a description' }))
+    expect(await within(details).findByText('Tracks team expenses and approvals.')).toBeTruthy()
+    expect(api.gallery.describe).toHaveBeenCalledWith('p1')
+    // An app not on this computer, or one you can't change, isn't offered it.
+    fireEvent.click(card(/^sales-dashboard/))
+    const other = screen.getByRole('complementary', { name: 'About sales-dashboard' })
+    expect(within(other).queryByRole('button', { name: 'Write a description' })).toBeNull()
+  })
+
+  it('offers examples to start a new app from', async () => {
+    installApi()
+    const onUseExample = vi.fn()
+    renderGallery({ onUseExample })
+    await screen.findByRole('button', { name: /^expense-tracker/ })
+    fireEvent.click(screen.getByRole('tab', { name: 'Examples' }))
+    expect(screen.queryByRole('searchbox', { name: 'Search apps' })).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'Use Expense tracker' }))
+    expect(onUseExample).toHaveBeenCalledWith(expect.objectContaining({ path: 'apps/expenses' }))
   })
 })

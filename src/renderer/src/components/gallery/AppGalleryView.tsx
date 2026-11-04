@@ -1,28 +1,53 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import type { GalleryApp, GalleryResult, GalleryStatus } from '@shared/ipc'
+import type {
+  CommunityTemplate,
+  GalleryApp,
+  GalleryDescribeResult,
+  GalleryResult,
+  GalleryStatus,
+  StudioProject
+} from '@shared/ipc'
 import { topLayerOpen, useSuppressPreview } from '../../overlay'
 import { useAzureSignIn, type AzureSignIn } from '../../azureAuth'
 import { authErrorMessage } from '../../authErrors'
 import type { WorkspaceUse } from '../../fabric'
+import { useProjectFacts } from '../../projectFacts'
+import { useThumbnails } from '../../thumbnails'
 import { FabricatorMark } from '../FabricatorMark'
 import { Codicon } from '../icons'
+import { rayfinUpdate } from '../recentProjectsModel'
 import AppCard, { SkeletonCard } from './AppCard'
 import AppDetails from './AppDetails'
+import AppTable from './AppTable'
+import ExamplesView from './ExamplesView'
 import { GalleryMenu } from './GalleryMenu'
+import {
+  gallerySnapshot,
+  noteOpened,
+  openedTimes,
+  resetGallerySnapshotForTests as forgetSnapshot,
+  setGallerySnapshot
+} from './memory'
+import QuickLook from './QuickLook'
 import { WorkspaceName, WorkspacePicker, workspaceIcon } from './WorkspacePicker'
 import {
   ago,
+  appAddress,
+  appHealth,
   applyQuery,
   count,
   groupByWorkspace,
   pinKey,
+  publishedThumbnail,
   rankWorkspaces,
   workspacesOf,
   type GalleryEntry,
   type GalleryGroup,
   type GalleryQuery,
   type GallerySort,
-  type GalleryWhere
+  type GalleryView,
+  type GalleryWhere,
+  type HealthIssue
 } from './model'
 import './gallery.css'
 
@@ -37,6 +62,10 @@ interface Props {
   onSignedIn?: () => Promise<void> | void
   /** The workspaces your apps on this computer use, and when: the gallery lists them first. */
   recentWorkspaces?: readonly WorkspaceUse[]
+  /** The projects on this computer: their pictures, and how the apps they publish stand. */
+  projects?: readonly StudioProject[]
+  /** Start a new project from a community example (the Examples tab offers them). */
+  onUseExample?: (template: CommunityTemplate) => void
 }
 
 /** Cards shown before "Show more". */
@@ -48,20 +77,23 @@ const RECENT_LIMIT = 500
 const PREFS_KEY = 'rayfin.gallery'
 const LIST_FAILED = 'Couldn’t list your Fabric apps. Try again.'
 
-/** The last apps read, so the gallery opens on them at once while it checks Fabric again. */
-let snapshot: { result: GalleryResult; statuses: Record<string, GalleryStatus> } | null = null
-
 /** Test seam: forget the last apps read. */
 export function resetGallerySnapshotForTests(): void {
-  snapshot = null
+  forgetSnapshot()
 }
 
-type Prefs = Pick<GalleryQuery, 'where' | 'sort' | 'pinned'>
+type Prefs = Pick<GalleryQuery, 'where' | 'sort' | 'pinned'> & {
+  view: GalleryView
+  attention: boolean
+  editable: boolean
+}
 const WHERE: readonly GalleryWhere[] = ['all', 'local', 'remote']
-const SORTS: readonly GallerySort[] = ['name', 'recent', 'workspace']
+const SORTS: readonly GallerySort[] = ['name', 'recent', 'opened', 'workspace']
+const VIEWS: readonly GalleryView[] = ['grid', 'table']
 const SORT_NAMES: Record<GallerySort, { label: string; desc: string }> = {
   name: { label: 'Name', desc: 'A to Z' },
   recent: { label: 'Recently published', desc: 'Newest publish first' },
+  opened: { label: 'Recently opened', desc: 'The apps you opened last first' },
   workspace: { label: 'Workspace', desc: 'Grouped, your recent workspaces first' }
 }
 
@@ -71,16 +103,28 @@ function savedPins(value: unknown): string[] {
   return [...new Set(value.filter((key): key is string => typeof key === 'string' && key !== ''))]
 }
 
+const DEFAULT_PREFS: Prefs = {
+  where: 'all',
+  sort: 'name',
+  pinned: [],
+  view: 'grid',
+  attention: false,
+  editable: false
+}
+
 function loadPrefs(): Prefs {
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<Prefs>
     return {
       where: WHERE.includes(saved.where as GalleryWhere) ? (saved.where as GalleryWhere) : 'all',
       sort: SORTS.includes(saved.sort as GallerySort) ? (saved.sort as GallerySort) : 'name',
-      pinned: savedPins(saved.pinned)
+      pinned: savedPins(saved.pinned),
+      view: VIEWS.includes(saved.view as GalleryView) ? (saved.view as GalleryView) : 'grid',
+      attention: saved.attention === true,
+      editable: saved.editable === true
     }
   } catch {
-    return { where: 'all', sort: 'name', pinned: [] }
+    return DEFAULT_PREFS
   }
 }
 
@@ -99,12 +143,16 @@ export default function AppGalleryView({
   onOpenProject,
   onNewProject,
   onSignedIn,
-  recentWorkspaces
+  recentWorkspaces,
+  projects,
+  onUseExample
 }: Props): JSX.Element {
   useSuppressPreview()
-  const [result, setResult] = useState<GalleryResult | null>(() => snapshot?.result ?? null)
+  const [result, setResult] = useState<GalleryResult | null>(
+    () => gallerySnapshot()?.result ?? null
+  )
   const [statuses, setStatuses] = useState<Record<string, GalleryStatus>>(
-    () => snapshot?.statuses ?? {}
+    () => gallerySnapshot()?.statuses ?? {}
   )
   const [failure, setFailure] = useState<Failure | null>(null)
   const [checking, setChecking] = useState(true)
@@ -113,6 +161,11 @@ export default function AppGalleryView({
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [limit, setLimit] = useState(PAGE)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** The app whose live page the quick look shows. */
+  const [lookId, setLookId] = useState<string | null>(null)
+  const [tab, setTab] = useState<'apps' | 'examples'>('apps')
+  /** When each app was last opened from here (ms), by pin key. */
+  const [opened, setOpened] = useState(openedTimes)
   const searchRef = useRef<HTMLInputElement>(null)
   const mounted = useRef(true)
   const readSeq = useRef(0)
@@ -126,7 +179,7 @@ export default function AppGalleryView({
 
   /* ---- statuses: each app's address and last publish, read as cards show ---- */
 
-  const requested = useRef(new Set<string>(Object.keys(snapshot?.statuses ?? {})))
+  const requested = useRef(new Set<string>(Object.keys(gallerySnapshot()?.statuses ?? {})))
   const queue = useRef<GalleryApp[]>([])
   const pumping = useRef(false)
   const statusGen = useRef(0)
@@ -211,7 +264,7 @@ export default function AppGalleryView({
   }, [read])
 
   useEffect(() => {
-    if (result?.ok) snapshot = { result, statuses }
+    if (result?.ok) setGallerySnapshot({ result, statuses })
   }, [result, statuses])
 
   const azure = useAzureSignIn(async () => {
@@ -230,14 +283,82 @@ export default function AppGalleryView({
   const recentIds = useMemo(() => ranked.recent.map((w) => w.id), [ranked])
   const usedAtOf = useMemo(() => new Map(ranked.recent.map((w) => [w.id, w.usedAt])), [ranked])
   const localCount = useMemo(() => apps.filter((a) => a.local).length, [apps])
-  const query = useMemo<GalleryQuery>(
-    () => ({ text, workspaceId, ...prefs, recent: recentIds }),
-    [text, workspaceId, prefs, recentIds]
+
+  // The projects here that publish these apps: their pictures, and how they stand.
+  const projectsById = useMemo(() => new Map((projects ?? []).map((p) => [p.id, p])), [projects])
+  const publishing = useMemo(
+    () =>
+      apps.flatMap((app) => {
+        const project = app.local ? projectsById.get(app.local.projectId) : undefined
+        return project ? [project] : []
+      }),
+    [apps, projectsById]
   )
-  const filtered = useMemo(() => applyQuery(apps, statuses, query), [apps, statuses, query])
+  const facts = useProjectFacts(publishing)
+  const thumbnail = useThumbnails(publishing)
+  const projectOf = useCallback(
+    (app: GalleryApp): StudioProject | undefined =>
+      app.local ? projectsById.get(app.local.projectId) : undefined,
+    [projectsById]
+  )
+  const updateOf = useCallback(
+    (app: GalleryApp): string | null => {
+      const project = projectOf(app)
+      return project ? rayfinUpdate(project, facts.latest) : null
+    },
+    [projectOf, facts.latest]
+  )
+  const issuesOf = useCallback(
+    (app: GalleryApp, status: GalleryStatus | undefined): HealthIssue[] => {
+      const project = projectOf(app)
+      return appHealth({
+        status,
+        publishFailed: project?.lastDeploy?.status === 'error',
+        changed: project ? facts.changed.get(project.id) : undefined,
+        update: updateOf(app)
+      })
+    },
+    [projectOf, facts.changed, updateOf]
+  )
+  const pictureOf = (app: GalleryApp): string | undefined =>
+    app.local ? thumbnail(app.local.projectId) : undefined
+
+  // Opened here, or (for an app published from this computer) its project opened.
+  const openedAt = useMemo(() => {
+    const times: Record<string, number> = { ...opened }
+    for (const app of apps) {
+      const at = Date.parse(projectOf(app)?.lastOpenedAt ?? '')
+      const key = pinKey(app)
+      if (Number.isFinite(at) && at > (times[key] ?? 0)) times[key] = at
+    }
+    return times
+  }, [opened, apps, projectOf])
+
+  const query = useMemo<GalleryQuery>(
+    () => ({ text, workspaceId, ...prefs, recent: recentIds, opened: openedAt }),
+    [text, workspaceId, prefs, recentIds, openedAt]
+  )
+  const filtered = useMemo(
+    () => applyQuery(apps, statuses, query, issuesOf),
+    [apps, statuses, query, issuesOf]
+  )
   const shown = filtered.slice(0, limit)
-  const filteredBy = Boolean(text.trim()) || prefs.where !== 'all' || workspaceId !== null
+  const filteredBy =
+    Boolean(text.trim()) ||
+    prefs.where !== 'all' ||
+    workspaceId !== null ||
+    prefs.attention ||
+    prefs.editable
   const selected = selectedId ? apps.find((a) => a.id === selectedId) : undefined
+  const attentionCount = useMemo(
+    () => apps.filter((app) => issuesOf(app, statuses[app.id]).length > 0).length,
+    [apps, statuses, issuesOf]
+  )
+  /** Fabric said which apps the account can change. */
+  const rolesKnown = apps.some((app) => app.canEdit !== undefined)
+  const editableCount = useMemo(() => apps.filter((app) => app.canEdit === true).length, [apps])
+  const looking = lookId ? apps.find((a) => a.id === lookId) : undefined
+  const lookUrl = looking ? appAddress(looking, statuses[looking.id]) : undefined
 
   useEffect(() => {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
@@ -254,15 +375,22 @@ export default function AppGalleryView({
   }, [selectedId, apps, result])
 
   // A new search, filter or order shows the first page again; pinning doesn't.
-  useEffect(() => setLimit(PAGE), [text, workspaceId, prefs.where, prefs.sort])
+  useEffect(
+    () => setLimit(PAGE),
+    [text, workspaceId, prefs.where, prefs.sort, prefs.attention, prefs.editable]
+  )
 
-  // Read the statuses of the cards on screen, or of every app to sort by publish.
+  // Read the statuses of the cards on screen; of every app to sort by publish;
+  // and of every app to find the ones that need attention.
   useEffect(() => {
     if (!result) return
-    const targets =
-      prefs.sort === 'recent' ? filtered.slice(0, RECENT_LIMIT) : filtered.slice(0, limit)
-    want(targets.map((e) => e.app))
-  }, [result, filtered, limit, prefs.sort, want])
+    const targets = prefs.attention
+      ? apps.slice(0, RECENT_LIMIT)
+      : prefs.sort === 'recent'
+        ? filtered.slice(0, RECENT_LIMIT).map((e) => e.app)
+        : filtered.slice(0, limit).map((e) => e.app)
+    want(targets)
+  }, [result, apps, filtered, limit, prefs.sort, prefs.attention, want])
 
   const select = useCallback(
     (app: GalleryApp): void => {
@@ -306,25 +434,72 @@ export default function AppGalleryView({
     const focusLost = !document.activeElement || document.activeElement === document.body
     if (!pressed || !focusLost) return
     document
-      .querySelector<HTMLElement>(`[data-app-id="${pressed.id}"] ~ .gcard-pin`)
+      .querySelector<HTMLElement>(`[data-pin-for="${pressed.id}"]`)
       ?.focus({ preventScroll: !pressed.keyboard })
   }, [prefs.pinned])
 
-  // Esc closes the details, then clears the search, then leaves. Capture runs
-  // before a dialog's own handler can remove it, so a dialog, Search or Help on
-  // top keeps its Esc, and so does an open toolbar menu.
+  /** Note that an app was opened, for the Recently opened order. */
+  const markOpened = useCallback((app: GalleryApp): void => {
+    noteOpened(app)
+    setOpened(openedTimes())
+  }, [])
+
+  const openLook = useCallback(
+    (app: GalleryApp): void => {
+      setLookId(app.id)
+      markOpened(app)
+    },
+    [markOpened]
+  )
+
+  const closeLook = useCallback((): void => {
+    const id = lookId
+    setLookId(null)
+    // Back to the app it was opened from.
+    if (id)
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>(`[data-app-id="${id}"]`)?.focus()
+      )
+  }, [lookId])
+
+  // The app looked at is gone (a refresh, another account), or lost its address.
+  useEffect(() => {
+    if (lookId && (!looking || !lookUrl)) setLookId(null)
+  }, [lookId, looking, lookUrl])
+
+  /** Have Copilot write an app's description, and show it once it's saved. */
+  const describe = useCallback(async (app: GalleryApp): Promise<GalleryDescribeResult> => {
+    if (!app.local) return { ok: false, error: 'This app isn’t on this computer.' }
+    const answer = await window.api.gallery.describe(app.local.projectId)
+    const description = answer.ok ? answer.description : undefined
+    if (description && mounted.current) {
+      setResult(
+        (current) =>
+          current && {
+            ...current,
+            apps: current.apps.map((a) => (a.id === app.id ? { ...a, description } : a))
+          }
+      )
+    }
+    return answer
+  }, [])
+
+  // Esc closes the quick look, then the details, then clears the search, then
+  // leaves. Capture runs before a dialog's own handler can remove it, so a
+  // dialog, Search or Help on top keeps its Esc, and so does an open toolbar menu.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       if (topLayerOpen() || document.querySelector('.help')) return
       if ((event.target as Element | null)?.closest?.('.mp-pop')) return
-      if (selectedId) closeDetails()
+      if (lookId) closeLook()
+      else if (selectedId) closeDetails()
       else if (text) setText('')
       else onClose()
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [selectedId, text, onClose, closeDetails])
+  }, [lookId, selectedId, text, onClose, closeDetails, closeLook])
 
   // "/" jumps to the search, as on the web.
   useEffect(() => {
@@ -344,7 +519,21 @@ export default function AppGalleryView({
   const showAll = (): void => {
     setText('')
     setWorkspaceId(null)
-    setPrefs((p) => ({ ...p, where: 'all' }))
+    setPrefs((p) => ({ ...p, where: 'all', attention: false, editable: false }))
+  }
+  /** An app has a page to look at once its address is known. */
+  const canLook = (entry: GalleryEntry): boolean => Boolean(appAddress(entry.app, entry.status))
+
+  /** What every list of apps (cards or table) needs besides its entries. */
+  const results = {
+    selectedId,
+    view: prefs.view,
+    picture: pictureOf,
+    updateOf,
+    canLook,
+    onSelect: select,
+    onPin: pinCard,
+    onQuickLook: openLook
   }
 
   const user = result?.account?.user
@@ -385,6 +574,26 @@ export default function AppGalleryView({
               <div className="gallery-head-tools">
                 {checking && result && <span className="gallery-checking">Checking Fabric…</span>}
                 {summary && <span className="gallery-count">{summary}</span>}
+                {tab === 'apps' && (
+                  <div className="seg gallery-view" role="group" aria-label="Layout">
+                    {(
+                      [
+                        ['grid', 'Cards'],
+                        ['table', 'Table']
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`seg-btn${prefs.view === value ? ' seg-btn--active' : ''}`}
+                        aria-pressed={prefs.view === value}
+                        onClick={() => setPrefs((p) => ({ ...p, view: value }))}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <button
                   type="button"
                   className="btn btn--sm btn--icon"
@@ -398,195 +607,281 @@ export default function AppGalleryView({
               </div>
             </div>
 
-            <div className="gallery-toolbar" role="search">
-              <label className="gallery-search">
-                <Codicon name="search" className="gallery-search-ico" />
-                <input
-                  ref={searchRef}
-                  className="field-input gallery-search-input"
-                  type="search"
-                  value={text}
-                  autoFocus
-                  spellCheck={false}
-                  placeholder="Search apps, workspaces and descriptions"
-                  aria-label="Search apps"
-                  onChange={(e) => setText(e.target.value)}
-                />
-                {!text && (
-                  <kbd className="gallery-search-key" aria-hidden="true">
-                    /
-                  </kbd>
-                )}
-              </label>
-              <div className="seg gallery-where" role="group" aria-label="Where the apps are">
+            {onUseExample && (
+              <div className="gallery-tabs" role="tablist" aria-label="Show">
                 {(
                   [
-                    ['all', 'All', apps.length],
-                    ['local', 'On this computer', localCount],
-                    ['remote', 'In Fabric only', apps.length - localCount]
+                    ['apps', 'Apps'],
+                    ['examples', 'Examples']
                   ] as const
-                ).map(([value, label, n]) => (
+                ).map(([value, label]) => (
                   <button
                     key={value}
                     type="button"
-                    className={`seg-btn${prefs.where === value ? ' seg-btn--active' : ''}`}
-                    aria-pressed={prefs.where === value}
-                    onClick={() => setPrefs((p) => ({ ...p, where: value }))}
+                    role="tab"
+                    aria-selected={tab === value}
+                    className={`gallery-tab${tab === value ? ' is-on' : ''}`}
+                    onClick={() => setTab(value)}
                   >
                     {label}
-                    {result && <span className="gallery-seg-count">{n.toLocaleString('en')}</span>}
                   </button>
                 ))}
               </div>
-              <WorkspacePicker
-                recent={ranked.recent}
-                others={ranked.others}
-                total={apps.length}
-                value={workspaceId}
-                onChange={setWorkspaceId}
-              />
-              <GalleryMenu
-                icon="list-ordered"
-                label={SORT_NAMES[prefs.sort].label}
-                value={SORT_NAMES[prefs.sort].label}
-                name="Sort"
-                width={260}
-              >
-                {(close) =>
-                  SORTS.map((sort) => {
-                    const on = prefs.sort === sort
-                    return (
-                      <button
-                        key={sort}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={on}
-                        className="mp-item"
-                        onClick={() => {
-                          setPrefs((p) => ({ ...p, sort }))
-                          close()
-                        }}
-                      >
-                        <span className="mp-item-text">
-                          <span className="mp-item-label">{SORT_NAMES[sort].label}</span>
-                          <span className="mp-item-desc">{SORT_NAMES[sort].desc}</span>
-                        </span>
-                        <Codicon name="check" className={`mp-check${on ? '' : ' mp-check--off'}`} />
-                      </button>
-                    )
-                  })
-                }
-              </GalleryMenu>
-            </div>
+            )}
+
+            {tab === 'apps' && (
+              <div className="gallery-toolbar" role="search">
+                <label className="gallery-search">
+                  <Codicon name="search" className="gallery-search-ico" />
+                  <input
+                    ref={searchRef}
+                    className="field-input gallery-search-input"
+                    type="search"
+                    value={text}
+                    autoFocus
+                    spellCheck={false}
+                    placeholder="Search apps, workspaces and descriptions"
+                    aria-label="Search apps"
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                  {!text && (
+                    <kbd className="gallery-search-key" aria-hidden="true">
+                      /
+                    </kbd>
+                  )}
+                </label>
+                <div className="seg gallery-where" role="group" aria-label="Where the apps are">
+                  {(
+                    [
+                      ['all', 'All', apps.length],
+                      ['local', 'On this computer', localCount],
+                      ['remote', 'In Fabric only', apps.length - localCount]
+                    ] as const
+                  ).map(([value, label, n]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`seg-btn${prefs.where === value ? ' seg-btn--active' : ''}`}
+                      aria-pressed={prefs.where === value}
+                      onClick={() => setPrefs((p) => ({ ...p, where: value }))}
+                    >
+                      {label}
+                      {result && (
+                        <span className="gallery-seg-count">{n.toLocaleString('en')}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className={`gallery-chip${prefs.attention ? ' is-on' : ''}`}
+                  aria-pressed={prefs.attention}
+                  title="Apps whose last publish failed, that changed since they were published, that can update Rayfin, or that never published"
+                  onClick={() => setPrefs((p) => ({ ...p, attention: !p.attention }))}
+                >
+                  <span className="gdot gdot--pending" aria-hidden="true" />
+                  Needs attention
+                  {result && (
+                    <span className="gallery-seg-count">{attentionCount.toLocaleString('en')}</span>
+                  )}
+                </button>
+                {rolesKnown && (
+                  <button
+                    type="button"
+                    className={`gallery-chip${prefs.editable ? ' is-on' : ''}`}
+                    aria-pressed={prefs.editable}
+                    title="Apps in workspaces where you're an Admin, Member or Contributor"
+                    onClick={() => setPrefs((p) => ({ ...p, editable: !p.editable }))}
+                  >
+                    <Codicon name="edit" />
+                    Apps I can edit
+                    <span className="gallery-seg-count">{editableCount.toLocaleString('en')}</span>
+                  </button>
+                )}
+                <WorkspacePicker
+                  recent={ranked.recent}
+                  others={ranked.others}
+                  total={apps.length}
+                  value={workspaceId}
+                  onChange={setWorkspaceId}
+                />
+                <GalleryMenu
+                  icon="list-ordered"
+                  label={SORT_NAMES[prefs.sort].label}
+                  value={SORT_NAMES[prefs.sort].label}
+                  name="Sort"
+                  width={260}
+                >
+                  {(close) =>
+                    SORTS.map((sort) => {
+                      const on = prefs.sort === sort
+                      return (
+                        <button
+                          key={sort}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={on}
+                          className="mp-item"
+                          onClick={() => {
+                            setPrefs((p) => ({ ...p, sort }))
+                            close()
+                          }}
+                        >
+                          <span className="mp-item-text">
+                            <span className="mp-item-label">{SORT_NAMES[sort].label}</span>
+                            <span className="mp-item-desc">{SORT_NAMES[sort].desc}</span>
+                          </span>
+                          <Codicon
+                            name="check"
+                            className={`mp-check${on ? '' : ' mp-check--off'}`}
+                          />
+                        </button>
+                      )
+                    })
+                  }
+                </GalleryMenu>
+              </div>
+            )}
           </div>
         </header>
 
         <div className="gallery-scroll">
           <div className="gallery-wrap">
-            <p className="sr-only" role="status">
-              {announced}
-            </p>
-            {result && failure && (
-              <Banner failure={failure} azure={azure} onRetry={() => void read(true)} />
-            )}
-            {result?.truncated && (
-              <p className="gallery-note">
-                <Codicon name="info" />
-                Fabric has more apps than Fabricator reads at once, so some apps you can open aren’t
-                shown.
-              </p>
-            )}
-            {!result ? (
-              failure ? (
-                <ErrorState failure={failure} azure={azure} onRetry={() => void read(true)} />
-              ) : (
-                <ul className="gallery-grid" aria-busy="true" aria-label="Loading apps">
-                  {Array.from({ length: 8 }, (_, i) => (
-                    <SkeletonCard key={i} index={i} />
-                  ))}
-                </ul>
-              )
-            ) : apps.length === 0 ? (
-              <div className="gallery-state">
-                <FabricatorMark className="gallery-state-mark" />
-                <p className="gallery-state-title">No Rayfin apps yet</p>
-                <p className="gallery-state-sub">
-                  Apps you publish to Fabric, and apps others share with you, show up here.
-                </p>
-                <div className="gallery-state-actions">
-                  <button type="button" className="btn btn--primary" onClick={onNewProject}>
-                    New project
-                  </button>
-                </div>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="gallery-state">
-                <Codicon name="search" className="gallery-state-glyph" />
-                <p className="gallery-state-title">
-                  {text.trim() ? `No apps match “${text.trim()}”` : 'No apps match these filters'}
-                </p>
-                <p className="gallery-state-sub">Try other words, or look in every workspace.</p>
-                <div className="gallery-state-actions">
-                  <button type="button" className="btn" onClick={showAll}>
-                    Show all apps
-                  </button>
-                </div>
-              </div>
-            ) : prefs.sort === 'workspace' ? (
-              groupByWorkspace(shown).map((group) => {
-                const usedAt = group.pinned ? undefined : usedAtOf.get(group.id)
-                return (
-                  <section key={group.id} className="gallery-group" aria-label={group.name}>
-                    <h2 className="gallery-group-head">
-                      <Codicon name={groupIcon(group)} />
-                      <span className="gallery-group-name">
-                        {group.pinned ? group.name : <WorkspaceName name={group.name} />}
-                      </span>
-                      <span className="gallery-group-count">{group.entries.length}</span>
-                      {usedAt ? (
-                        <span className="gallery-group-used">
-                          Used {ago(new Date(usedAt).toISOString())}
-                        </span>
-                      ) : null}
-                    </h2>
-                    <Grid
-                      entries={group.entries}
-                      selectedId={selectedId}
-                      label={group.pinned ? 'Pinned apps' : `Apps in ${group.name}`}
-                      grouped={!group.pinned}
-                      onSelect={select}
-                      onPin={pinCard}
-                    />
-                  </section>
-                )
-              })
+            {tab === 'examples' && onUseExample ? (
+              <ExamplesView onUse={onUseExample} />
             ) : (
-              <Grid entries={shown} selectedId={selectedId} onSelect={select} onPin={pinCard} />
-            )}
-            {filtered.length > shown.length && (
-              <div className="gallery-more">
-                <button
-                  type="button"
-                  className="btn btn--sm"
-                  onClick={() => setLimit((n) => n + PAGE)}
-                >
-                  Show more ({(filtered.length - shown.length).toLocaleString('en')} left)
-                </button>
-              </div>
+              <>
+                <p className="sr-only" role="status">
+                  {announced}
+                </p>
+                {result && failure && (
+                  <Banner failure={failure} azure={azure} onRetry={() => void read(true)} />
+                )}
+                {result?.truncated && (
+                  <p className="gallery-note">
+                    <Codicon name="info" />
+                    Fabric has more apps than Fabricator reads at once, so some apps you can open
+                    aren’t shown.
+                  </p>
+                )}
+                {!result ? (
+                  failure ? (
+                    <ErrorState failure={failure} azure={azure} onRetry={() => void read(true)} />
+                  ) : (
+                    <ul className="gallery-grid" aria-busy="true" aria-label="Loading apps">
+                      {Array.from({ length: 8 }, (_, i) => (
+                        <SkeletonCard key={i} index={i} />
+                      ))}
+                    </ul>
+                  )
+                ) : apps.length === 0 ? (
+                  <div className="gallery-state">
+                    <FabricatorMark className="gallery-state-mark" />
+                    <p className="gallery-state-title">No Rayfin apps yet</p>
+                    <p className="gallery-state-sub">
+                      Apps you publish to Fabric, and apps others share with you, show up here.
+                    </p>
+                    <div className="gallery-state-actions">
+                      <button type="button" className="btn btn--primary" onClick={onNewProject}>
+                        New project
+                      </button>
+                    </div>
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <div className="gallery-state">
+                    <Codicon name="search" className="gallery-state-glyph" />
+                    <p className="gallery-state-title">
+                      {text.trim()
+                        ? `No apps match “${text.trim()}”`
+                        : 'No apps match these filters'}
+                    </p>
+                    <p className="gallery-state-sub">
+                      Try other words, or look in every workspace.
+                    </p>
+                    <div className="gallery-state-actions">
+                      <button type="button" className="btn" onClick={showAll}>
+                        Show all apps
+                      </button>
+                    </div>
+                  </div>
+                ) : prefs.sort === 'workspace' ? (
+                  groupByWorkspace(shown).map((group) => {
+                    const usedAt = group.pinned ? undefined : usedAtOf.get(group.id)
+                    return (
+                      <section key={group.id} className="gallery-group" aria-label={group.name}>
+                        <h2 className="gallery-group-head">
+                          <Codicon name={groupIcon(group)} />
+                          <span className="gallery-group-name">
+                            {group.pinned ? group.name : <WorkspaceName name={group.name} />}
+                          </span>
+                          <span className="gallery-group-count">{group.entries.length}</span>
+                          {usedAt ? (
+                            <span className="gallery-group-used">
+                              Used {ago(new Date(usedAt).toISOString())}
+                            </span>
+                          ) : null}
+                        </h2>
+                        <Results
+                          {...results}
+                          entries={group.entries}
+                          label={group.pinned ? 'Pinned apps' : `Apps in ${group.name}`}
+                          grouped={!group.pinned}
+                        />
+                      </section>
+                    )
+                  })
+                ) : (
+                  <Results {...results} entries={shown} />
+                )}
+                {filtered.length > shown.length && (
+                  <div className="gallery-more">
+                    <button
+                      type="button"
+                      className="btn btn--sm"
+                      onClick={() => setLimit((n) => n + PAGE)}
+                    >
+                      Show more ({(filtered.length - shown.length).toLocaleString('en')} left)
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
       </div>
-      {selected && (
+      {selected && tab === 'apps' && (
         <AppDetails
           key={selected.id}
           app={selected}
           status={statuses[selected.id]}
           pinned={prefs.pinned.includes(pinKey(selected))}
+          picture={pictureOf(selected)}
+          hosted={publishedThumbnail(selected, statuses[selected.id])}
+          issues={issuesOf(selected, statuses[selected.id])}
+          update={updateOf(selected)}
           onClose={closeDetails}
           onOpenProject={onOpenProject}
           onPin={togglePin}
           openUrl={openUrl}
+          onOpened={markOpened}
+          onQuickLook={openLook}
+          onDescribe={describe}
+        />
+      )}
+      {looking && lookUrl && (
+        <QuickLook
+          key={looking.id}
+          app={looking}
+          url={lookUrl}
+          onClose={closeLook}
+          onOpenApp={() => {
+            markOpened(looking)
+            openUrl(lookUrl)
+          }}
+          onOpenFabric={() => {
+            markOpened(looking)
+            openUrl(looking.portalUrl)
+          }}
         />
       )}
     </div>
@@ -598,34 +893,71 @@ function groupIcon(group: GalleryGroup): string {
   return workspaceIcon(group.name)
 }
 
-function Grid({
+interface ResultsProps {
+  entries: readonly GalleryEntry[]
+  selectedId: string | null
+  label?: string
+  /** Under a workspace's heading, so the apps needn't name it. */
+  grouped?: boolean
+  view: GalleryView
+  /** An app's thumbnail from this computer. */
+  picture: (app: GalleryApp) => string | undefined
+  /** The Rayfin version an app's project could update to. */
+  updateOf: (app: GalleryApp) => string | null
+  /** Whether an app has a page to look at. */
+  canLook: (entry: GalleryEntry) => boolean
+  onSelect: (app: GalleryApp) => void
+  onPin: (app: GalleryApp, keyboard: boolean) => void
+  onQuickLook: (app: GalleryApp) => void
+}
+
+/** The apps, as cards or as a table. */
+function Results({
   entries,
   selectedId,
   label = 'Apps',
   grouped = false,
+  view,
+  picture,
+  updateOf,
+  canLook,
   onSelect,
-  onPin
-}: {
-  entries: readonly GalleryEntry[]
-  selectedId: string | null
-  label?: string
-  /** Under a workspace's heading, so the cards needn't name it. */
-  grouped?: boolean
-  onSelect: (app: GalleryApp) => void
-  onPin: (app: GalleryApp, keyboard: boolean) => void
-}): JSX.Element {
+  onPin,
+  onQuickLook
+}: ResultsProps): JSX.Element {
+  if (view === 'table') {
+    return (
+      <AppTable
+        entries={entries}
+        selectedId={selectedId}
+        label={label}
+        showWorkspace={!grouped}
+        picture={picture}
+        updateOf={updateOf}
+        canLook={canLook}
+        onSelect={onSelect}
+        onPin={onPin}
+        onQuickLook={onQuickLook}
+      />
+    )
+  }
   return (
     <ul className="gallery-grid" aria-label={label}>
-      {entries.map(({ app, status, pinned }) => (
+      {entries.map((entry) => (
         <AppCard
-          key={app.id}
-          app={app}
-          status={status}
-          selected={app.id === selectedId}
-          pinned={pinned}
+          key={entry.app.id}
+          app={entry.app}
+          status={entry.status}
+          selected={entry.app.id === selectedId}
+          pinned={entry.pinned}
           showWorkspace={!grouped}
+          picture={picture(entry.app)}
+          hosted={publishedThumbnail(entry.app, entry.status)}
+          issues={entry.issues}
+          update={updateOf(entry.app)}
           onSelect={onSelect}
           onPin={onPin}
+          onQuickLook={canLook(entry) ? onQuickLook : undefined}
         />
       ))}
     </ul>

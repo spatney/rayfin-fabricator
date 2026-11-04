@@ -1,5 +1,5 @@
 // Search's results, built from what the app already knows.
-import type { FileNode, StudioProject, TeamWorkspace } from '@shared/ipc'
+import type { FileNode, GalleryApp, StudioProject, TeamWorkspace } from '@shared/ipc'
 import type { DocsIndexPage } from 'virtual:docs-index'
 import { docsPageUrl } from '../../docsLinks'
 import { flattenFiles } from '../chat/mentions'
@@ -94,6 +94,57 @@ export function workspaceItems(
     actions: [copy('Copy repository', workspace.repo, `Copied ${workspace.repo}`)],
     run: () => open(workspace)
   }))
+}
+
+/**
+ * The Fabric apps the gallery last read: Enter opens the live app (or its
+ * page in Fabric until its address is known), with Fabric, the project here
+ * and its link under Actions.
+ */
+export function galleryAppItems(
+  apps: ReadonlyArray<{ app: GalleryApp; address?: string }>,
+  options: {
+    /** Open the app's page, or its page in Fabric, in the browser. */
+    open: (app: GalleryApp, url: string) => void
+    /** Open the project on this computer that publishes it. */
+    openProject: (projectId: string) => void
+  }
+): SearchItem[] {
+  return apps.map(({ app, address }) => {
+    const actions: ItemAction[] = []
+    if (address) {
+      actions.push({
+        id: 'fabric',
+        title: 'Open in Fabric',
+        icon: 'globe',
+        run: () => options.open(app, app.portalUrl)
+      })
+    }
+    const local = app.local
+    if (local) {
+      actions.push({
+        id: 'project',
+        title: 'Open in Fabricator',
+        icon: 'go-to-file',
+        run: () => options.openProject(local.projectId)
+      })
+    }
+    actions.push(copy('Copy link', address ?? app.portalUrl, 'Copied the link'))
+    const keywords = [app.description, local?.projectName, app.team?.name].filter(
+      (word): word is string => Boolean(word)
+    )
+    return {
+      id: `fabric-app:${app.id.toLowerCase()}`,
+      group: 'apps',
+      title: app.name,
+      subtitle: local ? `${app.workspaceName} · on this computer` : app.workspaceName,
+      keywords: keywords.length ? keywords : undefined,
+      icon: { kind: 'mark', name: app.name },
+      verb: address ? 'Open app' : 'Open in Fabric',
+      actions,
+      run: () => options.open(app, address ?? app.portalUrl)
+    }
+  })
 }
 
 /** Every docs page, and each of its sections. They open in the browser. */

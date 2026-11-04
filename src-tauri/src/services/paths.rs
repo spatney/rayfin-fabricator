@@ -201,6 +201,19 @@ pub fn shots_dir() -> PathBuf {
   temp_dir().join("rayfin-fabricator-shots")
 }
 
+/// Where project thumbnails live: one small image per project, drawn from its
+/// preview. On this computer only, beside the other caches: Fabricator draws
+/// them again.
+pub fn thumbnails_dir() -> PathBuf {
+  cache_dir().join("thumbnails")
+}
+
+/// One project's thumbnail. The id is sanitized so it is always a safe single
+/// path segment.
+pub fn thumbnail_file(project_id: &str) -> PathBuf {
+  thumbnails_dir().join(format!("{}.webp", safe_segment(project_id)))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

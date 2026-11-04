@@ -4,8 +4,8 @@ import type { DerivedAdvisor } from '../advisor/lifecycle'
 import { useSuppressPreview } from '../overlay'
 import { moveMenuFocus } from '../menuFocus'
 import { Codicon } from './icons'
+import { initials, markHue } from './gallery/model'
 import { displayPath } from './projectDisplay'
-import { hueOf } from './team/map/parts'
 
 /** The active project's content views, switched from the app bar's tabs. */
 export type ProjectView = 'build' | 'code' | 'blueprint' | 'advisor'
@@ -22,11 +22,15 @@ const SWITCH_LIMIT = 6
 
 const ITEM = '[role="menuitem"]'
 
-/** A project's initial on its own hue, the same as on Home's project list. */
+/** A project's letters on its own hue, the same as on Home's project list. */
 export function ProjectMark({ name, className }: { name: string; className: string }): JSX.Element {
   return (
-    <span className={className} aria-hidden="true" style={{ '--hue': hueOf(name) } as CSSProperties}>
-      {name.trim()[0]?.toUpperCase() ?? '?'}
+    <span
+      className={className}
+      aria-hidden="true"
+      style={{ '--hue': markHue(name) } as CSSProperties}
+    >
+      {initials(name)}
     </span>
   )
 }

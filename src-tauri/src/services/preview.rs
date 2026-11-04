@@ -145,7 +145,7 @@ pub struct PreviewBounds {
 }
 
 impl PreviewBounds {
-  fn to_rect(self) -> AppResult<tauri::Rect> {
+  pub(crate) fn to_rect(self) -> AppResult<tauri::Rect> {
     let ratio = self.pixel_ratio.unwrap_or(1.0);
     if !ratio.is_finite() || ratio <= 0.0
       || !self.width.is_finite() || !self.height.is_finite()

@@ -228,6 +228,9 @@ pub(crate) fn register_project(dir: &Path, display_name: Option<&str>) -> Studio
     team: None,
     missing: None,
     rayfin_version: None,
+    last_opened_at: None,
+    pinned: false,
+    thumbnail_at: None,
   };
   store::upsert_project(project.clone());
   project

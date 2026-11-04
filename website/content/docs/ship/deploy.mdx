@@ -77,6 +77,8 @@ If Fabric asks you to sign in again, publishing waits for you to finish in your 
 
 During publishing you can select **View logs** on the publish screen. If publishing fails, Ray stays above the preview and says "Your app didn’t make it to Fabric. Want me to find out why?" He offers **Find out why**, which opens Help to explain what went wrong, and **View logs** for the publish log. When Fabric wants you to sign in again, he offers **Refresh Fabric authentication** too. When Fabric apps aren't available in the workspace's region, he offers **Choose another workspace** and **Region availability** instead. See [A deploy failed](/docs/troubleshooting/deploy#a-deploy-failed).
 
+Each publish also takes the app's picture with it, as `fabricator-thumbnail.webp` among its files, and when the app has no description in Fabric, Copilot writes one. The [App gallery](/docs/build/app-gallery) shows both, to you and to the people you share the app with. See [Pictures of your apps](/docs/build/app-gallery#pictures-of-your-apps) and [Give an app a description](/docs/build/app-gallery#give-an-app-a-description).
+
 ## Publish changes
 
 After the first publish, the publish control in the app bar names the published app, with its state as a dot: green while it's live, red after a publish that didn't finish. Before that, it says **Not published**. The button beside it says what publishing would do now:

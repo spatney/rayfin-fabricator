@@ -39,6 +39,8 @@ interface Props {
   source?: { label: string; detail: string }
   /** The project name to start with. */
   initialName?: string
+  /** Start from this community example (its `path`, or its name): the gallery's Examples offer it. */
+  initialExample?: string
   /** The Copilot model the new app's first turns use, chosen here (a report migration's). */
   model?: { value: ModelSelection; onChange: (next: ModelSelection) => void; onManageKeys?: () => void }
   /** The projects folder, where a new project goes unless another folder is chosen. */
@@ -137,6 +139,7 @@ export default function CreateProjectScreen({
   onTeamCreated,
   source,
   initialName,
+  initialExample,
   model,
   projectsFolder,
   recentLocations
@@ -160,7 +163,7 @@ export default function CreateProjectScreen({
   >(null)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const locationId = useId()
-  const [start, setStart] = useState<Start>('scratch')
+  const [start, setStart] = useState<Start>(initialExample ? 'example' : 'scratch')
   const [gallery, setGallery] = useState<CommunityGallery | null>(null)
   const [loadingGallery, setLoadingGallery] = useState(false)
   const [galleryError, setGalleryError] = useState<string | null>(null)
@@ -201,7 +204,9 @@ export default function CreateProjectScreen({
       const res = await window.api.projects.communityTemplates(repoUrl)
       if (res.ok && res.gallery) {
         setGallery(res.gallery)
-        setCommunitySel(res.gallery.templates[0] ? keyOf(res.gallery.templates[0]) : '')
+        const first = res.gallery.templates[0]
+        const asked = res.gallery.templates.find((t) => keyOf(t) === initialExample)
+        setCommunitySel(asked ? keyOf(asked) : first ? keyOf(first) : '')
       } else {
         setGallery(null)
         setGalleryError(res.error ?? 'Couldn’t load the community gallery.')

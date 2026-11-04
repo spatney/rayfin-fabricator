@@ -3,7 +3,16 @@ import type { WorkspaceUse } from '../../fabric'
 
 /** Where the apps shown live: everywhere, on this computer, or only in Fabric. */
 export type GalleryWhere = 'all' | 'local' | 'remote'
-export type GallerySort = 'name' | 'recent' | 'workspace'
+export type GallerySort = 'name' | 'recent' | 'opened' | 'workspace'
+/** How the apps are laid out: cards, or a table for many. */
+export type GalleryView = 'grid' | 'table'
+
+/**
+ * Something an app's maker may want to look at: its last publish failed, its
+ * project changed since it was published, its Rayfin has an update, or it
+ * has never published its pages.
+ */
+export type HealthIssue = 'failed' | 'changes' | 'outdated' | 'unpublished'
 
 export interface GalleryQuery {
   text: string
@@ -15,6 +24,12 @@ export interface GalleryQuery {
   pinned: readonly string[]
   /** The workspaces your apps on this computer use, most recent first: grouped by workspace, they come first. */
   recent?: readonly string[]
+  /** Only apps with something to look at ({@link HealthIssue}). */
+  attention?: boolean
+  /** Only apps the account can change. */
+  editable?: boolean
+  /** When each app was last opened (ms), by `pinKey`: for the Recently opened order. */
+  opened?: Readonly<Record<string, number>>
 }
 
 /** An app with what Fabric said about its latest publish, once it has, and whether it's pinned. */
@@ -22,6 +37,10 @@ export interface GalleryEntry {
   app: GalleryApp
   status?: GalleryStatus
   pinned: boolean
+  /** What its maker may want to look at, most pressing first. */
+  issues: HealthIssue[]
+  /** When it was last opened (ms), when known. */
+  openedAt?: number
 }
 
 export interface GalleryWorkspace {
@@ -48,7 +67,7 @@ const PINNED_GROUP = 'pinned'
  * the app is renamed and is unique across workspaces. Fabric's ids are GUIDs in
  * either case, so the key is lowercase.
  */
-export function pinKey(app: GalleryApp): string {
+export function pinKey(app: Pick<GalleryApp, 'id'>): string {
   return app.id.toLowerCase()
 }
 
@@ -100,13 +119,22 @@ const byName = (a: GalleryEntry, b: GalleryEntry): number =>
   collator.compare(a.app.name, b.app.name) ||
   collator.compare(a.app.workspaceName, b.app.workspaceName)
 
+/** Newest first; entries without a time last, by name. */
+function newestFirst(
+  time: (entry: GalleryEntry) => number
+): (a: GalleryEntry, b: GalleryEntry) => number {
+  return (a, b) => {
+    const [ta, tb] = [time(a), time(b)]
+    return ta === tb ? byName(a, b) : tb > ta ? 1 : -1
+  }
+}
+
 const ORDER: Record<GallerySort, (a: GalleryEntry, b: GalleryEntry) => number> = {
   name: byName,
   // Apps Fabric hasn't said anything about yet come last, by name.
-  recent: (a, b) => {
-    const [ta, tb] = [publishedTime(a), publishedTime(b)]
-    return ta === tb ? byName(a, b) : tb > ta ? 1 : -1
-  },
+  recent: newestFirst(publishedTime),
+  // Apps never opened from Fabricator come last, by name.
+  opened: newestFirst((entry) => entry.openedAt ?? -Infinity),
   workspace: (a, b) => collator.compare(a.app.workspaceName, b.app.workspaceName) || byName(a, b)
 }
 
@@ -124,12 +152,14 @@ function workspaceOrder(recent: readonly string[] = []): (a: GalleryApp, b: Gall
 
 /**
  * The apps a query shows: pinned apps first, then the rest. Within each, best
- * matches first when searching, then in the chosen order.
+ * matches first when searching, then in the chosen order. `issuesOf` says what
+ * each app's maker may want to look at (Needs attention shows only those).
  */
 export function applyQuery(
   apps: readonly GalleryApp[],
   statuses: Readonly<Record<string, GalleryStatus>>,
-  query: GalleryQuery
+  query: GalleryQuery,
+  issuesOf: (app: GalleryApp, status: GalleryStatus | undefined) => HealthIssue[] = () => []
 ): GalleryEntry[] {
   const search = terms(query.text)
   const pins = new Set(query.pinned)
@@ -138,11 +168,20 @@ export function applyQuery(
     if (query.where === 'local' && !app.local) continue
     if (query.where === 'remote' && app.local) continue
     if (query.workspaceId && app.workspaceId !== query.workspaceId) continue
+    if (query.editable && app.canEdit !== true) continue
     const s = score(app, search)
-    if (s > 0) {
-      const entry = { app, status: statuses[app.id], pinned: pins.has(pinKey(app)) }
-      scored.push({ entry, score: s })
+    if (s === 0) continue
+    const status = statuses[app.id]
+    const issues = issuesOf(app, status)
+    if (query.attention && issues.length === 0) continue
+    const entry: GalleryEntry = {
+      app,
+      status,
+      pinned: pins.has(pinKey(app)),
+      issues,
+      openedAt: query.opened?.[pinKey(app)]
     }
+    scored.push({ entry, score: s })
   }
   // Grouped by workspace, the groups keep their order; relevance ranks within each.
   const order = ORDER[query.sort]
@@ -157,6 +196,44 @@ export function applyQuery(
     return (relevance ? b.score - a.score : 0) || order(a.entry, b.entry)
   })
   return scored.map((s) => s.entry)
+}
+
+/** How each {@link HealthIssue} reads: a dot of its tone and a word. */
+export const HEALTH: Record<HealthIssue, { label: string; tone: 'danger' | 'pending' | 'faint' }> =
+  {
+    failed: { label: 'Publish failed', tone: 'danger' },
+    changes: { label: 'Changes not published', tone: 'pending' },
+    outdated: { label: 'Rayfin update available', tone: 'pending' },
+    unpublished: { label: 'Not published yet', tone: 'faint' }
+  }
+
+/**
+ * What an app's maker may want to look at, most pressing first, from what
+ * Fabric says about its publishes and, for an app published from this
+ * computer, from its project: its last publish from here failed
+ * (`publishFailed`), it changed since (`changed`), or a newer Rayfin is out
+ * for it (`update`).
+ */
+export function appHealth({
+  status,
+  publishFailed = false,
+  changed = false,
+  update
+}: {
+  status?: GalleryStatus
+  publishFailed?: boolean
+  changed?: boolean
+  update?: string | null
+}): HealthIssue[] {
+  const issues: HealthIssue[] = []
+  const failed = publishFailed || status?.deployState === 'failed'
+  if (failed) issues.push('failed')
+  if (changed) issues.push('changes')
+  if (update) issues.push('outdated')
+  const neverPublished =
+    status && !status.unknown && !status.publishedAt && status.deployState !== 'in-progress'
+  if (neverPublished && !failed) issues.push('unpublished')
+  return issues
 }
 
 /** The workspaces the apps live in, A to Z, with how many each has. */
@@ -262,6 +339,26 @@ export function initials(name: string): string {
   return letters.join('').toUpperCase() || '?'
 }
 
+/**
+ * The hues apps' marks and covers use: ten spread around the wheel, far enough
+ * apart to tell neighbours apart.
+ */
+const MARK_HUES = [356, 22, 42, 95, 150, 178, 204, 230, 262, 310] as const
+
+/**
+ * The hue of an app's mark and cover. The same name, in any case, always gets
+ * the same one, on Home and in the gallery.
+ */
+export function markHue(name: string): number {
+  // FNV-1a: well spread for short strings, unlike a sum or a small modulus.
+  let hash = 0x811c9dc5
+  for (const ch of name.trim().toLowerCase()) {
+    hash ^= ch.codePointAt(0) ?? 0
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return MARK_HUES[hash % MARK_HUES.length]
+}
+
 const UNITS: ReadonlyArray<[Intl.RelativeTimeFormatUnit, number]> = [
   ['year', 365 * 86_400],
   ['month', 30 * 86_400],
@@ -297,6 +394,24 @@ export function hostOf(url: string): string {
   } catch {
     return url
   }
+}
+
+/** The name Fabricator's publish gives an app's thumbnail among its hosted files. */
+const PUBLISHED_THUMBNAIL = 'fabricator-thumbnail.webp'
+
+/** The app's own address, once it has published its pages. */
+export function appAddress(app: GalleryApp, status?: GalleryStatus): string | undefined {
+  return status?.hostingUrl ?? app.hostingUrl
+}
+
+/**
+ * Where the thumbnail Fabricator published with the app would be. It loads
+ * when the app was published from Fabricator, and its files are public or
+ * you're signed in to it.
+ */
+export function publishedThumbnail(app: GalleryApp, status?: GalleryStatus): string | undefined {
+  const address = appAddress(app, status)
+  return address ? `${address.replace(/\/+$/, '')}/${PUBLISHED_THUMBNAIL}` : undefined
 }
 
 /** "26 apps", "1 app". */

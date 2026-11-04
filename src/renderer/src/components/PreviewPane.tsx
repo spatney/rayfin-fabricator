@@ -226,6 +226,13 @@ interface Props {
    *  load, the live page on screen, or — while something covers the pane — a
    *  still of the loaded page ready behind it. The launch screen waits on it. */
   onSettle?: () => void
+  /**
+   * The preview started or finished loading a page. `app` when it's the app's
+   * own page (the app on this computer, or the published one shown directly):
+   * not the Fabric portal around it, nor a sign-in page. Fabricator draws the
+   * project's thumbnail from it.
+   */
+  onPageLoad?: (page: { url: string; loading: boolean; app: boolean }) => void
 }
 
 /** What a team app's preview status says once its deployment is up: which one
@@ -335,7 +342,8 @@ export default function PreviewPane({
   watching = false,
   onWatchChange,
   deploymentName,
-  onSettle
+  onSettle,
+  onPageLoad
 }: Props): JSX.Element {
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
@@ -626,6 +634,11 @@ export default function PreviewPane({
     if (previewUrl) setDisplayUrl(previewUrl)
   }, [previewUrl])
 
+  // The app's own page, for `onPageLoad`: what the surface shows now, read
+  // when the native webview reports a load.
+  const appPageRef = useRef({ previewUrl, fabric: previewMode === 'fabric', onPageLoad })
+  appPageRef.current = { previewUrl, fabric: previewMode === 'fabric', onPageLoad }
+
   // Subscribe to navigation state pushed from the native webview (Rust side).
   useEffect(() => {
     return window.api.preview.onNavState((s) => {
@@ -636,6 +649,11 @@ export default function PreviewPane({
       // Reveal a hidden transition once its fresh load finishes (after it began).
       if (s.loading) sawLoadingRef.current = true
       else if (pendingUrlRef.current && sawLoadingRef.current) endTransition()
+      const page = appPageRef.current
+      if (page.onPageLoad) {
+        const app = Boolean(page.previewUrl && !page.fabric && sameOrigin(s.url, page.previewUrl))
+        page.onPageLoad({ url: s.url, loading: s.loading, app })
+      }
     })
   }, [endTransition])
 

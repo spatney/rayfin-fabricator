@@ -140,6 +140,36 @@ pub fn projects_set_active(id: Option<String>) -> ProjectsState {
   annotate_state(store::set_active(id))
 }
 
+/// Pin a project to the top of Home's recent projects, or unpin it.
+#[tauri::command(async)]
+pub fn projects_set_pinned(id: String, pinned: bool) -> ProjectsState {
+  annotate_state(store::set_pinned(&id, pinned))
+}
+
+/// Open a project's folder in the file manager.
+#[tauri::command]
+pub fn projects_reveal(app: AppHandle, id: String) -> Result<(), String> {
+  use tauri_plugin_opener::OpenerExt;
+  let project = store::find_project(&id).ok_or_else(|| "That project isn't in Fabricator anymore.".to_string())?;
+  if !std::path::Path::new(&project.path).is_dir() {
+    return Err("The project's folder isn't there anymore.".into());
+  }
+  app.opener().open_path(project.path, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// Keep a project's thumbnail: a WebP `data:` URL drawn from its preview.
+/// Returns when it was saved, as `thumbnailAt` reports it.
+#[tauri::command(async)]
+pub fn projects_thumbnail_save(id: String, image: String) -> Result<String, String> {
+  crate::services::thumbnails::save(&id, &image)
+}
+
+/// The projects' thumbnails as `data:` URLs, by id; projects without one are left out.
+#[tauri::command(async)]
+pub fn projects_thumbnails(ids: Vec<String>) -> std::collections::HashMap<String, String> {
+  crate::services::thumbnails::read_many(&ids)
+}
+
 #[tauri::command]
 pub async fn projects_rename(id: String, name: String) -> ProjectActionResult {
   crate::commands::projects_impl::rename_project(id, name).await

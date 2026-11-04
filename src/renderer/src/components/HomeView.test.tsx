@@ -1,9 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
+import type { LocalStatus, RayfinLatest } from '@shared/ipc'
 import HomeView from './HomeView'
 import { displayPath } from './projectDisplay'
 import { makeProject } from '../../test/harness'
+import { localBackendStore } from '../localBackend'
+import { resetProjectFactsForTests } from '../projectFacts'
+import { thumbnailStore } from '../thumbnails'
 
 function baseProps(): ComponentProps<typeof HomeView> {
   return {
@@ -21,7 +25,52 @@ function baseProps(): ComponentProps<typeof HomeView> {
   }
 }
 
-afterEach(() => cleanup())
+/** What Home reads besides its props: Rayfin's releases, changes since a publish, local backends and pictures. */
+function homeApi({
+  latest = {},
+  changed = [],
+  running = [],
+  thumbnails = {}
+}: {
+  latest?: RayfinLatest
+  changed?: string[]
+  running?: string[]
+  thumbnails?: Record<string, string>
+} = {}) {
+  return {
+    rayfin: { latest: vi.fn(() => Promise.resolve(latest)) },
+    deploy: { hasChanges: vi.fn((id: string) => Promise.resolve(changed.includes(id))) },
+    local: {
+      status: vi.fn((projectId: string) =>
+        Promise.resolve({
+          projectId,
+          state: running.includes(projectId) ? 'running' : 'stopped',
+          revision: 1
+        } as LocalStatus)
+      ),
+      onState: vi.fn(() => () => {})
+    },
+    projects: { thumbnails: vi.fn(() => Promise.resolve(thumbnails)) }
+  }
+}
+
+function installHomeApi(over: Parameters<typeof homeApi>[0] = {}): ReturnType<typeof homeApi> {
+  const api = homeApi(over)
+  ;(window as unknown as { api: unknown }).api = api
+  return api
+}
+
+beforeEach(() => {
+  installHomeApi()
+  resetProjectFactsForTests()
+  localBackendStore.clear()
+  thumbnailStore.clear()
+})
+
+afterEach(() => {
+  cleanup()
+  delete (window as unknown as { api?: unknown }).api
+})
 
 describe('HomeView project launcher', () => {
   it('starts a new project, or opens an existing one from a folder or GitHub', () => {
@@ -105,16 +154,178 @@ describe('HomeView project launcher', () => {
     expect(props.onManageProject).toHaveBeenCalledWith(project)
   })
 
-  it('shows the Rayfin version each project has installed', () => {
+  it('offers a Rayfin update only on projects behind the newest release, and hands it on', async () => {
+    installHomeApi({ latest: { latest: '1.37.0', latestSupportedLocally: '1.36.2' } })
+    const props = baseProps()
+    const behind = makeProject('p1', { name: 'Sales', rayfinVersion: '1.35.1' })
+    props.projects = [
+      behind,
+      makeProject('p2', { name: 'Notes', rayfinVersion: '1.36.2' }),
+      makeProject('p3', {
+        name: 'Trips',
+        rayfinVersion: '1.36.2',
+        team: { workspaceId: 'w', folder: 'trips', worktree: 'C:/t' }
+      })
+    ]
+    props.onUpdateRayfin = vi.fn()
+    render(<HomeView {...props} />)
+    const [sales, notes, trips] = screen.getAllByRole('listitem')
+    const update = await within(sales).findByRole('button', {
+      name: 'Update Rayfin in Sales to 1.36.2'
+    })
+    expect(within(sales).getByText(/^Rayfin 1\.35\.1/)).toBeTruthy()
+    // Up to date for this computer: no version at all.
+    expect(within(notes).queryByText(/^Rayfin \d/)).toBeNull()
+    // A team app updates to the newest release.
+    expect(
+      within(trips).getByRole('button', { name: 'Update Rayfin in Trips to 1.37.0' })
+    ).toBeTruthy()
+    fireEvent.click(update)
+    expect(props.onUpdateRayfin).toHaveBeenCalledWith(behind, '1.36.2')
+    expect(props.onSelect).not.toHaveBeenCalled()
+  })
+
+  it('says how each project’s publish stands, and which run on this computer', async () => {
+    const now = Date.now()
+    installHomeApi({ changed: ['p2'], running: ['p4'] })
     const props = baseProps()
     props.projects = [
-      makeProject('p1', { name: 'Sales', rayfinVersion: '1.36.2' }),
-      makeProject('p2', { name: 'Notes' })
+      makeProject('p1', {
+        name: 'Sales',
+        lastDeploy: {
+          status: 'success',
+          at: new Date(now - 2 * 86_400_000).toISOString(),
+          commit: 'a'
+        }
+      }),
+      makeProject('p2', {
+        name: 'Notes',
+        lastDeploy: { status: 'success', at: new Date(now).toISOString(), commit: 'b' }
+      }),
+      makeProject('p3', {
+        name: 'Trips',
+        lastDeploy: { status: 'error', error: 'workspace not found' }
+      }),
+      makeProject('p4', { name: 'Recipes', lastDeploy: undefined })
     ]
+    render(<HomeView {...props} publishing={new Set(['p5'])} />)
+    const rows = screen.getAllByRole('listitem')
+    expect(within(rows[0]).getByText('Published 2 days ago')).toBeTruthy()
+    expect(await within(rows[1]).findByText('Changes not published')).toBeTruthy()
+    const failed = within(rows[2]).getByText('Publish failed')
+    expect(failed.getAttribute('title')).toBe('Workspace not found')
+    expect(within(rows[3]).getByText('Not published')).toBeTruthy()
+    expect(await within(rows[3]).findByText('Running locally')).toBeTruthy()
+  })
+
+  it('groups projects by when they were opened, pinned ones first, and pins from the row', () => {
+    const now = Date.now()
+    const props = baseProps()
+    const old = makeProject('p3', { name: 'Old', lastOpenedAt: '2025-01-01T00:00:00.000Z' })
+    props.projects = [
+      makeProject('p1', { name: 'Today', lastOpenedAt: new Date(now).toISOString() }),
+      makeProject('p2', {
+        name: 'Pinned',
+        pinned: true,
+        lastOpenedAt: new Date(now - 3 * 86_400_000).toISOString()
+      }),
+      old
+    ]
+    props.onPinProject = vi.fn()
     render(<HomeView {...props} />)
-    const [sales, notes] = screen.getAllByRole('listitem')
-    expect(within(sales).getByText('Rayfin 1.36.2')).toBeTruthy()
-    expect(within(notes).queryByText(/^Rayfin \d/)).toBeNull()
+    const groups = screen.getAllByRole('list').map((list) => ({
+      name:
+        list.getAttribute('aria-labelledby') &&
+        document.getElementById(list.getAttribute('aria-labelledby') ?? '')?.textContent,
+      projects: within(list)
+        .getAllByRole('listitem')
+        .map((row) => within(row).getAllByRole('button')[0].textContent)
+    }))
+    expect(groups).toEqual([
+      { name: 'Pinned', projects: ['Pinned'] },
+      { name: 'Today', projects: ['Today'] },
+      { name: 'Earlier', projects: ['Old'] }
+    ])
+    expect(screen.getByText('Opened just now')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Old' }))
+    expect(props.onPinProject).toHaveBeenCalledWith(old, true)
+  })
+
+  it('filters the projects with /, and moves through them with the arrow keys', () => {
+    const props = baseProps()
+    props.projects = Array.from({ length: 8 }, (_, i) =>
+      makeProject(`p${i}`, { name: i === 5 ? 'Lead tracker' : `App ${i}` })
+    )
+    render(<HomeView {...props} />)
+    fireEvent.keyDown(window, { key: '/' })
+    const filter = screen.getByRole('searchbox', { name: 'Filter projects' })
+    expect(document.activeElement).toBe(filter)
+    fireEvent.change(filter, { target: { value: 'lead' } })
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.getByText('1 of 8 projects')).toBeTruthy()
+    fireEvent.change(filter, { target: { value: 'nothing like it' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }))
+    expect(screen.getAllByRole('listitem')).toHaveLength(6)
+
+    const first = screen.getByRole('button', { name: 'Open App 0' })
+    first.focus()
+    fireEvent.keyDown(first, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open App 1' }))
+    fireEvent.keyDown(document.activeElement as Element, { key: 'End' })
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open Lead tracker' }))
+  })
+
+  it('offers a project’s actions on right-click', () => {
+    const props = baseProps()
+    const sales = makeProject('p1', {
+      name: 'Sales',
+      lastDeploy: {
+        status: 'success',
+        url: 'https://sales.example.app',
+        portalUrl: 'https://app.fabric.microsoft.com/x'
+      }
+    })
+    props.projects = [sales]
+    props.onRevealProject = vi.fn()
+    props.onOpenUrl = vi.fn()
+    render(<HomeView {...props} />)
+    fireEvent.contextMenu(screen.getByRole('listitem'), { clientX: 40, clientY: 40 })
+    const menu = screen.getByRole('menu', { name: 'Sales' })
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual([
+      'Open',
+      'Open app',
+      'Open in Fabric',
+      'Show in Explorer',
+      'Copy folder path',
+      'Manage…'
+    ])
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open app' }))
+    expect(props.onOpenUrl).toHaveBeenCalledWith('https://sales.example.app')
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.contextMenu(screen.getByRole('listitem'), { clientX: 40, clientY: 40 })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Show in Explorer' }))
+    expect(props.onRevealProject).toHaveBeenCalledWith(sales)
+  })
+
+  it('shows a project’s picture once Fabricator has drawn one', async () => {
+    installHomeApi({ thumbnails: { p1: 'data:image/webp;base64,UklGRg==' } })
+    const props = baseProps()
+    props.projects = [
+      makeProject('p1', { name: 'Sales', thumbnailAt: '2026-11-01T00:00:00.000Z' }),
+      makeProject('p2', { name: 'Github Buddy' })
+    ]
+    const { container } = render(<HomeView {...props} />)
+    await waitFor(() => expect(container.querySelector('.ptile-img')).not.toBeNull())
+    expect(container.querySelector('.ptile-img')?.getAttribute('src')).toBe(
+      'data:image/webp;base64,UklGRg=='
+    )
+    // Without one: its two letters.
+    expect(within(screen.getAllByRole('listitem')[1]).getByText('GB')).toBeTruthy()
+    await act(async () => {})
   })
 
   it('shows projects being removed in the background, and what to do when one stops', () => {
@@ -146,18 +357,20 @@ describe('HomeView project launcher', () => {
     render(<HomeView {...props} />)
 
     const removing = screen.getByRole('button', { name: 'Open Sales' }) as HTMLButtonElement
+    const row = (button: HTMLElement): HTMLElement =>
+      button.closest('[role="listitem"]') as HTMLElement
     expect(removing.disabled).toBe(true)
-    expect(removing.textContent).toContain('Removing')
-    expect(removing.textContent).toContain('Deleting the published app from fabcon…')
+    expect(row(removing).textContent).toContain('Removing')
+    expect(row(removing).textContent).toContain('Deleting the published app from fabcon…')
     expect(screen.queryByRole('button', { name: 'Manage Sales' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Open CRM' }).textContent).toContain(
+    expect(row(screen.getByRole('button', { name: 'Open CRM' })).textContent).toContain(
       'Moving 1,200 files to trash… 5s'
     )
 
     const stopped = screen.getByRole('button', { name: 'Open Notes' }) as HTMLButtonElement
     expect(stopped.disabled).toBe(false)
-    expect(stopped.textContent).toContain('Not removed')
-    expect(stopped.textContent).toContain('The file is in use.')
+    expect(row(stopped).textContent).toContain('Not removed')
+    expect(row(stopped).textContent).toContain('The file is in use.')
     fireEvent.click(screen.getByRole('button', { name: 'Try again to remove Notes' }))
     fireEvent.click(screen.getByRole('button', { name: 'Keep Notes' }))
     expect(props.onRetryRemoval).toHaveBeenCalledWith('p2')
@@ -198,6 +411,7 @@ describe('HomeView team workspaces', () => {
       Promise.resolve({ ok: true, project: makeProject('t1', { name: 'Leads' }) })
     )
     ;(window as unknown as { api: unknown }).api = {
+      ...homeApi(),
       openExternal: vi.fn(),
       team: {
         joinOptions: vi.fn(() =>
@@ -311,7 +525,8 @@ describe('HomeView team workspaces', () => {
       />
     )
     const recents = screen.getByRole('region', { name: 'Recent projects' })
-    const row = within(recents).getByRole('button', { name: 'Open Leads' })
+    const row = within(recents).getByRole('listitem')
+    expect(within(row).getByRole('button', { name: 'Open Leads' })).toBeTruthy()
     expect(row.textContent).toContain('Sales team')
     // A team app's deep worktree path isn't shown, only kept in the tooltip.
     expect(row.textContent).not.toContain('C:/team/leads/leads')

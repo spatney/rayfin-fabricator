@@ -79,9 +79,10 @@ export interface SpotlightProps {
   modKey: string
 }
 
-/** Between matches as good, what you're likelier to want: your projects, then actions. */
+/** Between matches as good, what you're likelier to want: your projects, your apps, then actions. */
 const GROUP_PRIOR: Record<SearchGroup, number> = {
   projects: 0.04,
+  apps: 0.035,
   actions: 0.03,
   docs: 0,
   files: -0.02
@@ -287,12 +288,14 @@ export default function Spotlight({
         scope,
         groups: {
           projects: base.filter((p) => p.item.group === 'projects'),
+          apps: base.filter((p) => p.item.group === 'apps'),
           actions: base.filter((p) => p.item.group === 'actions'),
           docs: preparedDocs,
           files: preparedFiles
         },
         lists: {
           projects: items.filter((i) => i.group === 'projects'),
+          apps: items.filter((i) => i.group === 'apps'),
           actions: items.filter((i) => i.group === 'actions'),
           docs: docList.filter((i) => !i.id.includes('#')),
           files: [...fileList].sort((a, b) => a.id.localeCompare(b.id))
@@ -641,10 +644,13 @@ export default function Spotlight({
       } else close()
       return
     }
-    if (mod && /^[1-5]$/.test(event.key)) {
+    if (mod && /^[1-6]$/.test(event.key)) {
       handled()
       const next = VIEW_ORDER[Number(event.key) - 1]
-      if (next !== 'files' || files) changeScope(scope === next ? 'all' : next)
+      const available =
+        (next !== 'files' || Boolean(files)) &&
+        (next !== 'apps' || items.some((i) => i.group === 'apps'))
+      if (available) changeScope(scope === next ? 'all' : next)
       return
     }
     if (event.nativeEvent.isComposing) return

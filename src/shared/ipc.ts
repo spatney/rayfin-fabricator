@@ -1614,6 +1614,16 @@ export interface StudioProject {
   missing?: boolean
   /** The Rayfin version the project has installed (its CLI's), read when projects are listed. */
   rayfinVersion?: string
+  /** When the project was last opened in Fabricator (ISO 8601). */
+  lastOpenedAt?: string
+  /** Pinned to the top of Home's recent projects. */
+  pinned?: boolean
+  /**
+   * When the project's thumbnail (drawn from its preview) was last saved
+   * (RFC 3339), read when projects are listed; absent while it has none. The
+   * image itself comes from `projects.thumbnails`.
+   */
+  thumbnailAt?: string
 }
 
 export interface ProjectsState {
@@ -2644,6 +2654,14 @@ export interface RayfinVersionInfo {
   latestSupportedLocally?: string
 }
 
+/** The newest Rayfin releases, for Home's update offers (`rayfin.latest`). */
+export interface RayfinLatest {
+  /** The newest stable release on npm: where a team app's upgrades go. */
+  latest?: string
+  /** The newest release the bundled local backend runs: where a personal app's go. */
+  latestSupportedLocally?: string
+}
+
 /* ------------------------------------------------------------------ *
  * Skills
  * ------------------------------------------------------------------ */
@@ -3062,6 +3080,11 @@ export interface GalleryApp {
   hostingUrl?: string
   local?: GalleryLocal
   team?: GalleryTeam
+  /**
+   * The account can change the app: it's an Admin, Member or Contributor of
+   * the app's workspace. Absent when Fabric didn't say.
+   */
+  canEdit?: boolean
 }
 
 /** Every app the account can open, A to Z. */
@@ -3083,8 +3106,20 @@ export interface GalleryStatus {
   hostingUrl?: string
   /** When it last published successfully (ISO 8601). */
   publishedAt?: string
+  /** Its latest publish, when Fabric says. */
+  deployState?: 'in-progress' | 'completed' | 'failed'
   /** Fabric couldn't say: no access to the app's status, or the read failed. */
   unknown?: boolean
+}
+
+/** What describing a project's published app came to (`gallery.describe`). */
+export interface GalleryDescribeResult {
+  ok: boolean
+  /** The app's description now: the one it had, or the one just written. */
+  description?: string
+  /** It had a description already, which it keeps. */
+  kept?: boolean
+  error?: string
 }
 
 /* ------------------------------------------------------------------ *
@@ -3857,6 +3892,22 @@ export interface RayfinStudioApi {
     list: (refresh?: boolean) => Promise<GalleryResult>
     /** Each app's address and last publish, in the order asked (up to 50 at a time). Never throws. */
     status: (apps: Array<{ workspaceId: string; id: string }>) => Promise<GalleryStatus[]>
+    /**
+     * Have Copilot write a one-line description of a project's published app,
+     * and save it in Fabric. An app that has one keeps it unless `replace`.
+     * Never throws.
+     */
+    describe: (projectId: string, replace?: boolean) => Promise<GalleryDescribeResult>
+    /**
+     * Quick look: an app's live page (an `https` address) in a native webview of
+     * its own over `bounds`, which paints above all HTML. Kept placed with
+     * `setBounds`; `close` takes it away.
+     */
+    quickLook: {
+      show: (url: string, bounds: PreviewBounds) => Promise<void>
+      setBounds: (bounds: PreviewBounds) => Promise<void>
+      close: () => Promise<void>
+    }
   }
 
   projects: {
@@ -3890,6 +3941,17 @@ export interface RayfinStudioApi {
     /** Install missing dependencies so this project's pinned Rayfin CLI is ready. */
     ensureDependencies: (id: string) => Promise<ProjectActionResult>
     setActive: (id: string | null) => Promise<ProjectsState>
+    /** Pin a project to the top of Home's recent projects, or unpin it. */
+    setPinned: (id: string, pinned: boolean) => Promise<ProjectsState>
+    /** Open a project's folder in the file manager. Rejects when it's gone. */
+    reveal: (id: string) => Promise<void>
+    /**
+     * Keep a project's thumbnail, a WebP `data:` URL drawn from its preview.
+     * Resolves to when it was saved (the project's new `thumbnailAt`).
+     */
+    saveThumbnail: (id: string, image: string) => Promise<string>
+    /** The projects' thumbnails as `data:` URLs, by id; ones without a thumbnail are left out. */
+    thumbnails: (ids: string[]) => Promise<Record<string, string>>
     /** Rename a project (updates the display name and rayfin/rayfin.yml `name`). */
     rename: (id: string, name: string) => Promise<ProjectActionResult>
     /** Set (or clear, when empty) the Fabric workspace a project deploys to. */
@@ -4035,6 +4097,8 @@ export interface RayfinStudioApi {
   rayfin: {
     /** The project's local Rayfin CLI + SDK versions, with upgrade availability. */
     versions: (id: string) => Promise<RayfinVersionInfo>
+    /** The newest Rayfin releases (cached; empty when npm is unreachable). */
+    latest: () => Promise<RayfinLatest>
   }
 
   skills: {

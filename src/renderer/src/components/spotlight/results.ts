@@ -53,9 +53,9 @@ export interface ResultsInput {
   answering: boolean
 }
 
-export const GROUPS: SearchGroup[] = ['projects', 'actions', 'docs', 'files']
+export const GROUPS: SearchGroup[] = ['projects', 'apps', 'actions', 'docs', 'files']
 /** How many of each kind make the one list of results. */
-const LIMITS: Record<SearchGroup, number> = { projects: 4, actions: 5, docs: 5, files: 4 }
+const LIMITS: Record<SearchGroup, number> = { projects: 4, apps: 4, actions: 5, docs: 5, files: 4 }
 /** How many a view lists. */
 export const VIEW_LIMIT = 60
 const RECENT = 5
@@ -117,7 +117,10 @@ function browse(input: ResultsInput): Section[] {
         ]
       : []
   }
-  const views = GROUPS.filter((g) => g !== 'files' || input.hasFiles)
+  // Fabric apps once the gallery has read some; files once the project has some.
+  const views = GROUPS.filter(
+    (g) => (g !== 'files' || input.hasFiles) && (g !== 'apps' || input.lists.apps.length > 0)
+  )
   const sections: Section[] = [
     {
       key: 'suggestions',

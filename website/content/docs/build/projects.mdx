@@ -3,7 +3,7 @@ title: "Create and manage projects"
 description: "Start a new Rayfin app, open or clone an existing one, export a project for someone else or import one, switch between projects, and rename or remove them."
 ---
 
-Projects are the Rayfin apps Fabricator can open. From **Your projects**, you can start a new app, open a local folder, clone a GitHub repository, import a project someone exported, or return to a recent project. Each recent project shows its folder and the Rayfin version it has installed, such as `Rayfin 1.36.2`.
+Projects are the Rayfin apps Fabricator can open. From **Your projects**, you can start a new app, open a local folder, clone a GitHub repository, import a project someone exported, or return to a recent project. Fabricator opens on **Your projects** when it starts, with the project you worked on last at the top. Each recent project shows a picture of its app, its folder, how its publish stands, and when you last opened it.
 
 ![Home, with the New project, Open folder and Clone from GitHub actions above a list of three recent projects.](/screenshots/home.webp)
 
@@ -100,6 +100,25 @@ If the file says where the app is published, publishing updates that same app. T
 The Fabricator installer has your computer open `.fabricator` files with Fabricator. If Fabricator is already running, the file opens in it. If you've just installed Fabricator, it imports the file once you finish setup.
 
 **Import a project** also imports a .zip of a Rayfin project, as long as the project is at the top of the .zip or in the one folder at its top.
+
+## Find your way around recent projects
+
+**Recent projects** lists your projects, the ones you opened most recently first, grouped under **Today**, **This week** and **Earlier**. Projects you pin come first, under **Pinned**. The list shows six projects besides the pinned ones; select **Show all** to see the rest.
+
+Each project shows:
+
+- **A picture of its app.** Fabricator draws it from the preview once the app's page has loaded, then again when it's more than half an hour old, and after each publish. Until there's one, the project shows its first letters on its own color, the same as in the app bar.
+- **Its folder**, or for a team app, its team workspace.
+- **How its publish stands**, as a small dot and a word: **Published 2 days ago**, **Changes not published** when the folder changed since the last publish, **Publish failed** (point at it to see why), **Publishing…** or **Not published**.
+- **Open now**, **Running locally** or **Missing** beside its name, when the project is open, its app runs on this computer, or its folder is gone.
+- **Its Rayfin version, with Update**, only when a newer Rayfin release is out for it, such as `Rayfin 1.35.1 · Update`. Select **Update** to open the project and have Copilot update its Rayfin packages, as **Update with Copilot** does. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
+- **When you last opened it**, such as "Opened 3 hours ago", on the right.
+
+Point at a project to see its actions in place of when you opened it: **Open app** and **Open in Fabric** once it's published, **Show in Explorer** (**Show in Finder** on macOS), **Pin to the top** or **Unpin**, and **Manage**. Right-click a project for the same actions, and also **Copy folder path** and **Update Rayfin** when there's an update.
+
+To find a project when you have more than six, type in **Filter projects** above the list, or press `/` to get there. It matches project names, folders and team workspace names.
+
+With the keyboard, press `↑` and `↓` to move between projects and `Enter` to open one. Press `→` and `←` to move between a project and its actions. Press the menu key or `Shift+F10` for the right-click menu.
 
 ## Switch between projects
 

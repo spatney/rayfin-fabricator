@@ -39,7 +39,7 @@ describe('SplashScreen', () => {
     rerender(<SplashScreen stage="ready" />)
     expect(line()).toBe('All set')
     rerender(<SplashScreen stage="ready" opening="Lead Tracker" />)
-    expect(line()).toBe('LOpening Lead Tracker')
+    expect(line()).toBe('LTOpening Lead Tracker')
   })
 
   it('introduces Ray first, holding his hello long enough to read', () => {
@@ -90,14 +90,14 @@ describe('SplashScreen at a later launch', () => {
     expect(said()).not.toMatch(/I’m Ray/)
   })
 
-  it('names the project it’s opening, with its initial, once that’s known', () => {
+  it('names the project it’s opening, with its letters, once that’s known', () => {
     const line = (): string => document.querySelector('.splash-status')?.textContent ?? ''
     const { container, rerender } = render(<SplashScreen launch />)
     // Not known yet: nothing, and no "Checking…" either, since the checks run behind.
     expect(line()).toBe('')
     rerender(<SplashScreen launch opening="lead-tracker" />)
-    expect(line()).toBe('LOpening lead-tracker')
-    expect(container.querySelector('.splash-status-mark')?.textContent).toBe('L')
+    expect(line()).toBe('LTOpening lead-tracker')
+    expect(container.querySelector('.splash-status-mark')?.textContent).toBe('LT')
     rerender(<SplashScreen launch opening={null} />)
     expect(line()).toBe('Opening your projects')
   })

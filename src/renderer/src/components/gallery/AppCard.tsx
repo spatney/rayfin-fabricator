@@ -1,8 +1,7 @@
-import type { CSSProperties, JSX } from 'react'
+import { useState, type CSSProperties, type JSX, type KeyboardEvent } from 'react'
 import type { GalleryApp, GalleryStatus } from '@shared/ipc'
 import { Codicon } from '../icons'
-import { hueOf } from '../team/map/parts'
-import { ago, initials } from './model'
+import { ago, HEALTH, initials, markHue, type HealthIssue } from './model'
 import { WorkspaceName, workspaceIcon } from './WorkspacePicker'
 
 /** A stable number for a name, to pick its cover's shapes. */
@@ -32,18 +31,33 @@ const SHAPES: ReadonlyArray<JSX.Element> = [
   </>
 ]
 
-/** An app's cover: a flat tint of its hue, a few shapes, and its initials. */
+/**
+ * An app's cover: a picture of the app when there's one (`picture`, drawn on
+ * this computer, or `hosted`, the one its last publish put among its files,
+ * when that loads), else a flat tint of its hue, a few shapes, and its initials.
+ */
 export function AppCover({
   name,
-  className = ''
+  className = '',
+  picture,
+  hosted
 }: {
   name: string
   className?: string
+  /** The app's thumbnail, drawn from its preview on this computer (`data:` URL). */
+  picture?: string
+  /** Where its published thumbnail would be: shown only once it loads. */
+  hosted?: string
 }): JSX.Element {
+  const [loaded, setLoaded] = useState<string | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+  const remote = hosted && failed !== hosted ? hosted : undefined
+  const src = picture ?? remote
+  const showing = Boolean(picture) || (remote !== undefined && loaded === remote)
   return (
     <span
-      className={`gcover ${className}`.trim()}
-      style={{ '--hue': hueOf(name) } as CSSProperties}
+      className={`gcover${showing ? ' gcover--picture' : ''} ${className}`.trim()}
+      style={{ '--hue': markHue(name) } as CSSProperties}
       aria-hidden="true"
     >
       <svg
@@ -55,9 +69,60 @@ export function AppCover({
         <rect className="gcover-bg" width="160" height="70" />
         {SHAPES[hash(name) % SHAPES.length]}
       </svg>
-      <span className="gcover-mark">{initials(name)}</span>
+      {!showing && <span className="gcover-mark">{initials(name)}</span>}
+      {src && (
+        <img
+          className={`gcover-img${showing ? '' : ' gcover-img--loading'}`}
+          src={src}
+          alt=""
+          loading="lazy"
+          draggable={false}
+          onLoad={() => setLoaded(src)}
+          onError={() => {
+            if (src === hosted) setFailed(src)
+          }}
+        />
+      )}
     </span>
   )
+}
+
+/** The words for a health issue; an update says which version. */
+export function healthLabel(issue: HealthIssue, update?: string | null): string {
+  return issue === 'outdated' && update ? `Rayfin ${update} available` : HEALTH[issue].label
+}
+
+/** A health issue as a small dot and a word. */
+export function HealthTag({
+  issue,
+  update
+}: {
+  issue: HealthIssue
+  update?: string | null
+}): JSX.Element {
+  return (
+    <span className={`gtag gtag--${HEALTH[issue].tone}`}>
+      <span className={`gdot gdot--${HEALTH[issue].tone}`} aria-hidden="true" />
+      {healthLabel(issue, update)}
+    </span>
+  )
+}
+
+/** Space on an app opens its quick look; the button's own click (select) waits for Enter or a click. */
+export function quickLookKeys(
+  onQuickLook: (() => void) | undefined
+): Pick<JSX.IntrinsicElements['button'], 'onKeyDown' | 'onKeyUp'> {
+  if (!onQuickLook) return {}
+  return {
+    onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key !== ' ' || event.repeat) return
+      event.preventDefault()
+      onQuickLook()
+    },
+    onKeyUp: (event: KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === ' ') event.preventDefault()
+    }
+  }
 }
 
 /** "Published 3 days ago", "Not published yet", or nothing while Fabric hasn't said. */
@@ -98,8 +163,13 @@ export default function AppCard({
   selected,
   pinned = false,
   showWorkspace = true,
+  picture,
+  hosted,
+  issues = [],
+  update,
   onSelect,
-  onPin
+  onPin,
+  onQuickLook
 }: {
   app: GalleryApp
   status?: GalleryStatus
@@ -107,12 +177,24 @@ export default function AppCard({
   pinned?: boolean
   /** Off under a workspace's own heading. */
   showWorkspace?: boolean
+  /** The app's thumbnail from this computer. */
+  picture?: string
+  /** Where its published thumbnail would be. */
+  hosted?: string
+  /** What its maker may want to look at, most pressing first. */
+  issues?: readonly HealthIssue[]
+  /** The Rayfin version its project could update to. */
+  update?: string | null
   onSelect: (app: GalleryApp) => void
   /** Pin or unpin the app; `keyboard` when the keyboard pressed the pin, not a pointer. */
   onPin: (app: GalleryApp, keyboard: boolean) => void
+  /** Look at the live app (Space), when it has an address. */
+  onQuickLook?: (app: GalleryApp) => void
 }): JSX.Element {
   const published = publishedText(status)
   const descId = `gcard-desc-${app.id}`
+  // "Not published yet" is already its time line.
+  const issue = issues.find((i) => i !== 'unpublished')
   return (
     <li className="gcard-item">
       <button
@@ -121,10 +203,12 @@ export default function AppCard({
         aria-label={`${app.name}, in ${app.workspaceName}`}
         aria-describedby={descId}
         aria-pressed={selected}
+        aria-keyshortcuts={onQuickLook ? 'Space' : undefined}
         data-app-id={app.id}
         onClick={() => onSelect(app)}
+        {...quickLookKeys(onQuickLook && (() => onQuickLook(app)))}
       >
-        <AppCover name={app.name} />
+        <AppCover name={app.name} picture={picture} hosted={hosted} />
         <span className="gcard-body">
           <span className="gcard-name" title={app.name}>
             {app.name}
@@ -139,6 +223,7 @@ export default function AppCard({
           )}
           {app.description && <span className="gcard-desc">{app.description}</span>}
           <span className="gcard-meta" id={descId}>
+            {issue && <HealthTag issue={issue} update={update} />}
             <AppTags app={app} />
             {published ? (
               <span className="gcard-time">{published}</span>
@@ -156,6 +241,7 @@ export default function AppCard({
       <button
         type="button"
         className="icon-btn gcard-pin"
+        data-pin-for={app.id}
         aria-label={`Pin ${app.name}`}
         aria-pressed={pinned}
         title={pinned ? 'Unpin' : 'Pin to the top'}

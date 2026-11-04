@@ -357,6 +357,55 @@ fn patch_deploy(project_id: &str, f: impl FnOnce(&mut DeployInfo)) {
   });
 }
 
+/// The name a publish gives the app's thumbnail among its hosted files, where
+/// the app gallery looks for it (`<hosting URL>/fabricator-thumbnail.webp`).
+pub(crate) const PUBLISHED_THUMBNAIL: &str = "fabricator-thumbnail.webp";
+
+/// A thumbnail put in the frontend's `public/` folder for one publish.
+struct StagedThumbnail {
+  file: PathBuf,
+  /// The `public/` folder was made for it, so it goes too.
+  made_folder: Option<PathBuf>,
+}
+
+impl StagedThumbnail {
+  fn remove(self) {
+    let _ = std::fs::remove_file(&self.file);
+    if let Some(folder) = self.made_folder {
+      // Only when nothing else arrived in it meanwhile.
+      let _ = std::fs::remove_dir(folder);
+    }
+  }
+}
+
+/// Put the project's thumbnail (drawn from its preview) in its frontend's
+/// `public/` folder, which the build copies into the files `rayfin up` hosts.
+/// `None` when it has none, or it can't be put there.
+fn stage_thumbnail(project: &StudioProject) -> Option<StagedThumbnail> {
+  stage_thumbnail_in(
+    &crate::services::dev_server::frontend_dir(Path::new(&project.path)),
+    &crate::services::paths::thumbnail_file(&project.id),
+  )
+}
+
+fn stage_thumbnail_in(frontend: &Path, thumbnail: &Path) -> Option<StagedThumbnail> {
+  let image = std::fs::read(thumbnail).ok()?;
+  let public = frontend.join("public");
+  let made_folder = if public.is_dir() {
+    None
+  } else {
+    std::fs::create_dir(&public).ok()?;
+    Some(public.clone())
+  };
+  let file = public.join(PUBLISHED_THUMBNAIL);
+  let staged = StagedThumbnail { file, made_folder };
+  if std::fs::write(&staged.file, image).is_err() {
+    staged.remove();
+    return None;
+  }
+  Some(staged)
+}
+
 fn git_opts(dir: &str, ms: u64) -> RunOptions {
   RunOptions {
     cwd: Some(PathBuf::from(dir)),
@@ -797,6 +846,8 @@ async fn run_deploy_inner(
   up_args.extend(workspace_args(workspace_target.as_deref()));
   let arg_refs: Vec<&str> = up_args.iter().map(|s| s.as_str()).collect();
 
+  // The app's thumbnail goes out with its files, so galleries elsewhere can show it.
+  let staged = stage_thumbnail(&project);
   let result = exec::run_project_rayfin(
     Path::new(&project.path),
     &arg_refs,
@@ -808,6 +859,10 @@ async fn run_deploy_inner(
     },
   )
   .await;
+  // Gone before anything commits the folder: it was never the app's.
+  if let Some(staged) = staged {
+    staged.remove();
+  }
 
   let captured_text = captured.lock().unwrap().clone();
   if !result.ok {
@@ -1246,6 +1301,30 @@ pub fn deploy_set_name(project_id: String, workspace_key: String, name: String) 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn a_publish_takes_the_thumbnail_and_leaves_the_folder_as_it_was() {
+    let root = std::env::temp_dir().join(format!("fab-stage-{}", uuid::Uuid::new_v4()));
+    let thumbnail = root.join("thumb.webp");
+    let frontend = root.join("app");
+    std::fs::create_dir_all(&frontend).unwrap();
+    assert!(stage_thumbnail_in(&frontend, &thumbnail).is_none(), "no thumbnail yet");
+    std::fs::write(&thumbnail, b"RIFF....WEBP").unwrap();
+
+    // Without a public/ folder, one is made for the publish and goes with it.
+    let staged = stage_thumbnail_in(&frontend, &thumbnail).unwrap();
+    assert_eq!(std::fs::read(frontend.join("public").join(PUBLISHED_THUMBNAIL)).unwrap(), b"RIFF....WEBP");
+    staged.remove();
+    assert!(!frontend.join("public").exists());
+
+    // The app's own public/ folder keeps everything else in it.
+    std::fs::create_dir_all(frontend.join("public")).unwrap();
+    std::fs::write(frontend.join("public").join("logo.svg"), "<svg/>").unwrap();
+    stage_thumbnail_in(&frontend, &thumbnail).unwrap().remove();
+    assert!(frontend.join("public").join("logo.svg").is_file());
+    assert!(!frontend.join("public").join(PUBLISHED_THUMBNAIL).exists());
+    let _ = std::fs::remove_dir_all(&root);
+  }
 
   fn failed_run(stdout: &str, stderr: &str) -> RunResult {
     RunResult {

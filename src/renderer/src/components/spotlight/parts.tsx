@@ -1,21 +1,21 @@
 import type { CSSProperties, JSX } from 'react'
+import { initials, markHue } from '../gallery/model'
 import { Codicon } from '../icons'
 import { Ray } from '../mascot/Ray'
-import { hueOf } from '../team/map/parts'
 import type { Range } from './rank'
 import type { ItemIcon } from './model'
 
-/** A result's icon on its tile: a project's initial, a tinted codicon, or Ray. */
+/** A result's icon on its tile: a project's letters, a tinted codicon, or Ray. */
 export function Icon({ icon, small }: { icon: ItemIcon; small?: boolean }): JSX.Element {
   const className = `sl-ico${small ? ' sl-ico--sm' : ''}`
   if (icon.kind === 'mark') {
     return (
       <span
         className={`${className} sl-ico--mark`}
-        style={{ '--hue': hueOf(icon.name) } as CSSProperties}
+        style={{ '--hue': markHue(icon.name) } as CSSProperties}
         aria-hidden="true"
       >
-        {icon.name.trim()[0]?.toUpperCase() ?? '?'}
+        {initials(icon.name)}
       </span>
     )
   }

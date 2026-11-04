@@ -62,8 +62,6 @@ fn default_settings() -> AppSettings {
 struct RawStore {
   workspace_root: Option<String>,
   #[serde(default)]
-  active_project_id: Option<String>,
-  #[serde(default)]
   projects: Vec<StudioProject>,
   #[serde(default)]
   team_workspaces: Vec<TeamWorkspace>,
@@ -83,20 +81,26 @@ fn settings_from(saved: Option<Value>) -> AppSettings {
     .unwrap_or_else(default_settings)
 }
 
+/// The projects a saved store holds. The project that was open when
+/// Fabricator closed isn't opened again (the store still records it): a
+/// launch opens on Home.
+fn state_from(parsed: RawStore) -> ProjectsState {
+  let mut state = default_state();
+  if let Some(root) = parsed.workspace_root {
+    state.workspace_root = root;
+  }
+  state.projects = parsed.projects;
+  state.team_workspaces = parsed.team_workspaces;
+  state.recent_locations = parsed.recent_locations;
+  state
+}
+
 fn load() -> Cache {
   match std::fs::read_to_string(paths::store_file()) {
     Ok(raw) => match serde_json::from_str::<RawStore>(&raw) {
-      Ok(parsed) => {
-        let mut state = default_state();
-        if let Some(root) = parsed.workspace_root {
-          state.workspace_root = root;
-        }
-        state.active_project_id = parsed.active_project_id;
-        state.projects = parsed.projects;
-        state.team_workspaces = parsed.team_workspaces;
-        state.recent_locations = parsed.recent_locations;
-        let settings = settings_from(parsed.settings);
-        Cache { state, settings }
+      Ok(mut parsed) => {
+        let settings = settings_from(parsed.settings.take());
+        Cache { state: state_from(parsed), settings }
       }
       Err(_) => Cache {
         state: default_state(),
@@ -363,8 +367,9 @@ pub fn set_active(id: Option<String>) -> ProjectsState {
     if let Some(ref want) = id {
       // Bump the selected project to the front so Home shows true
       // most-recently-used order (matches how upsert_project front-loads
-      // newly created / opened projects).
+      // newly created / opened projects), and note when it was opened.
       if let Some(pos) = c.state.projects.iter().position(|p| &p.id == want) {
+        c.state.projects[pos].last_opened_at = Some(crate::commands::util::now_iso());
         if pos != 0 {
           let p = c.state.projects.remove(pos);
           c.state.projects.insert(0, p);
@@ -379,6 +384,11 @@ pub fn set_active(id: Option<String>) -> ProjectsState {
   })
 }
 
+/// Pin a project to the top of Home's recent projects, or unpin it.
+pub fn set_pinned(id: &str, pinned: bool) -> ProjectsState {
+  mutate_project(id, |p| p.pinned = pinned)
+}
+
 /// Insert or update a project (matched by id), keeping it at the front.
 pub fn upsert_project(project: StudioProject) -> ProjectsState {
   with_cache(|c| {
@@ -390,14 +400,16 @@ pub fn upsert_project(project: StudioProject) -> ProjectsState {
 }
 
 pub fn remove_project(id: &str) -> ProjectsState {
-  with_cache(|c| {
+  let state = with_cache(|c| {
     c.state.projects.retain(|p| p.id != id);
     if c.state.active_project_id.as_deref() == Some(id) {
       c.state.active_project_id = None;
     }
     persist(c);
     c.state.clone()
-  })
+  });
+  crate::services::thumbnails::forget(id);
+  state
 }
 
 /// Mutate a tracked project in place (id preserved) and persist.
@@ -568,6 +580,19 @@ mod tests {
     })).unwrap();
     assert!(raw.team_workspaces.is_empty());
     assert!(raw.projects[0].team.is_none());
+  }
+
+  #[test]
+  fn a_launch_opens_on_home_not_the_project_open_at_closing() {
+    let raw: RawStore = serde_json::from_value(serde_json::json!({
+      "workspaceRoot": "C:/x", "activeProjectId": "p",
+      "projects": [{"id":"p","name":"App","path":"C:/x/app","addedAt":"2026-01-01T00:00:00.000Z","pinned":true}]
+    })).unwrap();
+    let state = state_from(raw);
+    assert_eq!(state.active_project_id, None);
+    assert_eq!(state.workspace_root, "C:/x");
+    assert_eq!(state.projects.len(), 1);
+    assert!(state.projects[0].pinned, "the projects themselves come back as they were");
   }
 
   #[test]

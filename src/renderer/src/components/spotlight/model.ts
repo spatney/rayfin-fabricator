@@ -1,7 +1,7 @@
 // What Search finds, and how a result is shown.
 
 /** The groups results come in, in their default order. */
-export type SearchGroup = 'projects' | 'actions' | 'docs' | 'files'
+export type SearchGroup = 'projects' | 'apps' | 'actions' | 'docs' | 'files'
 
 /** Where Search is: everything, one kind of thing's own search, or asking Help. */
 export type SearchScope = 'all' | SearchGroup | 'help'
@@ -79,6 +79,7 @@ export interface AskSuggestion {
 
 export const GROUP_LABELS: Record<SearchGroup, string> = {
   projects: 'Projects',
+  apps: 'Fabric apps',
   actions: 'Actions',
   docs: 'Documentation',
   files: 'Files'
@@ -87,6 +88,7 @@ export const GROUP_LABELS: Record<SearchGroup, string> = {
 /** Each kind of thing, as a sentence names it: "No docs match". */
 export const GROUP_NOUNS: Record<SearchGroup, string> = {
   projects: 'projects',
+  apps: 'apps',
   actions: 'actions',
   docs: 'docs',
   files: 'files'
@@ -95,6 +97,7 @@ export const GROUP_NOUNS: Record<SearchGroup, string> = {
 /** What each group's results are, and what Enter does with one. */
 export const GROUP_DEFAULTS: Record<SearchGroup, { kind: string; verb: string }> = {
   projects: { kind: 'Project', verb: 'Open project' },
+  apps: { kind: 'Fabric app', verb: 'Open app' },
   actions: { kind: 'Action', verb: 'Run action' },
   docs: { kind: 'Docs', verb: 'Open in browser' },
   files: { kind: 'File', verb: 'Open in Code' }
@@ -106,6 +109,11 @@ export const VIEWS: Record<SearchView, { title: string; icon: ItemIcon; placehol
     title: 'Search projects',
     icon: { kind: 'codicon', name: 'folder-library', hue: HUE.violet },
     placeholder: 'Search projects…'
+  },
+  apps: {
+    title: 'Search Fabric apps',
+    icon: { kind: 'codicon', name: 'library', hue: HUE.green },
+    placeholder: 'Search the apps you can open in Fabric…'
   },
   actions: {
     title: 'Search actions',
@@ -125,5 +133,8 @@ export const VIEWS: Record<SearchView, { title: string; icon: ItemIcon; placehol
   help: { title: 'Ask Help', icon: { kind: 'ray' }, placeholder: 'Ask Help anything…' }
 }
 
-/** The views in the order Ctrl+1…5 (⌘1…5) opens them. */
-export const VIEW_ORDER: SearchView[] = ['projects', 'actions', 'docs', 'files', 'help']
+/**
+ * The views in the order Ctrl+1…6 (⌘1…6) opens them. Fabric apps came later,
+ * so they're last, and the others keep the keys people know.
+ */
+export const VIEW_ORDER: SearchView[] = ['projects', 'actions', 'docs', 'files', 'help', 'apps']

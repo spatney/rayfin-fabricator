@@ -1,5 +1,5 @@
 import type { CSSProperties, JSX, ReactNode } from 'react'
-import { hueOf } from './team/map/parts'
+import { initials, markHue } from './gallery/model'
 
 /** `1 file`, `1,234 files`. */
 export function count(n: number, word: string): string {
@@ -24,9 +24,9 @@ export function ProjectFileSummary({
       <span
         className="home-project-mark project-manage-mark"
         aria-hidden="true"
-        style={{ '--hue': hueOf(name) } as CSSProperties}
+        style={{ '--hue': markHue(name) } as CSSProperties}
       >
-        {name.trim()[0]?.toUpperCase() ?? '?'}
+        {initials(name)}
       </span>
       <span className="project-manage-summary-text">
         <strong>{name}</strong>

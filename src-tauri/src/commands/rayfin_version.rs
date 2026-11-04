@@ -18,7 +18,7 @@ use serde::Deserialize;
 
 use crate::services::exec::{self, RunOptions};
 use crate::services::{rayfin_sdk, store};
-use crate::types::{RayfinPackageVersion, RayfinVersionInfo};
+use crate::types::{RayfinLatest, RayfinPackageVersion, RayfinVersionInfo};
 
 /// The canonical CLI package; every other `@microsoft/rayfin-*` is treated as SDK.
 const CLI_PACKAGE: &str = "@microsoft/rayfin-cli";
@@ -201,6 +201,17 @@ pub async fn rayfin_versions(id: String) -> RayfinVersionInfo {
     packages,
     latest_supported_locally,
   }
+}
+
+/// The newest Rayfin releases: on npm, and within what the bundled local
+/// backend runs. Rayfin's packages ship in lockstep, so the CLI's are every
+/// package's. Cached like [`rayfin_versions`]' lookups; absent when npm is
+/// unreachable.
+#[tauri::command]
+pub async fn rayfin_latest() -> RayfinLatest {
+  let (latest, latest_supported_locally) =
+    tokio::join!(latest_version(CLI_PACKAGE), latest_supported_locally(CLI_PACKAGE));
+  RayfinLatest { latest, latest_supported_locally }
 }
 
 #[cfg(test)]

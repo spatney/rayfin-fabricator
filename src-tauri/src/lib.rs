@@ -367,6 +367,7 @@ pub fn run() {
       // app gallery
       commands::gallery::gallery_list,
       commands::gallery::gallery_status,
+      commands::gallery::gallery_describe,
       // projects
       commands::projects::projects_state,
       commands::projects::projects_check_name,
@@ -380,6 +381,10 @@ pub fn run() {
       commands::projects::projects_open,
       commands::projects::projects_prepare_dependencies,
       commands::projects::projects_set_active,
+      commands::projects::projects_set_pinned,
+      commands::projects::projects_reveal,
+      commands::projects::projects_thumbnail_save,
+      commands::projects::projects_thumbnails,
       commands::projects::projects_rename,
       commands::projects::projects_set_workspace,
       commands::projects::projects_set_preview_mode,
@@ -429,6 +434,7 @@ pub fn run() {
       commands::projects::projects_files_list_dir,
       // rayfin versions
       commands::rayfin_version::rayfin_versions,
+      commands::rayfin_version::rayfin_latest,
       // skills
       commands::skills::skills_list,
       commands::skills::skills_set,
@@ -521,6 +527,10 @@ pub fn run() {
       services::preview::preview_design_snapshot,
       services::preview::preview_design_command,
       services::preview::preview_design_set_theme,
+      // the app gallery's quick look
+      services::quicklook::quicklook_show,
+      services::quicklook::quicklook_set_bounds,
+      services::quicklook::quicklook_close,
       commands::design::design_variations,
       commands::design::design_polish,
       commands::design::design_locate,

@@ -27,11 +27,12 @@ function input(overrides: Partial<ResultsInput> = {}): ResultsInput {
     scope: 'all',
     groups: {
       projects: prepare(projects),
+      apps: [],
       actions: prepare(actions),
       docs: prepare(docs),
       files: []
     },
-    lists: { projects, actions, docs, files: [] },
+    lists: { projects, apps: [], actions, docs, files: [] },
     recentProjects: projects,
     suggestions: [actions[0]],
     questions: [{ id: 'new', question: 'What’s new in this release?' }],
@@ -88,7 +89,7 @@ describe('what Search shows', () => {
     const many = Array.from({ length: 7 }, (_, i) => item('docs', `Deploy step ${i + 1}`))
     const sections = sectionsFor({
       query: 'step',
-      groups: { projects: [], actions: [], docs: prepare(many), files: [] }
+      groups: { projects: [], apps: [], actions: [], docs: prepare(many), files: [] }
     })
     expect(sections[0].entries).toHaveLength(5)
     expect(sections[1].entries[1]).toMatchObject({ type: 'view', view: 'docs', count: 7 })
@@ -100,10 +101,25 @@ describe('what Search shows', () => {
     expect(sections[0]).toMatchObject({ label: 'Documentation', count: 3 })
     expect(buildResults(input({ query: 'deploy', scope: 'docs' })).counts).toEqual({
       projects: 1,
+      apps: 0,
       actions: 1,
       docs: 3,
       files: 0
     })
+  })
+
+  it('finds Fabric apps once the gallery has read them, with a search of their own', () => {
+    expect(titles(sectionsFor()[2].entries)).not.toContain('apps')
+    const apps = [item('apps', 'Deploy dashboard')]
+    const sections = sectionsFor({
+      query: 'deploy dash',
+      groups: { projects: [], apps: prepare(apps), actions: [], docs: [], files: [] },
+      lists: { projects, apps, actions, docs, files: [] }
+    })
+    expect(titles(sections[0].entries)).toEqual(['Deploy dashboard'])
+    expect(sections[1].entries[1]).toMatchObject({ type: 'view', view: 'apps', count: 1 })
+    const browsing = sectionsFor({ lists: { projects, apps, actions, docs, files: [] } })
+    expect(titles(browsing[2].entries)).toEqual(['projects', 'apps', 'actions', 'docs'])
   })
 
   it('offers to ask what’s typed in Help, not the starter questions', () => {

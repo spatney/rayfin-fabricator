@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { GalleryApp } from '@shared/ipc'
 import {
   ago,
+  appHealth,
   applyQuery,
   groupByWorkspace,
   initials,
+  markHue,
+  publishedThumbnail,
   rankWorkspaces,
   score,
   splitWorkspaceName,
@@ -231,5 +234,63 @@ describe('gallery workspaces', () => {
     })
     expect(workspaceTitle('FabCON')).toEqual({ title: 'FabCON' })
     expect(workspaceTitle('Sample Reports / SM')).toEqual({ title: 'Sample Reports / SM' })
+  })
+})
+
+describe('gallery marks', () => {
+  it('gives each name one of ten hues, whatever its case, telling apart names that look alike', () => {
+    expect(markHue('Sales Dashboard')).toBe(markHue('  sales dashboard '))
+    // On Home these were the same colour and letter; now they differ in both.
+    expect(markHue('Sales Dashboard')).not.toBe(markHue('Slides Builder'))
+    expect(initials('Sales Dashboard')).not.toBe(initials('Slides Builder'))
+    expect(markHue('Hawaii')).not.toBe(markHue('Hello Azure'))
+    const hues = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'].map(markHue))
+    expect(hues.size).toBeGreaterThan(5)
+    expect([...hues].every((hue) => hue >= 0 && hue < 360)).toBe(true)
+  })
+
+  it('looks for the picture a publish put with the app at its own address', () => {
+    expect(publishedThumbnail(apps[0])).toBeUndefined()
+    expect(publishedThumbnail(apps[0], { id: 'a', hostingUrl: 'https://x.example.net/' })).toBe(
+      'https://x.example.net/fabricator-thumbnail.webp'
+    )
+  })
+})
+
+describe('gallery health', () => {
+  it('says what may need looking at, most pressing first', () => {
+    expect(appHealth({})).toEqual([])
+    expect(appHealth({ status: { id: 'a', publishedAt: '2026-10-01T00:00:00Z' } })).toEqual([])
+    expect(appHealth({ status: { id: 'a' } })).toEqual(['unpublished'])
+    expect(appHealth({ status: { id: 'a', unknown: true } })).toEqual([])
+    expect(appHealth({ status: { id: 'a', deployState: 'in-progress' } })).toEqual([])
+    expect(appHealth({ status: { id: 'a', deployState: 'failed' } })).toEqual(['failed'])
+    expect(appHealth({ publishFailed: true, changed: true, update: '1.36.2' })).toEqual([
+      'failed',
+      'changes',
+      'outdated'
+    ])
+  })
+
+  it('shows only the apps that need attention, or that you can change', () => {
+    const editable = [{ ...apps[0], canEdit: true }, { ...apps[1], canEdit: false }, apps[2]]
+    const health = (app: GalleryApp) => (app.id === 'b' ? (['unpublished'] as const) : [])
+    const shown = (q: Partial<GalleryQuery>) =>
+      applyQuery(editable, {}, query(q), (app) => [...health(app)]).map((e) => e.app.id)
+    expect(shown({ attention: true })).toEqual(['b'])
+    expect(shown({ editable: true })).toEqual(['a'])
+    expect(applyQuery(editable, {}, query(), (app) => [...health(app)])[1].issues).toEqual([
+      'unpublished'
+    ])
+  })
+
+  it('puts the apps opened last first, and the others after by name', () => {
+    const opened = { c: 3, a: 1 }
+    expect(names(query({ sort: 'opened', opened }))).toEqual([
+      'Trip logger',
+      'expense-tracker',
+      'dashboard-sales-old',
+      'sales-dashboard'
+    ])
   })
 })

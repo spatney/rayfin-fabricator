@@ -61,7 +61,7 @@ afterEach(cleanup)
 describe('ProjectSwitcher', () => {
   it('shows every project on Home in one click from the project’s name', () => {
     const props = renderSwitcher()
-    expect(home().textContent).toBe('TTpm board')
+    expect(home().textContent).toBe('TBTpm board')
     expect(home().title).toBe('C:\\Users\\amy\\RayfinProjects\\tpm-board\nAll projects')
     fireEvent.click(home())
     expect(props.onShowAll).toHaveBeenCalledTimes(1)

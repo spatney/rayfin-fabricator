@@ -23,7 +23,7 @@ function versionCore(version: string | null | undefined): number[] | null {
 }
 
 /** Whether `version` is a newer release than `than`. */
-function newerRelease(version: string, than: string): boolean {
+export function newerRelease(version: string, than: string): boolean {
   const a = versionCore(version)
   const b = versionCore(than)
   if (!a || !b) return false

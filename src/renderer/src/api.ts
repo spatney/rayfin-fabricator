@@ -236,7 +236,15 @@ export const api: RayfinStudioApi = {
 
   gallery: {
     list: (refresh?: boolean) => invoke('gallery_list', { refresh: refresh ?? null }),
-    status: (apps: Array<{ workspaceId: string; id: string }>) => invoke('gallery_status', { apps })
+    status: (apps: Array<{ workspaceId: string; id: string }>) =>
+      invoke('gallery_status', { apps }),
+    describe: (projectId: string, replace?: boolean) =>
+      invoke('gallery_describe', { projectId, replace: replace ?? null }),
+    quickLook: {
+      show: (url: string, bounds: PreviewBounds) => invoke('quicklook_show', { url, bounds }),
+      setBounds: (bounds: PreviewBounds) => invoke('quicklook_set_bounds', { bounds }),
+      close: () => invoke('quicklook_close')
+    }
   },
 
   projects: {
@@ -257,6 +265,10 @@ export const api: RayfinStudioApi = {
     open: (path: string) => invoke('projects_open', { path }),
     ensureDependencies: (id: string) => invoke('projects_prepare_dependencies', { id }),
     setActive: (id: string | null) => invoke('projects_set_active', { id }),
+    setPinned: (id: string, pinned: boolean) => invoke('projects_set_pinned', { id, pinned }),
+    reveal: (id: string) => invoke('projects_reveal', { id }),
+    saveThumbnail: (id: string, image: string) => invoke('projects_thumbnail_save', { id, image }),
+    thumbnails: (ids: string[]) => invoke('projects_thumbnails', { ids }),
     rename: (id: string, name: string) => invoke('projects_rename', { id, name }),
     setWorkspace: (id: string, workspace?: string, workspaceName?: string) =>
       invoke('projects_set_workspace', { id, workspace, workspaceName }),
@@ -308,7 +320,8 @@ export const api: RayfinStudioApi = {
   },
 
   rayfin: {
-    versions: (id: string) => invoke('rayfin_versions', { id })
+    versions: (id: string) => invoke('rayfin_versions', { id }),
+    latest: () => invoke('rayfin_latest')
   },
 
   skills: {

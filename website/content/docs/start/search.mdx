@@ -27,12 +27,13 @@ If you come back within a minute and a half, Search opens where you left it, wit
 | Results | What opening one does |
 | --- | --- |
 | Projects | Opens the project, as it would from Home. A project whose folder is missing opens its management dialog instead. |
+| Fabric apps | Opens the app in your browser, or its page in Fabric until Fabricator knows its address. They're the apps the [App gallery](/docs/build/app-gallery) found with your Azure sign-in; Search reads them the first time you open it, when the gallery hasn't yet. |
 | Team workspaces | Opens the workspace overview. They show when **Team workspaces** is turned on in **Settings → Experiments**. |
 | Actions | Does what the matching control does: switch to **Build**, **Code**, **Blueprint** or **Advisor**, open **History**, **Skills** or **Secrets**, publish, **Share**, turn **Publish after each chat turn** on or off, change the theme or text size, open **Settings**, manage accounts or API keys, open setup, and more. |
 | Documentation | Opens the page, or the section of it, in your browser. |
 | Files | Opens the file in **Code**. Search lists the open project's files once its packages are ready, leaving out what git ignores. |
 
-Search ranks everything in one list, best match first, and shows a few of each kind. The end of each row says what the result is: **Project**, **Workspace**, **Action**, **Docs** or **File**. Under the results, **Use “…” with…** offers to ask Help, or to search only projects, actions, the docs or files, with how many of each match.
+Search ranks everything in one list, best match first, and shows a few of each kind. The end of each row says what the result is: **Project**, **Fabric app**, **Workspace**, **Action**, **Docs** or **File**. Under the results, **Use “…” with…** offers to ask Help, or to search only projects, Fabric apps, actions, the docs or files, with how many of each match.
 
 You don't have to type whole words. The start of a word works, and so do the first letters of several: `np` finds **New project**. Search also knows the names some actions used to have: once the open app is published, `deploy` finds the action that publishes it, such as **Publish** or **Publish 3 changes**, and `deploy after each chat turn` finds **Turn on Publish after each chat turn** or **Turn off Publish after each chat turn**. Search also remembers what you open, so the things you use most rise to the top.
 
@@ -42,14 +43,14 @@ With nothing typed, Search offers:
 
 - **Suggestions** for what's going on, such as **Publish 3 changes** when your published app doesn't have your latest changes yet, or **Review 2 Advisor issues**.
 - **Recent projects**. A green dot marks the one that's open.
-- **Search**: **Search projects**, **Search actions**, **Search the docs** and **Search files**.
+- **Search**: **Search projects**, **Search Fabric apps**, **Search actions**, **Search the docs** and **Search files**.
 - **Ask Help**: questions to ask. After a publish fails, the first one is **Find out why publishing failed**.
 
 ## Search one kind of thing
 
-To search only projects, actions, the docs or files, select **Search projects**, **Search actions**, **Search the docs** or **Search files**, or press `Ctrl+1` to `Ctrl+4` (`Cmd+1` to `Cmd+4` on macOS). What you typed comes along. To go back to everything, press `Esc`, select the back arrow, or press `Backspace` in the empty box.
+To search only projects, actions, the docs or files, select **Search projects**, **Search actions**, **Search the docs** or **Search files**, or press `Ctrl+1` to `Ctrl+4` (`Cmd+1` to `Cmd+4` on macOS). To search only Fabric apps, select **Search Fabric apps** or press `Ctrl+6` (`Cmd+6`). What you typed comes along. To go back to everything, press `Esc`, select the back arrow, or press `Backspace` in the empty box.
 
-**Search files** is available once a project is open and its packages are ready.
+**Search files** is available once a project is open and its packages are ready. **Search Fabric apps** is available once Fabricator has found your apps in Fabric.
 
 ## Do more with a result
 
@@ -58,6 +59,7 @@ Press `Ctrl+K` (`Cmd+K` on macOS) in Search, or select **Actions** at the bottom
 | Result | Actions |
 | --- | --- |
 | Projects | **Open project**, **Open in VS Code**, **Copy path** and **Manage project** |
+| Fabric apps | **Open app**, **Open in Fabric**, **Open in Fabricator** for an app a project on this computer publishes, and **Copy link**. Until Fabricator knows an app's address, **Open in Fabric** takes the place of **Open app**. |
 | Team workspaces | **Open overview** and **Copy repository** |
 | Actions | **Run action** |
 | Documentation | **Open in browser** and **Copy link** |
@@ -92,6 +94,7 @@ Search and Help share one conversation. With nothing typed, **Continue your Help
 | `Tab` | Ask Help what you typed |
 | `Ctrl+Enter` | Ask Help what you typed, from anywhere in Search |
 | `Ctrl+1` to `Ctrl+5` | Search only projects, actions, the docs or files, or ask Help |
+| `Ctrl+6` | Search only Fabric apps |
 | `Ctrl+J` | Carry on in the full-screen Help |
 | `Esc` | Put away actions, stop an answer, go back, clear the box, then close Search |
 

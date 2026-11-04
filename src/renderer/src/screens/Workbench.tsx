@@ -90,6 +90,13 @@ import BlueprintTab from '../components/blueprint/BlueprintTab'
 import MigrationCard from '../components/migrate/MigrationCard'
 import MigrateReportScreen, { describePick, type ReportPick } from '../components/migrate/MigrateReportScreen'
 import AppGalleryView from '../components/gallery/AppGalleryView'
+import { exampleKey } from '../components/gallery/ExamplesView'
+import {
+  noteOpened,
+  onGallerySnapshot,
+  readGalleryOnce,
+  searchableApps
+} from '../components/gallery/memory'
 import { useMigration, type MigrationControl } from '../migration/useMigration'
 import { writeCodeTab, type CodeTab } from '../components/codeTab'
 import { useToast } from '../toast'
@@ -125,6 +132,7 @@ import { refusedAfterPublish, workspaceUses } from '../fabric'
 import { useDesignSession, type DesignSurface } from '../design/useDesignSession'
 import { readStoredSelection, selectionArgs, writeStoredSelection, type ModelSelection } from '../modelSelection'
 import { toProjectName } from '../projectName'
+import { ThumbnailCapture } from '../thumbnails'
 
 /** Where the Design bar's model is kept. */
 const DESIGN_MODEL_KEY = 'fabricator.design.model'
@@ -317,6 +325,13 @@ export default function Workbench({
   const [showHelpOffline, setShowHelpOffline] = useState(false)
   /** Search (Ctrl/Cmd+K): projects, actions, docs and files, and Help answering inline. */
   const [showSearch, setShowSearch] = useState(false)
+  /** Changes when the gallery reads a new list of Fabric apps, which Search lists. */
+  const [, setGalleryRead] = useState(0)
+  useEffect(() => onGallerySnapshot(() => setGalleryRead((n) => n + 1)), [])
+  // Search lists Fabric apps: read them once when the gallery hasn't this session.
+  useEffect(() => {
+    if (showSearch) void readGalleryOnce()
+  }, [showSearch])
   /** Help was opened from Search, to carry on the conversation started there. */
   const [helpContinues, setHelpContinues] = useState(false)
   /**
@@ -395,6 +410,10 @@ export default function Workbench({
   const [deployGuardError, setDeployGuardError] = useState<string | null>(null)
   /** Active project's local Rayfin (CLI + SDK) version + upgrade availability. */
   const [rayfinVer, setRayfinVer] = useState<RayfinVersionInfo | null>(null)
+  /** The project `rayfinVer` is about. */
+  const rayfinVerForRef = useRef<string | null>(null)
+  /** A project opened from Home's "Update": its Rayfin update goes to Copilot once its versions are read. */
+  const pendingRayfinUpdateRef = useRef<string | null>(null)
   /** A prompt queued for the chat composer (e.g. the Rayfin upgrade hand-off). */
   const [chatOutbound, setChatOutbound] = useState<(OutboundPrompt & { projectId: string }) | null>(
     null
@@ -544,6 +563,12 @@ export default function Workbench({
   /** Latest active project id, for guarding async (per-project) responses. */
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = projects?.activeProjectId ?? null
+  /** Draws the open project's thumbnail from its preview (for Home and the gallery). */
+  const thumbnailCapture = useMemo(
+    () => new ThumbnailCapture((projectId) => activeIdRef.current === projectId),
+    []
+  )
+  useEffect(() => () => thumbnailCapture.cancel(), [thumbnailCapture])
   /** Projects whose persisted history has been loaded this session (keyed by projectId). */
   const hydratedRef = useRef<Set<string>>(new Set())
   /** Latest projects snapshot, for reading inside async callbacks. */
@@ -687,6 +712,11 @@ export default function Workbench({
     () => (projects?.projects ?? []).filter((p) => !removingIds.has(p.id)),
     [projects, removingIds]
   )
+  /** Projects publishing right now, for Home's publish statuses. */
+  const publishingIds = useMemo(
+    () => new Set(Object.keys(deploys).filter((id) => deploys[id]?.running)),
+    [deploys]
+  )
   /** A Build chat turn is running for the project. */
   const isTurnRunning = useCallback(
     (projectId: string): boolean =>
@@ -792,6 +822,8 @@ export default function Workbench({
   }, [manualDeploy, stopDevServer])
   /** A team workspace preselected for New project ("New app" in a workspace). */
   const [newAppTeamId, setNewAppTeamId] = useState<string | null>(null)
+  /** A community example picked in the gallery's Examples: New project starts from it. */
+  const [newExample, setNewExample] = useState<{ key: string; name: string } | null>(null)
   const sendTeamPrompt = useCallback((projectId: string, display: string, prompt: string): void => {
     setViewMode('build')
     setChatOutbound({ id: `team-${Date.now()}`, projectId, display, prompt })
@@ -923,7 +955,10 @@ export default function Workbench({
   const refreshRayfinVer = useCallback(async (projectId: string): Promise<void> => {
     const info = await window.api.rayfin.versions(projectId)
     // Guard against a stale response after the user switches projects.
-    if (activeIdRef.current === projectId) setRayfinVer(info)
+    if (activeIdRef.current === projectId) {
+      rayfinVerForRef.current = projectId
+      setRayfinVer(info)
+    }
   }, [])
 
   // Keep sign-in/reset diagnostics alongside the failed deploy, including late log events.
@@ -1072,6 +1107,14 @@ export default function Workbench({
           toast.error(result.error ?? 'Publishing didn’t finish.', {
             title: 'Couldn’t publish'
           })
+        } else {
+          // Draw the app again for Home and the gallery, from the published version.
+          thumbnailCapture.published(projectId)
+          // Give the published app a description in Fabric when it has none, for
+          // everyone's gallery (best-effort; it never replaces one).
+          void Promise.resolve()
+            .then(() => window.api.gallery.describe(projectId))
+            .catch(() => undefined)
         }
         try {
           await refreshProjects()
@@ -1089,7 +1132,15 @@ export default function Workbench({
         if (mountedRef.current) void refreshRayfinVer(projectId)
       }
     },
-    [refreshProjects, refreshRayfinVer, toast, onAuthChanged, refreshAuthWithFeedback, stopDevServer]
+    [
+      refreshProjects,
+      refreshRayfinVer,
+      toast,
+      onAuthChanged,
+      refreshAuthWithFeedback,
+      stopDevServer,
+      thumbnailCapture
+    ]
   )
   const runDeploy = useCallback(
     (projectId: string, workspace?: string): Promise<DeployResult> =>
@@ -1663,6 +1714,17 @@ export default function Workbench({
     return true
   }, [])
 
+  // A Rayfin update asked for on Home goes to Copilot once the project is open
+  // and its versions have been read.
+  useEffect(() => {
+    const id = pendingRayfinUpdateRef.current
+    if (!id || !active || active.id !== id || !versionInfo || rayfinVerForRef.current !== id) return
+    pendingRayfinUpdateRef.current = null
+    if (!requestRayfinUpdate(versionInfo)) {
+      toast.info(`Fabricator didn’t find a Rayfin update for ${active.name} just now.`)
+    }
+  }, [active, versionInfo, requestRayfinUpdate, toast])
+
   // Hand Advisor findings to the Build chat so Copilot can fix them in one task.
   // Rayfin version findings on their own go through the upgrade hand-off.
   const handOffFindings = advisor.handOff
@@ -1950,6 +2012,39 @@ export default function Workbench({
     }
     remindUnpublished()
     setProjects(await window.api.projects.setActive(p.id))
+  }
+
+  /** Home's "Update": open the project, and hand its Rayfin update to Copilot. */
+  function updateRayfinFromHome(p: StudioProject): void {
+    if (p.id === activeIdRef.current && versionInfo && rayfinVerForRef.current === p.id) {
+      setNotice(null)
+      setGallery(null)
+      setShowHome(false)
+      if (!requestRayfinUpdate(versionInfo)) {
+        toast.info(`Fabricator didn’t find a Rayfin update for ${p.name} just now.`)
+      }
+      return
+    }
+    if (!removingIds.has(p.id)) pendingRayfinUpdateRef.current = p.id
+    void selectProject(p)
+  }
+
+  /** Pin a project to the top of Home's recent projects, or unpin it. */
+  async function pinProject(p: StudioProject, pinned: boolean): Promise<void> {
+    try {
+      setProjects(await window.api.projects.setPinned(p.id, pinned))
+    } catch (reason) {
+      toast.error(errorMessage(reason, `Couldn’t ${pinned ? 'pin' : 'unpin'} ${p.name}.`))
+    }
+  }
+
+  /** Show a project's folder in the file manager. */
+  async function revealProject(p: StudioProject): Promise<void> {
+    try {
+      await window.api.projects.reveal(p.id)
+    } catch (reason) {
+      toast.error(errorMessage(reason, `Couldn’t show ${p.name}’s folder.`))
+    }
   }
 
   // Show the projects launcher over the current project WITHOUT closing it, so any
@@ -2637,6 +2732,7 @@ export default function Workbench({
       project: active,
       projects: listedProjects,
       teamWorkspaces: teamEnabled ? (projects?.teamWorkspaces ?? []) : [],
+      galleryApps: searchableApps(),
       toolsReady,
       onProjectScreen,
       onHome: (showHome || !active) && !teamMap && !gallery,
@@ -2674,6 +2770,19 @@ export default function Workbench({
         },
         openWorkspace: (workspace) =>
           openTeamMap(workspace.id, active && !showHome && !teamMap ? 'project' : 'home'),
+        openGalleryApp: (app, url) => {
+          noteOpened(app)
+          void window.api.openExternal(url)
+        },
+        openProjectById: (projectId) => {
+          const project = projects?.projects.find((p) => p.id === projectId)
+          if (!project) {
+            toast.error('That project isn’t in Fabricator anymore.')
+            return
+          }
+          setTeamMap(null)
+          void selectProject(project)
+        },
         showView: (view) => {
           toProject()
           setViewMode(view)
@@ -2968,6 +3077,7 @@ export default function Workbench({
             setShowCreate(false)
             setNewAppTeamId(null)
             setMigrationPick(null)
+            setNewExample(null)
           }}
           onCreated={(result) => {
             const pick = migrationPick
@@ -2977,6 +3087,7 @@ export default function Workbench({
               setShowCreate(false)
               setNewAppTeamId(null)
               setMigrationPick(null)
+              setNewExample(null)
               setShowHome(false)
               setGallery(null)
               setViewMode('build')
@@ -2992,6 +3103,7 @@ export default function Workbench({
           onTeamCreated={(result) => {
             setShowCreate(false)
             setNewAppTeamId(null)
+            setNewExample(null)
             setShowHome(false)
             setGallery(null)
             setViewMode('build')
@@ -3001,7 +3113,14 @@ export default function Workbench({
             if (result.error) toast.error(result.error, { title: 'Not on GitHub yet' })
           }}
           source={migrationPick ? { label: 'From Power BI', detail: describePick(migrationPick) } : undefined}
-          initialName={migrationPick ? toProjectName(migrationPick.source.reportName) : undefined}
+          initialName={
+            migrationPick
+              ? toProjectName(migrationPick.source.reportName)
+              : newExample
+                ? toProjectName(newExample.name)
+                : undefined
+          }
+          initialExample={migrationPick ? undefined : newExample?.key}
           model={
             migrationPick
               ? { value: migrationModel, onChange: setMigrationModel, onManageKeys: openModelProviders }
@@ -3189,6 +3308,11 @@ export default function Workbench({
                             setFocusPane((f) => (f === 'preview' ? null : 'preview'))
                           }
                           onPreviewModeChanged={() => void refreshProjects()}
+                          onPageLoad={(page) =>
+                            page.loading || !page.app
+                              ? thumbnailCapture.left()
+                              : thumbnailCapture.appLoaded(active.id, active.thumbnailAt)
+                          }
                           design={design}
                           designModel={{
                             value: designChoice,
@@ -3283,6 +3407,12 @@ export default function Workbench({
               <AppGalleryView
                 onClose={closeGallery}
                 recentWorkspaces={appWorkspaces}
+                projects={projects?.projects}
+                onUseExample={(template) => {
+                  setNewExample({ key: exampleKey(template), name: template.name })
+                  setNewAppTeamId(null)
+                  setShowCreate(true)
+                }}
                 onOpenProject={(projectId) => {
                   const project = projects?.projects.find((p) => p.id === projectId)
                   if (project) void selectProject(project)
@@ -3310,6 +3440,11 @@ export default function Workbench({
                   removals={removals.removals}
                   onRetryRemoval={(projectId) => void retryRemoval(projectId)}
                   onDismissRemoval={removals.dismiss}
+                  onPinProject={(p, pinned) => void pinProject(p, pinned)}
+                  onRevealProject={(p) => void revealProject(p)}
+                  onOpenUrl={(url) => void window.api.openExternal(url)}
+                  onUpdateRayfin={(p) => updateRayfinFromHome(p)}
+                  publishing={publishingIds}
                   onNewProject={() => setShowCreate(true)}
                   onOpenExisting={openExisting}
                   onCloneFromGitHub={() => setShowClone(true)}
