@@ -103,6 +103,7 @@ const pill = () => screen.getByRole('button', { name: /^Model:/ })
 
 beforeEach(() => {
   invalidateCopilotModels()
+  localStorage.clear()
   ;(window as unknown as { api: unknown }).api = {
     chat: { listModels: vi.fn(async () => MODELS), autoTiers: vi.fn(async () => TIERS) }
   }
@@ -119,39 +120,77 @@ describe('ModelPicker', () => {
     expect(pill().textContent).toContain('Auto')
     fireEvent.click(pill())
 
-    const group = await screen.findByRole('group', { name: 'Optimized for' })
-    expect(within(group).getByRole('menuitemradio', { name: /Balance/ }).getAttribute('aria-checked')).toBe('true')
-    const intelligence = within(group).getByRole('menuitemradio', { name: /Intelligence/ })
+    const row = await screen.findByRole('menuitem', { name: /Optimized for/ })
+    expect(row.textContent).toContain('Balance')
+    fireEvent.click(row)
+    const list = await screen.findByRole('menu', { name: 'Optimized for' })
+    expect(
+      within(list)
+        .getByRole('menuitemradio', { name: /Balance/ })
+        .getAttribute('aria-checked')
+    ).toBe('true')
+    const intelligence = within(list).getByRole('menuitemradio', { name: /Intelligence/ })
     expect((intelligence as HTMLButtonElement).disabled).toBe(true)
     expect(intelligence.textContent).toContain('Not on your plan')
 
-    fireEvent.click(within(group).getByRole('menuitemradio', { name: /Efficiency/ }))
+    fireEvent.click(within(list).getByRole('menuitemradio', { name: /Efficiency/ }))
     expect(onChange).toHaveBeenLastCalledWith({ ...AUTO_SELECTION, autoTier: 'efficiency' })
     expect(pill().textContent).toContain('Auto · Efficiency')
   })
 
-  it('offers Copilot Fusion’s effort levels under Auto, named as Copilot names them', async () => {
+  it('calls Auto Copilot Fusion where Copilot offers it, with its effort levels beside the menu', async () => {
     offerTiers(FUSION)
+    const openExternal = vi.fn()
+    ;(window as unknown as { api: { openExternal: unknown } }).api.openExternal = openExternal
     const onChange = renderPicker(AUTO_SELECTION)
+    await waitFor(() => expect(pill().textContent).toBe('Copilot Fusion · Standard'))
     fireEvent.click(pill())
 
-    const group = await screen.findByRole('group', { name: 'Copilot Fusion' })
+    const fusion = await screen.findByRole('menuitemcheckbox', { name: /Copilot Fusion/ })
+    expect(fusion.getAttribute('aria-checked')).toBe('true')
+    // One row, like a model's Effort, with the levels in a list beside the menu.
+    const row = screen.getByRole('menuitem', { name: /Effort/ })
+    expect(row.textContent).toContain('Standard')
+    expect(screen.queryByRole('menuitemradio')).toBeNull()
+    fireEvent.click(row)
+    const list = await screen.findByRole('menu', { name: 'Effort' })
     expect(
-      within(group)
+      within(list)
         .getByRole('menuitemradio', { name: /Standard/ })
         .getAttribute('aria-checked')
     ).toBe('true')
-    expect(group.textContent).toContain('so a request can take longer and cost more')
+    expect(list.textContent).toContain('so a request can take longer and cost more')
 
-    fireEvent.click(within(group).getByRole('menuitemradio', { name: /High/ }))
+    fireEvent.click(within(list).getByRole('menuitemradio', { name: /High/ }))
     expect(onChange).toHaveBeenLastCalledWith({ ...AUTO_SELECTION, autoTier: 'hydrafusion' })
-    expect(pill().textContent).toBe('Fusion High')
+    expect(pill().textContent).toBe('Copilot Fusion · High')
+
+    fireEvent.click(pill())
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Effort/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Learn more about Copilot Fusion' }))
+    expect(openExternal).toHaveBeenCalledWith(
+      'https://docs.github.com/en/copilot/concepts/models/copilot-fusion'
+    )
   })
 
   it('names a saved Fusion level in the pill without opening the menu', async () => {
     offerTiers(FUSION)
     renderPicker({ ...AUTO_SELECTION, autoTier: 'hydrafusion-max' })
-    await waitFor(() => expect(pill().textContent).toBe('Fusion Max'))
+    await waitFor(() => expect(pill().textContent).toBe('Copilot Fusion · Max'))
+  })
+
+  it('names Copilot Fusion from what Copilot offered last time, before it answers', async () => {
+    offerTiers(FUSION)
+    renderPicker(AUTO_SELECTION)
+    await waitFor(() => expect(pill().textContent).toBe('Copilot Fusion · Standard'))
+    cleanup()
+
+    invalidateCopilotModels()
+    ;(window as unknown as { api: { chat: { autoTiers: unknown } } }).api.chat.autoTiers = vi.fn(
+      () => new Promise(() => {})
+    )
+    renderPicker(AUTO_SELECTION)
+    expect(pill().textContent).toBe('Copilot Fusion · Standard')
   })
 
   it('turns Auto off on Copilot’s first model and opens the list, with your keys’ models in their own section', async () => {
@@ -177,6 +216,37 @@ describe('ModelPicker', () => {
     fireEvent.click(within(list).getByRole('menuitemradio', { name: /Claude Opus 5\.5/ }))
     expect(onChange).toHaveBeenLastCalledWith({ ...AUTO_SELECTION, model: 'anthropic/claude-opus-5-5' })
     expect(pill().textContent).toContain('Claude Opus 5.5 · Medium')
+  })
+
+  it('starts a model that names no effort of its own at Medium, with no Automatic to choose', async () => {
+    const sonnet = model('claude-sonnet-5.5', 'Claude Sonnet 5.5', {
+      defaultReasoningEffort: undefined,
+      supportedReasoningEfforts: ['low', 'medium', 'high', 'max']
+    })
+    ;(window as unknown as { api: { chat: { listModels: unknown } } }).api.chat.listModels = vi.fn(
+      async () => [sonnet, MODELS[1]]
+    )
+    // A choice saved before, with the effort left to the model.
+    const onChange = renderPicker({ ...AUTO_SELECTION, model: 'claude-sonnet-5.5' })
+    await waitFor(() => expect(pill().textContent).toContain('Claude Sonnet 5.5 · Medium'))
+
+    fireEvent.click(pill())
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Effort/ }))
+    const efforts = await screen.findByRole('menu', { name: 'Effort' })
+    expect(within(efforts).queryByRole('menuitemradio', { name: /Automatic/ })).toBeNull()
+    const medium = within(efforts).getByRole('menuitemradio', { name: /Medium/ })
+    expect(medium.getAttribute('aria-checked')).toBe('true')
+    expect(medium.textContent).toContain('Default')
+
+    // Chosen afresh, it says so, rather than leaving the effort to Copilot.
+    const auto = screen.getByRole('menuitemcheckbox', { name: /Auto/ })
+    fireEvent.click(auto)
+    fireEvent.click(auto)
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...AUTO_SELECTION,
+      model: 'claude-sonnet-5.5',
+      effort: 'medium'
+    })
   })
 
   it('keeps only the effort and context window a newly chosen model offers', async () => {

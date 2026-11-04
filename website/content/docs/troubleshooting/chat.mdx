@@ -13,9 +13,9 @@ Fabricator sends your prompt to the bundled GitHub Copilot engine. Authenticatio
 
 1. If the error asks you to sign in, select **Sign in to Copilot** in chat and complete the browser or device-code flow.
 2. Retry the message yourself. Fabricator keeps your displayed conversation and draft, but does not automatically replay work after a failed or partially started turn.
-3. If the model pill shows a warning sign, or the model list says "Not available anymore. Choose another model.", open the model picker and turn on **Auto** or choose another model.
+3. If the model pill shows a warning sign, or the model list says "Not available anymore. Choose another model.", open the model picker and turn on **Copilot Fusion** (or **Auto**), or choose another model.
 4. If models do not load, sign out and back in to Copilot from setup or the chat notice.
-5. If the error mentions rate limits or unavailable service, wait a few minutes, choose **Auto** or a fast model, and retry.
+5. If the error mentions rate limits or unavailable service, wait a few minutes, choose **Copilot Fusion** (or **Auto**) or a fast model, and retry.
 6. If repeated "Session not found" errors continue on the latest version, start **New chat**. This clears the conversation view, not your app files.
 
 If the same error repeats, [Report a problem](/docs/troubleshooting/report-a-problem).
@@ -54,7 +54,7 @@ Your GitHub Copilot plan shows included credits or premium requests being used f
 
 Fabricator uses your own GitHub Copilot entitlement. Each chat turn, deep review, design option, model selection, image attachment, and retry can use Copilot capacity. Fabricator cannot increase your plan limits.
 
-1. Open the model picker and turn on **Auto**, or choose a model marked **Fast**, when you do not need a deep implementation pass.
+1. Open the model picker and turn on **Copilot Fusion** (or **Auto**), or choose a model marked **Fast**, when you do not need a deep implementation pass. On Copilot Fusion, keep **Effort** at **Standard**: **High** and **Max** can use more than one model for a request.
 2. Choose a lower **Effort** for small edits.
 3. Break broad requests into smaller prompts with clear acceptance criteria.
 4. Avoid repeated **Try again** or **Retry** on the same large prompt; steer with a shorter correction instead.
@@ -79,7 +79,7 @@ The provider runs these models and bills your account, so its key, credit and pl
 | "`<Provider>` doesn't offer `<model>` to your key anymore. Check your models in Accounts, or choose another model." | In **Accounts → Model providers**, select **Check again** to update the provider's list of models, and choose another model. |
 
 1. Follow the step for your message in the table.
-2. To keep working meanwhile, open the model picker and choose a Copilot model or **Auto**.
+2. To keep working meanwhile, open the model picker and choose a Copilot model, or turn on **Copilot Fusion** (or **Auto**).
 
 When you add a key, Fabricator checks it first. If the provider turns it down, you see "`<Provider>` didn't accept this key. Check that you copied all of it." and nothing is saved.
 
@@ -96,7 +96,7 @@ A turn on one of your own models stops before it starts, with one of these messa
 The chat, Advisor or Design bar is set to a model that the pickers no longer offer: you turned the model off or removed its key. Fabricator never switches to another model by itself.
 
 1. Open the model picker. Its pill shows a warning sign next to the model.
-2. Choose another model, or turn on **Auto**.
+2. Choose another model, or turn on **Copilot Fusion** (or **Auto**).
 3. To use the model again, turn it back on in **Accounts → Model providers**, or add its key again.
 
 See [Use your own API keys](/docs/build/your-own-api-keys).

@@ -27,6 +27,10 @@ const MAX_OUTPUT_TOKENS: u32 = 32_768;
 pub struct ByokRegistry {
   pub providers: Vec<NamedProviderConfig>,
   pub models: Vec<ProviderModelConfig>,
+  /// The effort each chosen model runs at when none is chosen, by selection
+  /// id: for a model that offers efforts but names no default of its own (see
+  /// [`crate::services::copilot::fallback_effort`]).
+  pub fallback_efforts: HashMap<String, String>,
   /// Changes whenever anything a session would see changes, keys included.
   pub revision: String,
 }
@@ -157,6 +161,7 @@ pub fn build_routed(
 ) -> ByokRegistry {
   let mut providers = Vec::new();
   let mut models = Vec::new();
+  let mut fallback_efforts = HashMap::new();
   for spec in catalog::PROVIDERS.iter() {
     let (Some(key), Some(saved)) = (keys.get(spec.id), settings.providers.get(spec.id)) else {
       continue;
@@ -166,12 +171,17 @@ pub fn build_routed(
       continue;
     };
     providers.push(provider_config(spec, base_url, key));
+    for m in chosen.iter().filter(|m| m.default_effort.as_deref().is_none_or(|e| e.trim().is_empty())) {
+      if let Some(effort) = crate::services::copilot::fallback_effort(&m.efforts) {
+        fallback_efforts.insert(selection_id(spec.id, &m.id), effort);
+      }
+    }
     models.extend(chosen.into_iter().map(|m| model_config(spec, m)));
   }
   let mut hasher = Sha256::new();
   hasher.update(serde_json::to_vec(&(&providers, &models)).unwrap_or_default());
   let revision = hex::encode(&hasher.finalize()[..8]);
-  ByokRegistry { providers, models, revision }
+  ByokRegistry { providers, models, fallback_efforts, revision }
 }
 
 #[cfg(test)]

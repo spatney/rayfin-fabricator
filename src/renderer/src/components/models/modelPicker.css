@@ -8,6 +8,25 @@
   max-width: 260px;
 }
 
+/* In the composer, the model pill gives way before the send button: it
+   shrinks, ending its name in "…", and in a narrow chat Copilot Fusion goes
+   by Fusion. */
+.composer-left .model-picker {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.composer-left .model-picker .mp-pill {
+  max-width: min(260px, 100%);
+  min-width: 0;
+}
+
+@container (max-width: 380px) {
+  .mp-pill-brand {
+    display: none;
+  }
+}
+
 .mp-pill .brand-logo.mp-pill-logo {
   width: 14px;
   height: 14px;
@@ -280,6 +299,19 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--text-faint);
+}
+
+/* A link out at the foot of a list, like Copilot's "Learn more". */
+.mp-item.mp-learn {
+  min-height: 28px;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.mp-item.mp-learn .codicon[class*='codicon-'].mp-caret {
+  font-size: 11px;
+  color: inherit;
 }
 
 .mp-empty {

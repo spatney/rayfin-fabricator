@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { AutoTiers, CopilotModel, ReasoningEffort } from '@shared/ipc'
+import { EFFORT_ORDER } from './components/chat/modes'
 
 // Module-level cache so the per-user model list is fetched once and shared across
 // every ChatPanel instance, rather than re-queried on each open.
@@ -8,6 +9,9 @@ let modelsPromise: Promise<CopilotModel[]> | null = null
 // What Auto can optimize for: account-bound like the models, so cleared with them.
 let tiersCache: { value: AutoTiers | null } | null = null
 let tiersPromise: Promise<AutoTiers | null> | null = null
+// The options Auto had last time, so a new launch can name Copilot Fusion and
+// its level before Copilot answers. Only a hint: they're read fresh when needed.
+const LAST_TIERS_KEY = 'fabricator.autoTiers'
 let generation = 0
 const listeners = new Set<() => void>()
 const subscribe = (listener: () => void): (() => void) => {
@@ -76,13 +80,28 @@ export function useCopilotModels(enabled: boolean): { models: CopilotModel[]; lo
   return { models, loading }
 }
 
+function lastTiers(): AutoTiers | null {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_TIERS_KEY) ?? 'null') as AutoTiers | null
+  } catch {
+    return null
+  }
+}
+
 function loadAutoTiers(): Promise<AutoTiers | null> {
   if (tiersCache) return Promise.resolve(tiersCache.value)
   if (!tiersPromise) {
     const current = generation
     tiersPromise = new Promise<AutoTiers | null>((resolve) => resolve(window.api.chat.autoTiers()))
       .then((value) => {
-        if (current === generation) tiersCache = { value }
+        if (current === generation) {
+          tiersCache = { value }
+          try {
+            localStorage.setItem(LAST_TIERS_KEY, JSON.stringify(value))
+          } catch (error) {
+            console.warn('Could not remember Auto’s options', error)
+          }
+        }
         return value
       })
       .catch((err) => {
@@ -93,17 +112,20 @@ function loadAutoTiers(): Promise<AutoTiers | null> {
   return tiersPromise
 }
 
-/** What Auto can optimize for on this account, once `enabled`; null while
- *  unknown, or when Copilot offers no choice. */
+/** What Auto can optimize for on this account, once `enabled`, and what it
+ *  could last time until then; null while unknown, or when Copilot offers no
+ *  choice. */
 export function useAutoTiers(enabled: boolean): AutoTiers | null {
   const revision = useSyncExternalStore(subscribe, snapshot)
-  const [tiers, setTiers] = useState<AutoTiers | null>(tiersCache?.value ?? null)
+  const [tiers, setTiers] = useState<AutoTiers | null>(() =>
+    tiersCache ? tiersCache.value : lastTiers()
+  )
   useEffect(() => {
     if (tiersCache) {
       setTiers(tiersCache.value)
       return
     }
-    setTiers(null)
+    setTiers(lastTiers())
     if (!enabled) return
     let cancelled = false
     loadAutoTiers()
@@ -122,6 +144,27 @@ export function useAutoTiers(enabled: boolean): AutoTiers | null {
  *  (`anthropic/claude-sonnet-5-5`); Copilot's ids never contain a slash. */
 export function isProviderModelId(id: string | undefined): boolean {
   return Boolean(id?.includes('/'))
+}
+
+/**
+ * The effort a model runs at unless one is chosen: its own default, or, for a
+ * model that offers efforts but names none, Medium (else the middle of what it
+ * offers). Copilot would run such a model with no reasoning effort at all, so
+ * Fabricator asks for this one (see `fallback_effort` in copilot.rs).
+ */
+export function defaultEffort(m: CopilotModel): ReasoningEffort | undefined {
+  if (m.defaultReasoningEffort) return m.defaultReasoningEffort
+  const offered = EFFORT_ORDER.filter(
+    (e) => e !== 'none' && m.supportedReasoningEfforts.includes(e)
+  )
+  if (offered.includes('medium')) return 'medium'
+  return offered[Math.floor(offered.length / 2)]
+}
+
+/** A newly chosen model's effort, as a selection keeps it: blank for the
+ *  model's own default, and the default it gets without one spelled out. */
+export function startingEffort(m: CopilotModel): ReasoningEffort | '' {
+  return m.defaultReasoningEffort ? '' : (defaultEffort(m) ?? '')
 }
 
 /** Name tokens that mark a small/fast model when Copilot doesn't report a tier. */

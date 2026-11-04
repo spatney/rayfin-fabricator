@@ -358,6 +358,11 @@ export function PluginsMenu({
       >
         <Codicon name="plug" />
         {names && <span className="composer-pill-label pl-pill-label">{names}</span>}
+        {names && (
+          <span className="pl-pill-count" aria-hidden="true">
+            {enabled}
+          </span>
+        )}
       </button>
       {open &&
         createPortal(

@@ -2709,9 +2709,28 @@ button.thinking-head:hover {
   font-size: 14px;
 }
 
+/* With its names hidden in a narrow chat, the trigger counts the plugins that are on. */
+.pl-pill-count {
+  display: none;
+  min-width: 16px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+}
+
 @container (max-width: 380px) {
   .pl-pill-label {
     display: none;
+  }
+
+  .pl-pill-count {
+    display: inline-block;
   }
 }
 

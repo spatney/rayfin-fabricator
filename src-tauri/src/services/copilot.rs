@@ -239,6 +239,60 @@ fn norm_effort(effort: &Option<String>) -> Option<String> {
     .map(str::to_string)
 }
 
+/// Copilot's reasoning efforts, from the least thinking to the most.
+const EFFORT_ORDER: [&str; 6] = ["none", "low", "medium", "high", "xhigh", "max"];
+
+/// The effort for a model that offers some but names no default of its own:
+/// Medium, or else the middle of what it offers. Left unset, Copilot runs such
+/// a model with no reasoning effort at all. The model pickers show the same
+/// default (`defaultEffort` in the renderer's copilotModels.ts).
+pub fn fallback_effort(supported: &[String]) -> Option<String> {
+  let mut offered: Vec<&str> = supported.iter().map(String::as_str).filter(|e| *e != "none").collect();
+  if offered.contains(&"medium") {
+    return Some("medium".to_string());
+  }
+  offered.sort_by_key(|e| EFFORT_ORDER.iter().position(|o| o == e).unwrap_or(EFFORT_ORDER.len()));
+  offered.get(offered.len() / 2).map(|e| e.to_string())
+}
+
+/// `choice` with the effort it runs at: a Copilot model chosen without one,
+/// that offers efforts but names no default, runs at [`fallback_effort`]. The
+/// SDK caches Copilot's catalog, so this asks Copilot once per client. A model
+/// on the user's own key gets its effort from its registry instead (see
+/// [`with_own_key_effort`]).
+async fn with_default_effort(client: &Client, choice: &ModelChoice) -> ModelChoice {
+  let Some(model) = choice.model.as_deref().filter(|m| !m.contains('/')) else {
+    return choice.clone();
+  };
+  if choice.effort.is_some() {
+    return choice.clone();
+  }
+  let Ok(models) = client.list_models().await else {
+    return choice.clone();
+  };
+  let Some(m) = models.iter().find(|m| m.id == model) else {
+    return choice.clone();
+  };
+  if m.default_reasoning_effort.as_deref().is_some_and(|e| !e.trim().is_empty()) {
+    return choice.clone();
+  }
+  let supported = m.supported_reasoning_efforts.clone().unwrap_or_default();
+  ModelChoice { effort: fallback_effort(&supported), ..choice.clone() }
+}
+
+/// `choice` with the effort a model on the user's own key runs at: chosen
+/// without one, a model that offers efforts but names no default runs at
+/// [`fallback_effort`], as Copilot's own models do. Its registry knows them.
+fn with_own_key_effort(choice: ModelChoice, byok: Option<&crate::services::byok::registry::ByokRegistry>) -> ModelChoice {
+  if choice.effort.is_some() {
+    return choice;
+  }
+  match choice.model.as_deref().and_then(|model| byok?.fallback_efforts.get(model)).cloned() {
+    Some(effort) => ModelChoice { effort: Some(effort), ..choice },
+    None => choice,
+  }
+}
+
 /// Apply a model choice to a live session. Always switches — to the concrete
 /// model, or back to the `"auto"` router — so returning to Auto after using a
 /// named model actually takes effect (a live/resumed session keeps its last
@@ -254,8 +308,10 @@ fn norm_effort(effort: &Option<String>) -> Option<String> {
 /// models do not support reasoning effort"). On Auto, `autoTier` is always
 /// sent, as `null` for Copilot's default routing: omitted, the runtime reuses
 /// the tier chosen last. A runtime that rejects a tier (Auto routing tiers must
-/// be enabled for the account) still gets the model switch.
+/// be enabled for the account) still gets the model switch. A model that names
+/// no default effort gets Medium (see [`with_default_effort`]).
 async fn apply_options(session: &Session, choice: &ModelChoice) -> Result<(), SdkError> {
+  let choice = &with_default_effort(session.client(), choice).await;
   let mut params = serde_json::json!({
     "sessionId": session.id().as_str(),
     "modelId": set_model_target(&choice.model),
@@ -642,6 +698,7 @@ async fn open_session(
   opts: &SessionOptions,
   resume: bool,
 ) -> Result<TurnSession, SdkError> {
+  let choice = &with_default_effort(client, choice).await;
   let handler: Arc<dyn PermissionHandler> = opts.permission.clone().unwrap_or_else(|| Arc::new(ApproveAllHandler));
   let sid = SessionId::new(session_id.to_string());
   let cwd_pb = PathBuf::from(cwd);
@@ -1212,6 +1269,7 @@ impl CopilotManager {
     iq: IqConfig,
     mcp: McpServers,
   ) -> Result<TurnSession, String> {
+    let choice = with_own_key_effort(choice, byok.as_ref());
     let key = project_id.to_string();
     let registry_rev = byok.as_ref().map(|r| r.revision.clone());
     let mcp_rev = mcp.revision();
@@ -1323,6 +1381,7 @@ impl CopilotManager {
     choice: ModelChoice,
     opts: SessionOptions,
   ) -> Result<Arc<Session>, String> {
+    let choice = with_own_key_effort(choice, opts.byok.as_ref());
     let mut engine = self.engine.lock().await;
     self.check_available()?;
     let client = Self::wait_for_auth(&mut engine).await?;
@@ -1734,6 +1793,10 @@ pub(crate) mod tests {
   async fn a_new_session_is_created_on_its_model_auto_included() {
     let (client, server) = fake_client(vec![
       ("session.create", json!({ "result": { "sessionId": "on-auto" } })),
+      ("models.list", json!({ "result": { "models": [
+        { "id": "gpt-6-astra", "name": "GPT-6 Astra", "capabilities": {},
+          "supportedReasoningEfforts": ["low", "medium", "high"], "defaultReasoningEffort": "high" }
+      ] } })),
       ("session.create", json!({ "result": { "sessionId": "on-a-model" } })),
     ]);
     let none = SessionOptions::default();
@@ -1741,8 +1804,73 @@ pub(crate) mod tests {
     open_session(&client, ".", "on-a-model", &ModelChoice::of(m("gpt-6-astra"), None), &none, false).await.unwrap();
     let requests = server.await.unwrap();
     assert_eq!(requests[0]["params"]["model"], "auto");
-    assert_eq!(requests[1]["params"]["model"], "gpt-6-astra");
+    assert_eq!(requests[2]["params"]["model"], "gpt-6-astra");
+    // Its own default effort is Copilot's to apply.
+    assert!(requests[2]["params"].get("reasoningEffort").is_none_or(Value::is_null), "{}", requests[2]);
     client.force_stop();
+  }
+
+  /// Copilot runs a model that names no default effort with none at all, so
+  /// one chosen without an effort runs at Medium, as the pickers show; a
+  /// switch to it asks Copilot's catalog only once.
+  #[tokio::test]
+  async fn a_model_without_a_default_effort_runs_at_medium() {
+    let (client, server) = fake_client(vec![
+      ("models.list", json!({ "result": { "models": [
+        { "id": "claude-sonnet-5.5", "name": "Claude Sonnet 5.5", "capabilities": {},
+          "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"] }
+      ] } })),
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+      ("session.model.switchTo", json!({ "result": {} })),
+      ("session.model.switchTo", json!({ "result": {} })),
+    ]);
+    let sonnet = ModelChoice::of(m("claude-sonnet-5.5"), None);
+    let opened = open_session(&client, ".", "s", &sonnet, &SessionOptions::default(), false).await.unwrap();
+    apply_options(&opened.session, &sonnet).await.unwrap();
+    apply_options(&opened.session, &ModelChoice::of(m("claude-sonnet-5.5"), m("high"))).await.unwrap();
+    let requests = server.await.unwrap();
+    assert_eq!(requests[1]["params"]["reasoningEffort"], "medium", "{}", requests[1]);
+    assert_eq!(requests[2]["params"]["reasoningEffort"], "medium", "{}", requests[2]);
+    assert_eq!(requests[3]["params"]["reasoningEffort"], "high", "{}", requests[3]);
+    client.force_stop();
+  }
+
+  #[test]
+  fn a_model_without_a_default_effort_falls_back_to_medium_or_the_middle() {
+    let efforts = |list: &[&str]| list.iter().map(|e| e.to_string()).collect::<Vec<_>>();
+    assert_eq!(fallback_effort(&efforts(&["none", "low", "medium", "high"])).as_deref(), Some("medium"));
+    assert_eq!(fallback_effort(&efforts(&["high", "low"])).as_deref(), Some("high"));
+    assert_eq!(fallback_effort(&efforts(&["low", "high", "xhigh"])).as_deref(), Some("high"));
+    assert_eq!(fallback_effort(&efforts(&["none"])), None);
+    assert_eq!(fallback_effort(&[]), None);
+  }
+
+  /// A model on your own key that names no default effort runs at Medium too,
+  /// chosen before efforts defaulted or not; one with a default keeps it.
+  #[test]
+  fn a_model_on_your_own_key_without_a_default_effort_runs_at_medium() {
+    let model = |id: &str, default: Option<&str>| crate::types::ByokModelInfo {
+      id: id.into(),
+      name: id.into(),
+      efforts: vec!["low".into(), "medium".into(), "high".into()],
+      default_effort: default.map(str::to_string),
+      ..Default::default()
+    };
+    let mut settings = crate::types::ByokSettings::default();
+    settings.providers.insert("google".into(), crate::types::ByokProviderSettings {
+      models: vec![model("gemini-3.8-flash", None), model("gemini-3.9-pro", Some("high"))],
+      enabled: vec!["gemini-3.8-flash".into(), "gemini-3.9-pro".into()],
+      checked_at: None,
+    });
+    let keys = HashMap::from([("google".to_string(), "AIza-test".to_string())]);
+    let registry = crate::services::byok::registry::build(&settings, &keys);
+    let effort = |model: &str, effort: &str| {
+      with_own_key_effort(ModelChoice::of(m(model), Some(effort.to_string()).filter(|e| !e.is_empty())), Some(&registry)).effort
+    };
+    assert_eq!(effort("google/gemini-3.8-flash", "").as_deref(), Some("medium"));
+    assert_eq!(effort("google/gemini-3.8-flash", "low").as_deref(), Some("low"));
+    assert_eq!(effort("google/gemini-3.9-pro", ""), None, "its own default is the provider's to apply");
+    assert_eq!(with_own_key_effort(ModelChoice::of(m("google/gemini-3.8-flash"), None), None).effort, None);
   }
 
   /// Copilot lists Copilot Fusion's effort levels, and runs Fusion Max, only for
