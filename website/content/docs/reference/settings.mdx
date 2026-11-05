@@ -91,7 +91,7 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 ## Experiments
 
-**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has five experiments: **Team workspaces**, **Migrate Power BI reports**, **Work IQ**, **MCP servers** and **Export as an app**.
+**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has six experiments: **Team workspaces**, **Migrate Power BI reports**, **Work IQ**, **MCP servers**, **Export as an app** and **Goals**.
 
 ### Team workspaces
 
@@ -127,6 +127,13 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 > [!WARNING]
 > Exporting apps is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
+
+### Goals
+
+**Goals** adds a **Goals** tab to each personal app. Say there, in plain words, what the app is for and the checks it must keep passing, and Fabricator saves them in the app as `GOALS.md`. When you run the checks, Copilot proves each one on a fresh copy of the app, calling it as each kind of user, and Fabricator asks before you publish an app whose checks didn't all pass. In chat, Copilot tells you when a change would stop a check passing. Turning the experiment off hides the tab and stops both, but keeps `GOALS.md` and the last results. See [Check your app against its goals](/docs/ship/goals).
+
+> [!WARNING]
+> Goals are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
 
 ## Publish after each chat turn
 

@@ -42,6 +42,7 @@ fn default_flags() -> ExperimentFlags {
     work_iq: Some(false),
     mcp_servers: Some(false),
     app_export: Some(false),
+    goals: Some(false),
   }
 }
 
@@ -189,6 +190,12 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   if let Some(v) = patch.work_iq { current.work_iq = Some(v); }
   if let Some(v) = patch.mcp_servers { current.mcp_servers = Some(v); }
   if let Some(v) = patch.app_export { current.app_export = Some(v); }
+  if let Some(v) = patch.goals { current.goals = Some(v); }
+}
+
+/// The Goals experiment is on.
+pub fn goals_enabled() -> bool {
+  with_cache(|c| c.settings.experiments.as_ref().and_then(|f| f.goals).unwrap_or(false))
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -548,6 +555,15 @@ mod tests {
       serde_json::to_value(flags.unwrap()).unwrap(),
       serde_json::json!({"mcpServers":true,"appExport":true})
     );
+  }
+
+  #[test]
+  fn goals_flag_merges_and_defaults_off() {
+    assert_eq!(default_settings().experiments.unwrap().goals, Some(false));
+    let mut flags: Option<ExperimentFlags> =
+      Some(serde_json::from_value(serde_json::json!({"appExport":true})).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"goals":true})).unwrap());
+    assert_eq!(serde_json::to_value(flags.unwrap()).unwrap(), serde_json::json!({"appExport":true,"goals":true}));
   }
 
   #[test]

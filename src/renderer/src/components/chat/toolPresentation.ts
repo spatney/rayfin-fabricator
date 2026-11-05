@@ -52,7 +52,7 @@ export function toolKind(name: string): ToolKind {
   // that would otherwise be misread.
   if (n.startsWith('fabricator_')) {
     if (n.includes('local_status')) return 'local-status'
-    if (n.includes('local_call')) return 'local-call'
+    if (n.includes('local_call') || n.includes('goals_call')) return 'local-call'
     if (n.includes('local_seed')) return 'local-seed'
     if (n.includes('screenshot')) return 'screenshot'
     if (n.includes('navigate')) return 'navigate'

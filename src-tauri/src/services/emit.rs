@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter};
 use super::exec::{OnData, Stream};
 use crate::types::{ChatEvent, ChatEventEnvelope, ProcLogEvent};
 use crate::types::{AdvisorEvent, AdvisorEventEnvelope};
+use crate::types::{GoalsEvent, GoalsEventEnvelope};
 use crate::types::{HelpEvent, HelpEventEnvelope};
 use crate::types::{SecurityEvent, SecurityEventEnvelope};
 
@@ -19,6 +20,8 @@ pub const PROC_LOG: &str = "proc:log";
 pub const CHAT_EVENT: &str = "chat:event";
 /// Event name for streamed advisor events (matches `IpcChannels.advisorEvent`).
 pub const ADVISOR_EVENT: &str = "advisor:event";
+/// Event name for a Goals run or draft as it goes (matches `IpcChannels.goalsEvent`).
+pub const GOALS_EVENT: &str = "goals:event";
 /// Event name for streamed Help assistant events (matches `IpcChannels.helpEvent`).
 pub const HELP_EVENT: &str = "help:event";
 /// Event name for a package's security check as it goes (matches `IpcChannels.securityEvent`).
@@ -151,6 +154,11 @@ pub fn emit_advisor_event(app: &AppHandle, project_id: &str, event: AdvisorEvent
 /// Emit one Help assistant event, routed to the question that produced it.
 pub fn emit_help_event(app: &AppHandle, ask_id: &str, event: HelpEvent) {
   let _ = app.emit(HELP_EVENT, HelpEventEnvelope { ask_id: ask_id.to_string(), event });
+}
+
+/// Emit one Goals event, routed to the project it's about.
+pub fn emit_goals_event(app: &AppHandle, project_id: &str, event: GoalsEvent) {
+  let _ = app.emit(GOALS_EVENT, GoalsEventEnvelope { project_id: project_id.to_string(), event });
 }
 
 /// Emit one security check event, routed to the check that produced it.

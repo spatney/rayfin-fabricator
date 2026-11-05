@@ -1,0 +1,636 @@
+/* ------------------------------------------------------------------ *
+ * Goals tab (an experiment). Builds on the Advisor's layout and pieces
+ * (advisor.css): flat surfaces, neutral borders, status as dots and words.
+ * ------------------------------------------------------------------ */
+
+.gl-inner {
+  max-width: 920px;
+}
+
+/* GOALS.md, in the top bar: opens it in Code. */
+.gl-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.gl-file:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.gl-file .codicon {
+  font-size: 12px;
+}
+
+.gl-caps {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.gl-dismiss {
+  height: 24px;
+  min-width: 24px;
+  margin: -4px -6px -4px 0;
+}
+
+.gl-intro-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.gl-intro-actions .btn .codicon,
+.gl-status .btn .codicon,
+.gl-edit-actions .btn .codicon {
+  font-size: 13px;
+}
+
+/* ── No goals yet ── */
+.gl-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 44px 24px 28px;
+  text-align: center;
+  animation: advRise 0.24s ease both;
+}
+
+.gl-intro-badge {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+  color: var(--accent);
+  background: var(--bg-elev-2);
+  border-radius: 50%;
+}
+
+.gl-intro-badge .codicon {
+  font-size: 22px;
+}
+
+.gl-intro-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.gl-intro-text {
+  max-width: 540px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.gl-example {
+  width: min(560px, 100%);
+  margin: 26px 0 0;
+  padding: 14px 18px 16px;
+  text-align: left;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.gl-example p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.gl-example ol {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-dim);
+}
+
+/* ── Where the checks stand ── */
+.gl-status {
+  --gl-tone: var(--text-faint);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  animation: advRise 0.24s ease both;
+}
+
+.gl-status--ok {
+  --gl-tone: var(--ok);
+}
+
+.gl-status--bad {
+  --gl-tone: var(--danger);
+}
+
+.gl-status--warn {
+  --gl-tone: var(--pending);
+}
+
+.gl-status--running {
+  --gl-tone: var(--accent);
+}
+
+.gl-status-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.gl-status-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 7px;
+  background: var(--gl-tone);
+  border-radius: 50%;
+}
+
+.gl-status--idle .gl-status-dot {
+  background: transparent;
+  border: 1.5px solid var(--text-faint);
+}
+
+.gl-status-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.gl-status-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.gl-status-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.gl-status-side {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gl-status .adv-live {
+  margin: 0;
+}
+
+.gl-status > .adv-activity {
+  margin: 0;
+}
+
+.gl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-left: 21px;
+}
+
+.gl-chip--passed {
+  --adv-chip-dot: var(--ok);
+}
+
+.gl-chip--failed {
+  --adv-chip-dot: var(--danger);
+}
+
+.gl-chip--not-proven {
+  --adv-chip-dot: var(--pending);
+}
+
+.gl-chip--stale,
+.gl-chip--not-run {
+  --adv-chip-dot: var(--adv-idle);
+  color: var(--text-dim);
+}
+
+/* ── The goals: what it's for, then the checks ── */
+.gl-goals {
+  animation: advRise 0.24s ease both;
+}
+
+.gl-purpose {
+  padding: 14px 18px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gl-purpose-text {
+  max-width: 100ch;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.gl-purpose-text--empty {
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+.gl-checks-head {
+  min-height: 42px;
+  border-bottom: 0;
+}
+
+.gl-list {
+  margin: 0;
+  padding: 0 6px 6px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gl-check {
+  --gl-dot: var(--adv-idle);
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+
+.gl-check--passed {
+  --gl-dot: var(--ok);
+}
+
+.gl-check--failed {
+  --gl-dot: var(--danger);
+}
+
+.gl-check--not-proven {
+  --gl-dot: var(--pending);
+}
+
+.gl-check.is-open {
+  background: color-mix(in srgb, var(--bg-elev-2) 60%, transparent);
+}
+
+.gl-check-btn {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 10px 10px 12px;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.gl-check:not(.is-open) > .gl-check-btn:hover {
+  background: var(--bg-elev-2);
+}
+
+.gl-check-btn:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: -2px;
+}
+
+.gl-check-mark {
+  flex: none;
+  width: 12px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+}
+
+.gl-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--gl-dot);
+  border-radius: 50%;
+}
+
+.gl-check--not-run .gl-dot {
+  background: transparent;
+  border: 1.5px solid var(--text-faint);
+}
+
+/* Out of date: the old outcome, faded. */
+.gl-check.is-stale .gl-dot {
+  background: color-mix(in srgb, var(--gl-dot) 40%, transparent);
+}
+
+.gl-check-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gl-check-text {
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.45;
+}
+
+.gl-check-summary {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+}
+
+.gl-check.is-open .gl-check-summary {
+  white-space: normal;
+}
+
+.gl-check-side {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 19px;
+}
+
+.gl-check-state {
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.gl-check--failed:not(.is-stale) .gl-check-state {
+  color: var(--danger);
+}
+
+.gl-check--checking .gl-check-state {
+  color: var(--accent);
+}
+
+.gl-check-caret {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--text-faint);
+  transition: transform 0.18s ease;
+}
+
+.gl-check.is-open .gl-check-caret {
+  transform: rotate(90deg);
+}
+
+/* The detail opens under the row, lined up with its text. */
+.gl-check-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 16px 14px 34px;
+  animation: advRise 0.18s ease both;
+}
+
+.gl-check-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.gl-evidence {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.gl-calls {
+  margin: 0;
+  padding: 8px 10px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.gl-check-when {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.gl-check-body .adv-detail-actions {
+  padding-top: 10px;
+}
+
+.gl-check-body .adv-detail-actions .btn .codicon {
+  font-size: 13px;
+}
+
+/* ── Editing the goals ── */
+.gl-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 20px 16px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  animation: advRise 0.24s ease both;
+}
+
+.gl-editor-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.gl-editor-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.gl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gl-label {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.gl-hint {
+  max-width: 100ch;
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.gl-input {
+  width: 100%;
+  resize: none;
+  font-size: 13px;
+  line-height: 1.5;
+  field-sizing: content;
+}
+
+.gl-input:disabled {
+  opacity: 0.6;
+}
+
+.gl-input--purpose {
+  min-height: calc(3lh + 20px);
+}
+
+.gl-input--check {
+  min-height: calc(1lh + 14px);
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.gl-edit-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gl-edit-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.gl-edit-num {
+  flex: none;
+  width: 18px;
+  padding-top: 8px;
+  font-size: 11.5px;
+  text-align: right;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.gl-edit-remove {
+  flex: none;
+  margin-top: 2px;
+  opacity: 0;
+}
+
+.gl-edit-row:hover .gl-edit-remove,
+.gl-edit-row:focus-within .gl-edit-remove,
+.gl-edit-remove:focus-visible {
+  opacity: 1;
+}
+
+.gl-edit-add {
+  align-self: flex-start;
+  margin: 4px 0 0 26px;
+}
+
+.gl-edit-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.gl-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0 26px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.gl-note .codicon {
+  font-size: 12px;
+}
+
+.gl-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.gl-spacer {
+  flex: 1;
+}
+
+@container adv (max-width: 760px) {
+  .gl-status-head {
+    flex-wrap: wrap;
+  }
+
+  .gl-status-side {
+    width: 100%;
+    padding-left: 21px;
+  }
+
+  .gl-check-body {
+    padding-left: 16px;
+    padding-right: 12px;
+  }
+
+  .gl-editor {
+    padding: 16px 14px 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gl-intro,
+  .gl-status,
+  .gl-goals,
+  .gl-check-body,
+  .gl-editor {
+    animation: none;
+  }
+
+  .gl-check,
+  .gl-check-caret {
+    transition: none;
+  }
+}

@@ -1,0 +1,169 @@
+---
+title: "Check your app against its goals"
+description: "Say in plain words what your app is for and what it must keep doing, then have Copilot check a fresh copy of the app against it before you publish."
+---
+
+> [!WARNING]
+> Goals are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
+
+An app can keep building, and pass the Advisor's checks, while a change quietly stops it doing what it's for: managers can no longer approve expenses, or employees start seeing each other's. Goals let you write down, in plain words, who your app is for and what it must keep doing. Before you publish, GitHub Copilot checks each one on a fresh copy of the app, using it the way each kind of user would, and tells you which still hold.
+
+Goals are for your personal apps. Team apps don't have them yet.
+
+![The Goals tab of an expenses app after a run: 1 check failed and 1 couldn't be proven, with 3 passed. Below Copilot's summary of the run and what the app is for, the failed check, that someone who isn't signed in can't see any expenses, receipts or reports, is open on what Copilot found and the calls it made signed out.](/screenshots/goals.webp)
+
+## Turn on Goals
+
+1. Open **Settings** from the account menu.
+2. Expand **Experiments**, and turn on **Goals**.
+
+![The Experiments section of Settings, with its note that experiments are off by default and may change, and the Team workspaces, Migrate Power BI reports, Work IQ, MCP servers, Export as an app and Goals switches, all off.](/screenshots/settings-experiments.webp)
+
+Each personal app gets a **Goals** tab after **Advisor**. Turning the experiment off hides the tab, and Fabricator stops asking about your checks before you publish and stops telling chat about your goals. The goals stay in the app, and their last results stay on this computer.
+
+## Say what your app is for
+
+The first time you open **Goals** in an app, it asks you to "Say what this app is for". Choose how to start:
+
+- **Draft with Copilot**: Copilot reads the app, such as its README, data model, screens, functions and seed data, and proposes what it's for and the checks it should keep passing. It only reads, so it can't change the app.
+- **Write them myself**: start with empty fields.
+
+Either way, the goals editor opens with two fields:
+
+- **What it’s for**: who uses the app and what they need it to do, in a few sentences. Copilot reads each check in this light.
+- **Checks**: what the app must keep doing, one per line, the way someone using it would say it.
+
+Press `Enter` to add a check, and `Backspace` in an empty one to remove it. Paste a list to add a check for each line.
+
+While Copilot drafts, the editor shows what it's reading. When it's done, you see "Copilot drafted these from your app. Change anything that’s off, then save." Once there's something in the fields, **Improve with Copilot** drafts again, keeping what you've written.
+
+Select **Save** when they're right. Fabricator saves them in the app's folder as `GOALS.md`, so they travel with the app.
+
+### Write checks Copilot can prove
+
+Copilot proves a check by using the app the way its screens do: it reads the app's data, saves changes and calls its functions, as each kind of user. A check is easiest to prove when it says, in one sentence, what one kind of user must be able to do or see, or must not.
+
+| Hard to prove | Easier to prove |
+| --- | --- |
+| The app is user-friendly. | An employee can submit an expense with a date, amount, category and a short note. |
+| Expenses are secure. | Employees see only their own expenses. |
+| Approvals work. | A manager can approve or reject an expense from someone on their team. |
+| The dashboard looks right. | The dashboard's monthly total counts only approved expenses. |
+
+Start with the main jobs the app does, then who must not see or change what. Leave out how the app looks, how its code is written, and what only a person can judge.
+
+An app has at most 40 checks, each under 500 characters, and a purpose under 4,000 characters. Rewording a check makes it a new one, which shows as **Not run** until you run it.
+
+## Change your goals
+
+- **Edit**, in the Goals header, opens the editor again.
+- **GOALS.md** opens the file in the **Code** view. To change it by hand, [open the project in VS Code](/docs/build/code-and-history#open-the-project-in-vs-code). The tab reads the file again when you come back to it. Its format is in [How Fabricator works](/docs/reference/how-it-works#goalsmd).
+- Chat changes `GOALS.md` when you ask it to, for example after you add a feature:
+
+```prompt title="Add checks for a new feature"
+Add checks to GOALS.md for the approval flow you just built: a manager can approve or reject an expense from their team, and employees can't approve their own expenses. Keep the existing checks as they are.
+```
+
+## Run the checks
+
+Select **Run checks** in the Goals header. Fabricator then:
+
+1. Makes a fresh copy of the app in a folder of its own, without its git history, its build or its local data.
+2. Starts the copy's backend on this computer, apart from the app's preview, with an empty database.
+3. Loads the app's seed data into it, if the app has any.
+4. Has Copilot prove each check by calling the copy as the check's users: as you, as test users it creates, or signed out.
+5. Stops the copy and deletes it.
+
+Data that the checks create, change or delete stays in the copy, so your app's local data and your published app's data aren't touched. The header says what's happening, such as "Making a fresh copy of the app…" or "Loading its seed data…", and each check shows **Checking…** while Copilot works on it. Results appear as Copilot reports them.
+
+- Select **Stop** to end the run early. Fabricator keeps the results Copilot has reported and deletes the copy.
+- To run one check, select it, then select **Run this check**.
+- When some checks haven't run on the app as it is now, a button such as **Run 3 checks** runs only those.
+
+You can keep building while the checks run. A run checks the app as it was when the run started, so if chat changes the app in the meantime, the results show as **Out of date**.
+
+Drafts and runs use Copilot requests. To choose their model, open the model pill in the Goals header. It works like the [chat's model picker](/docs/build/chat#choose-a-model-and-reasoning-effort), and Fabricator remembers your choice on this computer. You can also choose a model on [your own API key](/docs/build/your-own-api-keys).
+
+### When a run can't start or finish
+
+| You see | What to do |
+| --- | --- |
+| "Copilot is changing the app in the Build chat. Run the checks once it’s done." | Wait for the chat turn to end. Checks run on the app as a turn leaves it. |
+| "Fabricator is copying this project to run its Goals checks. Wait a moment, then try again." | A chat turn or a publish can't start while Fabricator copies the app for its checks. Send the message or publish again in a moment. |
+| "Goals checks are already running for 3 other apps. Try again when one of them ends." | Checks run for at most three apps at once. |
+| "The copy of the app didn't start within 4 minutes. Its output is in Fabricator's logs folder, under goals." | Select **Open logs folder** in **Settings → Diagnostics**, then open the `goals` folder. The copy's output is in the file named for the project's ID. |
+| "The run stopped after 12 minutes, before Copilot got to 2 of the 8 checks. Run fewer checks at a time." | A run gets 10 minutes, and a minute more for each check over six, up to 30. Run the checks it didn't get to with **Run 2 checks**. |
+
+## Read the results
+
+Each check shows one of these:
+
+| Status | What it means |
+| --- | --- |
+| **Passed** | Copilot's calls to the copy showed everything the check says, as the users it's about. |
+| **Failed** | The app doesn't do it: a wrong or missing answer, a refusal where the user may, data the user may not see, an error, or nothing in the app that could do it. A check met only in part fails. |
+| **Not proven** | Copilot couldn't show it either way by using the app. |
+| **Not run** | The check hasn't run yet. |
+
+**Out of date** marks a result from before the app's latest changes to its data model, functions, seed data, screens, configuration or packages. Changes to its docs or to `GOALS.md` don't count.
+
+The card at the top sums up the last results, such as "All 5 checks passed" or "1 check failed, 1 couldn’t be proven and 2 haven’t run on the app as it is now." Under it, you see when the checks last ran, how long the run took and on which model, how many checks it ran when it didn't run them all, and "stopped early" when it ended before it got to them all. **Copilot’s summary of the last run** says what Copilot made of it.
+
+Each check shows Copilot's result in a sentence or two. Select it to see more:
+
+- **What Copilot found**: what the calls showed, or what's missing from the app.
+- **Calls it made**: the calls that show the result, each with who made it, what it asked and what the copy answered. Fabricator records every call itself, and accepts **Passed** only with calls Copilot made in that run.
+- When it was checked, and whether that was before the app's latest changes.
+
+For a check that's **Not proven**, Fabricator suggests: "Copilot couldn’t show this either way by using the app. Make the check more specific, or make sure the app’s seed data and roles let someone do it."
+
+The **Goals** tab's badge counts the checks that failed on the app as it is now.
+
+## What a check can prove
+
+Copilot proves checks by calling the app's backend, as the app's screens do:
+
+- **Data and permissions** are what checks prove best: who can see, add, change or delete what.
+- **A check about a screen** is judged by the data the screen asks for. How screens look or behave in the browser, such as their layout, colors, wording or navigation, can't be shown this way, so those checks are **Not proven**.
+- **A check about what mustn't happen**, such as "Employees can't approve their own expenses", passes only if the backend refuses the call or leaves the data out of its answer. A screen that hides a button isn't enough.
+- **Reading the code never passes a check.** Copilot reads it to learn what to call, then judges what the app answers.
+- **Stored files** can't be reached by the calls, so checks about them are **Not proven**, unless a function answers what the check needs.
+- **An error** fails the check, unless the copy caused it, such as a connector that runs only on Fabric. Then the check is **Not proven**.
+- **A vague check** is read as you most likely meant it, given what the app is for, and Copilot says how it read it.
+
+The copy starts with your app's seed data and nothing else. Without seed data, Copilot creates what each check needs through the app. When a check needs people or records that are hard to create that way, such as a manager with a team, add them to the app's seed data. See [Start with seed data](/docs/build/local-development#start-with-seed-data).
+
+> [!IMPORTANT]
+> The copy's data is its own, but its functions and connectors reach real services, signed in as you, with your app's local secret values. Fabricator refuses changes through a SQL connector. Beyond that, Copilot is told to read a function's code before it calls it, and never to make a call that sends a message or an email, posts to another system, charges money, or changes data outside the app. It reports the checks that need one as **Not proven** instead.
+
+Copilot can't change anything else. A run's session reads only the copy, and a draft's reads only the app's folder. Neither can edit files, run commands, fetch web pages, or open `.env` files, keys or the app's `.rayfin-local` folder. See [How Fabricator works](/docs/reference/how-it-works#what-a-goals-run-can-do).
+
+## Fix failed checks with Copilot
+
+Select **Fix with Copilot** on a failed check, or select the button on the card at the top, such as **Fix 2 with Copilot**, for every failed check. Fabricator sends the checks to the Build chat, with what Copilot found and the calls it made. Copilot is asked to make the app meet them while keeping what the other checks expect, and to leave `GOALS.md` as it is.
+
+When the turn ends, run the checks again. With **Publish after each chat turn** on, the fix is published as the turn ends, before you run them. See [Publish after each chat turn](/docs/ship/deploy#publish-after-each-chat-turn).
+
+## Before you publish
+
+When you publish an app whose checks didn't all pass on the app as it is now, Fabricator asks first:
+
+| It asks | When | Its first button |
+| --- | --- | --- |
+| "Run your app’s checks first?" | Some checks haven't run on the app as it is now. | **Run 3 checks** opens **Goals** and runs only those. |
+| "Your app’s checks didn’t all pass" | Every check has run, and some failed or couldn't be proven. | **See the checks** opens **Goals**. |
+| "Your app’s checks are still running" | A run is going. | **See the checks** opens **Goals**. |
+
+**Publish anyway** publishes, and **Cancel** doesn't. Fabricator doesn't ask when the app has no checks, or when every check passed on the app as it is now. **Publish after each chat turn** doesn't ask either. See [Publish changes](/docs/ship/deploy#publish-changes).
+
+## How chat uses your goals
+
+When `GOALS.md` has checks, Copilot reads it in the Build chat before it changes the app's data, permissions, functions or screens. If a change would stop a check passing, Copilot tells you which, and why. It changes `GOALS.md` only when you ask.
+
+## Where your goals and results are kept
+
+Your goals are in `GOALS.md`, at the root of the app's folder, with the rest of its code. Their last results are on this computer, in Fabricator's app data, and don't go with the app. A run's results replace those of the checks it ran, and results for checks you remove are dropped. See [Files and folders](/docs/reference/files).
+
+## Goals and the Advisor
+
+The [Advisor](/docs/ship/advisor) checks how the app is built: its security, data model, queries and configuration. Goals check that it still does what it's for, for the people it's for. Use both before you publish.

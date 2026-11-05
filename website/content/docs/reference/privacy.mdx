@@ -73,6 +73,8 @@ When you chat, Fabricator sends your request and relevant project context to Git
 
 The Advisor's **Run deep review** also uses Copilot in a read-only mode.
 
+With the **Goals** experiment on, drafting an app's goals and running its checks also use Copilot in a read-only mode. Copilot reads the app's code and, during a run, what a copy of the app answers to its calls: the app's seed data, and anything its functions and connectors read from real services with your sign-in. Like other chat content, that goes to GitHub Copilot, or to the provider of a model you chose on your own API key. The results stay on this computer. See [Check your app against its goals](/docs/ship/goals).
+
 **Check for security risks**, before you import a project or install an app, also uses Copilot in a read-only mode, on **Auto**. Copilot reads the file's code from a folder Fabricator unpacks it into, on this computer, and deletes when the check ends. Fabricator doesn't unpack the file's programs, media, large files, `.env` files, keys or certificates, and it hides the sign-ins in its `.npmrc` files. See [Check a project or app for security risks](/docs/build/security-check).
 
 **Diagnose with Copilot** for team workspaces also uses Copilot in a read-only mode. It sends what failed, the IDs and names of the workspace's repository, deploy identities, tenant, and Fabric workspaces, your sign-in names, and the results of read-only checks, including the end of a failed pipeline log. Values that look like secrets or tokens are masked. Select **Details sent to Copilot** to see what was sent.

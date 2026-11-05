@@ -12,6 +12,7 @@ enum Owner {
   Team,
   Secrets,
   Export,
+  Goals,
 }
 
 impl Owner {
@@ -22,6 +23,7 @@ impl Owner {
       Owner::Team => "Fabricator is saving or publishing this project. Wait for it to finish, then try again.",
       Owner::Secrets => "Fabricator is updating this app's secrets. Wait for it to finish, then try again.",
       Owner::Export => "Fabricator is exporting this project. Wait for it to finish, then try again.",
+      Owner::Goals => "Fabricator is copying this project to run its Goals checks. Wait a moment, then try again.",
     }
   }
 }
@@ -89,6 +91,12 @@ impl ProjectMutations {
   /// never holds a half-written turn or a half-updated publishing record.
   pub fn export(&self, project_id: &str) -> Result<MutationGuard, String> {
     self.acquire(project_id, Owner::Export)
+  }
+
+  /// Lease the project while a Goals run fingerprints and copies it, so the
+  /// copy never holds a half-written turn.
+  pub fn goals(&self, project_id: &str) -> Result<MutationGuard, String> {
+    self.acquire(project_id, Owner::Goals)
   }
 
   #[cfg(test)]

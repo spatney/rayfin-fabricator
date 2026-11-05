@@ -320,7 +320,7 @@ async fn crashes_restart_with_backoff_then_give_up() {
 async fn a_crash_restarts_and_keeps_the_sign_in_and_serve_mode_but_not_one_time_options() {
   let Some(h) = harness(fast()) else { return };
   let dir = h.project("once", "crash-once");
-  let serve = crate::types::ServeMode { static_build: true, reuse_build: true, port: Some(47_123) };
+  let serve = crate::types::ServeMode { static_build: true, reuse_build: true, port: Some(47_123), ..Default::default() };
   let options =
     LocalStartOptions { force_schema: true, reset: true, sign_in_as: Some("user:ana@example.com".into()), serve };
   h.backends.start("p", dir.clone(), options).await;

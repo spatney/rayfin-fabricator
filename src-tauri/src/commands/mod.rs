@@ -21,6 +21,7 @@ pub mod files;
 pub mod gallery;
 pub mod git;
 pub mod github;
+pub mod goals;
 pub mod help;
 pub mod mcp;
 pub mod migration;

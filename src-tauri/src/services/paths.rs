@@ -135,6 +135,30 @@ pub fn advisor_state_file(project_id: &str) -> PathBuf {
   advisor_dir().join(format!("{}.state.json", safe_segment(project_id)))
 }
 
+/// Directory holding each project's last Goals results. On this computer, never
+/// in the project: the goals themselves are the project's `GOALS.md`.
+pub fn goals_dir() -> PathBuf {
+  let d = data_dir().join("goals");
+  let _ = std::fs::create_dir_all(&d);
+  d
+}
+
+/// The saved Goals results for one project, by a safe single path segment.
+pub fn goals_file(project_id: &str) -> PathBuf {
+  goals_dir().join(format!("{}.json", safe_segment(project_id)))
+}
+
+/// Where a Goals run copies the app to check it on fresh data, one folder per
+/// run, removed when the run ends. On this computer only, beside the other caches.
+pub fn goals_runs_dir() -> PathBuf {
+  cache_dir().join("goals")
+}
+
+/// `id` as a safe single path segment.
+pub fn safe_name(id: &str) -> String {
+  safe_segment(id)
+}
+
 fn safe_segment(id: &str) -> String {
   id.chars()
     .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })

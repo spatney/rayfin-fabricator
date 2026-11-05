@@ -626,7 +626,7 @@ pub async fn run(app: &AppHandle, key: &str) -> AppActionResult {
     }
   }
   let reuse_build = record.built_for == Some(port) && backends.reuses_builds().await;
-  let serve = ServeMode { static_build: true, reuse_build, port: Some(port) };
+  let serve = ServeMode { static_build: true, reuse_build, port: Some(port), ..Default::default() };
   backends.start(key, dir, LocalStartOptions { serve, ..Default::default() }).await;
   done()
 }

@@ -296,9 +296,9 @@ pub(crate) async fn drain(
 
 /// Assistant text reassembled in stream order, plus the terminal state.
 #[derive(Default)]
-struct TextAcc {
+pub(crate) struct TextAcc {
   /// Every assistant message, concatenated.
-  text: String,
+  pub(crate) text: String,
   /// Characters of each assistant message already appended (dedup with the
   /// terminal `assistant.message` event).
   streamed: HashMap<String, usize>,
@@ -306,7 +306,7 @@ struct TextAcc {
   messages: Vec<(String, String)>,
   /// Messages that handed off to tool calls — narration, not the answer.
   narration: HashSet<String>,
-  errored: Option<String>,
+  pub(crate) errored: Option<String>,
 }
 
 /// A finished assistant message that hands off to tool calls ("Let me check
@@ -326,7 +326,7 @@ impl TextAcc {
   }
 
   /// Take one event; returns the newly appended text, if any.
-  fn feed(&mut self, event_type: &str, data: &Value) -> Option<String> {
+  pub(crate) fn feed(&mut self, event_type: &str, data: &Value) -> Option<String> {
     let id = || data.get("messageId").and_then(Value::as_str).unwrap_or("").to_string();
     match event_type {
       "assistant.message_delta" => {
@@ -370,7 +370,7 @@ impl TextAcc {
   }
 
   /// The reply without narration: the messages that didn't lead to tool calls.
-  fn answer(&self) -> String {
+  pub(crate) fn answer(&self) -> String {
     let parts: Vec<&str> = self
       .messages
       .iter()
@@ -382,7 +382,7 @@ impl TextAcc {
   }
 }
 
-fn is_terminal(event_type: &str) -> bool {
+pub(crate) fn is_terminal(event_type: &str) -> bool {
   matches!(event_type, "session.idle" | "session.error")
 }
 
@@ -509,7 +509,7 @@ fn fold_by_id(findings: impl IntoIterator<Item = AdvisorFinding>) -> Vec<Advisor
 
 /* ----------------------------- persistence ----------------------------- */
 
-fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
+pub(crate) fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
   let tmp = path.with_extension("tmp");
   std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
   std::fs::rename(&tmp, path).map_err(|e| e.to_string())
@@ -661,13 +661,13 @@ fn finalize_review(
 /* ----------------------------- one-shot sessions ----------------------------- */
 
 /// Where a one-shot Advisor session runs, and how it can be stopped.
-struct RunCtx<'a> {
-  copilot: &'a CopilotManager,
+pub(crate) struct RunCtx<'a> {
+  pub copilot: &'a CopilotManager,
   /// Your own API keys, for runs on a provider's model.
-  byok: &'a ByokManager,
-  root: &'a str,
-  choice: ModelChoice,
-  token: &'a CancelToken,
+  pub byok: &'a ByokManager,
+  pub root: &'a str,
+  pub choice: ModelChoice,
+  pub token: &'a CancelToken,
 }
 
 /// Deliver a project's Advisor events to the renderer.
@@ -678,7 +678,7 @@ fn emitter(app: &AppHandle, project_id: &str) -> Emit {
 
 /// Send `prompt` on a throwaway read-only session and feed its events to
 /// `on_event` until the turn ends. `Err` means the prompt never started.
-async fn one_shot(
+pub(crate) async fn one_shot(
   run: &RunCtx<'_>,
   mut opts: SessionOptions,
   prompt: String,
@@ -743,7 +743,7 @@ async fn one_shot(
 }
 
 /// Why a one-shot turn ended without a usable answer.
-fn incomplete_detail(text: &TextAcc, end: &DrainEnd, fallback: &str) -> String {
+pub(crate) fn incomplete_detail(text: &TextAcc, end: &DrainEnd, fallback: &str) -> String {
   if let Some(e) = &text.errored {
     e.clone()
   } else if matches!(end, DrainEnd::TimedOut) {

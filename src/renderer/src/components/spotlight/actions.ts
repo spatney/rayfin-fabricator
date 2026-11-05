@@ -60,6 +60,8 @@ export interface ActionContext {
   migrationEnabled: boolean
   /** The MCP servers experiment is on. */
   mcpServersEnabled: boolean
+  /** The open app has the Goals tab (an experiment). */
+  goalsEnabled: boolean
   /** The App gallery is showing. */
   inGallery: boolean
   /** The open team app's workspace. */
@@ -108,6 +110,20 @@ const VIEWS: {
     icon: 'shield',
     detail: (name) => `Check ${name} for problems before you share it`,
     keywords: ['review', 'issues', 'security', 'checks', 'quality']
+  },
+  {
+    view: 'goals',
+    title: 'Goals',
+    icon: 'target',
+    detail: (name) => `Check ${name} still does what it’s for`,
+    keywords: [
+      'purpose',
+      'evals',
+      'acceptance criteria',
+      'requirements',
+      'business goals',
+      'intent'
+    ]
   }
 ]
 
@@ -131,6 +147,7 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
 
   if (project && ctx.toolsReady) {
     for (const v of VIEWS) {
+      if (v.view === 'goals' && !ctx.goalsEnabled) continue
       add({
         id: `action:view-${v.view}`,
         title: v.title,

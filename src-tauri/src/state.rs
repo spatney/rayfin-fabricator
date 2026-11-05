@@ -26,6 +26,10 @@ pub struct AppState {
   explain_cancels: Mutex<HashMap<String, CancelToken>>,
   /// Active Advisor verify cancel tokens, keyed by `projectId` (one verify per project).
   verify_cancels: Mutex<HashMap<String, CancelToken>>,
+  /// Goals runs checking an app against its goals, keyed by `projectId` (one per project).
+  goals_cancels: Mutex<HashMap<String, CancelToken>>,
+  /// Copilot drafting an app's goals, keyed by `projectId` (one per project).
+  goals_draft_cancels: Mutex<HashMap<String, CancelToken>>,
   /// Long team operations (publish, setup verification), keyed by project or workspace id.
   team_cancels: Mutex<HashMap<String, CancelToken>>,
   /// Report migrations gathering their material in the background, keyed by `projectId`.
@@ -291,6 +295,8 @@ impl AppState {
       || !self.suggest_cancels.lock().unwrap().is_empty()
       || !self.explain_cancels.lock().unwrap().is_empty()
       || !self.verify_cancels.lock().unwrap().is_empty()
+      || !self.goals_cancels.lock().unwrap().is_empty()
+      || !self.goals_draft_cancels.lock().unwrap().is_empty()
   }
 
   /// Register a fresh advisor-run cancel token for a project only if none is
@@ -513,6 +519,79 @@ impl AppState {
 
   pub fn migration_running(&self, project_id: &str) -> bool {
     self.migration_cancels.lock().unwrap().contains_key(project_id)
+  }
+
+  /// Start a Goals run for a project, unless one is running or still stopping (then `None`).
+  pub fn try_begin_goals(&self, project_id: &str) -> Option<CancelToken> {
+    begin_in(&self.goals_cancels, project_id)
+  }
+
+  /// Release a Goals run's slot, only when it still holds `token`.
+  pub fn end_goals(&self, project_id: &str, token: &CancelToken) {
+    end_in(&self.goals_cancels, project_id, token);
+  }
+
+  /// A Goals run is going (or still stopping) for a project.
+  pub fn goals_running(&self, project_id: &str) -> bool {
+    self.goals_cancels.lock().unwrap().contains_key(project_id)
+  }
+
+  /// Stop a Goals run. Its slot stays taken until the run has stopped its
+  /// copy of the app and removed it ([`Self::end_goals`]), so a new run can't
+  /// start beside it. Returns true when one was running.
+  pub fn cancel_goals(&self, project_id: &str) -> bool {
+    signal_in(&self.goals_cancels, project_id)
+  }
+
+  /// Start drafting a project's goals, unless a draft is running (then `None`).
+  pub fn try_begin_goals_draft(&self, project_id: &str) -> Option<CancelToken> {
+    begin_in(&self.goals_draft_cancels, project_id)
+  }
+
+  /// Release a draft's slot, only when it still holds `token`.
+  pub fn end_goals_draft(&self, project_id: &str, token: &CancelToken) {
+    end_in(&self.goals_draft_cancels, project_id, token);
+  }
+
+  /// Stop drafting a project's goals. Returns true when a draft was running.
+  pub fn cancel_goals_draft(&self, project_id: &str) -> bool {
+    signal_in(&self.goals_draft_cancels, project_id)
+  }
+
+  /// Stop every Goals run and draft (Fabricator's window closed).
+  pub fn cancel_all_goals(&self) {
+    for map in [&self.goals_cancels, &self.goals_draft_cancels] {
+      for token in map.lock().unwrap().values() {
+        token.cancel();
+      }
+    }
+  }
+}
+
+fn begin_in(map: &Mutex<HashMap<String, CancelToken>>, key: &str) -> Option<CancelToken> {
+  let mut map = map.lock().unwrap();
+  if map.contains_key(key) {
+    return None;
+  }
+  let token = CancelToken::new();
+  map.insert(key.to_string(), token.clone());
+  Some(token)
+}
+
+fn end_in(map: &Mutex<HashMap<String, CancelToken>>, key: &str, token: &CancelToken) {
+  let mut map = map.lock().unwrap();
+  if map.get(key).is_some_and(|t| t.same(token)) {
+    map.remove(key);
+  }
+}
+
+fn signal_in(map: &Mutex<HashMap<String, CancelToken>>, key: &str) -> bool {
+  match map.lock().unwrap().get(key) {
+    Some(token) => {
+      token.cancel();
+      true
+    }
+    None => false,
   }
 }
 

@@ -47,6 +47,7 @@ describe('toolKind', () => {
       fabricator_console: 'console',
       fabricator_local_status: 'local-status',
       fabricator_local_call: 'local-call',
+      fabricator_goals_call: 'local-call',
       fabricator_local_seed: 'local-seed',
       // MCP tools are named after their server; these would otherwise read as project searches or web reads.
       'FabricIQ-ValueSearch': 'fabric-iq',

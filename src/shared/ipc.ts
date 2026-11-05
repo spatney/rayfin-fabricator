@@ -1799,6 +1799,12 @@ export interface ExperimentFlags {
    * only: `.rayfin` files open whether it's on or off.
    */
   appExport?: boolean
+  /**
+   * Goals: each app's Goals tab, where you write what the app is for and the
+   * checks it must keep passing (`GOALS.md`), and Copilot runs them against a
+   * fresh copy of the app before you publish.
+   */
+  goals?: boolean
 }
 
 /**
@@ -2971,6 +2977,153 @@ export interface AdvisorEventEnvelope {
   event: AdvisorEvent
 }
 
+/* ------------------------------------------------------------------ *
+ * Goals (an experiment)
+ *
+ * What an app is for and the checks it must keep passing, in the project's
+ * `GOALS.md`. Copilot runs the checks on a fresh copy of the app, calling its
+ * routes as each kind of user. Mirrors the Goals DTOs in `types.rs`.
+ * ------------------------------------------------------------------ */
+
+/** How a check came out. `not-proven`: Copilot couldn't show it either way by calling the app. */
+export type GoalStatus = 'passed' | 'failed' | 'not-proven'
+
+/** One check in `GOALS.md`. `id` comes from its words, so a reworded check is a new check. */
+export interface GoalCheck {
+  id: string
+  text: string
+}
+
+/** A check's last outcome on this computer (never kept in the project). */
+export interface GoalResult {
+  checkId: string
+  /** The check as it read when it ran. */
+  check: string
+  status: GoalStatus
+  /** One or two plain sentences: what Copilot found. */
+  summary: string
+  /** The calls that show it, as Fabricator made them: who called, what they asked, how the app answered. */
+  calls: string[]
+  /** What Copilot saw in those answers, or what's missing, as short lines. */
+  evidence: string[]
+  /** RFC3339. */
+  ranAt: string
+  /** A signature of the app's code it ran against. */
+  fingerprint: string
+  /** The app's code changed since it ran. */
+  stale: boolean
+}
+
+/** The last Goals run: when, how long, on which model, and what it covered. */
+export interface GoalsRunInfo {
+  ranAt: string
+  durationMs: number
+  /** Absent on Auto. */
+  model?: string
+  /** Copilot's summary of the run. */
+  summary: string
+  /** The checks it ran. */
+  checkIds: string[]
+  /** It ran every check. */
+  all: boolean
+  /** It got through every check it was given. */
+  complete: boolean
+}
+
+/** An app's goals (`goals.load`): `GOALS.md` read, with each check's last result. */
+export interface GoalsSnapshot {
+  /** `GOALS.md` exists. */
+  exists: boolean
+  /** What the app is for, and who for. */
+  purpose: string
+  checks: GoalCheck[]
+  /** Results of the checks as they read now. */
+  results: GoalResult[]
+  lastRun: GoalsRunInfo | null
+  /** Every check passed, on the app's code as it is now. */
+  allPassed: boolean
+  /** Why the checks can't run for this app, when they can't. */
+  cannotRun: string | null
+  /** A run is going for this app (set by `load` only). */
+  running: boolean
+}
+
+/** What `goals.run` runs: these checks (all of them when absent), on this model. */
+export interface GoalsRunRequest extends AdvisorModelChoice {
+  checkIds?: string[]
+}
+
+/** How a run went (as its `done` event said), and the goals and results after it. */
+export interface GoalsRunEnd {
+  /** Every check it was given has a result. */
+  ok: boolean
+  cancelled: boolean
+  /** Why it stopped short. */
+  error?: string
+  snapshot: GoalsSnapshot
+}
+
+/** Goals Copilot drafted from the app's code, for the user to edit and save. */
+export interface GoalsProposal {
+  purpose: string
+  checks: string[]
+}
+
+/**
+ * Where a run is: `preparing` (copying the app), `starting` its copy,
+ * `seeding` it, `checking`, or `finishing` (removing the copy).
+ */
+export type GoalsPhase = 'preparing' | 'starting' | 'seeding' | 'checking' | 'finishing'
+
+/** Streamed Goals events (main -> renderer). */
+export type GoalsEvent =
+  | { type: 'phase'; phase: GoalsPhase; detail?: string }
+  /** A tool call a run made (sent on start and again when it ends). */
+  | { type: 'activity'; tool: ChatToolCall }
+  /** A check's outcome. */
+  | { type: 'result'; result: GoalResult }
+  /** A tool call a draft made. */
+  | { type: 'draftActivity'; tool: ChatToolCall }
+  /** A run ended: `ok` when every check it was given has a result, else `cancelled` or why it stopped short. */
+  | { type: 'done'; ok: boolean; cancelled: boolean; error?: string }
+
+export interface GoalsEventEnvelope {
+  projectId: string
+  event: GoalsEvent
+}
+
+/**
+ * `window.api.goals` (the Goals experiment): read and save an app's
+ * `GOALS.md`, have Copilot draft it, and run its checks on a fresh copy of the
+ * app. Team apps can't run checks yet (`cannotRun`).
+ */
+export interface GoalsApi {
+  load: (projectId: string) => Promise<GoalsSnapshot>
+  /** Save the purpose and checks to `GOALS.md`, keeping whatever else it says. */
+  save: (projectId: string, purpose: string, checks: string[]) => Promise<GoalsSnapshot>
+  /**
+   * Run checks, streaming `phase`, `activity` and `result` events, then
+   * `done`. Rejects only when the run can't begin (one is already going, say);
+   * otherwise resolves with how it went and the goals and results after it.
+   */
+  run: (projectId: string, request: GoalsRunRequest) => Promise<GoalsRunEnd>
+  /** Stop a run. Resolves with whether one was running. */
+  cancel: (projectId: string) => Promise<boolean>
+  /**
+   * Have Copilot read the app and propose its purpose and checks, building on
+   * what's written so far. Nothing is saved.
+   */
+  draft: (
+    projectId: string,
+    purpose: string,
+    checks: string[],
+    choice?: AdvisorModelChoice
+  ) => Promise<GoalsProposal>
+  /** Stop drafting. Resolves with whether a draft was running. */
+  draftCancel: (projectId: string) => Promise<boolean>
+  onEvent: (cb: (envelope: GoalsEventEnvelope) => void) => () => void
+}
+
 /** Per-project chat configuration (model, reasoning effort and tiers). */
 export interface ChatOptions {
   /** Copilot model id (`--model`); 'auto' or undefined lets Copilot pick. */
@@ -3670,6 +3823,7 @@ export const IpcChannels = {
   procLog: 'proc:log',
   chatEvent: 'chat:event',
   advisorEvent: 'advisor:event',
+  goalsEvent: 'goals:event',
   helpEvent: 'help:event',
   designVariation: 'design:variation',
   previewNav: 'preview:nav',
@@ -4859,6 +5013,8 @@ export interface RayfinStudioApi {
   local: LocalBackendApi
   apps: InstalledAppsApi
   security: SecurityCheckApi
+  /** The Goals experiment; see {@link GoalsApi}. */
+  goals: GoalsApi
 }
 
 /* ------------------------------------------------------------------ *

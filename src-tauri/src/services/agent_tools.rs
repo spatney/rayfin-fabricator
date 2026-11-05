@@ -120,7 +120,7 @@ pub fn fabricator_tools(app: AppHandle, project_id: String, guidance: Guidance) 
 /* ----------------------------- shared helpers ----------------------------- */
 
 /// A failure tool result carrying a message the agent can act on.
-fn failure(message: impl Into<String>) -> ToolResult {
+pub(crate) fn failure(message: impl Into<String>) -> ToolResult {
   let message = message.into();
   // `ToolResultExpanded` is `#[non_exhaustive]` in the SDK; build it via the
   // `new(...).with_*` chain rather than a struct literal.
@@ -1188,7 +1188,7 @@ fn azure_advice(connectors: bool, functions: bool) -> Option<String> {
 }
 
 /// One line of output: its time (UTC), source, level and text.
-fn output_line(event: &LocalLogEvent) -> String {
+pub(crate) fn output_line(event: &LocalLogEvent) -> String {
   let time = event.time.get(11..19).filter(|_| event.time.contains('T')).unwrap_or("");
   format!("{time} {} {}: {}", event.source, event.level, quote(&event.line, MAX_OUTPUT_LINE)).trim_start().to_string()
 }
@@ -1283,7 +1283,7 @@ fn status_report(status: &LocalStatus, output: &[LocalLogEvent], notes: &[String
 /* ------------------------------- the call -------------------------------- */
 
 #[derive(Deserialize)]
-struct CallParams {
+pub(crate) struct CallParams {
   #[serde(default, alias = "route", alias = "kind")]
   target: Option<String>,
   #[serde(default, alias = "function", alias = "connector")]
@@ -1325,18 +1325,18 @@ impl Target {
 
 /// A checked call: where, with what, and as whom.
 #[derive(Clone, Debug)]
-struct CallRequest {
-  name: Option<String>,
-  path: String,
-  body: Value,
-  call_as: CallAs,
+pub(crate) struct CallRequest {
+  pub(crate) name: Option<String>,
+  pub(crate) path: String,
+  pub(crate) body: Value,
+  pub(crate) call_as: CallAs,
 }
 
 const GRAPHQL_BODY: &str = "Pass the GraphQL request as `body`: {\"query\": \"…\", \"variables\": {…}}.";
 const CONNECTOR_BODY: &str =
   "Pass the connector call as `body`, such as {\"operation\": \"executeQuery\", \"input\": {\"query\": \"EVALUATE …\"}} for a semantic model.";
 
-fn parse_call(params: CallParams) -> Result<CallRequest, String> {
+pub(crate) fn parse_call(params: CallParams) -> Result<CallRequest, String> {
   let target_text = params.target.as_deref().map(str::trim).unwrap_or_default();
   let target = Target::parse(target_text).ok_or_else(|| {
     let given = if target_text.is_empty() { String::new() } else { format!(", not {target_text:?}") };
@@ -1429,7 +1429,7 @@ fn request_body(target: Target, body: Option<Value>, query: Option<String>, vari
   }
 }
 
-fn who(call_as: &CallAs) -> String {
+pub(crate) fn who(call_as: &CallAs) -> String {
   match call_as {
     CallAs::Developer => "as developer".into(),
     CallAs::Anonymous => "as anonymous (signed out)".into(),
@@ -1437,8 +1437,9 @@ fn who(call_as: &CallAs) -> String {
   }
 }
 
-/// What a status means for the agent, when it isn't plain success.
-fn status_note(call_as: &CallAs, status: u16) -> Option<String> {
+/// What a status means for the agent, when it isn't plain success. `output`
+/// says where the backend's recent output is.
+fn status_note(call_as: &CallAs, status: u16, output: &str) -> Option<String> {
   let caller = match call_as {
     CallAs::Developer => "the developer".to_string(),
     CallAs::Anonymous => "a signed-out caller".to_string(),
@@ -1449,8 +1450,8 @@ fn status_note(call_as: &CallAs, status: u16) -> Option<String> {
     403 => format!("The backend refused the call (403): {caller} isn't allowed to do this."),
     404 => "Nothing answers there (404): check the name, and that the app declares it.".into(),
     501 => "Not available on this computer (501): this connector's type runs only on Microsoft Fabric.".into(),
-    503 => format!("Unavailable (503): the backend is busy, or the functions' build failed. See {LOCAL_STATUS_TOOL}."),
-    500..=599 => format!("The backend failed: see the answer, and the recent output in {LOCAL_STATUS_TOOL}."),
+    503 => format!("Unavailable (503): the backend is busy, or the functions' build failed. See {output}."),
+    500..=599 => format!("The backend failed: see the answer, and {output}."),
     _ => return None,
   })
 }
@@ -1471,6 +1472,22 @@ fn graphql_errors(answer: &Value) -> Option<String> {
 
 /// The call tool's answer: what was called, the status, and the body.
 fn call_report(request: &CallRequest, response: &AppResponse, notes: &[String]) -> String {
+  let arrow = format!(
+    "To read its values, run `npx rayfin connector invoke {} executeQuery --file <query>.json` with the same input in the file.",
+    request.name.as_deref().unwrap_or("<name>")
+  );
+  call_report_reading(request, response, notes, &format!("the recent output in {LOCAL_STATUS_TOOL}"), &arrow)
+}
+
+/// [`call_report`] for a backend whose recent output the agent finds in
+/// `output`. `arrow` says what to do about an answer only the app's SDK decodes.
+pub(crate) fn call_report_reading(
+  request: &CallRequest,
+  response: &AppResponse,
+  notes: &[String],
+  output: &str,
+  arrow: &str,
+) -> String {
   let mut out = String::new();
   for note in notes {
     out.push_str(note);
@@ -1480,7 +1497,7 @@ fn call_report(request: &CallRequest, response: &AppResponse, notes: &[String]) 
   let header = format!("POST {} {}: {} {reason}", request.path, who(&request.call_as), response.status);
   out.push_str(header.trim_end());
   out.push('\n');
-  if let Some(note) = status_note(&request.call_as, response.status) {
+  if let Some(note) = status_note(&request.call_as, response.status, output) {
     out.push_str(&note);
     out.push('\n');
   }
@@ -1493,11 +1510,7 @@ fn call_report(request: &CallRequest, response: &AppResponse, notes: &[String]) 
   let content_type = response.content_type.as_deref().unwrap_or_default().to_ascii_lowercase();
   let body = response.body.trim();
   if content_type.contains("arrow") {
-    out.push_str(&format!(
-      "The answer is an Apache Arrow stream, which only the app's SDK decodes: the query ran. To read its values, \
-       run `npx rayfin connector invoke {} executeQuery --file <query>.json` with the same input in the file.",
-      request.name.as_deref().unwrap_or("<name>")
-    ));
+    out.push_str(&format!("The answer is an Apache Arrow stream, which only the app's SDK decodes: the query ran. {arrow}"));
     return out;
   }
   if body.is_empty() {

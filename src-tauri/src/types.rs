@@ -810,6 +810,11 @@ pub struct ExperimentFlags {
   /// default). It gates exporting only: `.rayfin` files open either way.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub app_export: Option<bool>,
+  /// Goals: a project's Goals tab, where the user writes what the app is for
+  /// and the checks it must keep passing (`GOALS.md`), and Copilot runs them
+  /// against a fresh copy of the app before a publish. Opt-in (off by default).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub goals: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -3987,6 +3992,160 @@ pub struct AdvisorEventEnvelope {
   pub event: AdvisorEvent,
 }
 
+/* -------------------------------- goals -------------------------------- */
+
+/// How a goal check came out: `passed`, `failed` or `not-proven` (Copilot
+/// couldn't show it either way by calling the app).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum GoalStatus {
+  Passed,
+  Failed,
+  #[default]
+  NotProven,
+}
+
+/// One check in `GOALS.md`: something the app must keep doing, in plain words.
+/// `id` comes from the text, so a reworded check is a new check.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalCheck {
+  pub id: String,
+  pub text: String,
+}
+
+/// A check's last outcome on this computer (never kept in the project).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GoalResult {
+  pub check_id: String,
+  /// The check as it read when it ran.
+  pub check: String,
+  pub status: GoalStatus,
+  /// One or two plain sentences: what Copilot found.
+  pub summary: String,
+  /// The calls that show it, as Fabricator made them: who called, what they
+  /// asked and how the app answered.
+  pub calls: Vec<String>,
+  /// What Copilot saw in those answers, or what's missing, as short lines.
+  pub evidence: Vec<String>,
+  /// RFC3339.
+  pub ran_at: String,
+  /// A signature of the app's code it ran against (its backend and screens).
+  pub fingerprint: String,
+  /// The app's code changed since (set on load).
+  pub stale: bool,
+}
+
+/// The last Goals run: when, how long, on which model, and what it covered.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GoalsRunInfo {
+  pub ran_at: String,
+  pub duration_ms: u64,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub model: Option<String>,
+  /// Copilot's summary of the run.
+  pub summary: String,
+  /// The checks it ran.
+  pub check_ids: Vec<String>,
+  /// It ran every check.
+  pub all: bool,
+  /// It got through every check it was given.
+  pub complete: bool,
+}
+
+/// An app's goals: `GOALS.md` read, with each check's last result here.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalsSnapshot {
+  /// `GOALS.md` exists.
+  pub exists: bool,
+  /// What the app is for, and who for.
+  pub purpose: String,
+  pub checks: Vec<GoalCheck>,
+  /// Results of the checks as they read now.
+  pub results: Vec<GoalResult>,
+  pub last_run: Option<GoalsRunInfo>,
+  /// Every check passed, on the app's code as it is now.
+  pub all_passed: bool,
+  /// Why the checks can't run for this app, when they can't.
+  pub cannot_run: Option<String>,
+  /// A run is going for this app (set by `goals_load`).
+  pub running: bool,
+}
+
+/// Arguments of `goals_run`.
+#[derive(Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GoalsRunRequest {
+  /// The checks to run; all of them when absent.
+  pub check_ids: Option<Vec<String>>,
+  pub model: Option<String>,
+  pub effort: Option<String>,
+  pub auto_tier: Option<String>,
+  pub context_tier: Option<String>,
+}
+
+/// How a `goals_run` went (as its `done` event said), and the goals and
+/// results after it.
+#[derive(Serialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalsRunEnd {
+  pub ok: bool,
+  pub cancelled: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  pub snapshot: GoalsSnapshot,
+}
+
+/// Goals Copilot drafted from the app's code, for the user to edit and save.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GoalsProposal {
+  pub purpose: String,
+  pub checks: Vec<String>,
+}
+
+/// Streamed Goals events (main -> renderer), tagged by `type`.
+#[derive(Serialize, Clone)]
+#[serde(tag = "type")]
+pub enum GoalsEvent {
+  /// A run reached a step: `preparing` (copying the app), `starting`,
+  /// `seeding`, `checking` or `finishing` (removing the copy).
+  #[serde(rename = "phase")]
+  Phase {
+    phase: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detail: Option<String>,
+  },
+  /// A tool call a run made (sent on start and again when it ends).
+  #[serde(rename = "activity")]
+  Activity { tool: ChatToolCall },
+  /// A check's outcome, as Copilot reported it.
+  #[serde(rename = "result")]
+  Result { result: GoalResult },
+  /// A tool call a draft made.
+  #[serde(rename = "draftActivity")]
+  DraftActivity { tool: ChatToolCall },
+  /// A run ended: `ok` when every check it was given has a result, else
+  /// `cancelled`, or `error` saying why it stopped short.
+  #[serde(rename = "done")]
+  Done {
+    ok: bool,
+    cancelled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+  },
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalsEventEnvelope {
+  pub project_id: String,
+  pub event: GoalsEvent,
+}
+
 /* --------------------------- help assistant --------------------------- */
 
 /// A safe app operation the assistant offered, rendered as a button under its
@@ -4596,7 +4755,8 @@ pub struct LocalStartOptions {
 }
 
 /// How rayfin-local serves an app installed from a `.rayfin` file: its build,
-/// from the backend's origin, on a port that stays the same.
+/// from the backend's origin, on a port that stays the same. Goals runs serve
+/// only the backend of a copy of the app.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ServeMode {
   /// `--static`: build the app and serve it from the backend, without Vite.
@@ -4605,6 +4765,8 @@ pub struct ServeMode {
   pub reuse_build: bool,
   /// `--port`.
   pub port: Option<u16>,
+  /// `--no-frontend`: run only the backend.
+  pub no_frontend: bool,
 }
 
 /// The Rayfin SDK an app uses, and whether rayfin-local implements it.

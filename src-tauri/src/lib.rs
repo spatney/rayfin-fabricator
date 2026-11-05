@@ -161,6 +161,7 @@ pub fn run() {
     .manage(DevServers::default())
     .manage(services::local_backend::LocalBackends::default())
     .manage(services::apps::Apps::default())
+    .manage(commands::goals::GoalRunners::default())
     // The stills the preview leaves in its place under an HTML overlay.
     .register_uri_scheme_protocol(services::preview::STILL_SCHEME, services::preview::serve_still)
     .setup(|app| {
@@ -227,6 +228,7 @@ pub fn run() {
         services::new_project_cache::clean_up();
         services::apps::clean_up();
         commands::security::clean_up();
+        commands::goals::clean_up();
       });
 
       Ok(())
@@ -463,6 +465,13 @@ pub fn run() {
       commands::advisor::advisor_explain_cancel,
       commands::advisor::advisor_verify,
       commands::advisor::advisor_verify_cancel,
+      // goals
+      commands::goals::goals_load,
+      commands::goals::goals_save,
+      commands::goals::goals_run,
+      commands::goals::goals_cancel,
+      commands::goals::goals_draft,
+      commands::goals::goals_draft_cancel,
       // help assistant
       commands::help::help_ask,
       commands::help::help_cancel,
@@ -601,6 +610,7 @@ pub fn run() {
         services::dev_server::kill_all(app);
         services::local_backend::kill_all(app);
         services::apps::kill_all(app);
+        commands::goals::kill_all(app);
       }
     });
 }
