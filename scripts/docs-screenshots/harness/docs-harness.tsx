@@ -1707,14 +1707,7 @@ function ComposerPicker({
             </div>
             <div className="composer-actions">
               <div className="composer-left">
-                <AddMenu
-                  attaching={false}
-                  onImage={noop}
-                  onConnectData={noop}
-                  onReferenceFile={noop}
-                  onBrowseFiles={noop}
-                  onBrowseFolders={noop}
-                />
+                <AddMenu attaching={false} onImage={noop} onConnectData={noop} onBrowse={noop} />
                 <PluginsMenu
                   plugins={offeredPlugins({ workIq, mcpServers: Boolean(servers) })}
                   servers={servers}

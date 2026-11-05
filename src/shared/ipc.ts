@@ -3037,6 +3037,8 @@ export interface ChatMessage {
   advisor?: ChatAdvisorSummary
   /** The Fabric data a (user) message asked Copilot to connect, shown as chips in the transcript. */
   data?: ChatDataRef[]
+  /** Files and folders on this computer a (user) message gave Copilot to read, shown as chips. */
+  files?: ChatFileRef[]
   /** The report-migration page a (user) message asked Copilot to build, shown as a chip. */
   migration?: ChatMigrationRef
   /**
@@ -3052,6 +3054,12 @@ export interface ChatDataRef {
   name: string
   type: FabricDataItemType
   workspace: string
+}
+
+/** A file or folder on this computer a message gave Copilot to read. */
+export interface ChatFileRef {
+  path: string
+  dir: boolean
 }
 
 /** The report-migration turn a message started, as its chip shows it. */
@@ -4376,10 +4384,10 @@ export interface RayfinStudioApi {
     /** Cancel an in-flight suggestion generation (e.g. the user started typing). */
     cancelSuggest: (projectId: string) => Promise<boolean>
     /**
-     * Let the user pick files, or folders, on this computer with the system's
-     * file dialog, to reference in a message. Empty when the dialog is closed.
+     * Let the user pick files and folders on this computer, in one system
+     * dialog, to add to a message. Empty when the dialog is closed.
      */
-    pickPaths: (directory: boolean) => Promise<string[]>
+    pickPaths: () => Promise<string[]>
     /**
      * Which of `paths`, dropped on the composer or picked on this computer, are
      * folders. Paths that don't exist are left out.

@@ -19,6 +19,7 @@ import ChatPanel, { reduceChatMessage, type OutboundPrompt, type UIChatMessage }
 import { tryAgainPrompt } from './chat/prompts'
 import { invalidateCopilotModels } from '../copilotModels'
 import { setPendingData } from '../fabricData'
+import { setPendingFiles } from './chat/fileRefs'
 
 vi.mock('../monaco', () => ({}))
 vi.mock('@monaco-editor/react', () => ({
@@ -1511,9 +1512,10 @@ describe('ChatPanel files and folders from this computer', () => {
   }
   afterEach(() => {
     delete (document as unknown as { elementFromPoint?: unknown }).elementFromPoint
+    setPendingFiles('p1', [])
   })
 
-  it('references the files and folders dropped on the composer, and attaches images', async () => {
+  it('adds the files and folders dropped on the composer as chips, and attaches images', async () => {
     const { api, drag } = installComputer()
     const onAddAttachment = vi.fn()
     render(
@@ -1541,9 +1543,13 @@ describe('ChatPanel files and folders from this computer', () => {
     expect(api.chat.inspectPaths, 'dropped elsewhere').not.toHaveBeenCalled()
 
     drag({ type: 'drop', paths, point: { x: 10, y: 10 } })
-    await waitFor(() =>
-      expect(composer.value).toBe('Use @"C:\\Users\\me\\Design docs\\" @C:\\Users\\me\\brief.md ')
-    )
+    const tray = await screen.findByRole('list', { name: 'Files and folders to send' })
+    expect(
+      within(tray)
+        .getAllByRole('listitem')
+        .map((chip) => chip.title)
+    ).toEqual(['C:\\Users\\me\\Design docs', 'C:\\Users\\me\\brief.md'])
+    expect(composer.value, 'no @ references in the message').toBe('Use')
     await waitFor(() =>
       expect(onAddAttachment).toHaveBeenCalledWith({
         path: 'C:/tmp/shot.png',
@@ -1554,19 +1560,40 @@ describe('ChatPanel files and folders from this computer', () => {
     expect(screen.queryByText('Drop to attach')).toBeNull()
   })
 
-  it('references folders picked in the system’s file dialog at the caret', async () => {
+  it('sends files and folders picked in one system dialog as chips, and gives Copilot a reference to each', async () => {
     const { api } = installComputer(['C:\\Users\\me\\Team notes', 'C:/projects/p1/src/data'])
-    render(
-      <ChatPanel project={makeProject('p1')} messages={[]} onChange={vi.fn()} draft="Read  first" />
-    )
-    const composer = screen.getByPlaceholderText(PLACEHOLDER) as HTMLTextAreaElement
-    composer.setSelectionRange(5, 5)
+    function Harness(): JSX.Element {
+      const [messages, setMessages] = useState<UIChatMessage[]>([])
+      return (
+        <ChatPanel
+          project={makeProject('p1')}
+          messages={messages}
+          onChange={(update) => setMessages(update)}
+          draft="Read these first"
+        />
+      )
+    }
+    render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Add images, files or data' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Folder on this computer…' }))
-    await waitFor(() =>
-      expect(composer.value).toBe('Read @"C:\\Users\\me\\Team notes\\" @./src/data/ first')
-    )
-    expect(api.chat.pickPaths).toHaveBeenCalledWith(true)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Files and folders…' }))
+    const tray = await screen.findByRole('list', { name: 'Files and folders to send' })
+    expect(api.chat.pickPaths).toHaveBeenCalledWith()
+    expect(tray.textContent).toBe('Team notesdata')
+    const composer = screen.getByPlaceholderText(/Say what to do with these/) as HTMLTextAreaElement
+    expect(composer.value).toBe('Read these first')
+
+    await act(async () => {
+      fireEvent.keyDown(composer, { key: 'Enter' })
+    })
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+    const [, , prompt] = api.chat.send.mock.calls[0] as unknown as [string, string, string]
+    expect(prompt).toBe('Read these first\n\n@"C:\\Users\\me\\Team notes\\" @./src/data/')
+    // The transcript shows the message and its chips, not the references.
+    const sent = await screen.findByRole('list', { name: 'Files and folders' })
+    expect(sent.textContent).toBe('Team notesdata')
+    expect(screen.getByText('Read these first')).toBeTruthy()
+    expect(screen.queryByText(/@/)).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Files and folders to send' })).toBeNull()
   })
 })
 

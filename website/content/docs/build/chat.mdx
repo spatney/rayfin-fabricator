@@ -16,13 +16,12 @@ Chat is where you describe what you want Fabricator to build. The built-in GitHu
 Use `Shift+Enter` for a new line. If you type `@`, Fabricator opens **Reference a file** so you can point Copilot at a project file. To point it at a file or folder outside the project, type a path after `@`: `../` for the folder that holds the project, `~/` for your home folder, or a full path such as `C:\`. The list then shows that folder's contents. Use the arrow keys or the pointer to move through the list. Select a folder to look inside it, a file to reference it, or **This folder** to reference the folder itself. A path with spaces is put in quotes. The **+** button (**Add images, files or data**) opens a menu with:
 
 - **Image**. You can also paste an image, or drop one into the box.
-- **File**, which points Copilot at a project file, like typing `@`.
-- **Files on this computer…** and **Folder on this computer…**, which open your system's file dialog, File Explorer on Windows or Finder on macOS, so you can point Copilot at files or folders anywhere without typing their paths. Fabricator puts an `@` reference to each one you choose where your cursor is, and attaches images.
+- **Files and folders…**, which opens your system's file dialog, File Explorer on Windows or Finder on macOS, so you can give Copilot files and folders anywhere on your computer without typing their paths. On Windows, select files and choose **Add**, or choose **Add folder** to add the folders you selected, or the folder that's open when you haven't selected one. On macOS, select files and folders and choose **Add**. Each one you add waits in the box as a chip and goes with your next message, which shows the same chips. Select × on a chip to remove it. Images you choose are attached instead.
 - **Fabric data**, which lists the kinds of Fabric data your app can connect to: semantic models, warehouses, SQL databases and lakehouses. What you pick waits in the box as chips and goes with your next message. See [Connect Fabric data](/docs/build/data-model#connect-fabric-data).
 
-![The composer's + menu: Image, File, Files on this computer…, Folder on this computer…, and Fabric data open beside it, listing Semantic model, Warehouse, SQL database and Lakehouse, and Browse all Fabric data](/screenshots/add-menu.webp)
+![The composer's + menu: Image, Files and folders…, and Fabric data open beside it, listing Semantic model, Warehouse, SQL database and Lakehouse, and Browse all Fabric data](/screenshots/add-menu.webp)
 
-You can also drag files and folders from File Explorer or Finder onto the message box. Fabricator adds an `@` reference to each to the end of your message, with the full path of anything outside the project, so Copilot reads them. Images you drop are attached instead, like pasted ones.
+You can also drag files and folders from File Explorer or Finder onto the message box. Each one waits in the box as a chip, like those you add with **Files and folders…**, so Copilot reads them with your next message. Images you drop are attached instead, like pasted ones.
 
 ## Turn on plugins
 

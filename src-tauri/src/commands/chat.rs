@@ -1587,13 +1587,16 @@ pub async fn chat_export_plan(app: AppHandle, suggested_name: String, content: S
   Ok(Some(path.display().to_string()))
 }
 
-/// Let the user pick files, or folders, on this computer with the system's file
-/// dialog, to reference in a message: the composer puts an `@` reference to each
-/// in the message. Empty when the dialog is closed.
+/// Let the user pick files and folders on this computer, in one system dialog,
+/// to add to a message: the composer adds each as an attachment. Empty when the
+/// dialog is closed.
 #[tauri::command]
-pub async fn chat_pick_paths(app: AppHandle, directory: bool) -> Vec<String> {
-  let title = if directory { "Choose folders for Copilot to read" } else { "Choose files for Copilot to read" };
-  crate::commands::help::help_pick_paths(app, directory, Some(title.into())).await
+pub async fn chat_pick_paths(app: AppHandle) -> Vec<String> {
+  crate::services::path_picker::pick_files_and_folders(&app, "Choose files or folders for Copilot to read")
+    .await
+    .into_iter()
+    .map(|path| path.to_string_lossy().into_owned())
+    .collect()
 }
 
 /// Which of `paths`, dropped on the composer or picked on this computer, are

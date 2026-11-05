@@ -191,6 +191,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       design,
       advisor,
       data,
+      files,
       migration,
       prompt,
       fusion
@@ -221,6 +222,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         design,
         advisor,
         data,
+        files,
         migration,
         prompt,
         fusion

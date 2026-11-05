@@ -90,6 +90,8 @@ png = "0.18"
 [target.'cfg(windows)'.dependencies]
 tauri-plugin-single-instance = "2.5"
 webview2-com = "0.39"
+# The `#[implement]` COM macro (services/path_picker.rs) names `::windows_core` directly.
+windows-core = "0.62"
 windows = { version = "0.62", features = [
   "Wdk_System_Threading",
   "Win32_Foundation",
@@ -115,17 +117,29 @@ objc2 = "0.6"
 block2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = [
   "std",
+  "NSArray",
   "NSData",
   "NSDictionary",
   "NSDate",
+  "NSEnumerator",
   "NSRunLoop",
   "NSError",
+  "NSString",
+  "NSURL",
 ] }
+# NSOpenPanel and its parents: the dialog that adds files and folders to chat
+# (services/path_picker.rs). rfd, under tauri-plugin-dialog, enables the same features.
 objc2-app-kit = { version = "0.3", default-features = false, features = [
   "std",
+  "NSApplication",
   "NSImage",
   "NSImageRep",
   "NSBitmapImageRep",
+  "NSOpenPanel",
+  "NSPanel",
+  "NSResponder",
+  "NSSavePanel",
+  "NSWindow",
 ] }
 objc2-web-kit = { version = "0.3", default-features = false, features = [
   "std",

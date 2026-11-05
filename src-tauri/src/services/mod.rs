@@ -29,6 +29,7 @@ pub mod mcp;
 pub mod new_project_cache;
 pub mod npm_env;
 pub mod paths;
+pub mod path_picker;
 pub mod preview;
 pub mod project_layout;
 pub mod project_mutation;

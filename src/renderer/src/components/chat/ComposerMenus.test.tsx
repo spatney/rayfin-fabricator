@@ -10,9 +10,7 @@ function renderMenu(over: { imageNote?: string } = {}) {
   const handlers = {
     onImage: vi.fn(),
     onConnectData: vi.fn(),
-    onReferenceFile: vi.fn(),
-    onBrowseFiles: vi.fn(),
-    onBrowseFolders: vi.fn()
+    onBrowse: vi.fn()
   }
   render(<AddMenu attaching={false} imageNote={over.imageNote} {...handlers} />)
   const open = (): HTMLElement => {
@@ -30,13 +28,7 @@ describe('AddMenu', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((i) => i.textContent)
-    ).toEqual([
-      'ImageOr paste',
-      'File@',
-      'Files on this computer…',
-      'Folder on this computer…',
-      'Fabric data'
-    ])
+    ).toEqual(['ImageOr paste', 'Files and folders…', 'Fabric data'])
 
     fireEvent.click(within(menu).getByRole('menuitem', { name: /Fabric data/ }))
     const kinds = screen.getByRole('menu', { name: 'Fabric data' })
@@ -61,23 +53,17 @@ describe('AddMenu', () => {
     expect(onConnectData).toHaveBeenLastCalledWith()
   })
 
-  it('says why images can’t be added, references a file, and browses this computer', () => {
-    const { open, onImage, onReferenceFile, onBrowseFiles, onBrowseFolders } = renderMenu({
-      imageNote: 'o3-mini can’t read images'
-    })
+  it('says why images can’t be added, and browses this computer for files and folders in one dialog', () => {
+    const { open, onImage, onBrowse } = renderMenu({ imageNote: 'o3-mini can’t read images' })
     const menu = open()
     const image = within(menu).getByRole('menuitem', { name: /Image/ }) as HTMLButtonElement
     expect(image.disabled).toBe(true)
     expect(image.textContent).toContain('o3-mini can’t read images')
     fireEvent.click(image)
     expect(onImage).not.toHaveBeenCalled()
-    fireEvent.click(within(menu).getByRole('menuitem', { name: /^File\s*@$/ }))
-    expect(onReferenceFile).toHaveBeenCalledTimes(1)
-    fireEvent.click(within(open()).getByRole('menuitem', { name: 'Files on this computer…' }))
-    expect(onBrowseFiles).toHaveBeenCalledTimes(1)
-    fireEvent.click(within(open()).getByRole('menuitem', { name: 'Folder on this computer…' }))
-    expect(onBrowseFolders).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('menu'), 'each closes the menu').toBeNull()
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Files and folders…' }))
+    expect(onBrowse).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu'), 'it closes the menu').toBeNull()
   })
 })
 

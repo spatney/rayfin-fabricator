@@ -3021,6 +3021,11 @@ button.thinking-head:hover {
   color: var(--text);
 }
 
+/* A file or folder chip: nothing to open, only ×. */
+.data-chip-main--static {
+  cursor: default;
+}
+
 .data-chip-x svg {
   width: 11px;
   height: 11px;

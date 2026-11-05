@@ -13,6 +13,7 @@ import {
 import {
   type ChatAdvisorSummary,
   type ChatDataRef,
+  type ChatFileRef,
   type ChatMigrationRef,
   type ChatMode,
   type ChatPathInfo,
@@ -36,6 +37,8 @@ import {
   type DataSource
 } from '../fabricData'
 import { DataTray } from './chat/DataTray'
+import { FileTray } from './chat/FileTray'
+import { filesTurnPrompt, pendingFiles, setPendingFiles, withFiles } from './chat/fileRefs'
 import CopilotSignInNotice from './CopilotSignInNotice'
 import type { PendingShot } from './PreviewPane'
 import { splitMentions } from './MentionText'
@@ -70,7 +73,6 @@ import {
   isImagePath,
   isPathQuery,
   mentionText,
-  pathReference,
   rankEntries,
   rankFiles,
   splitPathQuery,
@@ -100,11 +102,13 @@ function rerunPrompt(user: UIChatMessage): string | null {
 }
 
 /** What a user message carries beyond its text: a Design or Advisor card, the
- *  Fabric data it added, the migration page it builds, and the prompt reruns re-send. */
+ *  Fabric data and the files it added, the migration page it builds, and the
+ *  prompt reruns re-send. */
 interface TurnExtra {
   design?: ChatDesignSummary
   advisor?: ChatAdvisorSummary
   data?: ChatDataRef[]
+  files?: ChatFileRef[]
   migration?: ChatMigrationRef
   storedPrompt?: string
 }
@@ -112,7 +116,16 @@ interface TurnExtra {
 /** A Design or Advisor message's card and prompt, carried to its rerun (without
  *  the captures — those were deleted once the original turn used them). */
 function rerunExtra(user: UIChatMessage): TurnExtra | undefined {
-  if (!user.prompt && !user.design && !user.advisor && !user.data && !user.migration) return undefined
+  if (
+    !user.prompt &&
+    !user.design &&
+    !user.advisor &&
+    !user.data &&
+    !user.files &&
+    !user.migration
+  ) {
+    return undefined
+  }
   return {
     design: user.design
       ? {
@@ -126,6 +139,7 @@ function rerunExtra(user: UIChatMessage): TurnExtra | undefined {
       : undefined,
     advisor: user.advisor,
     data: user.data,
+    files: user.files,
     migration: user.migration,
     storedPrompt: user.prompt
   }
@@ -361,7 +375,7 @@ export default function ChatPanel({
   const [jumpNew, setJumpNew] = useState(false)
   /** The composer box: where files and folders dragged from this computer drop. */
   const boxRef = useRef<HTMLDivElement>(null)
-  const dragOver = useFileDrop(boxRef, (paths) => void addPaths(paths, 'end'), !sending)
+  const dragOver = useFileDrop(boxRef, (paths) => void addPaths(paths), !sending)
   const [fileList, setFileList] = useState<MentionFile[] | null>(null)
   const knownFiles = useMemo(() => (fileList ? new Set(fileList.map((f) => f.path)) : undefined), [fileList])
   const [atOpen, setAtOpen] = useState(false)
@@ -394,6 +408,14 @@ export default function ChatPanel({
     setPendingData(project.id, next)
     setDataChipsState(next)
   }
+  /** Files and folders on this computer waiting to go out with the next message, shown as chips. */
+  const [fileChips, setFileChipsState] = useState<ChatFileRef[]>(() => pendingFiles(project.id))
+  const changeFileChips = (change: (files: ChatFileRef[]) => ChatFileRef[]): void =>
+    setFileChipsState((files) => {
+      const next = change(files)
+      setPendingFiles(project.id, next)
+      return next
+    })
 
   // Keep the caret in view inside the composer's single scrollport
   // (`.composer-input-sizer`). The textarea is sized to its full content height so
@@ -695,9 +717,9 @@ export default function ChatPanel({
   /**
    * Add files and folders from this computer, dropped on the composer or picked
    * in the system's file dialog: images are attached, like pasted ones, and the
-   * rest get an `@` reference Copilot reads, at the caret or after what's typed.
+   * rest wait as chips for the next message, which gives Copilot each to read.
    */
-  async function addPaths(paths: string[], where: 'caret' | 'end'): Promise<void> {
+  async function addPaths(paths: string[]): Promise<void> {
     if (paths.length === 0) return
     let found: ChatPathInfo[]
     try {
@@ -707,34 +729,20 @@ export default function ChatPanel({
       return
     }
     const images = onAddAttachment ? found.filter((f) => !f.dir && isImagePath(f.path)) : []
-    const refs = found
+    const files = found
       .filter((f) => !images.includes(f))
-      .map((f) => pathReference(f.path, project.path, f.dir))
-    if (refs.length > 0) insertReferences(refs, where)
+      .map((f) => ({ path: f.path, dir: f.dir }))
+    if (files.length > 0) changeFileChips((chips) => withFiles(chips, files))
     await attachImages(images.map((f) => () => window.api.screenshot.read(f.path)))
   }
 
-  /** Add files, or folders, picked in the system's file dialog (the "+" menu). */
-  async function browse(directory: boolean): Promise<void> {
+  /** Add files and folders picked in the system's file dialog (the "+" menu). */
+  async function browse(): Promise<void> {
     try {
-      await addPaths(await window.api.chat.pickPaths(directory), 'caret')
+      await addPaths(await window.api.chat.pickPaths())
     } catch (err) {
       console.error('Failed to pick files', err)
     }
-  }
-
-  /** Put `@` references in the message, at the caret or after what's typed, and type on after them. */
-  function insertReferences(refs: string[], where: 'caret' | 'end'): void {
-    const text = inputRef.current
-    const caret = taRef.current?.selectionStart ?? text.length
-    const at = where === 'caret' ? Math.min(caret, text.length) : text.length
-    const before = text.slice(0, at)
-    const after = text.slice(at)
-    const lead = before && !/\s$/.test(before) ? ' ' : ''
-    const insert = `${lead}${refs.join(' ')}${/^\s/.test(after) ? '' : ' '}`
-    setInput(before + insert + after)
-    setAtOpen(false)
-    pendingCaret.current = before.length + insert.length
   }
 
   // A deploy in progress pauses *submitting* a new turn (typing stays enabled) when
@@ -796,7 +804,9 @@ export default function ChatPanel({
       }
       setInput('')
       onAttachmentsConsumed?.()
-      await steer(text, shots)
+      const files = fileChips
+      if (files.length > 0) changeFileChips(() => [])
+      await steer(text, shots, files)
       return
     }
     // Pause a *new* turn while a deploy runs (steering a live turn above is still
@@ -808,15 +818,23 @@ export default function ChatPanel({
       await sendDesign(text, shots)
       return
     }
-    // Fabric data goes out with the message as chips; Copilot gets how to connect it.
-    if (dataChips.length > 0) {
+    // Fabric data and files go out with the message as chips: Copilot gets how to
+    // connect the data, and a reference to each file and folder, which it reads.
+    if (dataChips.length > 0 || fileChips.length > 0) {
       const sources = dataChips
-      const prompt = dataTurnPrompt(text, sources)
+      const files = fileChips
+      const prompt = filesTurnPrompt(
+        sources.length > 0 ? dataTurnPrompt(text, sources) : text,
+        files,
+        project.path
+      )
       setInput('')
       setDataChips([])
+      changeFileChips(() => [])
       onAttachmentsConsumed?.()
       await dispatch(text, prompt, shots, undefined, undefined, {
-        data: sources.map(toDataRef),
+        data: sources.length > 0 ? sources.map(toDataRef) : undefined,
+        files: files.length > 0 ? files : undefined,
         storedPrompt: prompt
       })
       return
@@ -860,8 +878,14 @@ export default function ChatPanel({
    * shows it inline in the live assistant feed, then asks the backend to deliver
    * it immediately. If the turn happened to finish first (`steered: false`), the
    * optimistic bubble is rolled back and the message is sent as a fresh turn.
+   * Copilot gets a reference to each of `files` too.
    */
-  async function steer(text: string, shots: PendingShot[]): Promise<void> {
+  async function steer(
+    text: string,
+    shots: PendingShot[],
+    files: ChatFileRef[] = []
+  ): Promise<void> {
+    const prompt = filesTurnPrompt(text, files, project.path)
     const liveTurnId = [...messages].reverse().find((m) => m.pending && m.turnId)?.turnId
     const thumbs = shots.length ? shots.map((s) => s.thumb) : undefined
     if (liveTurnId) {
@@ -875,7 +899,11 @@ export default function ChatPanel({
     }
     let steered = true
     try {
-      const res = await window.api.chat.steer(project.id, text, shots.map((s) => s.path))
+      const res = await window.api.chat.steer(
+        project.id,
+        prompt,
+        shots.map((s) => s.path)
+      )
       steered = !!res?.steered
     } catch (err) {
       console.error('Failed to steer', err)
@@ -888,7 +916,14 @@ export default function ChatPanel({
           )
         )
       }
-      await dispatch(text, text, shots)
+      await dispatch(
+        text,
+        prompt,
+        shots,
+        undefined,
+        undefined,
+        files.length > 0 ? { files, storedPrompt: prompt } : undefined
+      )
     }
   }
 
@@ -954,6 +989,7 @@ export default function ChatPanel({
       design: extra?.design,
       advisor: extra?.advisor,
       data: extra?.data,
+      files: extra?.files,
       migration: extra?.migration,
       prompt: extra?.storedPrompt
     }
@@ -1290,21 +1326,6 @@ export default function ChatPanel({
   function applySuggestion(text: string): void {
     setInput(text)
     taRef.current?.focus()
-  }
-
-  /** Insert an "@" at the caret and open the file picker (the "+" menu's "File"). */
-  function insertMention(): void {
-    const caret = taRef.current?.selectionStart ?? input.length
-    const before = input.slice(0, caret)
-    const lead = before && !/\s$/.test(before) ? ' ' : ''
-    setInput(`${before}${lead}@${input.slice(caret)}`)
-    pendingCaret.current = before.length + lead.length + 1
-    setAtStart(before.length + lead.length)
-    setAtQuery('')
-    setAtIdx(0)
-    setAtDismissed(false)
-    setAtOpen(true)
-    void ensureFiles()
   }
 
   // @-mentions: typing "@" (after whitespace/start) opens a fuzzy file picker;
@@ -1783,6 +1804,10 @@ export default function ChatPanel({
             onOpen={() => setConnect({})}
             onRemove={(id) => setDataChips(dataChips.filter((s) => s.item.id !== id))}
           />
+          <FileTray
+            files={fileChips}
+            onRemove={(path) => changeFileChips((files) => files.filter((f) => f.path !== path))}
+          />
           {((attachments?.length ?? 0) > 0 || attaching) && (
             <div className="chat-attachments">
               {(attachments ?? []).map((a) => (
@@ -1833,7 +1858,9 @@ export default function ChatPanel({
                   ? 'Add a note for these changes (optional) — or just press Enter to send them'
                   : dataChips.length > 0
                     ? 'Say what to build with this data, or just press Enter to connect it'
-                    : `Message Fabricator about ${project.name}…`
+                    : fileChips.length > 0
+                      ? 'Say what to do with these, or just press Enter to send them'
+                      : `Message Fabricator about ${project.name}…`
               }
               value={input}
               rows={1}
@@ -1851,9 +1878,7 @@ export default function ChatPanel({
                 imageNote={imageNote}
                 onImage={() => fileRef.current?.click()}
                 onConnectData={(kind) => setConnect({ kind })}
-                onReferenceFile={insertMention}
-                onBrowseFiles={() => void browse(false)}
-                onBrowseFolders={() => void browse(true)}
+                onBrowse={() => void browse()}
               />
               <PluginsMenu
                 plugins={offeredPlugins(experiments)}
@@ -1921,7 +1946,8 @@ export default function ChatPanel({
                       (!input.trim() &&
                         (attachments?.length ?? 0) === 0 &&
                         designItems.length === 0 &&
-                        dataChips.length === 0)
+                        dataChips.length === 0 &&
+                        fileChips.length === 0)
                     }
                     title={
                       submitBlocked || imagesBlocked

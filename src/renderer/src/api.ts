@@ -459,7 +459,7 @@ export const api: RayfinStudioApi = {
     quota: () => invoke('chat_quota'),
     suggest: (projectId: string) => invoke('chat_suggest', { projectId }),
     cancelSuggest: (projectId: string) => invoke('chat_suggest_cancel', { projectId }),
-    pickPaths: (directory: boolean) => invoke('chat_pick_paths', { directory }),
+    pickPaths: () => invoke('chat_pick_paths'),
     inspectPaths: (paths: string[]) => invoke('chat_inspect_paths', { paths })
   },
 

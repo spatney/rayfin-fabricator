@@ -3343,6 +3343,11 @@ pub struct ChatMessage {
   /// is dropped when the renderer persists history.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub data: Option<serde_json::Value>,
+  /// The files and folders on this computer a user message gave Copilot to read
+  /// (`ChatFileRef[]`), rendered as chips in the transcript. Opaque to Rust; must
+  /// round-trip or it is dropped when the renderer persists history.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub files: Option<serde_json::Value>,
   /// The report-migration page a user message asked Copilot to build
   /// (`ChatMigrationRef`), rendered as a chip in the transcript. Opaque to Rust;
   /// must round-trip or it is dropped when the renderer persists history.
@@ -4274,6 +4279,7 @@ mod tests {
       design: None,
       advisor: None,
       data: None,
+      files: None,
       migration: None,
       prompt: None,
       fusion: None,
@@ -4315,6 +4321,7 @@ mod tests {
       design: None,
       advisor: None,
       data: None,
+      files: None,
       migration: None,
       prompt: None,
       fusion: None,

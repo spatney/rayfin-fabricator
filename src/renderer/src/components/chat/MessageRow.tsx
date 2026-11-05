@@ -8,6 +8,7 @@ import { AgentStatus } from './AgentStatus'
 import { AgentQuestionBlock, AssistantBody } from './AssistantBody'
 import { CopyButton } from './CopyButton'
 import { SentData, SentMigration } from './DataTray'
+import { SentFiles } from './FileTray'
 import { formatClock, formatFullDate } from './format'
 import { TurnFooter } from './TurnFooter'
 import type { UIChatMessage } from './types'
@@ -45,6 +46,7 @@ function UserMessage({
           </div>
         ) : null}
         {m.data && m.data.length > 0 && <SentData data={m.data} />}
+        {m.files && m.files.length > 0 && <SentFiles files={m.files} />}
         {m.migration && <SentMigration migration={m.migration} />}
         {hasText && !m.advisor && (
           <div className="msg-text user-bubble">
