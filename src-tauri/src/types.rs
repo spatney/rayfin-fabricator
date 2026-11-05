@@ -4944,6 +4944,79 @@ pub struct LocalReloadResult {
   pub config: Option<LocalConfigChanged>,
 }
 
+/// Something wrong with the project's seed data (`rayfin/seed`), and where.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalSeedProblem {
+  /// From the project root, such as `rayfin/seed/data/Todo.csv`.
+  pub file: String,
+  /// A JSON array's item (from 1), or a CSV file's line; `None` for the whole file.
+  pub row: Option<u64>,
+  /// The field at fault.
+  pub field: Option<String>,
+  pub message: String,
+}
+
+/// An entity's rows in the seed data.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalSeedEntity {
+  pub name: String,
+  /// The file, from the project root (`GET /seed` only).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub file: Option<String>,
+  pub rows: u64,
+}
+
+/// A storage folder's files in the seed data.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalSeedFolder {
+  pub folder: String,
+  pub files: u64,
+  /// Their size together (`GET /seed` only).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub bytes: Option<u64>,
+}
+
+/// The project's seed data, checked without loading it.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalSeed {
+  /// `rayfin/seed` holds seed data.
+  pub exists: bool,
+  pub entities: Vec<LocalSeedEntity>,
+  pub storage: Vec<LocalSeedFolder>,
+  /// The user placeholders it uses, such as `$developer`.
+  pub users: Vec<String>,
+  pub problems: Vec<LocalSeedProblem>,
+}
+
+/// What loading the seed data did, or would do in a dry run: what it stored,
+/// or the problems that kept it from changing anything.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalSeedLoad {
+  /// It loaded (or would): no problems.
+  pub ok: bool,
+  pub dry_run: bool,
+  pub entities: Vec<LocalSeedEntity>,
+  pub storage: Vec<LocalSeedFolder>,
+  pub problems: Vec<LocalSeedProblem>,
+}
+
+/// What saving the local data as seed data wrote to `rayfin/seed`.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LocalSeedSaved {
+  pub entities: u64,
+  pub rows: u64,
+  pub files: u64,
+  /// The stored files left out, each as `<folder>/<path>: <why>`: their paths
+  /// can't be file paths everywhere, or loading would skip them.
+  pub skipped: Vec<String>,
+}
+
 /// Where a secret's local value comes from (never the value).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase", default)]

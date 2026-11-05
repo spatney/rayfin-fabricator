@@ -698,10 +698,11 @@
       "title": "Seed script writes to a sign-in-only entity",
       "summary": "Seed scripts only target entities that allow scripted writes",
       "why": "There is no supported way to script data into entities that require sign-in, so these seed scripts fail.",
-      "fix": "Create signed-in data through the running app. Scripts can seed only `@anonymous()` entities, which most Fabric tenants refuse when you publish.",
-      "check": "If the project has seed scripts (for example scripts/seed*.ts that use RayfinServerClient), flag writes to entities whose relevant action is only granted to signed-in users.",
+      "fix": "For data while you build, put the rows in `rayfin/seed` instead: Fabricator loads them into the app's local data, with `$developer` or `$user:<email>` standing for each row's owner. On Fabric, create signed-in data through the running app: scripts can seed only `@anonymous()` entities, which most Fabric tenants refuse when you publish.",
+      "check": "If the project has seed scripts (for example scripts/seed*.ts that use RayfinServerClient), flag writes to entities whose relevant action is only granted to signed-in users. Seed data in rayfin/seed (JSON and CSV files) isn't a seed script: Fabricator loads it on this computer whatever the permissions, so don't flag it.",
       "docs": [
-        { "title": "No supported path for authenticated entities", "url": "https://rayfin.ai/docs/data/seeding#no-supported-path-for-authenticated-entities" }
+        { "title": "No supported path for authenticated entities", "url": "https://rayfin.ai/docs/data/seeding#no-supported-path-for-authenticated-entities" },
+        { "title": "Seed data (rayfin-local)", "url": "https://github.com/spatney/rayfin-local/blob/main/docs/seed-data.md" }
       ]
     },
     {

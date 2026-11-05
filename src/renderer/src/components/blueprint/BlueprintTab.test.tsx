@@ -486,6 +486,13 @@ udf.func('posts', async () => fetch('https://oauth.reddit.com/r/all'), [])`
         entities: vi.fn(async () => [{ name: 'Expense', rows: 1 }]),
         users: vi.fn(async () => []),
         storage: vi.fn(async () => []),
+        seed: vi.fn(async () => ({
+          exists: false,
+          entities: [],
+          storage: [],
+          users: [],
+          problems: []
+        })),
         rows: vi.fn(async () => ({
           columns: [{ name: 'id', type: 'UUID', key: true }],
           rows: [{ id: 'e1' }],

@@ -212,6 +212,51 @@ async fn runs_a_project_answers_its_control_api_and_stops_it_by_closing_stdin() 
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn seed_data_is_checked_loaded_and_saved_to_the_project() {
+  let Some(h) = harness(fast()) else { return };
+  let dir = h.project("seeded", "ok");
+  h.backends.start("p", dir.clone(), LocalStartOptions::default()).await;
+  h.running("p").await;
+  let control = h.backends.control("p").unwrap();
+
+  let seed = control.seed().await.unwrap();
+  assert!(seed.exists);
+  assert_eq!((seed.entities[0].file.as_deref(), seed.storage[0].bytes), (Some("rayfin/seed/data/Note.json"), Some(4)));
+  let checked = control.load_seed(true).await.unwrap();
+  assert!(checked.ok && checked.dry_run);
+  assert_eq!(checked.entities[0].rows, 2);
+  // The seed data's problems are an answer, not an error.
+  std::fs::write(dir.join("seed-problems"), "").unwrap();
+  let refused = control.load_seed(false).await.unwrap();
+  assert!(!refused.ok && !refused.dry_run);
+  let problem = &refused.problems[0];
+  assert_eq!((problem.row, problem.field.as_deref()), (Some(2), Some("title")));
+  std::fs::remove_file(dir.join("seed-problems")).unwrap();
+  assert!(control.load_seed(false).await.unwrap().ok);
+
+  // Saving writes the export in place of the seed's rows and files, and keeps the rest.
+  let seed_dir = dir.join("rayfin").join("seed");
+  std::fs::create_dir_all(seed_dir.join("data")).unwrap();
+  std::fs::write(seed_dir.join("data").join("Old.csv"), "id\n1\n").unwrap();
+  std::fs::write(seed_dir.join("README.md"), "notes").unwrap();
+  let saved = seed::save(&control, &dir).await.unwrap();
+  assert_eq!((saved.entities, saved.rows, saved.files), (1, 1, 1));
+  assert_eq!(saved.skipped, ["avatars/CON.png: `CON.png` is a name Windows keeps for a device."]);
+  let read = |path: &[&str]| std::fs::read_to_string(path.iter().fold(seed_dir.clone(), |dir, name| dir.join(name))).unwrap();
+  let rows: serde_json::Value = serde_json::from_str(&read(&["data", "Note.json"])).unwrap();
+  assert_eq!(rows, serde_json::json!([{ "id": 1, "title": "a", "user_id": "$developer" }]));
+  assert!(read(&["data", "Note.json"]).ends_with("}\n]\n"), "pretty JSON, as people write it");
+  assert!(!seed_dir.join("data").join("Old.csv").exists(), "the old rows are replaced");
+  assert_eq!(read(&["storage", "avatars", "ana", "face.png"]), "png!");
+  let manifest: serde_json::Value = serde_json::from_str(&read(&["storage", "avatars.json"])).unwrap();
+  assert_eq!(manifest["ana/face.png"]["owner"], "$user:ana@example.com");
+  assert_eq!(read(&["README.md"]), "notes");
+  let names: Vec<String> = std::fs::read_dir(&seed_dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+  assert!(names.iter().all(|name| !name.starts_with(".saving")), "{names:?}");
+  h.backends.stop("p").await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_fatal_error_waits_for_the_user() {
   let Some(h) = harness(fast()) else { return };
   let dir = h.project("refused", "fatal");

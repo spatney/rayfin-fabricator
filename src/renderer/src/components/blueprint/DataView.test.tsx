@@ -6,6 +6,8 @@ import type {
   LocalFile,
   LocalReady,
   LocalRows,
+  LocalSeed,
+  LocalSeedLoad,
   LocalStatus,
   LocalStorageFolder,
   LocalUser,
@@ -104,8 +106,10 @@ let entities: LocalEntity[]
 let users: LocalUser[]
 let folders: LocalStorageFolder[]
 let stored: Record<string, LocalFile[]>
+let seed: LocalSeed
+let seedLoad: LocalSeedLoad
 let local: Record<string, Mock>
-let preview: { resetSiteData: Mock }
+let preview: { resetSiteData: Mock; reload: Mock }
 let record: Mock
 let emitState: (status: LocalStatus) => void
 
@@ -235,9 +239,26 @@ beforeEach(() => {
       forget(folder, (file) => file.path === path)
     }),
     clearFiles: vi.fn(async (_id: string, folder: string) => forget(folder, () => true)),
-    reload: vi.fn(async () => ({ schema: null, config: null }))
+    reload: vi.fn(async () => ({ schema: null, config: null })),
+    seed: vi.fn(async () => seed),
+    loadSeed: vi.fn(async () => seedLoad),
+    saveSeed: vi.fn(async () => ({ entities: 1, rows: 120, files: 2, skipped: [] }))
   }
-  preview = { resetSiteData: vi.fn(async () => true) }
+  seed = {
+    exists: true,
+    entities: [{ name: 'Expense', file: 'rayfin/seed/data/Expense.json', rows: 3 }],
+    storage: [{ folder: 'receipts', files: 1, bytes: 12 }],
+    users: ['$developer'],
+    problems: []
+  }
+  seedLoad = {
+    ok: true,
+    dryRun: false,
+    entities: [{ name: 'Expense', rows: 3 }],
+    storage: [{ folder: 'receipts', files: 1 }],
+    problems: []
+  }
+  preview = { resetSiteData: vi.fn(async () => true), reload: vi.fn(async () => undefined) }
   ;(window as unknown as { api: unknown }).api = { local, preview, diagnostics: { record } }
 })
 
@@ -400,6 +421,107 @@ describe('DataView', () => {
     )
     expect(await screen.findByText('3 entities · 0 rows')).toBeTruthy()
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ event: 'local.data_reset' }))
+  })
+
+  it('loads the seed data after saying what it replaces, and shows the app again with it', async () => {
+    renderView()
+    await screen.findByRole('table')
+    fireEvent.click(screen.getByRole('button', { name: 'Load seed data' }))
+    const dialog = screen.getByRole('dialog', { name: 'Load seed data?' })
+    expect(
+      within(dialog)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent)
+    ).toEqual(['3 rows in 1 entity', '1 stored file'])
+    expect(dialog.textContent).toContain('The app’s current rows and stored files are deleted.')
+    expect(dialog.textContent).toContain('The local users stay')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Load seed data' }))
+    expect(
+      (await screen.findByRole('status')).textContent
+    ).toContain('Loaded the seed data: 3 rows in 1 entity and 1 file.')
+    expect(local.loadSeed).toHaveBeenCalledWith('p1')
+    // Sessions stay valid: the page only loads again, with the new data.
+    expect(preview.reload).toHaveBeenCalledTimes(1)
+    expect(preview.resetSiteData).not.toHaveBeenCalled()
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ event: 'local.seed_loaded' }))
+  })
+
+  it('lists the seed data’s problems and hands them to Copilot to fix', async () => {
+    const problem = {
+      file: 'rayfin/seed/data/Expense.json',
+      row: 2,
+      field: 'amount',
+      message: '`amount` must be a number, not "lots".'
+    }
+    seedLoad = { ...seedLoad, ok: false, entities: [], storage: [], problems: [problem] }
+    const onSendToChat = vi.fn()
+    render(
+      <DataView
+        project={makeProject('p1')}
+        refreshKey={0}
+        dataModel={MODEL}
+        onSendToChat={onSendToChat}
+      />
+    )
+    await screen.findByRole('table')
+    fireEvent.click(screen.getByRole('button', { name: 'Load seed data' }))
+    const confirm = screen.getByRole('dialog', { name: 'Load seed data?' })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Load seed data' }))
+    const dialog = await screen.findByRole('dialog', { name: 'The seed data has 1 problem' })
+    expect(within(dialog).getByRole('listitem').textContent).toBe(
+      'rayfin/seed/data/Expense.json, row 2, `amount` `amount` must be a number, not "lots".'
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Fix with Copilot' }))
+    expect(onSendToChat).toHaveBeenCalledWith(
+      'Fix the seed data’s problems',
+      expect.stringContaining(
+        '- rayfin/seed/data/Expense.json, row 2, `amount`: `amount` must be a number, not "lots".'
+      )
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(preview.reload).not.toHaveBeenCalled()
+
+    // Problems the files have already show at once, without asking first.
+    seed = { ...seed, problems: [{ ...problem, message: 'Expense has no field `amout`.' }] }
+    const reads = local.seed.mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(local.seed.mock.calls.length).toBe(reads + 1))
+    await waitFor(() => expect(document.querySelector('.icon-spin')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Load seed data' }))
+    expect(
+      (await screen.findByRole('dialog', { name: 'The seed data has 1 problem' })).textContent
+    ).toContain('Expense has no field `amout`.')
+    expect(local.loadSeed).toHaveBeenCalledTimes(1)
+  })
+
+  it('saves the local data as seed data after saying where it goes', async () => {
+    renderView()
+    await screen.findByRole('table')
+    fireEvent.click(screen.getByRole('button', { name: 'Save as seed data' }))
+    const dialog = screen.getByRole('dialog', { name: 'Save local data as seed data?' })
+    expect(
+      within(dialog)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent)
+    ).toEqual([
+      '122 rows of 2 entities, in rayfin/seed/data',
+      '2 stored files, in rayfin/seed/storage'
+    ])
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save as seed data' }))
+    expect((await screen.findByRole('status')).textContent).toContain(
+      'Saved 120 rows in 1 entity and 2 files to rayfin/seed.'
+    )
+    expect(local.saveSeed).toHaveBeenCalledWith('p1')
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({ event: 'local.seed_saved' }))
+  })
+
+  it('has no seed data to load until the app has some', async () => {
+    seed = { ...seed, exists: false, entities: [], storage: [] }
+    renderView()
+    await screen.findByRole('table')
+    const load = screen.getByRole('button', { name: 'Load seed data' }) as HTMLButtonElement
+    expect(load.disabled).toBe(true)
+    expect(load.title).toContain('no seed data in rayfin/seed yet')
   })
 
   it('applies a data model change that waits for a decision once a reset leaves no data to lose', async () => {

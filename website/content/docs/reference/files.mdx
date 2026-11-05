@@ -45,7 +45,9 @@ Each app other than a team app runs on this computer with its own backend while 
 - The keys that sign the app's local sign-ins and stored-file links.
 - The values of its secrets on this computer.
 
-The folder has its own `.gitignore`, so git ignores it: it isn't in History, and it doesn't go to GitHub with the app. Copilot's chat can't read or change it. Its data starts empty and stays on this computer. Nothing is copied from your published app, and publishing doesn't copy it to Fabric.
+The folder has its own `.gitignore`, so git ignores it: it isn't in History, and it doesn't go to GitHub with the app. Copilot's chat can't read or change it. Its data starts empty unless you load the project's seed data, and stays on this computer. Nothing is copied from your published app, and publishing doesn't copy it to Fabric.
+
+A project can bring seed data for its local data in its `rayfin/seed` folder. Unlike `.rayfin-local`, that folder is part of the project's code: git tracks it, and it goes to GitHub with the app. See [Start with seed data](/docs/build/local-development#start-with-seed-data).
 
 To see or clear the data, use Blueprint's **Data explorer**; see [See your app's local data](/docs/build/data-model#see-your-apps-local-data). Moving a project folder to the trash takes its local data with it. Team apps run on their Fabric deployment, so their data lives in Fabric instead.
 

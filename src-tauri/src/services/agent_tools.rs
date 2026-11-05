@@ -111,7 +111,8 @@ pub fn fabricator_tools(app: AppHandle, project_id: String, guidance: Guidance) 
   ];
   if guidance == Guidance::Local {
     tools.push(local_status_tool(app.clone(), project_id.clone()));
-    tools.push(local_call_tool(app, project_id));
+    tools.push(local_call_tool(app.clone(), project_id.clone()));
+    tools.push(local_seed_tool(app, project_id));
   }
   tools
 }
@@ -320,6 +321,133 @@ fn render_semantic_model_result(r: &semantic_model::SemanticModelResult) -> Tool
 
 const LOCAL_STATUS_TOOL: &str = "fabricator_local_status";
 const LOCAL_CALL_TOOL: &str = "fabricator_local_call";
+const LOCAL_SEED_TOOL: &str = "fabricator_local_seed";
+
+fn local_seed_tool(app: AppHandle, project_id: String) -> Tool {
+  Tool::new(LOCAL_SEED_TOOL)
+    .with_description(
+      "Check or load this app's seed data: the rows and files in rayfin/seed that Fabricator loads \
+       into the app's local data (see the seed-data skill). Fabricator brings the backend up to date \
+       first, as fabricator_local_status does. `action` is `check` (the default) or `load`. `check` \
+       reads the seed files and runs their rows through the database without changing anything, then \
+       lists each problem with its file, row and field. `load` replaces the local data with the seed \
+       data, which Fabricator does only while the local data is empty, so nothing is lost; otherwise \
+       ask the user to load it from Fabricator's Data explorer. Returns, as JSON, what the seed data \
+       holds or loaded, and its problems.",
+    )
+    .with_parameters(json!({
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["check", "load"],
+          "description": "check (the default) changes nothing; load replaces the local data with the seed data, only while the local data is empty."
+        }
+      }
+    }))
+    .with_skip_permission(true)
+    .with_handler(Arc::new(LocalSeedTool { app, project_id }))
+}
+
+struct LocalSeedTool {
+  app: AppHandle,
+  project_id: String,
+}
+
+#[derive(Default, Deserialize)]
+struct SeedParams {
+  #[serde(default, alias = "mode")]
+  action: Option<String>,
+}
+
+#[async_trait]
+impl ToolHandler for LocalSeedTool {
+  async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+    let params: SeedParams = invocation.params().unwrap_or_default();
+    let load = match params.action.as_deref().map(|a| a.trim().to_ascii_lowercase()).as_deref() {
+      None | Some("" | "check") => false,
+      Some("load") => true,
+      Some(other) => return Ok(failure(format!("`action` is check or load, not {other:?}."))),
+    };
+    let dir = match local_dir(&self.project_id) {
+      Ok(dir) => dir,
+      Err(result) => return Ok(result),
+    };
+    let backends = local_backend::state(&self.app);
+    Ok(local_seed(&backends, &self.project_id, &dir, load, Waits::default()).await)
+  }
+}
+
+/// Check the seed data (a dry run of loading it), or load it into empty local data.
+async fn local_seed(backends: &LocalBackends, project_id: &str, dir: &Path, load: bool, waits: Waits) -> ToolResult {
+  let prepared = prepare(backends, project_id, dir, waits).await;
+  let control = match backends.control(project_id) {
+    Ok(control) => control,
+    Err(error) => {
+      return failure(format!(
+        "{}The app's local backend can't check seed data: {error} Call {LOCAL_STATUS_TOOL} to see why.",
+        prepared.notes.iter().map(|note| format!("{note} ")).collect::<String>()
+      ))
+    }
+  };
+  let seed = match control.seed().await {
+    Ok(seed) => seed,
+    Err(error) => return failure(format!("Reading the seed data failed: {error}")),
+  };
+  let mut report = Map::new();
+  if !prepared.notes.is_empty() {
+    report.insert("notes".into(), json!(prepared.notes));
+  }
+  if !seed.exists {
+    report.insert("exists".into(), json!(false));
+    report.insert("advice".into(), json!("There's no seed data in rayfin/seed. Follow the seed-data skill to add some."));
+    return ToolResult::Text(serde_json::to_string_pretty(&report).unwrap_or_default());
+  }
+  if load {
+    match local_data_empty(&control).await {
+      Ok(true) => {}
+      Ok(false) => {
+        report.insert("loaded".into(), json!(false));
+        report.insert(
+          "advice".into(),
+          json!(
+            "The local data isn't empty, so loading the seed data would replace it. Don't delete it: check the seed \
+             data, and tell the user to load it from Fabricator's Data explorer (Load seed data), which asks first."
+          ),
+        );
+        return ToolResult::Text(serde_json::to_string_pretty(&report).unwrap_or_default());
+      }
+      Err(error) => return failure(format!("Reading the local data failed: {error}")),
+    }
+  }
+  let result = match control.load_seed(!load).await {
+    Ok(result) => result,
+    Err(error) => return failure(format!("{} the seed data failed: {error}", if load { "Loading" } else { "Checking" })),
+  };
+  report.insert("action".into(), json!(if load { "load" } else { "check" }));
+  report.insert("ok".into(), json!(result.ok));
+  if result.ok {
+    report.insert(if load { "loaded" } else { "wouldLoad" }.into(), json!({ "entities": result.entities, "storage": result.storage }));
+    report.insert("users".into(), json!(seed.users));
+    if load {
+      report.insert("advice".into(), json!("Loaded. The preview shows the data once the app's page loads again."));
+    }
+  } else {
+    report.insert("problems".into(), json!(result.problems));
+    report.insert(
+      "advice".into(),
+      json!("Nothing was loaded. Fix each problem in the seed files (or the entity, if the seed data is right), then check again."),
+    );
+  }
+  ToolResult::Text(serde_json::to_string_pretty(&report).unwrap_or_default())
+}
+
+/// Whether the local data holds no rows and no stored files.
+async fn local_data_empty(control: &local_backend::ControlClient) -> Result<bool, crate::types::LocalCommandError> {
+  let entities = control.entities().await?;
+  let folders = control.storage().await.unwrap_or_default();
+  Ok(entities.iter().all(|e| e.rows == 0) && folders.iter().all(|f| f.files == 0))
+}
 
 fn local_status_tool(app: AppHandle, project_id: String) -> Tool {
   Tool::new(LOCAL_STATUS_TOOL)
@@ -1947,6 +2075,23 @@ mod tests {
     let missing = text_of(&local_call(&fake.backends, &id, &dir, &function, quick()).await);
     assert!(missing.starts_with("POST /functions/getBacklog/invoke as developer: 404 Not Found\n"), "{missing}");
     assert!(missing.contains("No such route."), "{missing}");
+  }
+
+  #[tokio::test(flavor = "multi_thread")]
+  async fn the_seed_tool_checks_the_seed_data_and_loads_it_only_into_empty_local_data() {
+    let Some(fake) = fake() else { return };
+    let (id, dir) = fake.project("ok");
+    let checked = json_of(&local_seed(&fake.backends, &id, &dir, false, quick()).await);
+    assert_eq!((checked["action"].as_str(), checked["ok"].as_bool()), (Some("check"), Some(true)), "{checked}");
+    assert_eq!(checked["wouldLoad"]["entities"][0]["rows"], 2, "{checked}");
+    // The stand-in's local data has rows, which loading would replace.
+    let refused = json_of(&local_seed(&fake.backends, &id, &dir, true, quick()).await);
+    assert_eq!(refused["loaded"], false, "{refused}");
+    assert!(refused["advice"].as_str().unwrap().contains("Data explorer"), "{refused}");
+    std::fs::write(dir.join("seed-problems"), "").unwrap();
+    let problems = json_of(&local_seed(&fake.backends, &id, &dir, false, quick()).await);
+    assert_eq!(problems["ok"], false, "{problems}");
+    assert_eq!(problems["problems"][0]["field"], "title", "{problems}");
   }
 
   #[tokio::test(flavor = "multi_thread")]

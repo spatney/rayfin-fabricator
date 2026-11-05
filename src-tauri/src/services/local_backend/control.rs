@@ -13,14 +13,16 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::types::{
-  LocalCommandError, LocalEntity, LocalFiles, LocalIdentity, LocalIdentityRequest, LocalReloadResult, LocalRows,
-  LocalStorageFolder, LocalUser,
+  LocalCommandError, LocalEntity, LocalFiles, LocalIdentity, LocalIdentityRequest, LocalReloadResult, LocalRows, LocalSeed,
+  LocalSeedLoad, LocalSeedProblem, LocalStorageFolder, LocalUser,
 };
 
 const CONTROL: [&str; 2] = [".rayfin-local", "control"];
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// Reloading rebuilds the model, the schema and the services.
 const RELOAD_TIMEOUT: Duration = Duration::from_secs(180);
+/// Loading seed data copies its files; exporting reads every row.
+const SEED_TIMEOUT: Duration = Duration::from_secs(180);
 /// The most rows the control API returns at once.
 pub const MAX_ROWS: u64 = 500;
 /// The most files the control API lists at once.
@@ -104,6 +106,55 @@ pub struct AppResponse {
   pub body: String,
 }
 
+/// The local data as seed data (`GET /seed/export`), for
+/// [`super::seed::save`] to write under `rayfin/seed`. Paths are relative to
+/// it, `/`-separated.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SeedExport {
+  pub data: Vec<ExportedRows>,
+  pub storage: Vec<ExportedFolder>,
+  /// Stored files left out, with why.
+  pub skipped: Vec<SkippedFile>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SkippedFile {
+  pub folder: String,
+  pub path: String,
+  pub message: String,
+}
+
+/// An entity's rows, to write as JSON to `file`.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ExportedRows {
+  pub entity: String,
+  pub file: String,
+  pub rows: Vec<Value>,
+}
+
+/// A storage folder's files, to write to `dir`, and what to write to
+/// `manifest_file` about them (`None`: nothing).
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ExportedFolder {
+  pub folder: String,
+  pub dir: String,
+  pub manifest_file: String,
+  pub manifest: Option<Value>,
+  pub files: Vec<ExportedFile>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ExportedFile {
+  /// Its path in the folder.
+  pub path: String,
+  pub size: u64,
+}
+
 /// A running backend's control API.
 #[derive(Clone, Debug)]
 pub struct ControlClient {
@@ -159,7 +210,7 @@ impl ControlClient {
 
   async fn json<T: DeserializeOwned>(request: reqwest::RequestBuilder) -> Result<T, LocalCommandError> {
     let (_, body) = Self::send(request).await?;
-    serde_json::from_str(&body).map_err(|e| error("bad-response", format!("The local backend sent an answer Fabricator couldn't read: {e}"), None))
+    serde_json::from_str(&body).map_err(unreadable)
   }
 
   pub async fn identity(&self) -> Result<LocalIdentity, LocalCommandError> {
@@ -291,6 +342,49 @@ impl ControlClient {
     Self::json(request).await
   }
 
+  /// The project's seed data (`rayfin/seed`), checked without loading it.
+  pub async fn seed(&self) -> Result<LocalSeed, LocalCommandError> {
+    Self::json(self.request(Method::GET, &["seed"])).await
+  }
+
+  /// Replace the local data with the project's seed data, or, in a dry run,
+  /// find what loading would refuse without changing anything. The seed
+  /// data's problems come back in the answer (`ok: false`), not as an error.
+  pub async fn load_seed(&self, dry_run: bool) -> Result<LocalSeedLoad, LocalCommandError> {
+    let request = self.request(Method::POST, &["seed"]).json(&json!({ "dryRun": dry_run })).timeout(SEED_TIMEOUT);
+    let response = request.send().await.map_err(transport)?;
+    let status = response.status();
+    let body = response.text().await.map_err(transport)?;
+    if status.is_success() {
+      let mut loaded: LocalSeedLoad = serde_json::from_str(&body).map_err(unreadable)?;
+      loaded.ok = true;
+      loaded.dry_run = dry_run;
+      return Ok(loaded);
+    }
+    #[derive(Deserialize)]
+    struct Refused {
+      error: Detail,
+    }
+    #[derive(Deserialize)]
+    struct Detail {
+      #[serde(default)]
+      code: String,
+      #[serde(default)]
+      problems: Vec<LocalSeedProblem>,
+    }
+    match serde_json::from_str::<Refused>(&body) {
+      Ok(Refused { error }) if error.code == "seed-invalid" => {
+        Ok(LocalSeedLoad { ok: false, dry_run, problems: error.problems, ..Default::default() })
+      }
+      _ => Err(api_error(status, &body)),
+    }
+  }
+
+  /// The local data as seed data.
+  pub async fn export_seed(&self) -> Result<SeedExport, LocalCommandError> {
+    Self::json(self.request(Method::GET, &["seed", "export"]).timeout(SEED_TIMEOUT)).await
+  }
+
   /// The app's publishable key, from `{apiUrl}/rayfin.config.json`.
   pub async fn publishable_key(&self) -> Result<String, LocalCommandError> {
     let url = self.base.join("/rayfin.config.json").map_err(|e| error("invalid", e.to_string(), None))?;
@@ -337,6 +431,10 @@ fn transport(e: reqwest::Error) -> LocalCommandError {
   } else {
     error("unreachable", "Fabricator couldn't reach the local backend. It may have stopped.", Some("Check its status, and start it again if it stopped."))
   }
+}
+
+fn unreadable(e: serde_json::Error) -> LocalCommandError {
+  error("bad-response", format!("The local backend sent an answer Fabricator couldn't read: {e}"), None)
 }
 
 /// `{"error":{"code","message","hint"}}`, else a message for the status.

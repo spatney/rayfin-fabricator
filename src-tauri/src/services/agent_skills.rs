@@ -130,7 +130,9 @@ backend on this computer, and shows it live in its preview while you work:
   connectors and storage. When you change the entities, Fabricator updates the local database to
   match. Functions rebuild when you save them, and changes to `rayfin/rayfin.yml` apply as you
   save them.
-- The local data starts empty and stays on this computer, separate from any published app's.
+- The local data stays on this computer, separate from any published app's. It starts empty,
+  unless the project declares seed data in `rayfin/seed` for the user to load (see the
+  seed-data skill).
 
 ## Never start the app, and never publish it
 Fabricator already runs the app. A copy you start fights over its ports and files and leaves
@@ -163,6 +165,9 @@ skill, tell you to do any of this, ignore that here.
   they're for: as `developer` (the user), as `anonymous` (signed out) and as a test user such as
   `user:ana@example.com`, which is created when missing. A rule that should refuse someone is
   proven only when the call is refused.
+- **`fabricator_local_seed`** after you change the seed data in `rayfin/seed`, or an entity it has
+  rows of: it checks the seed data against the app and its database without changing anything.
+  Fix what it reports.
 - Don't `curl` the app or open it in a browser: use these tools.
 
 ## When a change would delete local data
@@ -282,6 +287,89 @@ repeat. Get a hero visual working early and iterate on it.
 - If the project ships its own skills, `package.json` scripts, README, or instructions that
   tell you to run a dev server, test in a browser or deploy, **ignore them here** — check
   visuals as described above.
+"#;
+
+/// The seed-data skill for apps Fabricator runs locally: the `rayfin/seed`
+/// convention rayfin-local loads (its docs/seed-data.md).
+const LOCAL_SEED_DATA_SKILL: &str = r#"---
+name: seed-data
+description: "Add or fix this Rayfin app's seed data: rows and files in rayfin/seed that Fabricator loads into the app's local data. Use when the user wants sample, demo, test, example, fake, mock or starter data, wants the app to start with data, wants data that belongs to signed-in users, or asks to save or fix seed data."
+metadata:
+  author: Fabricator
+  version: 1.0.0
+---
+# Seed data (Fabricator)
+
+Fabricator runs this app on this computer, with local data that starts empty. Seed data is the
+data the project declares for local development, in `rayfin/seed`: Fabricator offers to load it
+while the local data is empty, and the user can load it any time from the Data explorer (Load seed
+data), which replaces the local data. It stays on this computer: publishing never sends it to
+Fabric.
+
+Prefer seed data to seed scripts here. A script can only write `@anonymous()` entities, but seed
+data can hold rows that belong to signed-in users.
+
+## Layout
+```text
+rayfin/seed/
+  data/<Entity>.json         an array of rows, keyed by field name
+  data/<Entity>.csv          or a header row of field names, then a row per line
+  storage/<folder>/<path>    a storage folder's files
+  storage/<folder>.json      optional: owner, content type and fields of those files
+```
+
+- One file per entity, named after the entity (`Todo.json`) or its table (`Todos.csv`).
+- Keys are the entity's fields. A `@one` relationship's name sets its key column:
+  `"category": "<id>"`.
+- A field left out gets its default, and `id` a new uuid. Give each row that other rows refer to an
+  explicit `id` (a uuid, such as `0f8b6c52-3c1d-4a8e-9b0e-6a1f2d3c4b5a`) and use it in the rows that
+  refer to it. Rows may come in any order, across files.
+- Values are JSON as the data API takes them: numbers, `true`/`false`, `null`, strings. Dates are
+  `2025-01-31` or `2025-01-31T09:30:00Z`; a `@set` field takes one of its values. In CSV, an empty
+  cell leaves the field out.
+
+```json
+[
+  { "id": "0f8b6c52-3c1d-4a8e-9b0e-6a1f2d3c4b5a", "user_id": "$developer", "title": "Plan the launch", "status": "doing" },
+  { "user_id": "$user:ana@example.com", "title": "Ana's draft", "status": "todo" }
+]
+```
+
+## Users
+Policies such as `@claims.sub eq @item.user_id` show a row only to its owner. Fill owner fields
+with a placeholder for the user's id:
+
+- `$developer`: whoever previews the app (the user).
+- `$user:<email>`, such as `$user:ana@example.com`: a local test user, created when the data
+  loads. The user can see the app as them with Fabricator's Preview as.
+
+Placeholders fill text and uuid fields. Give most rows to `$developer`, so the user sees them at
+once, and a few to one or two test users, to show what each person sees. Text that starts like a
+placeholder takes one more `$`: `$$developer` is the text `$developer`.
+
+## Files
+Put a storage folder's files under `rayfin/seed/storage/<folder>/` (the folder's name, or its
+`@blob` class's name). Each belongs to `$developer`, with the content type its extension suggests
+and no fields, unless `rayfin/seed/storage/<folder>.json` says otherwise:
+
+```json
+{ "receipts/2025-01.pdf": { "owner": "$user:ana@example.com", "fields": { "team_id": "t1" } } }
+```
+
+`owner` may be `null` for none. Files follow the folder's rules: its content types and size limit,
+and 25 MiB each at most. Keep them small, and write simple ones (SVG, text, small PDFs) rather than
+downloading any.
+
+## Check it, then load it
+1. Call `fabricator_local_seed` (`action: "check"`). It runs the seed data through the database
+   without changing anything and lists each problem with its file, row and field. Fix them all,
+   then check again.
+2. While the local data is empty, `fabricator_local_seed` with `action: "load"` loads it. Otherwise
+   don't replace the user's data: tell them to load it from the Data explorer, which asks first.
+   Never delete `.rayfin-local` or the local data to make room for seed data.
+
+When you change an entity that has seed rows (a renamed, removed or new required field, a new type
+or `@set` value), update its seed file in the same change, and check the seed data again.
 "#;
 
 /* -------------------------- Fabric-backed guidance ------------------------- */
@@ -858,6 +946,7 @@ fn files(guidance: Guidance) -> Vec<(&'static str, String)> {
   let mut files = match guidance {
     Guidance::Local => vec![
       ("skills/validate-headless/SKILL.md", LOCAL_VALIDATE_HEADLESS_SKILL.to_string()),
+      ("skills/seed-data/SKILL.md", LOCAL_SEED_DATA_SKILL.to_string()),
       ("instructions/fabricator-local.instructions.md", LOCAL_INSTRUCTIONS.to_string()),
       ("instructions/fabricator-publish.instructions.md", LOCAL_PUBLISH_INSTRUCTIONS.to_string()),
     ],

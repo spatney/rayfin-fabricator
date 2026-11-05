@@ -217,6 +217,7 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `team-overview`, `skills`, `secrets`, `blueprint`, `app-gallery` | harness | none |
 | `model-relations`, `model-access` | harness | `0,0,1440,770` |
 | `local-data` | harness | `0,0,1440,580` |
+| `seed-offer` | harness | `270,170,900,86` |
 | `setup`, `help` | harness, shorter window (picked by the script) | none |
 | `search` | harness, over the `workbench` screenshot | `225,90,990,546` |
 | `team-create` | harness | `405,100,630,700` |

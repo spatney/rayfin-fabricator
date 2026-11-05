@@ -17,7 +17,7 @@ Team apps work differently: the team pipeline publishes them, and their preview 
 When you open an app, Fabricator starts its local backend, rayfin-local, which comes with Fabricator. Setup lists it as **Local backend** with your tools, and checks that it runs. If Windows or your antivirus blocks it, see [Windows blocked rayfin-local](/docs/troubleshooting/preview#windows-blocked-rayfin-local). The local backend runs:
 
 - The app's own Vite dev server, which the preview shows. Copilot's edits show up as it saves them.
-- The app's data API, with the access rules of its entities, over a local database that starts empty.
+- The app's data API, with the access rules of its entities, over a local database that starts empty, or with the project's [seed data](/docs/build/local-development#start-with-seed-data).
 - Sign-in, with a local Fabric sign-in page. Apps created from Rayfin's Universal App template sign you in by themselves.
 - The app's functions. They build again when their code changes.
 - Connectors to Fabric data: semantic models, SQL databases, warehouses and lakehouses.
@@ -63,7 +63,26 @@ After each chat turn that changes your app, Fabricator saves a version in **Code
 
 ## See and clear local data
 
-Blueprint's **Data explorer** shows the rows of each entity, the files the app stored and the app's local users, as the local backend stores them. You can't edit rows or files there, but you can clear an entity's rows, delete stored files or a local user, or reset all of the app's local data. See [See your app's local data](/docs/build/data-model#see-your-apps-local-data).
+Blueprint's **Data explorer** shows the rows of each entity, the files the app stored and the app's local users, as the local backend stores them. You can't edit rows or files there, but you can clear an entity's rows, delete stored files or a local user, or reset all of the app's local data. It also loads the project's seed data, and saves the local data as seed data. See [See your app's local data](/docs/build/data-model#see-your-apps-local-data).
+
+## Start with seed data
+
+Seed data is data a project brings for its local data while you build: rows for its entities and files for its storage folders, in the project's `rayfin/seed` folder. It's part of the project's code, so it's in **History** and goes to GitHub with the app, but publishing doesn't send it to Fabric. Everyone who opens the project can start from the same data, including rows that belong to people who sign in.
+
+![The note above the sample app's preview on this computer: This app comes with seed data (24 rows and 5 files). Its local data is empty: load the seed data to start with it. Beside it, Load seed data and a button that dismisses the note.](/screenshots/seed-offer.webp)
+
+When an app's local data is empty and its project has seed data, a note above the preview offers it: "**This app comes with seed data** (24 rows and 5 files). Its local data is empty: load the seed data to start with it." Select **Load seed data** to load it, or dismiss the note. You can load the seed data any time from Blueprint's **Data explorer**, which replaces the local data. See [Load or save seed data](/docs/build/data-model#load-or-save-seed-data).
+
+There are two ways to make seed data:
+
+- **Save your local data.** Use the app in the preview until it has the data you want, then select **Save as seed data** in the **Data explorer**.
+- **Ask Copilot.** Copilot writes the seed files, checks them against the app, and loads them while the local data is empty.
+
+```prompt title="Add seed data"
+Add seed data for local development: four expense categories, and a dozen expenses across them from the last month. Make most of the expenses mine and three of them from a test user, ana@example.com, and add two small receipt files.
+```
+
+Seed data keeps who each row belongs to, so each row shows up for the right person. Rows that belong to the person who made the seed data load as yours, whoever loads them. Rows that belong to a test user such as `ana@example.com` load as that test user's, and loading adds the test user to the local users. For the folder's format, see [Seed data](/docs/reference/how-it-works#seed-data).
 
 ## Set secret values for this computer
 
@@ -96,9 +115,9 @@ Copilot sees the same refusal when it checks its work, and tells you what the ch
 
 ## How Copilot checks its work
 
-Copilot doesn't start the app, run a dev server or publish: Fabricator runs the app, and publishing is your choice. Copilot checks its work with static checks, such as type-checking and the build, and unit tests that run once. After it changes entities, functions, connectors or `rayfin/rayfin.yml`, it checks the local backend for problems, then calls the app's data API, functions and connectors as you, as a test user or signed out. That's how it shows that an access rule refuses the people it should.
+Copilot doesn't start the app, run a dev server or publish: Fabricator runs the app, and publishing is your choice. Copilot checks its work with static checks, such as type-checking and the build, and unit tests that run once. After it changes entities, functions, connectors or `rayfin/rayfin.yml`, it checks the local backend for problems, then calls the app's data API, functions and connectors as you, as a test user or signed out. That's how it shows that an access rule refuses the people it should. After it changes the seed data, it checks it against the app without changing your local data.
 
-These checks show in the work log as steps such as **Checked the local backend** and "Called the app's data API while signed out". See [Chat with Copilot](/docs/build/chat#how-copilot-checks-its-work).
+These checks show in the work log as steps such as **Checked the local backend**, "Called the app's data API while signed out" and **Checked the seed data**. See [Chat with Copilot](/docs/build/chat#how-copilot-checks-its-work).
 
 ## Publish your app
 

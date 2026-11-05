@@ -77,7 +77,7 @@ The backend that runs your app on this computer while you build it: its data, si
 
 ## Local data
 
-The data your app stores while it runs on this computer: its records, local users and stored files. It starts empty, stays in the project's `.rayfin-local` folder, and is separate from your published app's data. See [Files and folders](/docs/reference/files#your-apps-local-data).
+The data your app stores while it runs on this computer: its records, local users and stored files. It starts empty, or with the project's [seed data](/docs/reference/glossary#seed-data), stays in the project's `.rayfin-local` folder, and is separate from your published app's data. See [Files and folders](/docs/reference/files#your-apps-local-data).
 
 ## MCP server
 
@@ -134,6 +134,10 @@ A local Rayfin backend that Fabricator bundles to run your app on this computer.
 ## Secret
 
 A value such as an API key or password that your app's Rayfin functions read on the server. Your app keeps a value on this computer and, once it's published, a value with the published app. Neither value is shown again. See [Secrets](/docs/build/secrets).
+
+## Seed data
+
+Data a project brings for its [local data](/docs/reference/glossary#local-data): rows and files in its `rayfin/seed` folder, which anyone who opens the project can load. It's part of the project's code, so it goes to GitHub with the app, but publishing doesn't send it to Fabric. See [Start with seed data](/docs/build/local-development#start-with-seed-data).
 
 ## Semantic model
 

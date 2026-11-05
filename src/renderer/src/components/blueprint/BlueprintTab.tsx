@@ -317,7 +317,14 @@ export default function BlueprintTab({
   let body: JSX.Element
   if (active === 'local-data') {
     // Read from the local backend, so it doesn't wait for the project's files.
-    body = <DataView project={project} refreshKey={refreshKey} dataModel={loaded?.dataModel} />
+    body = (
+      <DataView
+        project={project}
+        refreshKey={refreshKey}
+        dataModel={loaded?.dataModel}
+        onSendToChat={onSendToChat}
+      />
+    )
   } else if (!loaded) {
     body = <div className="model-empty">Reading your app…</div>
   } else if (active === 'data') {

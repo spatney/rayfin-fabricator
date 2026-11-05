@@ -3,15 +3,18 @@
 //! secret values. The work is in [`crate::services::local_backend`]. Commands
 //! fail with a [`LocalCommandError`] (`{code, message, hint}`).
 
+use std::path::Path;
+
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
 use crate::services::journal::{self, Area, Level};
 use crate::services::local_backend::{self, error, project_dir, sign_in_flag, valid_sign_in, DEFAULT_LOG_LINES};
-use crate::services::telemetry;
+use crate::services::{exec, git, telemetry};
 use crate::types::{
   LocalCommandError, LocalEntity, LocalFiles, LocalIdentity, LocalIdentityRequest, LocalLogEvent, LocalReloadResult,
-  LocalRows, LocalSecret, LocalStartOptions, LocalStatus, LocalStorageFolder, LocalUser,
+  LocalRows, LocalSecret, LocalSeed, LocalSeedLoad, LocalSeedSaved, LocalStartOptions, LocalStatus, LocalStorageFolder,
+  LocalUser,
 };
 
 type LocalResult<T> = Result<T, LocalCommandError>;
@@ -210,6 +213,53 @@ pub async fn local_clear_files(app: AppHandle, project_id: String, folder: Strin
   local_backend::control(&app, &project_id)?.clear_files(&folder).await
 }
 
+/// The project's seed data (`rayfin/seed`), checked without loading it.
+#[tauri::command]
+pub async fn local_seed(app: AppHandle, project_id: String) -> LocalResult<LocalSeed> {
+  local_backend::control(&app, &project_id)?.seed().await
+}
+
+/// Replace the local data with the project's seed data: every entity's rows and
+/// every stored file (the local users stay). `dry_run` only finds what loading
+/// would refuse, changing nothing. The seed data's problems come back as
+/// `ok: false` with `problems`.
+#[tauri::command]
+pub async fn local_load_seed(app: AppHandle, project_id: String, dry_run: Option<bool>) -> LocalResult<LocalSeedLoad> {
+  local_backend::control(&app, &project_id)?.load_seed(dry_run.unwrap_or(false)).await
+}
+
+/// Save the local data as the project's seed data, in place of the rows and
+/// files in `rayfin/seed`, and save the change as a version in History.
+#[tauri::command]
+pub async fn local_save_seed(app: AppHandle, project_id: String) -> LocalResult<LocalSeedSaved> {
+  let dir = project_dir(&project_id)?;
+  let control = local_backend::control(&app, &project_id)?;
+  let saved = local_backend::seed::save(&control, &dir).await?;
+  commit_seed(&dir).await;
+  Ok(saved)
+}
+
+/// The History message of a save of the seed data.
+const SEED_COMMIT: &str = "Save the local data as seed data";
+
+/// Commit what a save changed in `rayfin/seed`, best-effort, as Fabricator does
+/// for the changes it makes outside chat turns. Only the folders a save
+/// replaces, and only those git sees changes in, so the commit's paths all
+/// match and nothing else is swept in.
+async fn commit_seed(dir: &Path) {
+  let mut changed = Vec::new();
+  for part in local_backend::seed::PARTS {
+    let path = format!("rayfin/seed/{part}");
+    let options = exec::RunOptions { cwd: Some(dir.to_path_buf()), timeout_ms: Some(30_000), ..Default::default() };
+    let status = git::run(&["status", "--porcelain", "--untracked-files=all", "--", &path], options).await;
+    if status.ok && !status.stdout.trim().is_empty() {
+      changed.push(path);
+    }
+  }
+  let paths: Vec<&str> = changed.iter().map(String::as_str).collect();
+  crate::commands::skills::commit_paths(&dir.to_string_lossy(), &paths, SEED_COMMIT).await;
+}
+
 /// The secrets and where their local values come from (never the values).
 #[tauri::command]
 pub async fn local_secrets(app: AppHandle, project_id: String) -> LocalResult<Vec<LocalSecret>> {
@@ -284,6 +334,40 @@ pub fn local_report_fallback(project_id: String, code: String, reason: String) -
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[tokio::test]
+  async fn saved_seed_data_is_committed_and_nothing_else() {
+    if which::which("git").is_err() {
+      return;
+    }
+    let dir = std::env::temp_dir().join(format!("fab-seed-git-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(dir.join("rayfin/seed/data")).unwrap();
+    let git = |args: &[&str]| {
+      let out = std::process::Command::new("git").args(args).current_dir(&dir).output().unwrap();
+      assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+      String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+    git(&["init", "-q", "-b", "main"]);
+    git(&["config", "core.autocrlf", "false"]);
+    git(&["config", "user.name", "Test"]);
+    git(&["config", "user.email", "test@example.invalid"]);
+    std::fs::write(dir.join("rayfin/seed/data/Old.json"), "[]\n").unwrap();
+    std::fs::write(dir.join("rayfin/seed/README.md"), "v1\n").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "First"]);
+
+    // What a save of rows without files does, next to unrelated unsaved edits.
+    std::fs::remove_file(dir.join("rayfin/seed/data/Old.json")).unwrap();
+    std::fs::write(dir.join("rayfin/seed/data/Note.json"), "[]\n").unwrap();
+    std::fs::write(dir.join("rayfin/seed/README.md"), "v2\n").unwrap();
+    commit_seed(&dir).await;
+
+    assert_eq!(git(&["log", "-1", "--pretty=%s"]), SEED_COMMIT);
+    let committed = git(&["show", "--name-status", "--no-renames", "--pretty=format:", "HEAD"]);
+    assert_eq!(committed, "A\trayfin/seed/data/Note.json\nD\trayfin/seed/data/Old.json");
+    assert_eq!(git(&["status", "--porcelain"]), "M rayfin/seed/README.md");
+    let _ = std::fs::remove_dir_all(&dir);
+  }
 
   #[test]
   fn only_known_sign_in_identities_start() {

@@ -4,7 +4,8 @@
 // config-restart, ignore-stdin or analysis-fails-once (its first run then reports
 // a data model change it couldn't analyze, as live reload does, and keeps
 // running). Each start is counted in `<project>/starts` and its arguments saved
-// in `<project>/args-<start>.json`.
+// in `<project>/args-<start>.json`. With `<project>/seed-problems`, loading the
+// seed data is refused.
 'use strict'
 const fs = require('fs')
 const http = require('http')
@@ -173,6 +174,25 @@ function serve() {
       if (route === 'POST /reload') {
         const schema = { v: 1, type: 'schema', result: body.forceSchema ? 'applied' : 'unchanged', changes: [], losses: [], message: null, live: true }
         return send(res, 200, { schema, config: null })
+      }
+      if (route === 'GET /seed') {
+        const entities = [{ name: 'Note', file: 'rayfin/seed/data/Note.json', rows: 2 }]
+        return send(res, 200, { exists: true, entities, storage: [{ folder: 'avatars', files: 1, bytes: 4 }], users: ['$developer'], problems: [] })
+      }
+      if (route === 'POST /seed') {
+        if (fs.existsSync(path.join(project, 'seed-problems'))) {
+          const problems = [{ file: 'rayfin/seed/data/Note.json', row: 2, field: 'title', message: '`title` is required.' }]
+          const error = { code: 'seed-invalid', message: 'The seed data has 1 problem; nothing was loaded.', hint: 'Fix the seed files.', problems }
+          return send(res, 422, { error })
+        }
+        return send(res, 200, { dryRun: Boolean(body.dryRun), entities: [{ name: 'Note', rows: 2 }], storage: [{ folder: 'avatars', files: 1 }], users: [] })
+      }
+      if (route === 'GET /seed/export') {
+        const data = [{ entity: 'Note', file: 'data/Note.json', rows: [{ id: 1, title: 'a', user_id: '$developer' }] }]
+        const manifest = { 'ana/face.png': { owner: '$user:ana@example.com' } }
+        const files = [{ path: 'ana/face.png', size: 4 }]
+        const skipped = [{ folder: 'avatars', path: 'CON.png', message: '`CON.png` is a name Windows keeps for a device.' }]
+        return send(res, 200, { data, storage: [{ folder: 'avatars', dir: 'storage/avatars', manifestFile: 'storage/avatars.json', manifest, files }], skipped })
       }
       return send(res, 404, { error: { code: 'not-found', message: `No ${route}.` } })
     })

@@ -297,6 +297,28 @@
   flex: none;
 }
 
+/* Puts a note away (the seed data offer). */
+.local-note-close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 3px;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.local-note-close:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.local-note-error {
+  color: var(--danger);
+}
+
 .local-note-dot {
   flex: none;
   width: 7px;

@@ -3301,6 +3301,7 @@ export default function Workbench({
                           onDiagnoseLocal={() => openHelp(LOCAL_QUESTION)}
                           onOpenSetup={onReviewSetup}
                           onReviewSchema={reviewSchema}
+                          onSendToChat={sendModelToChat}
                           localPreviewUrl={
                             devServers[active.id]?.status === 'running'
                               ? (devServers[active.id]?.url ?? null)

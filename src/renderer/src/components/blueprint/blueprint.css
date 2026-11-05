@@ -1410,6 +1410,33 @@
   min-width: 0;
 }
 
+/* What loading or saving the seed data did, until it's dismissed. */
+.bp-data-notice-text + .bp-data-notice-close {
+  margin-left: auto;
+}
+
+.bp-data-notice-close {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 2px;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.bp-data-notice-close:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.bp-data-notice .bp-data-notice-close .codicon[class*='codicon-'] {
+  margin-top: 0;
+  color: inherit;
+}
+
 .bp-data-notice-detail {
   display: block;
   max-height: 4.8em;
@@ -2074,6 +2101,18 @@
 
 .bp-data-confirm-list li + li {
   margin-top: 3px;
+}
+
+/* Why the seed data wasn't loaded: a long list scrolls in the dialog. */
+.bp-data-seed-problems {
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.bp-data-seed-problems code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
 }
 
 .bp-data-alert {

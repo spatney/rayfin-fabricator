@@ -9,7 +9,12 @@ import type {
 } from '@shared/ipc'
 import { usePreviewSuppressed } from '../overlay'
 import { measurePreviewBounds, watchPreviewPixelRatio } from '../previewBounds'
-import { localSdkWarning, refusedSchemaLosses, type LocalBackend } from '../localBackend'
+import {
+  backendStamp,
+  localSdkWarning,
+  refusedSchemaLosses,
+  type LocalBackend
+} from '../localBackend'
 import { DEVICES, deviceHostHeight, deviceHostWidth, type DeviceId } from '../design/devices'
 import { readFabricatorTheme } from '../design/hostTheme'
 import type { DesignSession, DesignSurface } from '../design/useDesignSession'
@@ -40,6 +45,7 @@ import LocalOutputButton from './local/LocalOutputButton'
 import LocalPublishedInfo from './local/LocalPublishedInfo'
 import PreviewAsMenu from './local/PreviewAsMenu'
 import LocalOutput from './local/LocalOutput'
+import SeedOffer from './local/SeedOffer'
 import {
   FallbackNote,
   SchemaWaitingNote,
@@ -186,6 +192,8 @@ interface Props {
   onOpenSetup?: () => void
   /** Show the dialog for a schema change that would delete local data. */
   onReviewSchema?: () => void
+  /** Hand a request to the chat, such as fixing the seed data's problems. */
+  onSendToChat?: (display: string, prompt: string) => void
   /** An app on its published backend (team apps, every app without Local
    *  development, and the fallback): the `localhost` URL of the project's Vite
    *  dev server, or null/undefined when none. When set (and no publish is
@@ -331,6 +339,7 @@ export default function PreviewPane({
   onDiagnoseLocal,
   onOpenSetup,
   onReviewSchema,
+  onSendToChat,
   localPreviewUrl,
   manualDeploy = false,
   localReload = 0,
@@ -615,14 +624,17 @@ export default function PreviewPane({
   // data model, rebuilt functions, a rebuilt backend). The workbench asks for
   // one reload then, hidden like a publish's reload, to show the app from a
   // fresh start. Only when the surface holds the local page.
-  useEffect(() => {
-    if (localReload === localReloadRef.current) return
-    localReloadRef.current = localReload
+  const reloadLocalPage = useCallback((): void => {
     if (isLocal && previewUrl && (loadedUrlRef.current ?? surfaceShownUrl) === previewUrl) {
       beginTransition(previewUrl)
       void window.api.preview.reload()
     }
-  }, [localReload, isLocal, previewUrl, beginTransition])
+  }, [isLocal, previewUrl, beginTransition])
+  useEffect(() => {
+    if (localReload === localReloadRef.current) return
+    localReloadRef.current = localReload
+    reloadLocalPage()
+  }, [localReload, reloadLocalPage])
 
   // A backend that stops (to restart, or on a problem) takes the local page's
   // dev server with it.
@@ -1438,6 +1450,14 @@ export default function PreviewPane({
         local?.state === 'running' &&
         refusedSchemaLosses(local.status) &&
         onReviewSchema && <SchemaWaitingNote onReview={onReviewSchema} />}
+      {localView && local?.state === 'running' && !team && (
+        <SeedOffer
+          projectId={project.id}
+          stamp={`${backendStamp(local.status)}|${turnRunning}`}
+          onLoaded={reloadLocalPage}
+          onSendToChat={onSendToChat}
+        />
+      )}
 
       {surfaceError && <div className="preview-error-banner" role="alert">{surfaceError}</div>}
 

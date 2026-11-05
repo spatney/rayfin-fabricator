@@ -726,6 +726,10 @@ export const api: RayfinStudioApi = {
       localInvoke('local_delete_file', { projectId, folder, path }),
     clearFiles: (projectId: string, folder: string) =>
       localInvoke('local_clear_files', { projectId, folder }),
+    seed: (projectId: string) => localInvoke('local_seed', { projectId }),
+    loadSeed: (projectId: string, dryRun?: boolean) =>
+      localInvoke('local_load_seed', { projectId, dryRun: dryRun ?? null }),
+    saveSeed: (projectId: string) => localInvoke('local_save_seed', { projectId }),
     secrets: (projectId: string) => localInvoke('local_secrets', { projectId }),
     setSecret: (projectId: string, name: string, value: string) =>
       localInvoke('local_set_secret', { projectId, name, value }),

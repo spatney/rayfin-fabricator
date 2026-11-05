@@ -109,9 +109,25 @@ rayfin-local is a local Rayfin backend: it answers the same requests as an app's
 
 - **One per project.** For each personal project, Fabricator runs `rayfin-local serve --json` in the project folder, with no console window. It reads the backend's events to show its state, keeps its output for **Help** and diagnostics, and restarts it after a crash, up to three times in two minutes. At most two projects run at once: the one you have open and the one before it. When Fabricator exits or installs an update, it stops them all.
 - **On this computer only.** The backend listens on `localhost`, by default on port 7171 and the app's Vite dev server on port 5173, and moves to the next free port when one is busy. Fabricator controls it through a control API that answers only on this computer, and only to a secret that changes every time the backend starts.
-- **Its own data.** The app's database, local users, stored files, signing keys and local secret values live in the project's `.rayfin-local/` folder. The folder has its own `.gitignore`, so git ignores it, and Copilot's chat can't read or change it. The data starts empty: nothing is copied from a published app, and publishing doesn't copy it to Fabric.
+- **Its own data.** The app's database, local users, stored files, signing keys and local secret values live in the project's `.rayfin-local/` folder. The folder has its own `.gitignore`, so git ignores it, and Copilot's chat can't read or change it. The data starts empty unless you load the project's [seed data](/docs/reference/how-it-works#seed-data): nothing is copied from a published app, and publishing doesn't copy it to Fabric.
 - **Signed in as you.** Apps built from Rayfin's templates sign in automatically, without a sign-in page. They sign in as your Microsoft Entra account from the Azure CLI or, when the Azure CLI isn't signed in, from the Rayfin CLI's sign-in for the Fabric account in use, which Fabricator passes in `RAYFIN_CONFIG_DIR`. With neither, they sign in as a local account, `developer@example.com`. **Preview as** in the preview's toolbar signs the app in as a test user, or signs it out, instead. "Sign in with Fabric" opens a local sign-in window instead of Fabric's, which signs in as the person **Preview as** shows without asking, and asks only when it's **Signed out**.
 - **Your Azure access.** Functions' tokens, and connectors to Power BI semantic models, Fabric SQL databases, warehouses and SQL analytics endpoints, run as you, with that same account, even for connections set to application access. A function or query can reach what your account can reach. Kusto connectors run only on Fabric.
+
+### Seed data
+
+A project's seed data is in its `rayfin/seed` folder, in the format rayfin-local reads. Its [seed data docs](https://github.com/spatney/rayfin-local/blob/main/docs/seed-data.md) have the details.
+
+| Path | What it holds |
+| --- | --- |
+| `rayfin/seed/data/<Entity>.json` | An array of rows, each an object of field values, for the entity it's named after. |
+| `rayfin/seed/data/<Entity>.csv` | Or a header row of field names, then a row per line. An empty cell leaves its field out. |
+| `rayfin/seed/storage/<folder>/` | The files of a storage folder, at their paths in it. |
+| `rayfin/seed/storage/<folder>.json` | Optional: each file's owner, content type and fields, by its path. |
+
+- A field left out gets its default, and `id` a new value. Rows refer to each other by `id`, in any order and across files.
+- `$developer` stands for the id of your own account, the one apps sign in as automatically, and `$user:<username>` for a local user's, created when the data loads. Files belong to `$developer` unless their `.json` file says otherwise. Text that starts like a placeholder takes one more `$`.
+- Loading checks every file and row first, then replaces every entity's rows and every stored file at once, so when something's wrong nothing changes. Local users stay. Fabricator loads the data through the backend's control API, and checks it the same way without changing anything when Copilot asks.
+- Saving reads the local data back in the same form, with user ids as placeholders. rayfin-local writes nothing outside `.rayfin-local`, so Fabricator writes the files, then commits `rayfin/seed/data` and `rayfin/seed/storage`.
 
 ## Installed apps
 

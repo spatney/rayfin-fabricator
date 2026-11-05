@@ -5193,6 +5193,65 @@ export interface LocalReloadResult {
   config: LocalConfigChanged | null
 }
 
+/** Something wrong with the project's seed data (`rayfin/seed`), and where. */
+export interface LocalSeedProblem {
+  /** From the project root, such as `rayfin/seed/data/Todo.csv`. */
+  file: string
+  /** A JSON array's item (from 1), or a CSV file's line; `null` for the whole file. */
+  row: number | null
+  /** The field at fault. */
+  field: string | null
+  message: string
+}
+
+/** An entity's rows in the seed data. */
+export interface LocalSeedEntity {
+  name: string
+  /** The file, from the project root (`seed` only). */
+  file?: string
+  rows: number
+}
+
+/** A storage folder's files in the seed data. */
+export interface LocalSeedFolder {
+  folder: string
+  files: number
+  /** Their size together (`seed` only). */
+  bytes?: number
+}
+
+/** The project's seed data (`rayfin/seed`), checked without loading it. */
+export interface LocalSeed {
+  /** `rayfin/seed` holds seed data. */
+  exists: boolean
+  entities: LocalSeedEntity[]
+  storage: LocalSeedFolder[]
+  /** The user placeholders it uses, such as `$developer`. */
+  users: string[]
+  problems: LocalSeedProblem[]
+}
+
+/**
+ * What loading the seed data did, or would do in a dry run: what it stored,
+ * or (`ok: false`) the problems that kept it from changing anything.
+ */
+export interface LocalSeedLoad {
+  ok: boolean
+  dryRun: boolean
+  entities: LocalSeedEntity[]
+  storage: LocalSeedFolder[]
+  problems: LocalSeedProblem[]
+}
+
+/** What saving the local data as seed data wrote to `rayfin/seed`. */
+export interface LocalSeedSaved {
+  entities: number
+  rows: number
+  files: number
+  /** Stored files left out, each as `<folder>/<path>: <why>`. */
+  skipped: string[]
+}
+
 /** Where a secret's local value comes from (never the value). */
 export interface LocalSecret {
   name: string
@@ -5268,6 +5327,16 @@ export interface LocalBackendApi {
   deleteFile: (projectId: string, folder: string, path: string) => Promise<void>
   /** Delete every file in a folder; resolves with how many. */
   clearFiles: (projectId: string, folder: string) => Promise<number>
+  /** The project's seed data (`rayfin/seed`), checked without loading it. */
+  seed: (projectId: string) => Promise<LocalSeed>
+  /**
+   * Replace the local data (every entity's rows and every stored file; the
+   * local users stay) with the project's seed data. `dryRun` only finds what
+   * loading would refuse. The seed data's problems resolve as `ok: false`.
+   */
+  loadSeed: (projectId: string, dryRun?: boolean) => Promise<LocalSeedLoad>
+  /** Save the local data as the project's seed data, in place of the rows and files in `rayfin/seed`. */
+  saveSeed: (projectId: string) => Promise<LocalSeedSaved>
   /** Works whether or not the backend runs. */
   secrets: (projectId: string) => Promise<LocalSecret[]>
   /** The value goes to rayfin-local through stdin; a running backend applies it by itself. */

@@ -47,6 +47,7 @@ describe('toolKind', () => {
       fabricator_console: 'console',
       fabricator_local_status: 'local-status',
       fabricator_local_call: 'local-call',
+      fabricator_local_seed: 'local-seed',
       // MCP tools are named after their server; these would otherwise read as project searches or web reads.
       'FabricIQ-ValueSearch': 'fabric-iq',
       'FabricIQ-ExecuteQuery': 'fabric-iq',
@@ -169,6 +170,14 @@ describe('describeStep', () => {
     ).toBe('Called the app')
     expect(phaseLabel('fabricator_local_status')).toBe('Checking the local backend')
     expect(phaseLabel('fabricator_local_call')).toBe('Calling the app')
+    // The seed tool's title says whether it checked or loaded the seed data.
+    expect(stepLabel(describeStep(tool('fabricator_local_seed', 'check'), ROOT))).toBe(
+      'Checked the seed data'
+    )
+    expect(
+      stepLabel(describeStep(tool('fabricator_local_seed', 'load', { state: 'running' }), ROOT))
+    ).toBe('Loading the seed data')
+    expect(phaseLabel('fabricator_local_seed')).toBe('Checking the seed data')
   })
 
   it('says which service an IQ lookup went to, and what it asked', () => {

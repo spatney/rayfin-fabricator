@@ -156,9 +156,9 @@ Add Project and Task entities. A project has many tasks. Tasks have a title, due
 
 ## See your app's local data
 
-Your app runs on this computer with its own data. The **Data explorer** shows that data as the app's local backend stores it. You can't edit rows or files there, but you can delete them: see [Clear or reset local data](/docs/build/data-model#clear-or-reset-local-data). For how the app runs on this computer, see [Develop on this computer](/docs/build/local-development).
+Your app runs on this computer with its own data. The **Data explorer** shows that data as the app's local backend stores it. You can't edit rows or files there, but you can delete them: see [Clear or reset local data](/docs/build/data-model#clear-or-reset-local-data). It also loads the project's seed data and saves the local data as seed data: see [Load or save seed data](/docs/build/data-model#load-or-save-seed-data). For how the app runs on this computer, see [Develop on this computer](/docs/build/local-development).
 
-![Blueprint's Data explorer with the sample app's local data: 4 entities · 24 rows and the running local backend in the header, the note that local data is separate from the published app's, the Expense entity's 12 rows with each column's name and type, the other entities and Local users with their counts, and Refresh, Reset local data and Clear rows.](/screenshots/local-data.webp)
+![Blueprint's Data explorer with the sample app's local data: 4 entities · 24 rows and the running local backend in the header, the note that local data is separate from the published app's, Refresh, Load seed data, Save as seed data and Reset local data, the Expense entity's 12 rows with each column's name and type and Clear rows, and the other entities, the Receipts storage folder and Local users with their counts.](/screenshots/local-data.webp)
 
 1. Open a project.
 2. Select **Blueprint** in the project tabs.
@@ -197,6 +197,17 @@ The **Data explorer** can delete local data. Each action asks you to confirm, an
 - **Reset local data**, in the toolbar, deletes every entity's rows, the local users and their sessions, and the files the app stored. If a data model change is waiting because it would delete data, it applies afterward.
 
 When the data model changes in a way that would delete local data, Fabricator asks you before it deletes anything. See [When a data model change would delete local data](/docs/build/local-development#when-a-data-model-change-would-delete-local-data).
+
+## Load or save seed data
+
+Seed data is data a project brings for its local data, in its `rayfin/seed` folder, so that everyone who opens the project can start from the same data. See [Start with seed data](/docs/build/local-development#start-with-seed-data).
+
+- **Load seed data**, in the toolbar, replaces the app's local data with the seed data. It asks first, with how many rows and stored files the seed data has, then deletes the app's current rows and stored files and loads the seed data. Your local users stay, and the test users the seed data names are added. A note then says what it loaded, such as "Loaded the seed data: 24 rows in 4 entities and 5 files.", and the preview loads the app again. Until the project has seed data, **Load seed data** is unavailable.
+- **Save as seed data**, in the toolbar, saves the app's local data to `rayfin/seed`, in place of the seed data there. Rows and files that are yours are saved as belonging to whoever loads the seed data, and a local user's stay that user's. Fabricator saves the change as a version in **Code → History**. A stored file whose name can't be a file's name on every computer, such as `CON.png` on Windows, isn't saved, and the note says so.
+
+If the seed data can't load, nothing changes. A dialog such as "The seed data has 2 problems" lists each problem with its file, row and field, for example a value of the wrong type, or a row that refers to one that isn't there. Select **Fix with Copilot** to ask Copilot to fix them in the chat.
+
+None of this touches your published app's data.
 
 ## View the Fabric data the app connects to
 

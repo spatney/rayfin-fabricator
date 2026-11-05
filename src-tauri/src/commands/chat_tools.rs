@@ -142,6 +142,11 @@ pub fn tool_title(tool_name: &str, args: Option<&Value>) -> String {
   if lower(tool_name) == "fabricator_local_call" {
     return local_call_title(args);
   }
+  // What the work log says it did: `load`, else `check`.
+  if lower(tool_name) == "fabricator_local_seed" {
+    let action = args.get("action").and_then(|v| v.as_str()).map(|a| a.trim().to_ascii_lowercase());
+    return if action.as_deref() == Some("load") { "load" } else { "check" }.to_string();
+  }
   let raw = TITLE_KEYS
     .iter()
     .find_map(|key| args.get(*key).and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty()))
@@ -369,6 +374,9 @@ mod tests {
     assert_eq!(title(json!({"target":"function"})), "a function as you");
     // The status takes no arguments, so its title stays the tool's name.
     assert_eq!(tool_title("fabricator_local_status", Some(&json!({}))), "fabricator_local_status");
+    // The seed tool's title is what it does.
+    assert_eq!(tool_title("fabricator_local_seed", Some(&json!({}))), "check");
+    assert_eq!(tool_title("fabricator_local_seed", Some(&json!({"action":" Load "}))), "load");
   }
 
   #[test]

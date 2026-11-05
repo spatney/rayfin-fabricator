@@ -154,6 +154,14 @@ export function ToolKindIcon({
           <path d="M7.5 11.5 10 14l-2.5 2.5" />
         </svg>
       )
+    case 'local-seed':
+      return (
+        <svg {...p}>
+          <ellipse cx="12" cy="6.5" rx="7" ry="2.5" />
+          <path d="M5 6.5v11c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-11" />
+          <path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" />
+        </svg>
+      )
     case 'work-iq':
       return (
         <svg {...p}>

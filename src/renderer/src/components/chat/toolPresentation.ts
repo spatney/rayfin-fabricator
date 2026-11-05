@@ -24,6 +24,7 @@ export type ToolKind =
   | 'model'
   | 'local-status'
   | 'local-call'
+  | 'local-seed'
   | 'fabric-iq'
   | 'work-iq'
   | 'mcp'
@@ -52,6 +53,7 @@ export function toolKind(name: string): ToolKind {
   if (n.startsWith('fabricator_')) {
     if (n.includes('local_status')) return 'local-status'
     if (n.includes('local_call')) return 'local-call'
+    if (n.includes('local_seed')) return 'local-seed'
     if (n.includes('screenshot')) return 'screenshot'
     if (n.includes('navigate')) return 'navigate'
     if (n.includes('deploy')) return 'deploy'
@@ -99,6 +101,7 @@ const VERBS: Record<ToolKind, [running: string, done: string]> = {
   model: ['Looking up a semantic model', 'Looked up a semantic model'],
   'local-status': ['Checking the local backend', 'Checked the local backend'],
   'local-call': ['Calling', 'Called'],
+  'local-seed': ['Checking the seed data', 'Checked the seed data'],
   'fabric-iq': ['Looking up in Fabric IQ', 'Looked up in Fabric IQ'],
   'work-iq': ['Looking up in Work IQ', 'Looked up in Work IQ'],
   mcp: ['Using', 'Used'],
@@ -144,6 +147,7 @@ const PHASES: Record<ToolKind, string> = {
   model: 'Looking up a semantic model',
   'local-status': 'Checking the local backend',
   'local-call': 'Calling the app',
+  'local-seed': 'Checking the seed data',
   'fabric-iq': 'Looking up Power BI data',
   'work-iq': 'Looking up Microsoft 365',
   mcp: 'Using an MCP server',
@@ -207,6 +211,10 @@ export function describeStep(tool: ChatToolCall, projectPath: string): StepView 
     if (io) [verbRunning, verbDone] = io
   }
   const title = tool.title?.trim() ?? ''
+  // The seed tool's title is what it did (see chat_tools.rs).
+  if (kind === 'local-seed' && title === 'load') {
+    ;[verbRunning, verbDone] = ['Loading the seed data', 'Loaded the seed data']
+  }
   const hasTitle = title !== '' && title.toLowerCase() !== tool.name.toLowerCase()
   const paths = tool.paths?.length ? tool.paths : hasTitle && looksLikePath(title) ? [title] : []
   let target: StepTarget | undefined
@@ -241,6 +249,7 @@ export function describeStep(tool: ChatToolCall, projectPath: string): StepView 
     case 'console':
     case 'scroll':
     case 'local-status':
+    case 'local-seed':
       break
     case 'other':
       target = { kind: 'text', text: hasTitle ? title : humanize(tool.name) }

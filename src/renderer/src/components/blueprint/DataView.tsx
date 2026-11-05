@@ -4,6 +4,8 @@ import type {
   LocalEntity,
   LocalFile,
   LocalRows,
+  LocalSeed,
+  LocalSeedProblem,
   LocalStorageFolder,
   LocalUser,
   StudioProject
@@ -25,6 +27,7 @@ import {
 import ConfirmModal from '../ConfirmModal'
 import { Codicon } from '../icons'
 import { describeProblem } from '../local/problems'
+import { seedFixPrompt, seedPlace } from '../local/seedData'
 import { Empty, Pager, Problem } from './dataParts'
 import {
   formatCell,
@@ -46,6 +49,8 @@ interface Props {
   refreshKey: number
   /** The app's data model, to name the entities whose rows refer to others. */
   dataModel?: DataModel
+  /** Hand a request to the Build chat, such as fixing the seed data's problems. */
+  onSendToChat?: (display: string, prompt: string, stage?: boolean) => void
 }
 
 type Selection =
@@ -59,6 +64,8 @@ interface Overview {
   /** The storage folders; `null` when they couldn't be read (see `storageError`). */
   storage: LocalStorageFolder[] | null
   storageError: LocalBackendError | null
+  /** The project's seed data; `null` when it couldn't be read. */
+  seed: LocalSeed | null
 }
 
 type Confirm =
@@ -67,6 +74,8 @@ type Confirm =
   | { kind: 'delete-user'; user: LocalUser }
   | { kind: 'clear-files'; folder: LocalStorageFolder; files: number }
   | { kind: 'delete-file'; folder: LocalStorageFolder; file: LocalFile }
+  | { kind: 'load-seed'; seed: LocalSeed }
+  | { kind: 'save-seed'; rows: number; entities: number; files: number }
 
 const STATE_DOT: Record<LocalBackendState, string> = {
   running: 'ok',
@@ -90,7 +99,12 @@ const SIGN_IN_LABEL: Record<string, string> = {
  * files, or every bit of local data. Team apps have no local backend, so they
  * only get a note.
  */
-export default function DataView({ project, refreshKey, dataModel }: Props): JSX.Element {
+export default function DataView({
+  project,
+  refreshKey,
+  dataModel,
+  onSendToChat
+}: Props): JSX.Element {
   const team = Boolean(project.team)
 
   useEffect(() => {
@@ -127,10 +141,17 @@ export default function DataView({ project, refreshKey, dataModel }: Props): JSX
       </div>
     )
   }
-  return <LocalData project={project} refreshKey={refreshKey} dataModel={dataModel} />
+  return (
+    <LocalData
+      project={project}
+      refreshKey={refreshKey}
+      dataModel={dataModel}
+      onSendToChat={onSendToChat}
+    />
+  )
 }
 
-function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
+function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX.Element {
   const projectId = project.id
   const backend = useLocalBackend(projectId)
   const { status, state } = backend
@@ -195,11 +216,13 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
       }),
       (reason: unknown) => ({ storage: null, storageError: toLocalBackendError(reason) })
     )
-    Promise.all([window.api.local.entities(projectId), users, storage])
+    // Seed data is optional: without it (or an older backend), there's nothing to load.
+    const seed = window.api.local.seed(projectId).catch(() => null)
+    Promise.all([window.api.local.entities(projectId), users, storage, seed])
       .then(
-        ([entities, people, files]) => {
+        ([entities, people, files, seedData]) => {
           if (!alive) return
-          setOverview({ entities, ...people, ...files })
+          setOverview({ entities, ...people, ...files, seed: seedData })
           setOverviewError(null)
         },
         (reason: unknown) => {
@@ -257,6 +280,13 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
     setConfirm(null)
     setConfirmError(null)
   }, [])
+  // What loading or saving the seed data did, until the next one, and why a load was refused.
+  const [seedNote, setSeedNote] = useState<string | null>(null)
+  const [seedProblems, setSeedProblems] = useState<LocalSeedProblem[] | null>(null)
+  useEffect(() => {
+    setSeedNote(null)
+    setSeedProblems(null)
+  }, [projectId])
 
   const perform = async (work: () => Promise<void>): Promise<void> => {
     setConfirmBusy(true)
@@ -313,12 +343,57 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
           { projectId }
         )
       })
+    } else if (confirm.kind === 'load-seed') {
+      void perform(async () => {
+        setSeedNote(null)
+        const loaded = await window.api.local.loadSeed(projectId)
+        if (!loaded.ok) {
+          setSeedProblems(loaded.problems)
+          reportEvent(
+            'preview',
+            'local.seed_refused',
+            `The seed data has ${plural(loaded.problems.length, 'problem')}, so it wasn’t loaded.`,
+            { projectId }
+          )
+          return
+        }
+        const rows = loaded.entities.reduce((sum, e) => sum + e.rows, 0)
+        const files = loaded.storage.reduce((sum, f) => sum + f.files, 0)
+        setSeedNote(`Loaded the seed data: ${seedAmount(rows, loaded.entities.length, files)}.`)
+        // The app's page shows the new data once it loads again.
+        void window.api.preview.reload().catch(() => undefined)
+        reportEvent(
+          'preview',
+          'local.seed_loaded',
+          `Loaded the seed data: ${seedAmount(rows, loaded.entities.length, files)}.`,
+          { projectId }
+        )
+      })
+    } else if (confirm.kind === 'save-seed') {
+      void perform(async () => {
+        setSeedNote(null)
+        const saved = await window.api.local.saveSeed(projectId)
+        const left =
+          saved.skipped.length > 0
+            ? ` ${plural(saved.skipped.length, 'stored file')} couldn’t be saved: ${saved.skipped.join('; ')}`
+            : ''
+        setSeedNote(
+          `Saved ${seedAmount(saved.rows, saved.entities, saved.files)} to rayfin/seed.${left}`
+        )
+        reportEvent(
+          'preview',
+          'local.seed_saved',
+          `Saved the local data as seed data: ${seedAmount(saved.rows, saved.entities, saved.files)}.`,
+          { projectId }
+        )
+      })
     } else {
       void perform(() => window.api.local.deleteUser(projectId, confirm.user.id))
     }
   }
 
   const totalRows = entities.reduce((sum, e) => sum + e.rows, 0)
+  const totalFiles = folders.reduce((sum, folder) => sum + folder.files, 0)
   const head = (
     <ViewHead
       title="Data explorer"
@@ -499,6 +574,43 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
         <button
           type="button"
           className="model-tool-btn"
+          onClick={() => {
+            const seed = overview?.seed
+            if (!seed) return
+            // Seed data its files already get wrong can't load: say why at once.
+            if (seed.problems.length > 0) setSeedProblems(seed.problems)
+            else setConfirm({ kind: 'load-seed', seed })
+          }}
+          disabled={!running || !overview?.seed?.exists}
+          title={
+            overview?.seed?.exists
+              ? 'Replace the local data with the seed data in rayfin/seed'
+              : 'This app has no seed data in rayfin/seed yet. Save the local data as seed data, or ask Copilot to add some.'
+          }
+        >
+          <Codicon name="database" />
+          Load seed data
+        </button>
+        <button
+          type="button"
+          className="model-tool-btn"
+          onClick={() =>
+            setConfirm({
+              kind: 'save-seed',
+              rows: totalRows,
+              entities: entities.filter((e) => e.rows > 0).length,
+              files: totalFiles
+            })
+          }
+          disabled={!running || !overview || (totalRows === 0 && totalFiles === 0)}
+          title="Save the local data to rayfin/seed, for anyone who opens the project to load"
+        >
+          <Codicon name="save" />
+          Save as seed data
+        </button>
+        <button
+          type="button"
+          className="model-tool-btn"
           onClick={() => setConfirm({ kind: 'reset' })}
           disabled={!running || !overview}
         >
@@ -506,6 +618,20 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
           Reset local data
         </button>
       </div>
+      {seedNote && (
+        <div className="bp-data-notice" role="status">
+          <Codicon name="check" />
+          <span className="bp-data-notice-text">{seedNote}</span>
+          <button
+            type="button"
+            className="bp-data-notice-close"
+            aria-label="Dismiss"
+            onClick={() => setSeedNote(null)}
+          >
+            <Codicon name="close" />
+          </button>
+        </div>
+      )}
       {fallback && (
         <div className="bp-data-notice" role="note">
           <Codicon name="info" />
@@ -542,7 +668,64 @@ function LocalData({ project, refreshKey, dataModel }: Props): JSX.Element {
           onCancel={closeConfirm}
         />
       )}
+      {seedProblems && (
+        <SeedProblemsDialog
+          problems={seedProblems}
+          onFix={
+            onSendToChat
+              ? () => {
+                  onSendToChat('Fix the seed data’s problems', seedFixPrompt(seedProblems))
+                  setSeedProblems(null)
+                }
+              : undefined
+          }
+          onClose={() => setSeedProblems(null)}
+        />
+      )}
     </div>
+  )
+}
+
+/** `12 rows in 3 entities and 2 files`, leaving out what there's none of. */
+function seedAmount(rows: number, entities: number, files: number): string {
+  const parts: string[] = []
+  if (rows > 0 || entities > 0) {
+    parts.push(`${plural(rows, 'row')} in ${plural(entities, 'entity', 'entities')}`)
+  }
+  if (files > 0) parts.push(plural(files, 'file'))
+  return parts.length > 0 ? parts.join(' and ') : 'no rows or files'
+}
+
+/** Why the seed data wasn't loaded, problem by problem. */
+function SeedProblemsDialog({
+  problems,
+  onFix,
+  onClose
+}: {
+  problems: LocalSeedProblem[]
+  onFix?: () => void
+  onClose: () => void
+}): JSX.Element {
+  return (
+    <ConfirmModal
+      title={`The seed data has ${plural(problems.length, 'problem')}`}
+      confirmLabel={onFix ? 'Fix with Copilot' : 'OK'}
+      cancelLabel="Close"
+      onConfirm={onFix ?? onClose}
+      onCancel={onClose}
+      message={
+        <>
+          <p>Nothing was loaded, so the local data is as it was. Fix these, then load it again:</p>
+          <ul className="bp-data-confirm-list bp-data-seed-problems">
+            {problems.map((problem, i) => (
+              <li key={i}>
+                <code>{seedPlace(problem)}</code> {problem.message}
+              </li>
+            ))}
+          </ul>
+        </>
+      }
+    />
   )
 }
 
@@ -980,6 +1163,52 @@ function ConfirmDialog({
         <p>{unaffected}</p>
       </>
     )
+  } else if (confirm.kind === 'load-seed') {
+    const rows = confirm.seed.entities.reduce((sum, e) => sum + e.rows, 0)
+    const files = confirm.seed.storage.reduce((sum, f) => sum + f.files, 0)
+    title = 'Load seed data?'
+    label = 'Load seed data'
+    busyLabel = 'Loading…'
+    message = (
+      <>
+        <p>This replaces the app’s local data on this computer with the seed data in rayfin/seed:</p>
+        <ul className="bp-data-confirm-list">
+          <li>
+            {confirm.seed.entities.length > 0
+              ? `${plural(rows, 'row')} in ${plural(confirm.seed.entities.length, 'entity', 'entities')}`
+              : 'No rows'}
+          </li>
+          {files > 0 && <li>{plural(files, 'stored file')}</li>}
+        </ul>
+        <p>
+          {storage
+            ? 'The app’s current rows and stored files are deleted.'
+            : 'The app’s current rows are deleted.'}{' '}
+          The local users stay, and the users the seed data names are added.
+        </p>
+        <p>{unaffected}</p>
+      </>
+    )
+  } else if (confirm.kind === 'save-seed') {
+    title = 'Save local data as seed data?'
+    label = 'Save as seed data'
+    busyLabel = 'Saving…'
+    message = (
+      <>
+        <p>This saves the app’s local data to rayfin/seed in the project, in place of the seed data there:</p>
+        <ul className="bp-data-confirm-list">
+          {confirm.rows > 0 && (
+            <li>{`${plural(confirm.rows, 'row')} of ${plural(confirm.entities, 'entity', 'entities')}, in rayfin/seed/data`}</li>
+          )}
+          {confirm.files > 0 && <li>{`${plural(confirm.files, 'stored file')}, in rayfin/seed/storage`}</li>}
+        </ul>
+        <p>
+          Anyone who opens the project can load it. User ids become <code>$developer</code> (you)
+          and <code>$user:&lt;username&gt;</code> (the local users). Fabricator saves the change as a
+          version in History.
+        </p>
+      </>
+    )
   } else {
     title = `Delete ${confirm.user.username}?`
     label = 'Delete user'
@@ -1033,7 +1262,7 @@ function ConfirmDialog({
       confirmLabel={label}
       busy={busy}
       busyLabel={busyLabel}
-      danger
+      danger={confirm.kind !== 'save-seed'}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />

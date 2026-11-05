@@ -26,7 +26,9 @@ import type {
   LocalLogEvent,
   LocalRows,
   LocalSecret,
+  LocalSeed,
   LocalStatus,
+  LocalStorageFolder,
   LocalUser,
   McpCheckResult,
   McpServer,
@@ -608,6 +610,29 @@ const localTables: Record<string, { columns: LocalColumn[]; rows: Record<string,
 }
 
 const localEntities: LocalEntity[] = LOCAL_ENTITIES.map((name) => ({ name, rows: localTables[name].rows.length }))
+
+/** The sample app's storage folder of receipt files. */
+const localFolders: LocalStorageFolder[] = [{ name: 'receipts', displayName: 'Receipts', files: 5, bytes: 1_843_200 }]
+
+/** Which screenshot this page renders. */
+const SHOT = new URLSearchParams(location.search).get('shot') ?? ''
+
+/**
+ * The seed data the sample app declares in `rayfin/seed`: the same rows and receipt files, the
+ * developer's and a test user's. `seed-offer` shows the preview offering it to empty local data.
+ */
+const localSeed: LocalSeed = {
+  exists: true,
+  entities: LOCAL_ENTITIES.map((name) => ({
+    name,
+    file: `rayfin/seed/data/${name}.json`,
+    rows: localTables[name].rows.length
+  })),
+  storage: [{ folder: 'receipts', files: 5, bytes: 1_843_200 }],
+  users: ['$developer', '$user:jordan.lee@example.com'],
+  problems: []
+}
+const seedOffer = SHOT === 'seed-offer'
 
 /** A page of an entity's sample rows, sorted the way the Data view asks. */
 function localRows(entity: string, offset: number, limit: number, orderBy?: string, desc?: boolean): LocalRows {
@@ -1312,9 +1337,11 @@ function installApi(): void {
       logs: (projectId: string, limit = 500) => Promise.resolve(localLogs(projectId).slice(-limit)),
       users: ok(localUsers),
       identity: ok(localIdentity),
-      entities: ok(localEntities),
+      entities: ok(seedOffer ? localEntities.map((entity) => ({ ...entity, rows: 0 })) : localEntities),
       rows: (_projectId: string, entity: string, offset: number, limit: number, orderBy?: string, desc?: boolean) =>
         Promise.resolve(localRows(entity, offset, limit, orderBy, desc)),
+      storage: ok(seedOffer ? localFolders.map((folder) => ({ ...folder, files: 0, bytes: 0 })) : localFolders),
+      seed: ok(localSeed),
       secrets: ok(localSecrets)
     },
     // What the app reads at launch: the sample settings.
@@ -2109,10 +2136,24 @@ function Blueprint({ view = 'architecture' }: { view?: 'architecture' | 'data' |
 
 /**
  * The preview of the sample app running on this computer, in a preview-sized frame: its
- * toolbar with Local and Published, and the running local backend, whose output is open.
+ * toolbar with Local and Published, and the running local backend, whose output is open unless
+ * `output` is false.
  */
-function LocalPreview(): JSX.Element {
+function LocalPreview({ output = true }: { output?: boolean }): JSX.Element {
   const local = useLocalBackend(expensesApp.id)
+  const pane = (
+    <PreviewPane
+      project={expensesApp}
+      deploy={undefined}
+      local={local}
+      view="local"
+      onViewChange={noop}
+      onDiagnoseLocal={noop}
+      onSendToChat={noop}
+      focused={false}
+      onToggleFocus={noop}
+    />
+  )
   return (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div
@@ -2126,18 +2167,7 @@ function LocalPreview(): JSX.Element {
           overflow: 'hidden'
         }}
       >
-        <Steps clicks={['.local-output-btn']}>
-          <PreviewPane
-            project={expensesApp}
-            deploy={undefined}
-            local={local}
-            view="local"
-            onViewChange={noop}
-            onDiagnoseLocal={noop}
-            focused={false}
-            onToggleFocus={noop}
-          />
-        </Steps>
+        {output ? <Steps clicks={['.local-output-btn']}>{pane}</Steps> : pane}
       </div>
     </div>
   )
@@ -2149,6 +2179,8 @@ function Shot({ id }: { id: string | null }): JSX.Element {
       return <Blueprint view="local-data" />
     case 'preview-local':
       return <LocalPreview />
+    case 'seed-offer':
+      return <LocalPreview output={false} />
     case 'team-overview': {
       const map = sampleMap()
       // Started a minute and a half ago, so the run's timer reads like a live deploy.
