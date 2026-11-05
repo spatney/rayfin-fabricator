@@ -27,6 +27,7 @@ export interface ActionHandlers {
   openAccounts(): void
   openApiKeys(): void
   openMcpServers(): void
+  openChatDefaults(): void
   refreshFabricAuth(): void
   signInToFabric(): void
   openSetup(): void
@@ -363,6 +364,14 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
       run: run.openMcpServers
     })
   }
+  add({
+    id: 'action:chat-defaults',
+    title: 'Manage chat defaults',
+    subtitle: 'The model and plugins a new project’s chat starts with',
+    keywords: ['default model', 'models', 'plugins', 'mcp', 'chat', 'new project'],
+    icon: { kind: 'codicon', name: 'comment-discussion' },
+    run: run.openChatDefaults
+  })
   if (ctx.fabricSignedIn && project) {
     add({
       id: 'action:fabric-refresh',

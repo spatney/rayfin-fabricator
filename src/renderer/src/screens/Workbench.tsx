@@ -43,6 +43,7 @@ import PortConflictModal, {
 } from '../components/PortConflictModal'
 import SettingsModal from '../components/SettingsModal'
 import McpServersModal from '../components/mcp/McpServersModal'
+import ChatDefaultsModal from '../components/ChatDefaultsModal'
 import { applyUiScale, UI_SCALES } from '../theme'
 import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../components/ChatPanel'
 import { segmentsForStorage, segmentsFromStorage } from '../components/chat/storage'
@@ -319,6 +320,8 @@ export default function Workbench({
   const authActionRef = useRef(false)
   const mountedRef = useRef(false)
   const [showSettings, setShowSettings] = useState(false)
+  /** Chat defaults, opened from Settings or Search. */
+  const [showChatDefaults, setShowChatDefaults] = useState(false)
   /** The full-screen Help assistant, opened from the status bar or Ctrl/Cmd+J. */
   const [showHelp, setShowHelp] = useState(false)
   /** What Help was opened to ask, such as why a deploy failed. */
@@ -2838,6 +2841,7 @@ export default function Workbench({
         openAccounts: () => setShowAccounts(true),
         openApiKeys: openModelProviders,
         openMcpServers: () => openMcpServers(),
+        openChatDefaults: () => setShowChatDefaults(true),
         refreshFabricAuth: () => {
           if (active) openAuthRefresh(active)
         },
@@ -3610,10 +3614,35 @@ export default function Workbench({
                 }
               : undefined
           }
+          onManageChatDefaults={() => {
+            setShowSettings(false)
+            setShowChatDefaults(true)
+          }}
           onReviewSetup={() => {
             setShowSettings(false)
             onReviewSetup()
           }}
+        />
+      )}
+
+      {showChatDefaults && settings && (
+        <ChatDefaultsModal
+          defaults={settings.chatDefaults}
+          experiments={settings.experiments}
+          onChange={(chatDefaults) => onSettingsChange({ chatDefaults })}
+          onClose={() => setShowChatDefaults(false)}
+          onManageKeys={() => {
+            setShowChatDefaults(false)
+            openModelProviders()
+          }}
+          onManageMcpServers={
+            mcpServersEnabled
+              ? () => {
+                  setShowChatDefaults(false)
+                  openMcpServers()
+                }
+              : undefined
+          }
         />
       )}
 

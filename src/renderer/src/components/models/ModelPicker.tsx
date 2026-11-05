@@ -74,6 +74,7 @@ export function ModelPicker({
   onChange,
   tiers = false,
   placement = 'up',
+  overDialog = false,
   onManageKeys,
   autoHint,
   label = 'Model'
@@ -85,6 +86,8 @@ export function ModelPicker({
   tiers?: boolean
   /** Open above the trigger (the composer) or below it (a toolbar). */
   placement?: 'up' | 'down'
+  /** In a dialog: the menu opens over it. */
+  overDialog?: boolean
   /** Open Accounts at Model providers; shown while Your own API keys is on. */
   onManageKeys?: () => void
   /** What Auto does here, when it isn't Copilot choosing per request. */
@@ -623,7 +626,7 @@ export function ModelPicker({
         createPortal(
           <div
             ref={popRef}
-            className={`mp-pop mp-pop--${placement} mp-pop--${layout.side}`}
+            className={`mp-pop mp-pop--${placement} mp-pop--${layout.side}${overDialog ? ' mp-pop--over-dialog' : ''}`}
             style={layout.style}
           >
             <div

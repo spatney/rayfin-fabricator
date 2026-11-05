@@ -1677,6 +1677,27 @@ export interface AppSettings {
    * of their environment variables or headers.
    */
   mcpServers?: McpServer[]
+  /**
+   * What a new project's chat starts with (Settings → Chat defaults). Each
+   * project's chat keeps its own choice after that.
+   */
+  chatDefaults?: ChatDefaults
+}
+
+/** The model and plugins a new project's chat starts with. */
+export interface ChatDefaults {
+  /** The model's id; absent is Auto. */
+  model?: string
+  effort?: ReasoningEffort
+  /** With Auto, what it optimizes for. */
+  autoTier?: string
+  contextTier?: ContextTier
+  /**
+   * The plugins on ({@link ChatPluginId}s, including `mcp:<id>`). A new project
+   * gets only the ones chat offers it: Work IQ and MCP servers while their
+   * experiments are on.
+   */
+  plugins?: string[]
 }
 
 /** Saved state of Your own API keys, by provider id. */

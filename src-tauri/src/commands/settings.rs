@@ -1,9 +1,9 @@
-//! Settings commands: get + patch (theme, experiment flags).
+//! Settings commands: get + patch (theme, experiment flags, chat defaults).
 
 use serde::Deserialize;
 
 use crate::services::store;
-use crate::types::{AppSettings, ExperimentFlags};
+use crate::types::{AppSettings, ChatDefaults, ExperimentFlags};
 
 /// Off the main thread, like every read the app makes while it starts.
 #[tauri::command(async)]
@@ -24,6 +24,9 @@ pub struct SettingsPatch {
   full_diagnostics: Option<bool>,
   #[serde(default)]
   deploy_mode: Option<String>,
+  /// Replaces the chat defaults as a whole.
+  #[serde(default)]
+  chat_defaults: Option<ChatDefaults>,
 }
 
 #[tauri::command]
@@ -33,13 +36,16 @@ pub fn settings_set(patch: SettingsPatch) -> AppSettings {
   let work_iq_changed = patch.experiments.as_ref().is_some_and(|e| e.work_iq.is_some());
   // So does the MCP servers experiment, for the user's servers.
   let mcp_changed = patch.experiments.as_ref().is_some_and(|e| e.mcp_servers.is_some());
-  let settings = store::set_settings(
+  let mut settings = store::set_settings(
     patch.theme,
     patch.ui_scale,
     patch.experiments,
     patch.full_diagnostics,
     patch.deploy_mode,
   );
+  if let Some(defaults) = patch.chat_defaults {
+    settings = store::set_chat_defaults(crate::commands::chat::chat_defaults(defaults, &settings.mcp_servers));
+  }
   if work_iq_changed {
     use crate::services::iq::{self, Iq, IqConfig};
     iq::toggled(Iq::Work, IqConfig::in_use(&store::get_state().projects, &settings));

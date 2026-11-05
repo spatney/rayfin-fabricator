@@ -53,6 +53,11 @@
   gap: 6px;
 }
 
+/* A picker in a dialog opens over it (dialogs sit at 50). */
+.mp-pop--over-dialog {
+  z-index: 60;
+}
+
 .mp-pop--up {
   align-items: flex-end;
 }

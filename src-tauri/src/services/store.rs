@@ -11,8 +11,8 @@ use serde_json::Value;
 
 use super::paths;
 use crate::types::{
-  AppSettings, ByokProviderSettings, ByokSettings, ExperimentFlags, McpServerEntry, ProjectsState, StudioProject,
-  TeamWorkspace,
+  AppSettings, ByokProviderSettings, ByokSettings, ChatDefaults, ExperimentFlags, McpServerEntry, ProjectsState,
+  StudioProject, TeamWorkspace,
 };
 
 struct Cache {
@@ -54,6 +54,7 @@ fn default_settings() -> AppSettings {
     deploy_mode: None,
     byok: None,
     mcp_servers: Vec::new(),
+    chat_defaults: None,
   }
 }
 
@@ -250,8 +251,8 @@ pub fn upsert_mcp_server(server: McpServerEntry) -> Vec<McpServerEntry> {
   })
 }
 
-/// Forget an MCP server, and turn it off in every chat that has it on. Returns
-/// the servers left.
+/// Forget an MCP server, and turn it off in every chat that has it on, and in
+/// the chat defaults. Returns the servers left.
 pub fn remove_mcp_server(id: &str) -> Vec<McpServerEntry> {
   let plugin = format!("mcp:{id}");
   with_cache(|c| {
@@ -259,8 +260,21 @@ pub fn remove_mcp_server(id: &str) -> Vec<McpServerEntry> {
     for project in &mut c.state.projects {
       project.plugins.retain(|p| *p != plugin);
     }
+    if let Some(defaults) = c.settings.chat_defaults.as_mut() {
+      defaults.plugins.retain(|p| *p != plugin);
+    }
     persist(c);
     c.settings.mcp_servers.clone()
+  })
+}
+
+/// Save what a new project's chat starts with (already checked: see
+/// `commands::chat::chat_defaults`), and return the settings.
+pub fn set_chat_defaults(defaults: ChatDefaults) -> AppSettings {
+  with_cache(|c| {
+    c.settings.chat_defaults = Some(defaults);
+    persist(c);
+    c.settings.clone()
   })
 }
 

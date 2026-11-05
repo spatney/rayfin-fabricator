@@ -25,7 +25,7 @@ You can also drag files and folders from File Explorer or Finder onto the messag
 
 ## Turn on plugins
 
-Plugins let chat look things up in your organization's data, or use other services' tools, while it builds. Select **Plugins**, the plug button next to **+**, to turn them on or off. Each one is off until you turn it on, and each app's chat has its own. When a plugin is on, the button shows its name, or, in a narrow chat, how many are on.
+Plugins let chat look things up in your organization's data, or use other services' tools, while it builds. Select **Plugins**, the plug button next to **+**, to turn them on or off. Each app's chat has its own: a new app's chat starts with the plugins in your [chat defaults](/docs/reference/settings#chat-defaults), or with none on. When a plugin is on, the button shows its name, or, in a narrow chat, how many are on.
 
 - **Fabric IQ** looks up the Power BI reports and semantic models you can open.
 - **Work IQ** looks up your Microsoft 365 email, meetings, files, Teams messages and people. It's an experiment: it shows in **Plugins** once you turn on **Work IQ** in **Settings → Experiments**.
@@ -39,7 +39,7 @@ Open the model pill in the composer to choose the model Copilot uses.
 
 ![The model picker with Auto off, the model list open, Copilot's models with their makers' logos, and the models on the user's own Anthropic and OpenAI keys under Your API keys](/screenshots/model-picker.webp)
 
-**Copilot Fusion** is on to start: Copilot picks the models for each request and how long they think. [Copilot Fusion](https://docs.github.com/en/copilot/concepts/models/copilot-fusion) is Copilot's Auto on accounts that have it; on others, the switch is named **Auto**. **Effort** under **Copilot Fusion** sets how much work Copilot puts into each request:
+**Copilot Fusion** is on to start, unless you chose another model in your [chat defaults](/docs/reference/settings#chat-defaults). With it on, Copilot picks the models for each request and how long they think. [Copilot Fusion](https://docs.github.com/en/copilot/concepts/models/copilot-fusion) is Copilot's Auto on accounts that have it; on others, the switch is named **Auto**. **Effort** under **Copilot Fusion** sets how much work Copilot puts into each request:
 
 - **Standard**, the default, uses one model for each request.
 - **High** and **Max** can bring in more capable models, or more than one model, such as one to review another's work, so a request can take longer and cost more.
@@ -55,6 +55,8 @@ To choose for yourself, turn off **Copilot Fusion** (or **Auto**). The picker th
 - **Context window**, for models that offer a long one: **Standard** or **Long**, with their sizes.
 
 The pill shows your choice, such as `Claude Opus 5.5 · High`. When you choose another model, Fabricator keeps the effort and context window if the new model offers them.
+
+Each app's chat keeps its own choice. To start every new app's chat with your model, choose it in **Settings → Chat defaults**. See [Chat defaults](/docs/reference/settings#chat-defaults).
 
 Fabricator uses the GitHub Copilot account you signed in with. The models shown come from that account's available Copilot models. When you add your own API keys, the list also has models on your own Anthropic, OpenAI, xAI or Google key. See [Use your own API keys](/docs/build/your-own-api-keys).
 

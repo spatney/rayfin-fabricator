@@ -845,6 +845,30 @@ pub struct AppSettings {
   /// OS credential store).
   #[serde(default, skip_serializing_if = "Vec::is_empty")]
   pub mcp_servers: Vec<McpServerEntry>,
+  /// What a new project's chat starts with (Settings → Chat defaults). Each
+  /// project's chat keeps its own choice after that.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub chat_defaults: Option<ChatDefaults>,
+}
+
+/// The model and plugins a new project's chat starts with, saved as a chat
+/// keeps them (see `commands::chat::chat_defaults`).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatDefaults {
+  /// The model's id; none is Auto.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub model: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub effort: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub auto_tier: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub context_tier: Option<String>,
+  /// The plugins on: `fabric-iq`, `work-iq`, or `mcp:<id>` for a server the
+  /// user added. A new project gets only the ones chat offers it.
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  pub plugins: Vec<String>,
 }
 
 /// How Fabricator reaches an MCP server: a command it runs on this computer,

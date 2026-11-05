@@ -70,6 +70,7 @@ import DeploymentsControl from './components/DeploymentsControl'
 import AccountMenu from './components/AccountMenu'
 import AccountsModal from './components/AccountsModal'
 import SettingsModal from './components/SettingsModal'
+import ChatDefaultsModal from './components/ChatDefaultsModal'
 import BlueprintTab from './components/blueprint/BlueprintTab'
 import { ModelPicker } from './components/models/ModelPicker'
 import { AddMenu, PluginsMenu } from './components/chat/ComposerMenus'
@@ -1794,6 +1795,7 @@ function SettingsShot({ experiments = false }: { experiments?: boolean }): JSX.E
       onClose={noop}
       onManageAccounts={noop}
       onManageKeys={noop}
+      onManageChatDefaults={noop}
       onReviewSetup={noop}
     />
   )
@@ -2351,6 +2353,20 @@ function Shot({ id }: { id: string | null }): JSX.Element {
       return <SettingsShot />
     case 'settings-experiments':
       return <SettingsShot experiments />
+    case 'chat-defaults':
+      // The sample user's new apps start on Claude Opus 5.5 with Fabric IQ and Charts on.
+      return (
+        <Unfocused>
+          <ChatDefaultsModal
+            defaults={{ model: 'claude-opus-5.5', effort: 'high', plugins: ['fabric-iq', 'mcp:charts'] }}
+            experiments={{ workIq: true, mcpServers: true }}
+            onChange={noop}
+            onClose={noop}
+            onManageKeys={noop}
+            onManageMcpServers={noop}
+          />
+        </Unfocused>
+      )
     case 'migrate-report':
       // The picker opens on Contoso Apps, where the sample app deploys; the shot opens Sales
       // analytics and picks Sales performance, and Fabricator shows what it can read of it.

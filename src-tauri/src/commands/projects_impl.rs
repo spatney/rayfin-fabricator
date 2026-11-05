@@ -206,6 +206,8 @@ pub(crate) fn register_project(dir: &Path, display_name: Option<&str>) -> Studio
     .map(|s| s.trim().to_string())
     .filter(|s| !s.is_empty())
     .unwrap_or_else(|| read_project_name(&abs));
+  // Its chat starts with the chat defaults (Settings → Chat defaults).
+  let (chat, plugins) = crate::commands::chat::new_project_chat(&store::get_settings());
   let project = StudioProject {
     id: uuid::Uuid::new_v4().to_string(),
     name,
@@ -217,11 +219,11 @@ pub(crate) fn register_project(dir: &Path, display_name: Option<&str>) -> Studio
     workspace: None,
     workspace_name: None,
     deployment_names: None,
-    model: None,
-    effort: None,
-    auto_tier: None,
-    context_tier: None,
-    plugins: Vec::new(),
+    model: chat.model,
+    effort: chat.effort,
+    auto_tier: chat.auto_tier,
+    context_tier: chat.context_tier,
+    plugins,
     preview_mode: None,
     fabric_preview_defaulted: None,
     needs_fabric_portal: None,

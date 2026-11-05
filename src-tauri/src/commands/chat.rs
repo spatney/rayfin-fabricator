@@ -45,8 +45,9 @@ use crate::services::store;
 use crate::services::usage;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
-  ChatEvent, ChatFusion, ChatFusionModel, ChatMessage, ChatOptions, ChatPathInfo, ChatPlanDependency, ChatPlanTodo,
-  ChatToolCall, ChatToolState, ChatTurnResult, ChatUsage, CopilotModel, CopilotQuota, SteerResult, StudioProject,
+  AppSettings, ChatDefaults, ChatEvent, ChatFusion, ChatFusionModel, ChatMessage, ChatOptions, ChatPathInfo,
+  ChatPlanDependency, ChatPlanTodo, ChatToolCall, ChatToolState, ChatTurnResult, ChatUsage, CopilotModel,
+  CopilotQuota, McpServerEntry, SteerResult, StudioProject,
 };
 
 /// Up to this many copilot invocations per turn on a transient pre-work failure.
@@ -1660,6 +1661,54 @@ pub fn chat_set_plugin(project_id: String, plugin: String, on: bool) -> Result<V
   Ok(state.projects.into_iter().find(|p| p.id == project_id).map(|p| p.plugins).unwrap_or_default())
 }
 
+/// Chat defaults as they're saved: the model choice normalized as a project's
+/// chat keeps it, and each plugin Fabricator has, once. An MCP server counts
+/// only while it's added; a plugin whose experiment is off is kept for when
+/// it's on again.
+pub(crate) fn chat_defaults(defaults: ChatDefaults, servers: &[McpServerEntry]) -> ChatDefaults {
+  let choice = ModelChoice::new(defaults.model, defaults.effort, defaults.auto_tier, defaults.context_tier);
+  let mut plugins: Vec<String> = Vec::new();
+  for plugin in defaults.plugins.iter().map(|p| p.trim()) {
+    let known = iq::Iq::from_plugin(plugin).is_some()
+      || mcp::server_of_plugin(plugin).is_some_and(|id| servers.iter().any(|s| s.id == id));
+    if known && !plugins.iter().any(|p| p == plugin) {
+      plugins.push(plugin.to_string());
+    }
+  }
+  ChatDefaults {
+    model: choice.model,
+    effort: choice.effort,
+    auto_tier: choice.auto_tier,
+    context_tier: choice.context_tier,
+    plugins,
+  }
+}
+
+/// What a new project's chat starts with: the chat defaults, with only the
+/// plugins chat offers it now (Work IQ and MCP servers while their experiments
+/// are on, and a server only while it's added). Auto with none on without them.
+pub(crate) fn new_project_chat(settings: &AppSettings) -> (ModelChoice, Vec<String>) {
+  let Some(defaults) = settings.chat_defaults.clone() else {
+    return (ModelChoice::default(), Vec::new());
+  };
+  let experiments = settings.experiments.as_ref();
+  let work_iq = experiments.and_then(|f| f.work_iq).unwrap_or(false);
+  let mcp_servers = experiments.and_then(|f| f.mcp_servers).unwrap_or(false);
+  let plugins = defaults
+    .plugins
+    .iter()
+    .filter(|plugin| match iq::Iq::from_plugin(plugin) {
+      Some(iq::Iq::Fabric) => true,
+      Some(iq::Iq::Work) => work_iq,
+      None => {
+        mcp_servers && mcp::server_of_plugin(plugin).is_some_and(|id| settings.mcp_servers.iter().any(|s| s.id == id))
+      }
+    })
+    .cloned()
+    .collect();
+  (ModelChoice::new(defaults.model, defaults.effort, defaults.auto_tier, defaults.context_tier), plugins)
+}
+
 /// List the Copilot models available to the signed-in user, for the chat model
 /// picker, followed by the models on the user's own keys while that experiment
 /// is on. Returns an `Err` (the renderer then falls back to its static
@@ -2331,5 +2380,62 @@ mod tests {
       vec![ChatPathInfo { path: at("Design docs"), dir: true }, ChatPathInfo { path: at("brief.md"), dir: false }]
     );
     std::fs::remove_dir_all(dir).unwrap();
+  }
+
+  fn server(id: &str) -> McpServerEntry {
+    McpServerEntry { id: id.into(), name: id.into(), ..Default::default() }
+  }
+
+  #[test]
+  fn chat_defaults_are_saved_as_a_chat_keeps_them_with_each_plugin_once() {
+    let plugins = |ids: &[&str]| ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+    let saved = chat_defaults(
+      ChatDefaults {
+        model: Some(" claude-opus-5.5 ".into()),
+        effort: Some("high".into()),
+        auto_tier: Some("efficiency".into()),
+        context_tier: Some("long_context".into()),
+        plugins: plugins(&["mcp:chart", "fabric-iq", " fabric-iq ", "work-iq", "mcp:gone", "mcp:", "a-later-plugin"]),
+      },
+      &[server("chart")],
+    );
+    assert_eq!(
+      saved,
+      ChatDefaults {
+        model: Some("claude-opus-5.5".into()),
+        effort: Some("high".into()),
+        auto_tier: None,
+        context_tier: Some("long_context".into()),
+        plugins: plugins(&["mcp:chart", "fabric-iq", "work-iq"]),
+      }
+    );
+    // On Auto, Copilot decides the effort; what Auto optimizes for stays.
+    let auto = chat_defaults(
+      ChatDefaults { model: Some("auto".into()), effort: Some("high".into()), auto_tier: Some("efficiency".into()), ..Default::default() },
+      &[],
+    );
+    assert_eq!((auto.model, auto.effort, auto.auto_tier.as_deref()), (None, None, Some("efficiency")));
+  }
+
+  #[test]
+  fn a_new_project_starts_with_the_chat_defaults_chat_offers_it() {
+    let settings = |work_iq: bool, mcp_servers: bool| -> AppSettings {
+      let mut settings: AppSettings = serde_json::from_value(json!({
+        "theme": "dark",
+        "experiments": { "workIq": work_iq, "mcpServers": mcp_servers },
+        "chatDefaults": { "model": "gpt-6-sol", "effort": "xhigh", "plugins": ["work-iq", "fabric-iq", "mcp:chart", "mcp:gone"] }
+      }))
+      .unwrap();
+      settings.mcp_servers = vec![server("chart")];
+      settings
+    };
+    let (chat, plugins) = new_project_chat(&settings(true, true));
+    assert_eq!((chat.model.as_deref(), chat.effort.as_deref()), (Some("gpt-6-sol"), Some("xhigh")));
+    assert_eq!(plugins, ["work-iq", "fabric-iq", "mcp:chart"]);
+    // Work IQ and MCP servers only while their experiments are on.
+    assert_eq!(new_project_chat(&settings(false, false)).1, ["fabric-iq"]);
+    // Without chat defaults, as before: Auto, with every plugin off.
+    let (chat, plugins) = new_project_chat(&serde_json::from_value(json!({ "theme": "dark" })).unwrap());
+    assert_eq!((chat, plugins), (ModelChoice::default(), Vec::<String>::new()));
   }
 }

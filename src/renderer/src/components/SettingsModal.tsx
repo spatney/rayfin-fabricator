@@ -20,6 +20,8 @@ interface Props {
   onManageKeys?: () => void
   /** Open the MCP servers dialog, while the MCP servers experiment is on. */
   onManageMcpServers?: () => void
+  /** Open Chat defaults: the model and plugins a new project's chat starts with. */
+  onManageChatDefaults?: () => void
   /** Leave for the setup screen to re-check tools and sign-ins. */
   onReviewSetup?: () => void
 }
@@ -31,7 +33,7 @@ const THEMES: Array<{ value: ThemePreference; label: string }> = [
 ]
 
 /** A group of settings: a quiet heading over a card of rows. */
-function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+export function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   const id = useId()
   return (
     <section className="set-section" aria-labelledby={id}>
@@ -44,7 +46,7 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
 }
 
 /** One setting: its name and what it does, with its control at the end. */
-function Item({
+export function Item({
   title,
   desc,
   extra,
@@ -68,7 +70,7 @@ function Item({
   )
 }
 
-function ToggleRow({
+export function ToggleRow({
   label,
   hint,
   checked,
@@ -163,6 +165,7 @@ export default function SettingsModal({
   onManageAccounts,
   onManageKeys,
   onManageMcpServers,
+  onManageChatDefaults,
   onReviewSetup
 }: Props): JSX.Element {
   useSuppressPreview()
@@ -269,6 +272,16 @@ export default function SettingsModal({
                 >
                   <button type="button" className="btn btn--sm" onClick={onManageMcpServers}>
                     Manage MCP servers
+                  </button>
+                </Item>
+              )}
+              {onManageChatDefaults && (
+                <Item
+                  title="Chat defaults"
+                  desc="The model and plugins a new project’s chat starts with."
+                >
+                  <button type="button" className="btn btn--sm" onClick={onManageChatDefaults}>
+                    Manage chat defaults
                   </button>
                 </Item>
               )}

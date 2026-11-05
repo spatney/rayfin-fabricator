@@ -295,6 +295,17 @@ describe('SettingsModal API keys', () => {
   })
 })
 
+describe('SettingsModal chat defaults', () => {
+  it('opens Chat defaults', async () => {
+    installApi()
+    const onManageChatDefaults = vi.fn()
+    await renderModal({ onManageChatDefaults })
+    expect(screen.getByText('The model and plugins a new project’s chat starts with.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Manage chat defaults' }))
+    expect(onManageChatDefaults).toHaveBeenCalledOnce()
+  })
+})
+
 describe('SettingsModal MCP servers', () => {
   it('turns the experiment on, and offers managing servers only while it’s on', async () => {
     installApi()
