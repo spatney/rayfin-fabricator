@@ -5,14 +5,20 @@ import { pathToFileURL } from 'node:url'
 
 export class NeedsLogin extends Error {}
 export class NeedsAz extends Error {}
+/** The sign-in may well be fine: refreshing it failed for another reason, such as being offline. */
+export class Unverified extends Error {}
 
 const LOGIN_ERROR = /\b(interaction_required|login_required|consent_required|invalid_grant|no_account_error|no_account_in_silent_request|no_tokens_found)\b|\bno (?:cached )?(?:account|credentials?|tokens?|session)\b|\bnot (?:signed|logged) in\b|\b(?:sign[ -]?in|log[ -]?in|interactive authentication) (?:is )?required\b|\b(?:please|must|need to) (?:sign|log)[ -]?in\b|\b(?:access|refresh) token\b[^\n]*(?:expired|revoked)|\bAADSTS(?:50058|50076|50079|50173|65001|70043|700082|700084)\b|(?:run|use)\s+[`'"]?(?:az|rayfin) login\b/i
 const TRANSPORT_ERROR = /\b(ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN)\b|timed? ?out|network (?:error|request failed)|fetch failed/i
 // Rayfin's silentOnly path can report this plain message without an MSAL code.
 const INTERACTIVE_LOGIN_BLOCKED = /\binteractive\s+(?:log[ -]?in|authentication)\s+(?:(?:was|is)\s+)?not\s+allowed\b/i
 
+function failureText(error) {
+  return [error?.errorCode, error?.code, error?.subError, error?.message || error].filter(Boolean).join(' ')
+}
+
 export function needsLogin(error) {
-  const text = [error?.errorCode, error?.code, error?.subError, error?.message || error].filter(Boolean).join(' ')
+  const text = failureText(error)
   return !TRANSPORT_ERROR.test(text) && (LOGIN_ERROR.test(text) || INTERACTIVE_LOGIN_BLOCKED.test(text))
 }
 
@@ -26,7 +32,7 @@ export function errorResult(error) {
   const needsAz = error instanceof NeedsAz
   return {
     ok: false,
-    needsLogin: !needsAz && (error instanceof NeedsLogin || needsLogin(error)),
+    needsLogin: !needsAz && !(error instanceof Unverified) && (error instanceof NeedsLogin || needsLogin(error)),
     needsAz,
     error: errorMessage(error),
   }
@@ -42,21 +48,47 @@ function checkedToken(value, provider) {
   return value
 }
 
-export async function acquireRayfinToken(auth, scopes) {
+export async function acquireRayfinToken(auth, scopes, defaultScopes = () => undefined) {
   try {
     const result = await auth.acquireToken(scopes, { silentOnly: true })
     return checkedToken(result?.token, 'rayfin')
   } catch (error) {
-    if (error instanceof NeedsLogin || needsLogin(error)) throw new NeedsLogin(errorMessage(error))
-    throw error
+    if (error instanceof NeedsLogin) throw error
+    if (!needsLogin(error)) throw error
+    // Only the CLI's generic message, which says nothing about why: ask MSAL.
+    if (!LOGIN_ERROR.test(failureText(error))) return acquireSilentlyAgain(auth, scopes ?? defaultScopes(), error)
+    throw new NeedsLogin(errorMessage(error))
   }
+}
+
+// The CLI's silent-only path reports every failure the same way, whether you're
+// signed out, Microsoft wants you to sign in again, or its sign-in service
+// couldn't be reached. Ask MSAL once more, directly, to tell them apart: only no
+// account, or one MSAL says needs an interactive sign-in, means signing in again.
+async function acquireSilentlyAgain(auth, scopes, cliError) {
+  const canAsk = !auth.isServicePrincipal && Array.isArray(scopes) &&
+    typeof auth.getAccount === 'function' && typeof auth.getPca === 'function'
+  if (!canAsk) throw new NeedsLogin(errorMessage(cliError))
+  let result
+  try {
+    const account = await auth.getAccount()
+    if (!account) throw new NeedsLogin('Not signed in to Fabric.')
+    result = await (await auth.getPca()).acquireTokenSilent({ account, scopes })
+  } catch (error) {
+    if (error instanceof NeedsLogin || needsLogin(error)) throw new NeedsLogin(errorMessage(error))
+    const offline = TRANSPORT_ERROR.test(failureText(error))
+    throw new Unverified(`Microsoft sign-in couldn't refresh the Fabric token (${errorMessage(error)}).` +
+      (offline ? ' Check your connection and try again.' : ''))
+  }
+  return checkedToken(result?.accessToken, 'rayfin')
 }
 
 export async function makeRayfinTokens(authPath) {
   const module = await import(pathToFileURL(authPath).href)
   const auth = await module.getRayfinAuth()
+  const fabricScopes = () => typeof module.getFabricScopes === 'function' ? module.getFabricScopes() : undefined
   // Let MSAL own expiration/refresh; do not add another token cache.
-  return (scopes) => acquireRayfinToken(auth, scopes)
+  return (scopes) => acquireRayfinToken(auth, scopes, fabricScopes)
 }
 
 export function azToken(resource, execute = execFile) {

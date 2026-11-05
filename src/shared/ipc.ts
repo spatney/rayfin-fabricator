@@ -135,6 +135,11 @@ export interface RayfinAuthStatus {
   user?: string
   tenant?: string
   error?: string
+  /**
+   * Signed in as far as the Rayfin CLI knows, but Fabric couldn't confirm it
+   * just now (offline, a timeout, or a check that couldn't run); `error` says why.
+   */
+  unverified?: boolean
   /** Renderer-only: not verified yet this session (see {@link CopilotAuthStatus.checking}). */
   checking?: boolean
 }

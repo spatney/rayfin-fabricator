@@ -500,7 +500,8 @@ export default function AccountsModal({
             icon={<img className="brand-glyph" src={fabricSvg} alt="" />}
             title="Microsoft Fabric"
             purpose="Publishes, hosts, and shares your apps."
-            state={fabricState}
+            state={rayfin.unverified ? 'error' : fabricState}
+            stateLabels={rayfin.unverified ? { error: 'Couldn’t confirm' } : undefined}
             action={
               rayfin.signedIn
                 ? adding?.service !== 'fabric' && (
@@ -566,7 +567,9 @@ export default function AccountsModal({
               </ul>
             )}
             <Foot>
-              {errorLine(errors.fabric ?? (rayfin.signedIn ? undefined : rayfin.error))}
+              {errorLine(
+                errors.fabric ?? (rayfin.signedIn && !rayfin.unverified ? undefined : rayfin.error)
+              )}
               {action === 'fabric:add' && <SignInProgress log={log} service="Microsoft" />}
               {adding?.service === 'fabric' && (
                 <AddAccountForm

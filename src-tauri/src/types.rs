@@ -109,6 +109,10 @@ pub struct RayfinAuthStatus {
   pub tenant: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
+  /// Signed in as far as the Rayfin CLI knows, but the check couldn't confirm it
+  /// with Fabric (offline, a timeout, or a check that couldn't run); `error` says why.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub unverified: bool,
 }
 
 #[derive(Serialize, Clone, Default)]

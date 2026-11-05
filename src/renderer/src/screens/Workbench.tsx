@@ -3024,6 +3024,7 @@ export default function Workbench({
                 user={auth.rayfin.user}
                 tenant={tenantLabel(auth.rayfin.tenant, auth.az)}
                 checking={auth.rayfin.checking}
+                unverified={auth.rayfin.unverified ? auth.rayfin.error : undefined}
                 busy={fabricAuthBusy}
                 signingIn={signingIn}
                 signingOut={signingOut}

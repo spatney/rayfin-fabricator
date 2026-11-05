@@ -1225,6 +1225,30 @@ code {
   color: var(--text-dim);
 }
 
+.account-pop-note {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--pending);
+}
+
+/* Signed in, but Fabric couldn't confirm it just now. */
+.account-trigger--unverified {
+  position: relative;
+}
+
+.account-trigger--unverified::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pending);
+  border: 1.5px solid var(--bg);
+}
+
 .account-pop-items {
   display: flex;
   flex-direction: column;

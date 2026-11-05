@@ -125,6 +125,11 @@ export function accountFacts(auth: AuthStatus | null): string[] {
         ? `Signed in to Microsoft Fabric as ${fabric.user}.`
         : 'Signed in to Microsoft Fabric.'
     )
+    if (fabric.unverified) {
+      facts.push(
+        `Fabricator couldn't confirm the Microsoft Fabric sign-in with Fabric just now, so it may still work: ${fabric.error ?? 'the check got no answer.'}`
+      )
+    }
   } else if (fabric?.checking) {
     facts.push('The Microsoft Fabric account is still being checked.')
   } else {

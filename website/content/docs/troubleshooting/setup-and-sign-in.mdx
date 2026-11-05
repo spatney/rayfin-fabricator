@@ -102,3 +102,15 @@ Fabricator runs the project's Rayfin CLI with `rayfin login --select` outside th
 7. After a successful refresh, publish again from the app bar, where the button says **Try again** after a failed publish. Fabricator does not publish automatically after a credential refresh.
 
 If you are using a client tenant, confirm that your account can access the target Fabric workspace and capacity. If sign-in still does nothing, [Report a problem](/docs/troubleshooting/report-a-problem) with diagnostics.
+
+## Fabric keeps asking you to sign in
+
+You signed in to Fabric recently, but a publish opens your browser to sign in again, the account menu shows **Sign in to Fabric**, or a Rayfin CLI line says "Token cache could not be parsed … Discarding the cached credentials; you may be prompted to sign in again."
+
+The Rayfin CLI keeps your Fabric sign-in in a token cache that every Rayfin command on this computer shares. When two of them open it at the same moment, the CLI can discard the cache, and that signs you out. Fabricator starts its own Rayfin commands one at a time, but a `rayfin` command you run in a terminal, or that chat runs, at the same moment as one of Fabricator's can still do it.
+
+1. Update to the latest Fabricator version.
+2. Open the account menu and select **Sign in to Fabric**.
+3. Avoid running `rayfin` commands in a terminal while Fabricator publishes or loads Fabric data.
+
+If **Accounts** shows **Couldn’t confirm** for Microsoft Fabric instead, you're still signed in: Fabricator couldn't reach Fabric to check. Check your connection, then re-check your accounts. If Fabric still asks you to sign in often, [Report a problem](/docs/troubleshooting/report-a-problem) with diagnostics.

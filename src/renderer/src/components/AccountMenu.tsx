@@ -21,6 +21,11 @@ interface Props {
   tenant?: string
   /** The Fabric sign-in hasn't been verified yet this launch. */
   checking?: boolean
+  /**
+   * Why the Fabric sign-in couldn't be confirmed just now (offline, a timeout):
+   * still signed in, as far as the Rayfin CLI knows.
+   */
+  unverified?: string
   /** A Fabric sign-in, sign-out, credential refresh, or deploy is running. */
   busy: boolean
   signingIn: boolean
@@ -52,6 +57,7 @@ export default function AccountMenu({
   user,
   tenant,
   checking = false,
+  unverified,
   busy,
   signingIn,
   signingOut,
@@ -135,7 +141,7 @@ export default function AccountMenu({
         <button
           ref={triggerRef}
           type="button"
-          className={`account-trigger${isOpen ? ' is-open' : ''}${pending ? ' account-trigger--checking' : ''}`}
+          className={`account-trigger${isOpen ? ' is-open' : ''}${pending ? ' account-trigger--checking' : ''}${signedIn && unverified ? ' account-trigger--unverified' : ''}`}
           aria-haspopup="menu"
           aria-expanded={isOpen}
           aria-controls={isOpen ? menuId : undefined}
@@ -143,7 +149,11 @@ export default function AccountMenu({
           title={
             pending
               ? 'Checking your Microsoft Fabric sign-in…'
-              : [user ? `Signed in to Fabric as ${user}` : 'Signed in to Fabric', tenant]
+              : [
+                  user ? `Signed in to Fabric as ${user}` : 'Signed in to Fabric',
+                  tenant,
+                  unverified ? 'Couldn’t confirm it just now' : undefined
+                ]
                   .filter(Boolean)
                   .join(' · ')
           }
@@ -186,6 +196,7 @@ export default function AccountMenu({
                 <span className="account-pop-sub">
                   Microsoft Fabric{tenant ? ` · ${tenant}` : ''}
                 </span>
+                {unverified && <span className="account-pop-note">{unverified}</span>}
               </span>
             </div>
           ) : (

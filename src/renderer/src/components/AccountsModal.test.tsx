@@ -142,6 +142,17 @@ describe('AccountsModal', () => {
     expect(screen.queryByRole('note')).toBeNull()
   })
 
+  it('keeps a Fabric sign-in it couldn’t confirm signed in, and says why', async () => {
+    installApi()
+    const reason = 'Couldn’t confirm your Fabric sign-in just now. Check your connection.'
+    renderModal({ auth: { ...auth, rayfin: { ...auth.rayfin, unverified: true, error: reason } } })
+    const fabric = card('Microsoft Fabric')
+    expect(within(fabric).getByText('alice@contoso.com')).toBeTruthy()
+    expect(within(fabric).getByText('Couldn’t confirm')).toBeTruthy()
+    expect(within(fabric).getByRole('alert').textContent).toBe(reason)
+    expect(within(fabric).queryByRole('button', { name: 'Sign in to Microsoft Fabric' })).toBeNull()
+  })
+
   it('offers one way to sign in to each service before any account is signed in', async () => {
     const { api } = installApi()
     api.accounts.fabric.mockResolvedValue({ accounts: [], sharedTokenStore: false })

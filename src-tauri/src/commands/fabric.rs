@@ -249,7 +249,7 @@ async fn app_items_in(project_dir: &Path, workspace_id: &str) -> Result<Vec<Stri
   let script_path = write_helper("fabric-app-items.mjs", APP_ITEMS_HELPER_SOURCE)
     .map_err(|e| format!("Could not prepare the Fabric app lookup: {e}"))?;
   let (script, auth) = (script_path.to_string_lossy().to_string(), auth_path.to_string_lossy().to_string());
-  let res = exec::run("node", &[&script, &auth, FABRIC_API_BASE, workspace_id], RunOptions::timeout(60_000)).await;
+  let res = fabric_auth::run_helper(&[&script, &auth, FABRIC_API_BASE, workspace_id], RunOptions::timeout(60_000)).await;
   let parsed: AppItems = fabric_auth::parse_helper_output(&res)?;
   if parsed.ok {
     Ok(parsed.names)
@@ -333,7 +333,7 @@ pub(crate) async fn workspace_details(
   let script_path = write_helper("fabric-workspace.mjs", WORKSPACE_HELPER_SOURCE)
     .map_err(|e| format!("Could not prepare the workspace lookup: {e}"))?;
   let (script, auth) = (script_path.to_string_lossy().to_string(), auth_path.to_string_lossy().to_string());
-  let res = exec::run("node", &[&script, &auth, FABRIC_API_BASE, workspace_id], RunOptions::timeout(timeout_ms)).await;
+  let res = fabric_auth::run_helper(&[&script, &auth, FABRIC_API_BASE, workspace_id], RunOptions::timeout(timeout_ms)).await;
   let details: WorkspaceDetails = fabric_auth::parse_helper_output(&res)?;
   if details.ok {
     Ok(details)
@@ -379,39 +379,79 @@ async fn project_auth_module(project_dir: Option<&Path>) -> Result<PathBuf, Stri
   })
 }
 
+/// Why the CLI's Fabric sign-in couldn't be confirmed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProbeFailure {
+  /// There's no sign-in, or Microsoft or Fabric turned it down: sign in again.
+  SignIn(String),
+  /// No answer either way (offline, a timeout, Fabric unavailable, or a check
+  /// that couldn't run), so the sign-in may well be fine.
+  Unverified(String),
+}
+
+impl ProbeFailure {
+  pub fn message(&self) -> &str {
+    match self {
+      ProbeFailure::SignIn(message) | ProbeFailure::Unverified(message) => message,
+    }
+  }
+}
+
+/// How long to wait before checking again when a check got no answer.
+const PROBE_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Verify the CLI's current Fabric credential, not its remembered account.
 /// Performs one authenticated GET, with no pagination, browser, or dependency
 /// install. A normal 403 confirms authentication but leaves permission errors
 /// to the requesting workflow; 401/claims challenges require another sign-in.
+/// A check that gets no answer is tried once more before it's reported.
 ///
 /// The helper owns no persistent token cache: every invocation opens the CLI's
 /// MSAL cache afresh. CLI login/logout is the only token-cache mutation needed.
-pub async fn probe_rayfin_auth(project_dir: Option<&Path>) -> Result<(), String> {
+pub async fn probe_rayfin_auth(project_dir: Option<&Path>) -> Result<(), ProbeFailure> {
+  match probe_once(project_dir).await {
+    Err(ProbeFailure::Unverified(_)) => {
+      tokio::time::sleep(PROBE_RETRY_DELAY).await;
+      probe_once(project_dir).await
+    }
+    result => result,
+  }
+}
+
+async fn probe_once(project_dir: Option<&Path>) -> Result<(), ProbeFailure> {
   #[derive(Deserialize)]
+  #[serde(rename_all = "camelCase")]
   struct ProbeResult {
     ok: bool,
+    #[serde(default)]
+    needs_login: bool,
     error: Option<String>,
   }
 
   let auth_path = exec::project_rayfin_auth_module(project_dir).ok_or_else(|| {
-    "Could not locate the Rayfin CLI authentication module. Open a Rayfin project to reach Fabric.".to_string()
+    ProbeFailure::Unverified(
+      "Could not locate the Rayfin CLI authentication module. Open a Rayfin project to reach Fabric.".to_string(),
+    )
   })?;
-  let script_path = write_helper("fabric-auth-probe.mjs", AUTH_PROBE_HELPER_SOURCE)
-    .map_err(|error| format!("Could not prepare the Fabric authentication check: {error}"))?;
+  let script_path = write_helper("fabric-auth-probe.mjs", AUTH_PROBE_HELPER_SOURCE).map_err(|error| {
+    ProbeFailure::Unverified(format!("Could not prepare the Fabric authentication check: {error}"))
+  })?;
   let auth_str = auth_path.to_string_lossy();
   let script_str = script_path.to_string_lossy();
-  let result = exec::run(
-    "node",
-    &[&script_str, &auth_str, FABRIC_API_BASE],
-    RunOptions::timeout(30_000),
-  )
-  .await;
-  let probe: ProbeResult = fabric_auth::parse_helper_output(&result)?;
+  let result =
+    fabric_auth::run_helper(&[&script_str, &auth_str, FABRIC_API_BASE], RunOptions::timeout(30_000)).await;
+  let probe: ProbeResult = fabric_auth::parse_helper_output(&result).map_err(|error| {
+    if fabric_auth::failure_flags(&error).0 {
+      ProbeFailure::SignIn(error)
+    } else {
+      ProbeFailure::Unverified(error)
+    }
+  })?;
   if probe.ok {
-    Ok(())
-  } else {
-    Err(probe.error.unwrap_or_else(|| "Could not verify the current Fabric session.".into()))
+    return Ok(());
   }
+  let error = probe.error.unwrap_or_else(|| "Could not verify the current Fabric session.".into());
+  Err(if probe.needs_login { ProbeFailure::SignIn(error) } else { ProbeFailure::Unverified(error) })
 }
 
 /// List the signed-in user's Fabric workspaces, each annotated with its
@@ -445,12 +485,7 @@ pub async fn fabric_workspaces() -> FabricWorkspacesResult {
 
   let auth_str = auth_path.to_string_lossy().to_string();
   let script_str = script_path.to_string_lossy().to_string();
-  let res = exec::run(
-    "node",
-    &[&script_str, &auth_str, FABRIC_API_BASE],
-    RunOptions::timeout(60_000),
-  )
-  .await;
+  let res = fabric_auth::run_helper(&[&script_str, &auth_str, FABRIC_API_BASE], RunOptions::timeout(60_000)).await;
 
   if res.not_found {
     return FabricWorkspacesResult {
@@ -525,12 +560,7 @@ pub async fn fabric_capacities() -> FabricCapacitiesResult {
   };
   let auth_str = auth_path.to_string_lossy().to_string();
   let script_str = script_path.to_string_lossy().to_string();
-  let res = exec::run(
-    "node",
-    &[&script_str, &auth_str, FABRIC_API_BASE],
-    RunOptions::timeout(60_000),
-  )
-  .await;
+  let res = fabric_auth::run_helper(&[&script_str, &auth_str, FABRIC_API_BASE], RunOptions::timeout(60_000)).await;
   if res.not_found {
     return FabricCapacitiesResult {
       ok: false,
@@ -583,8 +613,7 @@ pub async fn fabric_create_workspace(name: String, capacity_id: String) -> Fabri
   };
   let auth_str = auth_path.to_string_lossy().to_string();
   let script_str = script_path.to_string_lossy().to_string();
-  let res = exec::run(
-    "node",
+  let res = fabric_auth::run_helper(
     &[&script_str, &auth_str, FABRIC_API_BASE, &name, &capacity_id],
     RunOptions::timeout(60_000),
   )
@@ -722,8 +751,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
   let auth_str = auth_path.to_string_lossy().to_string();
   let script_str = script_path.to_string_lossy().to_string();
   let items_str = items_path.to_string_lossy().to_string();
-  let res = exec::run(
-    "node",
+  let res = fabric_auth::run_helper(
     &[&script_str, &auth_str, FABRIC_API_BASE, &items_str],
     RunOptions::timeout(120_000),
   )
@@ -1014,12 +1042,7 @@ pub async fn fabric_share_app(
   let auth_str = auth_path.to_string_lossy().to_string();
   let script_str = script_path.to_string_lossy().to_string();
   let request_str = request.to_string();
-  let res = exec::run(
-    "node",
-    &[&script_str, &auth_str, &request_str],
-    RunOptions::timeout(SHARE_TIMEOUT_MS),
-  )
-  .await;
+  let res = fabric_auth::run_helper(&[&script_str, &auth_str, &request_str], RunOptions::timeout(SHARE_TIMEOUT_MS)).await;
 
   if res.not_found {
     return FabricShareResult::failure("Node.js was not found on PATH.".to_string());
@@ -1072,6 +1095,7 @@ pub async fn fabric_directory_search(query: String) -> FabricDirectoryResult {
   let request_str = request.to_string();
   // The helper's search mode ignores the auth-module argv, so pass a placeholder
   // rather than resolving (and possibly installing) the project's Rayfin CLI.
+  // It never opens the CLI's token cache, so it needn't wait its turn.
   let res = exec::run(
     "node",
     &[&script_str, "-", &request_str],

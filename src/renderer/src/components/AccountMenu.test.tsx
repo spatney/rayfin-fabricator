@@ -63,6 +63,18 @@ describe('avatarInitials', () => {
 })
 
 describe('AccountMenu', () => {
+  it('flags a sign-in Fabric couldn’t confirm without signing you out', () => {
+    renderMenu({ tenant: 'Contoso', unverified: 'Couldn’t confirm your Fabric sign-in just now.' })
+    expect(trigger().textContent).toBe('FL')
+    expect(trigger().className).toContain('account-trigger--unverified')
+    expect(trigger().title).toBe(
+      'Signed in to Fabric as first.last@example.com · Contoso · Couldn’t confirm it just now'
+    )
+    fireEvent.click(trigger())
+    expect(screen.getByText('Couldn’t confirm your Fabric sign-in just now.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Sign in to Fabric' })).toBeNull()
+  })
+
   it('opens a menu with the account identity and its actions', async () => {
     const props = renderMenu({ tenant: 'Contoso' })
     expect(trigger().textContent).toBe('FL')

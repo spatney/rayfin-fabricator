@@ -536,7 +536,12 @@ async fn pending_since_deploy(dir: &str, deployed_commit: Option<&str>) -> Resul
 
 /// Read the persisted deployment status for a project directory.
 async fn status_for(path: &str) -> DeployStatus {
-  let res = exec::run_project_rayfin(Path::new(path), &["up", "status", "--json"], RunOptions::timeout(60_000)).await;
+  let res = fabric_auth::one_at_a_time(exec::run_project_rayfin(
+    Path::new(path),
+    &["up", "status", "--json"],
+    RunOptions::timeout(60_000),
+  ))
+  .await;
   let Some(parsed) = parse_status_json(&res.stdout) else {
     return DeployStatus { deployed: false, url: None, api_url: None, portal_url: None };
   };
@@ -743,7 +748,7 @@ pub(crate) async fn push_runtime_settings(project: &StudioProject, on_data: OnDa
   let workspace = project.workspace.as_deref().map(str::trim).filter(|w| !w.is_empty());
   let args = settings_push_args(workspace);
   let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-  let result = exec::run_project_rayfin(
+  let result = fabric_auth::one_at_a_time(exec::run_project_rayfin(
     dir,
     &arg_refs,
     RunOptions {
@@ -752,7 +757,7 @@ pub(crate) async fn push_runtime_settings(project: &StudioProject, on_data: OnDa
       timeout_ms: Some(SETTINGS_PUSH_TIMEOUT_MS),
       ..Default::default()
     },
-  )
+  ))
   .await;
   if result.ok {
     return DeployResult { ok: true, outcome: "success".into(), url: None, api_url: None, portal_url: None, error: None, unsupported: None };
@@ -848,7 +853,7 @@ async fn run_deploy_inner(
 
   // The app's thumbnail goes out with its files, so galleries elsewhere can show it.
   let staged = stage_thumbnail(&project);
-  let result = exec::run_project_rayfin(
+  let result = fabric_auth::one_at_a_time(exec::run_project_rayfin(
     Path::new(&project.path),
     &arg_refs,
     RunOptions {
@@ -857,7 +862,7 @@ async fn run_deploy_inner(
       timeout_ms: Some(DEPLOY_TIMEOUT_MS),
       ..Default::default()
     },
-  )
+  ))
   .await;
   // Gone before anything commits the folder: it was never the app's.
   if let Some(staged) = staged {

@@ -333,12 +333,14 @@ async fn invoke_helper<T: DeserializeOwned>(request: &serde_json::Value) -> Resu
   let auth_str = auth_path.to_string_lossy().to_string();
   let script_str = script_path.to_string_lossy().to_string();
   let request_str = request.to_string();
-  let res = exec::run(
-    "node",
-    &[&script_str, &auth_str, &request_str],
-    RunOptions::timeout(HELPER_TIMEOUT_MS),
-  )
-  .await;
+  let args = [script_str.as_str(), auth_str.as_str(), request_str.as_str()];
+  let opts = RunOptions::timeout(HELPER_TIMEOUT_MS);
+  // Schema reads use the Azure CLI; every other mode opens the Rayfin CLI's token cache.
+  let res = if request["mode"] == "schema" {
+    exec::run("node", &args, opts).await
+  } else {
+    fabric_auth::run_helper(&args, opts).await
+  };
 
   fabric_auth::parse_helper_output(&res)
 }

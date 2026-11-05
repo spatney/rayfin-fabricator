@@ -1,15 +1,26 @@
 //! Shared Fabric helper transport. Tokens remain in the Node child; Rust only
 //! reads its structured result and never accepts success from a failed process.
 
+use std::future::Future;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use once_cell::sync::{Lazy, OnceCell};
 use regex::Regex;
 use serde::de::DeserializeOwned;
+use tokio::sync::Mutex;
 
 use crate::services::{exec, paths};
 
 pub const HELPER_SOURCE: &str = include_str!("fabric_auth_helper.mjs");
+
+/// How long a process that opens the Rayfin CLI's token cache keeps the next
+/// one waiting, when it's still running: long enough to have opened the cache,
+/// which the CLI does within a few seconds of starting.
+const CACHE_OPEN_WAIT: Duration = Duration::from_secs(20);
+
+/// Taken while a process that opens the token cache starts. See [`one_at_a_time`].
+static CACHE_OPENING: Mutex<()> = Mutex::const_new(());
 
 static LOGIN_ERROR: Lazy<Regex> = Lazy::new(|| {
   Regex::new(concat!(
@@ -88,6 +99,35 @@ pub fn write_helper() -> std::io::Result<PathBuf> {
     .cloned()
 }
 
+/// Run `task`, which starts a Rayfin CLI command or Fabric helper that opens the
+/// CLI's token cache, once the one before it has finished or has run for
+/// [`CACHE_OPEN_WAIT`].
+///
+/// Opening the cache first checks that its encryption works, with a test file in
+/// the CLI's folder that every process shares. Two processes checking at once
+/// can fail the check; the CLI then falls back to an unencrypted cache, can't
+/// read the encrypted one, and deletes it, which signs you out of Fabric.
+pub async fn one_at_a_time<F: Future>(task: F) -> F::Output {
+  take_turn(&CACHE_OPENING, CACHE_OPEN_WAIT, task).await
+}
+
+async fn take_turn<F: Future>(turns: &Mutex<()>, wait: Duration, task: F) -> F::Output {
+  let turn = turns.lock().await;
+  tokio::pin!(task);
+  tokio::select! {
+    output = &mut task => return output,
+    () = tokio::time::sleep(wait) => {}
+  }
+  drop(turn);
+  task.await
+}
+
+/// Run a Fabric helper, `node <script> …`, that opens the Rayfin CLI's token
+/// cache: one at a time (see [`one_at_a_time`]).
+pub async fn run_helper(args: &[&str], opts: exec::RunOptions) -> exec::RunResult {
+  one_at_a_time(exec::run("node", args, opts)).await
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -126,6 +166,28 @@ mod tests {
       not_found: false,
     };
     assert!(parse_helper_output::<serde_json::Value>(&res).is_err());
+  }
+
+  async fn step(log: &std::sync::Mutex<Vec<String>>, name: &str, ms: u64) {
+    log.lock().unwrap().push(format!("{name} start"));
+    tokio::time::sleep(Duration::from_millis(ms)).await;
+    log.lock().unwrap().push(format!("{name} end"));
+  }
+
+  #[tokio::test]
+  async fn processes_that_open_the_token_cache_start_one_at_a_time() {
+    let (turns, log) = (Mutex::new(()), std::sync::Mutex::new(Vec::new()));
+    let wait = Duration::from_secs(5);
+    tokio::join!(take_turn(&turns, wait, step(&log, "check", 30)), take_turn(&turns, wait, step(&log, "list", 0)));
+    assert_eq!(*log.lock().unwrap(), ["check start", "check end", "list start", "list end"]);
+  }
+
+  #[tokio::test]
+  async fn a_long_process_lets_the_next_one_start_once_it_has_had_time_to_open_the_cache() {
+    let (turns, log) = (Mutex::new(()), std::sync::Mutex::new(Vec::new()));
+    let wait = Duration::from_millis(20);
+    tokio::join!(take_turn(&turns, wait, step(&log, "deploy", 400)), take_turn(&turns, wait, step(&log, "check", 0)));
+    assert_eq!(*log.lock().unwrap(), ["deploy start", "check start", "check end", "deploy end"]);
   }
 
   #[test]

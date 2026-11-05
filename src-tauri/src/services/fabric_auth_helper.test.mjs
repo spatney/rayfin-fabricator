@@ -66,9 +66,18 @@ test('revocation is a login failure; transport and syntax errors are not', async
   }
   const network = new Error('Token endpoint request timed out')
   await assert.rejects(acquireRayfinToken({ acquireToken: async () => { throw network } }), (error) => error === network)
+  // Rayfin CLI 1.37 reports an unreachable sign-in service itself.
+  const unreachable = Object.assign(
+    new Error("Can't reach Microsoft Entra ID (login.microsoftonline.com): the host name could not be resolved"),
+    { name: 'AuthNetworkError' },
+  )
+  await assert.rejects(
+    acquireRayfinToken({ acquireToken: async () => { throw unreachable } }),
+    (error) => error === unreachable && !errorResult(error).needsLogin,
+  )
 })
 
-test('silent-only token failures offer explicit Fabric sign-in instead of a blind retry', async () => {
+test('a silent-only failure that MSAL can’t be asked about still offers explicit Fabric sign-in', async () => {
   for (const message of [
     'Silent token acquisition failed and interactive login was not allowed',
     'Silent token acquisition failed and interactive login is not allowed',
@@ -83,6 +92,43 @@ test('silent-only token failures offer explicit Fabric sign-in instead of a blin
       (failure) => failure instanceof NeedsLogin && errorResult(failure).needsLogin,
     )
   }
+})
+
+const SILENT_ONLY = 'Silent token acquisition failed and interactive login was not allowed'
+const ACCOUNT = { username: 'user@example.invalid' }
+function cliAuth({ account = ACCOUNT, silent }) {
+  const requests = []
+  return {
+    requests,
+    acquireToken: async () => { throw new Error(SILENT_ONLY) },
+    getAccount: async () => account,
+    getPca: async () => ({ acquireTokenSilent: async (request) => { requests.push(request); return silent() } }),
+  }
+}
+
+test('a silent-only failure asks MSAL why before asking to sign in again', async () => {
+  const fails = (error) => () => { throw error }
+  await assert.rejects(acquireRayfinToken(cliAuth({ account: null, silent: () => ({}) }), ['scope']), NeedsLogin)
+  const expired = Object.assign(new Error('AADSTS700082: The refresh token has expired'), { errorCode: 'invalid_grant' })
+  await assert.rejects(acquireRayfinToken(cliAuth({ silent: fails(expired) }), ['scope']), NeedsLogin)
+
+  const offline = Object.assign(new Error('Network request failed: fetch failed'), { errorCode: 'network_error' })
+  await assert.rejects(acquireRayfinToken(cliAuth({ silent: fails(offline) }), ['scope']), (error) => {
+    const result = errorResult(error)
+    return !result.needsLogin && result.error.includes('fetch failed') && result.error.includes('connection')
+  })
+  const unavailable = Object.assign(new Error('Service unavailable'), { errorCode: 'temporarily_unavailable' })
+  await assert.rejects(acquireRayfinToken(cliAuth({ silent: fails(unavailable) }), ['scope']), (error) => !errorResult(error).needsLogin)
+
+  const recovered = cliAuth({ silent: () => ({ accessToken: TOKEN }) })
+  assert.equal(await acquireRayfinToken(recovered, ['scope']), TOKEN)
+  assert.deepEqual(recovered.requests, [{ account: ACCOUNT, scopes: ['scope'] }])
+})
+
+test('asking MSAL again uses the CLI’s Fabric scope when no scope was asked for', async () => {
+  const auth = cliAuth({ silent: () => ({ accessToken: TOKEN }) })
+  assert.equal(await acquireRayfinToken(auth, undefined, () => ['fabric/.default']), TOKEN)
+  assert.deepEqual(auth.requests[0].scopes, ['fabric/.default'])
 })
 
 test('Azure token failures distinguish reauthentication from outages without spawning az', async () => {

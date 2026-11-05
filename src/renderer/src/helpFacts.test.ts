@@ -141,6 +141,16 @@ describe('accountFacts', () => {
     ])
   })
 
+  it('says a Fabric sign-in that couldn’t be confirmed may still work, and why', () => {
+    const facts = accountFacts({
+      copilot: { signedIn: true, user: 'octocat' },
+      rayfin: { signedIn: true, user: 'ana@contoso.com', unverified: true, error: 'Offline.' },
+      az: { signedIn: false }
+    })
+    expect(facts).toContain('Signed in to Microsoft Fabric as ana@contoso.com.')
+    expect(facts.find((f) => f.includes("couldn't confirm"))).toContain('may still work: Offline.')
+  })
+
   it('describes Fabric and Azure as optional when signed out', () => {
     const facts = accountFacts(null)
     expect(facts).toContain('Not signed in to GitHub Copilot.')

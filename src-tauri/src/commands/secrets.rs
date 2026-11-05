@@ -423,24 +423,29 @@ async fn with_sign_in<T>(dir: &Path, cli: impl Future<Output = Result<T, Failure
     return Err(Failure { message: NOT_DEPLOYED.into(), not_deployed: true, sign_in: false });
   }
   let _auth = crate::commands::auth::rayfin_auth_read().await;
-  if let Err(error) = crate::commands::fabric::probe_rayfin_auth(Some(dir)).await {
-    let message = fabric_auth::redact(&error);
-    return Err(Failure { sign_in: needs_sign_in(&message), message, not_deployed: false });
+  if let Err(failure) = crate::commands::fabric::probe_rayfin_auth(Some(dir)).await {
+    let sign_in = matches!(failure, crate::commands::fabric::ProbeFailure::SignIn(_));
+    return Err(Failure { message: fabric_auth::redact(failure.message()), sign_in, not_deployed: false });
   }
   // `cli` doesn't start until it's awaited here.
   cli.await
 }
 
 async fn run_cli(dir: &Path, args: &[&str], stdin: Option<String>) -> Result<Value, Failure> {
-  let started = Instant::now();
-  let res = exec::run_project_rayfin(
-    dir,
-    args,
-    RunOptions { stdin, timeout_ms: Some(CLI_TIMEOUT_MS), ..Default::default() },
-  )
+  // Timed from when it starts, not from when it began waiting its turn.
+  let (res, ran) = fabric_auth::one_at_a_time(async {
+    let started = Instant::now();
+    let res = exec::run_project_rayfin(
+      dir,
+      args,
+      RunOptions { stdin, timeout_ms: Some(CLI_TIMEOUT_MS), ..Default::default() },
+    )
+    .await;
+    (res, started.elapsed())
+  })
   .await;
   // A process stopped at the timeout can still report an exit code (1 on Windows).
-  if !res.ok && started.elapsed() >= Duration::from_millis(CLI_TIMEOUT_MS) {
+  if !res.ok && ran >= Duration::from_millis(CLI_TIMEOUT_MS) {
     return Err(Failure { message: TIMED_OUT.into(), not_deployed: false, sign_in: false });
   }
   outcome(&res)
