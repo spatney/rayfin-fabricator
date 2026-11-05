@@ -470,11 +470,13 @@ export const api: RayfinStudioApi = {
   },
 
   deploy: {
-    run: (projectId: string, workspace?: string) =>
-      invoke('deploy_run', { projectId, workspace }),
+    run: (projectId: string, workspace?: string, itemName?: string) =>
+      invoke('deploy_run', { projectId, workspace, itemName }),
     list: (projectId: string) => invoke('deploy_list', { projectId }),
     switch: (projectId: string, workspace: string, byId?: boolean) =>
       invoke('deploy_switch', { projectId, workspace, byId }),
+    remove: (projectId: string, workspace: string) =>
+      invoke('deploy_remove', { projectId, workspace }),
     setName: (projectId: string, workspaceKey: string, name: string) =>
       invoke('deploy_set_name', { projectId, workspaceKey, name }),
     status: (projectId: string) => invoke('deploy_status', { projectId }),

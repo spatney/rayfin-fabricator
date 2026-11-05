@@ -34,8 +34,9 @@ interface Props {
   pending?: PendingChanges | null
   /** A deploy running to a new deployment, by its name: shown instead of the active one's until it's done. */
   deployingTo?: string
-  /** Remember a friendly name for the chosen workspace, then deploy into it. */
-  onCreate: (name: string, workspaceId: string, workspaceName?: string) => void
+  /** Remember a friendly name for the chosen workspace, then deploy into it: into
+   *  its existing app `itemName` when one was chosen. */
+  onCreate: (name: string, workspaceId: string, workspaceName?: string, itemName?: string) => void
   /** Redeploy the active deployment (no workspace change). */
   onRedeploy: () => void
   /** Switch the active recorded deployment (`rayfin up switch`). */
@@ -180,6 +181,10 @@ export default function DeploymentsControl({
   const [loadingWs, setLoadingWs] = useState(false)
   const [reauthing, setReauthing] = useState(false)
   const [switching, setSwitching] = useState<string | null>(null)
+  /** The published app (by key) whose Delete is asking to be confirmed. */
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  /** The published app (by key) being deleted. */
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [renamingKey, setRenamingKey] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [busy, setBusy] = useState(false)
@@ -283,6 +288,7 @@ export default function DeploymentsControl({
     if (!open) {
       setCreating(false)
       setRenamingKey(null)
+      setConfirmDelete(null)
       // Reopening must not reuse workspaces from an expired or different account.
       setWsResult(null)
       setLoadingWs(false)
@@ -384,6 +390,13 @@ export default function DeploymentsControl({
   /** A chat turn holds the project's source, so a publish started now could only fail. */
   const held = chatBusy && !running
   const heldTitle = 'Copilot is working on this app. Publishing waits until the turn finishes.'
+  const deletingTitle = 'Deleting a published app. Publishing waits until it’s done.'
+  /** Why a published app can't be deleted just now: publishing and chat turns hold the project. */
+  const deleteWait = running
+    ? 'Publishing. Deleting waits until it’s done.'
+    : held
+      ? 'Copilot is working on this app. Deleting waits until the turn finishes.'
+      : undefined
 
   /** What the button beside the state does now. */
   const nextAction: { label: string; title: string; primary: boolean; disabled?: boolean; run: () => void } =
@@ -427,7 +440,11 @@ export default function DeploymentsControl({
                 primary: false,
                 run: onRedeploy
               }
-  const action = held ? { ...nextAction, disabled: true, title: heldTitle } : nextAction
+  const action = held
+    ? { ...nextAction, disabled: true, title: heldTitle }
+    : deleting && !running
+      ? { ...nextAction, disabled: true, title: deletingTitle }
+      : nextAction
 
   const chipState = running
     ? `Publishing to ${name}…`
@@ -494,6 +511,96 @@ export default function DeploymentsControl({
   function startRename(d: FabricDeployment): void {
     setRenamingKey(d.workspaceId ?? d.workspaceName)
     setRenameValue(d.name ?? '')
+  }
+
+  /**
+   * Delete a published app: in Fabric, with its data, then from the project. A
+   * missing or expired Fabric session signs in again once and retries.
+   */
+  async function doDelete(d: FabricDeployment): Promise<void> {
+    const key = d.workspaceId ?? d.workspaceName
+    if (!key || deleteWait || deleting) return
+    const shown = d.name || d.workspaceName
+    const failed = (reason: unknown): void => {
+      toast.error(authErrorMessage(reason, `Couldn’t delete ${shown}. Please try again.`), {
+        title: 'Delete failed'
+      })
+    }
+    setDeleting(key)
+    try {
+      let result = await window.api.deploy.remove(project.id, key)
+      if (!result.ok && result.needsLogin) {
+        const login = await window.api.auth.loginRayfin()
+        if (!login.ok) {
+          toast.error(
+            authErrorMessage(login.error, 'Fabric sign-in did not complete. Please try again.'),
+            {
+              title: 'Sign-in failed'
+            }
+          )
+          return
+        }
+        await onSignedIn?.()
+        result = await window.api.deploy.remove(project.id, key)
+      }
+      if (!result.ok) {
+        failed(result.error)
+        return
+      }
+      setConfirmDelete(null)
+      toast.success(`Deleted ${shown} and its data in Fabric.`)
+      onChanged()
+      await loadDeployments()
+    } catch (reason) {
+      failed(reason)
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  /**
+   * Asks before deleting `d`. `then` is what the project publishes to afterwards:
+   * for the app it publishes to now, the most recently published of the others.
+   */
+  function deleteConfirm(d: FabricDeployment, then?: FabricDeployment | null): JSX.Element {
+    const shown = d.name || d.workspaceName
+    const inWorkspace = workspaceById(d.workspaceId)?.displayName || d.workspaceName
+    const removing = deleting === (d.workspaceId ?? d.workspaceName)
+    const after =
+      then === undefined
+        ? 'Your app on this computer stays as it is.'
+        : then
+          ? `Your app on this computer stays, and publishes to ${then.name || then.workspaceName} from then on.`
+          : 'Your app on this computer stays, unpublished.'
+    return (
+      <div className="dep-callout" role="alert">
+        <span className="dep-callout-text">
+          Delete <strong>{shown}</strong> and all its data in {inWorkspace}?
+          <span className="dep-callout-detail">
+            It’s gone for everyone who uses it, and this can’t be undone. {after}
+          </span>
+        </span>
+        <div className="dep-actions">
+          <button
+            type="button"
+            className="btn btn--sm btn--danger"
+            disabled={Boolean(deleting || deleteWait)}
+            title={deleteWait}
+            onClick={() => void doDelete(d)}
+          >
+            {removing ? 'Deleting…' : 'Delete'}
+          </button>
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost"
+            disabled={removing}
+            onClick={() => setConfirmDelete(null)}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
   }
 
   async function saveRename(): Promise<void> {
@@ -721,8 +828,8 @@ export default function DeploymentsControl({
                 onSignedIn={onSignedIn}
                 running={running}
                 onCancel={() => setCreating(false)}
-                onSubmit={(depName, workspaceId) => {
-                  onCreate(depName, workspaceId, workspaceById(workspaceId)?.displayName)
+                onSubmit={(depName, workspaceId, itemName) => {
+                  onCreate(depName, workspaceId, workspaceById(workspaceId)?.displayName, itemName)
                   setOpen(false)
                   setCreating(false)
                 }}
@@ -743,21 +850,37 @@ export default function DeploymentsControl({
                     </span>
                   )}
                   {activeDep && !toNew && renamingKey !== activeKey && (
-                    <button
-                      type="button"
-                      className="dep-ico"
-                      title="Rename this published app"
-                      aria-label="Rename this published app"
-                      onClick={() => startRename(activeDep)}
-                    >
-                      <Codicon name="edit" />
-                    </button>
+                    <span className="dep-title-actions">
+                      <button
+                        type="button"
+                        className="dep-ico"
+                        title="Rename this published app"
+                        aria-label="Rename this published app"
+                        onClick={() => startRename(activeDep)}
+                      >
+                        <Codicon name="edit" />
+                      </button>
+                      <button
+                        type="button"
+                        className="dep-ico"
+                        title={deleteWait ?? 'Delete this published app'}
+                        aria-label="Delete this published app"
+                        disabled={Boolean(deleting || deleteWait)}
+                        onClick={() => setConfirmDelete(activeKey)}
+                      >
+                        <Codicon name="trash" />
+                      </button>
+                    </span>
                   )}
                 </div>
                 <div className="dep-status">
                   <StatusDot status={status} />
                   <span>{statusText}</span>
                 </div>
+                {activeDep &&
+                  !toNew &&
+                  confirmDelete === activeKey &&
+                  deleteConfirm(activeDep, others[0] ?? null)}
 
                 {running && meter && (
                   <div className="dep-running">
@@ -964,42 +1087,57 @@ export default function DeploymentsControl({
                         .filter(Boolean)
                         .join(' · ')
                       return (
-                        <li key={key} className="dep-row">
-                          <StatusDot status="ok" />
-                          <span className="dep-row-main">
-                            {renamingKey === key ? (
-                              renameInput()
-                            ) : (
-                              <span className="dep-row-name">{d.name || d.workspaceName}</span>
-                            )}
-                            <span className="dep-row-sub" title={meta}>
-                              {meta}
+                        <li key={key} className="dep-item">
+                          <div className="dep-row">
+                            <StatusDot status="ok" />
+                            <span className="dep-row-main">
+                              {renamingKey === key ? (
+                                renameInput()
+                              ) : (
+                                <span className="dep-row-name">{d.name || d.workspaceName}</span>
+                              )}
+                              <span className="dep-row-sub" title={meta}>
+                                {meta}
+                              </span>
                             </span>
-                          </span>
-                          {renamingKey !== key && (
+                            {renamingKey !== key && (
+                              <button
+                                type="button"
+                                className="dep-ico dep-row-edit"
+                                title="Rename this published app"
+                                aria-label={`Rename ${d.name || d.workspaceName}`}
+                                onClick={() => startRename(d)}
+                              >
+                                <Codicon name="edit" />
+                              </button>
+                            )}
+                            {renamingKey !== key && (
+                              <button
+                                type="button"
+                                className="dep-ico dep-row-edit"
+                                title={deleteWait ?? 'Delete this published app'}
+                                aria-label={`Delete ${d.name || d.workspaceName}`}
+                                disabled={Boolean(deleting || deleteWait)}
+                                onClick={() => setConfirmDelete(key)}
+                              >
+                                <Codicon name="trash" />
+                              </button>
+                            )}
                             <button
                               type="button"
-                              className="dep-ico dep-row-edit"
-                              title="Rename this published app"
-                              aria-label={`Rename ${d.name || d.workspaceName}`}
-                              onClick={() => startRename(d)}
+                              className="btn btn--xs btn--ghost"
+                              disabled={Boolean(switching) || Boolean(deleting) || running || held}
+                              title={
+                                held
+                                  ? heldTitle
+                                  : `Preview and publish to ${d.name || d.workspaceName}`
+                              }
+                              onClick={() => void doSwitch(d)}
                             >
-                              <Codicon name="edit" />
+                              {switching === key ? 'Switching…' : 'Switch'}
                             </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn--xs btn--ghost"
-                            disabled={Boolean(switching) || running || held}
-                            title={
-                              held
-                                ? heldTitle
-                                : `Preview and publish to ${d.name || d.workspaceName}`
-                            }
-                            onClick={() => void doSwitch(d)}
-                          >
-                            {switching === key ? 'Switching…' : 'Switch'}
-                          </button>
+                          </div>
+                          {confirmDelete === key && deleteConfirm(d)}
                         </li>
                       )
                     })}
@@ -1035,8 +1173,8 @@ export default function DeploymentsControl({
                   type="button"
                   className="dep-new"
                   onClick={startCreate}
-                  disabled={running || held}
-                  title={held ? heldTitle : undefined}
+                  disabled={running || held || Boolean(deleting)}
+                  title={held ? heldTitle : deleting ? deletingTitle : undefined}
                 >
                   <Codicon name="add" />
                   {createTitle}…

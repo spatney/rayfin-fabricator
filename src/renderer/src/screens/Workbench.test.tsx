@@ -1027,7 +1027,7 @@ describe('Workbench after-turn publishing', () => {
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Test deploy' })))
     expect(api.deploy.run).toHaveBeenCalledTimes(1)
-    expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined)
+    expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined, undefined)
   })
 
   it('turns on publishing after each turn from the published apps panel', async () => {
@@ -1082,7 +1082,7 @@ describe('Workbench after-turn publishing', () => {
 
     expect(api.deploy.hasChanges).toHaveBeenCalledWith(project.id)
     expect(api.deploy.run).toHaveBeenCalledTimes(1)
-    expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined)
+    expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined, undefined)
     expect(api.projects.git.divergence).not.toHaveBeenCalled()
   })
 
@@ -1149,7 +1149,7 @@ describe('Workbench after-turn publishing', () => {
       await act(async () => completeTurn())
 
       expect(api.deploy.run).toHaveBeenCalledTimes(1)
-      expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined)
+      expect(api.deploy.run).toHaveBeenCalledWith(project.id, undefined, undefined)
       expect(screen.getByRole('alert').textContent).toContain(`${failure} unavailable`)
     }
   )

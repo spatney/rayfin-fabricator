@@ -2184,6 +2184,19 @@ export interface DeployTargetCheck {
   conflict?: string
   /** The check couldn't run; the deploy isn't blocked. */
   error?: string
+  /**
+   * The workspace's Rayfin apps the project can publish into instead of a new
+   * app: none when it already publishes there, or its Rayfin CLI is before 1.36.
+   */
+  apps?: string[]
+}
+
+/** What deleting one of a project's published apps did. */
+export interface DeployRemoveResult {
+  ok: boolean
+  /** Fabric needs you to sign in again before it deletes the app. */
+  needsLogin?: boolean
+  error?: string
 }
 
 /** A compact snapshot of a project's git working tree. */
@@ -4413,8 +4426,10 @@ export interface RayfinStudioApi {
      * 'deploy:run' channel) and resolve the live URL. Studio owns deploys.
      * `workspace` optionally targets a Fabric workspace by display name (first
      * deploy); subsequent deploys reuse the recorded active deployment.
+     * `itemName` publishes into the existing Rayfin app of that name there
+     * (see {@link DeployTargetCheck.apps}) instead of a new one.
      */
-    run: (projectId: string, workspace?: string) => Promise<DeployResult>
+    run: (projectId: string, workspace?: string, itemName?: string) => Promise<DeployResult>
     /** Read the persisted deployment status (`rayfin up status --json`). */
     status: (projectId: string) => Promise<DeployStatus>
     /**
@@ -4434,6 +4449,13 @@ export interface RayfinStudioApi {
      * recorded workspace name; pass `byId` to switch by workspace GUID instead.
      */
     switch: (projectId: string, workspace: string, byId?: boolean) => Promise<DeployResult>
+    /**
+     * Delete one of the project's published apps: the app in Fabric, with its
+     * data, and its record. When the project published to it, the most recently
+     * published of the others takes over. `workspace` is the deployment's
+     * workspace GUID (or its recorded workspace name).
+     */
+    remove: (projectId: string, workspace: string) => Promise<DeployRemoveResult>
     /**
      * Set (or clear, when empty) the friendly name for one of the project's
      * deployments. `workspaceKey` is the deployment's workspace GUID (or its

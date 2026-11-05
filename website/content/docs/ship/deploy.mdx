@@ -49,6 +49,16 @@ Before a first publish into a workspace, Fabricator checks whether that workspac
 
 If it finds one, you see a warning that publishing there would replace that app, for example "Operations already has an app named “Contoso Expenses”. Publishing here would replace it, so pick another workspace." Choose another workspace, or select **Replace it anyway** to confirm.
 
+## Publish into an app the workspace already has
+
+You can publish into a Rayfin app that's already in the workspace instead of creating a new one, for example an app published from another computer. This needs Rayfin CLI 1.36 or newer in the project; see [Rayfin versions](/docs/ship/rayfin-versions).
+
+1. In **Publish to a Fabric workspace** or **Publish to another workspace**, choose the workspace.
+2. Under **App**, choose the app. **App** shows when the workspace has Rayfin apps and the project doesn't publish there yet. Its first choice, such as **A new app named “Contoso Expenses”**, creates a new app.
+3. Select **Publish**.
+
+When you choose an app, you see "Publishing replaces the app “Budget” in Operations with this one." Unless you enter a **Name**, the published app takes that app's name.
+
 ## What happens while your app publishes
 
 Your app stays in the preview while it publishes, so you can keep looking at it: your app on this computer, or your published app. A strip above the preview shows where it's publishing to, such as "Publishing to Production", the step in progress, a progress bar and how long it has taken. Select **Watch** to follow it on the publish screen, and **Back to your app** to return. Select **Logs** to see the publish log. When the published app is in the preview, **Design** and the **Fabric** view wait until publishing ends, and the preview reloads when the new version is live.
@@ -134,12 +144,12 @@ Turning **Publish after each chat turn** on closes that local preview and doesn'
 
 In the app bar, select the publish control, which shows the published app's name, to open the **Published apps** panel. It opens straight away and doesn't sign you in to Fabric. It shows:
 
-- the published app's name and state, as a dot and words, for example "Published 2 h ago". Select the pencil, **Rename this published app**, to rename it.
+- the published app's name and state, as a dot and words, for example "Published 2 h ago". Select the pencil, **Rename this published app**, to rename it, or the trash can, **Delete this published app**, to delete it.
 - what's waiting to publish, with **See what changed**, which opens **History** in the Code tab,
 - **App**, the app's address. Select **Copy link** to copy it, or **Open in your browser**.
 - **Workspace**, the Fabric workspace, with its region and capacity. Select **Open the workspace in Fabric** to open it in the Fabric portal. The region and capacity show once you're signed in to Fabric.
 - **Account**, the Fabric account that publishes. Select **Change** to use another, or **Sign in** when you're signed out.
-- **Other published apps**, the project's other published apps. Select **Switch** on one to make it the active published app: the preview shows it, and publishing goes to it. Point at one to rename it.
+- **Other published apps**, the project's other published apps. Select **Switch** on one to make it the active published app: the preview shows it, and publishing goes to it. Point at one to rename or delete it.
 - **Publish after each chat turn**. See [Publish after each chat turn](/docs/ship/deploy#publish-after-each-chat-turn).
 - **Publish to another workspace…**, to publish the same project to another workspace.
 
@@ -147,7 +157,19 @@ In the app bar, select the publish control, which shows the published app's name
 
 Switching uses Rayfin's recorded deployments for the project. Each published app is in its own Fabric workspace.
 
-Fabricator doesn't delete published apps from this panel.
+## Delete a published app
+
+Deleting a published app deletes it and all its data in Fabric, for everyone who uses it, and can't be undone. Your app on this computer stays as it is.
+
+1. In the app bar, select the publish control to open the **Published apps** panel.
+2. Select the trash can, **Delete this published app**, beside the published app's name. To delete one of the **Other published apps**, point at it and select its trash can.
+3. Fabricator asks first, for example "Delete Production and all its data in Operations?" Select **Delete**, or **Cancel** to keep it.
+
+You can't delete a published app while your app is publishing or Copilot is working on it.
+
+When you delete the active published app, the most recently published of the project's other published apps becomes the active one, and the question names it. If there are none, your app isn't published anymore, and **Publish** asks for a workspace again.
+
+If Fabric wants you to sign in again, Fabricator signs you in and tries once more. If the app is already gone from Fabric, for example because someone deleted it in the Fabric portal, deleting it removes it from the project.
 
 ## Refresh Fabric authentication
 

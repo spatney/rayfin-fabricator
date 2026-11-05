@@ -191,10 +191,10 @@ runHelper(main)
 /// One item passed to the delete helper (serialized to the items JSON file).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteItem {
-  workspace_id: String,
-  item_id: String,
-  name: String,
+pub(crate) struct DeleteItem {
+  pub(crate) workspace_id: String,
+  pub(crate) item_id: String,
+  pub(crate) name: String,
 }
 
 /// Helper executed by the system `node` to list the Rayfin apps (`AppBackend`
@@ -214,18 +214,34 @@ async function main() {
 runHelper(main)
 "#;
 
+/// Whether this project already publishes to `workspace_id`: the CLI then keeps
+/// redeploying its own recorded app there.
+fn deploys_to(own: &[FabricDeployment], workspace_id: &str) -> bool {
+  own.iter().any(|d| d.workspace_id.as_deref().is_some_and(|w| w.eq_ignore_ascii_case(workspace_id)))
+}
+
 /// The existing app a deploy into `workspace_id` would replace: a Rayfin app
 /// there with the project's item name (matched like the CLI does, ignoring
 /// case), unless this project already deploys to that workspace, in which case
 /// the CLI reuses the project's own recorded item.
 fn replaced_app(item_name: &str, workspace_id: &str, own: &[FabricDeployment], existing: &[String]) -> Option<String> {
-  let deploys_there = own
-    .iter()
-    .any(|d| d.workspace_id.as_deref().is_some_and(|w| w.eq_ignore_ascii_case(workspace_id)));
-  if deploys_there {
+  if deploys_to(own, workspace_id) {
     return None;
   }
   existing.iter().find(|n| n.eq_ignore_ascii_case(item_name)).cloned()
+}
+
+/// The Rayfin apps in `workspace_id` the project could publish into instead of
+/// a new app, by name, A to Z: none when it already publishes there, or when
+/// its Rayfin CLI can't publish to an app by name (`can_name`).
+fn choosable_apps(workspace_id: &str, own: &[FabricDeployment], existing: &[String], can_name: bool) -> Vec<String> {
+  if !can_name || deploys_to(own, workspace_id) {
+    return Vec::new();
+  }
+  let mut apps: Vec<String> = existing.iter().map(|n| n.trim()).filter(|n| !n.is_empty()).map(String::from).collect();
+  apps.sort_by_key(|n| n.to_lowercase());
+  apps.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+  apps
 }
 
 /// The Fabric item name a project deploys as on its first deploy to a
@@ -260,8 +276,9 @@ async fn app_items_in(project_dir: &Path, workspace_id: &str) -> Result<Vec<Stri
 
 /// Before the active project's first deploy into a workspace, find a same-named
 /// Rayfin app there. `rayfin up -y` (how Fabricator deploys) would silently reuse
-/// it and overwrite its configuration. Best-effort: a failed lookup reports an
-/// error but never blocks the deploy by itself.
+/// it and overwrite its configuration. Also lists the workspace's Rayfin apps
+/// the project could publish into instead. Best-effort: a failed lookup reports
+/// an error but never blocks the deploy by itself.
 #[tauri::command]
 pub async fn fabric_check_deploy_target(workspace_id: String) -> DeployTargetCheck {
   let Some(project) = store::active_project() else {
@@ -279,12 +296,16 @@ pub async fn fabric_check_deploy_target(workspace_id: String) -> DeployTargetChe
     app_items_in(&dir, &workspace_id)
   );
   match existing {
-    Ok(existing) => DeployTargetCheck {
-      conflict: replaced_app(&item_name, &workspace_id, &own.unwrap_or_default(), &existing),
-      item_name: Some(item_name),
-      error: None,
-    },
-    Err(error) => DeployTargetCheck { item_name: Some(item_name), conflict: None, error: Some(error) },
+    Ok(existing) => {
+      let own = own.unwrap_or_default();
+      DeployTargetCheck {
+        conflict: replaced_app(&item_name, &workspace_id, &own, &existing),
+        apps: choosable_apps(&workspace_id, &own, &existing, crate::commands::deploy::names_its_app(&dir)),
+        item_name: Some(item_name),
+        error: None,
+      }
+    }
+    Err(error) => DeployTargetCheck { item_name: Some(item_name), error: Some(error), ..Default::default() },
   }
 }
 
@@ -715,7 +736,13 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
   }
 
   let project_dir = store::find_project(&project_id).map(|p| PathBuf::from(p.path));
-  let auth_path = match project_auth_module(project_dir.as_deref()).await {
+  delete_items(project_dir.as_deref(), &items).await
+}
+
+/// Delete `items` in Fabric with the project's Rayfin sign-in. One that's
+/// already gone counts as deleted. Never throws.
+pub(crate) async fn delete_items(project_dir: Option<&Path>, items: &[DeleteItem]) -> FabricDeleteResult {
+  let auth_path = match project_auth_module(project_dir).await {
     Ok(p) => p,
     Err(error) => {
       return FabricDeleteResult {
@@ -731,7 +758,7 @@ pub async fn fabric_delete_apps(project_id: String) -> FabricDeleteResult {
   let prep = (|| -> std::io::Result<(PathBuf, PathBuf)> {
     let script_path = write_helper("fabric-delete.mjs", DELETE_HELPER_SOURCE)?;
     let items_path = paths::ensure_data_dir()?.join(format!("fabric-delete-items-{}.json", uuid::Uuid::new_v4()));
-    let json = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
+    let json = serde_json::to_string(items).unwrap_or_else(|_| "[]".to_string());
     std::fs::write(&items_path, json)?;
     Ok((script_path, items_path))
   })();
@@ -1173,6 +1200,13 @@ mod tests {
     assert_eq!(replaced_app("notes", "ws-b", &[own("ws-a")], &existing), Some("Notes".into()));
     assert_eq!(replaced_app("budget", "ws-b", &[], &existing), None);
     assert!(APP_ITEMS_HELPER_SOURCE.contains("type=AppBackend") && APP_ITEMS_HELPER_SOURCE.contains("runHelper(main)"));
+
+    // The apps a publish can go into instead: A to Z, each once, and none where
+    // the project already publishes, or when its CLI can't name an app.
+    let existing = vec!["trip-logger".to_string(), "Notes".to_string(), " ".to_string(), "notes".to_string()];
+    assert_eq!(choosable_apps("ws-b", &[own("ws-a")], &existing, true), ["Notes", "trip-logger"]);
+    assert!(choosable_apps("WS-B", &[own("ws-b")], &existing, true).is_empty());
+    assert!(choosable_apps("ws-b", &[], &existing, false).is_empty());
   }
 
   #[test]

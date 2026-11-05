@@ -102,8 +102,9 @@ interface Props {
   cancelLabel?: string
   /** Secondary action; the Cancel button is hidden when omitted. */
   onCancel?: () => void
-  /** Submit: publish as `name` (friendly, may be empty) into `workspaceId`. */
-  onSubmit: (name: string, workspaceId: string) => void
+  /** Submit: publish as `name` (friendly, may be empty) into `workspaceId`,
+   *  into the existing app `itemName` there when one was chosen. */
+  onSubmit: (name: string, workspaceId: string, itemName?: string) => void
   /** Pre-fill the (editable) published app's name — e.g. "Development" for a first publish. */
   defaultName?: string
   /**
@@ -153,6 +154,8 @@ export default function DeploymentCreateForm({
   const [targetCheck, setTargetCheck] = useState<{ workspaceId: string; result?: DeployTargetCheck } | null>(null)
   /** The workspace whose same-named app the user agreed to replace. */
   const [replaceIn, setReplaceIn] = useState<string | null>(null)
+  /** An existing app picked to publish into, in the workspace it's in. */
+  const [appIn, setAppIn] = useState<{ workspaceId: string; name: string } | null>(null)
   /** A workspace Fabric turned down before that the user chose to publish to anyway. */
   const [tryIn, setTryIn] = useState<string | null>(null)
   const [showIneligible, setShowIneligible] = useState(false)
@@ -331,7 +334,13 @@ export default function DeploymentCreateForm({
   const targetState = selectedWorkspace && targetCheck?.workspaceId === selectedWorkspace.id ? targetCheck : null
   const checkingTarget = Boolean(targetState && !targetState.result)
   const replaces = targetState?.result?.conflict
-  const blockedByConflict = Boolean(replaces) && replaceIn !== selectedWs
+  const apps = targetState?.result?.apps ?? []
+  const chosenApp =
+    selectedWorkspace && appIn?.workspaceId === selectedWorkspace.id && apps.includes(appIn.name)
+      ? appIn.name
+      : undefined
+  // Choosing the app to publish into settles which one is replaced.
+  const blockedByConflict = Boolean(replaces) && replaceIn !== selectedWs && !chosenApp
   const selectedRefusal = selectedWorkspace ? refusal(selectedWorkspace) : undefined
   const blockedByRefusal = Boolean(selectedRefusal) && tryIn !== selectedWs
   const canSubmit =
@@ -346,8 +355,8 @@ export default function DeploymentCreateForm({
 
   function submit(): void {
     if (!canSubmit || !selectedWorkspace) return
-    const friendly = name.trim() || selectedWorkspace.displayName || ''
-    onSubmit(friendly, selectedWorkspace.id)
+    const friendly = name.trim() || chosenApp || selectedWorkspace.displayName || ''
+    onSubmit(friendly, selectedWorkspace.id, chosenApp)
   }
 
   const eligibleRow = (w: FabricWorkspace): JSX.Element => {
@@ -572,7 +581,7 @@ export default function DeploymentCreateForm({
                 Checking {selectedWorkspace.displayName} for an app with the same name…
               </p>
             )}
-            {selectedWorkspace && replaces && (
+            {selectedWorkspace && replaces && !chosenApp && (
               <div className="ws-target-conflict" role="alert">
                 <span className="codicon codicon-warning" aria-hidden="true" />
                 <span className="ws-target-conflict-text">
@@ -585,6 +594,44 @@ export default function DeploymentCreateForm({
                     Replace it anyway
                   </button>
                 )}
+              </div>
+            )}
+            {selectedWorkspace && apps.length > 0 && (
+              <label className="dep-field ws-app">
+                <span className="dep-field-label">App</span>
+                <select
+                  className="ws-input"
+                  value={chosenApp ?? ''}
+                  onChange={(e) =>
+                    setAppIn(
+                      e.target.value
+                        ? { workspaceId: selectedWorkspace.id, name: e.target.value }
+                        : null
+                    )
+                  }
+                >
+                  <option value="">
+                    {replaces
+                      ? `${replaces} (same name as this app)`
+                      : `A new app${targetState?.result?.itemName ? ` named “${targetState.result.itemName}”` : ''}`}
+                  </option>
+                  {apps
+                    .filter((app) => app.toLowerCase() !== replaces?.toLowerCase())
+                    .map((app) => (
+                      <option key={app} value={app}>
+                        {app}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
+            {selectedWorkspace && chosenApp && (
+              <div className="ws-target-conflict" role="alert">
+                <span className="codicon codicon-warning" aria-hidden="true" />
+                <span className="ws-target-conflict-text">
+                  Publishing replaces the app “{chosenApp}” in {selectedWorkspace.displayName} with
+                  this one.
+                </span>
               </div>
             )}
             {selectedWorkspace && selectedRefusal && (

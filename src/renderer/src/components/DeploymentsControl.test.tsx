@@ -53,7 +53,10 @@ describe('DeploymentsControl chip', () => {
         projectSemanticModels: vi.fn().mockResolvedValue([])
       },
       auth: { loginRayfin: vi.fn().mockResolvedValue({ ok: true, exitCode: 0 }) },
-      deploy: { list: vi.fn().mockResolvedValue([]) }
+      deploy: {
+        list: vi.fn().mockResolvedValue([]),
+        remove: vi.fn().mockResolvedValue({ ok: true })
+      }
     }
     ;(window as unknown as { api: unknown }).api = api
     return api
@@ -493,6 +496,98 @@ describe('DeploymentsControl chip', () => {
       })
       expect(api.deploy.list).toHaveBeenCalledTimes(2)
       expect(screen.getByRole('button', { name: /^Published app:\s*Staging$/ })).toBeTruthy()
+    })
+
+    it('deletes another published app only after asking, and says why when Fabric doesn’t', async () => {
+      const api = installApi()
+      api.deploy.list.mockResolvedValue([
+        { workspaceName: 'Sales', name: 'Production', workspaceId: 'ws-prod', active: true },
+        { workspaceName: 'Sales dev', name: 'Staging', workspaceId: 'ws-staging', active: false }
+      ])
+      api.deploy.remove
+        .mockResolvedValueOnce({ ok: false, error: 'Fabric said no.' })
+        .mockResolvedValueOnce({ ok: true })
+      const onChanged = vi.fn()
+      render(control({ onChanged }))
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
+      const panel = screen.getByRole('dialog', { name: 'Published apps' })
+      fireEvent.click(await screen.findByRole('button', { name: 'Delete Staging' }))
+
+      expect(panel.textContent).toContain('Delete Staging and all its data in Sales dev?')
+      expect(panel.textContent).toContain('Your app on this computer stays as it is.')
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      expect(panel.textContent).not.toContain('all its data')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete Staging' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+      expect(await screen.findByText('Fabric said no.')).toBeTruthy()
+      expect(onChanged).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1))
+      expect(api.deploy.remove.mock.calls).toEqual([
+        ['p1', 'ws-staging'],
+        ['p1', 'ws-staging']
+      ])
+      expect(api.deploy.list).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('Deleted Staging and its data in Fabric.')).toBeTruthy()
+      expect(panel.textContent).not.toContain('all its data')
+    })
+
+    it('says which app publishing goes to after deleting the active one, and signs in again once if Fabric asks', async () => {
+      const api = installApi()
+      api.deploy.list.mockResolvedValue([
+        { workspaceName: 'Sales', name: 'Production', workspaceId: 'ws-live', active: true },
+        {
+          workspaceName: 'Sales dev',
+          name: 'Staging',
+          workspaceId: 'ws-old',
+          active: false,
+          deployedAt: '2026-01-01T00:00:00Z'
+        },
+        {
+          workspaceName: 'Sales test',
+          name: 'Test',
+          workspaceId: 'ws-new',
+          active: false,
+          deployedAt: '2026-03-01T00:00:00Z'
+        }
+      ])
+      api.deploy.remove.mockResolvedValueOnce({
+        ok: false,
+        needsLogin: true,
+        error: 'Sign in to Fabric.'
+      })
+      const onSignedIn = vi.fn().mockResolvedValue(undefined)
+      render(control({ onSignedIn }))
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
+      const panel = screen.getByRole('dialog', { name: 'Published apps' })
+      await screen.findByText('Staging')
+      fireEvent.click(screen.getByRole('button', { name: 'Delete this published app' }))
+
+      expect(panel.textContent).toContain('Delete Production and all its data in Sales?')
+      expect(panel.textContent).toContain('publishes to Test from then on.')
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+      await waitFor(() => expect(api.deploy.remove).toHaveBeenCalledTimes(2))
+      expect(api.auth.loginRayfin).toHaveBeenCalledTimes(1)
+      expect(onSignedIn).toHaveBeenCalledTimes(1)
+      expect(api.deploy.remove).toHaveBeenLastCalledWith('p1', 'ws-live')
+    })
+
+    it('waits to delete while Copilot works on the app', async () => {
+      const api = installApi()
+      api.deploy.list.mockResolvedValue([
+        { workspaceName: 'Sales', name: 'Production', workspaceId: 'ws-live', active: true }
+      ])
+      render(control({ chatBusy: true }))
+      fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
+      const trash = (await screen.findByRole('button', {
+        name: 'Delete this published app'
+      })) as HTMLButtonElement
+      expect(trash.disabled).toBe(true)
+      expect(trash.title).toBe(
+        'Copilot is working on this app. Deleting waits until the turn finishes.'
+      )
     })
   })
 

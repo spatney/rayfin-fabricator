@@ -404,6 +404,7 @@ export default function Workbench({
   const [confirmDeploy, setConfirmDeploy] = useState<{
     projectId: string
     workspace?: string
+    itemName?: string
     behind: number
   } | null>(null)
   /** True while the deploy warning's "Get latest first" pull is running. */
@@ -1033,7 +1034,7 @@ export default function Workbench({
   }, [active?.id])
 
   const executeDeploy = useCallback(
-    async (projectId: string, workspace?: string): Promise<DeployResult> => {
+    async (projectId: string, workspace?: string, itemName?: string): Promise<DeployResult> => {
       if (authActionRef.current) {
         const error = 'Wait for Fabric authentication to finish, then publish again.'
         toast.error(error, { title: 'Publishing paused' })
@@ -1042,7 +1043,8 @@ export default function Workbench({
       deployingIdRef.current = projectId
       setDeploys((all) => ({ ...all, [projectId]: { running: true, log: [], startedAt: Date.now(), workspace } }))
       let result: DeployResult = { ok: false, outcome: 'error' }
-      const request = (): Promise<DeployResult> => window.api.deploy.run(projectId, workspace)
+      const request = (): Promise<DeployResult> =>
+        window.api.deploy.run(projectId, workspace, itemName)
       try {
         try {
           result = await request()
@@ -1145,8 +1147,8 @@ export default function Workbench({
     ]
   )
   const runDeploy = useCallback(
-    (projectId: string, workspace?: string): Promise<DeployResult> =>
-      deployQueueRef.current.enqueue({ projectId, workspace }, executeDeploy),
+    (projectId: string, workspace?: string, itemName?: string): Promise<DeployResult> =>
+      deployQueueRef.current.enqueue({ projectId, workspace, itemName }, executeDeploy),
     [executeDeploy]
   )
 
@@ -1157,7 +1159,7 @@ export default function Workbench({
    * skip this guard so they never stall on a modal.
    */
   const requestUserDeploy = useCallback(
-    async (projectId: string, workspace?: string): Promise<void> => {
+    async (projectId: string, workspace?: string, itemName?: string): Promise<void> => {
       // A chat turn holds the project's source until it finishes: publishing now could only fail.
       if ((chatsRef.current[projectId] ?? []).some((m) => m.role === 'assistant' && m.pending)) {
         toast.info('Copilot is still working on this app. Publish it once the turn finishes.', {
@@ -1174,13 +1176,13 @@ export default function Workbench({
         const div = await window.api.projects.git.divergence(projectId)
         if (div.behind > 0) {
           setDeployGuardError(null)
-          setConfirmDeploy({ projectId, workspace, behind: div.behind })
+          setConfirmDeploy({ projectId, workspace, itemName, behind: div.behind })
           return
         }
       } catch {
         /* divergence is best-effort — fall through and publish */
       }
-      void runDeploy(projectId, workspace)
+      void runDeploy(projectId, workspace, itemName)
     },
     [runDeploy, isTeamProject, toast]
   )
@@ -2979,7 +2981,7 @@ export default function Workbench({
                 chooseRequest={chooseRequest}
                 onChooseRequestHandled={onChooseRequestHandled}
                 refused={refusedWorkspaces}
-                onCreate={(name, workspaceId, workspaceName) => {
+                onCreate={(name, workspaceId, workspaceName, itemName) => {
                   setViewMode('build')
                   nameNewTarget(active.id, workspaceId, name.trim() || workspaceName || '')
                   void (async () => {
@@ -2988,7 +2990,7 @@ export default function Workbench({
                     } catch {
                       /* naming is best-effort; deploy anyway */
                     }
-                    await requestUserDeploy(active.id, workspaceId)
+                    await requestUserDeploy(active.id, workspaceId, itemName)
                   })()
                 }}
                 onRedeploy={() => {
@@ -3770,14 +3772,14 @@ export default function Workbench({
                 return
               }
               setConfirmDeploy(null)
-              void runDeploy(c.projectId, c.workspace)
+              void runDeploy(c.projectId, c.workspace, c.itemName)
             })()
           }}
           onSecondary={() => {
             const c = confirmDeploy
             setConfirmDeploy(null)
             setDeployGuardError(null)
-            void runDeploy(c.projectId, c.workspace)
+            void runDeploy(c.projectId, c.workspace, c.itemName)
           }}
           onCancel={() => {
             setConfirmDeploy(null)

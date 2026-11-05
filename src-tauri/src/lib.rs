@@ -504,6 +504,7 @@ pub fn run() {
       commands::deploy::deploy_pending,
       commands::deploy::deploy_list,
       commands::deploy::deploy_switch,
+      commands::deploy::deploy_remove,
       commands::deploy::deploy_set_name,
       commands::deploy::deploy_reconcile,
 

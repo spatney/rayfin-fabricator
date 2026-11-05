@@ -1423,6 +1423,23 @@ pub struct DeployTargetCheck {
   /// The check couldn't run (the deploy itself isn't blocked).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
+  /// The workspace's Rayfin apps the project can publish into instead of a new
+  /// app (`rayfin up --item-name`): none when it already publishes there, or its
+  /// Rayfin CLI is older than 1.36.
+  #[serde(skip_serializing_if = "Vec::is_empty")]
+  pub apps: Vec<String>,
+}
+
+/// What deleting one of a project's published apps did.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeployRemoveResult {
+  pub ok: bool,
+  /// Fabric needs you to sign in again before it deletes the app.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub needs_login: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
 }
 
 /* ----------------------------- github ----------------------------- */

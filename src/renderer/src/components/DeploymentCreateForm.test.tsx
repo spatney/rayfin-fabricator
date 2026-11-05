@@ -292,7 +292,76 @@ describe('DeploymentCreateForm replace check', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
     expect(deploy.disabled).toBe(false)
     fireEvent.click(deploy)
-    expect(onSubmit).toHaveBeenCalledWith('Development', 'w2')
+    expect(onSubmit).toHaveBeenCalledWith('Development', 'w2', undefined)
+  })
+
+  it('publishes into an app the workspace has, when you pick one', async () => {
+    const checkTarget = vi.fn(() =>
+      Promise.resolve({ itemName: 'notes', apps: ['Budget', 'Trip logger'] })
+    )
+    const onSubmit = vi.fn()
+    render(
+      <DeploymentCreateForm
+        wsResult={workspaces}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={onSubmit}
+        submitLabel="Publish app"
+        checkTarget={checkTarget}
+      />
+    )
+    fireEvent.click(screen.getByText('Sales apps'))
+    const app = (await screen.findByRole('combobox', { name: 'App' })) as HTMLSelectElement
+    expect([...app.options].map((o) => o.text)).toEqual([
+      'A new app named “notes”',
+      'Budget',
+      'Trip logger'
+    ])
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    fireEvent.change(app, { target: { value: 'Trip logger' } })
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Publishing replaces the app “Trip logger” in Sales apps with this one.'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Publish app' }))
+    expect(onSubmit).toHaveBeenLastCalledWith('Trip logger', 'w1', 'Trip logger')
+
+    // The pick is for that workspace only.
+    fireEvent.click(screen.getByText('Development'))
+    await waitFor(() => expect(checkTarget).toHaveBeenCalledWith('w2'))
+    expect(
+      ((await screen.findByRole('combobox', { name: 'App' })) as HTMLSelectElement).value
+    ).toBe('')
+    fireEvent.click(screen.getByRole('button', { name: 'Publish app' }))
+    expect(onSubmit).toHaveBeenLastCalledWith('Development', 'w2', undefined)
+  })
+
+  it('picking another app settles a same-named one, which the default replaces only when you say', async () => {
+    const checkTarget = vi.fn(() =>
+      Promise.resolve({ itemName: 'notes', conflict: 'Notes', apps: ['Budget', 'Notes'] })
+    )
+    const onSubmit = vi.fn()
+    render(
+      <DeploymentCreateForm
+        wsResult={workspaces}
+        loadingWs={false}
+        onReload={vi.fn()}
+        onSubmit={onSubmit}
+        submitLabel="Publish app"
+        checkTarget={checkTarget}
+      />
+    )
+    fireEvent.click(screen.getByText('Sales apps'))
+    const app = (await screen.findByRole('combobox', { name: 'App' })) as HTMLSelectElement
+    expect([...app.options].map((o) => o.text)).toEqual(['Notes (same name as this app)', 'Budget'])
+    const deploy = screen.getByRole('button', { name: 'Publish app' }) as HTMLButtonElement
+    expect(deploy.disabled).toBe(true)
+
+    fireEvent.change(app, { target: { value: 'Budget' } })
+    expect(deploy.disabled).toBe(false)
+    expect(screen.getByRole('alert').textContent).toContain('replaces the app “Budget”')
+    fireEvent.click(deploy)
+    expect(onSubmit).toHaveBeenLastCalledWith('Budget', 'w1', 'Budget')
   })
 
   it('never blocks publishing when the check fails', async () => {
@@ -452,7 +521,7 @@ describe('DeploymentCreateForm workspaces Fabric turned apps down in', () => {
     fireEvent.click(screen.getByText('Finance'))
     expect(screen.queryByRole('alert')).toBeNull()
     fireEvent.click(publish)
-    expect(onSubmit).toHaveBeenCalledWith('Finance', 'w2')
+    expect(onSubmit).toHaveBeenCalledWith('Finance', 'w2', undefined)
   })
 
   it('suggests the Fabric admin once more than one region turned apps down', () => {

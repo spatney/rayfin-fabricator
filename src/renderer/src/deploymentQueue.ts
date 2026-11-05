@@ -3,9 +3,11 @@ import type { DeployResult } from '@shared/ipc'
 export interface DeploymentRequest {
   projectId: string
   workspace?: string
+  /** Publish into the existing Rayfin app of this name in the workspace. */
+  itemName?: string
 }
 
-type Runner = (projectId: string, workspace?: string) => Promise<DeployResult>
+type Runner = (projectId: string, workspace?: string, itemName?: string) => Promise<DeployResult>
 interface Job {
   request: DeploymentRequest
   run: Runner
@@ -14,7 +16,7 @@ interface Job {
 }
 
 function key(request: DeploymentRequest): string {
-  return JSON.stringify([request.projectId, request.workspace ?? null])
+  return JSON.stringify([request.projectId, request.workspace ?? null, request.itemName ?? null])
 }
 
 /**
@@ -49,7 +51,7 @@ export class DeploymentQueue {
     if (!job) return
     this.active = job
     void job
-      .run(job.request.projectId, job.request.workspace)
+      .run(job.request.projectId, job.request.workspace, job.request.itemName)
       .then(job.resolve, (reason: unknown) => {
         const error = reason instanceof Error ? reason.message : String(reason)
         console.error('Queued deployment failed', reason)

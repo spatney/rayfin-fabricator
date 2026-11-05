@@ -3448,6 +3448,10 @@ code {
   flex: none;
   align-self: auto;
 }
+/* Which of the chosen workspace's apps a publish goes into, when it can choose. */
+.ws-app {
+  margin-top: 4px;
+}
 /* Fabric turned down an app in this workspace, on its capacity or in its region:
    a caution, not an error, so amber rather than red. */
 .ws-target-conflict--refused .codicon {
@@ -6812,6 +6816,24 @@ button.deploy-trouble-ray:focus-visible {
 }
 .dep-ico .codicon[class*='codicon-'] {
   font-size: 13px;
+}
+.dep-ico:disabled {
+  cursor: default;
+  color: var(--text-faint);
+  background: transparent;
+  border-color: transparent;
+}
+/* The published app's rename and delete, together at the end of its title. */
+.dep-title-actions {
+  flex: none;
+  display: flex;
+  gap: 2px;
+}
+/* A published app, and the question its Delete asks, under it. */
+.dep-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .dep-list {
   list-style: none;

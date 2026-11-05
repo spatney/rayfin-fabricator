@@ -21,13 +21,15 @@ use crate::commands::util::{annotate_state, now_iso};
 use crate::services::exec::{self, OnData, RunOptions, RunResult, Stream};
 use crate::services::{crashlog, emit, fabric_auth, git, journal, store, telemetry, version_history};
 use crate::types::{
-  DeployInfo, DeployResult, DeployStatus, FabricDeployment, PendingChanges, ProjectsState, StudioProject,
-  UnsupportedWorkspace,
+  DeployInfo, DeployRemoveResult, DeployResult, DeployStatus, FabricDeployment, PendingChanges, ProjectsState,
+  StudioProject, UnsupportedWorkspace,
 };
 
 const DEPLOY_TIMEOUT_MS: u64 = 20 * 60_000;
 const SETTINGS_PUSH_TIMEOUT_MS: u64 = 10 * 60_000;
 const DEPLOY_CHANNEL: &str = "deploy:run";
+/// The first Rayfin CLI whose `rayfin up` publishes to an app you name (`--item-name`).
+const ITEM_NAME_SINCE: semver::Version = semver::Version::new(1, 36, 0);
 
 static GUID_RE: Lazy<Regex> =
   Lazy::new(|| Regex::new(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap());
@@ -77,6 +79,31 @@ fn settings_push_args(workspace: Option<&str>) -> Vec<String> {
     ["up", "-y", "--force", "--exclude-services", "staticHosting"].into_iter().map(String::from).collect();
   args.extend(workspace_args(workspace));
   args
+}
+
+/// `rayfin up` arguments for a publish into `workspace` (else the active
+/// deployment's), and into the existing app named `item_name` when given.
+/// Always forced, so destructive datamodel/schema changes are applied: a deploy
+/// must never leave the published datamodel stale.
+fn up_args(workspace: Option<&str>, item_name: Option<&str>) -> Vec<String> {
+  let mut args: Vec<String> = ["up", "-y", "--force"].into_iter().map(String::from).collect();
+  args.extend(workspace_args(workspace));
+  if let Some(name) = item_name.map(str::trim).filter(|name| !name.is_empty()) {
+    args.extend(["--item-name".to_string(), name.to_string()]);
+  }
+  args
+}
+
+/// The version of a project's own Rayfin CLI, the one Fabricator runs.
+fn installed_cli_version(dir: &Path) -> Option<semver::Version> {
+  let text = std::fs::read_to_string(dir.join("node_modules/@microsoft/rayfin-cli/package.json")).ok()?;
+  let package: serde_json::Value = serde_json::from_str(&text).ok()?;
+  semver::Version::parse(package.get("version")?.as_str()?.trim()).ok()
+}
+
+/// Whether a project's Rayfin CLI can publish into an existing app by name.
+pub(crate) fn names_its_app(dir: &Path) -> bool {
+  installed_cli_version(dir).is_some_and(|version| version >= ITEM_NAME_SINCE)
 }
 
 /// Best URL to load in the preview, in priority order.
@@ -590,10 +617,11 @@ pub async fn deploy_run(
   app: AppHandle,
   project_id: String,
   workspace: Option<String>,
+  item_name: Option<String>,
 ) -> DeployResult {
   // Keep ownership attached to actual process completion, not to the invoking
   // renderer's lifetime.
-  match tokio::spawn(async move { run_deploy(app, project_id, workspace).await }).await {
+  match tokio::spawn(async move { run_deploy(app, project_id, workspace, item_name).await }).await {
     Ok(result) => result,
     Err(error) => deployment_error(format!("The publish task failed: {error}")),
   }
@@ -608,6 +636,7 @@ pub(crate) async fn run_deploy(
   app: AppHandle,
   project_id: String,
   workspace: Option<String>,
+  item_name: Option<String>,
 ) -> DeployResult {
   // Team projects are deployed by their workspace's pipeline, never from here
   // (enforced whether or not the experiment is on).
@@ -620,7 +649,7 @@ pub(crate) async fn run_deploy(
     Err(error) => return deployment_error(error),
   };
   let mut detail = None;
-  let result = run_deploy_inner(app.clone(), project_id.clone(), workspace, &mut detail).await;
+  let result = run_deploy_inner(app.clone(), project_id.clone(), workspace, item_name, &mut detail).await;
   record_deploy(&project_id, &result, detail);
   result
 }
@@ -773,6 +802,7 @@ async fn run_deploy_inner(
   app: AppHandle,
   project_id: String,
   workspace: Option<String>,
+  item_name: Option<String>,
   detail: &mut Option<String>,
 ) -> DeployResult {
   let Some(project) = store::find_project(&project_id) else {
@@ -845,10 +875,7 @@ async fn run_deploy_inner(
   captured.lock().unwrap().clear();
   let _auth_guard = crate::commands::auth::rayfin_auth_read().await;
 
-  // Always force so destructive datamodel/schema changes are applied — a deploy
-  // must never leave the published datamodel stale.
-  let mut up_args: Vec<String> = vec!["up".into(), "-y".into(), "--force".into()];
-  up_args.extend(workspace_args(workspace_target.as_deref()));
+  let up_args = up_args(workspace_target.as_deref(), item_name.as_deref());
   let arg_refs: Vec<&str> = up_args.iter().map(|s| s.as_str()).collect();
 
   // The app's thumbnail goes out with its files, so galleries elsewhere can show it.
@@ -1303,6 +1330,137 @@ pub fn deploy_set_name(project_id: String, workspace_key: String, name: String) 
   annotate_state(state)
 }
 
+/// Whether `recorded` is the deployment the deployments panel names `key`: by its
+/// workspace id, or the (sanitized) workspace name it's recorded under.
+fn is_deployment(recorded: &Recorded, key: &str) -> bool {
+  let key = key.trim();
+  recorded.workspace == key || recorded.entry.fabric_workspace_id.as_deref().is_some_and(|id| id.eq_ignore_ascii_case(key))
+}
+
+/// The deployment that takes over from a forgotten active one.
+#[derive(Debug, PartialEq)]
+struct NextActive {
+  key: String,
+  workspace_id: String,
+}
+
+/// Remove the deployment recorded under `key` from a project's registry. When
+/// it was the active one, the most recently published of the rest takes over,
+/// and is returned; with none left, none is active. The rest of the file,
+/// including what Fabricator doesn't read, stays as it was.
+fn forget_deployment(dir: &Path, key: &str) -> Result<Option<NextActive>, String> {
+  let path = dir.join("rayfin").join(".deployments.json");
+  let unreadable = |e: String| format!("Couldn't read {}: {e}", path.display());
+  let text = std::fs::read_to_string(&path).map_err(|e| unreadable(e.to_string()))?;
+  let mut registry: serde_json::Value = serde_json::from_str(&text).map_err(|e| unreadable(e.to_string()))?;
+  let was_active = registry.get("active").and_then(serde_json::Value::as_str) == Some(key);
+  let latest = {
+    let Some(deployments) = registry.get_mut("deployments").and_then(serde_json::Value::as_object_mut) else {
+      return Err(unreadable("it has no deployments".into()));
+    };
+    deployments.shift_remove(key);
+    deployments
+      .iter()
+      .filter_map(|(key, value)| {
+        let entry = serde_json::from_value::<RegistryEntry>(value.clone()).ok()?;
+        filled(entry.fabric_item_id)?;
+        let workspace_id = filled(entry.fabric_workspace_id)?;
+        Some((entry.deployed_at.unwrap_or_default(), NextActive { key: key.clone(), workspace_id }))
+      })
+      .max_by(|a, b| a.0.cmp(&b.0))
+      .map(|(_, next)| next)
+  };
+  let next = if was_active { latest } else { None };
+  if let (true, Some(object)) = (was_active, registry.as_object_mut()) {
+    match &next {
+      Some(next) => {
+        object.insert("active".into(), serde_json::Value::String(next.key.clone()));
+      }
+      None => {
+        object.shift_remove("active");
+      }
+    }
+  }
+  let body = serde_json::to_string_pretty(&registry).map_err(|e| e.to_string())? + "\n";
+  let staged = path.with_extension("json.tmp");
+  std::fs::write(&staged, body)
+    .and_then(|()| std::fs::rename(&staged, &path))
+    .map_err(|e| format!("Couldn't update {}: {e}", path.display()))?;
+  Ok(next)
+}
+
+fn removal_failed(error: impl Into<String>) -> DeployRemoveResult {
+  DeployRemoveResult { ok: false, needs_login: None, error: Some(error.into()) }
+}
+
+/// Delete one of a project's published apps: the app in Fabric, with its data,
+/// then its record, so the project no longer lists or publishes to it. When the
+/// project published to it, the most recently published of the others takes
+/// over, as Switch would make it; with none left, the project isn't published.
+/// `workspace` names it as the deployments panel does (see [`is_deployment`]).
+#[tauri::command]
+pub async fn deploy_remove(app: AppHandle, project_id: String, workspace: String) -> DeployRemoveResult {
+  // Once started, it finishes, whatever the renderer does meanwhile.
+  match tokio::spawn(async move { remove_deployment(app, project_id, workspace).await }).await {
+    Ok(result) => result,
+    Err(error) => removal_failed(format!("Deleting the published app failed: {error}")),
+  }
+}
+
+async fn remove_deployment(app: AppHandle, project_id: String, workspace: String) -> DeployRemoveResult {
+  if crate::services::team::is_team_project_id(&project_id) {
+    return removal_failed(crate::services::team::NO_LOCAL_DEPLOY);
+  }
+  let state = app.state::<crate::state::AppState>();
+  let _lease = match state.mutations.deploy(&project_id) {
+    Ok(lease) => lease,
+    Err(error) => return removal_failed(error),
+  };
+  let Some(project) = store::find_project(&project_id) else {
+    return removal_failed("Project not found.");
+  };
+  let dir = PathBuf::from(&project.path);
+  let Some(target) = read_registry(&dir).and_then(|list| list.into_iter().find(|r| is_deployment(r, &workspace))) else {
+    return removal_failed("That published app isn't recorded in this project anymore.");
+  };
+  // Recorded deployments always have both (see `read_registry`).
+  let workspace_id = target.entry.fabric_workspace_id.clone().unwrap_or_default();
+  let item_id = target.entry.fabric_item_id.clone().unwrap_or_default();
+  {
+    let _auth = crate::commands::auth::rayfin_auth_read().await;
+    let item = crate::commands::fabric::DeleteItem { workspace_id: workspace_id.clone(), item_id, name: target.workspace.clone() };
+    let deleted = crate::commands::fabric::delete_items(Some(&dir), &[item]).await;
+    if !deleted.ok {
+      let error = deleted.error.or_else(|| deleted.failures.first().map(|f| f.error.clone()));
+      return DeployRemoveResult {
+        ok: false,
+        needs_login: deleted.needs_login,
+        error: Some(error.unwrap_or_else(|| "Fabric didn't delete the app.".into())),
+      };
+    }
+  }
+  let next = match forget_deployment(&dir, &target.workspace) {
+    Ok(next) => next,
+    Err(error) => return removal_failed(format!("Fabric deleted the app, but this project still records it. {error}")),
+  };
+  // The app that takes over gets its settings in rayfin/.env, as Switch gives it.
+  if let Some(next) = next {
+    let res = exec::run_project_rayfin(&dir, &["up", "switch", "--workspace-id", &next.workspace_id], RunOptions::timeout(120_000)).await;
+    if !res.ok {
+      let error = error_text(&res, &res.stdout, "rayfin up switch failed.");
+      crashlog::log_error("deploy-remove", &format!("Couldn't switch to {}: {error}", next.key));
+    }
+  }
+  let key = target.workspace;
+  store::mutate_project(&project_id, move |p| {
+    if let Some(names) = p.deployment_names.as_mut() {
+      names.retain(|k, _| *k != key && !k.eq_ignore_ascii_case(&workspace_id));
+    }
+  });
+  deploy_reconcile(project_id).await;
+  DeployRemoveResult { ok: true, ..Default::default() }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1664,6 +1822,68 @@ mod tests {
       vec!["--workspace-id".to_string(), "3fa85f64-5717-4562-b3fc-2c963f66afa6".to_string()]
     );
     assert_eq!(workspace_args(Some("My Workspace")), vec!["-w".to_string(), "My Workspace".to_string()]);
+  }
+
+  #[test]
+  fn a_publish_into_an_existing_app_names_it() {
+    let ws = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+    assert_eq!(up_args(Some(ws), None), ["up", "-y", "--force", "--workspace-id", ws]);
+    assert_eq!(up_args(Some(ws), Some("  ")), ["up", "-y", "--force", "--workspace-id", ws]);
+    assert_eq!(
+      up_args(Some(ws), Some(" Sales & Ops ")),
+      ["up", "-y", "--force", "--workspace-id", ws, "--item-name", "Sales & Ops"]
+    );
+  }
+
+  #[test]
+  fn only_a_rayfin_cli_from_1_36_publishes_into_an_app_by_name() {
+    for (version, names) in [
+      ("1.36.0", true),
+      ("1.37.0-alpha.2159", true),
+      ("1.36.0-alpha.1620", false),
+      ("1.35.1", false),
+      ("not a version", false),
+    ] {
+      let dir = RegistryDir::new(None);
+      let cli = dir.0.join("node_modules/@microsoft/rayfin-cli");
+      std::fs::create_dir_all(&cli).unwrap();
+      std::fs::write(cli.join("package.json"), format!(r#"{{"version":"{version}"}}"#)).unwrap();
+      assert_eq!(names_its_app(&dir.0), names, "{version}");
+    }
+    assert!(!names_its_app(&RegistryDir::new(None).0), "no CLI installed");
+  }
+
+  #[test]
+  fn forgetting_the_active_deployment_hands_over_to_the_latest_of_the_rest() {
+    let dir = RegistryDir::new(Some(
+      r#"{"active":"prod","deployments":{"prod":{"fabricItemId":"i1","fabricWorkspaceId":"W1","deployedAt":"2026-11-03T10:00:00Z"},"old":{"fabricItemId":"i2","fabricWorkspaceId":"W2","deployedAt":"2026-01-01T00:00:00Z"},"dev":{"fabricItemId":"i3","fabricWorkspaceId":"W3","deployedAt":"2026-11-01T00:00:00Z","futureField":true},"draft":{"fabricItemId":"","fabricWorkspaceId":"W4","deployedAt":"2027-01-01T00:00:00Z"}},"version":2}"#,
+    ));
+    let next = forget_deployment(&dir.0, "prod").unwrap();
+    assert_eq!(next, Some(NextActive { key: "dev".into(), workspace_id: "W3".into() }), "never an unpublished placeholder");
+    let text = std::fs::read_to_string(dir.0.join("rayfin/.deployments.json")).unwrap();
+    let registry: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(registry["active"], "dev");
+    let keys: Vec<&String> = registry["deployments"].as_object().unwrap().keys().collect();
+    assert_eq!(keys, ["old", "dev", "draft"], "the rest keep their order");
+    assert_eq!(registry["deployments"]["dev"]["futureField"], true);
+    assert_eq!(registry["version"], 2);
+    assert!(text.ends_with("}\n"));
+  }
+
+  #[test]
+  fn forgetting_another_deployment_leaves_the_active_one_and_the_last_leaves_none() {
+    let dir = RegistryDir::new(Some(
+      r#"{"active":"prod","deployments":{"prod":{"fabricItemId":"i1","fabricWorkspaceId":"W1"},"dev":{"fabricItemId":"i2","fabricWorkspaceId":"W2"}}}"#,
+    ));
+    assert_eq!(forget_deployment(&dir.0, "dev").unwrap(), None);
+    let registry = || -> serde_json::Value {
+      serde_json::from_str(&std::fs::read_to_string(dir.0.join("rayfin/.deployments.json")).unwrap()).unwrap()
+    };
+    assert_eq!(registry()["active"], "prod");
+    assert_eq!(forget_deployment(&dir.0, "prod").unwrap(), None);
+    assert!(registry().get("active").is_none());
+    assert!(registry()["deployments"].as_object().unwrap().is_empty());
+    assert!(forget_deployment(&RegistryDir::new(None).0, "prod").is_err(), "no registry to change");
   }
 
   #[test]

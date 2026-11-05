@@ -12,15 +12,15 @@ describe('shared deployment queue', () => {
       .mockResolvedValue({ ok: true, url: 'second' })
     const queue = new DeploymentQueue()
     const a = queue.enqueue({ projectId: 'a' }, run)
-    const b = queue.enqueue({ projectId: 'b', workspace: 'workspace-b' }, run)
+    const b = queue.enqueue({ projectId: 'b', workspace: 'workspace-b', itemName: 'Budget' }, run)
     expect(run).toHaveBeenCalledTimes(1)
     first.resolve({ ok: false, outcome: 'error', error: 'Failed' })
     expect(await a).toMatchObject({ ok: false })
     expect(await b).toMatchObject({ url: 'second' })
-    expect(run).toHaveBeenLastCalledWith('b', 'workspace-b')
+    expect(run).toHaveBeenLastCalledWith('b', 'workspace-b', 'Budget')
   })
 
-  it('coalesces duplicate waiting requests but not different workspace targets', async () => {
+  it('coalesces duplicate waiting requests but not different workspace or app targets', async () => {
     const first = deferred<DeployResult>()
     const run = vi
       .fn()
@@ -32,9 +32,11 @@ describe('shared deployment queue', () => {
     expect(queue.enqueue({ projectId: 'p1' }, run)).toBe(a)
     const b = queue.enqueue({ projectId: 'p1', workspace: 'different' }, run)
     expect(b).not.toBe(a)
+    const c = queue.enqueue({ projectId: 'p1', workspace: 'different', itemName: 'Budget' }, run)
+    expect(c).not.toBe(b)
     first.resolve({ ok: true, outcome: 'success' })
-    await Promise.all([running, a, b])
-    expect(run).toHaveBeenCalledTimes(3)
+    await Promise.all([running, a, b, c])
+    expect(run).toHaveBeenCalledTimes(4)
   })
 
   it('queues a fresh run when the same deploy is requested while it is running', async () => {
