@@ -1,28 +1,10 @@
-/* MCP servers (an experiment): the dialog that adds, checks, changes and
+/* MCP servers: the dialog that adds, checks, changes and
    removes the MCP servers chat can turn on. Server cards are Accounts' own
    (main.css, which loads after this file), so rules that touch its selectors
    carry extra specificity. Flat: solid surfaces, neutral 1px borders. */
 
 .mcp-modal {
   max-width: 640px;
-}
-
-.mcp-modal .modal-header h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.mcp-badge {
-  flex: none;
-  padding: 1px 7px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text-dim);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 999px;
 }
 
 .modal-body.mcp-body {

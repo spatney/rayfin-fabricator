@@ -1689,24 +1689,20 @@ pub(crate) fn chat_defaults(defaults: ChatDefaults, servers: &[McpServerEntry]) 
 }
 
 /// What a new project's chat starts with: the chat defaults, with only the
-/// plugins chat offers it now (Work IQ and MCP servers while their experiments
-/// are on, and a server only while it's added). Auto with none on without them.
+/// plugins chat offers it now (Work IQ while its experiment is on, and an MCP
+/// server only while it's added). Auto with none on without them.
 pub(crate) fn new_project_chat(settings: &AppSettings) -> (ModelChoice, Vec<String>) {
   let Some(defaults) = settings.chat_defaults.clone() else {
     return (ModelChoice::default(), Vec::new());
   };
-  let experiments = settings.experiments.as_ref();
-  let work_iq = experiments.and_then(|f| f.work_iq).unwrap_or(false);
-  let mcp_servers = experiments.and_then(|f| f.mcp_servers).unwrap_or(false);
+  let work_iq = settings.experiments.as_ref().and_then(|f| f.work_iq).unwrap_or(false);
   let plugins = defaults
     .plugins
     .iter()
     .filter(|plugin| match iq::Iq::from_plugin(plugin) {
       Some(iq::Iq::Fabric) => true,
       Some(iq::Iq::Work) => work_iq,
-      None => {
-        mcp_servers && mcp::server_of_plugin(plugin).is_some_and(|id| settings.mcp_servers.iter().any(|s| s.id == id))
-      }
+      None => mcp::server_of_plugin(plugin).is_some_and(|id| settings.mcp_servers.iter().any(|s| s.id == id)),
     })
     .cloned()
     .collect();
@@ -2423,21 +2419,21 @@ mod tests {
 
   #[test]
   fn a_new_project_starts_with_the_chat_defaults_chat_offers_it() {
-    let settings = |work_iq: bool, mcp_servers: bool| -> AppSettings {
+    let settings = |work_iq: bool| -> AppSettings {
       let mut settings: AppSettings = serde_json::from_value(json!({
         "theme": "dark",
-        "experiments": { "workIq": work_iq, "mcpServers": mcp_servers },
+        "experiments": { "workIq": work_iq },
         "chatDefaults": { "model": "gpt-6-sol", "effort": "xhigh", "plugins": ["work-iq", "fabric-iq", "mcp:chart", "mcp:gone"] }
       }))
       .unwrap();
       settings.mcp_servers = vec![server("chart")];
       settings
     };
-    let (chat, plugins) = new_project_chat(&settings(true, true));
+    let (chat, plugins) = new_project_chat(&settings(true));
     assert_eq!((chat.model.as_deref(), chat.effort.as_deref()), (Some("gpt-6-sol"), Some("xhigh")));
     assert_eq!(plugins, ["work-iq", "fabric-iq", "mcp:chart"]);
-    // Work IQ and MCP servers only while their experiments are on.
-    assert_eq!(new_project_chat(&settings(false, false)).1, ["fabric-iq"]);
+    // Work IQ only while its experiment is on; an MCP server whenever it's added.
+    assert_eq!(new_project_chat(&settings(false)).1, ["fabric-iq", "mcp:chart"]);
     // Without chat defaults, as before: Auto, with every plugin off.
     let (chat, plugins) = new_project_chat(&serde_json::from_value(json!({ "theme": "dark" })).unwrap());
     assert_eq!((chat, plugins), (ModelChoice::default(), Vec::<String>::new()));

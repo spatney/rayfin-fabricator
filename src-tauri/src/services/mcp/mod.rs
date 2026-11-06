@@ -1,6 +1,6 @@
-//! MCP servers the user adds (an experiment): a command Fabricator runs on this
-//! computer, or a remote server's URL, that Build chat can turn on among its
-//! plugins, beside Fabric IQ and Work IQ ([`crate::services::iq`]).
+//! MCP servers the user adds: a command Fabricator runs on this computer, or a
+//! remote server's URL, that Build chat can turn on among its plugins, beside
+//! Fabric IQ and Work IQ ([`crate::services::iq`]).
 //!
 //! Servers are personal: they're kept in Fabricator's settings on this
 //! computer, never in a project, and the values of their environment variables
@@ -39,11 +39,6 @@ const MAX_NAME: usize = 60;
 const MAX_ID: usize = 20;
 /// The most characters in the name of an environment variable or header.
 const MAX_VALUE_NAME: usize = 128;
-
-/// Whether the MCP servers experiment is on.
-pub fn experiment_on(settings: &AppSettings) -> bool {
-  settings.experiments.as_ref().and_then(|f| f.mcp_servers).unwrap_or(false)
-}
 
 /// The server a plugin id names (`mcp:<id>`), when it's one the user added.
 pub fn server_of_plugin(plugin: &str) -> Option<&str> {
@@ -295,8 +290,7 @@ struct Fingerprint<'a> {
 }
 
 impl McpServers {
-  /// The servers on in `project`'s chat, while the experiment is on, with the
-  /// values saved for them.
+  /// The servers on in `project`'s chat, with the values saved for them.
   pub fn for_project(project: &StudioProject, settings: &AppSettings) -> Self {
     Self::for_project_with(project, settings, secrets::load)
   }
@@ -312,9 +306,6 @@ impl McpServers {
       cwd: Some(project.path.clone()),
       ..Default::default()
     };
-    if !experiment_on(settings) {
-      return servers;
-    }
     for id in project.plugins.iter().filter_map(|p| server_of_plugin(p)) {
       let Some(entry) = settings.mcp_servers.iter().find(|s| s.id == id) else {
         continue;

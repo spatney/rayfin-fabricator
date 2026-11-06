@@ -73,6 +73,7 @@ function installApi(): InstalledApi {
       exportPlan: vi.fn(() => Promise.resolve(null)),
       reset: vi.fn(() => Promise.resolve(undefined))
     },
+    mcp: { list: vi.fn(() => Promise.resolve([])) },
     projects: { files: { tree: vi.fn(() => Promise.resolve({ path: '', name: '', children: [] })) } },
     screenshot: { save: vi.fn(() => Promise.resolve('C:/tmp/shot.png')) }
   }

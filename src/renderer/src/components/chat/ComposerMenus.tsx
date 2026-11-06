@@ -252,9 +252,9 @@ export function AddMenu({
 
 /**
  * The composer's plugins, beside the "+" menu: services chat can look things up
- * with while it builds, such as Fabric IQ, and, with the MCP servers
- * experiment, the MCP servers you added. Each is off until turned on, and
- * changes from the chat's next message; the trigger names the ones that are on.
+ * with while it builds, such as Fabric IQ, and the MCP servers you added. Each
+ * is off until turned on, and changes from the chat's next message; the trigger
+ * names the ones that are on.
  */
 export function PluginsMenu({
   plugins,
@@ -267,8 +267,8 @@ export function PluginsMenu({
 }: {
   /** The plugins chat offers. */
   plugins: readonly ChatPlugin[]
-  /** The MCP servers you added, while the MCP servers experiment is on. */
-  servers?: readonly McpServer[]
+  /** The MCP servers you added. */
+  servers: readonly McpServer[]
   /** The ids of the plugins on in this chat. */
   on: readonly string[]
   /** While the assistant is working: plugins change between messages. */
@@ -289,7 +289,7 @@ export function PluginsMenu({
 
   const onNames = [
     ...plugins.filter((p) => on.includes(p.id)).map((p) => p.name),
-    ...(servers ?? []).filter((s) => on.includes(mcpPluginId(s.id))).map((s) => s.name)
+    ...servers.filter((s) => on.includes(mcpPluginId(s.id))).map((s) => s.name)
   ]
   const names = onNames.join(', ')
   const enabled = onNames.length
@@ -431,14 +431,11 @@ export function PluginsMenu({
                 )
               })}
 
-              {servers && (
+              {(servers.length > 0 || onManageServers) && (
                 <>
                   <div className="mp-sep" role="separator" />
                   <div className="pl-section" aria-hidden="true">
-                    <span className="pl-section-title">
-                      MCP servers
-                      <span className="pl-badge">Experiment</span>
-                    </span>
+                    <span className="pl-section-title">MCP servers</span>
                   </div>
                   {servers.map((s) => {
                     const id = mcpPluginId(s.id)

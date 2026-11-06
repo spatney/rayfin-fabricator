@@ -34,8 +34,6 @@ pub fn settings_set(patch: SettingsPatch) -> AppSettings {
   // Work IQ's experiment decides whether chats can have its plugin: changing it
   // tries Work IQ again from scratch, and turning it off drops its sign-in.
   let work_iq_changed = patch.experiments.as_ref().is_some_and(|e| e.work_iq.is_some());
-  // So does the MCP servers experiment, for the user's servers.
-  let mcp_changed = patch.experiments.as_ref().is_some_and(|e| e.mcp_servers.is_some());
   let mut settings = store::set_settings(
     patch.theme,
     patch.ui_scale,
@@ -49,9 +47,6 @@ pub fn settings_set(patch: SettingsPatch) -> AppSettings {
   if work_iq_changed {
     use crate::services::iq::{self, Iq, IqConfig};
     iq::toggled(Iq::Work, IqConfig::in_use(&store::get_state().projects, &settings));
-  }
-  if mcp_changed {
-    crate::services::mcp::MEMORY.reset_all();
   }
   settings
 }

@@ -222,9 +222,9 @@ interface Props {
   recentWorkspaces?: readonly WorkspaceUse[]
   /** Shown above the composer, such as a report migration's progress card. */
   banner?: ReactNode
-  /** The experiments that are on, for the plugins they add to chat (Work IQ, MCP servers). */
+  /** The experiments that are on, for the plugins they add to chat (Work IQ). */
   experiments?: ExperimentFlags
-  /** Open the MCP servers dialog (MCP servers experiment), adding a server when `add` is set. */
+  /** Open the MCP servers dialog, adding a server when `add` is set. */
   onManageMcpServers?: (add: boolean) => void
 }
 
@@ -526,9 +526,7 @@ export default function ChatPanel({
   useEffect(() => {
     setPlugins(savedPlugins ? savedPlugins.split('\n') : [])
   }, [savedPlugins])
-  // The MCP servers you added, offered while their experiment is on.
-  const mcpEnabled = Boolean(experiments?.mcpServers)
-  const mcpServers = useMcpServers(mcpEnabled)
+  const mcpServers = useMcpServers()
   function togglePlugin(plugin: ChatPluginId, on: boolean): void {
     const turn = (value: boolean) => (ids: readonly string[]) =>
       value ? [...ids.filter((id) => id !== plugin), plugin] : ids.filter((id) => id !== plugin)
@@ -1882,7 +1880,7 @@ export default function ChatPanel({
               />
               <PluginsMenu
                 plugins={offeredPlugins(experiments)}
-                servers={mcpEnabled ? mcpServers : undefined}
+                servers={mcpServers}
                 on={plugins}
                 disabled={sending}
                 onToggle={togglePlugin}

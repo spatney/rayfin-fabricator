@@ -74,6 +74,7 @@ describe('PluginsMenu', () => {
     render(
       <PluginsMenu
         plugins={offeredPlugins({ workIq: over.workIq })}
+        servers={[]}
         on={over.on ?? []}
         disabled={over.disabled}
         onToggle={onToggle}
@@ -126,7 +127,7 @@ describe('PluginsMenu', () => {
     expect(trigger.disabled).toBe(true)
   })
 
-  describe('with the MCP servers experiment', () => {
+  describe('with your MCP servers', () => {
     const servers: McpServer[] = [
       {
         id: 'chart',
@@ -152,7 +153,7 @@ describe('PluginsMenu', () => {
       const onManageServers = vi.fn()
       render(
         <PluginsMenu
-          plugins={offeredPlugins({ mcpServers: true })}
+          plugins={offeredPlugins()}
           servers={list}
           on={on}
           onToggle={onToggle}
@@ -166,7 +167,8 @@ describe('PluginsMenu', () => {
       const { onToggle, onManageServers } = renderWithServers(servers, ['mcp:learn', 'fabric-iq'])
       fireEvent.click(screen.getByRole('button', { name: 'Plugins: Fabric IQ, Microsoft Learn' }))
       const menu = screen.getByRole('menu', { name: 'Plugins & tools' })
-      expect(menu.textContent).toContain('MCP serversExperiment')
+      expect(menu.textContent).toContain('MCP servers')
+      expect(menu.textContent).not.toContain('Experiment')
       const charts = within(menu).getByRole('menuitemcheckbox', { name: /Charts/ })
       expect(charts.getAttribute('aria-checked')).toBe('false')
       expect(charts.textContent).toContain('npx -y @antv/mcp-server-chart')
@@ -191,15 +193,6 @@ describe('PluginsMenu', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
       fireEvent.click(screen.getByRole('menuitem', { name: 'Add an MCP server…' }))
       expect(onManageServers).toHaveBeenLastCalledWith(true)
-    })
-
-    it('shows no servers without the experiment, even ones that were on', () => {
-      renderPlugins({ on: ['mcp:chart'] })
-      fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
-      expect(screen.queryByText('MCP servers')).toBeNull()
-      const menu = screen.getByRole('menu', { name: 'Plugins & tools' })
-      expect(menu.textContent).toContain('Read-only')
-      expect(menu.textContent).not.toContain('An MCP server')
     })
   })
 })

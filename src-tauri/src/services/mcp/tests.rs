@@ -165,8 +165,8 @@ fn project(plugins: Value, team: bool) -> StudioProject {
   serde_json::from_value(project).unwrap()
 }
 
-fn settings(on: bool) -> AppSettings {
-  let mut settings: AppSettings = serde_json::from_value(json!({ "theme": "dark", "experiments": { "mcpServers": on } })).unwrap();
+fn settings() -> AppSettings {
+  let mut settings: AppSettings = serde_json::from_value(json!({ "theme": "dark" })).unwrap();
   settings.mcp_servers = vec![chart(), learn()];
   settings
 }
@@ -180,9 +180,9 @@ fn loaded(id: &str) -> Result<Values, String> {
 }
 
 #[test]
-fn a_chat_gets_the_servers_on_in_its_project_while_the_experiment_is_on() {
+fn a_chat_gets_the_servers_on_in_its_project() {
   let both = project(json!(["fabric-iq", "mcp:learn", "mcp:chart", "mcp:gone", "mcp:chart"]), false);
-  let servers = McpServers::for_project_with(&both, &settings(true), loaded);
+  let servers = McpServers::for_project_with(&both, &settings(), loaded);
   assert_eq!(servers.names(), [("learn".to_string(), "Microsoft Learn".to_string()), ("chart".into(), "Chart".into())]);
   let config = serde_json::to_value(servers.servers()).unwrap();
   assert_eq!(config["chart"]["type"], "stdio");
@@ -193,20 +193,18 @@ fn a_chat_gets_the_servers_on_in_its_project_while_the_experiment_is_on() {
   assert_eq!(config["learn"]["type"], "http");
   assert_eq!(config["learn"]["url"], "https://learn.microsoft.com/api/mcp");
   assert_eq!(config["learn"]["headers"], json!({ "Authorization": "Bearer abc" }));
-  // Off: none, even where they were turned on.
-  assert!(McpServers::for_project_with(&both, &settings(false), loaded).servers().is_empty());
-  assert!(McpServers::for_project_with(&project(json!(["fabric-iq"]), false), &settings(true), loaded).is_empty());
+  assert!(McpServers::for_project_with(&project(json!(["fabric-iq"]), false), &settings(), loaded).is_empty());
 }
 
 #[test]
 fn a_server_whose_values_cant_be_read_is_left_out_with_why() {
-  let mut settings = settings(true);
+  let mut settings = settings();
   settings.mcp_servers.push(entry(json!({ "id": "locked", "name": "Locked", "transport": "sse", "url": "https://x.dev/sse", "headers": ["X-Key"] })));
   let servers = McpServers::for_project_with(&project(json!(["mcp:locked", "mcp:chart"]), false), &settings, loaded);
   assert_eq!(servers.names().len(), 1);
   assert_eq!(servers.missing, [("Locked".to_string(), "Couldn't read the server's values from Windows Credential Manager: Access is denied".to_string())]);
   // A server without values never reads the credential store.
-  let mut settings = self::settings(true);
+  let mut settings = self::settings();
   settings.mcp_servers.push(entry(json!({ "id": "plain", "name": "Plain", "transport": "sse", "url": "https://x.dev/sse" })));
   let servers = McpServers::for_project_with(&project(json!(["mcp:plain"]), false), &settings, |_| Err("no".into()));
   assert_eq!(serde_json::to_value(servers.servers()).unwrap()["plain"]["type"], "sse");
@@ -214,12 +212,12 @@ fn a_server_whose_values_cant_be_read_is_left_out_with_why() {
 
 #[test]
 fn chat_may_call_any_tool_unless_a_server_or_a_team_app_allows_only_reading() {
-  let personal = McpServers::for_project_with(&project(json!(["mcp:chart", "mcp:learn"]), false), &settings(true), loaded).permits();
+  let personal = McpServers::for_project_with(&project(json!(["mcp:chart", "mcp:learn"]), false), &settings(), loaded).permits();
   assert_eq!(personal.permits("chart", false), Some(true));
   assert_eq!(personal.permits("learn", true), Some(true));
   assert_eq!(personal.permits("learn", false), Some(false));
   assert_eq!(personal.permits("FabricIQ", false), None);
-  let team = McpServers::for_project_with(&project(json!(["mcp:chart"]), true), &settings(true), loaded).permits();
+  let team = McpServers::for_project_with(&project(json!(["mcp:chart"]), true), &settings(), loaded).permits();
   assert!(team.team);
   assert_eq!(team.permits("chart", false), Some(false));
   assert_eq!(team.permits("chart", true), Some(true));
@@ -228,20 +226,20 @@ fn chat_may_call_any_tool_unless_a_server_or_a_team_app_allows_only_reading() {
 #[test]
 fn a_session_is_opened_again_only_when_what_it_gets_changes() {
   let on = project(json!(["mcp:chart", "mcp:learn"]), false);
-  let revision = McpServers::for_project_with(&on, &settings(true), loaded).revision();
-  assert_eq!(revision, McpServers::for_project_with(&on, &settings(true), loaded).revision());
+  let revision = McpServers::for_project_with(&on, &settings(), loaded).revision();
+  assert_eq!(revision, McpServers::for_project_with(&on, &settings(), loaded).revision());
   assert_eq!(McpServers::default().revision(), "");
   // Renaming changes nothing the session gets.
-  let mut renamed = settings(true);
+  let mut renamed = settings();
   renamed.mcp_servers[0].name = "Charts".into();
   assert_eq!(McpServers::for_project_with(&on, &renamed, loaded).revision(), revision);
   // A new value, read-only, or a team app does.
   let new_value = |id: &str| if id == "chart" { Ok(values(&[("VIS_REQUEST_SERVER", "https://other")], &[])) } else { loaded(id) };
-  assert_ne!(McpServers::for_project_with(&on, &settings(true), new_value).revision(), revision);
-  let mut read_only = settings(true);
+  assert_ne!(McpServers::for_project_with(&on, &settings(), new_value).revision(), revision);
+  let mut read_only = settings();
   read_only.mcp_servers[0].read_only = true;
   assert_ne!(McpServers::for_project_with(&on, &read_only, loaded).revision(), revision);
-  assert_ne!(McpServers::for_project_with(&project(json!(["mcp:chart", "mcp:learn"]), true), &settings(true), loaded).revision(), revision);
+  assert_ne!(McpServers::for_project_with(&project(json!(["mcp:chart", "mcp:learn"]), true), &settings(), loaded).revision(), revision);
 }
 
 #[test]
@@ -292,8 +290,6 @@ fn what_a_chat_found_stays_with_that_chat_until_it_starts_over() {
   memory.set_down("app-b", "chart", "why");
   memory.reset_server("chart");
   assert_eq!((memory.down("app-a", "chart"), memory.down("app-b", "chart")), (None, None));
-  memory.reset_all();
-  assert!(memory.first_ask("app-a", "linear") && memory.first_ask("app-b", "linear"));
 }
 
 #[derive(Default)]
@@ -307,7 +303,7 @@ fn listed(name: &str, status: &str) -> Value {
 }
 
 fn servers_for(plugins: Value) -> McpServers {
-  let mut settings = settings(true);
+  let mut settings = settings();
   settings.mcp_servers.push(entry(json!({ "id": "linear", "name": "Linear", "transport": "http", "url": "https://mcp.linear.app/mcp" })));
   McpServers::for_project_with(&project(plugins, false), &settings, loaded)
 }
@@ -366,7 +362,7 @@ async fn a_failure_in_one_chat_doesnt_keep_another_from_trying() {
   let memory = Memory::default();
   memory.set_down("p", "chart", "it couldn't start (old)");
   let other_app = {
-    let mut settings = settings(true);
+    let mut settings = settings();
     settings.mcp_servers = vec![chart()];
     let mut project = project(json!(["mcp:chart"]), false);
     project.id = "q".into();
@@ -449,7 +445,7 @@ async fn a_sign_in_page_that_isnt_on_the_web_is_never_opened() {
 
 #[tokio::test]
 async fn servers_whose_values_cant_be_read_are_unavailable_without_asking_the_runtime() {
-  let mut settings = settings(true);
+  let mut settings = settings();
   settings.mcp_servers.push(entry(json!({ "id": "locked", "name": "Locked", "transport": "http", "url": "https://x.dev/mcp", "headers": ["X-Key"] })));
   let servers = McpServers::for_project_with(&project(json!(["mcp:locked"]), false), &settings, loaded);
   let (prepared, _, requests) = run(vec![], &servers, &Memory::default(), 1).await;

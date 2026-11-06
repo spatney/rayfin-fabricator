@@ -1,4 +1,4 @@
-//! MCP servers (an experiment): the commands behind the MCP servers dialog.
+//! MCP servers: the commands behind the MCP servers dialog.
 //! The values of a server's environment variables and headers only ever travel
 //! renderer → backend, to be kept in the OS credential store; no command
 //! returns one.
@@ -18,14 +18,6 @@ use crate::types::{McpCheckResult, McpServerEntry, McpServerInput, McpTransport}
 const CHECK_WAIT: Duration = Duration::from_secs(60);
 const CHECK_POLL: Duration = Duration::from_millis(500);
 
-fn require_experiment() -> Result<(), String> {
-  if mcp::experiment_on(&store::get_settings()) {
-    Ok(())
-  } else {
-    Err("Turn on MCP servers in Settings → Experiments first.".into())
-  }
-}
-
 /// The MCP servers the user added.
 #[tauri::command(async)]
 pub fn mcp_list() -> Vec<McpServerEntry> {
@@ -35,7 +27,6 @@ pub fn mcp_list() -> Vec<McpServerEntry> {
 /// Add a server, or change one, and return them all.
 #[tauri::command(async)]
 pub fn mcp_save(server: McpServerInput) -> Result<Vec<McpServerEntry>, String> {
-  require_experiment()?;
   mcp::save(&server)
 }
 
@@ -48,7 +39,6 @@ pub fn mcp_remove(id: String) -> Result<Vec<McpServerEntry>, String> {
 /// Start or connect to a saved server on its own, and list its tools.
 #[tauri::command]
 pub async fn mcp_check(state: State<'_, AppState>, id: String) -> Result<McpCheckResult, String> {
-  require_experiment()?;
   let entry = store::mcp_servers()
     .into_iter()
     .find(|s| s.id == id)

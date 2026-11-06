@@ -58,8 +58,6 @@ export interface ActionContext {
   /** Publish after each chat turn. */
   autoDeploy: boolean
   migrationEnabled: boolean
-  /** The MCP servers experiment is on. */
-  mcpServersEnabled: boolean
   /** The open app has the Goals tab (an experiment). */
   goalsEnabled: boolean
   /** The App gallery is showing. */
@@ -371,16 +369,14 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
     icon: { kind: 'codicon', name: 'key' },
     run: run.openApiKeys
   })
-  if (ctx.mcpServersEnabled) {
-    add({
-      id: 'action:mcp-servers',
-      title: 'Manage MCP servers',
-      subtitle: 'Add the MCP servers chat can turn on in its Plugins',
-      keywords: ['mcp', 'model context protocol', 'plugins', 'tools', 'servers'],
-      icon: { kind: 'codicon', name: 'plug' },
-      run: run.openMcpServers
-    })
-  }
+  add({
+    id: 'action:mcp-servers',
+    title: 'Manage MCP servers',
+    subtitle: 'Add the MCP servers chat can turn on in its Plugins',
+    keywords: ['mcp', 'model context protocol', 'plugins', 'tools', 'servers'],
+    icon: { kind: 'codicon', name: 'plug' },
+    run: run.openMcpServers
+  })
   add({
     id: 'action:chat-defaults',
     title: 'Manage chat defaults',

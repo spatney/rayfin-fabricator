@@ -66,9 +66,9 @@ describe('ChatDefaultsModal', () => {
     })
     const fabric = screen.getByRole('checkbox', { name: /Fabric IQ/ }) as HTMLInputElement
     expect(fabric.checked).toBe(true)
-    // Work IQ and MCP servers only while their experiments are on.
+    // Work IQ only while its experiment is on; MCP servers always.
     expect(screen.queryByRole('checkbox', { name: /Work IQ/ })).toBeNull()
-    expect(screen.queryByRole('heading', { name: 'MCP servers' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'MCP servers' })).toBeTruthy()
 
     fireEvent.click(fabric)
     expect(onChange).toHaveBeenLastCalledWith({ model: 'gpt-6.1-sol', effort: 'high', plugins: [] })
@@ -102,11 +102,11 @@ describe('ChatDefaultsModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('offers Work IQ and your MCP servers while their experiments are on', () => {
+  it('offers Work IQ while its experiment is on, and your MCP servers', () => {
     setMcpServers([chart])
     const { onChange } = renderDefaults({
       defaults: { plugins: ['fabric-iq'] },
-      experiments: { workIq: true, mcpServers: true }
+      experiments: { workIq: true }
     })
     expect(screen.getByRole('checkbox', { name: /Work IQ/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('checkbox', { name: /Charts/ }))
@@ -115,7 +115,7 @@ describe('ChatDefaultsModal', () => {
 
   it('points to MCP servers when none are added yet', () => {
     const onManageMcpServers = vi.fn()
-    renderDefaults({ experiments: { mcpServers: true }, onManageMcpServers })
+    renderDefaults({ onManageMcpServers })
     expect(screen.getByText('No MCP servers yet')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Manage MCP servers' }))
     expect(onManageMcpServers).toHaveBeenCalledTimes(1)

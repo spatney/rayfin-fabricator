@@ -64,7 +64,7 @@ function installApi(preview: ExportPreview | Error = PREVIEW) {
   }
 }
 
-function renderModal(over: { project?: StudioProject; busy?: string; appExport?: boolean } = {}): {
+function renderModal(over: { project?: StudioProject; busy?: string } = {}): {
   onClose: ReturnType<typeof vi.fn>
 } {
   const onClose = vi.fn()
@@ -73,7 +73,6 @@ function renderModal(over: { project?: StudioProject; busy?: string; appExport?:
       <ExportProjectModal
         project={over.project ?? makeProject('p1', { name: 'Sales' })}
         busy={over.busy}
-        appExport={over.appExport}
         onClose={onClose}
       />
     </OverlayProvider>
@@ -148,7 +147,7 @@ describe('ExportProjectModal', () => {
 
   it('exports it as an app to use, with its icon, and says how the recipient opens it', async () => {
     const api = installApi()
-    renderModal({ appExport: true })
+    renderModal()
 
     const project = (await screen.findByRole('radio', { name: 'Project' })) as HTMLInputElement
     expect(project.checked).toBe(true)
@@ -182,18 +181,6 @@ describe('ExportProjectModal', () => {
     expect(next.getByText(/They double-click it/).textContent).toContain('a window of its own')
     expect(next.getByText(/Start menu, under Rayfin apps/)).toBeTruthy()
     expect(next.queryByText(/Contributor access/)).toBeNull()
-  })
-
-  it('offers only a project unless the Export as an app experiment is on', async () => {
-    const api = installApi()
-    renderModal()
-
-    await screen.findByRole('checkbox', { name: 'Version history' })
-    expect(screen.queryByRole('radiogroup', { name: 'Export it as' })).toBeNull()
-    expect(screen.queryByRole('radio')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Export…' }))
-    expect(api.projects.exportProject).toHaveBeenCalledTimes(1)
-    expect(api.projects.exportApp).not.toHaveBeenCalled()
   })
 
   it('copies the link to install Fabricator, for a recipient who doesn’t have it', async () => {

@@ -79,11 +79,6 @@ impl Memory {
   pub fn session_opened(&self, project: &str) {
     self.0.lock().unwrap().down.retain(|(chat, _), _| chat != project);
   }
-
-  /// Forgets what it found about every server.
-  pub fn reset_all(&self) {
-    *self.0.lock().unwrap() = Remembered::default();
-  }
 }
 
 pub static MEMORY: Lazy<Memory> = Lazy::new(Memory::default);

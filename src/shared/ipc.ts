@@ -1673,8 +1673,8 @@ export interface AppSettings {
    */
   byok?: ByokSettings
   /**
-   * The MCP servers you added (MCP servers experiment). Never holds the values
-   * of their environment variables or headers.
+   * The MCP servers you added. Never holds the values of their environment
+   * variables or headers.
    */
   mcpServers?: McpServer[]
   /**
@@ -1694,8 +1694,8 @@ export interface ChatDefaults {
   contextTier?: ContextTier
   /**
    * The plugins on ({@link ChatPluginId}s, including `mcp:<id>`). A new project
-   * gets only the ones chat offers it: Work IQ and MCP servers while their
-   * experiments are on.
+   * gets only the ones chat offers it: Work IQ while its experiment is on, and
+   * the MCP servers you still have.
    */
   plugins?: string[]
 }
@@ -1788,18 +1788,6 @@ export interface ExperimentFlags {
    */
   workIq?: boolean
   /**
-   * MCP servers: add MCP servers (a command Fabricator runs on this computer,
-   * or a remote server's URL) to chat's plugins, so chat can use their tools.
-   * Each chat still has a server off until it's turned on there.
-   */
-  mcpServers?: boolean
-  /**
-   * Export as an app: Export project also offers App, a `.rayfin` file that
-   * Fabricator installs and runs in a window of its own. It gates exporting
-   * only: `.rayfin` files open whether it's on or off.
-   */
-  appExport?: boolean
-  /**
    * Goals: each app's Goals tab, where you write what the app is for and the
    * checks it must keep passing (`GOALS.md`), and Copilot runs them against a
    * fresh copy of the app before you publish.
@@ -1810,7 +1798,7 @@ export interface ExperimentFlags {
 /**
  * A chat plugin: an MCP server chat can use. Fabric IQ reads the Power BI
  * reports and semantic models you can open; Work IQ (an experiment) reads your
- * Microsoft 365 data; `mcp:<id>` is an MCP server you added (an experiment).
+ * Microsoft 365 data; `mcp:<id>` is an MCP server you added.
  */
 export type ChatPluginId = 'fabric-iq' | 'work-iq' | `mcp:${string}`
 
@@ -1822,9 +1810,9 @@ export type ChatPluginId = 'fabric-iq' | 'work-iq' | `mcp:${string}`
 export type McpTransport = 'stdio' | 'http' | 'sse'
 
 /**
- * An MCP server you added (MCP servers experiment). Only the names of its
- * environment variables or headers are here: their values stay in the OS
- * credential store, and never come back to the renderer.
+ * An MCP server you added. Only the names of its environment variables or
+ * headers are here: their values stay in the OS credential store, and never
+ * come back to the renderer.
  */
 export interface McpServer {
   /** Stable id: starts its tools' names (`chart-generate_bar_chart`); its plugin id is `mcp:<id>`. */
@@ -2497,7 +2485,7 @@ export interface ChatToolCall {
   endedAt?: number
   /**
    * The name the user gave the MCP server whose tool this is, for a server
-   * they added (MCP servers experiment); `title` then names the tool.
+   * they added; `title` then names the tool.
    */
   server?: string
 }
@@ -4741,9 +4729,9 @@ export interface RayfinStudioApi {
   }
 
   /**
-   * MCP servers (experimental; {@link ExperimentFlags.mcpServers}). The values
-   * of a server's environment variables and headers only ever go to the
-   * backend, to be kept in the OS credential store; nothing returns one.
+   * MCP servers. The values of a server's environment variables and headers
+   * only ever go to the backend, to be kept in the OS credential store; nothing
+   * returns one.
    */
   mcp: {
     /** The servers you added. */

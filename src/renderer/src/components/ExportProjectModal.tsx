@@ -14,8 +14,6 @@ interface Props {
   project: StudioProject
   /** Why it can't be exported right now: Copilot is working on it, or it's publishing. */
   busy?: string
-  /** It can be exported as an app (`.rayfin`) too: the Export as an app experiment is on. */
-  appExport?: boolean
   onClose: () => void
 }
 
@@ -152,16 +150,11 @@ function Part({
 /**
  * Export a project for someone else: as a `.fabricator` file to keep building
  * it, with what they choose besides the code (its version history, where it's
- * published), or, with `appExport`, as a `.rayfin` app to use it, which
- * Fabricator installs and opens in a window of its own. Save it, then see what
- * the recipient needs. Secret values, the app's local data and sign-ins never go in.
+ * published), or as a `.rayfin` app to use it, which Fabricator installs and
+ * opens in a window of its own. Save it, then see what the recipient needs.
+ * Secret values, the app's local data and sign-ins never go in.
  */
-export default function ExportProjectModal({
-  project,
-  busy,
-  appExport,
-  onClose
-}: Props): JSX.Element {
+export default function ExportProjectModal({ project, busy, onClose }: Props): JSX.Element {
   useSuppressPreview()
   const titleId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
@@ -170,8 +163,7 @@ export default function ExportProjectModal({
   const [phase, setPhase] = useState<Phase>('loading')
   const [preview, setPreview] = useState<ExportPreview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
-  const [chosen, setFormat] = useState<Format>('project')
-  const format: Format = appExport ? chosen : 'project'
+  const [format, setFormat] = useState<Format>('project')
   const [options, setOptions] = useState<ExportOptions>({ history: false, deployment: false })
   const [progress, setProgress] = useState<{ processed: number; total: number } | null>(null)
   const [saved, setSaved] = useState<ExportResult | null>(null)
@@ -334,7 +326,7 @@ export default function ExportProjectModal({
 
           {preview && (phase === 'choose' || (saving && !progress)) && (
             <>
-              {appExport && <FormatChoice format={format} disabled={saving} onChange={setFormat} />}
+              <FormatChoice format={format} disabled={saving} onChange={setFormat} />
               <div
                 className="project-file-parts"
                 role="group"

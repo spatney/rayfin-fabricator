@@ -201,7 +201,7 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `model-picker` | harness | `0,355,720,545` |
 | `model-providers` | harness | `390,200,660,590` |
 | `add-menu` | harness | `0,630,520,270` |
-| `plugins` | harness | `0,520,520,380` |
+| `plugins` | harness | `0,430,520,470` |
 | `mcp-plugins` | harness | `0,320,520,580` |
 | `mcp-servers` | harness | `390,114,660,672` |
 | `connect-data` | harness | `300,140,840,620` |

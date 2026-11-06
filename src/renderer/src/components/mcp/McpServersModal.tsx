@@ -35,9 +35,9 @@ interface FormState {
 }
 
 /**
- * MCP servers (an experiment): the servers you added, which a chat can turn on
- * among its plugins. Add one with the command that starts it or its URL, check
- * that it connects and see its tools, change it, or remove it. The values of a
+ * MCP servers: the servers you added, which a chat can turn on among its
+ * plugins. Add one with the command that starts it or its URL, check that it
+ * connects and see its tools, change it, or remove it. The values of a
  * server's environment variables and headers only ever go to the backend.
  */
 export default function McpServersModal({
@@ -55,7 +55,7 @@ export default function McpServersModal({
   const titleId = useId()
   const formId = useId()
   const dialogRef = useModalFocus<HTMLDivElement>()
-  const servers = useMcpServers(true)
+  const servers = useMcpServers()
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState | null>(adding ? {} : null)
@@ -194,7 +194,6 @@ export default function McpServersModal({
                 ? `Edit ${form.server.name}`
                 : 'Add an MCP server'
               : 'MCP servers'}
-            <span className="mcp-badge">Experiment</span>
           </h2>
           <button
             className="btn btn--sm btn--ghost"

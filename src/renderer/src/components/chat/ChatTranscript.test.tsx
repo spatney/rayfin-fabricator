@@ -25,6 +25,7 @@ function installApi(): { send: ReturnType<typeof vi.fn> } {
       steer: vi.fn(() => Promise.resolve({ steered: true })),
       reset: vi.fn(() => Promise.resolve(undefined))
     },
+    mcp: { list: vi.fn(() => Promise.resolve([])) },
     projects: {
       files: {
         tree: vi.fn(() =>

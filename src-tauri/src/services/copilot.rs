@@ -2664,8 +2664,7 @@ pub(crate) mod tests {
       "team": { "workspaceId": "w", "folder": "app", "worktree": "C:\\team\\app" }
     }))
     .unwrap();
-    let mut settings: crate::types::AppSettings =
-      serde_json::from_value(json!({ "theme": "dark", "experiments": { "mcpServers": true } })).unwrap();
+    let mut settings: crate::types::AppSettings = serde_json::from_value(json!({ "theme": "dark" })).unwrap();
     settings.mcp_servers = vec![server("chart", false)];
     let team = BuildChatPolicy {
       inner: Arc::new(crate::services::team::guard::TeamChatPolicy),

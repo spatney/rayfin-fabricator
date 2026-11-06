@@ -7,7 +7,7 @@ Open **Settings** to manage your accounts, choose what a new project's chat star
 
 Settings groups its options into **General**, **Appearance**, **Diagnostics**, **Experiments**, and **About**. Each option shows its name and what it does, with its control on the right.
 
-![The Settings dialog: Accounts, API keys, Chat defaults, Setup and Workspace folder under General, then Theme and Text size under Appearance, and the start of Diagnostics.](/screenshots/settings.webp)
+![The Settings dialog: Accounts, API keys, MCP servers, Chat defaults, Setup and Workspace folder under General, then Theme and Text size under Appearance.](/screenshots/settings.webp)
 
 ## Accounts
 
@@ -19,7 +19,7 @@ Settings groups its options into **General**, **Appearance**, **Diagnostics**, *
 
 ## MCP servers
 
-**MCP servers** shows under **General** while the **MCP servers** experiment is on. Select **Manage MCP servers** to add, check, change or remove the MCP servers that chat can turn on in its **Plugins**. See [Connect MCP servers](/docs/build/mcp-servers).
+Select **Manage MCP servers** to add, check, change or remove the MCP servers that chat can turn on in its **Plugins**, each a command that runs on this computer or a server's URL. A server runs with your access, so add only servers you trust. See [Connect MCP servers](/docs/build/mcp-servers).
 
 ## Chat defaults
 
@@ -27,11 +27,11 @@ Settings groups its options into **General**, **Appearance**, **Diagnostics**, *
 
 - **Model**: **Auto** (**Copilot Fusion** on accounts that have it), or a model with its effort and context window, chosen as in the chat's model picker. See [Choose a model and reasoning effort](/docs/build/chat#choose-a-model-and-reasoning-effort).
 - **Plugins**: **Fabric IQ**, and **Work IQ** while its experiment is on.
-- **MCP servers**: the MCP servers you added, while the **MCP servers** experiment is on.
+- **MCP servers**: the MCP servers you added.
 
 ![Chat defaults: under Model, Claude Opus 5.5 at High; under Plugins, Fabric IQ on and Work IQ off; under MCP servers, Charts on and Microsoft Learn and Issue tracker off, each with its address or command.](/screenshots/chat-defaults.webp)
 
-Fabricator saves each choice as you make it. Projects you create, open, clone or import from then on start with them, and each project's chat keeps its own choice after that: changing your chat defaults doesn't change the projects you already have. A new project gets Work IQ and MCP servers only while their experiments are on. Without chat defaults, a new project's chat starts on **Auto** with every plugin off.
+Fabricator saves each choice as you make it. Projects you create, open, clone or import from then on start with them, and each project's chat keeps its own choice after that: changing your chat defaults doesn't change the projects you already have. A new project gets Work IQ only while its experiment is on. Without chat defaults, a new project's chat starts on **Auto** with every plugin off.
 
 ## Theme
 
@@ -91,7 +91,7 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 ## Experiments
 
-**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has six experiments: **Team workspaces**, **Migrate Power BI reports**, **Work IQ**, **MCP servers**, **Export as an app** and **Goals**.
+**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has four experiments: **Team workspaces**, **Migrate Power BI reports**, **Work IQ** and **Goals**.
 
 ### Team workspaces
 
@@ -113,20 +113,6 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 > [!WARNING]
 > Work IQ is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
-
-### MCP servers
-
-**MCP servers** adds an **MCP servers** section to the chat composer's **Plugins**, and **MCP servers** under **General**. Add MCP servers there, each a command that runs on this computer or a server's URL. Turned on in an app's chat, a server gives chat its tools while it builds, such as searching documentation, drawing charts or reading your issue tracker. A server runs with your access, so add only servers you trust. Turning the experiment off takes the servers out of every chat, but keeps them for when you turn it on again. See [Connect MCP servers](/docs/build/mcp-servers).
-
-> [!WARNING]
-> MCP servers are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
-
-### Export as an app
-
-**Export as an app** adds **App** to **Export project**: Fabricator saves the project as a `.rayfin` file that someone opens to install your app and use it in a window of its own, with its data on their computer. Anyone with Fabricator can open `.rayfin` files, whether the experiment is on or off. See [Share an app as a file](/docs/ship/app-files).
-
-> [!WARNING]
-> Exporting apps is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
 
 ### Goals
 

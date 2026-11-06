@@ -799,17 +799,6 @@ pub struct ExperimentFlags {
   /// default); each chat still has the plugin off until it's turned on there.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub work_iq: Option<bool>,
-  /// MCP servers: Build chat offers the MCP servers the user adds (a command
-  /// Fabricator runs on this computer, or a remote server's URL) among its
-  /// plugins. Opt-in (off by default); each chat still has a server off until
-  /// it's turned on there.
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub mcp_servers: Option<bool>,
-  /// Export as an app: Export project also offers a `.rayfin` app file,
-  /// which Fabricator installs and runs in a window of its own. Opt-in (off by
-  /// default). It gates exporting only: `.rayfin` files open either way.
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub app_export: Option<bool>,
   /// Goals: a project's Goals tab, where the user writes what the app is for
   /// and the checks it must keep passing (`GOALS.md`), and Copilot runs them
   /// against a fresh copy of the app before a publish. Opt-in (off by default).
@@ -845,9 +834,8 @@ pub struct AppSettings {
   /// pickers show. Never holds a key (those live in the OS credential store).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub byok: Option<ByokSettings>,
-  /// The MCP servers the user added (the MCP servers experiment). Never holds
-  /// the values of their environment variables or headers (those live in the
-  /// OS credential store).
+  /// The MCP servers the user added. Never holds the values of their
+  /// environment variables or headers (those live in the OS credential store).
   #[serde(default, skip_serializing_if = "Vec::is_empty")]
   pub mcp_servers: Vec<McpServerEntry>,
   /// What a new project's chat starts with (Settings → Chat defaults). Each
@@ -888,10 +876,10 @@ pub enum McpTransport {
   Sse,
 }
 
-/// An MCP server the user added (the MCP servers experiment), which a Build
-/// chat can turn on among its plugins. Only the names of its environment
-/// variables or headers are here: their values are kept in the OS credential
-/// store (see `services::mcp::secrets`).
+/// An MCP server the user added, which a Build chat can turn on among its
+/// plugins. Only the names of its environment variables or headers are here:
+/// their values are kept in the OS credential store (see
+/// `services::mcp::secrets`).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerEntry {
@@ -2867,7 +2855,7 @@ pub struct ChatToolCall {
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub ended_at: Option<f64>,
   /// The name the user gave the MCP server whose tool this is, for a server
-  /// they added (the MCP servers experiment); `title` then names the tool.
+  /// they added; `title` then names the tool.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub server: Option<String>,
 }

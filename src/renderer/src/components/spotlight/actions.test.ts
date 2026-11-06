@@ -27,7 +27,6 @@ function context(overrides: Partial<ActionContext> = {}): ActionContext {
     chatBusy: false,
     autoDeploy: true,
     migrationEnabled: false,
-    mcpServersEnabled: false,
     goalsEnabled: false,
     inGallery: false,
     theme: 'dark',
@@ -107,9 +106,8 @@ describe('Search actions', () => {
     expect(ids(context({ inGallery: true }))).not.toContain('action:gallery')
   })
 
-  it('offers managing MCP servers only with their experiment', () => {
-    expect(ids(context())).not.toContain('action:mcp-servers')
-    const ctx = context({ mcpServersEnabled: true })
+  it('offers managing MCP servers', () => {
+    const ctx = context()
     const manage = buildActions(ctx).find((a) => a.id === 'action:mcp-servers')!
     manage.run()
     expect(ctx.do.openMcpServers).toHaveBeenCalled()

@@ -18,7 +18,7 @@ interface Props {
   onManageAccounts?: () => void
   /** Open the Accounts dialog at Model providers (your own API keys). */
   onManageKeys?: () => void
-  /** Open the MCP servers dialog, while the MCP servers experiment is on. */
+  /** Open the MCP servers dialog. */
   onManageMcpServers?: () => void
   /** Open Chat defaults: the model and plugins a new project's chat starts with. */
   onManageChatDefaults?: () => void
@@ -419,18 +419,6 @@ export default function SettingsModal({
                       hint="Add Work IQ to chat's plugins. Turned on in a chat, it lets chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. Read-only. You sign in with your work account in your browser. Needs a Microsoft 365 Copilot license and your organization's approval."
                       checked={Boolean(settings.experiments?.workIq)}
                       onChange={(v) => onChange({ experiments: { workIq: v } })}
-                    />
-                    <ToggleRow
-                      label="MCP servers"
-                      hint="Add MCP servers to chat's plugins: a command that runs on this computer, or a server's URL, such as one that draws charts or reads your issue tracker. Turned on in a chat, chat can use the server's tools while it builds. A server runs with your access, so add only servers you trust."
-                      checked={Boolean(settings.experiments?.mcpServers)}
-                      onChange={(v) => onChange({ experiments: { mcpServers: v } })}
-                    />
-                    <ToggleRow
-                      label="Export as an app"
-                      hint="Export project also offers App: a .rayfin file someone opens to install your app and use it in a window of its own, with its data on their computer. Anyone with Fabricator can open .rayfin files, whether this is on or off."
-                      checked={Boolean(settings.experiments?.appExport)}
-                      onChange={(v) => onChange({ experiments: { appExport: v } })}
                     />
                     <ToggleRow
                       label="Goals"

@@ -1699,14 +1699,14 @@ function Steps({ clicks, children }: { clicks: string[]; children: ReactNode }):
 /** The Build chat's composer, chat-wide beside an empty preview, with its plugins and model
  *  picker (and any Fabric data waiting to go with the next message, or a banner above it, such
  *  as a report migration's card). `plugins` are on; `workIq` offers Work IQ, as its experiment does,
- *  and `servers` are the MCP servers the MCP servers experiment offers. */
+ *  and `servers` are the MCP servers the user added. */
 function ComposerPicker({
   value,
   data,
   banner,
   plugins = [],
   workIq = false,
-  servers,
+  servers = [],
   project = 'Contoso Expenses'
 }: {
   value: ModelSelection
@@ -1742,13 +1742,13 @@ function ComposerPicker({
               <div className="composer-left">
                 <AddMenu attaching={false} onImage={noop} onConnectData={noop} onBrowse={noop} />
                 <PluginsMenu
-                  plugins={offeredPlugins({ workIq, mcpServers: Boolean(servers) })}
+                  plugins={offeredPlugins({ workIq })}
                   servers={servers}
                   on={on}
                   onToggle={(id, value) =>
                     setOn((ids) => (value ? [...ids, id] : ids.filter((i) => i !== id)))
                   }
-                  onManageServers={servers ? noop : undefined}
+                  onManageServers={noop}
                   onLearnMore={noop}
                 />
                 <ModelPicker value={selection} disabled={false} onChange={setSelection} tiers onManageKeys={noop} />
@@ -1827,6 +1827,7 @@ function SettingsShot({ experiments = false }: { experiments?: boolean }): JSX.E
       onClose={noop}
       onManageAccounts={noop}
       onManageKeys={noop}
+      onManageMcpServers={noop}
       onManageChatDefaults={noop}
       onReviewSetup={noop}
     />
@@ -2488,7 +2489,7 @@ function Shot({ id }: { id: string | null }): JSX.Element {
     case 'connect-data':
       return <ConnectDataShot />
     case 'mcp-plugins':
-      // The MCP servers experiment is on: Charts is on in the sample app's chat, beside Fabric IQ.
+      // Charts is on in the sample app's chat, beside Fabric IQ.
       return (
         <Steps clicks={['.plugins-menu button']}>
           <ComposerPicker
@@ -2530,7 +2531,7 @@ function Shot({ id }: { id: string | null }): JSX.Element {
         <Unfocused>
           <ChatDefaultsModal
             defaults={{ model: 'claude-opus-5.5', effort: 'high', plugins: ['fabric-iq', 'mcp:charts'] }}
-            experiments={{ workIq: true, mcpServers: true }}
+            experiments={{ workIq: true }}
             onChange={noop}
             onClose={noop}
             onManageKeys={noop}

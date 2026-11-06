@@ -308,7 +308,7 @@ export default function Workbench({
   const [signingIn, setSigningIn] = useState(false)
   const [refreshingAuth, setRefreshingAuth] = useState(false)
   const [showAccounts, setShowAccounts] = useState(false)
-  /** The MCP servers dialog (MCP servers experiment), opened on adding a server when `adding`. */
+  /** The MCP servers dialog, opened on adding a server when `adding`. */
   const [mcpDialog, setMcpDialog] = useState<{ adding: boolean } | null>(null)
   /** The attention bar was dismissed for these problems (it returns for new ones). */
   const [dismissedAttention, setDismissedAttention] = useState<string | null>(null)
@@ -905,12 +905,7 @@ export default function Workbench({
   }, [])
   const closeGallery = useCallback((): void => setGallery(null), [])
 
-  const mcpServersEnabled = Boolean(settings?.experiments?.mcpServers)
   const openMcpServers = useCallback((adding = false): void => setMcpDialog({ adding }), [])
-  // The MCP servers dialog closes when its experiment is turned off.
-  useEffect(() => {
-    if (!mcpServersEnabled) setMcpDialog(null)
-  }, [mcpServersEnabled])
 
   // A team app's live preview stays up after its turn while the change is
   // saved and the pipeline publishes it. It ends once your preview has that
@@ -2800,7 +2795,6 @@ export default function Workbench({
       pending: active ? (pending[active.id] ?? undefined) : undefined,
       autoDeploy: !manualDeploy,
       migrationEnabled,
-      mcpServersEnabled,
       goalsEnabled: goalsOn,
       inGallery: Boolean(gallery),
       teamWorkspaceName: activeTeamWorkspace?.name,
@@ -3266,7 +3260,7 @@ export default function Workbench({
                             onOptionsChanged={() => void refreshProjects()}
                             onManageKeys={openModelProviders}
                             experiments={settings?.experiments}
-                            onManageMcpServers={mcpServersEnabled ? openMcpServers : undefined}
+                            onManageMcpServers={openMcpServers}
                             outbound={chatOutbound?.projectId === active.id ? chatOutbound : null}
                             onOutboundConsumed={() => setChatOutbound(null)}
                             onAdvisorRerun={rerunAdvisorFix}
@@ -3674,14 +3668,10 @@ export default function Workbench({
             setShowSettings(false)
             openModelProviders()
           }}
-          onManageMcpServers={
-            mcpServersEnabled
-              ? () => {
-                  setShowSettings(false)
-                  openMcpServers()
-                }
-              : undefined
-          }
+          onManageMcpServers={() => {
+            setShowSettings(false)
+            openMcpServers()
+          }}
           onManageChatDefaults={() => {
             setShowSettings(false)
             setShowChatDefaults(true)
@@ -3703,14 +3693,10 @@ export default function Workbench({
             setShowChatDefaults(false)
             openModelProviders()
           }}
-          onManageMcpServers={
-            mcpServersEnabled
-              ? () => {
-                  setShowChatDefaults(false)
-                  openMcpServers()
-                }
-              : undefined
-          }
+          onManageMcpServers={() => {
+            setShowChatDefaults(false)
+            openMcpServers()
+          }}
         />
       )}
 
@@ -3793,7 +3779,6 @@ export default function Workbench({
                 ? `${exporting.name} is publishing. Export it once it finishes.`
                 : undefined
           }
-          appExport={Boolean(settings?.experiments?.appExport)}
           onClose={() => setExporting(null)}
         />
       )}

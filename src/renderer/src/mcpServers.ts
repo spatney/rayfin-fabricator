@@ -1,8 +1,8 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import type { McpServer } from '@shared/ipc'
 
-// The MCP servers you added (MCP servers experiment), shared by every chat's
-// Plugins menu and the MCP servers dialog, and read once.
+// The MCP servers you added, shared by every chat's Plugins menu and the MCP
+// servers dialog, and read once.
 let cache: McpServer[] | null = null
 let pending: Promise<McpServer[]> | null = null
 let generation = 0
@@ -50,13 +50,13 @@ export function loadMcpServers(): Promise<McpServer[]> {
   return pending
 }
 
-/** The MCP servers you added, while `enabled` (the experiment is on). */
-export function useMcpServers(enabled: boolean): McpServer[] {
+/** The MCP servers you added: none until they're read. */
+export function useMcpServers(): McpServer[] {
   const servers = useSyncExternalStore(subscribe, snapshot)
   useEffect(() => {
-    if (enabled && !servers) {
+    if (!servers) {
       loadMcpServers().catch((reason) => console.warn('Could not load your MCP servers', reason))
     }
-  }, [enabled, servers])
-  return enabled && servers ? servers : NONE
+  }, [servers])
+  return servers ?? NONE
 }

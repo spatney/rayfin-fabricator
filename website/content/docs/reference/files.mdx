@@ -18,7 +18,7 @@ Fabricator creates this folder when it needs to save app-owned files.
 
 | Path | What it contains | Safe to delete? |
 | --- | --- | --- |
-| `studio.json` | Settings, the workspace folder path, recent projects with when you last opened and whether you pinned each, the active project, and team workspace list. With the **MCP servers** experiment, also the MCP servers you added: each one's name, command or URL, and the names of its environment variables or headers. | Yes, but Fabricator forgets settings and project lists. It does not delete the project folders. |
+| `studio.json` | Settings, the workspace folder path, recent projects with when you last opened and whether you pinned each, the active project, the team workspace list, and the MCP servers you added: each one's name, command or URL, and the names of its environment variables or headers. | Yes, but Fabricator forgets settings and project lists. It does not delete the project folders. |
 | `chats/` | Saved chat history, one JSON file per project. | Yes, if you no longer need chat history. |
 | `advisor/` | Saved Advisor reports and Advisor UI state for projects. | Yes, if you are comfortable losing saved findings, dismissals, and baselines. |
 | `goals/` | The last Goals results, one JSON file per project. The goals themselves are in each app's `GOALS.md`. | Yes, but the checks then show as not run until you run them again. |
