@@ -341,7 +341,15 @@ function installApi(active = false) {
       saveHistory: vi.fn().mockResolvedValue(undefined)
     },
     rayfin: { versions: vi.fn().mockResolvedValue(null) },
-    preview: { onAgentPreview: vi.fn(() => () => {}) },
+    preview: {
+      onAgentPreview: vi.fn(() => () => {}),
+      pick: {
+        set: vi.fn(() => Promise.resolve(undefined)),
+        poll: vi.fn(() => Promise.resolve(null)),
+        command: vi.fn(() => Promise.resolve(undefined))
+      },
+      releaseFocus: vi.fn(() => Promise.resolve(undefined))
+    },
     dev: {
       plan: vi.fn<RayfinStudioApi['dev']['plan']>().mockResolvedValue({}),
       start: vi.fn<RayfinStudioApi['dev']['start']>().mockResolvedValue({
@@ -1552,14 +1560,13 @@ describe('Workbench live preview on the published backend, for an app this compu
     }
   )
 
-  it('enables the chat and Design submission interlocks during deployment without a preview flag', async () => {
+  it('enables the chat submission interlock during deployment without a preview flag', async () => {
     const { api, dev } = await mount()
     const deploying = deferred<DeployResult>()
     api.deploy.run.mockReturnValueOnce(deploying.promise)
     fireEvent.click(screen.getByRole('button', { name: 'Test deploy' }))
     await waitFor(() => expect(chatProps.mock.lastCall?.[0].deploying).toBe(true))
     expect(chatProps.mock.lastCall?.[0].blockSubmitWhileDeploying).toBe(true)
-    expect(previewProps.mock.lastCall?.[0].designSendBlocked).toMatch(/^Publishing/)
 
     const { turn } = await beginTurn()
     await act(async () => turn)
@@ -1568,7 +1575,6 @@ describe('Workbench live preview on the published backend, for an app this compu
 
     await act(async () => deploying.resolve({ ok: true, outcome: 'success' }))
     await waitFor(() => expect(chatProps.mock.lastCall?.[0].deploying).toBe(false))
-    expect(previewProps.mock.lastCall?.[0].designSendBlocked).toBeNull()
     dev.plan.mockResolvedValue({ port: 5174 })
     const next = await beginTurn()
     await act(async () => next.turn)
@@ -1682,7 +1688,7 @@ describe('Workbench live preview on the published backend, for an app this compu
     expect(reloads(), 'a stopped turn that changed files').toBe(1)
   })
 
-  it('tells the preview while a turn runs, so Design waits for it on the local preview', async () => {
+  it('tells the preview while a turn runs, so the local preview knows Copilot is changing it', async () => {
     await mountManual()
     expect(previewProps.mock.lastCall?.[0].turnRunning).toBe(false)
     const setPending = (pending: boolean): void =>

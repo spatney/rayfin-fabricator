@@ -35,12 +35,6 @@ export interface OutboundPrompt {
    */
   stage?: boolean
   /**
-   * Send the queued Design changes (the preview toolbar's "Send") — the composer
-   * text becomes the note, exactly as if the user pressed Send in the composer.
-   * `display` and `prompt` are ignored.
-   */
-  design?: boolean
-  /**
    * Open Add Fabric data on every kind of data instead of sending anything (the
    * Blueprint's Add Fabric data). What's picked waits in the composer as chips.
    * `display` and `prompt` are ignored.

@@ -1,0 +1,355 @@
+/* Chat pictures, large: the viewer (ImageViewer) and drawing on them (ImageMarkup). */
+
+/* ── Viewer ─────────────────────────────────────────────────────────────── */
+.image-viewer {
+  padding: 0;
+  background: rgba(5, 7, 12, 0.86);
+}
+
+.image-viewer-dialog {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 72px;
+  outline: none;
+}
+
+.image-viewer-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+  animation: imageViewerIn 0.18s ease-out both;
+}
+
+.image-viewer-img--zoomable {
+  cursor: zoom-in;
+}
+
+/* Full size: the picture scrolls instead of fitting. */
+.image-viewer--full .image-viewer-dialog {
+  display: block;
+  overflow: auto;
+}
+
+.image-viewer--full .image-viewer-img {
+  max-width: none;
+  max-height: none;
+  margin: 0 auto;
+  cursor: zoom-out;
+}
+
+.image-viewer-btn {
+  position: fixed;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.image-viewer-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.image-viewer-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.image-viewer-close {
+  top: 14px;
+  right: 14px;
+}
+
+.image-viewer-prev,
+.image-viewer-next {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.image-viewer-prev {
+  left: 16px;
+}
+
+.image-viewer-next {
+  right: 16px;
+}
+
+.image-viewer-count {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+@keyframes imageViewerIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* ── Drawing ────────────────────────────────────────────────────────────── */
+.markup {
+  padding: 20px;
+}
+
+.markup-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(1480px, 100%);
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  outline: none;
+  animation: markupIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.markup-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.markup-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.markup-title h2 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.markup-title p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* A dotted sheet under the picture, as on a drawing board. */
+.markup-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    radial-gradient(
+        circle at 1px 1px,
+        color-mix(in srgb, var(--text) 10%, transparent) 1px,
+        transparent 0
+      )
+      0 0 / 18px 18px,
+    var(--bg);
+}
+
+.markup-sheet {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent),
+    0 12px 40px rgba(0, 0, 0, 0.35);
+  animation: markupSheetIn 0.24s ease-out both;
+}
+
+.markup-sheet img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.markup-ink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.markup-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.markup-toast {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  background: var(--bg-elev-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transform: translateX(-50%);
+  animation: markupToast 0.16s ease-out both;
+}
+
+.markup-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.markup-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.markup-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: var(--border);
+}
+
+.markup-spacer {
+  flex: 1;
+}
+
+.markup-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--text-dim);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.markup-icon-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.markup-icon-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.markup-icon-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.markup-tool.is-on {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.markup-swatch {
+  width: 22px;
+  height: 22px;
+  margin: 0 2px;
+  padding: 0;
+  background: var(--swatch);
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.markup-swatch:hover {
+  transform: scale(1.12);
+}
+
+.markup-swatch.is-on {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.25),
+    0 0 0 2px var(--bg-elev),
+    0 0 0 4px var(--swatch);
+}
+
+.markup-icon-btn:focus-visible,
+.markup-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@keyframes markupIn {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+@keyframes markupSheetIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes markupToast {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-viewer-img,
+  .markup-dialog,
+  .markup-sheet,
+  .markup-toast {
+    animation: none;
+  }
+}

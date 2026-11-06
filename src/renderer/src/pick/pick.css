@@ -1,0 +1,244 @@
+/* Touch Up: the preview toolbar's switch and its shortcuts, and the picked
+   elements as chips in the composer and the transcript. Flat: solid surfaces,
+   neutral 1px borders. */
+
+.pick-seg {
+  flex: none;
+}
+
+.pick-btn-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The shortcuts: one row beside the switch, centred on the toolbar, where
+   neither the preview below nor the window's edge above can cut them off. */
+.pick-tip {
+  position: fixed;
+  z-index: 1200;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  width: max-content;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  animation: pick-tip-in 0.12s ease-out;
+}
+
+.pick-tip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.pick-tip-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+}
+
+.pick-tip-reason {
+  color: var(--text-dim);
+}
+
+.pick-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pick-keys kbd {
+  min-width: 22px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.pick-keys-plus,
+.pick-keys-click {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+/* Picked elements waiting in the composer… */
+.pick-tray,
+.msg-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 1px 6px 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 260px;
+  height: 30px;
+  padding: 0 0 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: 12px;
+  animation: pick-chip-in 0.16s ease-out;
+}
+
+.pick-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.pick-chip-n {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pick-chip-shot {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-dim);
+}
+
+.pick-chip-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A picture that opens large. */
+.pick-chip-shot--open {
+  padding: 0;
+  border: 0;
+  cursor: zoom-in;
+  transition: box-shadow 0.12s ease;
+}
+
+.pick-chip-shot--open:hover,
+.pick-chip-shot--open:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.pick-chip-shot .btn-ico {
+  width: 13px;
+  height: 13px;
+}
+
+.pick-chip-shot--loading {
+  animation: pick-shot-wait 1s ease-in-out infinite;
+}
+
+.pick-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pick-chip-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0 8px 8px 0;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.pick-chip-x:hover {
+  background: var(--bg-elev-3);
+  color: var(--text);
+}
+
+.pick-chip-x svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* …and in the transcript, above the message they went with. */
+.msg-picks {
+  justify-content: flex-end;
+  margin: 0 0 6px;
+}
+
+.pick-chip--sent {
+  padding-right: 10px;
+  animation: none;
+}
+
+@keyframes pick-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.97);
+  }
+}
+
+@keyframes pick-tip-in {
+  from {
+    opacity: 0;
+    translate: 4px 0;
+  }
+}
+
+@keyframes pick-shot-wait {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pick-chip,
+  .pick-tip,
+  .pick-chip-shot--loading {
+    animation: none;
+  }
+}

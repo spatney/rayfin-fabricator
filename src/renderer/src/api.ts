@@ -47,13 +47,11 @@ import {
   type PreviewAgentEvent,
   type ProcLogEvent,
   type DeleteProgressEvent,
-  type DesignVariationsOptions,
   type ExportOptions,
   type FileDropEvent,
   type GoalsEventEnvelope,
   type GoalsRunRequest,
   type RayfinStudioApi,
-  type ReasoningEffort,
   type SecurityEventEnvelope,
   type TeamCreateRequest,
   type TeamDiagnoseRequest,
@@ -65,15 +63,7 @@ import {
   type UpdateProgress,
   type ZipProgressEvent
 } from '@shared/ipc'
-import type {
-  DesignCommand,
-  DesignEnableOptions,
-  DesignHostTheme,
-  DesignLocateTarget,
-  DesignPageOutline,
-  DesignRestyleContext,
-  DesignVariationEvent
-} from '@shared/design'
+import type { PickCommand, PickLocateTarget, PickSetOptions } from '@shared/pick'
 import { toLocalBackendError } from './localBackend'
 
 /** Subscribe to a Tauri event, returning a synchronous unsubscribe function. */
@@ -497,36 +487,9 @@ export const api: RayfinStudioApi = {
     onState: (cb: (event: DevStateEvent) => void) => subscribe<DevStateEvent>(IpcChannels.devState, cb)
   },
 
-  design: {
-    variations: (
-      projectId: string,
-      context: DesignRestyleContext,
-      hint?: string,
-      count?: number,
-      model?: string,
-      options?: DesignVariationsOptions
-    ) =>
-      invoke('design_variations', {
-        projectId,
-        context,
-        hint,
-        count,
-        model,
-        effort: options?.effort,
-        requestId: options?.requestId,
-        screenshotPath: options?.screenshotPath
-      }),
-    onVariation: (cb: (event: DesignVariationEvent) => void) =>
-      subscribe<DesignVariationEvent>(IpcChannels.designVariation, cb),
-    polish: (
-      projectId: string,
-      page: DesignPageOutline,
-      screenshotPath?: string,
-      model?: string,
-      effort?: ReasoningEffort
-    ) => invoke('design_polish', { projectId, page, screenshotPath, model, effort }),
-    locate: (projectId: string, targets: DesignLocateTarget[]) =>
-      invoke('design_locate', { projectId, targets })
+  pick: {
+    locate: (projectId: string, targets: PickLocateTarget[]) =>
+      invoke('pick_locate', { projectId, targets })
   },
 
   settings: {
@@ -568,24 +531,25 @@ export const api: RayfinStudioApi = {
       subscribe<PreviewNavState>(IpcChannels.previewNav, cb),
     onAgentPreview: (cb: (event: PreviewAgentEvent) => void) =>
       subscribe<PreviewAgentEvent>(IpcChannels.previewAgent, cb),
-    design: {
-      setEnabled: (
-        enabled: boolean,
+    pick: {
+      set: (
+        armed: boolean,
+        on: boolean,
         embedded?: boolean,
         appUrl?: string,
-        options?: DesignEnableOptions
+        options?: PickSetOptions
       ) =>
-        invoke('preview_design_set', {
-          enabled,
+        invoke('preview_pick_set', {
+          armed,
+          on,
           embedded: embedded ?? false,
           appUrl: appUrl ?? null,
           options: options ?? null
         }),
-      poll: () => invoke('preview_design_poll'),
-      snapshot: () => invoke('preview_design_snapshot'),
-      command: (command: DesignCommand) => invoke('preview_design_command', { command }),
-      setTheme: (theme: DesignHostTheme) => invoke('preview_design_set_theme', { theme })
-    }
+      poll: (page: string | null, since: number) => invoke('preview_pick_poll', { page, since }),
+      command: (command: PickCommand) => invoke('preview_pick_command', { command })
+    },
+    releaseFocus: () => invoke('preview_release_focus')
   },
 
   onProcLog: (cb: (event: ProcLogEvent) => void) =>

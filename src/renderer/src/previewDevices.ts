@@ -1,4 +1,4 @@
-/** Preview sizes offered while designing, in app CSS px. */
+/** The preview widths the preview toolbar offers, in app CSS px. */
 export type DeviceId = 'desktop' | 'tablet' | 'phone'
 
 export interface DevicePreset {

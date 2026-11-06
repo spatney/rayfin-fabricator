@@ -20,7 +20,7 @@ Everything here is a maintainer tool. It isn't part of the app or of CI.
 | `scrub.js` | Replaces personal details (names, emails, tenant, workspace and repo names, paths) in a page |
 | `capture-window.ps1` | Captures the app window, including the native preview webview a DevTools screenshot can't see |
 | `optimize.mjs` | Crops, resizes and converts a capture to WebP, and its light twin the same way (uses `sharp` from `website/node_modules`) |
-| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Accounts, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Search, Blueprint, its Data model view with related entities and with loose access, its Data view of the sample app's local data, the local preview with the local backend's output (a stand-in without the app, left out of the default list: the docs capture is live), deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, the chat's Plugins menu, the same menu with MCP servers, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Chat defaults, MCP servers, Migrate a Power BI report, the Migration card, the Goals view after a run) and captures each in both themes with headless Edge. Its local backend runs the sample app with made-up users, rows, secrets and output |
+| `harness/` + `capture-harness.ps1` | Renders components with sample data (team overview, publish menu, deployment panel, account menu, Accounts, Create a team workspace dialog, Rayfin update popover, port-conflict dialog, plan card, Skills and Secrets views, setup, Help, Search, Blueprint, its Data model view with related entities and with loose access, its Data view of the sample app's local data, the local preview with the local backend's output (a stand-in without the app, left out of the default list: the docs capture is live), Touch Up on the sample app (its dashboard in a frame over the preview, with the real in-page agent picking) and drawing on a screenshot of it, deploy screen, failed deploy, the chat's model picker, Accounts → Model providers, the chat's + menu, the chat's Plugins menu, the same menu with MCP servers, Add Fabric data, Fabric data chips in the composer, Settings and its Experiments, Chat defaults, MCP servers, Migrate a Power BI report, the Migration card, the Goals view after a run) and captures each in both themes with headless Edge. Its local backend runs the sample app with made-up users, rows, secrets and output |
 
 ## Before you start
 
@@ -206,7 +206,9 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `mcp-servers` | harness | `390,114,660,672` |
 | `connect-data` | harness | `300,140,840,620` |
 | `data-chips` | harness | `0,740,720,160` |
-| `design`, `design-theme` | live (`design-theme` with `--open` on the Theme button) | `720,40,720,860` |
+| `design` | live, of Design mode, which Touch Up replaced: no longer in the app, kept for the intro video | `720,40,720,860` |
+| `touch-up`, `touch-up-chips` | harness, both from the `touch-up` capture | `601,0,809,805` and `0,700,600,200` |
+| `touch-up-draw` | harness | none |
 | `advisor-finding` | live | `99,191,857,534` |
 | `settings` | harness | `410,40,620,820` |
 | `settings-experiments` | harness, taller window (picked by the script) | `410,45,620,910` |

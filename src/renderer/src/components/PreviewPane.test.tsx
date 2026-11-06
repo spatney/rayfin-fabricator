@@ -9,7 +9,8 @@ import type {
   StudioProject
 } from '@shared/ipc'
 import { OverlayProvider, SuppressPreview } from '../overlay'
-import { useDesignSession, type DesignSurface } from '../design/useDesignSession'
+import type { PickEvent, PickStatus, PickTarget } from '@shared/pick'
+import { useTouchUp, type PickSurface } from '../pick/useTouchUp'
 import type { LocalBackend } from '../localBackend'
 import PreviewPane, {
   type DeployUiState,
@@ -1147,7 +1148,7 @@ describe('PreviewPane Fabric view', () => {
   })
 })
 
-describe('PreviewPane design mode', () => {
+describe('PreviewPane retained documents', () => {
   it.each(['fabric', 'local'] as const)('does not reload a retained %s document when native re-show replays navigation', async (source) => {
     const project = fabricProject()
     const localPreviewUrl = 'http://localhost:5173'
@@ -1173,61 +1174,14 @@ describe('PreviewPane design mode', () => {
     expect(e.api.navigate).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: new URL(actualUrl).host })).toBeTruthy()
   })
+})
 
-  // Regression: design mode used to be hard-disabled in the Fabric portal view
-  // (the app runs in a cross-origin iframe the top-frame editor couldn't reach).
-  // It must now be enabled and drive the app iframe through the top-frame relay.
-  it('enables the Design button in the Fabric-embedded view and drives the relay', async () => {
-    render(<DesignHarnessed project={fabricProject('p1')} />)
+describe('PreviewPane toolbar', () => {
+  it('sizes the preview to a tablet’s or a phone’s width', async () => {
+    render(<Harnessed project={makeProject('p1')} suppressed={false} />)
     await settle(e)
-
-    const designBtn = screen.getByRole('button', { name: /^design/i }) as HTMLButtonElement
-    expect(designBtn.disabled).toBe(false)
-
-    fireEvent.click(designBtn)
-    await settle(e)
-
-    // Toggling on passes embedded=true + the direct app URL so the host can find
-    // and drive the cross-origin app iframe from the top-frame relay, plus a
-    // fresh session seeded with the (empty) queue.
-    const call = e.calls.find((c) => c.method === 'design.setEnabled')
-    expect(call, 'design.setEnabled was not called').toBeTruthy()
-    expect(call!.args.slice(0, 3)).toEqual([true, true, 'https://p1.example.app/'])
-    expect(call!.args[3]).toMatchObject({ items: [], intro: true, sessionId: expect.any(String) })
-  })
-
-  it('drives the direct view with embedded=false', async () => {
-    render(<DesignHarnessed project={makeProject('p1')} />)
-    await settle(e)
-
-    const designBtn = screen.getByRole('button', { name: /^design/i }) as HTMLButtonElement
-    expect(designBtn.disabled).toBe(false)
-    fireEvent.click(designBtn)
-    await settle(e)
-
-    const call = e.calls.find((c) => c.method === 'design.setEnabled')
-    expect(call!.args.slice(0, 3)).toEqual([true, false, 'https://p1.example.app/'])
-  })
-
-  it('shows the design bar while designing: device widths, Theme, Polish, Send and Done', async () => {
-    const onSend = vi.fn()
-    render(<DesignHarnessed project={fabricProject('p1')} onSend={onSend} />)
-    await settle(e)
-    fireEvent.click(screen.getByRole('button', { name: /^design/i }))
-    await settle(e)
-
-    const bar = screen.getByRole('toolbar', { name: 'Design tools' })
-    expect(bar.textContent).toContain('Click anything in your app to change it')
-    // Switching views mid-session would reload the page, so the toggle is locked.
-    expect((screen.getByRole('button', { name: 'Fabric' }) as HTMLButtonElement).disabled).toBe(
-      true
-    )
-    // Nothing queued yet → nothing to send.
-    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true)
-
-    // A device width constrains the preview host (the native surface follows it).
-    fireEvent.click(screen.getByRole('button', { name: 'Phone width' }))
     const host = document.querySelector('.preview-webview-host') as HTMLElement
+    fireEvent.click(screen.getByRole('button', { name: 'Phone width' }))
     expect(host.style.width).toBe('390px')
     expect(host.classList.contains('preview-webview-host--device')).toBe(true)
     // Phone gives the host a phone's screen height and draws a phone around it.
@@ -1241,159 +1195,161 @@ describe('PreviewPane design mode', () => {
     expect(host.querySelector('.preview-phone')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Desktop width' }))
     expect(host.style.width).toBe('')
-
-    fireEvent.click(screen.getByRole('button', { name: /theme/i }))
-    await settle(e)
-    const openTheme = e.calls.find((c) => c.method === 'design.command' && (c.args[0] as { op: string }).op === 'openPanel')
-    expect(openTheme?.args[0]).toEqual({ op: 'openPanel', panel: 'theme' })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
-    await settle(e)
-    expect(screen.queryByRole('toolbar', { name: 'Design tools' })).toBeNull()
-    expect(e.calls.filter((c) => c.method === 'design.setEnabled').slice(-1)[0].args).toEqual([false])
-    expect(onSend).not.toHaveBeenCalled()
   })
 
-  it('mirrors the page’s queue into the toolbar and sends it from the bar', async () => {
-    const onSend = vi.fn()
-    render(<DesignHarnessed project={makeProject('p1')} onSend={onSend} />)
-    await settle(e)
-    fireEvent.click(screen.getByRole('button', { name: /^design/i }))
-    await settle(e)
-    const session = (e.calls.find((c) => c.method === 'design.setEnabled')!.args[3] as { sessionId: string }).sessionId
-    const item = {
-      id: 'i1', kind: 'element', tweaks: [], instruction: 'Make it the primary action', createdAt: 1,
-      target: { label: 'Button · Save', role: 'button', tag: 'button', selector: 'button', route: '/', box: { w: 80, h: 32 } }
-    }
-    e.api.design.poll.mockResolvedValue({ enabled: true, sessionId: session, version: 3, hasTheme: true, itemCount: 1, requests: [], results: {}, panel: null })
-    e.api.design.snapshot.mockResolvedValue({ version: 3, sessionId: session, route: '/', viewport: { w: 900, h: 600, dpr: 1 }, items: [item] })
-    await settle(e)
-
-    expect(screen.getByRole('toolbar', { name: 'Design tools' }).textContent).toContain('1 change ready')
-    expect(screen.getByRole('button', { name: /^design · 1/i })).toBeTruthy()
-    const send = screen.getByRole('button', { name: 'Send 1' }) as HTMLButtonElement
-    expect(send.disabled).toBe(false)
-    fireEvent.click(send)
-    expect(onSend).toHaveBeenCalledOnce()
-  })
-
-  it('re-seeds a page that came back unseeded after a reload', async () => {
-    render(<DesignHarnessed project={makeProject('p1')} />)
-    await settle(e)
-    fireEvent.click(screen.getByRole('button', { name: /^design/i }))
-    await settle(e)
-    const session = (e.calls.find((c) => c.method === 'design.setEnabled')!.args[3] as { sessionId: string }).sessionId
-    e.api.design.poll.mockResolvedValue({ enabled: true, sessionId: null, version: 0, hasTheme: false, itemCount: 0, requests: [], results: {}, panel: null })
-    await settle(e)
-    const seed = e.calls.find((c) => c.method === 'design.command' && (c.args[0] as { op: string }).op === 'seed')
-    expect(seed?.args[0]).toEqual({ op: 'seed', sessionId: session, items: [] })
-    // An unseeded page's snapshot must never replace the host's queue.
-    expect(e.api.design.snapshot).not.toHaveBeenCalled()
-  })
-
-  it('ends the session when a deploy takes the preview away', async () => {
-    const project = makeProject('p1')
-    const { rerender } = render(<DesignHarnessed project={project} />)
-    await settle(e)
-    fireEvent.click(screen.getByRole('button', { name: /^design/i }))
-    await settle(e)
-    expect(screen.getByRole('toolbar', { name: 'Design tools' })).toBeTruthy()
-
-    rerender(<DesignHarnessed project={project} deploy={{ running: true, log: [] }} />)
-    await settle(e)
-    expect(screen.queryByRole('toolbar', { name: 'Design tools' })).toBeNull()
-    expect(e.calls.filter((c) => c.method === 'design.setEnabled').slice(-1)[0].args).toEqual([false])
-  })
-
-  it('keeps Design off during a temporary auto-deploy local preview', async () => {
-    render(<DesignHarnessed project={makeProject('p1')} localPreviewUrl="http://localhost:5173" />)
-    await settle(e)
-    expect((screen.getByRole('button', { name: /^design/i }) as HTMLButtonElement).disabled).toBe(true)
-  })
-
-  it.each(['direct', 'fabric'] as const)(
-    'enables Design on the manual-deploy local preview with %s selected',
-    async (mode) => {
-      const project =
-        mode === 'fabric' ? fabricProject('p1') : makeProject('p1', { needsFabricPortal: true })
-      const localPreviewUrl = 'http://localhost:5173'
-      render(<DesignHarnessed project={project} localPreviewUrl={localPreviewUrl} manualDeploy />)
-      await settle(e)
-
-      const designBtn = screen.getByRole<HTMLButtonElement>('button', { name: /^design/i })
-      expect(designBtn.disabled).toBe(false)
-      expect(designBtn.title).not.toContain('unavailable')
-      fireEvent.click(designBtn)
-      await settle(e)
-
-      const call = e.calls.find((c) => c.method === 'design.setEnabled')
-      expect(call!.args.slice(0, 3)).toEqual([true, false, localPreviewUrl])
-      expect(call!.args[3]).toMatchObject({ items: [], sessionId: expect.any(String) })
-      expect(screen.getByRole('toolbar', { name: 'Design tools' })).toBeTruthy()
-      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Fabric' }).disabled).toBe(true)
-    }
-  )
-
-  it('ends local Design when a manual redeploy starts', async () => {
-    const props = {
-      project: makeProject('p1'),
-      localPreviewUrl: 'http://localhost:5173',
-      manualDeploy: true
-    }
-    const { rerender } = render(<DesignHarnessed {...props} />)
-    await settle(e)
-    fireEvent.click(screen.getByRole('button', { name: /^design/i }))
-    await settle(e)
-    expect(screen.getByRole('toolbar', { name: 'Design tools' })).toBeTruthy()
-
-    rerender(<DesignHarnessed {...props} deploy={{ running: true, log: [] }} />)
-    await settle(e)
-    expect(screen.queryByRole('toolbar', { name: 'Design tools' })).toBeNull()
-    expect(e.calls.filter((c) => c.method === 'design.setEnabled').slice(-1)[0].args).toEqual([false])
-  })
-
-  it('ends local Design when a turn starts and offers it again once the turn finishes', async () => {
-    const props = {
-      project: makeProject('p1'),
-      localPreviewUrl: 'http://localhost:5173',
-      manualDeploy: true
-    }
-    const { rerender } = render(<DesignHarnessed {...props} />)
-    await settle(e)
-    fireEvent.click(screen.getByRole('button', { name: /^design/i }))
-    await settle(e)
-    expect(screen.getByRole('toolbar', { name: 'Design tools' })).toBeTruthy()
-
-    // Copilot's edits change the local page mid-turn, so Design waits for the turn.
-    rerender(<DesignHarnessed {...props} turnRunning />)
-    await settle(e)
-    expect(screen.queryByRole('toolbar', { name: 'Design tools' })).toBeNull()
-    expect(e.calls.filter((c) => c.method === 'design.setEnabled').slice(-1)[0].args).toEqual([false])
-    const designBtn = screen.getByRole<HTMLButtonElement>('button', { name: /^design/i })
-    expect(designBtn.disabled).toBe(true)
-    expect(designBtn.title).toContain('once this turn finishes')
-
-    rerender(<DesignHarnessed {...props} />)
-    await settle(e)
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: /^design/i }).disabled).toBe(false)
-  })
-
-  it('no longer renders an Annotate button (design mode replaced it)', async () => {
+  it('has no Annotate or Design button (Touch Up replaced them)', async () => {
     render(<Harnessed project={makeProject('p1')} suppressed={false} />)
     await settle(e)
     expect(screen.queryByRole('button', { name: /annotate/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^design/i })).toBeNull()
   })
 })
 
-/** PreviewPane wired to a real Design session, the way the Workbench does it. */
-function DesignHarnessed({
+describe('PreviewPane Touch Up', () => {
+  it('arms the app once it shows, and picks in the Fabric view through the relay', async () => {
+    render(<PickHarnessed project={fabricProject('p1')} />)
+    await settle(e)
+    // Armed, so the page's own Ctrl+Shift+C works, but not picking yet. The
+    // direct app URL identifies the app's iframe inside the Fabric portal.
+    expect(lastPickSet(e)?.slice(0, 4)).toEqual([true, false, true, 'https://p1.example.app/'])
+    expect(pickButton().disabled).toBe(false)
+    expect(pickButton().getAttribute('aria-pressed')).toBe('false')
+
+    fireEvent.click(pickButton())
+    await settle(e)
+    expect(lastPickSet(e)?.slice(0, 4)).toEqual([true, true, true, 'https://p1.example.app/'])
+    expect(pickButton().getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('shows its shortcuts as keycaps when the pointer rests on it', async () => {
+    render(<PickHarnessed project={makeProject('p1')} />)
+    await settle(e)
+    fireEvent.mouseEnter(pickButton().parentElement!)
+    act(() => e.advanceTimers(400))
+    const tip = screen.getByRole('tooltip')
+    expect(tip.textContent).toContain('Turn on')
+    expect(tip.textContent).toContain('Clip a screenshot')
+    expect([...tip.querySelectorAll('kbd')].map((key) => key.textContent)).toEqual([
+      'Ctrl',
+      'Shift',
+      'C',
+      'Shift'
+    ])
+  })
+
+  it('toggles with Ctrl+Shift+C while Fabricator has the keyboard', async () => {
+    render(<PickHarnessed project={makeProject('p1')} />)
+    await settle(e)
+    const shortcut = (): boolean =>
+      fireEvent.keyDown(document.body, { key: 'C', code: 'KeyC', ctrlKey: true, shiftKey: true })
+    // The preview's DevTools never see it.
+    expect(shortcut()).toBe(false)
+    await settle(e)
+    expect(pickButton().getAttribute('aria-pressed')).toBe('true')
+    expect(lastPickSet(e)?.slice(0, 4)).toEqual([true, true, false, 'https://p1.example.app/'])
+    shortcut()
+    await settle(e)
+    expect(pickButton().getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('follows the page: picking on and off there, and each pick counted on the button', async () => {
+    render(<PickHarnessed project={makeProject('p1')} />)
+    await settle(e)
+    const events: PickEvent[] = []
+    const page = (event: PickEvent): void => {
+      events.push(event)
+      e.api.pick.poll.mockResolvedValue(pageStatus([...events]))
+    }
+    page({ seq: 1, type: 'enter' })
+    await settle(e)
+    expect(pickButton().getAttribute('aria-pressed')).toBe('true')
+
+    page({ seq: 2, type: 'pick', pick: { id: 'a', n: 1, target: SAVE_BUTTON, rect: null } })
+    await settle(e)
+    expect(screen.getByRole('button', { name: 'Touch Up, 1 picked' })).toBeTruthy()
+
+    // Escape or Done in the page: the pick still waits for the message.
+    page({ seq: 3, type: 'exit' })
+    await settle(e)
+    expect(pickButton().getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: 'Touch Up, 1 picked' })).toBeTruthy()
+  })
+
+  it('ends picking while a publish takes the published app away, and says when it’s back', async () => {
+    const project = makeProject('p1')
+    const { rerender } = render(<PickHarnessed project={project} />)
+    await settle(e)
+    fireEvent.click(pickButton())
+    await settle(e)
+
+    rerender(<PickHarnessed project={project} deploy={{ running: true, log: [] }} />)
+    await settle(e)
+    expect(lastPickSet(e)).toEqual([false, false])
+    expect(pickButton().disabled).toBe(true)
+    expect(pickButton().getAttribute('aria-pressed')).toBe('false')
+    fireEvent.mouseEnter(pickButton().parentElement!)
+    act(() => e.advanceTimers(400))
+    expect(screen.getByRole('tooltip').textContent).toBe(
+      'Touch Up is back once the publish finishes.'
+    )
+  })
+
+  it.each(['direct', 'fabric'] as const)(
+    'picks on the manual-deploy local preview with %s selected',
+    async (mode) => {
+      const project =
+        mode === 'fabric' ? fabricProject('p1') : makeProject('p1', { needsFabricPortal: true })
+      render(
+        <PickHarnessed project={project} localPreviewUrl="http://localhost:5173" manualDeploy />
+      )
+      await settle(e)
+      fireEvent.click(pickButton())
+      await settle(e)
+      expect(lastPickSet(e)?.slice(0, 4)).toEqual([true, true, false, 'http://localhost:5173'])
+    }
+  )
+})
+
+const pickButton = (): HTMLButtonElement =>
+  screen.getByRole<HTMLButtonElement>('button', { name: /^touch up/i })
+
+/** The last `preview.pick.set` call's arguments. */
+function lastPickSet(e: PreviewEnv): unknown[] | undefined {
+  return e.calls.filter((c) => c.method === 'pick.set').slice(-1)[0]?.args
+}
+
+const SAVE_BUTTON: PickTarget = {
+  label: 'Button · Save',
+  role: 'button',
+  tag: 'button',
+  selector: 'main > button',
+  route: '/',
+  box: { w: 80, h: 32 }
+}
+
+/** What the page reports when polled, with everything that happened there. */
+function pageStatus(events: PickEvent[]): PickStatus {
+  return {
+    v: 1,
+    page: 'page-1',
+    armed: true,
+    on: false,
+    seq: events.length ? events[events.length - 1].seq : 0,
+    events,
+    results: {},
+    route: '/',
+    viewport: { w: 900, h: 600, dpr: 1 }
+  }
+}
+
+/** PreviewPane wired to Touch Up, the way the Workbench does it. */
+function PickHarnessed({
   project,
   deploy,
   localPreviewUrl,
   manualDeploy,
   turnRunning,
-  local,
-  onSend
+  local
 }: {
   project: StudioProject
   deploy?: DeployUiState
@@ -1401,10 +1357,9 @@ function DesignHarnessed({
   manualDeploy?: boolean
   turnRunning?: boolean
   local?: LocalBackend
-  onSend?: () => void
 }): JSX.Element {
-  const [surface, setSurface] = useState<DesignSurface | null>(null)
-  const design = useDesignSession(project.id, surface)
+  const [surface, setSurface] = useState<PickSurface | null>(null)
+  const touchUp = useTouchUp(project.id, surface, () => {})
   return (
     <OverlayProvider>
       <PreviewPane
@@ -1416,9 +1371,8 @@ function DesignHarnessed({
         local={local}
         focused={false}
         onToggleFocus={() => {}}
-        design={design}
-        onDesignSend={onSend}
-        onDesignSurface={setSurface}
+        touchUp={touchUp}
+        onPickSurface={setSurface}
       />
     </OverlayProvider>
   )
@@ -1847,24 +1801,16 @@ describe('PreviewPane on this computer', () => {
     ['a new app', makeProject('p1', { lastDeploy: undefined })],
     ['one in the Fabric view when published', fabricProject('p1')]
   ] as const)(
-    'offers Design on the app on this computer (%s) whenever no turn runs, even while publishing',
+    'offers Touch Up on the app on this computer (%s), even while a turn runs or it publishes',
     async (_, project) => {
-      const design = (): HTMLButtonElement => screen.getByRole('button', { name: /^design/i })
-      const { rerender } = render(
-        <DesignHarnessed project={project} local={runningLocally()} turnRunning />
+      const publishing = { running: true, log: [], startedAt: Date.now() }
+      render(
+        <PickHarnessed project={project} local={runningLocally()} turnRunning deploy={publishing} />
       )
       await settle(e)
-      expect(design().disabled).toBe(true)
-      expect(design().title).toContain('once this turn finishes')
-
-      const publishing = { running: true, log: [], startedAt: Date.now() }
-      rerender(<DesignHarnessed project={project} local={runningLocally()} deploy={publishing} />)
+      fireEvent.click(pickButton())
       await settle(e)
-      expect(design().disabled).toBe(false)
-      fireEvent.click(design())
-      await settle(e)
-      const call = e.calls.find((c) => c.method === 'design.setEnabled')
-      expect(call?.args.slice(0, 3)).toEqual([true, false, LOCAL_APP])
+      expect(lastPickSet(e)?.slice(0, 4)).toEqual([true, true, false, LOCAL_APP])
     }
   )
 

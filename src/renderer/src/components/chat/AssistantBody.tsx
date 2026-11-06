@@ -3,6 +3,7 @@ import type { ChatPlanQuestion, ChatSegment } from '@shared/ipc'
 import Markdown from '../Markdown'
 import PlanQuestionCard from '../PlanQuestionCard'
 import { Codicon } from '../icons'
+import { ShotStrip, useImageViewer } from './ImageViewer'
 import { ThinkingRow } from './ThinkingRow'
 import { layoutTurn } from './turnLayout'
 import type { UIChatMessage } from './types'
@@ -51,18 +52,14 @@ function Interjection({
 }: {
   seg: Extract<ChatSegment, { kind: 'interjection' }>
 }): JSX.Element {
+  const { open, viewer } = useImageViewer(seg.thumbs)
   return (
     <div className="turn-interject">
       <span className="turn-interject-tag">You added</span>
       <div className="turn-interject-text">
         <Markdown>{seg.text}</Markdown>
-        {seg.thumbs && seg.thumbs.length > 0 && (
-          <div className="msg-shots">
-            {seg.thumbs.map((src, j) => (
-              <img key={j} className="msg-shot" src={src} alt="Screenshot attachment" />
-            ))}
-          </div>
-        )}
+        {seg.thumbs && seg.thumbs.length > 0 && <ShotStrip images={seg.thumbs} onOpen={open} />}
+        {viewer}
       </div>
     </div>
   )

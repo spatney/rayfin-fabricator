@@ -102,35 +102,22 @@ const CONSOLE_INIT_JS: &str = r#";(function () {
   } catch (e) {}
 })();"#;
 
-/// The in-page "design mode" controller (see `services/design_agent.js`).
-/// Injected at document-start into **all frames**
+/// The in-page Touch Up agent (see `services/pick_agent.js`). Injected at
+/// document start into **all frames**
 /// ([`WebviewBuilder::initialization_script_for_all_frames`]) so it is present in
-/// the deployed app even when the app is embedded in a *cross-origin* iframe inside
-/// the Fabric portal — the top-frame `wv.eval` used for the direct view can't reach
-/// a cross-origin iframe. The controller stays dormant (defines
-/// `window.__rayfinDesign` + a passive `postMessage` listener) until
-/// [`preview_design_set`] enables it. In the Fabric-embedded view the top (Fabric
+/// the published app even when the app is embedded in a *cross-origin* iframe
+/// inside the Fabric portal: the top-frame `wv.eval` used for the direct view
+/// can't reach a cross-origin iframe. The agent stays dormant (defines
+/// `window.__fabricatorPick` + a passive `postMessage` listener) until
+/// [`preview_pick_set`] arms it. In the Fabric-embedded view the top (Fabric
 /// shell) frame runs as a *relay* that bridges host calls to the app iframe over
-/// `postMessage`; in the direct view the app is the top frame and runs the full
-/// controller locally. Idempotent: defines `window.__rayfinDesign` once.
-const DESIGN_AGENT_JS: &str = include_str!("design_agent.js");
+/// `postMessage`; in the direct view the app is the top frame and runs the agent
+/// itself. Idempotent: defines `window.__fabricatorPick` once.
+const PICK_AGENT_JS: &str = include_str!("pick_agent.js");
 
-/// Largest controller response the host relays. Snapshots carry the queued
-/// items (including chart specs before/after), so the cap is generous.
-const DESIGN_MAX_WIRE_BYTES: usize = 4 * 1024 * 1024;
-
-/// JS that reads the design controller's lightweight status (`peek()`), or
-/// `null`. WebView2 serializes the completion value to JSON for the callback.
-const DESIGN_POLL_JS: &str =
-  "(function(){try{return window.__rayfinDesign?window.__rayfinDesign.peek():null}catch(e){return null}})()";
-
-/// JS that reads the queued design items (`snapshot()`), or `null`.
-const DESIGN_SNAPSHOT_JS: &str =
-  "(function(){try{return window.__rayfinDesign?window.__rayfinDesign.snapshot():null}catch(e){return null}})()";
-
-/// JS that switches the design controller off.
-const DESIGN_DISABLE_JS: &str =
-  "try{window.__rayfinDesign&&window.__rayfinDesign.disable()}catch(e){}";
+/// Largest agent response the host relays. A peek carries only the events the
+/// renderer hasn't seen, each pick with a short HTML excerpt, so this is plenty.
+const PICK_MAX_WIRE_BYTES: usize = 1024 * 1024;
 
 /// Renderer visual-viewport CSS bounds plus its physical-pixel ratio. Legacy
 /// callers without a ratio use native logical coordinates.
@@ -263,15 +250,21 @@ struct Inner {
   /// hidden surface, so a capture there could only run out its timeout;
   /// [`capture_visible`] refuses to capture unless this is `true`.
   visible: bool,
-  /// Whether an in-preview "design mode" session is active. Drives re-injection
-  /// of the design controller on every finished page load (so it survives SPA
-  /// navigations / reloads) — see [`preview_design_set`] and [`on_page_load`].
-  design_active: bool,
-  /// When the active design session targets the Fabric-embedded view, the origin
-  /// of the deployed app (the cross-origin iframe inside the Fabric portal). The
-  /// top frame is then re-enabled as a `relay` for that origin on every finished
-  /// page load; `None` means the direct view (top frame is the app itself).
-  design_relay: Option<String>,
+  /// The Touch Up session the renderer armed, re-applied to the top frame
+  /// on every finished page load so it survives reloads and navigations (see
+  /// [`preview_pick_set`] and [`on_page_load`]). `None` while it isn't armed.
+  pick: Option<PickSession>,
+}
+
+/// What [`on_page_load`] re-applies to a freshly loaded page.
+#[derive(Clone, Debug, PartialEq)]
+struct PickSession {
+  /// Picking is on, not only armed for its shortcut.
+  on: bool,
+  /// In the Fabric-embedded view, the origin of the published app (the
+  /// cross-origin iframe inside the Fabric portal) the top-frame relay drives;
+  /// `None` in the direct view, where the top frame is the app itself.
+  relay: Option<String>,
 }
 
 impl Inner {
@@ -290,10 +283,9 @@ impl Inner {
     self.cursor = 0;
     self.programmatic = false;
     // A genuinely new root URL (project switch, redeploy-navigate, Fabric
-    // toggle) is a different app — end any active design session so the
-    // controller isn't re-injected into it (see `on_page_load`).
-    self.design_active = false;
-    self.design_relay = None;
+    // toggle) is a different app: drop the Touch Up session so the agent
+    // isn't armed there until the renderer arms it for that app.
+    self.pick = None;
   }
 }
 
@@ -322,12 +314,11 @@ fn build(app: &AppHandle, url: Url, bounds: PreviewBounds) -> AppResult<()> {
     // them back later via `fabricator_console`. Must be set before the webview
     // is created so it runs at document start on every page.
     .initialization_script(CONSOLE_INIT_JS)
-    // The design-mode controller is baked in at document-start into ALL frames
-    // (dormant until `preview_design_set` enables it). This is the only way to
-    // reach the app when it is embedded in a cross-origin iframe inside the
-    // Fabric portal, since `wv.eval` only runs in the top frame. See
-    // [`DESIGN_AGENT_JS`].
-    .initialization_script_for_all_frames(DESIGN_AGENT_JS)
+    // The Touch Up agent is baked in at document start into ALL frames
+    // (dormant until `preview_pick_set` arms it). This is the only way to reach
+    // the app when it is embedded in a cross-origin iframe inside the Fabric
+    // portal, since `wv.eval` only runs in the top frame. See [`PICK_AGENT_JS`].
+    .initialization_script_for_all_frames(PICK_AGENT_JS)
     .on_navigation(move |u| {
       on_navigation(&nav_app, u);
       true
@@ -375,7 +366,7 @@ fn on_navigation(app: &AppHandle, u: &Url) {
 fn on_page_load(app: &AppHandle, event: PageLoadEvent, u: &Url) {
   let loading = matches!(event, PageLoadEvent::Started);
   let state = app.state::<PreviewState>();
-  let (can_back, can_fwd, design_active, design_relay) = {
+  let (can_back, can_fwd, pick) = {
     let mut inner = state.inner.lock().unwrap();
     // A finished load releases anyone blocked in `navigate_and_wait`.
     if !loading {
@@ -383,21 +374,17 @@ fn on_page_load(app: &AppHandle, event: PageLoadEvent, u: &Url) {
         let _ = tx.send(());
       }
     }
-    (
-      inner.can_back(),
-      inner.can_forward(),
-      inner.design_active,
-      inner.design_relay.clone(),
-    )
+    (inner.can_back(), inner.can_forward(), inner.pick.clone())
   };
-  // Re-enable the design controller after a finished load so an active design
-  // session survives SPA navigations and reloads. The controller itself is a
-  // document-start init script (present in every frame after each load); this
-  // only re-arms the top frame — in relay mode it re-adopts the app iframe via
-  // the postMessage handshake.
-  if !loading && design_active {
-    if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-      let _ = wv.eval(design_enable_js(design_relay.as_deref(), None));
+  // Arm the Touch Up agent again after a finished load, so its shortcut
+  // and an active session survive reloads and navigations. The agent itself is
+  // a document-start init script (present in every frame after each load); this
+  // only re-arms the top frame, which in relay mode adopts the app iframe again
+  // through the postMessage handshake. The renderer restores its picks and
+  // theme once it sees the new page.
+  if !loading {
+    if let (Some(pick), Some(wv)) = (pick, app.get_webview(PREVIEW_LABEL)) {
+      let _ = wv.eval(pick_set_js(true, pick.on, pick.relay.as_deref(), None));
     }
   }
   emit_nav(app, &u.to_string(), loading, can_back, can_fwd);
@@ -710,7 +697,7 @@ pub async fn preview_reset_site_data(app: AppHandle) -> AppResult<bool> {
   let Some(origin) = loopback_origin(&url) else {
     return Ok(false);
   };
-  match design_eval::<bool>(&app, &reset_site_data_js(&origin)).await? {
+  match page_eval::<bool>(&app, &reset_site_data_js(&origin)).await? {
     Some(true) => {
       wv.reload().map_err(|e| AppError::Msg(e.to_string()))?;
       Ok(true)
@@ -802,36 +789,44 @@ fn navigate_to(app: &AppHandle, target: Option<String>) {
   }
 }
 
-/// Build the JS that enables the (already document-start-injected) design
-/// controller in the top frame. In the direct view the top frame *is* the app and
-/// runs the controller locally (`enable('direct', null, options)`); in the
-/// Fabric-embedded view the top frame becomes a relay for the app iframe at
-/// `relay_origin` (`enable('relay', "<origin>", options)`), which bridges host
-/// calls over `postMessage`. `options` seeds the session (id, queued items, host
-/// theme). Without it — the re-arm after a page load — the controller comes back
-/// unseeded, reports `sessionId: null`, and the renderer re-seeds it from its own
-/// copy of the queue.
-fn design_enable_js(relay_origin: Option<&str>, options: Option<&serde_json::Value>) -> String {
+/// Build the JS that applies a Touch Up session to the (already
+/// document-start-injected) agent in the top frame. In the direct view the top
+/// frame *is* the app and runs the agent itself (`set('direct', null, …)`); in
+/// the Fabric-embedded view the top frame becomes a relay for the app iframe at
+/// `relay_origin` (`set('relay', "<origin>", …)`), which bridges host calls over
+/// `postMessage`. `options` adds the renderer's picks and theme; without them
+/// (the re-arm after a page load) the renderer restores them once it sees the
+/// new page.
+fn pick_set_js(armed: bool, on: bool, relay_origin: Option<&str>, options: Option<&serde_json::Value>) -> String {
   let mode = if relay_origin.is_some() { "relay" } else { "direct" };
   let origin = serde_json::to_string(&relay_origin).unwrap_or_else(|_| "null".into());
-  let opts = options
-    .and_then(|o| serde_json::to_string(o).ok())
-    .unwrap_or_else(|| "null".into());
-  format!("try{{window.__rayfinDesign&&window.__rayfinDesign.enable('{mode}',{origin},{opts})}}catch(e){{}}")
+  let mut opts = options.cloned().filter(serde_json::Value::is_object).unwrap_or_else(|| serde_json::json!({}));
+  opts["armed"] = serde_json::Value::Bool(armed);
+  opts["on"] = serde_json::Value::Bool(armed && on);
+  let opts = serde_json::to_string(&opts).unwrap_or_else(|_| "{}".into());
+  format!("try{{window.__fabricatorPick&&window.__fabricatorPick.set('{mode}',{origin},{opts})}}catch(e){{}}")
 }
 
-/// Build the JS that hands one JSON command to the design controller. Results of
+/// Build the JS that reads the agent's state, with only the events after `since`
+/// when the agent still serves `page`. WebView2 serializes the completion value
+/// to JSON for the callback.
+fn pick_poll_js(page: Option<&str>, since: Option<u64>) -> String {
+  let opts = serde_json::json!({ "page": page, "since": since.unwrap_or(0) });
+  format!("(function(){{try{{return window.__fabricatorPick?window.__fabricatorPick.peek({opts}):null}}catch(e){{return null}}}})()")
+}
+
+/// Build the JS that hands one JSON command to the agent. Results of
 /// data-returning commands come back through `peek().results`, so this never
 /// needs a return value (and works the same through the Fabric relay).
-fn design_command_js(command: &serde_json::Value) -> String {
+fn pick_command_js(command: &serde_json::Value) -> String {
   let json = serde_json::to_string(command).unwrap_or_else(|_| "null".into());
-  format!("try{{window.__rayfinDesign&&window.__rayfinDesign.command({json})}}catch(e){{}}")
+  format!("try{{window.__fabricatorPick&&window.__fabricatorPick.command({json})}}catch(e){{}}")
 }
 
 /// The scheme://host:port origin of `url` (e.g. `https://app.example.com`), or
-/// `None` if it can't be parsed / has an opaque origin. Used to tell the design
-/// relay which cross-origin iframe (the deployed app) to drive inside the Fabric
-/// portal shell.
+/// `None` if it can't be parsed / has an opaque origin. Tells the Touch Up
+/// relay which cross-origin iframe (the published app) to drive inside the
+/// Fabric portal shell.
 fn url_origin(url: &str) -> Option<String> {
   match Url::parse(url).map(|u| u.origin()) {
     Ok(origin) if origin.is_tuple() => Some(origin.ascii_serialization()),
@@ -841,10 +836,10 @@ fn url_origin(url: &str) -> Option<String> {
 
 /// Evaluate `js` on the preview webview and return its JSON completion value
 /// parsed into `T` (or `None` when the webview is gone, the value is `null`, or
-/// it exceeds [`DESIGN_MAX_WIRE_BYTES`]). WebView2 serializes the result to JSON
+/// it exceeds [`PICK_MAX_WIRE_BYTES`]). WebView2 serializes the result to JSON
 /// for the callback; the whole round-trip is time-bounded so a stalled dispatch
 /// can never wedge the caller.
-async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) -> AppResult<Option<T>> {
+async fn page_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) -> AppResult<Option<T>> {
   let Some(wv) = app.get_webview(PREVIEW_LABEL) else {
     return Ok(None);
   };
@@ -862,8 +857,8 @@ async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) 
     Ok(Ok(s)) => s,
     _ => return Ok(None),
   };
-  if res.len() > DESIGN_MAX_WIRE_BYTES {
-    log::warn!("design controller response exceeded {DESIGN_MAX_WIRE_BYTES} bytes; ignored");
+  if res.len() > PICK_MAX_WIRE_BYTES {
+    log::warn!("preview page response exceeded {PICK_MAX_WIRE_BYTES} bytes; ignored");
     return Ok(None);
   }
   let trimmed = res.trim();
@@ -876,85 +871,62 @@ async fn design_eval<T: serde::de::DeserializeOwned>(app: &AppHandle, js: &str) 
   }
 }
 
-/// Turn the in-preview Design mode on/off. Enables (or disables) the design
-/// controller — which is already injected at document-start into every frame — and
-/// records the session so it is re-armed on subsequent page loads. `embedded` +
-/// `app_url` select the mode: when the app is shown embedded in the Fabric portal
-/// (`embedded == true`), the top (Fabric shell) frame runs as a relay for the app
-/// iframe at `app_url`'s origin; otherwise the top frame is the app and runs the
-/// controller directly. `options` (see `DesignEnableOptions` in
-/// `src/shared/design.ts`) seeds the session.
+/// Arm Touch Up in the preview, switch picking on or off, or (with `armed`
+/// false) put the agent back to sleep. The agent is already injected at document
+/// start into every frame; this records the session so it is re-armed on later
+/// page loads. `embedded` + `app_url` select the mode: when the app is shown
+/// embedded in the Fabric portal, the top (Fabric shell) frame runs as a relay
+/// for the app iframe at `app_url`'s origin; otherwise the top frame is the app.
+/// `options` (see `PickSetOptions` in `src/shared/pick.ts`) carries the
+/// renderer's picks and theme.
 #[tauri::command]
-pub fn preview_design_set(
+pub fn preview_pick_set(
   app: AppHandle,
   state: State<'_, PreviewState>,
-  enabled: bool,
+  armed: bool,
+  on: bool,
   embedded: Option<bool>,
   app_url: Option<String>,
   options: Option<serde_json::Value>,
 ) -> AppResult<()> {
-  // Relay mode only when enabling an embedded (Fabric) view for which we can
-  // resolve the app's origin; anything else is the direct (top-frame) view.
-  let relay_origin = if enabled && embedded.unwrap_or(false) {
-    app_url.as_deref().and_then(url_origin)
-  } else {
-    None
-  };
-  {
-    let mut inner = state.inner.lock().unwrap();
-    inner.design_active = enabled;
-    inner.design_relay = relay_origin.clone();
-  }
+  // Relay mode only for an embedded (Fabric) view whose app origin is known;
+  // anything else is the direct (top-frame) view.
+  let relay = if armed && embedded.unwrap_or(false) { app_url.as_deref().and_then(url_origin) } else { None };
+  state.inner.lock().unwrap().pick = armed.then(|| PickSession { on, relay: relay.clone() });
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    let js = if enabled {
-      design_enable_js(relay_origin.as_deref(), options.as_ref())
-    } else {
-      DESIGN_DISABLE_JS.to_string()
-    };
-    wv.eval(js).map_err(|e| AppError::Msg(e.to_string()))?;
+    wv.eval(pick_set_js(armed, on, relay.as_deref(), options.as_ref())).map_err(|e| AppError::Msg(e.to_string()))?;
   }
   Ok(())
 }
 
-/// Read the design controller's lightweight status (`DesignStatus`). Polled by
-/// the renderer while Design is on. Returns `None` when the controller isn't
-/// installed/active or didn't answer in time.
+/// Read the agent's state (`PickStatus`): whether it's armed and on, and the
+/// events after `since` on `page`. Polled by the renderer while Touch Up is
+/// armed. Returns `None` when the agent didn't answer in time.
 #[tauri::command]
-pub async fn preview_design_poll(app: AppHandle) -> AppResult<Option<serde_json::Value>> {
-  design_eval(&app, DESIGN_POLL_JS).await
+pub async fn preview_pick_poll(app: AppHandle, page: Option<String>, since: Option<u64>) -> AppResult<Option<serde_json::Value>> {
+  page_eval(&app, &pick_poll_js(page.as_deref(), since)).await
 }
 
-/// Read the queued design items (`DesignSnapshot`). Fetched by the renderer when
-/// the polled `version` changes.
+/// Hand one `PickCommand` to the agent (prepare or end a capture, outline a
+/// pick, sync the picks).
 #[tauri::command]
-pub async fn preview_design_snapshot(app: AppHandle) -> AppResult<Option<serde_json::Value>> {
-  design_eval(&app, DESIGN_SNAPSHOT_JS).await
-}
-
-/// Hand one `DesignCommand` to the controller (seed, remove/focus an item, show
-/// variations or suggestions, prepare a capture, …).
-#[tauri::command]
-pub fn preview_design_command(app: AppHandle, command: serde_json::Value) -> AppResult<()> {
+pub fn preview_pick_command(app: AppHandle, command: serde_json::Value) -> AppResult<()> {
   if !command.get("op").is_some_and(|op| op.is_string()) {
-    return Err(AppError::Msg("A design command needs an `op`.".into()));
+    return Err(AppError::Msg("A Touch Up command needs an `op`.".into()));
   }
   if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    wv.eval(design_command_js(&command)).map_err(|e| AppError::Msg(e.to_string()))?;
+    wv.eval(pick_command_js(&command)).map_err(|e| AppError::Msg(e.to_string()))?;
   }
   Ok(())
 }
 
-/// Push Fabricator's own theme into the design controller so the tools match the
-/// host app's look + zoom (the tools are Fabricator UI, not the previewed app's).
-/// `theme` is an opaque JSON object the renderer builds from its CSS tokens
-/// (`--accent` / `--bg-elev` / `--text` / `--border` …) plus the UI scale.
+/// Give the keyboard back to Fabricator's own window from the preview, so what
+/// the user types after picking an element goes to the chat composer.
 #[tauri::command]
-pub fn preview_design_set_theme(app: AppHandle, theme: serde_json::Value) -> AppResult<()> {
-  if let Some(wv) = app.get_webview(PREVIEW_LABEL) {
-    let json = serde_json::to_string(&theme).unwrap_or_else(|_| "null".into());
-    let js =
-      format!("try{{window.__rayfinDesign&&window.__rayfinDesign.setTheme({json})}}catch(e){{}}");
-    wv.eval(js).map_err(|e| AppError::Msg(e.to_string()))?;
+pub fn preview_release_focus(app: AppHandle) -> AppResult<()> {
+  if let Some(main) = app.get_webview_window("main") {
+    let webview: &tauri::Webview = main.as_ref();
+    webview.set_focus().map_err(|e| AppError::Msg(e.to_string()))?;
   }
   Ok(())
 }
@@ -994,7 +966,7 @@ type CaptureDone = oneshot::Sender<Result<Vec<u8>, String>>;
 /// webview's z-order or whether something overlaps it. The capture must start on
 /// the UI thread, so it is dispatched via [`tauri::webview::Webview::with_webview`];
 /// the resulting bytes are handed back to this async command over a oneshot
-/// channel. Design attaches the image to a chat turn.
+/// channel. Touch Up crops its picks and screenshots out of it.
 #[tauri::command]
 pub async fn preview_capture(app: AppHandle) -> AppResult<String> {
   let bytes = capture_preview_bytes(&app).await?;
@@ -1334,7 +1306,9 @@ unsafe fn snapshot_image_to_png(
 
 #[cfg(test)]
 mod tests {
-  use super::{design_command_js, design_enable_js, loopback_origin, reset_site_data_js, PreviewBounds, PreviewState};
+  use super::{
+    loopback_origin, pick_command_js, pick_poll_js, pick_set_js, reset_site_data_js, PreviewBounds, PreviewState,
+  };
   use tauri::Url;
 
   #[test]
@@ -1420,25 +1394,35 @@ mod tests {
   }
 
   #[test]
-  fn design_enable_js_selects_direct_or_relay_and_embeds_options() {
+  fn pick_set_js_selects_direct_or_relay_and_never_switches_on_unarmed() {
     assert_eq!(
-      design_enable_js(None, None),
-      "try{window.__rayfinDesign&&window.__rayfinDesign.enable('direct',null,null)}catch(e){}"
+      pick_set_js(true, false, None, None),
+      "try{window.__fabricatorPick&&window.__fabricatorPick.set('direct',null,{\"armed\":true,\"on\":false})}catch(e){}"
     );
-    let opts = serde_json::json!({ "sessionId": "s1", "items": [] });
-    let relay = design_enable_js(Some("https://p1.example.app"), Some(&opts));
-    assert!(relay.contains("enable('relay',\"https://p1.example.app\",{"));
-    assert!(relay.contains("\"sessionId\":\"s1\""));
+    let opts = serde_json::json!({ "picks": [{ "id": "k1", "n": 1 }] });
+    let relay = pick_set_js(true, true, Some("https://p1.example.app"), Some(&opts));
+    assert!(relay.contains("set('relay',\"https://p1.example.app\",{"));
+    assert!(relay.contains("\"picks\":[{\"id\":\"k1\",\"n\":1}]"));
+    assert!(relay.contains("\"on\":true"));
+    // Disarmed is off, whatever `on` says.
+    assert!(pick_set_js(false, true, None, None).contains("{\"armed\":false,\"on\":false}"));
   }
 
   #[test]
-  fn design_command_js_embeds_the_command_as_a_json_literal() {
+  fn pick_poll_js_asks_only_for_new_events_on_the_same_page() {
+    let js = pick_poll_js(Some("p1"), Some(7));
+    assert!(js.contains("peek({\"page\":\"p1\",\"since\":7})"), "{js}");
+    assert!(pick_poll_js(None, None).contains("peek({\"page\":null,\"since\":0})"));
+  }
+
+  #[test]
+  fn pick_command_js_embeds_the_command_as_a_json_literal() {
     // Quotes, backslashes and script-ish text stay inside a JSON string literal.
-    let cmd = serde_json::json!({ "op": "failRequest", "requestId": "r1", "message": "a \"quoted\" \\ </script>" });
-    let js = design_command_js(&cmd);
-    assert!(js.starts_with("try{window.__rayfinDesign&&window.__rayfinDesign.command({"));
+    let cmd = serde_json::json!({ "op": "focus", "id": "a \"quoted\" \\ </script>" });
+    let js = pick_command_js(&cmd);
+    assert!(js.starts_with("try{window.__fabricatorPick&&window.__fabricatorPick.command({"));
     let json = js
-      .trim_start_matches("try{window.__rayfinDesign&&window.__rayfinDesign.command(")
+      .trim_start_matches("try{window.__fabricatorPick&&window.__fabricatorPick.command(")
       .trim_end_matches(")}catch(e){}");
     assert_eq!(serde_json::from_str::<serde_json::Value>(json).unwrap(), cmd);
   }

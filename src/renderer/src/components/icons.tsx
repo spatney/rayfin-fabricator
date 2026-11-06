@@ -126,24 +126,23 @@ export function FabricIcon(props: IconProps): JSX.Element {
   )
 }
 
-/** Cursor selecting inside a frame — the in-preview design / tweak mode. */
-export function DesignIcon(props: IconProps): JSX.Element {
+/** Pointer with a sparkle: Touch Up, which points chat at an element in the preview. */
+export function PickIcon(props: IconProps): JSX.Element {
   return (
     <Icon {...props}>
-      <path d="M14 3H3v11" opacity="0.5" />
-      <path d="m8 8 12 5-5 2-2 5-5-12Z" />
+      <path d="m10 9.5 10.5 4.4-4.5 1.6-1.6 4.5L10 9.5Z" />
+      <path d="M6 2.5v5M3.5 5h5" />
+      <path d="M12.5 3.5v2.5M11.25 4.75h2.5" />
     </Icon>
   )
 }
 
-/** Painter's palette — the app-wide Theme sheet. */
-export function PaletteIcon(props: IconProps): JSX.Element {
+/** Pen: draw on a picture. */
+export function PenIcon(props: IconProps): JSX.Element {
   return (
     <Icon {...props}>
-      <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.8-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z" />
-      <circle cx="7.5" cy="11" r="1" fill="currentColor" />
-      <circle cx="10" cy="7" r="1" fill="currentColor" />
-      <circle cx="14.5" cy="7" r="1" fill="currentColor" />
+      <path d="M4 20l1.2-4.6L16.6 4a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z" />
+      <path d="M14.5 6.1l3.4 3.4" />
     </Icon>
   )
 }
@@ -237,17 +236,6 @@ export function ClockIcon(props: IconProps): JSX.Element {
     <Icon {...props}>
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
-    </Icon>
-  )
-}
-
-/** Four-point sparkle — the AI model selector. */
-export function SparkleIcon(props: IconProps): JSX.Element {
-  return (
-    <Icon {...props}>
-      <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3Z" />
-      <path d="M19 3.5v3" />
-      <path d="M20.5 5h-3" />
     </Icon>
   )
 }

@@ -60,7 +60,7 @@ const steps = [
 
     title: 'Watch it run',
 
-    text: 'Use the live preview while Copilot works, then point at the running app in Design mode to queue visual changes from the page itself.',
+    text: 'Use the live preview while Copilot works, then point at parts of the running app with Touch Up, or clip and draw on a screenshot, to show Copilot what to change.',
 
     href: '/docs/build/preview',
 
@@ -94,11 +94,11 @@ const features = [
 
   {
 
-    title: 'Live preview & Design mode',
+    title: 'Live preview & Touch Up',
 
-    href: '/docs/build/design',
+    href: '/docs/build/touch-up',
 
-    text: 'See the app running in Fabricator and select elements in the preview to queue visual changes for Copilot.',
+    text: 'See the app running in Fabricator, pick parts of it in the preview, and clip or draw on screenshots to show Copilot what to change.',
 
   },
 

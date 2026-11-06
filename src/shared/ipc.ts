@@ -8,20 +8,12 @@
  */
 
 import type {
-  ChatDesignSummary,
-  DesignCommand,
-  DesignEnableOptions,
-  DesignHostTheme,
-  DesignLocateResult,
-  DesignLocateTarget,
-  DesignPageOutline,
-  DesignRestyleContext,
-  DesignSnapshot,
-  DesignStatus,
-  DesignSuggestion,
-  DesignVariation,
-  DesignVariationEvent
-} from './design'
+  PickCommand,
+  PickLocateResult,
+  PickLocateTarget,
+  PickSetOptions,
+  PickStatus
+} from './pick'
 import type {
   AdvisorFinding,
   AdvisorLoadResult,
@@ -3132,16 +3124,6 @@ export interface AdvisorModelChoice {
   contextTier?: string
 }
 
-/** Extras for one Design Options request. */
-export interface DesignVariationsOptions {
-  /** Reasoning effort for the model, when it supports one. */
-  effort?: ReasoningEffort
-  /** Streams each option as a `design:variation` event tagged with this id. */
-  requestId?: string
-  /** One of Fabricator's temp captures of the element (vision models); deleted afterwards. */
-  screenshotPath?: string
-}
-
 /**
  * A clickable starter prompt shown on the empty Build chat: a single emoji glyph
  * plus one plain-language idea the user can click to prefill the composer. These
@@ -3206,8 +3188,8 @@ export interface ChatMessage {
    * this assistant turn and answered via `chat_resolve_question`.
    */
   questions?: ChatPlanQuestion[]
-  /** The Design changes a (user) message carried, shown as a card in the transcript. */
-  design?: ChatDesignSummary
+  /** The elements a (user) message picked in the preview with Touch Up, shown as chips. */
+  picks?: ChatPickRef[]
   /** The Advisor findings a (user) message handed to Copilot, shown as a card in the transcript. */
   advisor?: ChatAdvisorSummary
   /** The Fabric data a (user) message asked Copilot to connect, shown as chips in the transcript. */
@@ -3217,11 +3199,20 @@ export interface ChatMessage {
   /** The report-migration page a (user) message asked Copilot to build, shown as a chip. */
   migration?: ChatMigrationRef
   /**
-   * The prompt Copilot received when it differs from `text` (a Design turn's
-   * structured changes, or a hand-off's full instructions); re-sent by Retry /
-   * Try again / Resume.
+   * The prompt Copilot received when it differs from `text` (picked elements'
+   * details, or a hand-off's full instructions); re-sent by Retry / Try again /
+   * Resume.
    */
   prompt?: string
+}
+
+/** An element a message picked in the preview, as its chip shows it. */
+export interface ChatPickRef {
+  /** Its number, as the preview showed it. */
+  n: number
+  label: string
+  /** Index of its picture in the message's `attachmentThumbs`. */
+  shot?: number
 }
 
 /** Fabric data a message carried, as its chip shows it. */
@@ -3813,7 +3804,6 @@ export const IpcChannels = {
   advisorEvent: 'advisor:event',
   goalsEvent: 'goals:event',
   helpEvent: 'help:event',
-  designVariation: 'design:variation',
   previewNav: 'preview:nav',
   previewAgent: 'preview:agent',
   updateProgress: 'update:progress',
@@ -4678,31 +4668,12 @@ export interface RayfinStudioApi {
   }
 
   /**
-   * Design mode's model-backed and source-aware helpers. The model calls run on
-   * transient, read-only Copilot sessions (never in chat history).
+   * Touch Up: the source hints sent with picked elements. Picking itself
+   * runs in the preview ({@link RayfinStudioApi.preview}'s `pick`).
    */
-  design: {
-    /** Ask a fast model for `count` named alternative looks for one element. */
-    variations: (
-      projectId: string,
-      context: DesignRestyleContext,
-      hint?: string,
-      count?: number,
-      model?: string,
-      options?: DesignVariationsOptions
-    ) => Promise<DesignVariation[]>
-    /** Each option as it streams in, before `variations` resolves (routed by `requestId`). */
-    onVariation: (callback: (event: DesignVariationEvent) => void) => () => void
-    /** Review a page outline (+ optional screenshot) and suggest improvements. */
-    polish: (
-      projectId: string,
-      page: DesignPageOutline,
-      screenshotPath?: string,
-      model?: string,
-      effort?: ReasoningEffort
-    ) => Promise<DesignSuggestion[]>
+  pick: {
     /** Find the likely source lines behind picked elements (heuristic hints). */
-    locate: (projectId: string, targets: DesignLocateTarget[]) => Promise<DesignLocateResult>
+    locate: (projectId: string, targets: PickLocateTarget[]) => Promise<PickLocateResult>
   }
 
   /** App-wide settings (theme, telemetry opt-in). */
@@ -4789,9 +4760,8 @@ export interface RayfinStudioApi {
     forward: () => Promise<void>
     /**
      * Capture the current preview content as a PNG `data:` URL (via WebView2's
-     * `CapturePreview`). Lossless, for Design to attach the previewed changes
-     * (full view + element crops) to a chat turn. Rejects when no preview is open
-     * or capture fails.
+     * `CapturePreview`). Lossless, for Touch Up to crop its picks and
+     * screenshots out of. Rejects when no preview is open or capture fails.
      */
     capture: () => Promise<string>
     /**
@@ -4812,38 +4782,33 @@ export interface RayfinStudioApi {
      */
     onAgentPreview: (cb: (event: PreviewAgentEvent) => void) => () => void
     /**
-     * In-preview Design mode ("visual chat"). The controller injected into every
-     * preview frame lets the user point at elements, preview tweaks, and queue
-     * changes that are later sent to Copilot as one turn. Works in both the
+     * Touch Up. The agent injected into every preview frame lets the user
+     * point at elements in the app and hand them to chat. Works in both the
      * direct and Fabric-embedded views. The host only relays the JSON documents
-     * described in `@shared/design`.
+     * described in `@shared/pick`.
      */
-    design: {
+    pick: {
       /**
-       * Turn Design on/off. `embedded` marks the Fabric-embedded view, where the
-       * app is a cross-origin iframe; `appUrl` (the direct app URL) supplies the
-       * origin the top-frame relay uses to find and drive that iframe. `options`
-       * seeds the session (id, queued items, host theme).
+       * Arm Touch Up (its shortcut works in the page), switch picking on or
+       * off, or with `armed` false put it back to sleep. `embedded` marks the
+       * Fabric-embedded view, where the app is a cross-origin iframe; `appUrl`
+       * (the direct app URL) supplies the origin the top-frame relay drives.
+       * `options` hands the page the current picks and Fabricator's theme.
        */
-      setEnabled: (
-        enabled: boolean,
+      set: (
+        armed: boolean,
+        on: boolean,
         embedded?: boolean,
         appUrl?: string,
-        options?: DesignEnableOptions
+        options?: PickSetOptions
       ) => Promise<void>
-      /** Read the controller's lightweight status. Polled while Design is on. */
-      poll: () => Promise<DesignStatus | null>
-      /** Read the queued items (fetched when `poll().version` changes). */
-      snapshot: () => Promise<DesignSnapshot | null>
-      /** Send a command to the controller; results arrive via `poll().results`. */
-      command: (command: DesignCommand) => Promise<void>
-      /**
-       * Push Fabricator's own theme (accent/surfaces/text/border + UI scale) so
-       * the design tools match the host app's look and zoom. Re-sent after a
-       * preview reload (when `poll().hasTheme` is false) and on theme/scale change.
-       */
-      setTheme: (theme: DesignHostTheme) => Promise<void>
+      /** Read the agent's state, with the events after `since` on `page`. */
+      poll: (page: string | null, since: number) => Promise<PickStatus | null>
+      /** Send a command to the agent; results arrive via `poll().results`. */
+      command: (command: PickCommand) => Promise<void>
     }
+    /** Give the keyboard back to Fabricator's own window (from the preview). */
+    releaseFocus: () => Promise<void>
     /**
      * Clear the `localStorage` and `sessionStorage` of the page the preview
      * shows, then reload it, so an app that signs itself in signs in again:

@@ -15,7 +15,7 @@ Chat is where you describe what you want Fabricator to build. The built-in GitHu
 
 Use `Shift+Enter` for a new line. If you type `@`, Fabricator opens **Reference a file** so you can point Copilot at a project file. To point it at a file or folder outside the project, type a path after `@`: `../` for the folder that holds the project, `~/` for your home folder, or a full path such as `C:\`. The list then shows that folder's contents. Use the arrow keys or the pointer to move through the list. Select a folder to look inside it, a file to reference it, or **This folder** to reference the folder itself. A path with spaces is put in quotes. The **+** button (**Add images, files or data**) opens a menu with:
 
-- **Image**. You can also paste an image, or drop one into the box.
+- **Image**. You can also paste an image, or drop one into the box. Click an image waiting in the box to see it large and draw on it, to show Copilot what you mean. See [Draw on a screenshot](/docs/build/touch-up#draw-on-a-screenshot).
 - **Files and folders…**, which opens your system's file dialog, File Explorer on Windows or Finder on macOS, so you can give Copilot files and folders anywhere on your computer without typing their paths. On Windows, select files and choose **Add**, or choose **Add folder** to add the folders you selected, or the folder that's open when you haven't selected one. On macOS, select files and folders and choose **Add**. Each one you add waits in the box as a chip and goes with your next message, which shows the same chips. Select × on a chip to remove it. Images you choose are attached instead.
 - **Fabric data**, which lists the kinds of Fabric data your app can connect to: semantic models, warehouses, SQL databases and lakehouses. What you pick waits in the box as chips and goes with your next message. See [Connect Fabric data](/docs/build/data-model#connect-fabric-data).
 
@@ -116,7 +116,7 @@ Select the button to open **Session credits**:
 - **Copilot plan** shows how much of your plan's allowance is left, such as `998,000 of 1,000,000 credits remaining`, and when it resets.
 - **View usage** opens your Copilot usage on GitHub.
 
-The count covers this chat since it started and updates after each turn. **New chat** starts it again. Other features that use Copilot, such as Design, the Advisor and Help, aren't counted here.
+The count covers this chat since it started and updates after each turn. **New chat** starts it again. Other features that use Copilot, such as the Advisor and Help, aren't counted here.
 
 ## Plans and Autopilot
 
@@ -139,9 +139,9 @@ These checks show in the work log as steps such as **Checked the local backend**
 
 For a team app, or a published app that this computer can't run, Copilot checks without running the app: type-checking, the build, lint and the project's offline validators, and for charts, Fabricator's headless chart preview when the app has it. For such a published app, while **Publish after each chat turn** is off, Copilot ends by saying what to try in the preview, and whether it needs a publish first.
 
-## Design and Advisor cards in chat
+## Picks and Advisor cards in chat
 
-Design changes queued from the preview appear as a Design card instead of raw instructions. See [Design mode](/docs/build/design).
+Elements you pick in the preview with **Touch Up** appear in your message as numbered chips with their pictures, instead of the details sent to Copilot. See [Touch Up](/docs/build/touch-up). Click a picture in the chat to see it large.
 
 Advisor fixes appear as a card when you send findings to Copilot. See [Check app health with the Advisor](/docs/ship/advisor).
 

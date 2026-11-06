@@ -26,9 +26,6 @@ pub const GOALS_EVENT: &str = "goals:event";
 pub const HELP_EVENT: &str = "help:event";
 /// Event name for a package's security check as it goes (matches `IpcChannels.securityEvent`).
 pub const SECURITY_EVENT: &str = "security:event";
-/// Event name for an Options request's options as they stream in (matches
-/// `IpcChannels.designVariation`).
-pub const DESIGN_VARIATION: &str = "design:variation";
 /// Event name for update download progress (matches `IpcChannels.updateProgress`).
 pub const UPDATE_PROGRESS: &str = "update:progress";
 /// Event name for project-delete file-count progress (matches `IpcChannels.deleteProgress`).

@@ -1,8 +1,8 @@
 //! A commit message for a project's uncommitted changes, written by Copilot on
 //! its Auto model from what the commit would take: the changed files, the diff
 //! and the start of each new file, within a budget. It runs on a throwaway,
-//! tool-less session, like Design's one-shot calls, so it never touches the
-//! project's chat.
+//! tool-less session ([`crate::commands::transient`]), so it never touches
+//! the project's chat.
 
 use std::path::{Path, PathBuf};
 
@@ -200,7 +200,7 @@ pub async fn projects_git_message(
   }
   let prompt = format!("{PROMPT}\n{changes}");
   let reply =
-    crate::commands::design::run_transient(state.inner(), &project.path, None, None, prompt, &[], None).await;
+    crate::commands::transient::run_transient(state.inner(), &project.path, None, None, prompt, &[], None).await;
   Ok(match reply {
     Ok(reply) => match subject_line(&reply) {
       Some(message) => GitMessageResult { ok: true, message: Some(message), error: None },

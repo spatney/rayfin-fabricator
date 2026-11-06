@@ -3362,11 +3362,11 @@ pub struct ChatMessage {
   /// Epoch ms the message was created (shown as its timestamp).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub created_at: Option<f64>,
-  /// The Design changes a user message carried (`ChatDesignSummary`), rendered
-  /// as a card in the transcript. Opaque to Rust; must round-trip or it is
-  /// dropped when the renderer persists history.
+  /// The elements a user message picked in the preview with Touch Up
+  /// (`ChatPickRef[]`), rendered as chips in the transcript. Opaque to Rust;
+  /// must round-trip or it is dropped when the renderer persists history.
   #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub design: Option<serde_json::Value>,
+  pub picks: Option<serde_json::Value>,
   /// The Advisor findings a user message handed to Copilot (`ChatAdvisorSummary`),
   /// rendered as a card in the transcript. Opaque to Rust; must round-trip or it
   /// is dropped when the renderer persists history.
@@ -3387,9 +3387,9 @@ pub struct ChatMessage {
   /// must round-trip or it is dropped when the renderer persists history.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub migration: Option<serde_json::Value>,
-  /// The prompt Copilot received when it differs from `text` (a Design turn's
-  /// structured changes, or a hand-off's full instructions); re-sent by Retry /
-  /// Try again / Resume.
+  /// The prompt Copilot received when it differs from `text` (picked elements'
+  /// details, or a hand-off's full instructions); re-sent by Retry / Try again /
+  /// Resume.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub prompt: Option<String>,
   /// What Copilot Fusion chose for an assistant turn, shown under it.
@@ -4464,7 +4464,7 @@ mod tests {
       questions: None,
       elapsed_ms: None,
       created_at: None,
-      design: None,
+      picks: None,
       advisor: None,
       data: None,
       files: None,
@@ -4506,7 +4506,7 @@ mod tests {
       }]),
       elapsed_ms: None,
       created_at: None,
-      design: None,
+      picks: None,
       advisor: None,
       data: None,
       files: None,
@@ -4537,28 +4537,25 @@ mod tests {
   }
 
   #[test]
-  fn chat_message_round_trips_a_design_summary_and_hidden_prompt() {
+  fn chat_message_round_trips_picked_elements_and_the_hidden_prompt() {
     let raw = serde_json::json!({
       "id": "u1",
       "role": "user",
-      "text": "Make it pop",
-      "attachments": 2,
-      "attachmentThumbs": ["data:image/png;base64,AA", "data:image/png;base64,BB"],
-      "design": {
-        "items": [{ "n": 1, "kind": "element", "label": "Button · Save", "summary": "Background: bg-indigo-600 → bg-indigo-700", "shot": 1 }],
-        "full": 0
-      },
-      "prompt": "Make it pop\n\n## Design changes from the live preview (1)"
+      "text": "Make it the primary action",
+      "attachments": 1,
+      "attachmentThumbs": ["data:image/png;base64,AA"],
+      "picks": [{ "n": 1, "label": "Button · Save", "shot": 0 }],
+      "prompt": "Make it the primary action\n\n## Picked in the live preview (1)"
     });
     let msg: ChatMessage = serde_json::from_value(raw.clone()).unwrap();
-    assert_eq!(msg.prompt.as_deref(), Some("Make it pop\n\n## Design changes from the live preview (1)"));
+    assert_eq!(msg.prompt.as_deref(), Some("Make it the primary action\n\n## Picked in the live preview (1)"));
     let back = serde_json::to_value(&msg).unwrap();
-    assert_eq!(back["design"], raw["design"]);
+    assert_eq!(back["picks"], raw["picks"]);
     assert_eq!(back["prompt"], raw["prompt"]);
     // Plain messages don't grow the new keys.
     let plain: ChatMessage = serde_json::from_str(r#"{"id":"m1","role":"user","text":"hi"}"#).unwrap();
     let json = serde_json::to_value(&plain).unwrap();
-    assert!(json.get("design").is_none());
+    assert!(json.get("picks").is_none());
     assert!(json.get("advisor").is_none());
     assert!(json.get("prompt").is_none());
   }

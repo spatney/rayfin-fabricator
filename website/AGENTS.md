@@ -166,8 +166,10 @@ in `.md`.
 | `preview-toolbar` | The default preview toolbar above the published sample app (sample data) | `/docs/build/preview` |
 | `preview-local` | The sample app's preview on this computer: **Local** and **Published**, **Preview as**, and **Output** open below the app (sample data) | `/docs/build/local-development`, `/docs/build/preview` |
 | `preview-as` | The **Preview as** menu open over the sample app on this computer: **You**, two test users, **Signed out** and **Add test user…** (sample data) | `/docs/build/preview` |
-| `design` | Design mode with an element selected and its change card open | `/docs/build/design` |
-| `design-theme` | Design mode's Theme panel | `/docs/build/design` |
+| `design` | Design mode with an element selected and its change card open. No longer in the app (Touch Up replaced it): kept for the intro video | none (intro video only) |
+| `touch-up` | The sample app's preview with **Touch Up** on: two elements picked and numbered, the pointer resting on a bar, and the hint at the top (sample data) | `/docs/build/touch-up` |
+| `touch-up-chips` | The chat composer with the two picks as chips, a clip, and a request that refers to them by number (sample data) | `/docs/build/touch-up` |
+| `touch-up-draw` | Drawing on a screenshot of the sample app: an arrow at the month's total, a box round a bar and an underline, with the drawing tools (sample data) | `/docs/build/touch-up`, `/docs/build/chat` |
 | `code` | Code view with the file tree and the editor | `/docs/build/code-and-history` |
 | `history` | The History tab with a version per request, one selected and a file's diff open | `/docs/build/code-and-history` |
 | `blueprint` | Blueprint's Architecture view of the sample app (sample data) | `/docs/build/data-model` |

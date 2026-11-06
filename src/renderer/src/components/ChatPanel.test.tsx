@@ -11,8 +11,8 @@ import type {
 } from '@shared/ipc'
 import { makeProject } from '../../test/harness'
 import { deferred } from '../../test/deferred'
-import type { DesignItem } from '@shared/design'
-import type { DesignTurn } from '../design/useDesignSession'
+import type { PickedElement, PickTurn } from '../pick/useTouchUp'
+import type { PendingShot } from './PreviewPane'
 import type { FixOutcome } from '../advisor/lifecycle'
 import { AdvisorFixContext, type AdvisorFixLinks } from './advisor/AdvisorFixSummary'
 import ChatPanel, { reduceChatMessage, type OutboundPrompt, type UIChatMessage } from './ChatPanel'
@@ -28,7 +28,29 @@ vi.mock('@monaco-editor/react', () => ({
 // jsdom has no canvas to re-encode an attached image with.
 vi.mock('./chat/images', async (original) => ({
   ...(await original<typeof import('./chat/images')>()),
-  toPngAndThumb: async (src: string) => ({ png: src, thumb: `${src}#thumb` })
+  toPngAndThumb: async (src: string) => ({ png: src, thumb: `${src}#thumb` }),
+  stageImage: async (src: string) => ({ path: 'C:/tmp/drawn.png', thumb: `${src}#view` })
+}))
+// The drawing editor has tests of its own; here it hands back a drawing.
+vi.mock('./chat/ImageMarkup', () => ({
+  ImageMarkup: ({
+    label,
+    onDone,
+    onCancel
+  }: {
+    label: string
+    onDone: (drawn: string | null) => void
+    onCancel: () => void
+  }) => (
+    <div role="dialog" aria-label={label}>
+      <button type="button" onClick={() => onDone('data:image/png;base64,DRAWN')}>
+        Keep the drawing
+      </button>
+      <button type="button" onClick={onCancel}>
+        Cancel drawing
+      </button>
+    </div>
+  )
 }))
 
 /**
@@ -1598,39 +1620,50 @@ describe('ChatPanel files and folders from this computer', () => {
   })
 })
 
-describe('ChatPanel Design changes', () => {
-  const ITEM: DesignItem = {
-    id: 'i1',
-    kind: 'element',
-    tweaks: [{ kind: 'background', summary: 'Background: bg-indigo-600 → bg-indigo-700' }],
-    createdAt: 1,
-    target: { label: 'Button · Save', role: 'button', tag: 'button', selector: 'button', route: '/', box: { w: 80, h: 32 } }
+describe('ChatPanel Touch Up', () => {
+  const SAVE_SHOT = { path: 'C:/tmp/save.png', thumb: 'data:image/png;base64,SAVE' }
+  const PICK: PickedElement = {
+    id: 'a',
+    n: 1,
+    target: {
+      label: 'Button · Save',
+      role: 'button',
+      tag: 'button',
+      selector: 'main > button',
+      route: '/',
+      box: { w: 80, h: 32 }
+    },
+    shot: SAVE_SHOT
   }
-  const TURN: DesignTurn = {
+  const TURN: PickTurn = {
     projectId: 'p1',
-    itemIds: ['i1'],
-    display: 'make it pop',
-    prompt: 'make it pop\n\n## Design changes from the live preview (1)\nAttached images: #1 is the full view',
-    storedPrompt: 'make it pop\n\n## Design changes from the live preview (1)',
-    shots: [
-      { path: 'C:/tmp/full.png', thumb: 'data:image/png;base64,FULL' },
-      { path: 'C:/tmp/crop.png', thumb: 'data:image/png;base64,CROP' }
-    ],
-    summary: { full: 0, items: [{ n: 1, kind: 'element', label: 'Button · Save', summary: 'Background: bg-indigo-600 → bg-indigo-700', shot: 1 }] }
+    ids: ['a'],
+    display: 'make it the primary action',
+    prompt:
+      'make it the primary action\n\n## Picked in the live preview (1)\n- Picture: attached image 1',
+    storedPrompt: 'make it the primary action\n\n## Picked in the live preview (1)',
+    shots: [SAVE_SHOT],
+    picks: [{ n: 1, label: 'Button · Save', shot: 0 }]
   }
 
-  function DesignHarness({
+  function PickHarness({
     initial = [],
-    items = [ITEM],
-    buildDesignTurn,
-    onDesignSent,
-    onDesignRemove
+    picks = [PICK],
+    pickOn,
+    buildPickTurn,
+    onPicksSent,
+    onPickRemove = () => {},
+    onPickExit,
+    onPickShot
   }: {
     initial?: UIChatMessage[]
-    items?: DesignItem[]
-    buildDesignTurn?: (note: string, options?: { extraImages?: number }) => Promise<DesignTurn | null>
-    onDesignSent?: (turn: DesignTurn) => void
-    onDesignRemove?: (id: string) => void
+    picks?: PickedElement[]
+    pickOn?: boolean
+    buildPickTurn?: (note: string) => Promise<PickTurn | null>
+    onPicksSent?: (turn: PickTurn) => void
+    onPickRemove?: (id: string) => void
+    onPickExit?: () => void
+    onPickShot?: (id: string, shot: { path: string; thumb: string }) => void
   }): JSX.Element {
     const [messages, setMessages] = useState<UIChatMessage[]>(initial)
     return (
@@ -1639,59 +1672,138 @@ describe('ChatPanel Design changes', () => {
         messages={messages}
         onChange={(update) => setMessages(update)}
         draft=""
-        designItems={items}
-        buildDesignTurn={buildDesignTurn}
-        onDesignSent={onDesignSent}
-        onDesignRemove={onDesignRemove}
+        picks={picks}
+        pickOn={pickOn}
+        buildPickTurn={buildPickTurn}
+        onPicksSent={onPicksSent}
+        onPickRemove={onPickRemove}
+        onPickExit={onPickExit}
+        onPickShot={onPickShot}
       />
     )
   }
 
-  it('lists queued changes as chips and sends them as one turn with a clean card', async () => {
+  it('sends a clip that lands while the picks are being prepared', async () => {
+    const api = installApi()
+    const build = deferred<PickTurn | null>()
+    const clip = (name: string): PendingShot => ({
+      path: `C:/tmp/${name}.png`,
+      thumb: `data:${name}`
+    })
+    function Clips(): JSX.Element {
+      const [shots, setShots] = useState<PendingShot[]>([clip('a')])
+      return (
+        <>
+          <button type="button" onClick={() => setShots((s) => [...s, clip(`c${s.length}`)])}>
+            Clip lands
+          </button>
+          <ChatPanel
+            project={makeProject('p1')}
+            messages={[]}
+            onChange={() => {}}
+            draft=""
+            picks={[PICK]}
+            buildPickTurn={() => build.promise}
+            onPickRemove={() => {}}
+            attachments={shots}
+            onRemoveAttachment={() => {}}
+            onAttachmentsConsumed={(paths) =>
+              setShots((s) => (paths ? s.filter((x) => !paths.includes(x.path)) : []))
+            }
+          />
+        </>
+      )
+    }
+    render(<Clips />)
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clip lands' }))
+    await act(async () => build.resolve(TURN))
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+    const [, , , paths] = api.chat.send.mock.calls[0] as unknown as [
+      string,
+      string,
+      string,
+      string[]
+    ]
+    expect(paths).toEqual([SAVE_SHOT.path, 'C:/tmp/a.png', 'C:/tmp/c1.png'])
+    expect(screen.queryByRole('button', { name: 'Screenshot to send' })).toBeNull()
+  })
+
+  it('opens a pick’s picture to draw on, and the drawing becomes its picture', async () => {
+    installApi()
+    const shot = vi.fn()
+    render(<PickHarness onPickShot={shot} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Draw on the picture of Button · Save' }))
+    expect(screen.getByRole('dialog', { name: 'Button · Save' })).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Keep the drawing' }))
+    })
+    await waitFor(() =>
+      expect(shot).toHaveBeenCalledWith('a', {
+        path: 'C:/tmp/drawn.png',
+        thumb: 'data:image/png;base64,DRAWN#view'
+      })
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('shows picks as chips, and sends them with the message as chips in the transcript', async () => {
     const api = installApi()
     const build = vi.fn(async () => TURN)
     const sent = vi.fn()
     const removed = vi.fn()
-    render(<DesignHarness buildDesignTurn={build} onDesignSent={sent} onDesignRemove={removed} />)
+    render(<PickHarness buildPickTurn={build} onPicksSent={sent} onPickRemove={removed} />)
 
-    const tray = screen.getByRole('group', { name: 'Design changes to send' })
-    expect(tray.textContent).toContain('1 design change · sent with your message')
-    expect(tray.textContent).toContain('Button · Save')
-    fireEvent.click(screen.getByRole('button', { name: 'Remove change 1: Button · Save' }))
-    expect(removed).toHaveBeenCalledWith('i1')
+    const tray = screen.getByRole('list', { name: 'Picked elements to send' })
+    expect(tray.textContent).toBe('1Button · Save')
+    expect(tray.querySelector('img')?.getAttribute('src')).toBe(SAVE_SHOT.thumb)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Button · Save' }))
+    expect(removed).toHaveBeenCalledWith('a')
 
-    const composer = screen.getByPlaceholderText(/Add a note for these changes/) as HTMLTextAreaElement
-    // The changes alone are enough to send.
-    expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false)
-    fireEvent.change(composer, { target: { value: 'make it pop' } })
+    const composer = screen.getByPlaceholderText(
+      'Say how to change Button · Save, or press Enter to touch it up'
+    ) as HTMLTextAreaElement
+    fireEvent.change(composer, { target: { value: 'make it the primary action' } })
     await act(async () => {
       fireEvent.keyDown(composer, { key: 'Enter' })
     })
 
     await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
-    expect(build).toHaveBeenCalledWith('make it pop', { extraImages: 0 })
+    expect(build).toHaveBeenCalledWith('make it the primary action')
     expect(sent).toHaveBeenCalledWith(TURN)
     const [, , prompt, paths] = api.chat.send.mock.calls[0] as unknown as [string, string, string, string[]]
     expect(prompt).toBe(TURN.prompt)
-    expect(paths).toEqual(['C:/tmp/full.png', 'C:/tmp/crop.png'])
+    expect(paths).toEqual([SAVE_SHOT.path])
     expect(composer.value).toBe('')
 
-    // The transcript shows the note and a Design card — not the raw prompt.
-    const card = await screen.findByRole('group', { name: 'Design changes (1)' })
-    expect(card.textContent).toContain('1 design change')
-    expect(card.textContent).toContain('Button · Save')
-    expect(card.querySelector('img.design-card-shot')?.getAttribute('src')).toBe('data:image/png;base64,CROP')
-    expect(card.querySelector('img.design-card-full')?.getAttribute('src')).toBe('data:image/png;base64,FULL')
-    expect(screen.getByText('make it pop')).toBeTruthy()
-    // Captures shown in the card aren't repeated as loose screenshots.
+    // The transcript shows the words and what was picked, not the prompt; the
+    // picture shows in its chip, not again as a loose screenshot.
+    const chips = await screen.findByRole('list', { name: 'Picked elements' })
+    expect(chips.textContent).toBe('1Button · Save')
+    expect(chips.querySelector('img')?.getAttribute('src')).toBe(SAVE_SHOT.thumb)
+    expect(screen.getByText('make it the primary action')).toBeTruthy()
     expect(document.querySelectorAll('.msg-shots img')).toHaveLength(0)
-    expect(card.querySelector('details pre')?.textContent).toBe(TURN.storedPrompt)
   })
 
-  it('does nothing when the changes could not be prepared', async () => {
+  it('sends picks without words, so Copilot touches them up', async () => {
+    const api = installApi()
+    const build = vi.fn(async () => ({ ...TURN, display: 'Touch this up' }))
+    render(<PickHarness buildPickTurn={build} />)
+    const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement
+    expect(send.disabled).toBe(false)
+    expect(send.title).toBe('Send, with the picked element (Enter)')
+    await act(async () => {
+      fireEvent.click(send)
+    })
+    await waitFor(() => expect(api.chat.send).toHaveBeenCalledOnce())
+    expect(build).toHaveBeenCalledWith('')
+    expect(screen.getByText('Touch this up')).toBeTruthy()
+  })
+
+  it('does nothing when the picks could not be prepared', async () => {
     const api = installApi()
     const sent = vi.fn()
-    render(<DesignHarness buildDesignTurn={async () => null} onDesignSent={sent} />)
+    render(<PickHarness buildPickTurn={async () => null} onPicksSent={sent} />)
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     })
@@ -1699,23 +1811,74 @@ describe('ChatPanel Design changes', () => {
     expect(sent).not.toHaveBeenCalled()
   })
 
-  it('re-sends the stored Design prompt on Try again, keeping the card', async () => {
+  it('sends the picks with words typed while Copilot works', async () => {
+    const api = installApi()
+    const build = vi.fn(async () => TURN)
+    const sent = vi.fn()
+    const working: UIChatMessage[] = [
+      { id: 'u1', role: 'user', text: 'Build a CRM', tools: [], pending: false },
+      {
+        id: 'a1',
+        role: 'assistant',
+        text: '',
+        tools: [],
+        segments: [],
+        pending: true,
+        turnId: 't1'
+      }
+    ]
+    render(<PickHarness initial={working} buildPickTurn={build} onPicksSent={sent} />)
+    const composer = screen.getByPlaceholderText(/^Say how to change Button · Save/)
+    await act(async () => {
+      fireEvent.change(composer, { target: { value: 'make it the primary action' } })
+      fireEvent.keyDown(composer, { key: 'Enter' })
+    })
+    await waitFor(() => expect(api.chat.steer).toHaveBeenCalledOnce())
+    expect(api.chat.steer).toHaveBeenCalledWith('p1', TURN.prompt, [SAVE_SHOT.path])
+    expect(sent).toHaveBeenCalledWith(TURN)
+    expect(api.chat.send).not.toHaveBeenCalled()
+  })
+
+  it('brings the keyboard to the composer when something new is picked, and Escape there finishes picking', async () => {
+    installApi()
+    const releaseFocus = vi.fn(() => Promise.resolve(undefined))
+    ;(window as unknown as { api: { preview: unknown } }).api.preview = { releaseFocus }
+    const exit = vi.fn()
+    const { rerender } = render(<PickHarness picks={[]} pickOn onPickExit={exit} />)
+    const composer = screen.getByPlaceholderText(PLACEHOLDER)
+    composer.blur()
+
+    rerender(<PickHarness picks={[PICK]} pickOn onPickExit={exit} />)
+    await waitFor(() => expect(document.activeElement).toBe(composer))
+    expect(releaseFocus).toHaveBeenCalledOnce()
+
+    fireEvent.keyDown(composer, { key: 'Escape' })
+    expect(exit).toHaveBeenCalledOnce()
+  })
+
+  it('re-sends the stored prompt on Try again, keeping the chips', async () => {
     const api = installApi()
     const initial: UIChatMessage[] = [
       {
         id: 'u1',
         role: 'user',
-        text: '',
+        text: 'make it the primary action',
         tools: [],
         pending: false,
-        attachments: 2,
-        attachmentThumbs: ['data:image/png;base64,FULL', 'data:image/png;base64,CROP'],
-        design: TURN.summary,
+        attachments: 1,
+        attachmentThumbs: [SAVE_SHOT.thumb],
+        picks: TURN.picks,
         prompt: TURN.storedPrompt
       },
-      { id: 'a1', role: 'assistant', text: 'Done — the Save button is darker now.', tools: [], pending: false }
+      {
+        id: 'a1',
+        role: 'assistant',
+        text: 'Done — Save is the primary action now.',
+        tools: [],
+        pending: false
+      }
     ]
-    render(<DesignHarness initial={initial} items={[]} />)
+    render(<PickHarness initial={initial} picks={[]} />)
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Try again/ }))
     })
@@ -1723,10 +1886,65 @@ describe('ChatPanel Design changes', () => {
     const [, , prompt, paths] = api.chat.send.mock.calls[0] as unknown as [string, string, string, string[]]
     expect(prompt).toBe(tryAgainPrompt(TURN.storedPrompt))
     expect(paths).toEqual([])
-    // Both Design messages render a card; the rerun has no captures to show.
-    const cards = screen.getAllByRole('group', { name: 'Design changes (1)' })
-    expect(cards).toHaveLength(2)
-    expect(cards[1].querySelector('img')).toBeNull()
+    // Both messages show the pick; the rerun has no picture to show.
+    const sent = screen.getAllByRole('list', { name: 'Picked elements' })
+    expect(sent).toHaveLength(2)
+    expect(sent[1].textContent).toBe('1Button · Save')
+    expect(sent[1].querySelector('img')).toBeNull()
+  })
+})
+
+describe('ChatPanel pictures', () => {
+  it('opens a staged screenshot large to draw on, and the drawing takes its place', async () => {
+    installApi()
+    const replaced = vi.fn()
+    render(
+      <ChatPanel
+        project={makeProject('p1')}
+        messages={[]}
+        onChange={() => {}}
+        draft=""
+        attachments={[{ path: 'C:/tmp/shot.png', thumb: 'data:shot' }]}
+        onRemoveAttachment={() => {}}
+        onReplaceAttachment={replaced}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Screenshot to send' }))
+    expect(screen.getByRole('dialog', { name: 'Screenshot' })).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Keep the drawing' }))
+    })
+    await waitFor(() =>
+      expect(replaced).toHaveBeenCalledWith('C:/tmp/shot.png', {
+        path: 'C:/tmp/drawn.png',
+        thumb: 'data:image/png;base64,DRAWN#view'
+      })
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('shows a sent picture large, a step from the message’s others', () => {
+    installApi()
+    const sent: UIChatMessage[] = [
+      {
+        id: 'u1',
+        role: 'user',
+        text: 'Like this',
+        tools: [],
+        pending: false,
+        attachments: 2,
+        attachmentThumbs: ['data:one', 'data:two']
+      }
+    ]
+    render(<ChatPanel project={makeProject('p1')} messages={sent} onChange={() => {}} draft="" />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Screenshot attachment' })[0])
+    const picture = (name: string): string | null | undefined =>
+      screen.getByRole('dialog', { name }).querySelector('img')?.getAttribute('src')
+    expect(picture('Picture 1 of 2')).toBe('data:one')
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(picture('Picture 2 of 2')).toBe('data:two')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
 

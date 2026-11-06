@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, type JSX } from 'react'
-import { DesignSummary, designShotIndexes } from '../../design/DesignSummary'
+import { SentPicks, pickShotIndexes } from '../../pick/PickTray'
 import { AdvisorFixSummary } from '../advisor/AdvisorFixSummary'
 import { MentionText } from '../MentionText'
 import PlanCard from '../PlanCard'
@@ -10,6 +10,7 @@ import { CopyButton } from './CopyButton'
 import { SentData, SentMigration } from './DataTray'
 import { SentFiles } from './FileTray'
 import { formatClock, formatFullDate } from './format'
+import { ShotStrip, useImageViewer } from './ImageViewer'
 import { TurnFooter } from './TurnFooter'
 import type { UIChatMessage } from './types'
 
@@ -25,21 +26,22 @@ function UserMessage({
   onOpenMention?: (ref: string) => void
 }): JSX.Element {
   const hasText = Boolean(m.text) && m.text !== '(screenshot)'
-  // A Design message shows its captures inside the card; the strip keeps the rest.
-  const designShots = m.design ? designShotIndexes(m.design) : null
-  const shots = (m.attachmentThumbs ?? []).filter((_, i) => !designShots?.has(i))
+  const thumbs = m.attachmentThumbs ?? []
+  // Picked elements show their pictures in their chips; the strip keeps the rest.
+  const pickShots = m.picks ? pickShotIndexes(m.picks) : null
+  const shots = thumbs.flatMap((_, i) => (pickShots?.has(i) ? [] : [i]))
+  // Any of the message's pictures opens large, with the rest a step away.
+  const { open, viewer } = useImageViewer(m.attachmentThumbs)
   return (
     <div className="turn turn--user">
       <div className="turn-main">
-        {m.design && <DesignSummary design={m.design} thumbs={m.attachmentThumbs} prompt={m.prompt} />}
+        {m.picks && m.picks.length > 0 && (
+          <SentPicks picks={m.picks} thumbs={m.attachmentThumbs} onOpen={open} />
+        )}
         {m.advisor && <AdvisorFixSummary summary={m.advisor} prompt={m.prompt} working={working} />}
         {shots.length > 0 ? (
-          <div className="msg-shots">
-            {shots.map((src, i) => (
-              <img key={i} className="msg-shot" src={src} alt="Screenshot attachment" />
-            ))}
-          </div>
-        ) : m.attachments && !m.design ? (
+          <ShotStrip images={thumbs} indexes={shots} onOpen={open} />
+        ) : m.attachments && !m.picks ? (
           <div className="msg-attach">
             <ImageIcon className="msg-attach-ico" />
             {m.attachments} screenshot{m.attachments > 1 ? 's' : ''}
@@ -53,6 +55,7 @@ function UserMessage({
             <MentionText text={m.text} onOpen={onOpenMention} />
           </div>
         )}
+        {viewer}
         {(hasText || m.createdAt != null) && (
           <div className="msg-meta">
             {m.createdAt != null && (

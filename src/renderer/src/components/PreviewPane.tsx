@@ -15,21 +15,17 @@ import {
   refusedSchemaLosses,
   type LocalBackend
 } from '../localBackend'
-import { DEVICES, deviceHostHeight, deviceHostWidth, type DeviceId } from '../design/devices'
-import { readFabricatorTheme } from '../design/hostTheme'
-import type { DesignSession, DesignSurface } from '../design/useDesignSession'
-import type { ModelSelection } from '../modelSelection'
-import { ModelPicker } from './models/ModelPicker'
+import { DEVICES, deviceHostHeight, deviceHostWidth, type DeviceId } from '../previewDevices'
+import { readFabricatorTheme } from '../pick/hostTheme'
+import type { TouchUp, PickSurface } from '../pick/useTouchUp'
+import { TouchUpButton } from '../pick/TouchUpButton'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ReloadIcon,
   FabricIcon,
-  DesignIcon,
   ExpandIcon,
   CollapseIcon,
-  PaletteIcon,
-  SparkleIcon,
   DesktopIcon,
   TabletIcon,
   PhoneIcon,
@@ -69,7 +65,8 @@ export type PreviewView = 'local' | 'published'
 
 /**
  * A screenshot pending attachment to the next chat message — one the user
- * added to the composer, or a Design capture — consumed by the chat composer.
+ * added to the composer, or a Touch Up screenshot — consumed by the chat
+ * composer.
  */
 export interface PendingShot {
   /** Absolute temp-file path passed to copilot as `--attachment`. */
@@ -150,25 +147,13 @@ interface Props {
   /** Notify the parent that the persisted preview mode changed (so it can refresh
    *  project state — the selection lives on the project, store-backed). */
   onPreviewModeChanged?: () => void
-  /** Design mode ("visual chat"). The session lives in the Workbench, which
-   *  shares its queue with the chat composer. */
-  design?: DesignSession
-  /** The Design bar's model picker. Auto lets Design pick a fast model itself. */
-  designModel?: {
-    value: ModelSelection
-    onChange: (next: ModelSelection) => void
-    onManageKeys: () => void
-  }
-  /** Why sending the queued design changes is blocked right now (a turn is
-   *  running, the first publish is pending, a publish is running…), or null
-   *  when it can go. */
-  designSendBlocked?: string | null
-  /** Send the queued design changes to chat (the composer text is the note). */
-  onDesignSend?: () => void
-  /** Report the surface Design can run on — the app on this computer or the
-   *  published one, directly or embedded in the Fabric portal shell — or null
-   *  while it can't (publishing, loading, mid-turn on a local page). */
-  onDesignSurface?: (surface: DesignSurface | null) => void
+  /** Touch Up: point at elements in the app and hand them to chat. It
+   *  lives in the Workbench, which shares the picks with the chat composer. */
+  touchUp?: TouchUp
+  /** Report the surface Touch Up can run on (the app on this computer or
+   *  the published one, directly or embedded in the Fabric portal shell), or
+   *  null while it can't (publishing, loading, nothing to show). */
+  onPickSurface?: (surface: PickSurface | null) => void
   /** Report the project-load overlay state so the parent can render a centered
    *  "Loading <name>…" over the whole build view (a project switch reloads the
    *  chat + preview, so the indicator belongs at the content level, not the
@@ -304,18 +289,6 @@ function useUiScale(enabled: boolean): number {
   return scale
 }
 
-/** Whole seconds since `since` (a `performance.now()` stamp), ticking while set. */
-function useElapsed(since: number | null): number {
-  const [now, setNow] = useState(() => performance.now())
-  useEffect(() => {
-    if (since == null) return
-    setNow(performance.now())
-    const timer = window.setInterval(() => setNow(performance.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [since])
-  return since == null ? 0 : Math.max(0, Math.floor((now - since) / 1000))
-}
-
 export default function PreviewPane({
   project,
   deploy,
@@ -326,11 +299,8 @@ export default function PreviewPane({
   focused,
   onToggleFocus,
   onPreviewModeChanged,
-  design,
-  designModel,
-  designSendBlocked = null,
-  onDesignSend,
-  onDesignSurface,
+  touchUp,
+  onPickSurface,
   onLoadingChange,
   local,
   view: requestedView,
@@ -1066,57 +1036,40 @@ export default function PreviewPane({
     if (shownUrl) void window.api.openExternal(shownUrl)
   }
 
-  // ── Design mode ("visual chat") ───────────────────────────────────────────
-  // The session (queue, polling, AI requests, capture) lives in the Workbench so
-  // the chat composer can show and send the queue; this pane reports the surface
-  // Design can run on — the app on this computer or the published one, direct
-  // or embedded in the Fabric portal shell — and renders the design toolbar +
-  // device width. See `useDesignSession` and the injected `design_agent.js`.
-  const designActive = Boolean(design?.active)
-  // Mid-turn, Copilot's edits change a local page under the session, so a turn
-  // starting ends it (the queue stays in the composer). The published-backend
-  // fallback's dev server runs between turns only while turns don't publish.
-  const localDesign = isLocal && !turnRunning && (localView || manualDeploy)
+  // ── Touch Up ─────────────────────────────────────────────────────────
+  // The picks live in the Workbench so the chat composer can show and send
+  // them; this pane reports the surface picking can run on (the app on this
+  // computer or the published one, direct or embedded in the Fabric portal
+  // shell) and renders its switch. See `useTouchUp` and `pick_agent.js`.
   // A publish reloads the published app when it ends; the app on this computer
   // carries on through it.
   const publishing = running && !localView
   const embedded = previewMode === 'fabric' && !isLocal && Boolean(fabricUrl)
-  const designAppUrl = localView ? localAppUrl : isLocal ? previewUrl : deployedUrl
-  const designSurface = useMemo<DesignSurface | null>(
+  const pickAppUrl = localView ? localAppUrl : isLocal ? previewUrl : deployedUrl
+  const pickSurface = useMemo<PickSurface | null>(
     () =>
-      showWebview &&
-      !publishing &&
-      !transitioning &&
-      (!isLocal || localDesign) &&
-      previewUrl &&
-      designAppUrl
-        ? { url: previewUrl, embedded, appUrl: designAppUrl }
+      showWebview && !publishing && !transitioning && previewUrl && pickAppUrl
+        ? { url: previewUrl, embedded, appUrl: pickAppUrl }
         : null,
-    [
-      showWebview,
-      publishing,
-      transitioning,
-      isLocal,
-      localDesign,
-      previewUrl,
-      designAppUrl,
-      embedded
-    ]
+    [showWebview, publishing, transitioning, previewUrl, pickAppUrl, embedded]
   )
   useEffect(() => {
-    onDesignSurface?.(designSurface)
-  }, [designSurface, onDesignSurface])
-  useEffect(() => () => onDesignSurface?.(null), [onDesignSurface])
-  const uiScale = useUiScale(designActive)
-  const device = designActive && design ? design.device : null
-  const hostWidth = device ? deviceHostWidth(device, uiScale) : null
-  const hostHeight = device ? deviceHostHeight(device, uiScale) : null
+    onPickSurface?.(pickSurface)
+  }, [pickSurface, onPickSurface])
+  useEffect(() => () => onPickSurface?.(null), [onPickSurface])
+  const pickReason = publishing
+    ? 'Touch Up is back once the publish finishes.'
+    : 'Touch Up works once your app shows here.'
+  // The preview width: the full pane, or a tablet's or phone's width to check
+  // how the app responds.
+  const [device, setDevice] = useState<DeviceId>('desktop')
+  const uiScale = useUiScale(device !== 'desktop')
+  const hostWidth = showWebview ? deviceHostWidth(device, uiScale) : null
+  const hostHeight = showWebview ? deviceHostHeight(device, uiScale) : null
   const hostStyle = hostWidth
     ? { width: `${hostWidth}px`, height: hostHeight ? `${hostHeight}px` : undefined }
     : undefined
-  const phone = device === 'phone'
-  const polishSeconds = useElapsed(designActive ? (design?.polishingSince ?? null) : null)
-  const designCount = design?.items.length ?? 0
+  const phone = Boolean(hostWidth) && device === 'phone'
   const dotClass =
     running || status === 'deploying' || teamDeploying
       ? 'busy'
@@ -1137,15 +1090,13 @@ export default function PreviewPane({
       : 'Showing your own preview of your changes. Switch to the published app in the team menu.'
   // The Fabric portal shell around the published app (see `fabricOffered`).
   const fabricAvailable = Boolean(fabricUrl) && !isLocal
-  const fabricTitle = designActive
-    ? 'Finish designing (Done) to switch views'
-    : !fabricUrl
-      ? 'The Fabric portal view is unavailable for this published app'
-      : isLocal
-        ? 'The Fabric portal view shows your published app, not this preview on your computer'
-        : previewMode === 'fabric'
-          ? 'Viewing inside the Fabric portal shell — click to return to the direct app view'
-          : 'View the app inside the Fabric portal shell, where it works fully'
+  const fabricTitle = !fabricUrl
+    ? 'The Fabric portal view is unavailable for this published app'
+    : isLocal
+      ? 'The Fabric portal view shows your published app, not this preview on your computer'
+      : previewMode === 'fabric'
+        ? 'Viewing inside the Fabric portal shell — click to return to the direct app view'
+        : 'View the app inside the Fabric portal shell, where it works fully'
   const switchView = (next: PreviewView): void => {
     if (next === view) return
     // Looking at the published app is what the reminder beside the switch is for.
@@ -1193,13 +1144,8 @@ export default function PreviewPane({
                   type="button"
                   className={`seg-btn ${localView ? 'seg-btn--on' : ''}`}
                   aria-pressed={localView}
-                  disabled={designActive}
                   onClick={() => switchView('local')}
-                  title={
-                    designActive
-                      ? 'Finish designing (Done) to switch views'
-                      : 'Your app on this computer, with its local data'
-                  }
+                  title="Your app on this computer, with its local data"
                 >
                   <DesktopIcon />
                   <span className="seg-btn-label">Local</span>
@@ -1208,13 +1154,8 @@ export default function PreviewPane({
                   type="button"
                   className={`seg-btn ${localView ? '' : 'seg-btn--on'}`}
                   aria-pressed={!localView}
-                  disabled={designActive}
                   onClick={() => switchView('published')}
-                  title={
-                    designActive
-                      ? 'Finish designing (Done) to switch views'
-                      : 'Your published app on Microsoft Fabric, with its data'
-                  }
+                  title="Your published app on Microsoft Fabric, with its data"
                 >
                   <CloudIcon />
                   <span className="seg-btn-label">Published</span>
@@ -1229,11 +1170,7 @@ export default function PreviewPane({
             </div>
           )}
           {localView && localRunning && !turnRunning && (
-            <PreviewAsMenu
-              key={project.id}
-              projectId={project.id}
-              disabled={transitioning || designActive}
-            />
+            <PreviewAsMenu key={project.id} projectId={project.id} disabled={transitioning} />
           )}
           {team && (
             <span className={`preview-status preview-status--${dotClass}`} title={statusTitle}>
@@ -1283,6 +1220,35 @@ export default function PreviewPane({
         </div>
         <div className="preview-toolbar-right">
           {loading && showWebview && <span className="preview-loading">Loading…</span>}
+          <div className="seg seg--toolbar" role="group" aria-label="Preview width">
+            {DEVICES.map((d) => {
+              const Glyph = DEVICE_ICONS[d.id]
+              const chosen = device === d.id
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  className={`seg-btn seg-btn--icon ${chosen ? 'seg-btn--on' : ''}`}
+                  aria-pressed={chosen}
+                  aria-label={`${d.label} width`}
+                  title={d.width ? `${d.label} — ${d.width}px wide` : `${d.label} — fill the pane`}
+                  disabled={!showWebview}
+                  onClick={() => setDevice(d.id)}
+                >
+                  <Glyph className="btn-ico" />
+                </button>
+              )
+            })}
+          </div>
+          {touchUp && (
+            <TouchUpButton
+              on={touchUp.on}
+              count={touchUp.picks.length}
+              disabled={!touchUp.on && (!touchUp.available || !nativeShown)}
+              disabledReason={pickReason}
+              onToggle={touchUp.toggle}
+            />
+          )}
           <div className="seg seg--toolbar">
             {fabricOffered && (
               <button
@@ -1297,33 +1263,13 @@ export default function PreviewPane({
                     .setPreviewMode(project.id, next)
                     .then(() => onPreviewModeChanged?.())
                 }}
-                disabled={
-                  !showWebview || !fabricAvailable || transitioning || designActive || publishing
-                }
+                disabled={!showWebview || !fabricAvailable || transitioning || publishing}
                 title={fabricTitle}
               >
                 <FabricIcon />
                 <span className="seg-btn-label">Fabric</span>
               </button>
             )}
-            <button
-              className={`seg-btn ${designActive ? 'seg-btn--on' : ''}`}
-              onClick={design?.toggle}
-              aria-pressed={designActive}
-              disabled={!design || (!designActive && (!design.available || !nativeShown))}
-              title={
-                designActive
-                  ? 'Leave Design — your queued changes stay in the chat composer'
-                  : isLocal && !localView && !manualDeploy
-                    ? 'Design works on the published app — available once this turn finishes'
-                    : isLocal && turnRunning
-                      ? 'Copilot is working — Design is available once this turn finishes'
-                      : 'Design — click anything in your app to change it, preview the result live, then send it all to Copilot at once'
-              }
-            >
-              <DesignIcon />
-              <span className="seg-btn-label">{designCount ? `Design · ${designCount}` : 'Design'}</span>
-            </button>
             {localView && local && (
               <LocalOutputButton
                 status={local.status}
@@ -1345,92 +1291,6 @@ export default function PreviewPane({
           </div>
         </div>
       </div>
-
-      {designActive && design && (
-        <div className="design-bar" role="toolbar" aria-label="Design tools">
-          <span className="design-bar-status" aria-live="polite">
-            <span className="design-bar-dot" aria-hidden="true" />
-            {designCount
-              ? `${designCount} change${designCount === 1 ? '' : 's'} ready`
-              : 'Click anything in your app to change it'}
-          </span>
-          <div className="design-bar-actions">
-            {designModel && (
-              <ModelPicker
-                value={designModel.value}
-                disabled={false}
-                onChange={designModel.onChange}
-                placement="down"
-                onManageKeys={designModel.onManageKeys}
-                autoHint="Fabricator picks a fast model for Options and Polish."
-                label="Design model"
-              />
-            )}
-            <div className="seg seg--toolbar" role="group" aria-label="Preview width">
-              {DEVICES.map((d) => {
-                const Glyph = DEVICE_ICONS[d.id]
-                const on = design.device === d.id
-                return (
-                  <button
-                    key={d.id}
-                    type="button"
-                    className={`seg-btn seg-btn--icon ${on ? 'seg-btn--on' : ''}`}
-                    aria-pressed={on}
-                    aria-label={`${d.label} width`}
-                    title={d.width ? `${d.label} — ${d.width}px wide` : `${d.label} — fill the pane`}
-                    onClick={() => design.setDevice(d.id)}
-                  >
-                    <Glyph className="btn-ico" />
-                  </button>
-                )
-              })}
-            </div>
-            <div className="seg seg--toolbar">
-              <button
-                type="button"
-                className={`seg-btn ${design.panel === 'theme' ? 'seg-btn--on' : ''}`}
-                aria-pressed={design.panel === 'theme'}
-                onClick={design.toggleTheme}
-                title="Theme — try a new accent, neutrals, corners, density or font across the whole app"
-              >
-                <PaletteIcon />
-                <span className="seg-btn-label">Theme</span>
-              </button>
-              <button
-                type="button"
-                className={`seg-btn ${design.panel === 'polish' ? 'seg-btn--on' : ''}`}
-                onClick={design.polish}
-                disabled={design.polishingSince != null}
-                title="Polish — a quick design review of this page with fixes you can preview and add"
-              >
-                <SparkleIcon />
-                <span className="seg-btn-label">
-                  {design.polishingSince != null ? `Reviewing… ${polishSeconds}s` : 'Polish'}
-                </span>
-              </button>
-            </div>
-            <div className="seg seg--toolbar">
-              <button
-                type="button"
-                className="seg-btn seg-btn--primary"
-                onClick={onDesignSend}
-                disabled={!onDesignSend || !designCount || design.sending || Boolean(designSendBlocked)}
-                title={designSendBlocked ?? (designCount ? 'Send these changes to Copilot as one request' : 'Queue a change first')}
-              >
-                {design.sending ? 'Sending…' : designCount ? `Send ${designCount}` : 'Send'}
-              </button>
-              <button
-                type="button"
-                className="seg-btn"
-                onClick={design.stop}
-                title="Leave Design — your queued changes stay in the chat composer"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {teamDeploying && teamRun && showWebview && <TeamRunStrip run={teamRun} onOpenMap={onOpenTeamMap} />}
 

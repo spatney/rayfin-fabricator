@@ -17,6 +17,7 @@ import {
   type ChatMigrationRef,
   type ChatMode,
   type ChatPathInfo,
+  type ChatPickRef,
   type ChatPlanArtifact,
   type ChatPluginId,
   type ChatTurnResult,
@@ -42,7 +43,7 @@ import { filesTurnPrompt, pendingFiles, setPendingFiles, withFiles } from './cha
 import CopilotSignInNotice from './CopilotSignInNotice'
 import type { PendingShot } from './PreviewPane'
 import { splitMentions } from './MentionText'
-import { ExpandIcon, CollapseIcon, CloseIcon, StopIcon, ImageIcon, Codicon } from './icons'
+import { ExpandIcon, CollapseIcon, CloseIcon, StopIcon, ImageIcon, Codicon, PenIcon } from './icons'
 import ConnectDataModal from './ConnectDataModal'
 import ConfirmModal from './ConfirmModal'
 import { MarkdownLinksContext, type MarkdownLinks } from './Markdown'
@@ -64,7 +65,9 @@ import { selectionArgs, selectionOf, type ModelSelection } from '../modelSelecti
 import { useCopilotModels } from '../copilotModels'
 import { Welcome } from './chat/Welcome'
 import { uid } from './chat/format'
-import { readAsDataUrl, toPngAndThumb } from './chat/images'
+import { readAsDataUrl, stageImage, toPngAndThumb } from './chat/images'
+import { ImageMarkup } from './chat/ImageMarkup'
+import { ImageViewer } from './chat/ImageViewer'
 import { reduceChatMessage, rollbackInterjection, settleRunningTools } from './chat/reducer'
 import { ChatEventBuffer, isStreamingEvent } from './chat/eventCoalescer'
 import {
@@ -82,16 +85,15 @@ import {
 import { createFileResolver } from './chat/paths'
 import { MessageRow } from './chat/MessageRow'
 import { tryAgainPrompt } from './chat/prompts'
-import type { ChatDesignSummary, DesignItem } from '@shared/design'
-import type { DesignTurn } from '../design/useDesignSession'
-import { DesignTray } from '../design/DesignTray'
+import { PickTray } from '../pick/PickTray'
+import type { PickedElement, PickTurn } from '../pick/useTouchUp'
 import { useFileDrop } from '../fileDrop'
 import './chat/chat.css'
 
 export type { OutboundPrompt, UIChatMessage } from './chat/types'
 export { reduceChatMessage } from './chat/reducer'
 
-const NO_DESIGN_ITEMS: DesignItem[] = []
+const NO_PICKS: PickedElement[] = []
 
 /** The prompt a Retry / Try again / Resume re-sends for a user message, or null
  *  when it can't be re-run (a screenshot-only message). */
@@ -101,11 +103,11 @@ function rerunPrompt(user: UIChatMessage): string | null {
   return user.text
 }
 
-/** What a user message carries beyond its text: a Design or Advisor card, the
- *  Fabric data and the files it added, the migration page it builds, and the
- *  prompt reruns re-send. */
+/** What a user message carries beyond its text: the elements it picked in the
+ *  preview, an Advisor card, the Fabric data and the files it added, the
+ *  migration page it builds, and the prompt reruns re-send. */
 interface TurnExtra {
-  design?: ChatDesignSummary
+  picks?: ChatPickRef[]
   advisor?: ChatAdvisorSummary
   data?: ChatDataRef[]
   files?: ChatFileRef[]
@@ -113,12 +115,12 @@ interface TurnExtra {
   storedPrompt?: string
 }
 
-/** A Design or Advisor message's card and prompt, carried to its rerun (without
- *  the captures — those were deleted once the original turn used them). */
+/** A message's chips, card and prompt, carried to its rerun (without the
+ *  pictures: those were deleted once the original turn used them). */
 function rerunExtra(user: UIChatMessage): TurnExtra | undefined {
   if (
     !user.prompt &&
-    !user.design &&
+    !user.picks &&
     !user.advisor &&
     !user.data &&
     !user.files &&
@@ -127,16 +129,7 @@ function rerunExtra(user: UIChatMessage): TurnExtra | undefined {
     return undefined
   }
   return {
-    design: user.design
-      ? {
-          items: user.design.items.map((item) => ({
-            n: item.n,
-            kind: item.kind,
-            label: item.label,
-            summary: item.summary
-          }))
-        }
-      : undefined,
+    picks: user.picks?.map(({ n, label }) => ({ n, label })),
     advisor: user.advisor,
     data: user.data,
     files: user.files,
@@ -165,8 +158,11 @@ interface Props {
   onAddAttachment?: (shot: PendingShot) => void
   /** Remove a staged screenshot (also deletes its temp file). */
   onRemoveAttachment?: (path: string) => void
-  /** Called once staged screenshots have been sent so the parent can clear them. */
-  onAttachmentsConsumed?: () => void
+  /** A staged picture was drawn on: `shot` takes the place of the one at `path`. */
+  onReplaceAttachment?: (path: string, shot: PendingShot) => void
+  /** Called once staged screenshots have been sent so the parent can clear them:
+   *  the ones at `paths`, or all of them. */
+  onAttachmentsConsumed?: (paths?: string[]) => void
   /** Called when the user starts a new chat (parent clears persisted history). */
   onClearHistory?: () => void
   /** Called after the model / effort options or the plugins change (parent refreshes project). */
@@ -203,19 +199,22 @@ interface Props {
   draft?: string
   /** Called whenever the composer draft changes so the parent can persist it. */
   onDraftChange?: (value: string) => void
-  /** Queued Design changes, shown as chips in the composer and sent with the
-   *  next message (its text becomes an optional note). */
-  designItems?: DesignItem[]
-  /** The Design changes are being captured for sending. */
-  designSending?: boolean
-  onDesignRemove?: (id: string) => void
-  /** Show a queued change in the preview (switches Design on if needed). */
-  onDesignFocus?: (id: string) => void
-  onDesignClear?: () => void
-  /** Capture and compose the Design turn for `note` (null when nothing is queued). */
-  buildDesignTurn?: (note: string, options?: { extraImages?: number }) => Promise<DesignTurn | null>
-  /** A Design turn was dispatched: the parent drops its changes from the queue and leaves Design. */
-  onDesignSent?: (turn: DesignTurn) => void
+  /** Elements picked in the preview with Touch Up, shown as chips in the
+   *  composer and sent with the next message. */
+  picks?: readonly PickedElement[]
+  /** Picking is on in the preview: Escape in the composer finishes it. */
+  pickOn?: boolean
+  onPickRemove?: (id: string) => void
+  /** Outline a pick in the preview while its chip is hovered (`null` stops). */
+  onPickFocus?: (id: string | null) => void
+  /** Finish picking (Escape in the composer). */
+  onPickExit?: () => void
+  /** Compose the message's picks for `note` (null when nothing is picked). */
+  buildPickTurn?: (note: string) => Promise<PickTurn | null>
+  /** The picks went out with a message: the parent drops them and ends picking. */
+  onPicksSent?: (turn: PickTurn) => void
+  /** A pick's picture was drawn on: `shot` takes its place. */
+  onPickShot?: (id: string, shot: PendingShot) => void
   copilotAuth?: CopilotAuthStatus
   onCopilotAuthChanged?: () => Promise<void> | void
   /** The workspaces your apps deploy to, and when (Add Fabric data lists recent ones first). */
@@ -238,6 +237,7 @@ export default function ChatPanel({
   attachments,
   onAddAttachment,
   onRemoveAttachment,
+  onReplaceAttachment,
   onAttachmentsConsumed,
   onClearHistory,
   onOptionsChanged,
@@ -254,13 +254,14 @@ export default function ChatPanel({
   onOpenMention,
   draft,
   onDraftChange,
-  designItems = NO_DESIGN_ITEMS,
-  designSending = false,
-  onDesignRemove,
-  onDesignFocus,
-  onDesignClear,
-  buildDesignTurn,
-  onDesignSent,
+  picks = NO_PICKS,
+  pickOn = false,
+  onPickRemove,
+  onPickFocus,
+  onPickExit,
+  buildPickTurn,
+  onPicksSent,
+  onPickShot,
   copilotAuth,
   onCopilotAuthChanged,
   recentWorkspaces,
@@ -287,8 +288,11 @@ export default function ChatPanel({
     onDraftChangeRef.current?.(value)
   }, [])
   const [sending, setSending] = useState(false)
-  /** A Design turn is being captured and composed (guards double sends). */
-  const designBuildRef = useRef(false)
+  /** A message's picks are being composed (guards double sends). */
+  const pickBuildRef = useRef(false)
+  const [pickSending, setPickSending] = useState(false)
+  /** The staged picture shown large to draw on: a screenshot, or a pick's picture. */
+  const [marking, setMarking] = useState<{ path: string } | { pick: string } | null>(null)
   // Recover the in-flight state when the panel remounts mid-turn — switching
   // workbench tabs/projects or a dev hot-reload tears down this component while
   // the backend turn keeps streaming. `messages` is owned by the parent and
@@ -416,6 +420,49 @@ export default function ChatPanel({
       setPendingFiles(project.id, next)
       return next
     })
+  // What waits in the composer as of the latest render: a message that waits for
+  // its picks to be prepared sends what's there once they are.
+  const waiting = useRef({ attachments, fileChips })
+  waiting.current = { attachments, fileChips }
+
+  // The staged picture shown large, and what it is.
+  const marked = ((): { shot: PendingShot; label: string } | null => {
+    if (!marking) return null
+    if ('path' in marking) {
+      const shot = (attachments ?? []).find((a) => a.path === marking.path)
+      return shot ? { shot, label: 'Screenshot' } : null
+    }
+    const pick = picks.find((p) => p.id === marking.pick)
+    return pick?.shot ? { shot: pick.shot, label: pick.target.label } : null
+  })()
+  /** Keep what was drawn on a staged picture: it takes the old one's place. */
+  async function keepDrawing(
+    target: { path: string } | { pick: string },
+    drawn: string
+  ): Promise<void> {
+    try {
+      const shot = await stageImage(drawn)
+      if ('path' in target) onReplaceAttachment?.(target.path, shot)
+      else onPickShot?.(target.pick, shot)
+    } catch (err) {
+      console.error('Failed to keep the drawing', err)
+    }
+  }
+
+  // Something new to send, such as a pick or a screenshot made in the preview
+  // (where the user just clicked), brings the keyboard here, so what they type
+  // next says what to change.
+  const stagedCount = picks.length + (attachments?.length ?? 0)
+  const seenStaged = useRef(stagedCount)
+  useEffect(() => {
+    const grew = stagedCount > seenStaged.current
+    seenStaged.current = stagedCount
+    if (!grew) return
+    const release = window.api.preview?.releaseFocus
+    void (release ? release() : Promise.resolve())
+      .catch(() => {})
+      .finally(() => taRef.current?.focus())
+  }, [stagedCount])
 
   // Keep the caret in view inside the composer's single scrollport
   // (`.composer-input-sizer`). The textarea is sized to its full content height so
@@ -804,16 +851,19 @@ export default function ChatPanel({
       onAttachmentsConsumed?.()
       const files = fileChips
       if (files.length > 0) changeFileChips(() => [])
-      await steer(text, shots, files)
+      // Picked elements go with the interjection, so "make this bigger" says what "this" is.
+      const picked = picks.length > 0 ? await composePicks(text) : null
+      await steer(text, shots, files, picked)
       return
     }
     // Pause a *new* turn while a deploy runs (steering a live turn above is still
     // allowed) so the turn never overlaps the deploy and the local preview can
     // start cleanly once the deploy finishes.
     if (submitBlocked) return
-    // Queued Design changes go out as one turn; the typed text is their note.
-    if (designItems.length > 0 && buildDesignTurn) {
-      await sendDesign(text, shots)
+    // Elements picked in the preview go out with the message; the typed text says
+    // what to change, and without it Copilot touches them up.
+    if (picks.length > 0 && buildPickTurn) {
+      await sendPicks(text)
       return
     }
     // Fabric data and files go out with the message as chips: Copilot gets how to
@@ -844,31 +894,64 @@ export default function ChatPanel({
     await dispatch(text || '(screenshot)', prompt, shots)
   }
 
-  /**
-   * Send the queued Design changes as one turn. The previews are captured and
-   * composed into a structured prompt (hidden behind the transcript's Design
-   * card); `note` is what the user typed, if anything.
-   */
-  async function sendDesign(note: string, shots: PendingShot[]): Promise<void> {
-    if (!buildDesignTurn || designBuildRef.current) return
-    designBuildRef.current = true
-    let turn: DesignTurn | null = null
+  /** Compose the message's picks, or null when that fails (the message then goes without them). */
+  async function composePicks(note: string): Promise<PickTurn | null> {
+    if (!buildPickTurn || pickBuildRef.current) return null
+    pickBuildRef.current = true
+    setPickSending(true)
     try {
-      turn = await buildDesignTurn(note, { extraImages: shots.length })
+      return await buildPickTurn(note)
     } catch (err) {
-      console.error('Failed to prepare the design changes', err)
+      console.error('Failed to prepare the picked elements', err)
+      return null
     } finally {
-      designBuildRef.current = false
+      pickBuildRef.current = false
+      setPickSending(false)
     }
+  }
+
+  /**
+   * Send a message with the elements picked in the preview: Copilot gets what
+   * the user typed, each element's details and likely source, and a picture of
+   * each, and the transcript shows them as chips. The pictures, Fabric data and
+   * files waiting in the composer once the picks are ready go with it: a clip
+   * can land while they're being prepared, and one that lands later stays.
+   */
+  async function sendPicks(note: string): Promise<void> {
+    if (pickBuildRef.current) return
+    const turn = await composePicks(note)
     if (!turn) return
-    // Keep anything typed while the changes were being captured.
+    // Keep anything typed while the picks were being composed.
     if (inputRef.current.trim() === note) setInput('')
-    onAttachmentsConsumed?.()
-    onDesignSent?.(turn)
-    await dispatch(turn.display, turn.prompt, [...turn.shots, ...shots], undefined, undefined, {
-      design: turn.summary,
-      storedPrompt: turn.storedPrompt
-    })
+    const shots = waiting.current.attachments ?? []
+    const sources = pendingData(project.id)
+    const files = waiting.current.fileChips
+    if (sources.length > 0) setDataChips([])
+    if (files.length > 0) {
+      const sent = new Set(files.map((f) => f.path))
+      changeFileChips((all) => all.filter((f) => !sent.has(f.path)))
+    }
+    const wrap = (prompt: string): string =>
+      filesTurnPrompt(
+        sources.length > 0 ? dataTurnPrompt(prompt, sources) : prompt,
+        files,
+        project.path
+      )
+    onAttachmentsConsumed?.(shots.map((s) => s.path))
+    onPicksSent?.(turn)
+    await dispatch(
+      turn.display,
+      wrap(turn.prompt),
+      [...turn.shots, ...shots],
+      undefined,
+      undefined,
+      {
+        picks: turn.picks,
+        data: sources.length > 0 ? sources.map(toDataRef) : undefined,
+        files: files.length > 0 ? files : undefined,
+        storedPrompt: wrap(turn.storedPrompt)
+      }
+    )
   }
 
   /**
@@ -876,16 +959,20 @@ export default function ChatPanel({
    * shows it inline in the live assistant feed, then asks the backend to deliver
    * it immediately. If the turn happened to finish first (`steered: false`), the
    * optimistic bubble is rolled back and the message is sent as a fresh turn.
-   * Copilot gets a reference to each of `files` too.
+   * Copilot gets a reference to each of `files` too, and `picked` elements with
+   * their pictures.
    */
   async function steer(
     text: string,
     shots: PendingShot[],
-    files: ChatFileRef[] = []
+    files: ChatFileRef[] = [],
+    picked: PickTurn | null = null
   ): Promise<void> {
-    const prompt = filesTurnPrompt(text, files, project.path)
+    const prompt = filesTurnPrompt(picked ? picked.prompt : text, files, project.path)
+    const sent = picked ? [...picked.shots, ...shots] : shots
+    if (picked) onPicksSent?.(picked)
     const liveTurnId = [...messages].reverse().find((m) => m.pending && m.turnId)?.turnId
-    const thumbs = shots.length ? shots.map((s) => s.thumb) : undefined
+    const thumbs = sent.length ? sent.map((s) => s.thumb) : undefined
     if (liveTurnId) {
       onChange((prev) =>
         prev.map((m) =>
@@ -900,7 +987,7 @@ export default function ChatPanel({
       const res = await window.api.chat.steer(
         project.id,
         prompt,
-        shots.map((s) => s.path)
+        sent.map((s) => s.path)
       )
       steered = !!res?.steered
     } catch (err) {
@@ -917,10 +1004,18 @@ export default function ChatPanel({
       await dispatch(
         text,
         prompt,
-        shots,
+        sent,
         undefined,
         undefined,
-        files.length > 0 ? { files, storedPrompt: prompt } : undefined
+        picked
+          ? {
+              picks: picked.picks,
+              files: files.length > 0 ? files : undefined,
+              storedPrompt: filesTurnPrompt(picked.storedPrompt, files, project.path)
+            }
+          : files.length > 0
+            ? { files, storedPrompt: prompt }
+            : undefined
       )
     }
   }
@@ -962,7 +1057,7 @@ export default function ChatPanel({
   }
 
   /** Append a fresh turn and stream its result. Shared by send + retry. `extra`
-   *  carries a Design or Advisor turn's transcript card and the prompt reruns re-send. */
+   *  carries the chips or card a message shows and the prompt reruns re-send. */
   async function dispatch(
     displayText: string,
     prompt: string,
@@ -984,7 +1079,7 @@ export default function ChatPanel({
       createdAt: now,
       attachments: shots.length || undefined,
       attachmentThumbs: shots.length ? shots.map((s) => s.thumb) : undefined,
-      design: extra?.design,
+      picks: extra?.picks,
       advisor: extra?.advisor,
       data: extra?.data,
       files: extra?.files,
@@ -1547,6 +1642,12 @@ export default function ChatPanel({
         return
       }
     }
+    // Escape here finishes picking too: after a pick, the keyboard is here.
+    if (e.key === 'Escape' && pickOn && onPickExit) {
+      e.preventDefault()
+      onPickExit()
+      return
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       void send()
@@ -1563,9 +1664,6 @@ export default function ChatPanel({
     handledOutbound.current = outbound.id
     if (outbound.connectData) {
       setConnect({})
-    } else if (outbound.design) {
-      // The preview toolbar's Send: the same as pressing Send here.
-      if (!sending) void send()
     } else if (sending || outbound.stage) {
       setInput(outbound.prompt)
       taRef.current?.focus()
@@ -1592,8 +1690,8 @@ export default function ChatPanel({
     () =>
       messages.map((m, i) => {
         const prevUser = m.role === 'assistant' && i > 0 ? messages[i - 1] : undefined
-        // A Design message re-sends its stored prompt; plain screenshot-only
-        // messages can't be re-run (their images are gone).
+        // A message with a stored prompt (picked elements, a hand-off) re-sends it;
+        // plain screenshot-only messages can't be re-run (their images are gone).
         const rerunnable =
           !sending &&
           prevUser?.role === 'user' &&
@@ -1789,14 +1887,14 @@ export default function ChatPanel({
               ))}
             </div>
           )}
-          <DesignTray
-            items={designItems}
-            sending={designSending}
-            waiting={sending}
-            onRemove={onDesignRemove}
-            onFocus={onDesignFocus}
-            onClear={onDesignClear}
-          />
+          {onPickRemove && (
+            <PickTray
+              picks={picks}
+              onRemove={onPickRemove}
+              onFocus={onPickFocus}
+              onOpen={onPickShot ? (id) => setMarking({ pick: id }) : undefined}
+            />
+          )}
           <DataTray
             sources={dataChips}
             onOpen={() => setConnect({})}
@@ -1809,8 +1907,20 @@ export default function ChatPanel({
           {((attachments?.length ?? 0) > 0 || attaching) && (
             <div className="chat-attachments">
               {(attachments ?? []).map((a) => (
-                <div key={a.path} className="chat-attachment" title="Screenshot to send">
-                  <img src={a.thumb} alt="Screenshot to send" />
+                <div key={a.path} className="chat-attachment">
+                  <button
+                    type="button"
+                    className="chat-attachment-open"
+                    onClick={() => setMarking({ path: a.path })}
+                    title={onReplaceAttachment ? 'Show it larger and draw on it' : 'Show it larger'}
+                  >
+                    <img src={a.thumb} alt="Screenshot to send" draggable={false} />
+                    {onReplaceAttachment && (
+                      <span className="chat-attachment-draw" aria-hidden="true">
+                        <PenIcon />
+                      </span>
+                    )}
+                  </button>
                   <button
                     type="button"
                     className="chat-attachment-x"
@@ -1852,8 +1962,10 @@ export default function ChatPanel({
               ref={taRef}
               className="composer-input"
               placeholder={
-                designItems.length > 0
-                  ? 'Add a note for these changes (optional) — or just press Enter to send them'
+                picks.length > 0
+                  ? picks.length === 1
+                    ? `Say how to change ${picks[0].target.label}, or press Enter to touch it up`
+                    : `Say how to change these ${picks.length}, or press Enter to touch them up`
                   : dataChips.length > 0
                     ? 'Say what to build with this data, or just press Enter to connect it'
                     : fileChips.length > 0
@@ -1939,19 +2051,19 @@ export default function ChatPanel({
                     onClick={send}
                     disabled={
                       submitBlocked ||
-                      designSending ||
+                      pickSending ||
                       imagesBlocked ||
                       (!input.trim() &&
                         (attachments?.length ?? 0) === 0 &&
-                        designItems.length === 0 &&
+                        picks.length === 0 &&
                         dataChips.length === 0 &&
                         fileChips.length === 0)
                     }
                     title={
                       submitBlocked || imagesBlocked
                         ? undefined
-                        : designItems.length > 0
-                          ? `Send ${designItems.length} design change${designItems.length === 1 ? '' : 's'} (Enter)`
+                        : picks.length > 0
+                          ? `Send, with ${picks.length === 1 ? 'the picked element' : `the ${picks.length} picked elements`} (Enter)`
                           : dataChips.length > 0
                             ? `Send, and connect ${dataChips.length === 1 ? 'this data' : `these ${dataChips.length} data sources`} (Enter)`
                             : 'Send (Enter)'
@@ -1967,6 +2079,21 @@ export default function ChatPanel({
         </div>
       </div>
 
+      {marked &&
+        (marking && ('path' in marking ? onReplaceAttachment : onPickShot) ? (
+          <ImageMarkup
+            src={marked.shot.thumb}
+            loadFull={() => window.api.screenshot.read(marked.shot.path)}
+            label={marked.label}
+            onCancel={() => setMarking(null)}
+            onDone={(drawn) => {
+              setMarking(null)
+              if (drawn && marking) void keepDrawing(marking, drawn)
+            }}
+          />
+        ) : (
+          <ImageViewer images={[marked.shot.thumb]} onClose={() => setMarking(null)} />
+        ))}
       {connect && (
         <ConnectDataModal
           project={project}

@@ -5592,52 +5592,6 @@ code {
   background: var(--bg);
 }
 
-/* Design mode ("visual chat") bar under the preview toolbar: status, preview
-   width, Theme / Polish, and Send / Done. */
-.design-bar {
-  container-type: inline-size;
-  container-name: designbar;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px 12px;
-  padding: 5px 12px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
-}
-.design-bar-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.design-bar-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.design-bar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-left: auto;
-}
-@container designbar (max-width: 520px) {
-  .design-bar .seg-btn-label {
-    display: none;
-  }
-}
 /* A device-width preview (Tablet / Phone) sits centered in the stage. */
 .preview-webview-host.preview-webview-host--device {
   flex: 0 0 auto;

@@ -1,4 +1,4 @@
-import type { DesignCaptureLayout, DesignRect } from '@shared/design'
+import type { PickCaptureLayout, PickRect } from '@shared/pick'
 
 /** A screenshot staged for a chat message (temp PNG path + thumbnail). */
 export interface StagedShot {
@@ -20,8 +20,8 @@ export interface CropBox {
  * device pixel ratio. A little context (`pad` CSS px) is kept around the element.
  */
 export function cropBox(
-  rect: DesignRect,
-  layout: DesignCaptureLayout,
+  rect: PickRect,
+  layout: PickCaptureLayout,
   imageWidth: number,
   imageHeight: number,
   pad = 8
@@ -58,23 +58,13 @@ function draw(img: HTMLImageElement, box: CropBox, maxWidth: number): string {
   return canvas.toDataURL('image/png')
 }
 
-/** Downscale a PNG `data:` URL to a small thumbnail for a chat chip. */
-export async function thumbnail(dataUrl: string, maxWidth = 176): Promise<string> {
-  try {
-    const img = await loadImage(dataUrl)
-    return draw(img, { sx: 0, sy: 0, sw: img.naturalWidth || maxWidth, sh: img.naturalHeight || maxWidth }, maxWidth)
-  } catch {
-    return dataUrl
-  }
-}
-
 /**
  * Cut one crop per item out of a captured preview PNG. Returns crop data URLs
  * keyed by item id (items without a usable rect are skipped).
  */
 export async function cropItems(
   dataUrl: string,
-  layout: DesignCaptureLayout,
+  layout: PickCaptureLayout,
   ids: string[],
   maxWidth = 900,
   pad = 8

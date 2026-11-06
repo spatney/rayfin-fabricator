@@ -1,4 +1,4 @@
-//! Source hints for Design mode: find the lines most likely to render a picked
+//! Source hints for Touch Up: find the lines most likely to render a picked
 //! element, so Copilot starts at the right file instead of searching for it.
 //!
 //! Heuristic and dependency-free. The deployed DOM keeps Tailwind class names

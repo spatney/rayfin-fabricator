@@ -176,7 +176,7 @@ pub async fn gallery_describe(
     .collect();
   let prompt = describe_prompt(&project, &requests);
   let reply =
-    crate::commands::design::run_transient(state.inner(), &project.path, None, None, prompt, &[], None).await;
+    crate::commands::transient::run_transient(state.inner(), &project.path, None, None, prompt, &[], None).await;
   let description = match reply.map(|reply| description_line(&reply)) {
     Ok(Some(line)) => line,
     Ok(None) => return Ok(failed("Copilot didn't write a description. Try again.")),

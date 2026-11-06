@@ -71,13 +71,6 @@ pub fn cleanup(paths: &[String]) {
   }
 }
 
-/// The canonical path of `path` when it is one of Fabricator's own temp
-/// captures (a regular file directly inside the shots dir), else `None`.
-pub fn owned_capture_path(path: &str) -> Option<PathBuf> {
-  let shots = std::fs::canonicalize(crate::services::paths::shots_dir()).ok()?;
-  owned_capture(&shots, &PathBuf::from(path))
-}
-
 fn owned_capture(shots: &std::path::Path, path: &std::path::Path) -> Option<PathBuf> {
   let canonical = std::fs::canonicalize(path).ok()?;
   // Lexical starts_with allowed shots/../... to delete persistent assets.

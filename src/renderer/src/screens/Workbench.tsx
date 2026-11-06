@@ -133,13 +133,11 @@ import {
 } from '../components/AppBar'
 import { DeploymentQueue } from '../deploymentQueue'
 import { refusedAfterPublish, workspaceUses } from '../fabric'
-import { useDesignSession, type DesignSurface } from '../design/useDesignSession'
+import { useTouchUp, type PickSurface } from '../pick/useTouchUp'
 import { readStoredSelection, selectionArgs, writeStoredSelection, type ModelSelection } from '../modelSelection'
 import { toProjectName } from '../projectName'
 import { ThumbnailCapture } from '../thumbnails'
 
-/** Where the Design bar's model is kept. */
-const DESIGN_MODEL_KEY = 'fabricator.design.model'
 /** Help's offered steps that open a browser or a folder rather than a place in the app. */
 const HELP_ACTIONS_ELSEWHERE = new Set<HelpAction['id']>([
   'open-docs',
@@ -192,7 +190,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
       createdAt,
       plan,
       questions,
-      design,
+      picks,
       advisor,
       data,
       files,
@@ -223,7 +221,7 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
           ? questions?.map((q) => (q.state === 'pending' ? { ...q, state: 'interrupted' } : q))
           : questions,
         interrupted: cutOff ? true : undefined,
-        design,
+        picks,
         advisor,
         data,
         files,
@@ -246,15 +244,9 @@ function lastDeployFailed(project: StudioProject, deploy: DeployUiState | undefi
   return deploy?.result ? !deploy.result.ok : project.lastDeploy?.status === 'error'
 }
 
-/**
- * What a chat turn asked for, to name the version it saves: the user's words,
- * or the Design changes it carried when they came without a note.
- */
+/** What a chat turn asked for, to name the version it saves: the user's words. */
 function turnRequest(message: UIChatMessage | undefined): string {
-  const text = message?.text.trim() ?? ''
-  if (text || !message?.design) return text
-  const n = message.design.items.length
-  return `Apply ${n} design change${n === 1 ? '' : 's'}`
+  return message?.text.trim() ?? ''
 }
 
 /**
@@ -648,8 +640,8 @@ export default function Workbench({
   /** Goals (an experiment) for the open app; team apps don't have them. */
   const goalsOn = Boolean(settings?.experiments?.goals && active && !active.team)
   const goals = useGoals(active, { enabled: goalsOn, refreshKey: gitRefresh })
-  /** The preview surface Design can run on, reported by the PreviewPane. */
-  const [designSurface, setDesignSurface] = useState<DesignSurface | null>(null)
+  /** The preview surface Touch Up can run on, reported by the PreviewPane. */
+  const [pickSurface, setPickSurface] = useState<PickSurface | null>(null)
   /** Accounts opens at this section (Model providers, from a model picker). */
   const [accountsAt, setAccountsAt] = useState<'providers' | null>(null)
   const openModelProviders = useCallback((): void => {
@@ -659,21 +651,6 @@ export default function Workbench({
   useEffect(() => {
     if (!showAccounts) setAccountsAt(null)
   }, [showAccounts])
-  /** The Design bar's model, kept on this computer. Auto lets Design pick a fast model. */
-  const [designChoice, setDesignChoiceState] = useState<ModelSelection>(() =>
-    readStoredSelection(DESIGN_MODEL_KEY)
-  )
-  const setDesignChoice = useCallback((next: ModelSelection): void => {
-    setDesignChoiceState(next)
-    writeStoredSelection(DESIGN_MODEL_KEY, next)
-  }, [])
-  /** Design mode ("visual chat") for the active project. The queue is shared by
-   *  the preview (where changes are made) and the chat composer (where they're sent). */
-  const design = useDesignSession(
-    active?.id ?? null,
-    viewMode === 'build' ? designSurface : null,
-    designChoice
-  )
 
   const onDevServerError = useCallback((reason: unknown): void => {
     toast.error(authErrorMessage(reason, 'The local preview could not be updated.'), {
@@ -767,14 +744,36 @@ export default function Workbench({
   const addShot = useCallback((key: string, shot: PendingShot): void => {
     setShots((all) => ({ ...all, [key]: [...(all[key] ?? []), shot] }))
   }, [])
+  const shotsRef = useRef(shots)
+  shotsRef.current = shots
+  /** A staged picture was drawn on: `shot` takes the place of the one at `path`. */
+  const replaceShot = useCallback((key: string, path: string, shot: PendingShot): void => {
+    if (!(shotsRef.current[key] ?? []).some((s) => s.path === path)) {
+      // It went out with a message while the drawing was being saved.
+      void window.api.screenshot.cleanup([shot.path])
+      return
+    }
+    setShots((all) => ({
+      ...all,
+      [key]: (all[key] ?? []).map((s) => (s.path === path ? shot : s))
+    }))
+    void window.api.screenshot.cleanup([path])
+  }, [])
+  /** Touch Up for the active project: elements picked in the preview wait in
+   *  the chat composer, and regions clipped there join the next message. */
+  const touchUp = useTouchUp(active?.id ?? null, viewMode === 'build' ? pickSurface : null, addShot)
 
   const removeShot = useCallback((key: string, path: string): void => {
     setShots((all) => ({ ...all, [key]: (all[key] ?? []).filter((s) => s.path !== path) }))
     void window.api.screenshot.cleanup([path])
   }, [])
 
-  const clearShots = useCallback((key: string): void => {
-    setShots((all) => ({ ...all, [key]: [] }))
+  /** Staged pictures went out with a message: those at `paths`, or all of them. */
+  const clearShots = useCallback((key: string, paths?: readonly string[]): void => {
+    setShots((all) => ({
+      ...all,
+      [key]: paths ? (all[key] ?? []).filter((s) => !paths.includes(s.path)) : []
+    }))
   }, [])
 
   const setDraftFor = useCallback((key: string, value: string): void => {
@@ -3255,7 +3254,8 @@ export default function Workbench({
                             attachments={shots[active.id] ?? []}
                             onAddAttachment={(shot) => addShot(active.id, shot)}
                             onRemoveAttachment={(path) => removeShot(active.id, path)}
-                            onAttachmentsConsumed={() => clearShots(active.id)}
+                            onReplaceAttachment={(path, shot) => replaceShot(active.id, path, shot)}
+                            onAttachmentsConsumed={(paths) => clearShots(active.id, paths)}
                             onClearHistory={() => void window.api.chat.saveHistory(active.id, [])}
                             onOptionsChanged={() => void refreshProjects()}
                             onManageKeys={openModelProviders}
@@ -3278,13 +3278,14 @@ export default function Workbench({
                             onOpenMention={openMention}
                             draft={drafts[active.id] ?? ''}
                             onDraftChange={(value) => setDraftFor(active.id, value)}
-                            designItems={design.items}
-                            designSending={design.sending}
-                            onDesignRemove={design.removeItem}
-                            onDesignFocus={design.focusItem}
-                            onDesignClear={design.clear}
-                            buildDesignTurn={design.buildTurn}
-                            onDesignSent={design.finishSend}
+                            picks={touchUp.picks}
+                            pickOn={touchUp.on}
+                            onPickRemove={touchUp.remove}
+                            onPickFocus={touchUp.focus}
+                            onPickExit={touchUp.stop}
+                            buildPickTurn={touchUp.buildTurn}
+                            onPicksSent={touchUp.finishSend}
+                            onPickShot={touchUp.setShot}
                             banner={
                               migration.state ? (
                                 <MigrationCard
@@ -3369,32 +3370,8 @@ export default function Workbench({
                               ? thumbnailCapture.left()
                               : thumbnailCapture.appLoaded(active.id, active.thumbnailAt)
                           }
-                          design={design}
-                          designModel={{
-                            value: designChoice,
-                            onChange: setDesignChoice,
-                            onManageKeys: openModelProviders
-                          }}
-                          designSendBlocked={
-                            activeChatBusy
-                              ? 'Copilot is working — send when this turn finishes'
-                              : deploys[active.id]?.running
-                                ? 'Publishing — send when it finishes'
-                                : null
-                          }
-                          onDesignSend={() => {
-                            // Show the chat so the new turn is visible, then send
-                            // through the composer (its text becomes the note).
-                            setFocusPane((f) => (f === 'preview' ? null : f))
-                            setChatOutbound({
-                              id: `design-${Date.now()}`,
-                              projectId: active.id,
-                              display: '',
-                              prompt: '',
-                              design: true
-                            })
-                          }}
-                          onDesignSurface={setDesignSurface}
+                          touchUp={touchUp}
+                          onPickSurface={setPickSurface}
                           onLoadingChange={setPreviewLoading}
                           onSettle={() => setPreviewSettledId(active.id)}
                         />
@@ -3596,7 +3573,7 @@ export default function Workbench({
               applyUiScale(uiScale)
               onSettingsChange({ uiScale })
             }}
-            title="Interface zoom — scales the whole UI (and the design tools)"
+            title="Interface zoom — scales the whole UI (and Touch Up in the preview)"
             aria-label="Interface zoom"
           >
             {UI_SCALES.map((s) => (

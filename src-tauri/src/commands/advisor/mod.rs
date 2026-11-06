@@ -221,7 +221,7 @@ impl PermissionHandler for ReadOnlyPolicy {
 
 /// Session options that sandbox a transient session to reading `root` (and the
 /// rayfin.ai docs): writes, shell, secrets and sandbox bypasses are denied.
-/// Shared with Design mode's model-backed helpers.
+/// Shared with the one-shot calls in [`crate::commands::transient`].
 pub(crate) fn read_only_options(root: &str) -> SessionOptions {
   sandboxed_options(root, ADVISOR_SANDBOX)
 }

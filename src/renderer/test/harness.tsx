@@ -82,13 +82,12 @@ function makeApi(calls: PreviewCall[], getCaptureResult: () => string) {
         if (navCb === cb) navCb = null
       }
     }),
-    design: {
-      setEnabled: vi.fn(rec('design.setEnabled')),
+    pick: {
+      set: vi.fn(rec('pick.set')),
       poll: vi.fn((): Promise<unknown> => Promise.resolve(null)),
-      snapshot: vi.fn((): Promise<unknown> => Promise.resolve(null)),
-      command: vi.fn(rec('design.command')),
-      setTheme: vi.fn(rec('design.setTheme'))
-    }
+      command: vi.fn(rec('pick.command'))
+    },
+    releaseFocus: vi.fn(rec('releaseFocus'))
   }
 
   const api = {
@@ -98,10 +97,7 @@ function makeApi(calls: PreviewCall[], getCaptureResult: () => string) {
       save: vi.fn(() => Promise.resolve('C:/tmp/shot.png')),
       cleanup: vi.fn(() => Promise.resolve(undefined))
     },
-    design: {
-      variations: vi.fn(() => Promise.resolve([])),
-      onVariation: vi.fn(() => () => {}),
-      polish: vi.fn(() => Promise.resolve([])),
+    pick: {
       locate: vi.fn(() => Promise.resolve({ targets: [] }))
     },
     projects: { setPreviewMode: vi.fn(() => Promise.resolve(undefined)) },
