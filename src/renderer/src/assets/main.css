@@ -12209,7 +12209,7 @@ select.ws-input:disabled {
 .create-shell {
   width: 100%;
   max-width: 760px;
-  padding: 36px 28px 52px;
+  padding: 36px 28px;
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -12345,13 +12345,31 @@ select.ws-input:disabled {
   border-color: var(--accent);
 }
 
+/* The actions stay in view however long the form gets, such as with a long
+   list of examples: pinned to the bottom of the screen while it scrolls, with
+   what's under them fading out above. */
 .create-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 4px;
-  padding-top: 18px;
+  padding: 18px 0 16px;
   border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.create-foot::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 1px);
+  height: 18px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
 }
 
 /* Create progress — a phased, always-in-motion status for the slow scaffold +
@@ -13030,6 +13048,7 @@ select.ws-input:disabled {
   flex: none;
   margin-top: 2px;
   padding-top: 14px;
+  padding-bottom: 0;
 }
 
 @media (max-width: 680px) {
