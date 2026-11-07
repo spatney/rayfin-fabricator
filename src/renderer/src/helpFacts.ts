@@ -152,7 +152,7 @@ export function accountFacts(auth: AuthStatus | null): string[] {
   return facts
 }
 
-/** What the preview shows of the open personal app (see {@link workbenchFacts}). */
+/** What the preview shows of the open app (see {@link workbenchFacts}). */
 export interface LocalPreviewFacts {
   /**
    * The app's local backend, as the preview shows it; `null` while its status
@@ -162,25 +162,28 @@ export interface LocalPreviewFacts {
   /** Which copy of a published app the preview shows: this computer's, or the published one. */
   view?: 'local' | 'published'
   /**
-   * The preview uses the published app's backend because the local backend
-   * can't run the app, and says why in these words.
+   * The preview uses a backend in Fabric because the local backend can't run
+   * the app, and says why in these words.
    */
   fallbackReason?: string | null
 }
 
 /**
- * The open personal app on this computer, as the preview tells it: which copy
- * it shows, whether the app runs and, when it doesn't, what the preview says
- * about it. The local backend's details (its output, the exact problem) come
- * to Help from Fabricator itself.
+ * The open app on this computer, as the preview tells it: which copy it shows,
+ * whether the app runs and, when it doesn't, what the preview says about it.
+ * The local backend's details (its output, the exact problem) come to Help
+ * from Fabricator itself.
  */
 function localFacts(active: StudioProject, options: LocalPreviewFacts): string[] {
   const facts: string[] = []
   const name = `"${active.name}"`
 
   if (options.fallbackReason) {
+    const backend = active.team
+      ? "the team's deployment of it in Fabric"
+      : "its published app's backend"
     facts.push(
-      `The preview of ${name} uses its published app's backend, not this computer's, and says: "${options.fallbackReason}"`
+      `The preview of ${name} uses ${backend}, not this computer's, and says: "${options.fallbackReason}"`
     )
     return facts
   }
@@ -277,7 +280,7 @@ export function workbenchFacts(
     )
   } else if (options.team) {
     facts.push(
-      `No publish of "${active.name}" is recorded on this computer; the team's pipeline publishes it.`
+      `"${active.name}" hasn't been published yet. It runs on this computer; the team's pipeline publishes it when the user publishes.`
     )
   } else {
     facts.push(
@@ -293,8 +296,8 @@ export function workbenchFacts(
       `The most recent publish of "${active.name}" failed, and the notice above the preview says so. No publish has run since.`
     )
   }
-  // Only personal apps have a local backend.
-  if (!options.team) facts.push(...localFacts(active, options))
+  // Every app has a local backend, a team app too.
+  facts.push(...localFacts(active, options))
   if (options.previewUrl) facts.push(`A local preview of "${active.name}" is running.`)
 
   return facts

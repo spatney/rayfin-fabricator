@@ -14,6 +14,8 @@ Fabricator asks GitHub to protect `main`. On GitHub Free private repositories, G
 
 In that case, Fabricator still follows the publish flow itself: each person works on a branch, opens a pull request, checks the preview, and publishes by merging. However, a member with write access to the repository could push to `main` directly outside Fabricator. A paid GitHub plan lets GitHub enforce the flow and required reviews.
 
+GitHub Free also has no draft pull requests in private repositories. There, Fabricator opens your pull request ready for review, so the pipeline deploys your preview after each save, not only when you publish.
+
 ## Team workspaces use github.com only
 
 The team workspace GitHub code forces `gh` API calls and git credential use to `github.com`. GitHub Enterprise Server is not supported for team workspaces. GitHub Enterprise Cloud with data residency hosts are not used by the team workspace repository operations.
@@ -26,13 +28,13 @@ The team pipeline deploys by item name with `rayfin up --item-name`. Apps using 
 
 Turning off **Settings → Experiments → Team workspaces** hides team workspaces and team apps in Fabricator. It does not delete repositories, Fabric workspaces, deploy identities, previews, published apps, or local files.
 
-## Previews are deployed by GitHub Actions
+## Only the pipeline deploys team apps
 
-Team apps do not deploy from your computer. Your local preview is temporary while Copilot works and while the pipeline catches up. The deployed preview appears only after the GitHub Actions workflow finishes.
+A team app runs on your computer while you work, and only the GitHub Actions pipeline deploys it to Fabric: your preview when you publish, and the published app when your changes are merged. Fabricator never deploys a team app from your computer, and your local data stays on it.
 
-## Fabricator can't change a team app's secrets yet
+## Fabricator can't change the secrets of a team app's deployments yet
 
-For a team app, the **Secrets** tab lists the secrets of the published app and of your preview, but it can't add, replace or delete them, because the team pipeline, not your computer, deploys team apps. Change them in the Fabric portal: select **Open in Fabric** next to each deployment. See [Secrets in a team app](/docs/build/secrets#secrets-in-a-team-app).
+For a team app, the **Secrets** tab lets you add secrets and set their values on this computer, and it lists the secrets of the published app and of your preview, but it can't add, replace or delete those, because the team pipeline, not your computer, deploys team apps. Change them in the Fabric portal: select **Open in Fabric** next to each deployment. See [Secrets in a team app](/docs/build/secrets#secrets-in-a-team-app).
 
 ## One repository holds all apps in the workspace
 

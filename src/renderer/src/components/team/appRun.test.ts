@@ -17,7 +17,6 @@ function status(over: Partial<TeamSessionStatus> = {}): TeamSessionStatus {
     behind: 0,
     conflicted: false,
     requireReview: false,
-    view: 'preview',
     ...over
   }
 }

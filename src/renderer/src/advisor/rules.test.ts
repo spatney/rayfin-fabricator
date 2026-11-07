@@ -199,7 +199,7 @@ describe('access and policy rules', () => {
     expect((await check(files)).finding('policy/anonymous-grant')!.detail).toBe(
       '`Todo` allows anonymous reads. They work in the local preview, but publishing fails unless your tenant admin has turned on anonymous data access for Fabric apps.'
     )
-    // A team app has no local preview.
+    // An app the local backend doesn't run has no local preview.
     expect((await check(files, { localSdkRange: null })).finding('policy/anonymous-grant')!.detail).toBe(
       '`Todo` allows anonymous reads, which Fabric refuses unless your tenant admin has turned on anonymous data access for Fabric apps.'
     )
@@ -588,14 +588,14 @@ describe('config rules', () => {
 
 describe('platform rules', () => {
   it('grades outdated versions by how far behind they are', async () => {
-    // A team app, which the local backend doesn't run: every newer release counts.
-    const team = { localSdkRange: null }
-    const minor = await check({}, { ...team, versions: versionInfo('1.33.2', '1.35.1') })
+    // An app the local backend doesn't run: every newer release counts.
+    const notLocal = { localSdkRange: null }
+    const minor = await check({}, { ...notLocal, versions: versionInfo('1.33.2', '1.35.1') })
     expect(minor.finding('platform/cli-outdated')!.severity).toBe('medium')
     expect(minor.finding('platform/sdk-outdated')!.severity).toBe('medium')
-    const major = await check({}, { ...team, versions: versionInfo('1.35.1', '2.0.0') })
+    const major = await check({}, { ...notLocal, versions: versionInfo('1.35.1', '2.0.0') })
     expect(major.finding('platform/cli-outdated')!.severity).toBe('high')
-    const patch = await check({}, { ...team, versions: versionInfo('1.35.0', '1.35.1') })
+    const patch = await check({}, { ...notLocal, versions: versionInfo('1.35.0', '1.35.1') })
     expect(patch.finding('platform/cli-outdated')!.severity).toBe('low')
     const offline = await check({}, { versions: null })
     expect(offline.status('platform/cli-outdated')).toBe('skipped')
@@ -660,7 +660,7 @@ describe('platform rules', () => {
       'rayfin/functions/package.json'
     )
 
-    // Team apps don't run on the local backend.
+    // Not for an app the local backend doesn't run.
     expect(
       (await check({ 'package.json': manifest }, { localSdkRange: null })).status(
         'platform/sdk-local-range'
@@ -697,9 +697,9 @@ describe('platform rules', () => {
       "`logs` is a `kusto` connector, which runs only on Fabric, so the local preview can't call it. Until the app is published, those calls fail; after that, the preview uses the published app's backend."
     )
     expect(f.line).toBe(yml.split('\n').indexOf('  - name: logs') + 1)
-    // A team app previews on Fabric, where the connector runs.
-    const team = await check({ 'rayfin/rayfin.yml': yml }, { localSdkRange: null })
-    expect(team.status('platform/connector-fabric-only')).toBe('na')
+    // An app the local backend doesn't run previews on Fabric, where the connector runs.
+    const notLocal = await check({ 'rayfin/rayfin.yml': yml }, { localSdkRange: null })
+    expect(notLocal.status('platform/connector-fabric-only')).toBe('na')
   })
 
   it('flags SDK packages installed at different versions', async () => {

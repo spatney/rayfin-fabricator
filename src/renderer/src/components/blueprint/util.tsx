@@ -59,7 +59,7 @@ export function appWorkspaceId(project: StudioProject): string | undefined {
   const fromPortal = /\/groups\/([0-9a-f-]{36})/i.exec(project.lastDeploy?.portalUrl ?? '')?.[1]
   if (fromPortal) return fromPortal.toLowerCase()
   const team = project.team
-  const ws = team ? (team.view === 'preview' ? team.preview?.workspaceId : team.production?.workspaceId) : project.workspace
+  const ws = team ? team.production?.workspaceId : project.workspace
   return ws && /^[0-9a-f-]{36}$/i.test(ws) ? ws.toLowerCase() : undefined
 }
 

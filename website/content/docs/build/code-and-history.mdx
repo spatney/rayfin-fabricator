@@ -121,7 +121,7 @@ Fabricator switches back to **Build** and places the context in the composer so 
 
 Fabricator saves your current work first if there are uncommitted changes, restores the project to the selected snapshot, and records the restore as a new git commit. What happens next depends on the app:
 
-- A team app's restore is saved, and the team pipeline updates your preview. The dialog says "Fabricator then saves it, and the team pipeline updates your preview."
+- A team app's restore is saved to your working copy on GitHub, and your app on this computer shows the restored version. The dialog says "Fabricator then saves it to your working copy on GitHub. The published app doesn’t change until you publish."
 - Any other app's restore stays on this computer, and your app on this computer shows the restored version. For a published app, the dialog says "Your published app doesn’t change until you publish."
 
 Your current version stays in the timeline, so you can restore it again later. For team apps, restore is scoped to that app's folder; other apps and shared files in the team workspace repository are not restored.

@@ -7,7 +7,7 @@ const DESCRIPTION_PLACEHOLDER = 'TODO: Add description for this secret'
 export type LocalSource = LocalSecret['source']
 
 /**
- * One secret of a personal app: its entry in `rayfin.yml`, its value on this
+ * One of the app's secrets: its entry in `rayfin.yml`, its value on this
  * computer and its value on the published app. Never a value itself.
  */
 export interface SecretEntry {
@@ -33,9 +33,10 @@ function inOrder(a: SecretEntry, b: SecretEntry): number {
 }
 
 /**
- * The secrets of a personal app: the ones `secrets_list` reports (declared, or
- * stored on the published app) and the ones rayfin-local has a value for.
- * `local` is `null` while the local values aren't known.
+ * The app's own secrets: the ones `secrets_list` reports (declared, or stored
+ * on the published app) and the ones rayfin-local has a value for. A team
+ * app's deployments are listed apart. `local` is `null` while the local values
+ * aren't known.
  */
 export function secretEntries(state: SecretsState, local: LocalSecret[] | null): SecretEntry[] {
   const published = state.status === 'ready'

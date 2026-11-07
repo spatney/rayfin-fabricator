@@ -131,9 +131,7 @@ export default function GoalsView({
 
   const hasGoals = Boolean(snap && (snap.purpose.trim() || snap.checks.length))
   const hasChecks = Boolean(snap?.checks.length)
-  const runBlocked = !snap?.checks.length
-    ? 'Add a check first'
-    : (snap.cannotRun ?? (chatBusy ? RUN_WAITS : null))
+  const runBlocked = !snap?.checks.length ? 'Add a check first' : chatBusy ? RUN_WAITS : null
 
   const openEditor = (draftFirst: boolean): void => setEditor({ projectId: project.id, draftFirst })
   const toggle = (id: string): void =>
@@ -203,12 +201,6 @@ export default function GoalsView({
             >
               <Codicon name="close" />
             </button>
-          </div>
-        )}
-        {snap.cannotRun && (
-          <div className="adv-banner adv-banner--warn">
-            <Codicon name="warning" />
-            <span>{snap.cannotRun}</span>
           </div>
         )}
         {hasChecks && (
@@ -458,9 +450,7 @@ function StatusCard({
     sub = ids ? `${done} of ${ids.length} done` : `${done} done so far`
     if (!run.adopted) sub += ` · ${clock(now - run.startedAt)}`
   } else {
-    if (snapshot.cannotRun) {
-      title = 'The checks can’t run for this app'
-    } else if (snapshot.allPassed) {
+    if (snapshot.allPassed) {
       tone = 'ok'
       title =
         snapshot.checks.length === 1

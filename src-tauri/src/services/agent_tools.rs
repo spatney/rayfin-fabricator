@@ -614,12 +614,6 @@ impl ToolHandler for LocalCallTool {
 
 /// The folder of the app whose local backend the tools use, or why there's none.
 fn local_dir(project_id: &str) -> Result<PathBuf, ToolResult> {
-  if store::find_project(project_id).is_some_and(|p| p.team.is_some()) {
-    return Err(failure(
-      "This app is in a team workspace, so its backend runs on Microsoft Fabric, not on this computer: \
-       it has no local backend.",
-    ));
-  }
   local_backend::project_dir(project_id).map_err(|e| failure(e.to_string()))
 }
 

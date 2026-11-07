@@ -1,12 +1,12 @@
 ---
 title: "What are team workspaces?"
-description: "Build Rayfin apps with teammates in a private GitHub repository, with personal previews and a pipeline that publishes to Fabric."
+description: "Build Rayfin apps with teammates in a private GitHub repository: each person runs the app on their own computer, and a pipeline publishes it to Fabric."
 ---
 
 > [!WARNING]
 > Team workspaces are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
 
-Team workspaces let several people build Rayfin apps together without sharing one laptop or one deployment. Fabricator keeps the team's apps in GitHub, gives each person a working copy and a personal preview, and publishes the shared app through a GitHub Actions pipeline.
+Team workspaces let several people build Rayfin apps together without sharing one laptop or one deployment. Fabricator keeps the team's apps in GitHub, gives each person a working copy that runs on their own computer, and publishes the shared app through a GitHub Actions pipeline.
 
 ![Home with the Team workspaces experiment turned on, showing a Build apps together card with Create a team workspace and Join one.](/screenshots/team-home.webp)
 
@@ -14,10 +14,14 @@ Team workspaces let several people build Rayfin apps together without sharing on
 
 A team workspace is one private GitHub repository. Each top-level folder that contains `rayfin/rayfin.yml` is one Rayfin app.
 
+While you work on a team app, it runs on your computer like any app you build, with its own local data. See [Develop on this computer](/docs/build/local-development). After each chat turn, Fabricator saves your changes to your own working branch on GitHub, in a draft pull request, so your teammates can see what you're working on. A draft pull request deploys nothing.
+
 Fabricator also creates two Microsoft Fabric workspaces:
 
 - one workspace for published apps that everyone uses
 - one workspace for everyone's personal previews
+
+When you publish, Fabricator marks your pull request ready for review, and the pipeline deploys your personal preview as a check. Then Fabricator merges your changes, and the pipeline deploys the published app.
 
 The repository pipeline signs in to Microsoft Fabric with Microsoft Entra ID service principals called deploy identities. It uses GitHub OIDC, so Fabricator stores IDs as GitHub Actions variables but stores no client secrets.
 
@@ -25,18 +29,19 @@ Pull requests can only use the preview identity. Pushes to `main` use the deploy
 
 ```mermaid
 flowchart LR
-  You["You"] --> Branch["Your working branch"]
-  Branch --> PullRequest["Pull request into main"]
-  PullRequest --> PreviewWorkflow["Preview workflow"]
+  You["You"] --> Local["Your app on this computer"]
+  Local --> Branch["Your working branch"]
+  Branch --> PullRequest["Draft pull request into main"]
+  PullRequest --> Publish["Publish marks it ready, then merges it"]
+  Publish --> PreviewWorkflow["Preview workflow"]
   PreviewWorkflow --> PreviewWorkspace["Previews Fabric workspace"]
-  PullRequest --> Publish["Publish merges the pull request"]
   Publish --> Main["main branch"]
   Main --> PublishWorkflow["Published workflow"]
   PublishWorkflow --> PublishedWorkspace["Published apps Fabric workspace"]
 
   class You actor
   class Branch,PullRequest,Main store
-  class PreviewWorkflow,Publish,PublishWorkflow service
+  class Local,PreviewWorkflow,Publish,PublishWorkflow service
   class PreviewWorkspace,PublishedWorkspace external
 ```
 
@@ -57,7 +62,7 @@ Turning the experiment off hides team workspaces and team apps in Fabricator. It
   <Card title="Before you start" href="/docs/team/prerequisites">Check GitHub, Azure, Fabric, and Rayfin requirements.</Card>
   <Card title="Create a team workspace" href="/docs/team/create">Set up the repository, Fabric workspaces, identities, and pipeline.</Card>
   <Card title="Invite your team" href="/docs/team/members">Invite teammates and give them Fabric app access.</Card>
-  <Card title="Work on a team app" href="/docs/team/work-on-an-app">Open an app, preview changes, and bring in teammates' work.</Card>
+  <Card title="Work on a team app" href="/docs/team/work-on-an-app">Open an app, build it on this computer, and bring in teammates' work.</Card>
   <Card title="Publish changes" href="/docs/team/publish">Merge your work and deploy the published app.</Card>
   <Card title="Use the workspace overview" href="/docs/team/overview">See apps, previews, published deployments, data, and pipeline activity.</Card>
   <Card title="Move an existing app" href="/docs/team/move-an-app">Copy a local project into a team workspace.</Card>

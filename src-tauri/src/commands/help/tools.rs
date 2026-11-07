@@ -145,7 +145,7 @@ pub struct ToolContext {
   pub team_project: bool,
   /// Where the user is, which decides whether a navigation action is reachable.
   pub surface: Surface,
-  /// The open personal project's local backend output; `None` without one.
+  /// The open project's local backend output; `None` without one.
   pub local_output: Option<LocalOutput>,
 }
 
@@ -440,13 +440,9 @@ impl ToolHandler for LocalOutputTool {
     };
     let ctx = &self.0;
     let Some(read) = ctx.local_output.clone() else {
-      return Ok(fail(if ctx.team_project {
-        "The open app is a team app, and team apps don't run on a local backend: their preview \
-uses a backend the team's pipeline publishes, so there is no local output to read."
-      } else {
-        "No personal app is open, so there is no local backend output to read. It's there once \
-the user opens an app."
-      }));
+      return Ok(fail(
+        "No app is open, so there is no local backend output to read. It's there once the user opens an app.",
+      ));
     };
     let query = params.query();
     let fetch = query.fetch();
@@ -728,11 +724,11 @@ mod tests {
 
   #[tokio::test]
   async fn the_output_tool_says_why_there_is_nothing_to_read() {
-    let (kind, text) = read_output(context(None, true), json!({})).await;
-    assert_eq!(kind, "failure");
-    assert!(text.contains("team apps don't run on a local backend"));
-    let (_, text) = read_output(context(None, false), json!({})).await;
-    assert!(text.contains("No personal app is open"));
+    for team in [true, false] {
+      let (kind, text) = read_output(context(None, team), json!({})).await;
+      assert_eq!(kind, "failure");
+      assert!(text.contains("No app is open"), "{text}");
+    }
   }
 
   #[test]

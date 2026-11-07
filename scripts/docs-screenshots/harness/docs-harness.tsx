@@ -1469,13 +1469,29 @@ const project: StudioProject = {
 const teamStatus: TeamSessionStatus = {
   ok: true,
   branch: 'fabricator/averychen/trips-20261003-225801',
+  // Published and waiting for a teammate's approval: the pull request is ready
+  // for review, so its preview is deployed for the latest save.
+  pr: {
+    number: 42,
+    url: 'https://example.invalid/pull/42',
+    draft: false,
+    state: 'open',
+    title: 'Trips: Add a trip budget',
+    author: 'averychen',
+    headSha: 'a1b2c3d',
+    approvals: 0
+  },
   unpublished: 2,
   dirty: false,
   behind: 1,
   conflicted: false,
   requireReview: true,
-  view: 'preview',
-  preview: { environment: 'preview/trips/averychen', state: 'success', url: 'https://example.invalid/trips' },
+  preview: {
+    environment: 'preview/trips/averychen',
+    state: 'success',
+    url: 'https://example.invalid/trips',
+    sha: 'a1b2c3d'
+  },
   production: { environment: 'production/trips', state: 'success', url: 'https://example.invalid/trips' }
 } as TeamSessionStatus
 
@@ -1926,7 +1942,6 @@ function GoalsShot(): JSX.Element {
       complete: true
     },
     allPassed: false,
-    cannotRun: null,
     running: false
   }
   const goals: GoalsController = {
@@ -2740,7 +2755,6 @@ function Shot({ id }: { id: string | null }): JSX.Element {
               onUpdate={noop}
               onCombine={noop}
               onDiscard={noop}
-              onSetView={noop}
               onViewLogs={noop}
               onRefresh={noop}
             />

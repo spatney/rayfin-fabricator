@@ -12,7 +12,9 @@ import type {
   LocalProblem,
   LocalReady,
   LocalStartOptions,
-  LocalStatus
+  LocalStatus,
+  StudioProject,
+  TeamDeployRecord
 } from '@shared/ipc'
 
 /** A failed `window.api.local` command: an `Error` with its stable `code` and a `hint`. */
@@ -281,6 +283,28 @@ function unsupportedConnectors(status: LocalStatus): string[] {
   return [...names]
 }
 
+/** A team deployment a live preview can connect to (as `local_preview::usable`). */
+function usableDeployment(record: TeamDeployRecord | undefined): boolean {
+  if (!record) return false
+  return (
+    Object.keys(record.publicEnv ?? {}).length > 0 || Boolean(record.itemId && record.workspaceId)
+  )
+}
+
+/**
+ * Whether an app has a backend in Fabric that its preview can use when this
+ * computer can't run the app: its published app or, for a team app, the
+ * team's deployment of it (your preview, or the published app). As the Rust
+ * `agent_skills::has_fabric_backend`.
+ */
+export function hasFabricBackend(project: StudioProject | null | undefined): boolean {
+  if (!project) return false
+  if (project.team) {
+    return usableDeployment(project.team.preview) || usableDeployment(project.team.production)
+  }
+  return Boolean(project.lastDeploy?.url)
+}
+
 /**
  * Why a published app's preview uses its published backend instead of this
  * computer's, as a sentence; `null` when the local backend can run the app.
@@ -288,25 +312,30 @@ function unsupportedConnectors(status: LocalStatus): string[] {
  * connector's `supported`) and with `sdk-unsupported` and
  * `connector-unsupported` warnings. A Rayfin version of a newer line runs here
  * anyway, with {@link localSdkWarning}, unless the app couldn't start with it.
+ * A team app's preview uses the team's deployment of it instead (`team`).
  */
-export function localFallbackReason(status: LocalStatus | null | undefined): string | null {
+export function localFallbackReason(
+  status: LocalStatus | null | undefined,
+  { team = false }: { team?: boolean } = {}
+): string | null {
   if (!status) return null
+  const backend = team ? 'the team’s deployment of it in Fabric' : 'your published app’s backend'
   const sdk = sdkFallback(status)
   if (sdk?.newer) {
     return sdk.version
-      ? `This app uses Rayfin ${sdk.version}, which is newer than the Rayfin versions Fabricator runs on this computer and couldn’t start here, so the preview uses your published app’s backend.`
-      : 'This app’s newer Rayfin version couldn’t start on this computer, so the preview uses your published app’s backend.'
+      ? `This app uses Rayfin ${sdk.version}, which is newer than the Rayfin versions Fabricator runs on this computer and couldn’t start here, so the preview uses ${backend}.`
+      : `This app’s newer Rayfin version couldn’t start on this computer, so the preview uses ${backend}.`
   }
   if (sdk) {
     return sdk.version
-      ? `This app uses Rayfin ${sdk.version}, which Fabricator can’t run on this computer, so the preview uses your published app’s backend.`
-      : 'This app’s Rayfin version can’t run on this computer, so the preview uses your published app’s backend.'
+      ? `This app uses Rayfin ${sdk.version}, which Fabricator can’t run on this computer, so the preview uses ${backend}.`
+      : `This app’s Rayfin version can’t run on this computer, so the preview uses ${backend}.`
   }
   const names = unsupportedConnectors(status)
   if (names.length === 0) return null
   return names.length === 1
-    ? `The ${names[0]} connector runs only on Fabric, so the preview uses your published app’s backend.`
-    : `The ${sentenceList(names)} connectors run only on Fabric, so the preview uses your published app’s backend.`
+    ? `The ${names[0]} connector runs only on Fabric, so the preview uses ${backend}.`
+    : `The ${sentenceList(names)} connectors run only on Fabric, so the preview uses ${backend}.`
 }
 
 /** The code behind {@link localFallbackReason}: `sdk-unsupported` or `connector-unsupported`. */

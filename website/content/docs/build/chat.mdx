@@ -139,7 +139,7 @@ Copilot doesn't start your app or publish it: Fabricator runs your app, and publ
 
 These checks show in the work log as steps such as **Checked the local backend**, "Called the app's data API while signed out", "Called the getBacklog function as you" or **Checked the seed data**. If a change to the data model would delete data stored on this computer, Copilot tells you what it would delete instead of working around it. See [When a data model change would delete local data](/docs/build/local-development#when-a-data-model-change-would-delete-local-data).
 
-For a team app, or a published app that this computer can't run, Copilot checks without running the app: type-checking, the build, lint and the project's offline validators, and for charts, Fabricator's headless chart preview when the app has it. For such a published app, while **Publish after each chat turn** is off, Copilot ends by saying what to try in the preview, and whether it needs a publish first.
+For a published app or a team app that this computer can't run, Copilot checks without running the app: type-checking, the build, lint and the project's offline validators, and for charts, Fabricator's headless chart preview when the app has it. For such an app, while chat turns don't publish it, Copilot ends by saying what to try in the preview, and whether it needs a publish first.
 
 ## See the screens early with the UI builder
 
@@ -170,7 +170,7 @@ After a successful turn, Fabricator saves the chat history and, when the turn ch
 
 Your app on this computer already shows the turn's changes. If the app had stopped on a problem in its code, Fabricator starts it again after the turn, in case Copilot fixed it.
 
-For team apps, Fabricator saves the change to the working branch and the team pipeline deploys the preview. See [Work on an app](/docs/team/work-on-an-app).
+For team apps, the turn never publishes: Fabricator saves the change to your working branch on GitHub, and your preview deploys when you publish. See [Work on a team app](/docs/team/work-on-an-app).
 
 ## If Copilot asks you to sign in again
 

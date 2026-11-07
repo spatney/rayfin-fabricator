@@ -684,8 +684,10 @@ pub async fn remove_worktree(workspace: &TeamWorkspace, folder: &str) -> Result<
 }
 
 /// Files never copied when moving a project into a team workspace: generated
-/// output, dependencies, git data, and secret-bearing Rayfin files.
-const MOVE_SKIP: &[&str] = &["node_modules", ".git", "dist", "dist-ssr", ".vite", "coverage"];
+/// output, dependencies, git data, secret-bearing Rayfin files, and the local
+/// backend's state (its database, signing keys and local secret values), which
+/// the team copy starts afresh.
+const MOVE_SKIP: &[&str] = &["node_modules", ".git", "dist", "dist-ssr", ".vite", "coverage", ".rayfin-local"];
 
 fn skip_on_move(rel: &Path) -> bool {
   let parts: Vec<String> = rel.components().map(|c| c.as_os_str().to_string_lossy().to_string()).collect();
@@ -774,11 +776,22 @@ mod tests {
   }
 
   #[test]
-  fn moving_a_project_leaves_out_dependencies_output_and_secrets() {
-    for skipped in ["node_modules/x/index.js", ".git/HEAD", "dist/index.html", "rayfin/.env", "rayfin/.env.bak", "rayfin/.deployments.json", "rayfin/.temp/a", ".env.local"] {
+  fn moving_a_project_leaves_out_dependencies_output_secrets_and_local_data() {
+    for skipped in [
+      "node_modules/x/index.js",
+      ".git/HEAD",
+      "dist/index.html",
+      "rayfin/.env",
+      "rayfin/.env.bak",
+      "rayfin/.deployments.json",
+      "rayfin/.temp/a",
+      ".env.local",
+      ".rayfin-local/db.sqlite",
+      ".rayfin-local/secrets.json",
+    ] {
       assert!(skip_on_move(Path::new(skipped)), "{skipped}");
     }
-    for kept in ["rayfin/rayfin.yml", "src/App.tsx", "package.json", ".gitignore", "rayfin/data/schema.ts"] {
+    for kept in ["rayfin/rayfin.yml", "src/App.tsx", "package.json", ".gitignore", "rayfin/data/schema.ts", "rayfin/seed/Note.json"] {
       assert!(!skip_on_move(Path::new(kept)), "{kept}");
     }
   }

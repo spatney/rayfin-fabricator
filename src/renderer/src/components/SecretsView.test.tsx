@@ -380,28 +380,32 @@ describe('SecretsView', () => {
     )
   })
 
-  it('shows each deployment of a team app, read-only', async () => {
-    const api = installApi({
-      status: 'team',
-      secrets: [],
-      functionsEnabled: true,
-      environments: [
-        {
-          kind: 'published',
-          deployed: true,
-          portalUrl: 'https://app.fabric.microsoft.com/groups/w/apps/1',
-          secrets: [
-            {
-              name: 'HELLO_WORLD',
-              declared: false,
-              stored: true,
-              updatedAt: '2026-10-05T05:14:53Z'
-            }
-          ]
-        },
-        { kind: 'preview', deployed: false, secrets: [] }
-      ]
-    })
+  it('lists a team app’s values on this computer, and each of its deployments read-only', async () => {
+    const api = installApi(
+      {
+        status: 'team',
+        secrets: [{ name: 'OPENAI_KEY', declared: true, stored: false }],
+        functionsEnabled: true,
+        rayfinVersion: '1.36.2',
+        environments: [
+          {
+            kind: 'published',
+            deployed: true,
+            portalUrl: 'https://app.fabric.microsoft.com/groups/w/apps/1',
+            secrets: [
+              {
+                name: 'HELLO_WORLD',
+                declared: false,
+                stored: true,
+                updatedAt: '2026-10-05T05:14:53Z'
+              }
+            ]
+          },
+          { kind: 'preview', deployed: false, secrets: [] }
+        ]
+      },
+      [value('OPENAI_KEY', 'local')]
+    )
     const onSendToChat = vi.fn()
     await act(async () => {
       render(
@@ -415,15 +419,20 @@ describe('SecretsView', () => {
       )
     })
 
-    const published = await screen.findByRole('region', { name: 'Published app' })
+    // It runs on this computer, so its values here are yours to set.
+    const here = await screen.findByRole('region', { name: 'Secrets' })
+    expect(within(here).getByText('On this computer')).toBeTruthy()
+    expect(row('OPENAI_KEY').textContent).toContain('Local value: Set on this computer')
+    expect(row('OPENAI_KEY').textContent).not.toContain('Published value')
+    expect(api.local.secrets).toHaveBeenCalledWith('p1')
+    expect((screen.getByRole('button', { name: /New secret/ }) as HTMLButtonElement).disabled).toBe(
+      false
+    )
+
+    const published = screen.getByRole('region', { name: 'Published app' })
     expect(within(published).getByText('Not in rayfin.yml')).toBeTruthy()
     const preview = screen.getByRole('region', { name: 'Your preview' })
-    expect(within(preview).getByText(/Not deployed yet/)).toBeTruthy()
-    expect((screen.getByRole('button', { name: /New secret/ }) as HTMLButtonElement).disabled).toBe(
-      true
-    )
-    // A team app doesn't run on this computer.
-    expect(api.local.secrets).not.toHaveBeenCalled()
+    expect(within(preview).getByText(/Your preview deploys when you publish/)).toBeTruthy()
 
     const details = await openDetails('HELLO_WORLD')
     expect(within(details).getByText('Secret · Published app')).toBeTruthy()

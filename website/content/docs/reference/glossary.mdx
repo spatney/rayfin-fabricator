@@ -41,7 +41,7 @@ A read-only Copilot review started from the Advisor with **Run deep review**. It
 
 ## Deploy identity
 
-A Microsoft Entra ID service principal used by a team workspace pipeline to deploy apps to Fabric. Team apps never deploy from a member's computer. See [Team workspaces](/docs/team).
+A Microsoft Entra ID service principal used by a team workspace pipeline to deploy apps to Fabric. Team apps run on each member's computer while they work, but never deploy from it. See [Team workspaces](/docs/team).
 
 ## Deployment
 
@@ -69,11 +69,11 @@ GitHub's `gh` command-line tool. Fabricator uses it for cloning and team workspa
 
 ## Goals
 
-An experiment: what a personal app is for, and the checks it must keep passing, in plain words, in the app's `GOALS.md`. Before you publish, Copilot runs the checks on a fresh copy of the app, calling it as each kind of user, and reports each check as passed, failed or not proven. See [Check your app against its goals](/docs/ship/goals).
+An experiment: what an app is for, and the checks it must keep passing, in plain words, in the app's `GOALS.md`. Before you publish, Copilot runs the checks on a fresh copy of the app, calling it as each kind of user, and reports each check as passed, failed or not proven. See [Check your app against its goals](/docs/ship/goals).
 
 ## Local backend
 
-The backend that runs your app on this computer while you build it: its data, sign-in, functions, connectors and storage, and the app's own dev server. It's [rayfin-local](/docs/reference/glossary#rayfin-local), which comes with Fabricator. Fabricator starts it when you open a personal project; team apps run on Fabric. See [Develop on this computer](/docs/build/local-development) and [How Fabricator works](/docs/reference/how-it-works#the-local-backend).
+The backend that runs your app on this computer while you build it: its data, sign-in, functions, connectors and storage, and the app's own dev server. It's [rayfin-local](/docs/reference/glossary#rayfin-local), which comes with Fabricator. Fabricator starts it when you open a project, team apps included. See [Develop on this computer](/docs/build/local-development) and [How Fabricator works](/docs/reference/how-it-works#the-local-backend).
 
 ## Local data
 
@@ -93,7 +93,7 @@ Microsoft's data and analytics platform where Rayfin apps are published and host
 
 ## Personal preview
 
-A team workspace preview deployed for one member's working branch. See [Work on an app](/docs/team/work-on-an-app).
+A team workspace preview deployed for one member's working branch when they publish, as a check before their changes are merged. Their reviewers can open it too. See [Work on a team app](/docs/team/work-on-an-app#save-your-work).
 
 ## Pipeline
 
@@ -101,7 +101,7 @@ The GitHub workflow in a team workspace repository that deploys previews and pub
 
 ## Preview
 
-The pane that shows your app inside Fabricator: your app running on this computer, or its published copy in Fabric. For a published app that this computer can't run, it shows the app's pages from this computer with the published app's backend, and the published app when those aren't running, such as between chat turns while **Publish after each chat turn** is on. For team apps, it shows the app against the team's preview in Fabric. See [Live preview](/docs/build/preview).
+The pane that shows your app inside Fabricator: your app running on this computer, or its published copy in Fabric. For a published app that this computer can't run, it shows the app's pages from this computer with the published app's backend, and the published app when those aren't running, such as between chat turns while **Publish after each chat turn** is on. A team app that this computer can't run uses the team's deployment of it instead. See [Live preview](/docs/build/preview).
 
 ## Preview as
 

@@ -10,11 +10,12 @@
 //! Fabricator commits just those files when the CLI changes them, so History
 //! records "Add secret: NAME" the way it records skills.
 //!
-//! Every personal app also runs on this computer, where rayfin-local gives the
+//! Every app also runs on this computer, where rayfin-local gives the
 //! functions each declared secret's local value (`commands::local`). An app that
 //! hasn't been published has no published values, but secrets can still be
 //! added: [`secrets_declare`] records a name in `rayfin.yml` with the code the CLI's
-//! `secret set` runs, and its value goes to rayfin-local.
+//! `secret set` runs, and its value goes to rayfin-local. A team app's published
+//! values belong to its pipeline's deployments, which Fabricator only lists.
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -170,23 +171,27 @@ fn supported(version: &str) -> bool {
   parse_core(Some(version)).is_some_and(|v| Some(v) >= parse_core(Some(MIN_RAYFIN)))
 }
 
-/// Why this app's secrets can't be managed from here: `(status, message)`.
+/// Why this app's published secrets can't be changed from here: `(status, message)`.
 fn unavailable(project: &StudioProject, version: Option<&str>) -> Option<(&'static str, String)> {
   if project.team.is_some() {
     return Some((
       "team",
-      "Fabricator can’t change a team app’s secrets yet. Change them in the Fabric portal.".into(),
+      "Fabricator can’t change a team app’s published secrets yet. Change them in the Fabric portal.".into(),
     ));
   }
-  if !version.is_some_and(supported) {
-    return Some((
+  outdated(version)
+}
+
+/// Why the app's Rayfin CLI can't manage secrets, when it's too old.
+fn outdated(version: Option<&str>) -> Option<(&'static str, String)> {
+  (!version.is_some_and(supported)).then(|| {
+    (
       "update-rayfin",
       format!(
         "Secrets need Rayfin {MIN_RAYFIN_LABEL} or newer. Select Rayfin in the status bar and choose Update with Copilot."
       ),
-    ));
-  }
-  None
+    )
+  })
 }
 
 /// A description the CLI can store in `rayfin.yml`: one line, never empty.
@@ -547,11 +552,22 @@ fn from_failure(failure: Failure) -> SecretActionResult {
   }
 }
 
-/// The project's folder, when its secrets can be changed from here.
+/// The project's folder, when its published secrets can be changed from here.
 fn writable(project_id: &str) -> Result<PathBuf, String> {
   let project = store::find_project(project_id).ok_or("Project not found.")?;
   let dir = PathBuf::from(&project.path);
   if let Some((_, message)) = unavailable(&project, installed_version(&dir).as_deref()) {
+    return Err(message);
+  }
+  Ok(dir)
+}
+
+/// The project's folder, when its `rayfin.yml` can declare a secret: any app's,
+/// a team app's included, on a Rayfin CLI that manages secrets.
+fn declarable(project_id: &str) -> Result<PathBuf, String> {
+  let project = store::find_project(project_id).ok_or("Project not found.")?;
+  let dir = PathBuf::from(&project.path);
+  if let Some((_, message)) = outdated(installed_version(&dir).as_deref()) {
     return Err(message);
   }
   Ok(dir)
@@ -682,7 +698,8 @@ pub async fn secrets_delete(app: AppHandle, project_id: String, name: String) ->
 /// Add a secret to `rayfin.yml` (with `description`) without a published app,
 /// and commit it as "Add secret: NAME". Its value goes to this computer's
 /// local backend separately (`local_set_secret`); its published value, once the
-/// app is published, through [`secrets_set`]. A declared name stays as it is.
+/// app is published, through [`secrets_set`], or for a team app, in the Fabric
+/// portal. A declared name stays as it is.
 #[tauri::command]
 pub async fn secrets_declare(
   app: AppHandle,
@@ -694,7 +711,7 @@ pub async fn secrets_declare(
   if let Err(error) = validate_name(&name) {
     return failed(error);
   }
-  let dir = match writable(&project_id) {
+  let dir = match declarable(&project_id) {
     Ok(dir) => dir,
     Err(error) => return failed(error),
   };
@@ -767,6 +784,21 @@ mod tests {
       let config = Config { functions_path: Some(outside.into()), ..Default::default() };
       assert_eq!(tracked_paths(&config), ["rayfin/rayfin.yml"], "{outside}");
     }
+  }
+
+  #[test]
+  fn a_team_app_declares_secrets_but_its_published_values_stay_in_fabric() {
+    let mut project: StudioProject = serde_json::from_value(serde_json::json!({
+      "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z"
+    }))
+    .unwrap();
+    assert_eq!(unavailable(&project, Some("1.36.2")), None);
+    project.team = Some(crate::types::TeamBinding::default());
+    assert_eq!(unavailable(&project, Some("1.36.2")).map(|(status, _)| status), Some("team"));
+    // Declaring a name (for its value on this computer) only needs a Rayfin CLI that can.
+    assert_eq!(outdated(Some("1.36.2")), None);
+    assert_eq!(outdated(Some("1.35.1")).map(|(status, _)| status), Some("update-rayfin"));
+    assert_eq!(outdated(None).map(|(status, _)| status), Some("update-rayfin"));
   }
 
   #[test]

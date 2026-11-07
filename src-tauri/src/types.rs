@@ -1885,9 +1885,8 @@ pub struct TeamBinding {
   pub pr_number: Option<u64>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub pr_url: Option<String>,
-  /// Which deployment the preview shows: "preview" (yours) or "production".
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub view: Option<String>,
+  /// Your personal preview, which the pipeline deploys once your pull request
+  /// is ready for review (draft pull requests don't deploy).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub preview: Option<TeamDeployRecord>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2081,6 +2080,10 @@ pub struct TeamActionResult {
   /// Set when the action stopped on merge conflicts with teammates' changes.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub conflicts: Option<Vec<String>>,
+  /// The app's npm packages changed (teammates' changes came in, or yours went
+  /// away), so the app on this computer needs them installed again.
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub packages_changed: bool,
 }
 
 /// Something an unfinished setup created, which abandoning it deletes.
@@ -2188,8 +2191,6 @@ pub struct TeamSessionStatus {
   pub production: Option<TeamDeployRecord>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub publish: Option<TeamPublishState>,
-  /// "preview" or "production".
-  pub view: String,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub viewer: Option<String>,
 }
@@ -3500,10 +3501,10 @@ pub struct RayfinVersionInfo {
 #[derive(Serialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RayfinLatest {
-  /// The newest stable release on npm (a team app's upgrades go here).
+  /// The newest stable release on npm.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub latest: Option<String>,
-  /// The newest release the bundled local backend runs (a personal app's go here).
+  /// The newest release the bundled local backend runs (every app's upgrades go here).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub latest_supported_locally: Option<String>,
 }
@@ -4095,8 +4096,6 @@ pub struct GoalsSnapshot {
   pub last_run: Option<GoalsRunInfo>,
   /// Every check passed, on the app's code as it is now.
   pub all_passed: bool,
-  /// Why the checks can't run for this app, when they can't.
-  pub cannot_run: Option<String>,
   /// A run is going for this app (set by `goals_load`).
   pub running: bool,
 }

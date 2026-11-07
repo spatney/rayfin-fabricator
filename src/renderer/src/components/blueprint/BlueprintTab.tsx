@@ -276,11 +276,7 @@ export default function BlueprintTab({
     () => describeAppIdentity({ team: project.team ? teamManifest : undefined, fabricUser: owner }),
     [project.team, teamManifest, owner]
   )
-  const workspaceName = project.team
-    ? project.team.view === 'preview'
-      ? teamManifest?.fabric.previews.name
-      : teamManifest?.fabric.production.name
-    : project.workspaceName
+  const workspaceName = project.team ? teamManifest?.fabric.production.name : project.workspaceName
 
   const openEntity = useCallback(
     (entity: string): void => {

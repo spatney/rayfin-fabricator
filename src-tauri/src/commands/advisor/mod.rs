@@ -47,7 +47,7 @@ use crate::services::{paths, store};
 use crate::state::AppState;
 use crate::types::{
   AdvisorEvent, AdvisorFinding, AdvisorLoadResult, AdvisorProjectSnapshot, AdvisorRawReport, AdvisorReport,
-  AdvisorRuleResult, AdvisorRunRequest, AdvisorSnapshot, AdvisorVerdict, ChatToolCall, ChatToolState, StudioProject,
+  AdvisorRuleResult, AdvisorRunRequest, AdvisorSnapshot, AdvisorVerdict, ChatToolCall, ChatToolState,
 };
 use tools::{Emit, ReviewContext, ReviewCore, RuleMeta, SharedLog, SharedVerdicts, VerifyContext};
 
@@ -547,14 +547,7 @@ pub async fn advisor_collect(project_id: String) -> Result<AdvisorProjectSnapsho
   let Some(project) = store::find_project(&project_id) else {
     return Err("Project not found.".into());
   };
-  let local = runs_locally(&project);
-  Ok(collect::collect(&project.path, local).await)
-}
-
-/// Whether the bundled local backend runs the app, so the local-only quick
-/// checks apply to it: personal apps. Team apps run on their pipeline's backend.
-fn runs_locally(project: &StudioProject) -> bool {
-  project.team.is_none()
+  Ok(collect::collect(&project.path).await)
 }
 
 /// Return the saved deep review (with `stale` recomputed) and the
@@ -1120,20 +1113,6 @@ mod tests {
       decide(json!({ "kind": "read", "path": root.join("rayfin").to_string_lossy() })).await,
       PermissionResult::Decision { decision: github_copilot_sdk::PermissionDecision::ApproveOnce(_), .. }
     ));
-  }
-
-  #[test]
-  fn the_local_only_checks_apply_to_personal_apps() {
-    let project = |team: bool| -> StudioProject {
-      let mut project: StudioProject = serde_json::from_value(json!({
-        "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z"
-      }))
-      .unwrap();
-      project.team = team.then(crate::types::TeamBinding::default);
-      project
-    };
-    assert!(runs_locally(&project(false)));
-    assert!(!runs_locally(&project(true)), "team apps run on their pipeline's backend");
   }
 
   #[test]

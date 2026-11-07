@@ -118,8 +118,8 @@ reads the report while it creates the app, then Copilot rebuilds it page by page
 
 The app starts from the Universal App, the Rayfin CLI's default template, like any new project.
 See [Create a new project](/docs/build/projects#create-a-new-project). Fabricator opens it in the
-workbench, where it runs on this computer, and starts reading the report. A team app's preview is
-deployed by the team pipeline instead. See
+workbench, where it runs on this computer, and starts reading the report. A team app runs on
+this computer too, and the team pipeline publishes it. See
 [Work on a team app](/docs/team/work-on-an-app).
 
 ## While Fabricator reads the report
@@ -170,7 +170,7 @@ The preview shows each page as Copilot builds it. The app runs on this computer 
 semantic model live, as you, with your Azure sign-in. When the turn ends, nothing is published:
 the app stays on this computer until you publish it. See
 [Publish to Microsoft Fabric](/docs/ship/deploy). For a team app, Fabricator saves the change to
-your working branch, and the team pipeline deploys your preview.
+your working branch on GitHub, and your preview deploys when you publish.
 
 A migration's turns start only while the project is open on **Build** and nothing else is running,
 such as a chat turn or a publish. Until then, the card says what it's waiting for, such as:

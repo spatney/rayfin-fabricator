@@ -17,6 +17,7 @@ import type { DiagnosisInput } from '../diagnosis/useTeamDiagnosis'
 import { timeAgo, useNow } from '../runProgress'
 import {
   copyHealth,
+  deploysPreview,
   previewBehind,
   previewing,
   publishedHealth,
@@ -546,7 +547,11 @@ export default function Inspector({
                     ? `Updated ${timeAgo(copy.preview.updatedAt, now)}`
                     : copy.preview
                       ? ''
-                      : 'Deployed after the first save'}
+                      : !deploysPreview(workspace, copy)
+                        ? copy.mine
+                          ? 'Runs on your computer. Your preview deploys when you publish.'
+                          : `Runs on ${copy.author}’s computer. Their preview deploys when they publish.`
+                        : 'Not deployed yet'}
             </span>
             {copy.preview?.url && !deploying && <External url={copy.preview.url}>Open</External>}
           </div>

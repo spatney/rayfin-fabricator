@@ -35,7 +35,6 @@ fn register(ws: &TeamWorkspace, folder: &str, branch: &str, pr: Option<&TeamPull
     branch: Some(branch.to_string()),
     pr_number: pr.map(|p| p.number),
     pr_url: pr.map(|p| p.url.clone()),
-    view: Some(if pr.is_some() { "preview".into() } else { "production".into() }),
     ..Default::default()
   };
   store::mutate_project(&project.id, |p| p.team = Some(binding));
@@ -55,12 +54,12 @@ async fn my_open_session(ws: &TeamWorkspace, login: &str, folder: &str) -> Optio
 /// Open a team app on this computer, resuming your open pull request for it
 /// or starting a new working branch from the published version.
 #[tauri::command]
-pub async fn team_open_project(workspace_id: String, folder: String) -> TeamActionResult {
+pub async fn team_open_project(app: AppHandle, workspace_id: String, folder: String) -> TeamActionResult {
   let account = super::workspace_account(&workspace_id);
-  gh::as_account(account, open_project(workspace_id, folder)).await
+  gh::as_account(account, open_project(app, workspace_id, folder)).await
 }
 
-async fn open_project(workspace_id: String, folder: String) -> TeamActionResult {
+async fn open_project(app: AppHandle, workspace_id: String, folder: String) -> TeamActionResult {
   if let Err(e) = team::require_enabled() {
     return fail(e);
   }
@@ -76,6 +75,7 @@ async fn open_project(workspace_id: String, folder: String) -> TeamActionResult 
       return with_project(store::find_project(&existing.id));
     }
     // The folder was deleted outside Fabricator: forget it and check out again.
+    crate::services::local_backend::state(&app).forget(&existing.id).await;
     store::remove_project(&existing.id);
   }
   let me = match viewer().await {
@@ -117,12 +117,12 @@ async fn open_project(workspace_id: String, folder: String) -> TeamActionResult 
   with_project(project.and_then(|p| store::find_project(&p.id)))
 }
 
-/// Make sure a project's `.gitignore` keeps secrets and generated files out of
-/// the team repository.
+/// Make sure a project's `.gitignore` keeps secrets, generated files and the
+/// local backend's state out of the team repository.
 fn ensure_gitignore(dir: &Path) {
   let file = dir.join(".gitignore");
   let current = std::fs::read_to_string(&file).unwrap_or_default();
-  let needed = ["node_modules", "dist", "*.local", "rayfin/.env*", "rayfin/.deployments.json", "rayfin/.temp/"];
+  let needed = ["node_modules", "dist", "*.local", "rayfin/.env*", "rayfin/.deployments.json", "rayfin/.temp/", ".rayfin-local/"];
   let missing: Vec<&str> = needed.iter().copied().filter(|line| !current.lines().any(|l| l.trim() == *line)).collect();
   if missing.is_empty() {
     return;
@@ -200,7 +200,7 @@ async fn free_folder(ws: &TeamWorkspace, name: &str) -> Result<String, String> {
 }
 
 /// Create a new app in a team workspace on a working branch, save it to GitHub
-/// and open its pull request (which deploys your preview).
+/// and open its draft pull request. It runs on this computer from the start.
 #[tauri::command]
 pub async fn team_create_project(app: AppHandle, workspace_id: String, input: CreateProjectInput) -> TeamActionResult {
   let account = super::workspace_account(&workspace_id);
@@ -339,12 +339,12 @@ async fn first_save(app: &AppHandle, project_id: &str, message: &str) -> TeamAct
 /// Remove an app from the workspace (owners): deletes its folder through a
 /// merged pull request and, optionally, its published and preview apps in Fabric.
 #[tauri::command]
-pub async fn team_remove_project(workspace_id: String, folder: String, delete_apps: bool) -> TeamActionResult {
+pub async fn team_remove_project(app: AppHandle, workspace_id: String, folder: String, delete_apps: bool) -> TeamActionResult {
   let account = super::workspace_account(&workspace_id);
-  gh::as_account(account, remove_project(workspace_id, folder, delete_apps)).await
+  gh::as_account(account, remove_project(app, workspace_id, folder, delete_apps)).await
 }
 
-async fn remove_project(workspace_id: String, folder: String, delete_apps: bool) -> TeamActionResult {
+async fn remove_project(app: AppHandle, workspace_id: String, folder: String, delete_apps: bool) -> TeamActionResult {
   if let Err(e) = team::require_enabled() {
     return fail(e);
   }
@@ -381,6 +381,8 @@ async fn remove_project(workspace_id: String, folder: String, delete_apps: bool)
   }
   let _ = gh::delete_branch(&ws.repo, &branch).await;
   if let Some(local) = local_project(&ws.id, &folder) {
+    // Its local backend holds files in the worktree (the database, the logs).
+    crate::services::local_backend::state(&app).forget(&local.id).await;
     history::clear_history(&local.id);
     store::remove_project(&local.id);
   }

@@ -197,7 +197,7 @@ export interface AdvisorProjectSnapshot {
   /**
    * The Rayfin releases Fabricator's bundled local backend runs, as an npm
    * range (`sdk.supported` in `rayfin-local.json`, such as `>=1.36.0 <1.37.0`).
-   * Absent for apps it doesn't run, such as team apps.
+   * Absent for an app it doesn't run.
    */
   localSdkRange?: string
 }

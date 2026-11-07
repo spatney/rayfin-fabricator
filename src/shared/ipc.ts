@@ -414,8 +414,8 @@ export interface TeamBinding {
   branch?: string
   prNumber?: number
   prUrl?: string
-  /** Which deployment the preview shows. */
-  view?: 'preview' | 'production'
+  /** Your personal preview, which the pipeline deploys once your pull request
+   *  is ready for review (draft pull requests don't deploy). */
   preview?: TeamDeployRecord
   production?: TeamDeployRecord
   publish?: TeamPublishState
@@ -558,6 +558,9 @@ export interface TeamActionResult {
   project?: StudioProject
   /** Files changed by both you and a teammate (repo-relative). */
   conflicts?: string[]
+  /** The app's npm packages changed (teammates' changes came in, or yours went
+   *  away), so the app on this computer needs them installed again. */
+  packagesChanged?: boolean
 }
 
 /** Something an unfinished setup created, which abandoning it deletes. */
@@ -634,11 +637,12 @@ export interface TeamSessionStatus {
   /** A merge with teammates' changes is waiting to be resolved. */
   conflicted: boolean
   requireReview: boolean
+  /** The pipeline run deploying your preview (a draft's runs deploy nothing, so
+   *  they're never here) or, while publishing, the published app. */
   run?: TeamRunStatus
   preview?: TeamDeployRecord
   production?: TeamDeployRecord
   publish?: TeamPublishState
-  view: 'preview' | 'production'
   viewer?: string
 }
 
@@ -1319,7 +1323,7 @@ export interface DevServerResult {
   url?: string
   error?: string
   conflict?: PortConflict
-  /** Team apps: the deployment the local preview uses (`production` = the published app). */
+  /** Team apps on a Fabric backend: the deployment the live preview uses (`production` = the published app). */
   backend?: 'preview' | 'production' | 'none'
 }
 
@@ -2728,17 +2732,18 @@ export interface RayfinVersionInfo {
   /**
    * The newest stable release within the Rayfin versions the bundled local
    * backend runs (`rayfin-local.json` `sdk.supported`), for the headline
-   * package; Rayfin's packages ship in lockstep. A personal app's upgrades stop
-   * here. Absent when npm couldn't list the releases or none is in the range.
+   * package; Rayfin's packages ship in lockstep. Every app's upgrades stop
+   * here, a team app's too. Absent when npm couldn't list the releases or none
+   * is in the range.
    */
   latestSupportedLocally?: string
 }
 
 /** The newest Rayfin releases, for Home's update offers (`rayfin.latest`). */
 export interface RayfinLatest {
-  /** The newest stable release on npm: where a team app's upgrades go. */
+  /** The newest stable release on npm. */
   latest?: string
-  /** The newest release the bundled local backend runs: where a personal app's go. */
+  /** The newest release the bundled local backend runs: where every app's upgrades go. */
   latestSupportedLocally?: string
 }
 
@@ -3060,8 +3065,6 @@ export interface GoalsSnapshot {
   lastRun: GoalsRunInfo | null
   /** Every check passed, on the app's code as it is now. */
   allPassed: boolean
-  /** Why the checks can't run for this app, when they can't. */
-  cannotRun: string | null
   /** A run is going for this app (set by `load` only). */
   running: boolean
 }
@@ -3113,7 +3116,7 @@ export interface GoalsEventEnvelope {
 /**
  * `window.api.goals` (the Goals experiment): read and save an app's
  * `GOALS.md`, have Copilot draft it, and run its checks on a fresh copy of the
- * app. Team apps can't run checks yet (`cannotRun`).
+ * app.
  */
 export interface GoalsApi {
   load: (projectId: string) => Promise<GoalsSnapshot>
@@ -4939,7 +4942,7 @@ export interface RayfinStudioApi {
       folder: string,
       deleteApps: boolean
     ) => Promise<TeamActionResult>
-    /** Save the app's changes to its working branch (deploys your preview). */
+    /** Save the app's changes to its working branch (its draft pull request, which deploys nothing until you publish). */
     sync: (projectId: string, message: string) => Promise<TeamActionResult>
     /** Working state; `refresh` also asks GitHub (PR, deployments, pipeline run). */
     status: (projectId: string, refresh: boolean) => Promise<TeamSessionStatus>
@@ -4947,8 +4950,6 @@ export interface RayfinStudioApi {
     update: (projectId: string, keepConflicts: boolean) => Promise<TeamActionResult>
     /** Throw away unpublished changes and start fresh from the published app. */
     discard: (projectId: string) => Promise<TeamActionResult>
-    /** Show your preview or the published app in the preview pane. */
-    setView: (projectId: string, view: 'preview' | 'production') => Promise<TeamActionResult>
     runLog: (projectId: string, runId: number) => Promise<string>
     /** Publish (progress on `team:progress` with scope = projectId). */
     publish: (projectId: string, confirmDataLoss: boolean) => Promise<TeamActionResult>

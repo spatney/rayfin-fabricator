@@ -1,12 +1,12 @@
 ---
 title: "Work on a team app"
-description: "Open a team app, work on your own branch, preview changes locally and in Fabric, and bring in teammates' published changes."
+description: "Open a team app, build it on this computer on your own branch, save your work to GitHub, and bring in teammates' published changes."
 ---
 
 > [!WARNING]
 > Team workspaces are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
 
-When you open a team app, Fabricator gives you your own working branch. Your edits are saved to GitHub after each change, and the team pipeline deploys your personal preview.
+When you open a team app, Fabricator gives you your own working branch, and the app runs on this computer, like any app you build. Your edits are saved to GitHub after each change. They reach Microsoft Fabric when you publish.
 
 ## Open a team app
 
@@ -16,34 +16,27 @@ When you open a team app, Fabricator gives you your own working branch. Your edi
 
 Fabricator opens a working branch named like `fabricator/<login>/<app>-<timestamp>`. Your local files live in a worktree for that app.
 
-## Preview while Copilot works
+## Build it on this computer
 
-While Copilot is changing files, Fabricator starts a local Vite preview so frontend changes appear as they are made. See [Preview your app](/docs/build/preview) for the general preview controls.
+A team app runs on this computer with its own backend and local data, the same way as an app that's only yours. The preview shows it at a `localhost` address, Copilot checks its work against the running app, and **Output**, **Preview as** and the **Data explorer** work the same. See [Develop on this computer](/docs/build/local-development).
 
-For a team app, the local preview uses your preview deployment's data when one exists. Until your first preview has deployed, the preview toolbar says **Published data**. Changes you make in that state use the published app's data. If nothing is deployed yet, it says **No data yet**.
+- **Your local data is yours.** It starts empty, and it isn't shared with your teammates or saved to GitHub. To give everyone the same data to start from, add [seed data](/docs/build/local-development#start-with-seed-data). It's part of the app's code, so your teammates get it with your changes.
+- **Secrets have a Local value** on this computer, which only you have. See [Secrets in a team app](/docs/build/secrets#secrets-in-a-team-app).
+- **Published** is a switch away. Once the team has published the app, **Local** and **Published** in the preview toolbar switch between your app on this computer and the published app that everyone uses.
 
-If the local preview stops responding after a package install or another change, Fabricator starts it again.
+When the local backend can't run all of the app, such as an app with a KQL database connector, its preview uses the team's deployment of it in Fabric instead, and says why: your preview when it's deployed, otherwise the published app. While it uses the published app's data, the preview toolbar says **Published data**, and changes you make in it are real. A team app with nothing deployed yet runs on this computer anyway. See [What runs only on Fabric](/docs/build/local-development#what-runs-only-on-fabric).
 
-## Save and deploy your preview
+## Save your work
 
-After each chat turn, Fabricator saves your changes to GitHub and opens or updates your pull request. The pipeline deploys your personal preview.
+After each chat turn, Fabricator saves your changes to your working branch on GitHub, and opens a draft pull request for them, so your teammates can see what you're working on in the [workspace overview](/docs/team/overview). A draft pull request deploys nothing: your changes reach Fabric when you [publish](/docs/team/publish).
 
-You can see progress in two places:
+When you publish, the team pipeline deploys your personal preview to the previews Fabric workspace, as a check before your changes are merged. While a teammate's approval is pending, select **Open your preview** in the team menu to open it in your browser. Your reviewers can open it from the workspace overview.
 
-- the team app control in the app bar, which shows **Deploying preview…**
-- the preview pane, which shows **Deploying your first preview** for the first deploy or a progress bar above the existing preview later
-
-When the pipeline finishes, the preview switches to the deployed version.
-
-## Switch between your preview and the published app
-
-1. Open the team menu in the header.
-2. Under **Preview shows**, choose **My preview** or **Published**.
-
-The preview toolbar's status label shows which one you're looking at: **My preview** or **Published**.
+> [!NOTE]
+> A workspace whose pipeline Fabricator set up before team apps ran on this computer deploys your preview after each save, drafts included, until an owner selects **Repair** in **Pipeline health**. See [Use the workspace overview](/docs/team/overview#manage-the-workspace).
 
 ## Bring in teammates' changes
 
 If teammates publish changes after you started, the team menu shows **Teammates' changes** and the button **Bring in their changes**.
 
-Select **Bring in their changes** to merge the published app into your working branch. If you both changed the same files, Fabricator reports the conflict. Select **Ask Copilot to finish** or **Let Copilot combine them** when offered so Copilot can combine the changes.
+Select **Bring in their changes** to merge the published app into your working branch. If their changes added or changed the app's packages, Fabricator installs them and restarts your app on them. If you both changed the same files, Fabricator reports the conflict. Select **Ask Copilot to finish** or **Let Copilot combine them** when offered so Copilot can combine the changes.

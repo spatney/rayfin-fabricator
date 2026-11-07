@@ -124,7 +124,7 @@ fn limits(status: &LocalStatus) -> Vec<String> {
   out
 }
 
-/// The `<local-backend>` block: the open personal app's local backend right now.
+/// The `<local-backend>` block: the open app's local backend right now.
 pub fn describe(status: &LocalStatus, published: bool) -> String {
   let mut s = String::from(
     "The open app's local backend at this moment, from Fabricator's own records. This is the \

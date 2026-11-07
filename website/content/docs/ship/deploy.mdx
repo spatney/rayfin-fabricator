@@ -136,7 +136,7 @@ A published app that this computer can't run previews against its published back
 - **Point & Edit** works on the local preview, so you can pick what to change and send it to Copilot without publishing first. The **Fabric** view, for an app that has one, works on the published app, so it's unavailable.
 - The local preview stops when you switch to another app or close Fabricator, and the app you open next gets its own. If you switch your app to another published app, its local preview starts again with that one's settings.
 - If the project has no local Vite installation, there's no local preview. The preview keeps showing the published app, without your latest changes, until you publish them.
-- Team apps aren't affected. They still save to GitHub after each turn, and the team pipeline deploys your preview.
+- Team apps aren't affected. They still save to GitHub after each turn, and your preview deploys when you publish.
 
 Turning **Publish after each chat turn** on closes that local preview and doesn't publish anything. Your changes are still on this computer: the next successful chat turn publishes them, or you can publish them from the app bar.
 
@@ -179,4 +179,4 @@ See [setup and sign-in troubleshooting](/docs/troubleshooting/setup-and-sign-in)
 
 ## Redirect URIs for live preview
 
-A local preview of a published app runs against the published backend: for team apps, and for a published app this computer can't run. Fabricator runs the project's own Vite dev server on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next publish includes the app code. See [When every preview port is busy](/docs/build/preview#when-every-preview-port-is-busy).
+The live preview of an app that this computer can't run uses the app's backend in Fabric: the published app's, or for a team app, the team's deployment of it. Fabricator runs the project's own Vite dev server on an allowed `localhost` port. If the normal sign-in-compatible ports are busy and you choose another port, Fabricator can add that origin to `services.auth.allowedRedirectUris` in `rayfin/rayfin.yml` and push the runtime settings to Fabric without uploading the app. This keeps Fabric sign-in working in the live preview. The next publish includes the app code. See [When every preview port is busy](/docs/build/preview#when-every-preview-port-is-busy).

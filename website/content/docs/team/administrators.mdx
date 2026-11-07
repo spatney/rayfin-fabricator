@@ -93,7 +93,9 @@ If one administrator-provided app registration is used, that one app registratio
 
 ## What the workflow does
 
-The managed workflow is named `Fabricator`. It runs on pushes to `main`, pull requests into `main`, and manual `workflow_dispatch` runs.
+The managed workflow is named `Fabricator`. It runs on pushes to `main`, pull requests into `main` when they're opened, updated, reopened or marked ready for review, and manual `workflow_dispatch` runs.
+
+A draft pull request deploys nothing. Its runs skip every job, and they're named "Draft (no preview): " followed by the pull request's title. Fabricator opens each working copy's pull request as a draft, because the app runs on its author's computer while they work, and marks it ready for review when they publish, which deploys their preview. A workspace whose pipeline Fabricator set up before this deploys draft pull requests too, until an owner selects **Repair** in **Pipeline health**.
 
 The workflow permissions are:
 
@@ -107,7 +109,7 @@ To sign in, a job requests its GitHub OIDC token with audience `api://AzureADTok
 
 The workflow uses only actions made by GitHub: `actions/checkout@v7`, `actions/setup-node@v7`, and `actions/github-script@v9`. An Actions policy that allows only GitHub-made actions lets it run. A policy that requires actions pinned to a full commit SHA does not, because the workflow uses version tags.
 
-Pull requests deploy to the previews workspace with item names like `<app>-pv-<github-login>` and use the preview identity. Pushes to `main` deploy to the published apps workspace with item name `<app>` and use the deploy identity.
+Pull requests that are ready for review deploy to the previews workspace with item names like `<app>-pv-<github-login>` and use the preview identity. Pushes to `main` deploy to the published apps workspace with item name `<app>` and use the deploy identity.
 
 If Rayfin is too old, the workflow emits:
 

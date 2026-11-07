@@ -1,4 +1,12 @@
-import type { TeamDeployRecord, TeamMap, TeamMapApp, TeamMapCopy, TeamMapJob, TeamMapRun } from '@shared/ipc'
+import type {
+  TeamDeployRecord,
+  TeamMap,
+  TeamMapApp,
+  TeamMapCopy,
+  TeamMapJob,
+  TeamMapRun,
+  TeamWorkspace
+} from '@shared/ipc'
 import { dataIds, type ResourceView } from './resources'
 
 /** How a deployment target is doing. */
@@ -78,6 +86,20 @@ export function appHealth(app: TeamMapApp, runs: TeamMapRun[]): Health {
 export function previewBehind(copy: TeamMapCopy): boolean {
   const head = copy.pr?.headSha
   return Boolean(head && copy.preview?.sha && copy.preview.sha !== head)
+}
+
+/** The first pipeline template whose draft pull requests don't deploy a
+ *  preview (the Rust `templates::READY_PREVIEWS_VERSION`). */
+export const READY_PREVIEWS_TEMPLATE = 6
+
+/**
+ * Whether a working copy deploys a preview now. From template v6, a draft (or
+ * a copy not on GitHub yet) runs only on its author's computer: its preview
+ * deploys once they publish, which marks the pull request ready.
+ */
+export function deploysPreview(workspace: TeamWorkspace, copy: TeamMapCopy): boolean {
+  if ((workspace.manifest?.templateVersion ?? 0) < READY_PREVIEWS_TEMPLATE) return true
+  return Boolean(copy.pr && !copy.pr.draft)
 }
 
 export interface MapStats {

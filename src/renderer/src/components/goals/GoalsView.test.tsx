@@ -42,7 +42,6 @@ function snapshot(results: GoalResult[]): GoalsSnapshot {
     results,
     lastRun: null,
     allPassed: false,
-    cannotRun: null,
     running: false
   }
 }

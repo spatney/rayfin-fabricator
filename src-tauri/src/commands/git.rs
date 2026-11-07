@@ -1592,7 +1592,7 @@ fn is_package_manifest(path: &str) -> bool {
 }
 
 /// Whether going from commit `before` to `after` changed the app's packages.
-async fn packages_changed(cwd: &str, before: &str, after: &str) -> bool {
+pub(crate) async fn packages_changed(cwd: &str, before: &str, after: &str) -> bool {
   if before.is_empty() || after.is_empty() || before == after {
     return false;
   }

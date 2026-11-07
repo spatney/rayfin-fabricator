@@ -1029,37 +1029,6 @@
   margin-top: 2px;
 }
 
-/* "Preview shows": two equal choices, each with its deploy state. */
-.team-view.seg {
-  display: flex;
-  margin: 0;
-}
-
-.team-view .seg-btn {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  min-width: 0;
-  padding: 6px 10px;
-  text-align: left;
-}
-
-.team-view-label {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.team-view-state {
-  font-size: 11px;
-  color: var(--text-faint);
-}
-
-.team-view .seg-btn--active .team-view-state {
-  color: var(--text-dim);
-}
-
 .team-count {
   min-width: 18px;
   padding: 0 5px;

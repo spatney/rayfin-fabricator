@@ -545,8 +545,8 @@ pub async fn help_ask(
     &facts,
     tools::Surface::parse(surface.as_deref()),
   );
-  // The open personal app's local backend: its status for the prompt, and its
-  // output for `help_local_output`. Team apps don't run on one.
+  // The open app's local backend: its status for the prompt, and its output
+  // for `help_local_output`.
   let local_output: Option<tools::LocalOutput> = match project_id.as_deref() {
     Some(id) if ctx.reads_local_backend() => {
       ctx.local = Some(crate::services::local_backend::snapshot(&app, id));

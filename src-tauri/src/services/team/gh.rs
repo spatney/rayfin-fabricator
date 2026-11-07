@@ -1021,6 +1021,13 @@ pub struct Run {
   pub pr_number: Option<u64>,
 }
 
+impl Run {
+  /// A draft pull request's run, which deploys nothing (see `templates::DRAFT_RUN_PREFIX`).
+  pub fn is_draft(&self) -> bool {
+    super::templates::is_draft_run(&self.event, self.title.as_deref())
+  }
+}
+
 pub fn run_of(v: &Value) -> Option<Run> {
   let actor = v.get("triggering_actor").filter(|a| !a.is_null()).or_else(|| v.get("actor"));
   Some(Run {

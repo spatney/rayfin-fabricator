@@ -35,12 +35,15 @@ function placeUnder(trigger: DOMRect): CSSProperties {
 export default function LocalPublishedInfo({
   name,
   fresh = false,
+  team = false,
   onOpen
 }: {
   /** The app's name. */
   name: string
   /** The app was published before it ran here and nobody looked yet. */
   fresh?: boolean
+  /** A team app, whose published app is everyone's on the team. */
+  team?: boolean
   /** The note opened. */
   onOpen?: () => void
 }): JSX.Element {
@@ -147,8 +150,17 @@ export default function LocalPublishedInfo({
             <div className="lpi-row">
               <CloudIcon className="lpi-ico" />
               <p className="lpi-text">
-                <strong>Published</strong> is your app on Microsoft Fabric, with its data. Your
-                changes reach it when you publish them.
+                {team ? (
+                  <>
+                    <strong>Published</strong> is the app your team uses on Microsoft Fabric, with
+                    its data. Your changes reach it when you publish them.
+                  </>
+                ) : (
+                  <>
+                    <strong>Published</strong> is your app on Microsoft Fabric, with its data. Your
+                    changes reach it when you publish them.
+                  </>
+                )}
               </p>
             </div>
           </div>,

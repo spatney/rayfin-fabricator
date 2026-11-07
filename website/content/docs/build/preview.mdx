@@ -18,7 +18,7 @@ A published app that this computer can't run previews against its published back
 
 The local preview uses the published app's `VITE_*` configuration, so it runs against the published app's backend: frontend changes show as Copilot makes them, and changes to data, permissions or functions work once you publish them. If the project has no local Vite installation, Fabricator keeps showing the published app instead.
 
-Team app previews are handled by the team pipeline and local preview behavior. See [Work on a team app](/docs/team/work-on-an-app).
+A team app's preview works the same way: your app on this computer, and once the team has published it, **Local** and **Published**, where **Published** is the published app that everyone on the team uses. A team app that this computer can't run uses the team's deployment of it in Fabric instead. See [Work on a team app](/docs/team/work-on-an-app).
 
 ## Your app on this computer
 
@@ -90,7 +90,7 @@ The preview toolbar gives you browser-like controls and Fabricator-specific tool
 
 - **Back**, **Forward** and **Reload** navigate the preview history.
 - The address shows what the preview is showing: your published app's, or `localhost` for an app running on this computer. Select it to open the page in your default browser.
-- For a team app, a status label names the deployment you're looking at, **My preview** or **Published**, and says **Publishing…** while the pipeline updates it. Its local preview is marked **Published data** while it uses the published app's data, and **No data yet** before anything is published.
+- For a team app, **Published** has a status label, such as **Published**, which says **Publishing…** while the team pipeline updates the published app. The preview of a team app that this computer can't run is marked **Published data** while it uses the published app's data.
 - **Desktop**, **Tablet** and **Phone** show your app at other screen widths. **Desktop** fills the pane, **Tablet** previews at 820 CSS pixels, and **Phone** previews at 390 by 844 CSS pixels inside a phone outline.
 - **Point & Edit** lets you pick parts of your app and clip screenshots of it, to show Copilot what to change. While the published app in the preview is publishing, it waits until publishing is done. See [Point & Edit](/docs/build/touch-up).
 - **Fabric** is there only for an app that works only inside the Fabric portal: one that reads semantic models through a `fabric.yaml` file, the classic way to connect them, whose models load only there, or one whose `rayfin/rayfin.yml` hosts it to open only inside Fabric. It switches the published app between the direct view and the Fabric portal shell, and such an app switches to the Fabric view the first time it's published. It's turned off when the published app has no portal link, and while a local preview runs. Other apps, including ones that connect to Fabric data through Rayfin connectors, don't need it, so they don't have the button, and neither does your app on this computer.
@@ -126,7 +126,7 @@ Refreshing Fabricator's Fabric authentication affects the Rayfin CLI credentials
 
 ## When every preview port is busy
 
-A local preview of a published app runs against the published backend: for team apps, and for a published app that this computer can't run. It must use a `localhost` port your app accepts for sign-in. Fabricator first tries the registered `http://localhost:N` ports from `rayfin/rayfin.yml`.
+A local preview of an app that this computer can't run uses the app's backend in Fabric: the published app's, or for a team app, the team's deployment of it. It must use a `localhost` port your app accepts for sign-in. Fabricator first tries the registered `http://localhost:N` ports from `rayfin/rayfin.yml`.
 
 If another app's local backend holds the port and Copilot isn't working on that app, Fabricator stops that backend and uses the port. The backend starts again when you open that app. Otherwise, you see a dialog titled like "Your live preview needs localhost:5173". It says in plain words what is using the port, and offers one-click choices:
 

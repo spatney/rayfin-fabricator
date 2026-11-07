@@ -1,8 +1,8 @@
 /**
- * Local development: personal apps run on this computer with the bundled local
- * backend (rayfin-local) from the moment they're created, and publishing them
- * to Microsoft Fabric is the user's choice. Team apps run on the backend their
- * pipeline publishes.
+ * Local development: apps run on this computer with the bundled local backend
+ * (rayfin-local) from the moment they're created, team apps included.
+ * Publishing a personal app to Microsoft Fabric is the user's choice; a team
+ * app's pipeline publishes it when the user publishes.
  */
 import type { AppSettings, RayfinVersionInfo } from '@shared/ipc'
 
@@ -32,8 +32,8 @@ export function newerRelease(version: string, than: string): boolean {
 }
 
 /**
- * A personal app's Rayfin versions: its upgrades stop at the newest release
- * the bundled local backend runs (`latestSupportedLocally`), so the app keeps
+ * An app's Rayfin versions: its upgrades stop at the newest release the
+ * bundled local backend runs (`latestSupportedLocally`), so the app keeps
  * running on this computer. Rayfin's packages ship in lockstep, so that's every
  * package's target. Nothing is offered while it isn't known.
  */

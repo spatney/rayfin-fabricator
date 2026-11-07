@@ -1,13 +1,13 @@
 //! The Rayfin release new projects start on, and the releases the local
 //! backend runs.
 //!
-//! Every personal project runs on the bundled rayfin-local backend, which runs
-//! one line of Rayfin SDK releases: `sdk.supported` in the repo's
+//! Every project, team apps included, runs on the bundled rayfin-local backend,
+//! which runs one line of Rayfin SDK releases: `sdk.supported` in the repo's
 //! `rayfin-local.json`. A new project scaffolds with the newest stable release
 //! in that range and pins its `@microsoft/rayfin-*` packages to that minor
 //! (`~1.36.0`). The templates' caret ranges would otherwise pull a newer minor
-//! that rayfin-local can't run. Team apps take the pin too. Upgrades stop at
-//! [`newest_supported`] for the same reason.
+//! that rayfin-local can't run. Upgrades stop at [`newest_supported`] for the
+//! same reason.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};

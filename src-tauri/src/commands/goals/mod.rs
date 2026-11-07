@@ -49,7 +49,6 @@ const DRAFT_TIMEOUT_MS: u64 = 5 * 60_000;
 const MAX_ACTIVITY_OUTPUT: usize = 1500;
 /// Built-in tools a Goals session doesn't use, beside the read-only sessions' (see `advisor::EXCLUDED_TOOLS`).
 const ALSO_EXCLUDED: &[&str] = &["web_fetch", "fetch", "skill"];
-const TEAM_APP: &str = "Goals checks don't run on team apps yet.";
 /// What a chat turn is told when the app's `GOALS.md` has checks.
 const CHAT_NOTE: &str = "[Fabricator: GOALS.md, at the app's root, says what this app is for and lists checks it must keep passing, which the user runs in Fabricator before publishing. Read it before you change the app's data, permissions, functions or screens. If a change would stop a check passing, tell the user which, and why. Edit GOALS.md only when the user asks.]";
 
@@ -126,14 +125,9 @@ fn read_goals(project: &Path) -> Option<file::Goals> {
   read_text(&project.join(file::FILE_NAME)).map(|text| file::parse(&text))
 }
 
-/// Why the checks can't run for `project`, when they can't.
-fn cannot_run(project: &StudioProject) -> Option<&'static str> {
-  project.team.is_some().then_some(TEAM_APP)
-}
-
 /// What the Goals tab shows: `goals` (`None` without a `GOALS.md`) with each
 /// check's saved result, stale when the app's code is no longer `current`.
-fn snapshot(goals: Option<file::Goals>, saved: Saved, current: &str, cannot_run: Option<&str>) -> GoalsSnapshot {
+fn snapshot(goals: Option<file::Goals>, saved: Saved, current: &str) -> GoalsSnapshot {
   let exists = goals.is_some();
   let goals = goals.unwrap_or_default();
   let results: Vec<GoalResult> = goals
@@ -153,20 +147,19 @@ fn snapshot(goals: Option<file::Goals>, saved: Saved, current: &str, cannot_run:
     results,
     last_run: saved.last_run,
     all_passed,
-    cannot_run: cannot_run.map(str::to_string),
     running: false,
   }
 }
 
 /// The project's goals and their results, as they are now.
 async fn load(project: &StudioProject) -> GoalsSnapshot {
-  let (id, path, cannot) = (project.id.clone(), PathBuf::from(&project.path), cannot_run(project));
+  let (id, path) = (project.id.clone(), PathBuf::from(&project.path));
   tokio::task::spawn_blocking(move || {
     let goals = read_goals(&path);
     let saved = load_saved(&id);
     // Only results need the code's signature, which takes a moment.
     let current = if saved.results.is_empty() { String::new() } else { scratch::app_fingerprint(&path) };
-    snapshot(goals, saved, &current, cannot)
+    snapshot(goals, saved, &current)
   })
   .await
   .unwrap_or_default()
@@ -179,7 +172,7 @@ fn find(project_id: &str) -> Result<StudioProject, String> {
 /// The note a chat turn in `project` starts with, when the Goals experiment is
 /// on and the app's `GOALS.md` has checks.
 pub fn chat_note(project: &StudioProject) -> Option<&'static str> {
-  if project.team.is_some() || !store::goals_enabled() {
+  if !store::goals_enabled() {
     return None;
   }
   let goals = read_goals(Path::new(&project.path))?;
@@ -420,10 +413,10 @@ pub async fn goals_save(project_id: String, purpose: String, checks: Vec<String>
 
 /// Run the project's checks (those in the request, or all of them) on a fresh
 /// copy of the app, streaming its steps and each result. `Err` only when the
-/// run can't begin: an unknown project, a team app, no such checks, or a run
-/// already going. Otherwise whatever results it got are saved, its `done`
-/// event says how it went, and so does what it resolves with, along with the
-/// goals and results as they are now.
+/// run can't begin: an unknown project, no such checks, or a run already
+/// going. Otherwise whatever results it got are saved, its `done` event says
+/// how it went, and so does what it resolves with, along with the goals and
+/// results as they are now.
 #[tauri::command]
 pub async fn goals_run(
   app: AppHandle,
@@ -433,9 +426,6 @@ pub async fn goals_run(
   request: GoalsRunRequest,
 ) -> Result<GoalsRunEnd, String> {
   let project = find(&project_id)?;
-  if let Some(reason) = cannot_run(&project) {
-    return Err(reason.into());
-  }
   let root = PathBuf::from(&project.path);
   let goals = read_goals(&root).unwrap_or_default();
   let checks = chosen(&goals.checks, request.check_ids.as_deref())?;
@@ -632,29 +622,28 @@ mod tests {
   #[test]
   fn every_check_passes_only_on_the_code_as_it_is_now() {
     let list = checks(&["A rep can log a deal.", "Reps see only their own deals."]);
-    let now = snapshot(goals(&list), passed(&list, "v1"), "v1", None);
+    let now = snapshot(goals(&list), passed(&list, "v1"), "v1");
     assert!(now.exists && now.all_passed && now.results.iter().all(|r| !r.stale));
-    let changed = snapshot(goals(&list), passed(&list, "v1"), "v2", None);
+    let changed = snapshot(goals(&list), passed(&list, "v1"), "v2");
     assert!(!changed.all_passed && changed.results.iter().all(|r| r.stale));
 
     let mut one_left = passed(&list, "v1");
     one_left.results.pop();
-    assert!(!snapshot(goals(&list), one_left, "v1", None).all_passed);
+    assert!(!snapshot(goals(&list), one_left, "v1").all_passed);
     let mut failed = passed(&list, "v1");
     failed.results[1].status = GoalStatus::Failed;
-    assert!(!snapshot(goals(&list), failed, "v1", None).all_passed);
+    assert!(!snapshot(goals(&list), failed, "v1").all_passed);
 
-    assert!(!snapshot(goals(&[]), Saved::default(), "", None).all_passed);
-    let none = snapshot(None, Saved::default(), "", Some(TEAM_APP));
+    assert!(!snapshot(goals(&[]), Saved::default(), "").all_passed);
+    let none = snapshot(None, Saved::default(), "");
     assert!(!none.exists && !none.all_passed);
-    assert_eq!(none.cannot_run.as_deref(), Some(TEAM_APP));
   }
 
   #[test]
   fn a_reworded_check_has_no_result_until_it_runs() {
     let list = checks(&["A rep can log a deal.", "Reps see only their own deals."]);
     let reworded = checks(&["a rep can log a deal", "Reps see only the deals they own."]);
-    let now = snapshot(goals(&reworded), passed(&list, "v1"), "v1", None);
+    let now = snapshot(goals(&reworded), passed(&list, "v1"), "v1");
     assert_eq!(now.results.len(), 1);
     assert_eq!(now.results[0].check_id, reworded[0].id);
     assert!(!now.all_passed);

@@ -1,7 +1,9 @@
-//! Local previews of team apps. The workspace's pipeline deploys team apps, so
-//! this computer has no `rayfin/.env` pointing at a backend. Before a local
-//! preview starts, the app's `rayfin/.env` is pointed at your personal preview's
-//! deployment or, until you have one, the published app's.
+//! The live preview of a team app that this computer's local backend can't run
+//! all of (a Fabric-only connector, or a Rayfin version it can't start). Every
+//! other team app runs on its local backend, like any app. The workspace's
+//! pipeline deploys team apps, so this computer has no `rayfin/.env` pointing at
+//! a backend: before such a preview starts, the app's `rayfin/.env` is pointed
+//! at your personal preview's deployment or, without one, the published app's.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -24,7 +26,7 @@ const DEPLOYMENT_KEYS: &[&str] = &[
 /// Which deployment a local preview talks to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
-  /// Your personal preview (deployed by the pipeline from your working copy).
+  /// Your personal preview (deployed by the pipeline when you publish).
   Preview,
   /// The published app: real data.
   Published,
@@ -135,13 +137,13 @@ async fn hydrate_with_cli(project_dir: &Path, workspace_id: &str, item_id: &str)
 pub async fn prepare(project_dir: &Path, binding: &TeamBinding, log: impl Fn(&str)) -> Backend {
   let (backend, record) = choose(binding);
   let Some(record) = record else {
-    log("This app isn't deployed yet, so the local preview runs without data until the team pipeline deploys your preview.\n");
+    log("This app isn't deployed yet, so the live preview runs without data until the team pipeline deploys it.\n");
     return Backend::None;
   };
   if backend == Backend::Preview {
-    log("The local preview uses your preview's data (deployed by the team pipeline).\n");
+    log("The live preview uses your preview's data (deployed by the team pipeline when you last published).\n");
   } else {
-    log("You don't have a preview yet, so the local preview uses the published app's data. Changes you make in it are real.\n");
+    log("You don't have a preview, so the live preview uses the published app's data. Changes you make in it are real.\n");
   }
   if !record.public_env.is_empty() {
     if let Err(e) = write_public_env(project_dir, &record.public_env) {
@@ -152,7 +154,7 @@ pub async fn prepare(project_dir: &Path, binding: &TeamBinding, log: impl Fn(&st
   if let (Some(workspace_id), Some(item_id)) = (record.workspace_id.as_deref(), record.item_id.as_deref()) {
     if let Err(e) = hydrate_with_cli(project_dir, workspace_id, item_id).await {
       log(&format!(
-        "Couldn't read the deployment's settings: {e}. Sign in to Fabric, or update the workspace's pipeline (Manage → Settings → Repair) and save a change.\n"
+        "Couldn't read the deployment's settings: {e}. Sign in to Fabric, or update the workspace's pipeline (Manage → Settings → Repair) and publish again.\n"
       ));
     }
   }

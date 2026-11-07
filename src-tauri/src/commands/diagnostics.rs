@@ -97,13 +97,11 @@ fn rayfin_local_version(status: &ToolStatus) -> String {
   }
 }
 
-/// Every personal project's local backend, as the supervisor holds it. Team
-/// apps don't run on one.
+/// Every project's local backend, as the supervisor holds it.
 fn local_backend_reports(app: &AppHandle) -> Vec<diagnostics::LocalBackendReport> {
   store::get_state()
     .projects
     .into_iter()
-    .filter(|p| p.team.is_none())
     .map(|p| {
       let status = local_backend::snapshot(app, &p.id);
       diagnostics::LocalBackendReport {

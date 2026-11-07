@@ -319,7 +319,6 @@ pub fn run() {
       commands::team::team_status,
       commands::team::team_update,
       commands::team::team_discard,
-      commands::team::team_set_view,
       commands::team::team_run_log,
       commands::team::team_publish,
       commands::team::team_review_requests,

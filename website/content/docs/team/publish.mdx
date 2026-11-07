@@ -1,19 +1,19 @@
 ---
 title: "Publish changes"
-description: "Publish a team app by saving work, checking the preview, waiting for review when required, merging, and deploying the published app."
+description: "Publish a team app: save your work, deploy your preview as a check, wait for review when required, merge, and deploy the published app."
 ---
 
 > [!WARNING]
 > Team workspaces are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
 
-Use **Publish** when your preview is ready for everyone. Publishing merges your working branch and lets the team pipeline deploy the published app.
+Use **Publish** when your changes are ready for everyone. Publishing deploys your preview as a check, merges your working branch, and lets the team pipeline deploy the published app.
 
-![The team app menu, opened from the 2 unpublished chip next to Publish, with preview choices, Bring in their changes, and Discard changes.](/screenshots/team-publish.webp)
+![The team app menu, opened from the 2 unpublished chip next to Publish, with your working branch, a note that your app runs on this computer while you work, Bring in their changes, and under Your changes, View on GitHub, Open your preview and Discard changes.](/screenshots/team-publish.webp)
 
 ## Publish your changes
 
 1. Open the team app.
-2. Make sure your latest preview is working.
+2. Make sure the app works in the preview on this computer.
 3. Select **Publish** in the app bar.
 4. Keep the **Publish** window open while Fabricator works, or select **Stop waiting** if you only want to stop watching.
 
@@ -21,12 +21,12 @@ Fabricator runs these steps:
 
 1. **Save your latest changes**.
 2. **Bring in your teammates' changes**.
-3. **Check that your preview deploys**.
+3. **Check that your preview deploys**. Fabricator marks your draft pull request ready for review, and the team pipeline deploys your personal preview to Fabric.
 4. **Get a teammate's approval**, when the workspace requires reviews.
 5. **Publish your changes**.
 6. **Deploy the published app**.
 
-If review is required, Fabricator shows "Waiting for a teammate to approve your changes. They see your request on Fabricator's Home. Publish again once they've approved." Teammates approve from Home with **View changes** and **Approve**.
+If review is required, Fabricator shows "Waiting for a teammate to approve your changes. They see your request on Fabricator's Home. Publish again once they've approved." Teammates approve from Home with **View changes** and **Approve**. While you wait, your preview stays deployed: select **Open your preview** in the team menu to try it in your browser. Each change you save while you wait deploys it again.
 
 ## If publishing would delete data
 

@@ -599,8 +599,6 @@ export const api: RayfinStudioApi = {
     update: (projectId: string, keepConflicts: boolean) =>
       invoke('team_update', { projectId, keepConflicts }),
     discard: (projectId: string) => invoke('team_discard', { projectId }),
-    setView: (projectId: string, view: 'preview' | 'production') =>
-      invoke('team_set_view', { projectId, view }),
     runLog: (projectId: string, runId: number) => invoke('team_run_log', { projectId, runId }),
     publish: (projectId: string, confirmDataLoss: boolean) =>
       invoke('team_publish', { projectId, confirmDataLoss }),

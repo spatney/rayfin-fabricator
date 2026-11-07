@@ -30,7 +30,6 @@ function snapshot(results: GoalResult[], extra: Partial<GoalsSnapshot> = {}): Go
     results,
     lastRun: null,
     allPassed: false,
-    cannotRun: null,
     running: false,
     ...extra
   }
@@ -61,10 +60,9 @@ describe('Goals model', () => {
     expect(failingNow(snapshot([result('a', 'failed'), result('b', 'failed', true)]))).toBe(1)
   })
 
-  it('has no gap when every check passed, the checks can’t run, or there are none', () => {
+  it('has no gap when every check passed, or there are none', () => {
     const passed = [result('a', 'passed'), result('b', 'passed'), result('c', 'passed')]
     expect(goalsGap(snapshot(passed, { allPassed: true }))).toBeNull()
-    expect(goalsGap(snapshot([], { cannotRun: 'Team apps can’t run checks yet.' }))).toBeNull()
     expect(goalsGap(snapshot([], { checks: [] }))).toBeNull()
   })
 

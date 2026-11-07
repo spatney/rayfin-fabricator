@@ -360,9 +360,23 @@ describe('the app on this computer', () => {
     expect(facts.some((f) => f.includes('running on this computer'))).toBe(false)
   })
 
-  it('says nothing about a backend a team app does not have, or one it was not told about', () => {
+  it('says a team app runs on this computer too, and nothing about a backend it was not told about', () => {
     const team = workbenchFacts(project, { team: true, local: local() })
-    expect(team.some(aboutBackend)).toBe(false)
+    expect(team).toContain(
+      '"Expenses" is running on this computer; Output, in the preview toolbar, shows its backend\'s output.'
+    )
+    expect(team).toContain(
+      '"Expenses" hasn\'t been published yet. It runs on this computer; the team\'s pipeline publishes it when the user publishes.'
+    )
+    const teamApp = {
+      ...project,
+      team: { workspaceId: 'w1', folder: 'expenses', worktree: 'C:\\team\\expenses' }
+    } as StudioProject
+    const reason =
+      'The logs connector runs only on Fabric, so the preview uses the team’s deployment of it in Fabric.'
+    expect(workbenchFacts(teamApp, { team: true, fallbackReason: reason })).toContain(
+      `The preview of "Expenses" uses the team's deployment of it in Fabric, not this computer's, and says: "${reason}"`
+    )
     expect(workbenchFacts(project).some(aboutBackend)).toBe(false)
     expect(workbenchFacts(project, { local: null }).some(aboutBackend)).toBe(false)
   })

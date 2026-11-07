@@ -457,7 +457,7 @@ async fn abandon(steps: &Steps<'_>, ws: &TeamWorkspace, setup: &TeamSetupState) 
   steps.set("github", "done", None);
 
   steps.set("local", "running", None);
-  super::join::forget_workspace(ws).await;
+  super::join::forget_workspace(steps.app, ws).await;
   steps.set("local", "done", None);
   TeamActionResult { ok: true, ..Default::default() }
 }

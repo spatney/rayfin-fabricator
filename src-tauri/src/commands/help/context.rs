@@ -26,12 +26,11 @@ pub struct ProjectContext {
   pub name: String,
   pub path: String,
   /// Set when the project belongs to a team workspace. Team apps work
-  /// differently enough (publishing, who may grant access, and no local
-  /// backend) that the assistant must not offer the personal-project controls
-  /// for them.
+  /// differently enough (publishing, and who may grant access) that the
+  /// assistant must not offer the personal-project controls for them.
   pub team: Option<String>,
-  /// Published to Microsoft Fabric at least once, so its preview has a
-  /// published backend to fall back to.
+  /// Published to Microsoft Fabric at least once (a team app: deployed by its
+  /// pipeline), so its preview has a backend in Fabric to fall back to.
   pub published: bool,
 }
 
@@ -82,8 +81,8 @@ pub struct HelpContext {
   pub recent_activity: String,
   /// What is true right now, from the screen that opened Help.
   pub facts: Vec<String>,
-  /// The open personal project's local backend, as the supervisor last
-  /// reported it. `None` without one open: team apps don't run on one.
+  /// The open project's local backend, as the supervisor last reported it.
+  /// `None` without one open.
   pub local: Option<LocalStatus>,
   /// Which screen the user is on, so an action that can't work from there is
   /// never offered as a button.
@@ -127,15 +126,10 @@ impl HelpContext {
     }
   }
 
-  /// Whether the open project is a personal one.
-  pub fn personal_project(&self) -> bool {
-    self.project.as_ref().is_some_and(|p| p.team.is_none())
-  }
-
-  /// Whether Help describes and reads the open project's local backend: a
-  /// personal one.
+  /// Whether Help describes and reads the open project's local backend: every
+  /// app runs on one, team apps included.
   pub fn reads_local_backend(&self) -> bool {
-    self.personal_project()
+    self.project.is_some()
   }
 
   /// Places inside the roots the session must not read directly: the local
@@ -189,12 +183,12 @@ writes are marked `dev: true`.\n",
         s.push_str(&format!("- The user's open project: \"{}\" at `{}`\n", p.name, p.path));
         if p.team.is_some() {
           s.push_str(
-            "  It is a **team app**, which works differently from a personal one. It doesn't run on \
-a local backend: its preview uses a backend the team's pipeline publishes. It is published by the \
-team's pipeline, not from this computer, and access to it is granted to the whole team workspace \
-rather than per app. So there is no **Share** control for it: an owner grants access under **App \
-access** in the workspace overview. Offer `open-team-access` instead of `share-app`, and say that \
-only a workspace owner can grant it.\n",
+            "  It is a **team app**. It runs on this computer on its local backend like a personal \
+app, but it is published by the team's pipeline, not from this computer: **Publish** deploys the \
+user's personal preview as a check, then merges their changes. Access to it is granted to the \
+whole team workspace rather than per app. So there is no **Share** control for it: an owner \
+grants access under **App access** in the workspace overview. Offer `open-team-access` instead of \
+`share-app`, and say that only a workspace owner can grant it.\n",
           );
         } else if p.published {
           s.push_str("  It has been published to Microsoft Fabric.\n");
@@ -297,7 +291,7 @@ causes. Work from the logs and the documentation.\n",
 /// Look up a project's name and folder from the app's store.
 fn project_context(project_id: &str) -> Option<ProjectContext> {
   store::find_project(project_id).map(|p| ProjectContext {
-    published: published(&p),
+    published: crate::services::agent_skills::has_fabric_backend(&p),
     name: p.name,
     path: p.path,
     team: p.team.map(|t| t.workspace_id),
@@ -364,16 +358,17 @@ mod tests {
     assert!(text.contains("team app"));
     assert!(text.contains("no **Share** control"), "the missing control is explained, not ignored");
     assert!(text.contains("open-team-access"));
-    assert!(text.contains("doesn't run on a local backend"));
-    assert!(!c.personal_project(), "Help never describes a team app's local backend");
-    assert!(!c.reads_local_backend());
+    assert!(text.contains("runs on this computer on its local backend"));
+    assert!(c.reads_local_backend(), "a team app runs on its local backend too");
   }
 
   #[test]
   fn a_personal_project_says_nothing_about_team_access() {
     assert!(!ctx().describe().contains("team app"));
-    assert!(ctx().personal_project());
     assert!(ctx().reads_local_backend());
+    let mut nothing_open = ctx();
+    nothing_open.project = None;
+    assert!(!nothing_open.reads_local_backend());
   }
 
   #[test]

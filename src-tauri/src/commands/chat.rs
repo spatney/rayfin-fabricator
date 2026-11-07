@@ -90,7 +90,8 @@ fn turn_text(
   let notes: Vec<String> = [iq.note(), mcp.note()].into_iter().flatten().collect();
   let text = if notes.is_empty() { text.to_string() } else { format!("{}\n\n{text}", notes.join("\n\n")) };
   if project.team.is_some() {
-    return crate::services::team::chat_text(&project.id, &text);
+    let note = crate::services::team::chat_note(guidance == Guidance::FabricBacked);
+    return format!("{note}\n\n{text}");
   }
   let note = match (guidance, manual_publish) {
     (Guidance::Local, true) => LOCAL_NOTE,
@@ -2104,6 +2105,17 @@ mod tests {
     assert!(LOCAL_NOTE.contains("runs on this computer") && LOCAL_NOTE.contains("Publish after each chat turn is off"));
     assert!(LOCAL_UNPUBLISHED_NOTE.contains("hasn't been published yet") && !LOCAL_UNPUBLISHED_NOTE.contains("when this turn ends"));
     assert!(FALLBACK_NOTE.contains("published backend") && FALLBACK_NOTE.contains("whether it needs a publish first"));
+    // A team app runs here too; its turns never publish, whatever the setting says.
+    let mut team = project.clone();
+    team.team = Some(crate::types::TeamBinding::default());
+    for manual in [true, false] {
+      let local = turn_text(&team, "x", Guidance::Local, manual, &iq::Prepared::default(), &mcp::Prepared::default());
+      assert_eq!(local, format!("{}\n\nx", crate::services::team::CHAT_NOTE));
+      let fallback = turn_text(&team, "x", Guidance::FabricBacked, manual, &iq::Prepared::default(), &mcp::Prepared::default());
+      assert_eq!(fallback, format!("{}\n\nx", crate::services::team::FALLBACK_CHAT_NOTE));
+    }
+    assert!(crate::services::team::CHAT_NOTE.contains("runs on this computer"));
+    assert!(crate::services::team::FALLBACK_CHAT_NOTE.contains("whether it needs a publish first"));
     for note in [LOCAL_NOTE, LOCAL_AUTO_PUBLISH_NOTE, LOCAL_UNPUBLISHED_NOTE, FALLBACK_NOTE, FALLBACK_AUTO_PUBLISH_NOTE] {
       assert!(note.starts_with("[Fabricator: ") && note.ends_with(']'), "{note}");
       // Publishing is what the UI calls it: no note talks about deploying.

@@ -423,7 +423,7 @@ export default function SettingsModal({
                     />
                     <ToggleRow
                       label="Goals"
-                      hint="Add a Goals tab to each personal app: say what the app is for and what it must keep doing, in plain words. Before you publish, Copilot checks a fresh copy of the app against them, and in chat it tells you when a change would break one."
+                      hint="Add a Goals tab to each app: say what the app is for and what it must keep doing, in plain words. Before you publish, Copilot checks a fresh copy of the app against them, and in chat it tells you when a change would break one."
                       checked={Boolean(settings.experiments?.goals)}
                       onChange={(v) => onChange({ experiments: { goals: v } })}
                     />

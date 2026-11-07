@@ -60,7 +60,7 @@ export interface DeployUiState {
   workspace?: string
 }
 
-/** Which app a personal app's preview shows: the one on this computer, or the published one. */
+/** Which app a published app's preview shows: the one on this computer, or the published one. */
 export type PreviewView = 'local' | 'published'
 
 /**
@@ -160,10 +160,10 @@ interface Props {
    *  preview pane). `null` when not loading. */
   onLoadingChange?: (state: { name: string; fading: boolean } | null) => void
   /**
-   * A personal app's local backend (rayfin-local): by default the preview shows
-   * the app running on this computer, with its own backend and data. Absent for
-   * team apps, and for a published app it can't run, whose preview falls back
-   * to the published backend (`fallbackReason`).
+   * The app's local backend (rayfin-local): by default the preview shows the
+   * app running on this computer, with its own backend and data, team apps
+   * included. Absent for an app it can't run, whose preview falls back to its
+   * backend in Fabric (`fallbackReason`).
    */
   local?: LocalBackend
   /** With `local`: which app the preview shows. Published is offered once the app is. */
@@ -179,15 +179,14 @@ interface Props {
   onReviewSchema?: () => void
   /** Hand a request to the chat, such as fixing the seed data's problems. */
   onSendToChat?: (display: string, prompt: string) => void
-  /** An app on its published backend (team apps, every app without Local
-   *  development, and the fallback): the `localhost` URL of the project's Vite
-   *  dev server, or null/undefined when none. When set (and no publish is
-   *  running), the preview surface shows this instead of the published app.
-   *  See {@link RayfinStudioApi.dev}. */
+  /** An app on a Fabric backend (one its local backend can't run, `fallbackReason`):
+   *  the `localhost` URL of the project's Vite dev server, or null/undefined when none.
+   *  When set (and no publish is running), the preview surface shows this instead
+   *  of the published app. See {@link RayfinStudioApi.dev}. */
   localPreviewUrl?: string | null
-  /** Chat turns don't publish ("Publish after each chat turn" is off): the live
-   *  preview on the published backend runs whenever the app is open, instead
-   *  of only during turns. */
+  /** Chat turns don't publish ("Publish after each chat turn" is off, and never
+   *  for a team app): the live preview on a Fabric backend runs whenever the
+   *  app is open, instead of only during turns. */
   manualDeploy?: boolean
   /** Changes when the local page should load again: a chat turn ended that
    *  changed what hot updates don't bring, or the backend rebuilt. */
@@ -197,13 +196,10 @@ interface Props {
   turnRunning?: boolean
   /** A team app (experimental): its pipeline publishes it, so there's no Publish here. */
   team?: boolean
-  /** Team apps: the deployment the local preview's data comes from. */
+  /** Team apps on a Fabric backend: the deployment the live preview's data comes from. */
   localBackend?: DevServerResult['backend']
   /** Team apps: the pipeline run publishing this app right now, if any. */
   teamRun?: TeamRunStatus
-  /** Team apps: which deployment the preview shows — your own preview or the
-   *  published app (the team menu's "Preview shows"). */
-  teamView?: 'preview' | 'production'
   /** Team apps: open the workspace overview. */
   onOpenTeamMap?: () => void
   /**
@@ -229,18 +225,11 @@ interface Props {
   onPageLoad?: (page: { url: string; loading: boolean; app: boolean }) => void
 }
 
-/** What a team app's preview status says once its deployment is up: which one
- *  the preview shows. (A solo app's published state is on the app bar's
- *  publish control, so its preview has no such status.) */
-function liveLabel(teamView: Props['teamView']): string {
-  return teamView === 'production' ? 'Published' : 'My preview'
-}
-
-function statusLabel(running: boolean, status: string | undefined, live: string): string {
+function statusLabel(running: boolean, status: string | undefined): string {
   if (running) return 'Publishing…'
   switch (status) {
     case 'success':
-      return live
+      return 'Published'
     case 'error':
       return 'Couldn’t publish'
     case 'deploying':
@@ -317,7 +306,6 @@ export default function PreviewPane({
   team = false,
   localBackend,
   teamRun,
-  teamView,
   onOpenTeamMap,
   watching = false,
   onWatchChange,
@@ -328,9 +316,9 @@ export default function PreviewPane({
   const suppressed = usePreviewSuppressed()
   const running = deploy?.running ?? false
   const deployedUrl = project.lastDeploy?.url
-  // A personal app runs on this computer, on its local backend; once it's
-  // published, the published app is a switch away.
-  const localMode = Boolean(local) && !team
+  // An app runs on this computer, on its local backend (a team app too); once
+  // it's published, the published app is a switch away.
+  const localMode = Boolean(local)
   const view: PreviewView =
     !localMode || (deployedUrl && requestedView === 'published') ? 'published' : 'local'
   const localView = view === 'local'
@@ -356,8 +344,11 @@ export default function PreviewPane({
         : 'error'
       : project.lastDeploy?.status
   const error = deploy?.result ? deploy.result.error : project.lastDeploy?.error
-  // Team apps: the pipeline is publishing this app (its preview, or the published app).
-  const teamDeploying = Boolean(team && teamRun && teamRun.status !== 'completed')
+  // Team apps: the pipeline is publishing this app (its published version: your
+  // preview deploys while you publish, beside the app on this computer).
+  const teamDeploying = Boolean(
+    team && teamRun?.kind === 'production' && teamRun.status !== 'completed'
+  )
   const outcome = deploy?.result?.outcome ?? project.lastDeploy?.outcome
   // An app that has never been published has no Fabric workspace yet: a publish
   // that needed one asks where to publish it instead of failing. The Local view shows the app on this computer.
@@ -544,9 +535,9 @@ export default function PreviewPane({
   // The app on this computer, once its backend runs: its own dev server.
   const localReady = localView && local?.state === 'running' ? local.ready : null
   const localAppUrl = localReady?.appUrl ?? null
-  // Team apps and the published-backend fallback: while a Vite dev server runs
-  // for the project, the surface shows its localhost URL instead of the
-  // published app. A publish on the full screen still wins (DeployStage); one
+  // An app on a Fabric backend (one its local backend can't run): while a Vite
+  // dev server runs for the project, the surface shows its localhost URL instead
+  // of the published app. A publish on the full screen still wins (DeployStage); one
   // running beside the app leaves it on screen.
   const devPreview = !localMode && Boolean(localPreviewUrl) && (!running || beside)
   /** The surface shows a page served on this computer. */
@@ -1078,16 +1069,12 @@ export default function PreviewPane({
         : status === 'error'
           ? 'err'
           : 'idle'
-  const live = liveLabel(teamView)
   const statusText = teamDeploying
     ? status === 'success'
-      ? `${live} · updating`
+      ? 'Published · updating'
       : 'Publishing…'
-    : statusLabel(running, status, live)
-  const statusTitle =
-    teamView === 'production'
-      ? 'Showing the published app — what everyone sees. Switch in the team menu.'
-      : 'Showing your own preview of your changes. Switch to the published app in the team menu.'
+    : statusLabel(running, status)
+  const statusTitle = 'Showing the published app: what everyone on the team sees.'
   // The Fabric portal shell around the published app (see `fabricOffered`).
   const fabricAvailable = Boolean(fabricUrl) && !isLocal
   const fabricTitle = !fabricUrl
@@ -1165,6 +1152,7 @@ export default function PreviewPane({
                 key={project.id}
                 name={project.name}
                 fresh={showLocalNotice}
+                team={team}
                 onOpen={dismissNotice}
               />
             </div>
@@ -1172,20 +1160,21 @@ export default function PreviewPane({
           {localView && localRunning && !turnRunning && (
             <PreviewAsMenu key={project.id} projectId={project.id} disabled={transitioning} />
           )}
-          {team && (
+          {team && !localView && (
             <span className={`preview-status preview-status--${dotClass}`} title={statusTitle}>
               <span className="preview-dot" />
               <span className="preview-status-label">{statusText}</span>
             </span>
           )}
           {/* The address says when the preview is local (localhost); a team app's
-              local preview also says whose data it uses when that's not its own. */}
-          {isLocal && team && (localBackend === 'production' || localBackend === 'none') && (
+              live preview on a Fabric backend also says whose data it uses when
+              that's not its own. */}
+          {devPreview && team && (localBackend === 'production' || localBackend === 'none') && (
             <span
               className={`preview-local-badge${localBackend === 'production' ? ' preview-local-badge--warn' : ''}`}
               title={
                 localBackend === 'production'
-                  ? 'It uses the published app’s data until the team pipeline publishes your own preview, so changes you make in it are real.'
+                  ? 'It uses the published app’s data, so changes you make in it are real.'
                   : 'Nothing is published yet, so it runs without data.'
               }
             >
@@ -1200,13 +1189,13 @@ export default function PreviewPane({
                   ? `Your app, running on this computer at ${localAppUrl}, with its own backend and local data: Copilot’s changes show here as it makes them. Click to open it in your browser.`
                   : isLocal
                     ? team
-                      ? `Your app, running on this computer at ${localPreviewUrl}: Copilot's changes show here as it makes them. ${
+                      ? `Your app, running on this computer at ${localPreviewUrl} with the team’s deployment of it in Fabric: Copilot’s changes show here as it makes them. ${
                           localBackend === 'production'
-                            ? 'It uses the published app’s data until the team pipeline publishes your own preview, so changes you make in it are real.'
+                            ? 'It uses the published app’s data, so changes you make in it are real.'
                             : localBackend === 'none'
                               ? 'Nothing is published yet, so it runs without data.'
-                              : "It uses your preview's data."
-                        } It stays until the team pipeline has published your latest change. Click to open it in your browser.`
+                              : 'It uses your preview’s data.'
+                        } Click to open it in your browser.`
                       : manualDeploy
                         ? `Your app, running on this computer at ${localPreviewUrl} with your published app’s backend. While chat turns don’t publish, it shows your latest changes whenever the app is open. Click to open it in your browser.`
                         : `Your app, running on this computer at ${localPreviewUrl} with your published app’s backend while Copilot works, so its changes show as it makes them. Click to open it in your browser.`
@@ -1292,7 +1281,9 @@ export default function PreviewPane({
         </div>
       </div>
 
-      {teamDeploying && teamRun && showWebview && <TeamRunStrip run={teamRun} onOpenMap={onOpenTeamMap} />}
+      {teamDeploying && teamRun && showWebview && !localView && (
+        <TeamRunStrip run={teamRun} onOpenMap={onOpenTeamMap} />
+      )}
 
       {beside && (
         <DeployStrip
@@ -1304,13 +1295,13 @@ export default function PreviewPane({
         />
       )}
 
-      {fallbackReason && !localMode && !team && <FallbackNote reason={fallbackReason} />}
+      {fallbackReason && !localMode && <FallbackNote reason={fallbackReason} />}
       {localView && sdkWarning && <SdkWarningNote warning={sdkWarning} />}
       {localView &&
         local?.state === 'running' &&
         refusedSchemaLosses(local.status) &&
         onReviewSchema && <SchemaWaitingNote onReview={onReviewSchema} />}
-      {localView && local?.state === 'running' && !team && (
+      {localView && local?.state === 'running' && (
         <SeedOffer
           projectId={project.id}
           stamp={`${backendStamp(local.status)}|${turnRunning}`}
@@ -1405,11 +1396,7 @@ export default function PreviewPane({
             ) : status === 'error' ? (
               <p>Review the error and logs above, then publish again to retry.</p>
             ) : team ? (
-              <p>
-                Your preview appears here after Copilot makes a change: Fabricator saves it to
-                GitHub and the team pipeline publishes your own preview. The first one takes a few
-                minutes.
-              </p>
+              <p>The published app shows here once your team publishes it.</p>
             ) : localMode ? (
               <p>Your published app shows here once you publish it.</p>
             ) : (

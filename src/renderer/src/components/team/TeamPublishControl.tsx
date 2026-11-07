@@ -19,7 +19,6 @@ interface Props {
   onUpdate: () => void
   onCombine: () => void
   onDiscard: () => void
-  onSetView: (view: 'preview' | 'production') => void
   onViewLogs: (runId: number) => void
   /** Diagnose a failed run or publish with Copilot. */
   onDiagnose?: (run: { runId?: number; runUrl?: string; error?: string }) => void
@@ -47,23 +46,20 @@ export function teamChipLabel(status: TeamSessionStatus | undefined, syncing: bo
   return 'Up to date'
 }
 
-function deployLabel(state?: string): string {
-  switch (state) {
-    case 'success':
-      return 'Live'
-    case 'failure':
-    case 'error':
-      return 'Failed'
-    case 'in_progress':
-    case 'queued':
-    case 'pending':
-      return 'Deploying…'
-    default:
-      return 'Not deployed yet'
-  }
+/**
+ * Your preview, deployed for your open pull request once it's ready for review
+ * (Publish marks it ready), for you and your reviewers to open. A draft's
+ * deploys nothing, and one left from an earlier pull request isn't yours now.
+ */
+export function livePreviewUrl(status: TeamSessionStatus | undefined): string | undefined {
+  const pr = status?.pr
+  const preview = status?.preview
+  if (!pr || pr.state !== 'open' || pr.draft || preview?.state !== 'success') return undefined
+  if (preview.sha && pr.headSha && preview.sha !== pr.headSha) return undefined
+  return preview.url
 }
 
-/** The app bar control for team apps: state, Publish, the preview choice and the workspace overview. */
+/** The app bar control for team apps: state, Publish, and the workspace overview. */
 export default function TeamPublishControl({
   project,
   workspaceName,
@@ -74,7 +70,6 @@ export default function TeamPublishControl({
   onUpdate,
   onCombine,
   onDiscard,
-  onSetView,
   onViewLogs,
   onDiagnose,
   onRefresh,
@@ -84,8 +79,8 @@ export default function TeamPublishControl({
   const rootRef = useRef<HTMLDivElement>(null)
   // The native preview paints above all HTML; step it aside while the menu is open.
   useSuppressPreview(open)
-  const view = status?.view ?? project.team?.view ?? 'preview'
   const unpublished = status?.unpublished ?? 0
+  const previewUrl = livePreviewUrl(status)
   const publishing =
     status?.publish?.stage === 'deploying' ||
     (status?.run?.kind === 'production' && status.run.status !== 'completed')
@@ -187,8 +182,8 @@ export default function TeamPublishControl({
               </span>
             )}
             <span className="team-muted">
-              Your edits are saved to your own working copy on GitHub after each change. Publish
-              makes them live for everyone.
+              Your app runs on this computer while you work. Your edits are saved to your own
+              working copy on GitHub after each change, and Publish makes them live for everyone.
             </span>
             {onOpenMap && (
               <div className="team-menu-actions">
@@ -204,32 +199,6 @@ export default function TeamPublishControl({
                 </button>
               </div>
             )}
-          </div>
-
-          <div className="team-menu-section">
-            <span className="team-menu-title">Preview shows</span>
-            <div className="seg team-view" role="radiogroup" aria-label="Preview shows">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={view === 'preview'}
-                className={`seg-btn${view === 'preview' ? ' seg-btn--active' : ''}`}
-                onClick={() => onSetView('preview')}
-              >
-                <span className="team-view-label">My preview</span>
-                <span className="team-view-state">{deployLabel(status?.preview?.state)}</span>
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={view === 'production'}
-                className={`seg-btn${view === 'production' ? ' seg-btn--active' : ''}`}
-                onClick={() => onSetView('production')}
-              >
-                <span className="team-view-label">Published</span>
-                <span className="team-view-state">{deployLabel(status?.production?.state)}</span>
-              </button>
-            </div>
           </div>
 
           {status?.run && (runActive || runFailed) && (
@@ -329,6 +298,16 @@ export default function TeamPublishControl({
               {status?.pr && (
                 <button type="button" className="btn btn--sm" onClick={() => void window.api.openExternal(status.pr?.url ?? '')}>
                   View on GitHub
+                </button>
+              )}
+              {previewUrl && (
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  title="Your preview in Fabric, deployed when you published, which your reviewers can open too"
+                  onClick={() => void window.api.openExternal(previewUrl)}
+                >
+                  Open your preview
                 </button>
               )}
               <button

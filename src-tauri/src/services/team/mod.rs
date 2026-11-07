@@ -4,12 +4,15 @@
 //! projects, one per top-level folder. Each workspace has an Entra app
 //! registration (service principal) trusted by the repository through GitHub
 //! OIDC, and a Fabricator-managed workflow that deploys:
-//! - pull requests: a personal preview of the changed project for its author;
+//! - pull requests that are ready for review: a personal preview of the changed
+//!   project for its author (draft pull requests don't deploy);
 //! - pushes to `main`: the published app.
 //!
-//! Team projects never deploy from this machine. Fabricator works on a branch
-//! per session, commits and pushes after each chat turn, and publishes by
-//! merging the branch's pull request.
+//! Team projects never deploy from this machine. While you work on one, it runs
+//! on this computer on its local backend, like any app (`services::local_backend`).
+//! Fabricator works on a branch per session, commits and pushes after each chat
+//! turn to a draft pull request, and publishes by marking the pull request ready
+//! (which deploys your preview, the check) and merging it.
 
 pub mod entra;
 pub mod fabric;
@@ -198,15 +201,21 @@ pub fn save_binding(project_id: &str, f: impl FnOnce(&mut TeamBinding)) -> Optio
 }
 
 /// Guidance prepended to each chat message in a team project. Skills are shared
-/// by every project, so the team-specific rules travel with the message.
-pub const CHAT_NOTE: &str = "[Fabricator: this app is in a team workspace. When this turn ends, Fabricator saves the changes to the team's working branch on GitHub, and the team pipeline deploys a personal preview. Don't deploy, sign in to Rayfin, or run git branch, push or merge commands, or gh: Fabricator handles those.]";
+/// by every project, so the team-specific rules travel with the message. A team
+/// app runs on this computer (the local guidance) like any app.
+pub const CHAT_NOTE: &str = "[Fabricator: this app is in a team workspace, and it runs on this computer while you work. When this turn ends, Fabricator saves the changes to the user's working branch on GitHub. They reach Microsoft Fabric only when the user publishes: Fabricator merges them, and the team's pipeline deploys them. Don't deploy, sign in to Rayfin, or run git branch, push or merge commands, or gh: Fabricator handles those.]";
 
-/// The text sent to Copilot for a chat message in `project_id`.
-pub fn chat_text(project_id: &str, text: &str) -> String {
-  if is_team_project_id(project_id) {
-    format!("{CHAT_NOTE}\n\n{text}")
+/// The note for a team app the local backend can't run all of (the
+/// Fabric-backed guidance): its preview runs against the team's deployment.
+pub const FALLBACK_CHAT_NOTE: &str = "[Fabricator: this app is in a team workspace, and its backend runs on Microsoft Fabric, because the local backend can't run all of it. The preview shows your frontend changes against the team's deployment of the app. When this turn ends, Fabricator saves the changes to the user's working branch on GitHub; changes to data, permissions or functions reach that backend only once the user publishes, when the team's pipeline deploys them. End by saying what to try in the preview and whether it needs a publish first. Don't deploy, sign in to Rayfin, or run git branch, push or merge commands, or gh: Fabricator handles those.]";
+
+/// The note on a team app's chat message: for the app on this computer, or on
+/// the team's deployment in Fabric (`fabric_backed`).
+pub fn chat_note(fabric_backed: bool) -> &'static str {
+  if fabric_backed {
+    FALLBACK_CHAT_NOTE
   } else {
-    text.to_string()
+    CHAT_NOTE
   }
 }
 
@@ -236,25 +245,22 @@ pub fn deploy_info(record: &TeamDeployRecord) -> DeployInfo {
   }
 }
 
-/// Which record the preview shows: your preview while you have one (and asked
-/// for it), otherwise the published app.
-pub fn shown_record(binding: &TeamBinding) -> Option<&TeamDeployRecord> {
-  let want_preview = binding.view.as_deref() != Some("production");
-  if want_preview {
-    binding.preview.as_ref().filter(|r| r.url.is_some()).or(binding.production.as_ref())
-  } else {
-    binding.production.as_ref()
-  }
-}
-
-/// Point the project's `last_deploy` (what the preview loads) at the shown record.
+/// Point the project's `last_deploy` at its published app (the production
+/// deployment), which the preview's **Published** view shows. While you work,
+/// the app itself runs on this computer.
 pub fn apply_view(project_id: &str) -> Option<StudioProject> {
   store::mutate_project(project_id, |p| {
     if let Some(binding) = p.team.as_ref() {
-      p.last_deploy = shown_record(binding).map(deploy_info);
+      p.last_deploy = binding.production.as_ref().map(deploy_info);
     }
   });
   store::find_project(project_id)
+}
+
+/// Whether the team has a deployment of the app that a preview this computer
+/// can't run could use instead: your preview, or the published app.
+pub fn has_deployment(binding: &TeamBinding) -> bool {
+  local_preview::choose(binding).1.is_some()
 }
 
 #[cfg(test)]
@@ -349,20 +355,5 @@ mod tests {
     assert!(failed.error.unwrap().contains("delete data"));
     let outdated = deploy_info(&TeamDeployRecord { reason: Some("rayfin-update".into()), ..record("p", "failure", None) });
     assert!(outdated.error.unwrap().contains(MIN_RAYFIN));
-  }
-
-  #[test]
-  fn the_preview_shows_your_preview_until_you_pick_the_published_app() {
-    let mut binding = TeamBinding {
-      preview: Some(record("preview/app/amy", "success", Some("https://preview"))),
-      production: Some(record("production/app", "success", Some("https://prod"))),
-      ..Default::default()
-    };
-    assert_eq!(shown_record(&binding).unwrap().url.as_deref(), Some("https://preview"));
-    binding.view = Some("production".into());
-    assert_eq!(shown_record(&binding).unwrap().url.as_deref(), Some("https://prod"));
-    binding.view = None;
-    binding.preview = Some(record("preview/app/amy", "in_progress", None));
-    assert_eq!(shown_record(&binding).unwrap().url.as_deref(), Some("https://prod"));
   }
 }

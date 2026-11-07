@@ -1890,7 +1890,7 @@ describe('Workbench local backend', () => {
     expect(api.local.stop, 'the one you came from keeps running').not.toHaveBeenCalled()
   })
 
-  it('never starts a team app’s local backend', async () => {
+  it('runs a team app on its local backend, like any app', async () => {
     const api = installApi(true)
     const teamApp: StudioProject = {
       ...project,
@@ -1906,10 +1906,9 @@ describe('Workbench local backend', () => {
     api.deploy.reconcile.mockResolvedValue(state)
     render(<Workbench {...makeProps({ settings: defaultSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
-    await act(async () => {})
-    expect(api.local.status).not.toHaveBeenCalled()
-    expect(api.local.start).not.toHaveBeenCalled()
-    expect(preview().local).toBeUndefined()
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledWith(teamApp.id, undefined))
+    expect(preview().local).toBeDefined()
+    expect(preview().fallbackReason).toBeNull()
   })
 
   it('reloads the page once the backend rebuilds what it uses, after the turn that changed it', async () => {
@@ -2273,7 +2272,6 @@ describe('Workbench Goals', () => {
     results: [failed],
     lastRun: null,
     allPassed: false,
-    cannotRun: null,
     running: false
   }
 
@@ -2394,12 +2392,12 @@ describe('Workbench team workspaces', () => {
   }
   const teamSettings: AppSettings = { theme: 'system', experiments: { teamWorkspaces: true } }
 
-  function installTeamApi() {
+  function installTeamApi(app: StudioProject = teamProject) {
     const api = installApi(true)
     const state = {
       workspaceRoot: 'C:\\projects',
-      activeProjectId: teamProject.id,
-      projects: [teamProject],
+      activeProjectId: app.id,
+      projects: [app],
       teamWorkspaces: [
         {
           id: 'w1',
@@ -2417,13 +2415,12 @@ describe('Workbench team workspaces', () => {
     const team = {
       status: vi.fn().mockResolvedValue({
         ok: true,
-        branch: teamProject.team?.branch,
+        branch: app.team?.branch,
         unpublished: 2,
         dirty: false,
         behind: 0,
         conflicted: false,
-        requireReview: false,
-        view: 'preview'
+        requireReview: false
       }),
       sync: vi.fn().mockResolvedValue({ ok: true }),
       publish: vi.fn().mockResolvedValue({ ok: true }),
@@ -2485,20 +2482,64 @@ describe('Workbench team workspaces', () => {
     expect(deploymentsProps, 'team apps have no deployment panel, or its switch').not.toHaveBeenCalled()
   })
 
-  it('keeps a team local preview while its saved turn waits for the pipeline', async () => {
+  it('runs a team app’s turns on its local backend, with no live preview on Fabric', async () => {
     const { api, team } = installTeamApi()
     api.dev.plan.mockResolvedValue({ port: 5174 })
     render(<Workbench {...makeProps({ settings: teamSettings })} />, { wrapper: Wrapper })
     await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledWith(teamProject.id, undefined))
     const { turn } = await beginTurn()
     await act(async () => turn)
-    expect(api.dev.start).toHaveBeenCalledWith(teamProject.id, 5174)
-
     await act(async () => completeTurn())
     expect(team.sync).toHaveBeenCalledWith(teamProject.id, '')
-    expect(api.dev.stop).not.toHaveBeenCalled()
-    expect(previewProps.mock.lastCall?.[0].localPreviewUrl).toBe('http://localhost:5174')
+    expect(api.dev.start).not.toHaveBeenCalled()
+    expect(previewProps.mock.lastCall?.[0].local).toBeDefined()
     expect(api.deploy.run).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the team’s deployment when this computer can’t run the app, and keeps that preview between turns', async () => {
+    const deployed: StudioProject = {
+      ...teamProject,
+      lastDeploy: { url: 'https://team-app.example', status: 'success' },
+      team: {
+        ...(teamProject.team as NonNullable<StudioProject['team']>),
+        production: {
+          environment: 'production/team-app',
+          state: 'success',
+          url: 'https://team-app.example',
+          itemId: 'item',
+          workspaceId: 'ws'
+        }
+      }
+    }
+    const { api, team } = installTeamApi(deployed)
+    api.dev.plan.mockResolvedValue({ port: 5174 })
+    render(<Workbench {...makeProps({ settings: teamSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledTimes(1))
+    emitLocal(
+      {
+        state: 'running',
+        ready: {
+          ...localReady,
+          features: {
+            ...localReady.features,
+            connectors: [{ name: 'logs', type: 'kusto', supported: false }]
+          }
+        }
+      },
+      deployed.id
+    )
+    const reason =
+      'The logs connector runs only on Fabric, so the preview uses the team’s deployment of it in Fabric.'
+    expect(previewProps.mock.lastCall?.[0].fallbackReason).toBe(reason)
+    await waitFor(() => expect(api.local.stop).toHaveBeenCalledWith(deployed.id))
+    // Its turns never publish, so the live preview on that deployment runs while it's open.
+    emitLocal({ state: 'stopped' }, deployed.id)
+    await waitFor(() => expect(api.dev.start).toHaveBeenCalledWith(deployed.id, 5174))
+    await act(async () => completeTurn())
+    expect(team.sync).toHaveBeenCalledWith(deployed.id, '')
+    expect(api.dev.stop).not.toHaveBeenCalled()
   })
 
   it('replaces the deployments control with Publish', async () => {
@@ -2529,6 +2570,44 @@ describe('Workbench team workspaces', () => {
     expect(team.publish).toHaveBeenCalledWith('t1', false)
     expect(api.deploy.run).not.toHaveBeenCalled()
     expect(await screen.findByRole('dialog', { name: 'Publish' })).toBeTruthy()
+  })
+
+  it('offers to run a team app’s Goals checks before it publishes', async () => {
+    const { api, team } = installTeamApi()
+    const goals: GoalsSnapshot = {
+      exists: true,
+      purpose: 'Sales pipeline for the team',
+      checks: [{ id: 'a', text: 'Reps see only their own deals' }],
+      results: [],
+      lastRun: null,
+      allPassed: false,
+      running: false
+    }
+    Object.assign(api, {
+      goals: {
+        load: vi.fn<RayfinStudioApi['goals']['load']>().mockResolvedValue(goals),
+        run: vi.fn<RayfinStudioApi['goals']['run']>(() => new Promise(() => {})),
+        onEvent: vi.fn<RayfinStudioApi['goals']['onEvent']>(() => () => {}),
+        draftCancel: vi.fn<RayfinStudioApi['goals']['draftCancel']>().mockResolvedValue(false)
+      }
+    })
+    const settings: AppSettings = {
+      theme: 'system',
+      experiments: { teamWorkspaces: true, goals: true }
+    }
+    const { container } = render(<Workbench {...makeProps({ settings })} />, { wrapper: Wrapper })
+    const bar = within(container.querySelector('header.app-bar') as HTMLElement)
+    await bar.findByText('2 unpublished')
+
+    await act(async () => {
+      fireEvent.click(bar.getByRole('button', { name: 'Publish' }))
+    })
+    const gate = await screen.findByRole('dialog', { name: 'Run your app’s checks first?' })
+    expect(team.publish).not.toHaveBeenCalled()
+
+    fireEvent.click(within(gate).getByRole('button', { name: 'Publish anyway' }))
+    await waitFor(() => expect(team.publish).toHaveBeenCalledWith('t1', false))
+    expect(api.deploy.run).not.toHaveBeenCalled()
   })
 })
 

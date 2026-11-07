@@ -16,7 +16,21 @@ use crate::types::{TeamManifest, TeamRunner};
 use super::MIN_RAYFIN;
 
 /// Bump when [`WORKFLOW`] changes so existing workspaces are offered an update.
-pub const TEMPLATE_VERSION: u32 = 5;
+pub const TEMPLATE_VERSION: u32 = 6;
+
+/// The first template whose draft pull requests don't deploy a preview: their
+/// author runs the app on their own computer, and Fabricator's Publish marks
+/// the pull request ready, which deploys it. The renderer's `READY_PREVIEWS_TEMPLATE`.
+pub const READY_PREVIEWS_VERSION: u32 = 6;
+
+/// How the workflow names a draft pull request's run (`run-name`), which
+/// deploys nothing: Fabricator waits for, and reports, the other runs.
+pub const DRAFT_RUN_PREFIX: &str = "Draft (no preview): ";
+
+/// Whether a run of the workflow is a draft pull request's, which deploys nothing.
+pub fn is_draft_run(event: &str, title: Option<&str>) -> bool {
+  event == "pull_request" && title.is_some_and(|t| t.starts_with(DRAFT_RUN_PREFIX))
+}
 
 /// The Actions variable (repository or organization) that names the runners
 /// the workflow's jobs use, as JSON `runs-on` accepts. GitHub-hosted
@@ -27,7 +41,10 @@ const WORKFLOW: &str = r##"# Managed by Fabricator (team workspace template v{{V
 # Fabricator replaces this file when its template changes, so edits here may be lost.
 #
 # Every top-level folder that contains rayfin/rayfin.yml is a Rayfin app.
-# - Pull requests deploy a personal preview of the changed apps for their author.
+# - Pull requests that are ready for review deploy a personal preview of the
+#   changed apps for their author. Draft pull requests don't deploy: Fabricator
+#   runs the app on its author's computer while they work, and marks the pull
+#   request ready when they publish.
 # - Pushes to main deploy the published apps.
 # Jobs sign in through GitHub OIDC: pull requests as the preview identity (which
 # can only reach the previews workspace), main as the deploy identity.
@@ -37,13 +54,14 @@ const WORKFLOW: &str = r##"# Managed by Fabricator (team workspace template v{{V
 # variable (repository or organization) names other runners as JSON, for example
 # {"group":"my-runners"} or ["self-hosted","linux"]. Runners need bash, curl and git.
 name: Fabricator
+run-name: "${{ github.event_name == 'pull_request' && github.event.pull_request.draft && format('{{DRAFT_RUN_PREFIX}}{0}', github.event.pull_request.title) || ' ' }}"
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       action:
@@ -73,6 +91,8 @@ env:
 jobs:
   plan:
     name: Plan
+    # A draft pull request deploys nothing, so none of its jobs run.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ${{ fromJSON(vars.FABRICATOR_RUNS_ON || '"ubuntu-latest"') }}
     outputs:
       mode: ${{ steps.plan.outputs.mode }}
@@ -396,20 +416,23 @@ const README: &str = r##"# {{NAME}}
 This repository is a **Fabricator team workspace**. Each top-level folder is a Rayfin app.
 
 - Open it in Fabricator (Settings → Experiments → Team workspaces) to build the apps with your team.
-- Fabricator works on a branch for you, opens a pull request, and publishes by merging it.
-- The `Fabricator` workflow deploys a personal preview for each pull request and the published app for `main`.
+- Fabricator runs each app on your computer while you work on it, saves your changes to a branch and a
+  draft pull request, and publishes by merging it.
+- The `Fabricator` workflow deploys a personal preview for each pull request that's ready for review, and the
+  published app for `main`. Draft pull requests don't deploy.
   It signs in to Microsoft Fabric as the workspace's service principal through GitHub OIDC; no secrets are stored.
 
 Each folder's name is also its app's name in Fabric, so don't rename the folders.
 "##;
 
-const GITIGNORE: &str = "node_modules/\n.DS_Store\n";
+const GITIGNORE: &str = "node_modules/\n.DS_Store\n.rayfin-local/\n";
 
 /// The managed deploy workflow.
 pub fn workflow() -> String {
   let text = WORKFLOW
     .replace("{{VERSION}}", &TEMPLATE_VERSION.to_string())
-    .replace("{{MIN_RAYFIN}}", MIN_RAYFIN);
+    .replace("{{MIN_RAYFIN}}", MIN_RAYFIN)
+    .replace("{{DRAFT_RUN_PREFIX}}", DRAFT_RUN_PREFIX);
   let mut out = String::with_capacity(text.len() + 2 * SIGN_IN.len());
   for line in text.split_inclusive('\n') {
     if line.trim() != "{{SIGN_IN}}" {
@@ -551,7 +574,7 @@ mod tests {
     for tool in ["azure/login", "az account", "az login", "jq "] {
       assert!(!text.contains(tool), "uses {tool}");
     }
-    for placeholder in ["{{VERSION}}", "{{MIN_RAYFIN}}", "{{SIGN_IN}}"] {
+    for placeholder in ["{{VERSION}}", "{{MIN_RAYFIN}}", "{{SIGN_IN}}", "{{DRAFT_RUN_PREFIX}}"] {
       assert!(!text.contains(placeholder), "{placeholder} was left in");
     }
   }
@@ -731,12 +754,16 @@ mod tests {
   }
 
   #[test]
-  fn cancelled_runs_dont_record_deployments_or_restart_on_ready() {
+  fn cancelled_runs_dont_record_deployments() {
     let doc = yaml();
     let steps = doc["jobs"]["deploy"]["steps"].as_sequence().unwrap();
     let record = steps.iter().find(|s| s["name"].as_str() == Some("Record the deployment")).unwrap();
     assert_eq!(record["if"].as_str(), Some("${{ !cancelled() && steps.target.outputs.environment != '' }}"));
-    // Marking a draft ready mustn't start a second preview run that cancels the first.
+  }
+
+  #[test]
+  fn draft_pull_requests_deploy_nothing_until_they_are_ready() {
+    let doc = yaml();
     let on = doc
       .as_mapping()
       .unwrap()
@@ -744,8 +771,26 @@ mod tests {
       .find(|(k, _)| k.as_str() == Some("on"))
       .map(|(_, v)| v)
       .unwrap();
+    // Publish marks the draft ready, which deploys the preview it checks.
     let types: Vec<&str> = on["pull_request"]["types"].as_sequence().unwrap().iter().filter_map(|t| t.as_str()).collect();
-    assert_eq!(types, vec!["opened", "synchronize", "reopened"]);
+    assert_eq!(types, vec!["opened", "synchronize", "reopened", "ready_for_review"]);
+    // The plan skips a draft's run, and so every job after it: no runner, no deploy.
+    assert_eq!(
+      doc["jobs"]["plan"]["if"].as_str(),
+      Some("github.event_name != 'pull_request' || !github.event.pull_request.draft")
+    );
+    for job in ["verify", "deploy"] {
+      assert_eq!(doc["jobs"][job]["needs"].as_str(), Some("plan"), "{job}");
+    }
+    // A draft's run is named so Fabricator can tell it apart; other runs keep GitHub's name.
+    assert_eq!(
+      doc["run-name"].as_str(),
+      Some("${{ github.event_name == 'pull_request' && github.event.pull_request.draft && format('Draft (no preview): {0}', github.event.pull_request.title) || ' ' }}")
+    );
+    assert!(is_draft_run("pull_request", Some("Draft (no preview): Leads: Add a chart")));
+    assert!(!is_draft_run("pull_request", Some("Leads: Add a chart")));
+    assert!(!is_draft_run("push", Some("Draft (no preview): x")));
+    assert!(!is_draft_run("pull_request", None));
   }
 
   #[test]

@@ -1,12 +1,11 @@
 //! Live local preview against a Fabric backend: run a project's **Vite dev
 //! server** while an agent turn is in flight so edits show live (HMR) at
-//! `localhost`, then stop it at turn end. Personal apps run on their local
-//! backend instead (`local_backend`, rayfin-local, with its own Vite); this is
-//! for team apps, and for a published app the local backend can't run (an SDK
-//! outside its range, a connector that runs only on Fabric), whose preview falls
-//! back to its published backend. Team apps keep theirs until the pipeline has
-//! deployed the saved change, and run against their pipeline deployment's
-//! settings (see [`team::local_preview`]).
+//! `localhost`, then stop it at turn end. Apps run on their local backend
+//! instead (`local_backend`, rayfin-local, with its own Vite); this is for an
+//! app the local backend can't run (an SDK outside its range, a connector that
+//! runs only on Fabric), whose preview falls back to a backend in Fabric: a
+//! published app's, or a team app's deployment, whose settings come from its
+//! pipeline (see [`team::local_preview`]).
 //!
 //! Unlike a deploy, this does NOT run `rayfin up` — it spawns Vite *directly*
 //! (`node …/node_modules/vite/bin/vite.js`) for a fast preview, after a
@@ -499,8 +498,9 @@ async fn start_server(app: AppHandle, state: DevServers, project_id: String, req
     let Some(project) = store::find_project(&project_id) else {
         return Ok(unsupported("Project not found."));
     };
-    // Team apps are deployed by their pipeline: the preview runs against your
-    // preview's deployment (or the published app's) and never deploys from here.
+    // A team app the local backend can't run is deployed by its pipeline: its
+    // live preview runs against your preview's deployment (or the published
+    // app's) and never deploys from here.
     let team_backend = project.team.as_ref().map(|binding| team::local_preview::choose(binding).0);
     let project_dir = PathBuf::from(&project.path);
 
@@ -915,9 +915,8 @@ fn register_result(ok: bool, outcome: &str, error: Option<String>) -> DeployResu
 }
 
 /// A team app's new port is saved in rayfin.yml only: nothing deploys from this
-/// computer, so sign-in accepts the port once the change is saved to GitHub and
-/// the pipeline deploys your preview. Holds the team lease so it can't overlap
-/// a save.
+/// computer, so sign-in accepts the port once the team pipeline deploys the app
+/// again, when you next publish. Holds the team lease so it can't overlap a save.
 fn register_team_port(app: &AppHandle, app_state: &crate::state::AppState, project: &StudioProject, port: u16) -> DeployResult {
     let _lease = match app_state.mutations.team(&project.id) {
         Ok(lease) => lease,
@@ -935,7 +934,7 @@ fn register_team_port(app: &AppHandle, app_state: &crate::state::AppState, proje
             renderer(
                 Stream::System,
                 &format!(
-                    "Added {} to rayfin/rayfin.yml. Sign-in accepts it after your next change is saved and the team pipeline deploys your preview.\n",
+                    "Added {} to rayfin/rayfin.yml. Sign-in accepts it once the team pipeline deploys the app again, when you next publish.\n",
                     redirect_uris::origin(port)
                 ),
             );

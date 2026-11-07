@@ -728,17 +728,17 @@ describe('DataView', () => {
     expect(await screen.findByRole('button', { name: 'Expense, 120 rows' })).toBeTruthy()
   })
 
-  it('says it shows local data only for a team app', () => {
+  it('shows a team app’s own data on this computer, like any app’s', async () => {
     renderView(
       makeProject('p1', { team: { workspaceId: 'w1', folder: 'expenses', worktree: 'x' } })
     )
-    expect(screen.getByText('Local data only', { selector: '.model-empty-title' })).toBeTruthy()
     expect(
-      screen.getByText(
-        'The Data explorer shows data stored on this computer. This team app runs on its Fabric deployment, so its data lives in Fabric.'
+      await screen.findByText(
+        'Local data on this computer, separate from the published app’s data.'
       )
     ).toBeTruthy()
-    expect(local.status).not.toHaveBeenCalled()
+    expect(local.status).toHaveBeenCalled()
+    expect(screen.queryByText('Local data only', { selector: '.model-empty-title' })).toBeNull()
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'local.data_view_opened' })
     )

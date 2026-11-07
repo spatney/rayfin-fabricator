@@ -504,7 +504,7 @@ export default function CreateProjectScreen({
               </select>
               <span className="field-hint">
                 {destination
-                  ? 'Your team sees the app once you publish it. The team pipeline deploys your preview.'
+                  ? 'It runs on this computer while you build it. Your team sees it once you publish it.'
                   : 'It runs on this computer. Publish it to a Fabric workspace whenever you’re ready.'}
               </span>
             </label>

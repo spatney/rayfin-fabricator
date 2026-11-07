@@ -42,6 +42,9 @@ interface Options {
   refreshProjects: () => Promise<unknown>
   /** Send a prompt to the project's chat. */
   sendToChat: (projectId: string, display: string, prompt: string) => void
+  /** The app's packages changed (teammates' changes came in, or yours went
+   *  away): install them again for the app on this computer. */
+  onPackagesChanged?: (projectId: string) => void
 }
 
 interface PublishRun {
@@ -54,14 +57,13 @@ interface PublishRun {
 export interface TeamWork {
   status: (projectId: string) => TeamSessionStatus | undefined
   syncing: (projectId: string) => boolean
-  /** Save a finished chat turn to the working branch (deploys the preview). */
+  /** Save a finished chat turn to the working branch (its draft pull request). */
   afterTurn: (projectId: string, message: string) => Promise<void>
   refresh: (projectId: string, deep?: boolean) => Promise<void>
   publish: (projectId: string, confirmDataLoss?: boolean) => void
   update: (projectId: string) => void
   combineWithCopilot: (projectId: string, files: string[]) => void
   discard: (projectId: string) => void
-  setView: (projectId: string, view: 'preview' | 'production') => void
   viewLogs: (projectId: string, runId: number) => void
   /** Diagnose a failed run or publish with Copilot (read-only), in a dialog. */
   diagnose: (projectId: string, run: { runId?: number; runUrl?: string; error?: string }) => void
@@ -72,7 +74,7 @@ function recordKey(status: TeamSessionStatus | undefined): string {
   if (!status) return ''
   const r = (x?: { state: string; url?: string; sha?: string }): string =>
     x ? `${x.state}|${x.url ?? ''}|${x.sha ?? ''}` : '-'
-  return `${r(status.preview)}/${r(status.production)}/${status.view}/${status.publish?.stage ?? ''}`
+  return `${r(status.preview)}/${r(status.production)}/${status.publish?.stage ?? ''}`
 }
 
 /**
@@ -199,6 +201,7 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
         }
         setPublishing((p) => (p && p.projectId === projectId ? { ...p, running: false, result } : p))
         if (result.conflicts?.length) setConflicts({ projectId, files: result.conflicts })
+        if (result.packagesChanged) optionsRef.current.onPackagesChanged?.(projectId)
         await optionsRef.current.refreshProjects()
         await refresh(projectId, true)
       })()
@@ -220,6 +223,7 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
           } else {
             optionsRef.current.toast.success("You have your teammates' latest changes.", { title: 'Updated' })
           }
+          if (result.packagesChanged) optionsRef.current.onPackagesChanged?.(projectId)
         } catch (reason) {
           optionsRef.current.toast.error(teamError(reason, 'Could not bring in the changes.'), { title: 'Update failed' })
         }
@@ -256,16 +260,6 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
     })()
   }, [])
 
-  const setView = useCallback(
-    (projectId: string, view: 'preview' | 'production'): void => {
-      void window.api.team
-        .setView(projectId, view)
-        .then(() => optionsRef.current.refreshProjects())
-        .then(() => refresh(projectId, false))
-    },
-    [refresh]
-  )
-
   const viewLogs = useCallback((projectId: string, runId: number): void => {
     setLogs({ projectId, runId, text: null })
     void window.api.team
@@ -295,6 +289,7 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
       if (!result.ok) {
         optionsRef.current.toast.error(result.error ?? 'Could not discard your changes.', { title: 'Discard failed' })
       }
+      if (result.packagesChanged) optionsRef.current.onPackagesChanged?.(projectId)
     } finally {
       setDiscarding(false)
       setConfirmDiscard(null)
@@ -394,7 +389,6 @@ export function useTeamWork(activeProject: StudioProject | null, options: Option
     update,
     combineWithCopilot,
     discard: (projectId) => setConfirmDiscard(projectId),
-    setView,
     viewLogs,
     diagnose,
     overlays

@@ -338,7 +338,7 @@ function localHint(entry: SecretEntry, check: Check): JSX.Element | null {
 }
 
 /**
- * A personal app's secret: its value on this computer, its value on the
+ * One of the app's secrets: its value on this computer, its value on the
  * published app once there is one, and how functions read it.
  */
 export function EntryDetails({
@@ -490,7 +490,7 @@ export function SecretsOverview({
   /** Figures for "In this app", as (label, value). */
   facts: [string, string][]
   functionsEnabled: boolean
-  /** A team app: its secrets are changed in the Fabric portal. */
+  /** A team app: its deployments' secrets are changed in the Fabric portal. */
   team: boolean
   /** A personal app that has been published, so it has published values too. */
   published?: boolean
@@ -500,23 +500,19 @@ export function SecretsOverview({
       <section className="skl-section-block">
         <h4>How secrets work</h4>
         <ol className="skl-how">
-          {team ? (
-            <li>
-              The published app and each person’s preview keep their own secrets. Change them in the
-              Fabric portal.
-            </li>
-          ) : (
-            <li>
-              Add a secret with a name and a value. The value stays on this computer, outside your
-              code and History.
-            </li>
-          )}
+          <li>
+            Add a secret with a name and a value. The value stays on this computer, outside your
+            code and History.
+          </li>
           <li>
             Your app’s functions read it by name, such as{' '}
             <code>{readExpression('OPENAI_API_KEY')}</code>.
           </li>
           {team ? (
-            <li>Nobody can read a value back. To change one, set a new value.</li>
+            <li>
+              The published app and your preview keep their own values: change them in the Fabric
+              portal. Nobody can read a value back.
+            </li>
           ) : published ? (
             <li>
               Your published app keeps its own values. Nobody can read one back: to change it, set a

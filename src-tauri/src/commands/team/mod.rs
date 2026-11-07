@@ -173,6 +173,15 @@ pub(crate) fn git_identity(v: &gh::Viewer) -> (String, String) {
   (v.name.clone().unwrap_or_else(|| v.login.clone()), naming::noreply_email(v.id, &v.login))
 }
 
+/// Whether the app's npm packages changed between two commits of its
+/// worktree, so the app on this computer needs them installed again.
+pub(crate) async fn packages_changed(project_dir: &str, before: Option<&str>, after: Option<&str>) -> bool {
+  match (before, after) {
+    (Some(before), Some(after)) => crate::commands::git::packages_changed(project_dir, before, after).await,
+    _ => false,
+  }
+}
+
 /// A folder under the projects root that doesn't exist yet.
 pub(crate) fn unique_dir(base: &str) -> PathBuf {
   let root = PathBuf::from(store::get_state().workspace_root);
@@ -201,7 +210,9 @@ pub(crate) type OnRun<'a> = &'a (dyn Fn(&gh::Run) + Send + Sync);
 
 /// Wait for the Fabricator workflow run for `sha` (triggered by `event`) to
 /// finish. A run that a newer run for the same commit cancelled is replaced by
-/// that newer run. `Ok(None)` when no run starts within three minutes.
+/// that newer run. A draft pull request's run deploys nothing, so it never
+/// counts: marking the pull request ready starts the one that does.
+/// `Ok(None)` when no run starts within three minutes.
 pub(crate) async fn wait_for_run(
   full_name: &str,
   sha: &str,
@@ -216,7 +227,7 @@ pub(crate) async fn wait_for_run(
     let mut found: Option<gh::Run> = None;
     for _ in 0..polls {
       if let Ok(runs) = gh::runs_for_sha(full_name, sha).await {
-        found = runs.into_iter().find(|r| r.event == event && r.id > after);
+        found = runs.into_iter().find(|r| r.event == event && r.id > after && !r.is_draft());
       }
       if found.is_some() {
         break;

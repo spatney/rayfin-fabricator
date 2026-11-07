@@ -3,7 +3,8 @@
 //!
 //! 1. Save your latest changes to the working branch.
 //! 2. Bring in teammates' published changes (conflicts go back to the user).
-//! 3. Wait for the pull request's preview deploy (the check).
+//! 3. Mark the draft pull request ready, which deploys your preview, and wait
+//!    for that deploy (the check). A draft's own runs deploy nothing.
 //! 4. Wait for a teammate's approval, when the workspace requires reviews.
 //! 5. Squash-merge, then start a fresh working branch.
 //! 6. Follow the pipeline's production deploy.
@@ -98,6 +99,7 @@ async fn publish(app: &AppHandle, project_id: &str, cancel: &CancelToken) -> Tea
   if let Err(e) = repo::fetch(&tp.workspace).await {
     return fail_at("update", e);
   }
+  let before_update = repo::head(&wt).await;
   match repo::merge_main(&wt, false, &name, &email).await {
     Ok(repo::MergeOutcome::Conflicts(files)) => {
       progress(app, project_id, "update", "error", label("update"), Some("Your teammates changed some of the same files.".into()));
@@ -122,11 +124,16 @@ async fn publish(app: &AppHandle, project_id: &str, cancel: &CancelToken) -> Tea
     }
   }
   step("update", "done", None);
+  // Teammates' changes may bring new packages, which the app on this computer needs.
+  let packages_changed =
+    super::packages_changed(&tp.project.path, before_update.as_deref(), repo::head(&wt).await.as_deref()).await;
 
   let (unpublished, _) = repo::divergence(&wt, &folder).await;
   if unpublished == 0 {
     set_publish(project_id, None);
-    return fail("There's nothing new to publish: this app matches the published version.");
+    let mut result = fail("There's nothing new to publish: this app matches the published version.");
+    result.packages_changed = packages_changed;
+    return result;
   }
   // Saving opens the pull request once there's something to publish.
   let Some(tp) = team::team_project(project_id).ok() else {
@@ -152,7 +159,8 @@ async fn publish(app: &AppHandle, project_id: &str, cancel: &CancelToken) -> Tea
     return fail_at("checks", "Couldn't read your latest change.".into());
   };
 
-  // 3. The preview deploy is the check.
+  // 3. Marking the pull request ready deploys your preview, which is the check
+  //    (wait_for_run passes over a draft's runs, which deploy nothing).
   set_publish(project_id, Some(stage("checks", Some(pr_number))));
   step("checks", "running", None);
   let on_checks = |r: &gh::Run| step("checks", "running", Some(r.status.replace('_', " ")));
@@ -201,7 +209,9 @@ async fn publish(app: &AppHandle, project_id: &str, cancel: &CancelToken) -> Tea
     if approvals == 0 {
       step("review", "running", Some("Waiting for a teammate to approve. Publish again once they have.".into()));
       let project = set_publish(project_id, Some(stage("review", Some(pr_number))));
-      return with_project(project);
+      let mut result = with_project(project);
+      result.packages_changed = packages_changed;
+      return result;
     }
     step("review", "done", None);
   } else {
@@ -239,7 +249,6 @@ async fn publish(app: &AppHandle, project_id: &str, cancel: &CancelToken) -> Tea
     b.branch = Some(fresh.clone());
     b.pr_number = None;
     b.pr_url = None;
-    b.view = Some("production".into());
     b.publish = Some(TeamPublishState { merge_sha: Some(merge_sha.clone()), ..stage("deploying", Some(pr_number)) });
   });
   team::apply_view(project_id);
@@ -247,7 +256,9 @@ async fn publish(app: &AppHandle, project_id: &str, cancel: &CancelToken) -> Tea
   drop(lease);
 
   // 6. Follow the production deploy (the lease is released: chat can continue).
-  follow_production(app, project_id, &full, &folder, &merge_sha, "push", pr_number, cancel).await
+  let mut result = follow_production(app, project_id, &full, &folder, &merge_sha, "push", pr_number, cancel).await;
+  result.packages_changed = packages_changed;
+  result
 }
 
 /// Wait for the production run for `sha`, record its outcome and report.

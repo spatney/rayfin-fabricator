@@ -1,12 +1,19 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { invoke } from '@tauri-apps/api/core'
-import type { LocalLogEvent, LocalProblem, LocalReady, LocalStatus } from '@shared/ipc'
+import type {
+  LocalLogEvent,
+  LocalProblem,
+  LocalReady,
+  LocalStatus,
+  StudioProject
+} from '@shared/ipc'
 import { api } from './api'
 import {
   LocalBackendError,
   alreadyServing,
   changesLocalSupport,
+  hasFabricBackend,
   localBackendStore,
   localFallbackCode,
   localFallbackReason,
@@ -418,6 +425,41 @@ describe('local backend helpers', () => {
     )
     expect(localFallbackReason(status({ state: 'running', ready }))).toBeNull()
     expect(localFallbackCode(status({ state: 'running', ready }))).toBeNull()
+    // A team app's preview uses the team's deployment instead.
+    expect(localFallbackReason(connectors, { team: true })).toBe(
+      'The logs connector runs only on Fabric, so the preview uses the team’s deployment of it in Fabric.'
+    )
+  })
+
+  it('falls back only to a backend the app has in Fabric: its published app, or a team deployment it can connect to', () => {
+    const app = (over: Partial<StudioProject>): StudioProject =>
+      ({ id: 'p1', name: 'App', path: 'C:\\apps\\app', addedAt: '', ...over }) as StudioProject
+    const team = { workspaceId: 'w1', folder: 'app', worktree: 'C:\\team\\app' }
+    expect(hasFabricBackend(app({ lastDeploy: { url: 'https://app.example' } }))).toBe(true)
+    expect(hasFabricBackend(app({}))).toBe(false)
+    // A team app's published address alone doesn't say how to connect to its backend.
+    const record = { environment: 'production/app', state: 'success', url: 'https://app.example' }
+    expect(
+      hasFabricBackend(
+        app({ lastDeploy: { url: 'https://app.example' }, team: { ...team, production: record } })
+      )
+    ).toBe(false)
+    expect(
+      hasFabricBackend(
+        app({ team: { ...team, production: { ...record, itemId: 'i', workspaceId: 'w' } } })
+      )
+    ).toBe(true)
+    expect(
+      hasFabricBackend(
+        app({
+          team: {
+            ...team,
+            preview: { ...record, publicEnv: { RAYFIN_PUBLIC_API_URL: 'https://api' } }
+          }
+        })
+      )
+    ).toBe(true)
+    expect(hasFabricBackend(null)).toBe(false)
   })
 
   it('runs a newer Rayfin version here, warning that some things might not work', () => {

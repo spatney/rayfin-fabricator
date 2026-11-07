@@ -8,7 +8,7 @@ description: "Say in plain words what your app is for and what it must keep doin
 
 An app can keep building, and pass the Advisor's checks, while a change quietly stops it doing what it's for: managers can no longer approve expenses, or employees start seeing each other's. Goals let you write down, in plain words, who your app is for and what it must keep doing. Before you publish, GitHub Copilot checks each one on a fresh copy of the app, using it the way each kind of user would, and tells you which still hold.
 
-Goals are for your personal apps. Team apps don't have them yet.
+Team apps have goals too. Their `GOALS.md` goes to GitHub with your other changes, so your teammates get your goals when you publish, and each person runs the checks on their own computer.
 
 ![The Goals tab of an expenses app after a run: 1 check failed and 1 couldn't be proven, with 3 passed. Below Copilot's summary of the run and what the app is for, the failed check, that someone who isn't signed in can't see any expenses, receipts or reports, is open on what Copilot found and the calls it made signed out.](/screenshots/goals.webp)
 
@@ -19,7 +19,7 @@ Goals are for your personal apps. Team apps don't have them yet.
 
 ![The Experiments section of Settings, with its note that experiments are off by default and may change, and the Team workspaces, Migrate Power BI reports, Work IQ, Goals and Parallel UI builder switches, all off.](/screenshots/settings-experiments.webp)
 
-Each personal app gets a **Goals** tab after **Advisor**. Turning the experiment off hides the tab, and Fabricator stops asking about your checks before you publish and stops telling chat about your goals. The goals stay in the app, and their last results stay on this computer.
+Each app gets a **Goals** tab after **Advisor**. Turning the experiment off hides the tab, and Fabricator stops asking about your checks before you publish and stops telling chat about your goals. The goals stay in the app, and their last results stay on this computer.
 
 ## Say what your app is for
 
@@ -154,7 +154,7 @@ When you publish an app whose checks didn't all pass on the app as it is now, Fa
 | "Your app’s checks didn’t all pass" | Every check has run, and some failed or couldn't be proven. | **See the checks** opens **Goals**. |
 | "Your app’s checks are still running" | A run is going. | **See the checks** opens **Goals**. |
 
-**Publish anyway** publishes, and **Cancel** doesn't. Fabricator doesn't ask when the app has no checks, or when every check passed on the app as it is now. **Publish after each chat turn** doesn't ask either. See [Publish changes](/docs/ship/deploy#publish-changes).
+**Publish anyway** publishes, and **Cancel** doesn't. Fabricator doesn't ask when the app has no checks, or when every check passed on the app as it is now. **Publish after each chat turn** doesn't ask either. In a team app, **Publish** asks the same way before Fabricator starts publishing your changes. See [Publish changes](/docs/ship/deploy#publish-changes).
 
 ## How chat uses your goals
 

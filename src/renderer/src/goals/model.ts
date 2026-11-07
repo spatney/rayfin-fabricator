@@ -42,9 +42,9 @@ export interface GoalsGap {
   unchecked: string[]
 }
 
-/** The gap before publishing, or `null` when there's none, no checks, or they can't run. */
+/** The gap before publishing, or `null` when there's none or no checks. */
 export function goalsGap(snapshot: GoalsSnapshot): GoalsGap | null {
-  if (!snapshot.checks.length || snapshot.allPassed || snapshot.cannotRun) return null
+  if (!snapshot.checks.length || snapshot.allPassed) return null
   const gap: GoalsGap = { failed: 0, notProven: 0, unchecked: [] }
   for (const check of snapshot.checks) {
     const result = snapshot.results.find((r) => r.checkId === check.id)

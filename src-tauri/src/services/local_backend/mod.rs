@@ -1,4 +1,4 @@
-//! The local backend: each personal project's whole Rayfin backend (data API
+//! The local backend: each project's whole Rayfin backend (data API
 //! with policies, auth with a local Fabric sign-in page, functions,
 //! connectors, storage) plus the app's own Vite, run on this computer by the
 //! bundled **rayfin-local** (`serve --json`, host contract 1, see

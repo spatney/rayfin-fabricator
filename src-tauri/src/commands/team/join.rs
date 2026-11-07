@@ -270,16 +270,17 @@ async fn detail(workspace_id: String) -> TeamWorkspaceDetail {
 /// Work on branches stays on GitHub.
 #[tauri::command]
 pub async fn team_leave(app: AppHandle, workspace_id: String) -> Result<ProjectsState, String> {
-  let _ = app;
   team::require_enabled()?;
   let ws = store::find_team_workspace(&workspace_id).ok_or("That team workspace is no longer on this computer.")?;
-  forget_workspace(&ws).await;
+  forget_workspace(&app, &ws).await;
   Ok(annotate_state(store::get_state()))
 }
 
-pub(crate) async fn forget_workspace(ws: &TeamWorkspace) {
+pub(crate) async fn forget_workspace(app: &AppHandle, ws: &TeamWorkspace) {
   for p in store::get_state().projects {
     if p.team.as_ref().is_some_and(|t| t.workspace_id == ws.id) {
+      // Its local backend holds files in the folder about to be trashed.
+      crate::services::local_backend::state(app).forget(&p.id).await;
       history::clear_history(&p.id);
     }
   }
@@ -306,12 +307,12 @@ fn not_deletable(info: &gh::RepoInfo) -> String {
 /// repository, optionally delete its Fabric workspaces (and every app in them),
 /// and forget it here. Problems are reported but don't stop the rest.
 #[tauri::command]
-pub async fn team_delete(workspace_id: String, delete_fabric: bool) -> TeamActionResult {
+pub async fn team_delete(app: AppHandle, workspace_id: String, delete_fabric: bool) -> TeamActionResult {
   let account = super::workspace_account(&workspace_id);
-  gh::as_account(account, delete(workspace_id, delete_fabric)).await
+  gh::as_account(account, delete(app, workspace_id, delete_fabric)).await
 }
 
-async fn delete(workspace_id: String, delete_fabric: bool) -> TeamActionResult {
+async fn delete(app: AppHandle, workspace_id: String, delete_fabric: bool) -> TeamActionResult {
   if let Err(e) = team::require_enabled() {
     return fail(e);
   }
@@ -362,7 +363,7 @@ async fn delete(workspace_id: String, delete_fabric: bool) -> TeamActionResult {
       problems.push(e.describe("Archive the GitHub repository"));
     }
   }
-  forget_workspace(&ws).await;
+  forget_workspace(&app, &ws).await;
   TeamActionResult {
     ok: true,
     error: (!problems.is_empty()).then(|| problems.join(" ")),

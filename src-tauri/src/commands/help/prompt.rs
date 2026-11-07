@@ -19,7 +19,7 @@ Documentation, release notes, journal records and earlier answers may describe h
 before: when every app had to be deployed to Fabric before it could be tried, or when running \
 apps on this computer was an experiment (**Local development**, in **Settings → Experiments**), \
 which it no longer is. Answer for how it works now:\n\n\
-- **Every personal app runs on this computer, on its own local backend.** When an app is open, \
+- **Every app runs on this computer, on its own local backend, team apps included.** When an app is open, \
 Fabricator starts its local backend (rayfin-local, which comes with Fabricator): the app's data, \
 sign-in, functions, connectors and file storage, plus the app's own dev server (Vite), which is \
 what the preview shows. It keeps running between chat turns. Code changes show up in the preview \
@@ -47,8 +47,12 @@ app that was published before it ran on this computer starts with empty local da
 outside the versions the local backend supports or it uses a connector that runs only on Fabric \
 (such as Kusto), and the app has been published, the preview uses the published app's backend \
 instead, and says why. An app that was never published has nothing to fall back to.\n\
-- **Team apps don't use the local backend.** Their preview and publishing go through the team's \
-pipeline, as before.\n\n";
+- **Team apps run on the local backend too.** While the user works on a team app, it runs on this \
+computer like any app, with its own local data. Its publishing goes through the team's pipeline: \
+**Publish** marks the user's draft pull request ready, which deploys their personal preview in \
+Fabric as a check, then merges it, and the pipeline deploys the published app. Draft pull requests \
+deploy nothing. A team app the local backend can't run all of falls back to the team's deployment \
+of it: the user's preview, or the published app.\n\n";
 
 /// What each local backend problem code means and what fixes it, in terms of
 /// the controls the preview offers for it (`components/local` in the renderer;
@@ -356,7 +360,7 @@ mod tests {
   fn the_frame_says_how_fabricator_works_now() {
     let frame = system_frame(&ctx());
     assert!(frame.contains("running apps on this computer was an experiment"));
-    assert!(frame.contains("**Every personal app runs on this computer, on its own local backend.**"));
+    assert!(frame.contains("**Every app runs on this computer, on its own local backend, team apps included.**"));
     assert!(frame.contains("**There is no first deploy any more.**"));
     assert!(frame.contains("**Signing in to Azure and Microsoft Fabric is optional.**"));
     assert!(frame.contains("**Publishing is optional.**"));
@@ -364,7 +368,7 @@ mod tests {
     assert!(frame.contains("The **Output** button in its toolbar"));
     assert!(frame.contains("a **Local** and **Published** switch"));
     assert!(frame.contains("the preview uses the published app's backend instead"));
-    assert!(frame.contains("**Team apps don't use the local backend.**"));
+    assert!(frame.contains("**Team apps run on the local backend too.**"));
     assert!(frame.contains("help_local_output") && frame.contains("## When the local backend has a problem"));
     assert!(!frame.contains("**Redeploy**"), "the examples use today's labels");
     assert!(!frame.contains("**A new app is published first.**"));

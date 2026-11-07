@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { StudioProject, TeamMapRun, TeamSessionStatus, TeamWorkspace } from '@shared/ipc'
 import { OverlayProvider, usePreviewSuppressed } from '../../overlay'
 import CreateProjectScreen from '../CreateProjectScreen'
-import TeamPublishControl, { teamChipLabel } from './TeamPublishControl'
+import TeamPublishControl, { livePreviewUrl, teamChipLabel } from './TeamPublishControl'
 import TeamDeployCard from './TeamDeployCard'
 import CreateTeamWorkspaceModal from './CreateTeamWorkspaceModal'
 import { conflictPrompt } from './useTeamWork'
@@ -23,7 +23,6 @@ function status(over: Partial<TeamSessionStatus> = {}): TeamSessionStatus {
     behind: 0,
     conflicted: false,
     requireReview: false,
-    view: 'preview',
     ...over
   }
 }
@@ -42,6 +41,41 @@ describe('team chip label', () => {
     expect(teamChipLabel(status({ unpublished: 1 }), false)).toBe('1 unpublished')
     expect(teamChipLabel(status({ unpublished: 4 }), false)).toBe('4 unpublished')
     expect(teamChipLabel(status(), false)).toBe('Up to date')
+  })
+})
+
+describe('your live preview', () => {
+  const pr = (
+    over: Partial<NonNullable<TeamSessionStatus['pr']>> = {}
+  ): NonNullable<TeamSessionStatus['pr']> => ({
+    number: 4,
+    url: 'https://github.com/o/r/pull/4',
+    draft: false,
+    state: 'open',
+    title: 'Trips: Add a map',
+    author: 'me',
+    headSha: 'b2',
+    approvals: 0,
+    ...over
+  })
+  const preview = {
+    environment: 'preview/trips/me',
+    state: 'success',
+    url: 'https://trips-pv-me.example',
+    sha: 'b2'
+  }
+
+  it('is offered once your ready pull request has it deployed, for you and your reviewers', () => {
+    expect(livePreviewUrl(status({ pr: pr(), preview }))).toBe('https://trips-pv-me.example')
+    // A draft deploys nothing: a preview then is left from an earlier pull request.
+    expect(livePreviewUrl(status({ pr: pr({ draft: true }), preview }))).toBeUndefined()
+    expect(livePreviewUrl(status({ preview }))).toBeUndefined()
+    // Not yet deployed with your latest save, or not deployed at all.
+    expect(livePreviewUrl(status({ pr: pr({ headSha: 'c3' }), preview }))).toBeUndefined()
+    expect(
+      livePreviewUrl(status({ pr: pr(), preview: { ...preview, state: 'in_progress' } }))
+    ).toBeUndefined()
+    expect(livePreviewUrl(status({ pr: pr({ state: 'merged' }), preview }))).toBeUndefined()
   })
 })
 
@@ -78,7 +112,6 @@ describe('TeamPublishControl', () => {
           onUpdate={() => {}}
           onCombine={() => {}}
           onDiscard={() => {}}
-          onSetView={() => {}}
           onViewLogs={() => {}}
           onRefresh={() => {}}
         />
@@ -127,7 +160,6 @@ describe('TeamPublishControl', () => {
           onUpdate={() => {}}
           onCombine={() => {}}
           onDiscard={() => {}}
-          onSetView={() => {}}
           onViewLogs={onViewLogs}
           onRefresh={() => {}}
         />
@@ -137,7 +169,9 @@ describe('TeamPublishControl', () => {
     fireEvent.click(screen.getByRole('button', { name: /Deploying preview/ }))
     expect(screen.getByText('Deploying your preview')).toBeTruthy()
     expect(screen.getByText('Deploy with Rayfin')).toBeTruthy()
-    expect(screen.getByRole('radio', { name: /My preview/ }).getAttribute('aria-checked')).toBe('true')
+    // The app runs on this computer: there's no choice of deployment to show here.
+    expect(screen.queryByRole('radio')).toBeNull()
+    expect(screen.getByText(/Your app runs on this computer while you work/)).toBeTruthy()
 
     rerender(view(status({ unpublished: 1, run: run({ status: 'completed', conclusion: 'success' }) })))
     expect(screen.queryByText('Deploy with Rayfin')).toBeNull()
@@ -176,7 +210,6 @@ describe('TeamPublishControl', () => {
           onUpdate={() => {}}
           onCombine={() => {}}
           onDiscard={() => {}}
-          onSetView={() => {}}
           onViewLogs={() => {}}
           onDiagnose={onDiagnose}
           onRefresh={() => {}}
@@ -222,7 +255,6 @@ describe('TeamPublishControl', () => {
           onUpdate={() => {}}
           onCombine={() => {}}
           onDiscard={() => {}}
-          onSetView={() => {}}
           onViewLogs={() => {}}
           onRefresh={onRefresh}
         />

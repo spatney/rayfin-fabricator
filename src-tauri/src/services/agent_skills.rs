@@ -18,8 +18,9 @@
 //!   tests and the `fabricator_local_*` tools (see
 //!   [`crate::services::agent_tools`]). Publishing to Fabric is the user's
 //!   choice.
-//! - **Fabric-backed**: the app's backend runs on Microsoft Fabric (team apps,
-//!   and published apps the local backend can't run). The agent validates
+//! - **Fabric-backed**: the app's backend runs on Microsoft Fabric (an app the
+//!   local backend can't run all of, which has a backend in Fabric: its
+//!   published app, or a team app's deployment). The agent validates
 //!   without running the app (the headless `npm run preview` where the app has
 //!   it), and Fabricator deploys the app: after each chat turn or when the user
 //!   publishes, as the note on each message says.
@@ -49,16 +50,26 @@ impl Guidance {
   }
 }
 
-/// The guidance a project's chat sessions get. Team apps are Fabric-backed:
-/// their pipeline deploys them, and their preview runs against that. So is a
-/// published app the local backend can't run all of ([`needs_fabric`]), which
-/// Fabricator previews against its published backend instead. Every other app
-/// runs locally.
+/// The guidance a project's chat sessions get. An app the local backend can't
+/// run all of ([`needs_fabric`]) is Fabric-backed when it has a backend in
+/// Fabric to preview against instead ([`has_fabric_backend`]). Every other app
+/// runs locally, team apps included.
 pub fn guidance_for(project: &StudioProject, local: &LocalStatus) -> Guidance {
-  if project.team.is_some() || (is_published(project) && needs_fabric(local)) {
+  if has_fabric_backend(project) && needs_fabric(local) {
     Guidance::FabricBacked
   } else {
     Guidance::Local
+  }
+}
+
+/// Whether the app has a backend in Fabric that its preview can use when this
+/// computer can't run the app: its published app, or for a team app, the team's
+/// deployment of it (your preview, or the published app). As the renderer's
+/// `hasFabricBackend`.
+pub fn has_fabric_backend(project: &StudioProject) -> bool {
+  match &project.team {
+    Some(binding) => crate::services::team::has_deployment(binding),
+    None => is_published(project),
   }
 }
 
@@ -226,8 +237,10 @@ applyTo: '**'
 
 You are the coding agent inside **Fabricator**. While you build, the app runs on this computer.
 Publishing it to Microsoft Fabric is optional and up to the user: they publish from Fabricator with
-**Publish**, and can turn on **Publish after each chat turn**. Fabricator manages where the app is
-published and the Fabric sign-in.
+**Publish**, and can turn on **Publish after each chat turn**. For an app in a team workspace,
+Fabricator saves each turn's changes to the user's working branch on GitHub, and **Publish** merges
+them for the team's pipeline to deploy. Fabricator manages where the app is published and the
+Fabric sign-in.
 
 ## Never publish or deploy, even when asked
 - Don't run `rayfin up` in any form: `npx rayfin up`, `npm run rayfin:up`, dry runs such as
@@ -497,7 +510,7 @@ applyTo: '**'
 
 You are the coding agent inside **Fabricator**, and Fabricator owns deployment. This app's backend
 runs on Microsoft Fabric. Fabricator deploys the app there and shows the result in its preview:
-through the team's pipeline when your turn ends, for an app in a team workspace; otherwise with
+for an app in a team workspace, through the team's pipeline once the user publishes; otherwise with
 `rayfin up` when your turn ends while **Publish after each chat turn** is on, or when the user
 selects **Publish**. Fabricator's note at the start of the user's message says which applies. A
 deploy you start yourself races Fabricator's, can target the wrong workspace, and wastes the turn.
@@ -514,9 +527,9 @@ deploy you start yourself races Fabricator's, can target the wrong workspace, an
   account menu.
 - If the user asks you to deploy, publish or "make it live", make the code changes and tell them
   how they go live, as Fabricator's note says: in a team workspace, Fabricator saves them when
-  your turn ends and the team's pipeline deploys them; otherwise Fabricator publishes them when
-  your turn ends while **Publish after each chat turn** is on, and while it's off, they select
-  **Publish** in Fabricator.
+  your turn ends, and the team's pipeline deploys them once the user publishes; otherwise
+  Fabricator publishes them when your turn ends while **Publish after each chat turn** is on,
+  and while it's off, they select **Publish** in Fabricator.
 
 ## Skip the project's own deployment steps
 Templates and skills, including the Rayfin CLI's default Universal App template and the `rayfin`
@@ -1128,7 +1141,7 @@ mod tests {
     for source in ["`AGENTS.md`", "`app-deployment`", "`app-validation`", "`rayfin`"] {
       assert!(LOCAL_PUBLISH_INSTRUCTIONS.contains(source), "publish instructions should override {source}");
     }
-    for marker in ["Never publish or deploy, even when asked", "**Publish**", "**Publish after each chat turn**", "user's choice", "Refresh Fabric authentication", "take precedence"] {
+    for marker in ["Never publish or deploy, even when asked", "**Publish**", "**Publish after each chat turn**", "user's choice", "team's pipeline", "Refresh Fabric authentication", "take precedence"] {
       assert!(LOCAL_PUBLISH_INSTRUCTIONS.contains(marker), "publish instructions should say {marker}");
     }
   }
@@ -1420,8 +1433,18 @@ mod tests {
     assert_eq!(local(&project(false, false), &running), Guidance::Local);
     assert_eq!(local(&project(true, false), &running), Guidance::Local);
     assert_eq!(local(&project(true, false), &never_started), Guidance::Local);
-    // Team apps are previewed against, and deployed by, their pipeline.
-    assert_eq!(local(&project(false, true), &running), Guidance::FabricBacked);
+    // Team apps run here too.
+    assert_eq!(local(&project(false, true), &running), Guidance::Local);
+    // A team app's backend in Fabric is the team's deployment of it.
+    let mut team_deployed = project(false, true);
+    team_deployed.team.as_mut().unwrap().production = Some(crate::types::TeamDeployRecord {
+      environment: "production/app".into(),
+      state: "success".into(),
+      item_id: Some("item".into()),
+      workspace_id: Some("ws".into()),
+      ..Default::default()
+    });
+    assert_eq!(local(&team_deployed, &running), Guidance::Local);
 
     // A published app the local backend can't run all of falls back to its published backend.
     let older_sdk = LocalStatus { analysis: Some(crate::types::LocalAnalysis { sdk: sdk(Some("1.35.1"), false), ..Default::default() }), ..Default::default() };
@@ -1435,6 +1458,9 @@ mod tests {
       assert_eq!(local(&project(true, false), status), Guidance::FabricBacked);
       // Never published: nothing to fall back to, so it keeps running locally.
       assert_eq!(local(&project(false, false), status), Guidance::Local);
+      // A team app falls back to the team's deployment, when there is one.
+      assert_eq!(local(&team_deployed, status), Guidance::FabricBacked);
+      assert_eq!(local(&project(true, true), status), Guidance::Local, "a team app without a deployment runs here");
     }
     // An SDK of a newer line runs locally anyway, with a warning.
     let newer_sdk = LocalStatus {
@@ -1465,7 +1491,7 @@ mod tests {
     for marker in [
       "when your turn ends while **Publish after each chat turn** is on",
       "or when the user\nselects **Publish**",
-      "while it's off, they select\n  **Publish** in Fabricator",
+      "while it's off, they select **Publish** in Fabricator",
       "as Fabricator's note says",
     ] {
       assert!(FABRIC_DEPLOY_INSTRUCTIONS.contains(marker), "deploy instructions should say {marker:?}");

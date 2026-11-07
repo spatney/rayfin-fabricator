@@ -3,14 +3,14 @@ title: "Develop on this computer"
 description: "Run your apps and their backend on this computer while you build, and publish them to Microsoft Fabric when you choose."
 ---
 
-Each app you build, other than a team app, runs on this computer from the moment you create or open it: its pages, its data, sign-in, functions, connectors and file storage. You can build and try an app without a Fabric workspace, and Copilot checks its work against the running app. When you want other people to use the app, you publish it to Microsoft Fabric.
+Each app you build runs on this computer from the moment you create or open it: its pages, its data, sign-in, functions, connectors and file storage. You can build and try an app without a Fabric workspace, and Copilot checks its work against the running app. When you want other people to use the app, you publish it to Microsoft Fabric.
 
 ![The preview of Contoso Expenses running on this computer: the toolbar with Local and Published, the Running status, Preview as You and localhost:5173, and Output open below the app with Restart, Copy and the latest lines from rayfin-local and Vite.](/screenshots/preview-local.webp)
 
 > [!NOTE]
-> Earlier versions of Fabricator ran apps this way only with the **Local development** experiment on in **Settings → Experiments**. Now every app other than a team app runs on this computer, and the setting is gone. **Publish after each chat turn** is now off unless you turned it on yourself: until you turn it on, chat turns don't publish your apps. See [Publish after each chat turn](/docs/ship/deploy#publish-after-each-chat-turn).
+> Earlier versions of Fabricator ran apps this way only with the **Local development** experiment on in **Settings → Experiments**, and never ran team apps this way. Now every app runs on this computer, and the setting is gone. **Publish after each chat turn** is now off unless you turned it on yourself: until you turn it on, chat turns don't publish your apps. See [Publish after each chat turn](/docs/ship/deploy#publish-after-each-chat-turn).
 
-Team apps work differently: the team pipeline publishes them, and their preview runs against their deployment in Fabric. See [Work on a team app](/docs/team/work-on-an-app).
+Team apps run on this computer too, with your own local data, but the team pipeline publishes them: **Publish** in a team app deploys your preview, then merges your changes for the pipeline to publish. See [Work on a team app](/docs/team/work-on-an-app).
 
 ## What runs on this computer
 
@@ -44,6 +44,8 @@ A few things don't run on this computer:
 An app on a newer Rayfin release runs on this computer anyway, and a note above the preview says "This app uses Rayfin `<version>`, which is newer than the Rayfin versions Fabricator runs on this computer, so some things might not work as expected." If a published app on a newer release can't start here, its preview uses the published app's backend instead. See [The preview says some things might not work](/docs/troubleshooting/preview#the-preview-says-some-things-might-not-work).
 
 When a published app needs one of these, its preview uses the published app's backend instead, and says why, for example "The logs connector runs only on Fabric, so the preview uses your published app’s backend." The preview then runs your app's frontend on this computer against the published backend, so changes to data, permissions or functions reach that backend when you publish. While **Publish after each chat turn** is on, it does that only during chat turns, and shows your published app the rest of the time. There's no **Local** and **Published** switch, and the **Data explorer** still shows only the local data. After a chat turn that changes the app's packages or `rayfin/rayfin.yml`, Fabricator checks again whether this computer can run it. An app that was never published has no published backend to use, so it runs on this computer anyway. See [The preview uses your published app's backend](/docs/troubleshooting/preview#the-preview-uses-your-published-apps-backend).
+
+A team app uses the team's deployment of it instead: your preview when it's deployed, otherwise the published app. Chat turns never publish a team app, so its preview runs this way the whole time the app is open. See [Work on a team app](/docs/team/work-on-an-app#build-it-on-this-computer).
 
 Some things work on this computer but can fail once the app is published:
 

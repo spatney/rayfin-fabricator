@@ -40,7 +40,7 @@ Your workspace folder contains the actual app source code, git repository, Rayfi
 
 ## Your app's local data
 
-Each app other than a team app runs on this computer with its own backend while you build, and keeps its state in a `.rayfin-local` folder in its project folder:
+Each app, team apps included, runs on this computer with its own backend while you build, and keeps its state in a `.rayfin-local` folder in its project folder:
 
 - The app's local database: its data, its local users and their sessions.
 - Files the app stored.
@@ -51,7 +51,7 @@ The folder has its own `.gitignore`, so git ignores it: it isn't in History, and
 
 A project can bring seed data for its local data in its `rayfin/seed` folder. Unlike `.rayfin-local`, that folder is part of the project's code: git tracks it, and it goes to GitHub with the app. See [Start with seed data](/docs/build/local-development#start-with-seed-data).
 
-To see or clear the data, use Blueprint's **Data explorer**; see [See your app's local data](/docs/build/data-model#see-your-apps-local-data). Moving a project folder to the trash takes its local data with it. Team apps run on their Fabric deployment, so their data lives in Fabric instead.
+To see or clear the data, use Blueprint's **Data explorer**; see [See your app's local data](/docs/build/data-model#see-your-apps-local-data). Moving a project folder to the trash takes its local data with it. A team app keeps its local data in its working copy's folder, so publishing and discarding your changes keep it. Leaving the team workspace moves the workspace's folder, with that local data, to the trash.
 
 ## Installed apps
 

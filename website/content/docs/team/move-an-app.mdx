@@ -24,11 +24,11 @@ Open the app, select Rayfin in the status bar, and choose **Update with Copilot*
 4. Choose the workspace.
 5. Select **Move**.
 
-Fabricator copies the project into the team repository, copies the chat history to the new team app, creates your working branch, saves the app to GitHub, and opens a pull request so the preview pipeline can deploy it.
+Fabricator copies the project into the team repository, copies the chat history to the new team app, creates your working branch, and saves the app to GitHub in a draft pull request. The team app runs on this computer, like the original, and its preview deploys when you publish it.
 
 ## What changes
 
-The team copy deploys as a new Fabric app. Data in the old deployment is not copied.
+The team app starts with no local data: the original project keeps its data on this computer. To give the team data to start from, add [seed data](/docs/build/local-development#start-with-seed-data) before you move the app, or after. The team app deploys as a new Fabric app. Data in the old deployment is not copied.
 
 The original local project stays as it is. You can keep it in Fabricator, remove it from recent projects, or remove it later with the normal local project controls.
 

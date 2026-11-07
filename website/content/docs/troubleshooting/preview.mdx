@@ -69,7 +69,7 @@ You see a dialog titled "Your live preview needs localhost:5173", or another `lo
 
 ![The dialog titled Your live preview needs localhost:5173. A preview of Contoso Expenses is using it, and the dialog offers Stop that preview, marked Recommended, or Use localhost:5174 instead.](/screenshots/port-conflict.webp)
 
-The live preview of a team app, or of a published app this computer can't run, has to use a `localhost` address that the app's sign-in accepts. If all of them are busy, Fabricator asks what to do instead of closing something without your permission. An app that runs on this computer doesn't need this: the local backend picks free ports itself.
+The live preview of a published app or a team app that this computer can't run has to use a `localhost` address that the app's sign-in accepts. If all of them are busy, Fabricator asks what to do instead of closing something without your permission. An app that runs on this computer doesn't need this: the local backend picks free ports itself.
 
 When the address is held by the local backend of another app in Fabricator, and Copilot isn't working on that app, Fabricator stops that backend without asking. It starts again when you open that app.
 
@@ -97,14 +97,15 @@ This was fixed in Fabricator 1.3.2. Current versions position the native preview
 
 Then [Report a problem](/docs/troubleshooting/report-a-problem).
 
-## A team app local preview restarts
+## The live preview restarts
 
-A team app's local preview briefly disconnects and comes back while Copilot edits files or dependencies install.
+The live preview of a published app or a team app that this computer can't run briefly disconnects and comes back while Copilot edits files or dependencies install.
 
-Fabricator health-checks team local previews and starts Vite again when it stops answering. If it keeps stopping, use the team troubleshooting page.
+The live preview's pages come from the app's Vite dev server, which restarts its server when the app's `.env` file or its configuration changes. Fabricator checks that the live preview answers, and starts Vite again when it stops answering. If it keeps stopping, Fabricator stops it and shows **Local preview stopped**: "It kept stopping. Send your message again to start a new one."
 
 1. Wait for the preview to come back.
-2. If it keeps restarting, open [Team workspace problems](/docs/troubleshooting/team).
+2. If the live preview stopped, send your message again.
+3. If it keeps restarting, [Report a problem](/docs/troubleshooting/report-a-problem).
 
 ## Your app doesn't start on this computer
 
@@ -151,6 +152,8 @@ If the change still can't be applied, [Report a problem](/docs/troubleshooting/r
 A note above the preview of a published app says why it doesn't run on this computer, such as "The `<name>` connector runs only on Fabric, so the preview uses your published app’s backend." or "This app uses Rayfin `<version>`, which Fabricator can’t run on this computer, so the preview uses your published app’s backend."
 
 The local backend runs one line of Rayfin releases, and some connectors, such as Kusto connectors, run only on Fabric. When a published app needs something the local backend can't run, such as one of those connectors or a Rayfin release older than that line, Fabricator previews it against its published backend instead: the app's pages run on this computer with the published app's backend, and changes to the data model, permissions and functions reach that backend when you publish. An app on a newer Rayfin release runs on this computer anyway, with a warning: see [The preview says some things might not work](/docs/troubleshooting/preview#the-preview-says-some-things-might-not-work). If it can't start on this computer, its preview uses the published app's backend too, and the note says "This app uses Rayfin `<version>`, which is newer than the Rayfin versions Fabricator runs on this computer and couldn’t start here, so the preview uses your published app’s backend." An app that was never published has no published backend to use, so it keeps running on this computer, and what needs Fabric fails there until you publish it.
+
+A team app uses the team's deployment of it instead, and its note ends "so the preview uses the team’s deployment of it in Fabric.": your preview when it's deployed, otherwise the published app. See [Work on a team app](/docs/team/work-on-an-app#build-it-on-this-computer).
 
 1. Keep building in chat as usual. To put your changes in the published app, select **Publish** in the app bar, or turn on **Publish after each chat turn** in the publish control's panel.
 2. For an app on an older Rayfin release, update it to run it on this computer: select the Rayfin version in the status bar, then **Update with Copilot**. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).

@@ -125,7 +125,7 @@ The GitHub Actions workflow builds and deploys team apps. Common verified causes
 
 1. Open the team menu and select **View logs**, **View on GitHub**, or **View logs on GitHub**.
 2. Select **Diagnose with Copilot** next to **View logs**, or in the **Publish** window, to find the likely cause. If the cause is in the app's code, select **Fix with Copilot** to hand the diagnosis to the app's chat.
-3. If the log says "Team workspaces need Rayfin 1.36.2 or newer", open the app, select Rayfin in the status bar, choose **Update with Copilot**, then save another change.
+3. If the log says "Team workspaces need Rayfin 1.36.2 or newer", open the app, select Rayfin in the status bar, choose **Update with Copilot**, then publish again.
 4. If the log says "This change would delete data in the published app. Publish it again from Fabricator and confirm to allow it.", return to the app and publish again.
 5. If Fabricator offers **Deploy anyway (deletes data)**, select it only if you accept the data deletion.
 
@@ -168,15 +168,16 @@ If Copilot cannot resolve the conflict, include the conflicted file names when y
 
 ## Previews are not deploying
 
-You see your local preview, but **My preview** stays missing, failed, or older than your latest save. The preview pane may keep showing **Deploying your first preview**.
+You published, but your preview doesn't deploy: the **Publish** window stops at **Check that your preview deploys**, or in the workspace overview, your working copy's **Preview** stays missing, failed, or older than your latest save.
 
-Team previews are deployed by the repository's GitHub Actions workflow. They do not deploy from your computer.
+Your preview deploys when you publish: Fabricator marks your draft pull request ready for review, and the repository's GitHub Actions workflow deploys it. A draft pull request deploys nothing, and previews never deploy from your computer.
 
 1. Open the workspace overview.
 2. Select your working copy.
 3. In **Preview**, use **Watch on GitHub**, **See why it failed**, or **Diagnose with Copilot** if shown.
 4. Open **Manage → Settings** and check **Pipeline health** if runs are not starting. If they wait for a runner, see [No runner picks up the pipeline](#no-runner-picks-up-the-pipeline).
 5. Select **Repair** if Fabricator says the pipeline needs repair.
+6. Select **Publish** again.
 
 If the workflow did not start, check that GitHub Actions is enabled for the repository, then [report a problem](/docs/troubleshooting/report-a-problem).
 
@@ -198,7 +199,7 @@ If you still cannot join, include the repository name when you [report a problem
 
 You see **Repair** in **Manage → Settings → Pipeline health**, or a local preview error starts with "Couldn't read the deployment's settings:" and tells you to sign in to Fabric or repair the pipeline.
 
-Fabricator updates the managed workflow over time. Existing workspaces can need the newer template or refreshed settings.
+Fabricator updates the managed workflow over time. Existing workspaces can need the newer template or refreshed settings. For example, the pipeline of a workspace set up with an earlier version of Fabricator deploys a preview for each save to a draft pull request until Repair updates it.
 
 1. Open the workspace overview.
 2. Select **Manage**.

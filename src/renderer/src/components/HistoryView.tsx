@@ -31,8 +31,8 @@ interface Props {
   theme: string
   /**
    * Ask the parent to publish the project's current code: from the "published
-   * version differs" banner, and after a team app restores an older version (its
-   * pipeline deploys it). A personal app's restore stays on this computer.
+   * version differs" banner, and after a team app restores an older version (it
+   * saves it to the working branch). A personal app's restore stays on this computer.
    */
   onRequestDeploy?: () => void
   /**
@@ -354,8 +354,8 @@ export default function HistoryView({
         return
       }
       setConfirmRevert(null)
-      // A team app saves the restore for its pipeline. A personal app's stays on this
-      // computer until the user publishes.
+      // A team app saves the restore to its working branch. A personal app's
+      // stays on this computer until the user publishes.
       if (!res.noChanges && project.team) onRequestDeploy?.()
     } finally {
       setReverting(false)
@@ -903,7 +903,7 @@ export default function HistoryView({
               <p>
                 Your current version stays saved in this timeline, so you can switch back anytime.
                 {project.team
-                  ? ' Fabricator then saves it, and the team pipeline updates your preview.'
+                  ? ' Fabricator then saves it to your working copy on GitHub. The published app doesn’t change until you publish.'
                   : project.lastDeploy?.url
                     ? ' Your published app doesn’t change until you publish.'
                     : null}

@@ -158,7 +158,7 @@ export interface FixtureOptions {
   listed?: string[]
   packages?: AdvisorPackage[]
   isGitRepo?: boolean
-  /** The local backend's supported range (default {@link LOCAL_SDK_RANGE}); `null` for an app it doesn't run, such as a team app. */
+  /** The local backend's supported range (default {@link LOCAL_SDK_RANGE}); `null` for an app it doesn't run. */
   localSdkRange?: string | null
 }
 

@@ -746,30 +746,30 @@ describe('PreviewPane status label', () => {
     )
   }
 
-  it('has no status for a solo app (the app bar shows its deployment), and names which deployment a team app shows', async () => {
+  it('has no status for a solo app (the app bar shows its deployment), and says how a team app’s published app is', async () => {
     const { rerender, container } = render(pane())
     await settle(e)
     expect(container.querySelector('.preview-status')).toBeNull()
     expect(screen.queryByText('Live')).toBeNull()
 
-    rerender(pane({ team: true, teamView: 'preview' }))
-    expect(screen.getByText('My preview')).toBeTruthy()
-    expect(screen.queryByText('Live')).toBeNull()
-
-    rerender(pane({ team: true, teamView: 'production' }))
+    rerender(pane({ team: true }))
     expect(screen.getByText('Published')).toBeTruthy()
+    expect(screen.queryByText('My preview')).toBeNull()
+    expect(screen.queryByText('Live')).toBeNull()
   })
 
-  it('keeps the team deployment’s name while the pipeline updates it', async () => {
-    render(
-      pane({
-        team: true,
-        teamView: 'production',
-        teamRun: { id: 1, kind: 'production', status: 'in_progress', url: '', sha: '', steps: [] }
-      })
-    )
+  it('keeps the published app’s name while the pipeline publishes it, but not while your preview deploys', async () => {
+    const run = (kind: 'preview' | 'production'): Partial<Parameters<typeof PreviewPane>[0]> => ({
+      team: true,
+      teamRun: { id: 1, kind, status: 'in_progress', url: '', sha: '', steps: [] }
+    })
+    const { rerender } = render(pane(run('production')))
     await settle(e)
     expect(screen.getByText('Published · updating')).toBeTruthy()
+    // Your preview deploys while you publish; the published app on screen doesn't change.
+    rerender(pane(run('preview')))
+    expect(screen.getByText('Published')).toBeTruthy()
+    expect(screen.queryByText('Deploying your preview')).toBeNull()
   })
 })
 
@@ -860,7 +860,7 @@ describe('PreviewPane local preview', () => {
     expect(e.api.reload).not.toHaveBeenCalled()
   })
 
-  it('says whose data a team app’s local preview uses only when it isn’t its own', async () => {
+  it('says whose data a team app’s live preview on Fabric uses only when it isn’t its own', async () => {
     const props = {
       project: makeProject('p1'),
       deploy: undefined,
@@ -1761,6 +1761,46 @@ describe('PreviewPane on this computer', () => {
     expect(screen.getByText(/Your published app will render here/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'localhost:5173' })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Output/ })).toBeNull()
+  })
+
+  it('runs a team app on this computer too, with the published app a switch away', async () => {
+    const onViewChange = vi.fn()
+    const team = (view: PreviewView): JSX.Element => (
+      <OverlayProvider>
+        <PreviewPane
+          project={makeProject('p1')}
+          deploy={undefined}
+          local={runningLocally()}
+          team
+          view={view}
+          onViewChange={onViewChange}
+          teamRun={{
+            id: 1,
+            kind: 'production',
+            status: 'in_progress',
+            url: '',
+            sha: '',
+            steps: []
+          }}
+          focused={false}
+          onToggleFocus={() => {}}
+        />
+      </OverlayProvider>
+    )
+    const { rerender } = render(team('local'))
+    await settle(e)
+    expect(lastShowUrl(e)?.url).toBe(LOCAL_APP)
+    expect(screen.getByRole('button', { name: /^Preview as/ })).toBeTruthy()
+    // The pipeline's state is about the published app, not the one here.
+    expect(document.querySelector('.preview-status')).toBeNull()
+    expect(screen.queryByText('Publishing for everyone')).toBeNull()
+    const views = screen.getByRole('group', { name: 'App to show' })
+    fireEvent.click(within(views).getByRole('button', { name: 'Published' }))
+    expect(onViewChange).toHaveBeenCalledWith('published')
+
+    rerender(team('published'))
+    await settle(e)
+    expect(screen.getByText('Published · updating')).toBeTruthy()
   })
 
   it('switches between the app on this computer and the published one, in Fabric only there', async () => {

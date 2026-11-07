@@ -14,6 +14,7 @@ import type { DataModel } from '../../model/parseSchema'
 import { reportEvent } from '../../errorReport'
 import {
   backendStamp,
+  hasFabricBackend,
   localBackendStore,
   localFallbackReason,
   localStateLabel,
@@ -96,8 +97,8 @@ const SIGN_IN_LABEL: Record<string, string> = {
  * counts, the storage folders with their files, and the local users; a page of
  * the selected entity's rows, read-only and sortable, or of the selected
  * folder's files, with a preview; and clearing an entity's rows, deleting
- * files, or every bit of local data. Team apps have no local backend, so they
- * only get a note.
+ * files, or every bit of local data. A team app's is its own, on this
+ * computer, apart from the team's deployments.
  */
 export default function DataView({
   project,
@@ -105,31 +106,17 @@ export default function DataView({
   dataModel,
   onSendToChat
 }: Props): JSX.Element {
-  const team = Boolean(project.team)
-
   useEffect(() => {
     reportEvent(
       'preview',
       'local.data_view_opened',
-      team
-        ? 'Opened the Data explorer of a team app, which has no local data.'
-        : 'Opened the Data explorer of the app’s local data.',
-      { projectId: project.id }
+      'Opened the Data explorer of the app’s local data.',
+      {
+        projectId: project.id
+      }
     )
-  }, [project.id, team])
+  }, [project.id])
 
-  if (team) {
-    return (
-      <div className="bp-data">
-        <ViewHead title="Data explorer" subtitle="Local data only" />
-        <Empty
-          icon="cloud"
-          title="Local data only"
-          sub="The Data explorer shows data stored on this computer. This team app runs on its Fabric deployment, so its data lives in Fabric."
-        />
-      </div>
-    )
-  }
   if (!window.api?.local) {
     return (
       <div className="bp-data">
@@ -157,8 +144,10 @@ function LocalData({ project, refreshKey, dataModel, onSendToChat }: Props): JSX
   const { status, state } = backend
   const running = state === 'running'
   const published = Boolean(project.lastDeploy?.url)
-  // A published app the local backend can't run previews on its published backend.
-  const fallback = published ? localFallbackReason(status) : null
+  // An app the local backend can't run previews on its backend in Fabric.
+  const fallback = hasFabricBackend(project)
+    ? localFallbackReason(status, { team: Boolean(project.team) })
+    : null
   // A data model change that would delete data waits for a decision; a reset leaves none to lose.
   const schemaWaiting = running && refusedSchemaLosses(status) !== null
   // It runs with a problem, such as a data model change it couldn't read: it

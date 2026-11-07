@@ -11,7 +11,7 @@ use serde_json::Value;
 use super::viewer;
 use crate::commands::util::now_iso;
 use crate::services::store;
-use crate::services::team::{self, gh, naming, repo};
+use crate::services::team::{self, gh, naming, repo, templates};
 use crate::types::{
   StudioProject, TeamActivity, TeamDiff, TeamDiffFile, TeamMap, TeamMapApp, TeamMapCopy, TeamMapMember, TeamMapRun,
   TeamResourceRequest, TeamResourceSource, TeamResources, TeamWorkspace,
@@ -36,9 +36,11 @@ fn local_projects(ws: &TeamWorkspace) -> Vec<StudioProject> {
     .collect()
 }
 
-/// The pipeline's recent runs, with the jobs of the ones still going.
+/// The pipeline's recent runs, with the jobs of the ones still going. A draft
+/// pull request's run deploys nothing, so it isn't activity.
 async fn runs_with_jobs(full: &str) -> Result<Vec<TeamMapRun>, String> {
-  let runs = gh::recent_runs(full, RUN_COUNT).await.map_err(|e| e.describe("Read the pipeline's runs"))?;
+  let mut runs = gh::recent_runs(full, RUN_COUNT).await.map_err(|e| e.describe("Read the pipeline's runs"))?;
+  runs.retain(|run| !run.is_draft());
   let jobs = futures::future::join_all(runs.iter().map(|run| async move {
     if run.status == "completed" {
       Vec::new()
@@ -215,10 +217,15 @@ async fn read_map(workspace_id: String) -> TeamMap {
       HashMap::new()
     })
   };
+  // From template v6 a draft deploys nothing, so a draft's (or an unsaved
+  // copy's) preview record is left from an earlier pull request.
+  let ready_previews =
+    ws.manifest.as_ref().is_some_and(|m| m.template_version >= templates::READY_PREVIEWS_VERSION);
   for app in &mut apps {
     app.production = records.get(&naming::production_environment(&app.folder)).cloned();
     for copy in &mut app.copies {
-      if !copy.author.is_empty() {
+      let deploys = !ready_previews || copy.pr.as_ref().is_some_and(|pr| !pr.draft);
+      if !copy.author.is_empty() && deploys {
         copy.preview = records.get(&naming::preview_environment(&app.folder, &copy.author)).cloned();
       }
     }
