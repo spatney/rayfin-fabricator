@@ -46,6 +46,22 @@ Your next message in that app's chat can use it. The **Plugins** button shows th
 plugins that are on, such as **Fabric IQ**, and Fabricator remembers them for that app. You can't
 change plugins while Copilot is working on a message.
 
+## When chat needs Fabric IQ
+
+When you ask for something that needs Power BI data, and Fabric IQ is off in that app's chat or
+needs you to sign in to Azure, chat asks you on a card in the conversation:
+
+- When Fabric IQ is off, it asks, for example, "Copilot wants to look up the Hawaii sales data with
+  Fabric IQ, which is off in this chat." Select **Turn on Fabric IQ**. When the Azure CLI isn't
+  signed in either, the card adds "Turning it on also asks you to sign in to Azure in your browser."
+- When Fabric IQ is on but the Azure CLI isn't signed in, it asks, for example, "Fabric IQ needs you
+  to sign in to Azure before Copilot can look up the Hawaii sales data." Select **Sign in to Azure**.
+
+If you sign in, chat says "Sign in to Azure in your browser…" while you finish signing in there.
+Then it says "Connecting Fabric IQ…" and "Fabric IQ is on.", and carries on with the same message.
+Fabric IQ stays on in that app's chat, as if you had turned it on in **Plugins**. Select **Not now**
+to carry on without it.
+
 ## Add Work IQ
 
 > [!WARNING]
@@ -56,7 +72,7 @@ change plugins while Copilot is working on a message.
 2. Open **Experiments**.
 3. Turn on **Work IQ**.
 
-![The Experiments section of Settings, with its note that experiments are off by default and may change, and the Team workspaces, Migrate Power BI reports, Work IQ and Goals switches, all off.](/screenshots/settings-experiments.webp)
+![The Experiments section of Settings, with its note that experiments are off by default and may change, and the Team workspaces, Migrate Power BI reports, Work IQ, Goals and Parallel UI builder switches, all off.](/screenshots/settings-experiments.webp)
 
 **Work IQ** now shows in **Plugins**, marked **Experiment**. It's off in each app's chat until
 you turn it on there. Turning the experiment off takes Work IQ out of every chat and signs you
@@ -64,9 +80,12 @@ out of it.
 
 ## Sign in
 
-**Fabric IQ** uses the Azure CLI's sign-in, like Fabricator's other Fabric features, so it doesn't
-ask you to sign in. If the Azure CLI isn't signed in, sign in to Azure in **Settings → Accounts**.
-See [Manage your accounts](/docs/start/accounts).
+**Fabric IQ** uses the Azure CLI's sign-in, like Fabricator's other Fabric features. When a message
+needs Fabric IQ and the Azure CLI isn't signed in, chat asks you to **Sign in to Azure**. See
+[When chat needs Fabric IQ](/docs/build/fabric-iq-and-work-iq#when-chat-needs-fabric-iq). You can
+also sign in to Azure in **Settings → Accounts**. See [Manage your accounts](/docs/start/accounts).
+Fabric IQ stays signed in for as long as the Azure CLI is: Fabricator gets a new token from it
+before the last one expires.
 
 **Work IQ** asks you to sign in the first time a message can use it. Chat says "Sign in to Work IQ
 in your browser…", and your browser opens Microsoft's sign-in page.
@@ -102,10 +121,13 @@ message in that app's chat can't use it. What chat already looked up stays in th
 ## Fabric IQ or Work IQ isn't available
 
 When Fabric IQ or Work IQ can't connect, your message goes without it. When you ask for something
-that needs it, chat tells you why it isn't available and how to fix it.
+that needs it, chat offers to connect Fabric IQ, or tells you why it isn't available and how to fix
+it.
 
-- **The Azure CLI isn't signed in.** Fabric IQ uses the Azure CLI's sign-in. Sign in to Azure in
-  **Settings → Accounts**, then send your message again.
+- **The Azure CLI isn't signed in.** Fabric IQ uses the Azure CLI's sign-in. When chat asks, select
+  **Sign in to Azure**, or sign in to Azure in **Settings → Accounts**.
+- **The Azure CLI isn't installed.** Open **Settings**, select **Open setup**, and install the Azure
+  CLI under **Sign in to Azure**. Then send your message again.
 - **Work IQ sign-in didn't finish.** Fabricator asks once, not with every message. In **Plugins**,
   turn **Work IQ** off and on, send a message, and finish signing in within three minutes.
 - **Work IQ needs approval.** Before anyone in your organization can use Work IQ, an

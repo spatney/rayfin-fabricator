@@ -36,7 +36,7 @@ The toolbar adds:
 
 While the app starts, the preview says what it's doing, such as "Reading your app’s data model", "Updating its database" or "Building its functions". If the app stopped, select **Start**.
 
-**Touch Up** works here, also while Copilot is working, so you can pick what to change next. Your app on this computer has no **Fabric** view: that's for published apps that need the Fabric portal. See [Use the toolbar](/docs/build/preview#use-the-toolbar).
+**Point & Edit** works here, also while Copilot is working, so you can pick what to change next. Your app on this computer has no **Fabric** view: that's for published apps that need the Fabric portal. See [Use the toolbar](/docs/build/preview#use-the-toolbar).
 
 ## When your app doesn't start
 
@@ -59,7 +59,7 @@ Once an app is published, the toolbar has **Local** and **Published**:
 - **Local** shows your app on this computer, with its local data. The preview starts here.
 - **Published** shows your published app on Microsoft Fabric, with its data. Your changes reach it when you publish them.
 
-Switching turns **Touch Up** off, and your picks stay in the chat composer. In **Published**, Touch Up works on the published app, and an app that works only inside the Fabric portal has **Fabric**, which shows it in the Fabric portal shell.
+Switching turns **Point & Edit** off, and your picks stay in the chat composer. In **Published**, Point & Edit works on the published app, and an app that works only inside the Fabric portal has **Fabric**, which shows it in the Fabric portal shell.
 
 An app you published before it ran on this computer starts with empty local data, and its published app keeps its data. Until you select it or look at **Published**, the info button beside **Local** and **Published** is blue: select it for a short note on how the two differ.
 
@@ -92,7 +92,7 @@ The preview toolbar gives you browser-like controls and Fabricator-specific tool
 - The address shows what the preview is showing: your published app's, or `localhost` for an app running on this computer. Select it to open the page in your default browser.
 - For a team app, a status label names the deployment you're looking at, **My preview** or **Published**, and says **Publishing…** while the pipeline updates it. Its local preview is marked **Published data** while it uses the published app's data, and **No data yet** before anything is published.
 - **Desktop**, **Tablet** and **Phone** show your app at other screen widths. **Desktop** fills the pane, **Tablet** previews at 820 CSS pixels, and **Phone** previews at 390 by 844 CSS pixels inside a phone outline.
-- **Touch Up** lets you pick parts of your app and clip screenshots of it, to show Copilot what to change. While the published app in the preview is publishing, it waits until publishing is done. See [Touch Up](/docs/build/touch-up).
+- **Point & Edit** lets you pick parts of your app and clip screenshots of it, to show Copilot what to change. While the published app in the preview is publishing, it waits until publishing is done. See [Point & Edit](/docs/build/touch-up).
 - **Fabric** is there only for an app that works only inside the Fabric portal: one that reads semantic models through a `fabric.yaml` file, the classic way to connect them, whose models load only there, or one whose `rayfin/rayfin.yml` hosts it to open only inside Fabric. It switches the published app between the direct view and the Fabric portal shell, and such an app switches to the Fabric view the first time it's published. It's turned off when the published app has no portal link, and while a local preview runs. Other apps, including ones that connect to Fabric data through Rayfin connectors, don't need it, so they don't have the button, and neither does your app on this computer.
 - **Focus** hides the chat and gives the preview more room. **Exit focus** shows the chat again.
 

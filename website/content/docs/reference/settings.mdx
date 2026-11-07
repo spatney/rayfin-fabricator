@@ -51,7 +51,7 @@ Use this when Fabricator is hard to read on a large or high-DPI monitor. The set
 
 ## Interface zoom in the status bar
 
-The status bar has an **Interface zoom** menu with the same values as **Text size**. Changing it updates the same setting and also scales Touch Up's outlines and hint in the preview.
+The status bar has an **Interface zoom** menu with the same values as **Text size**. Changing it updates the same setting and also scales Point & Edit's outlines and hint in the preview.
 
 ## Workspace folder
 
@@ -91,7 +91,7 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 ## Experiments
 
-**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has four experiments: **Team workspaces**, **Migrate Power BI reports**, **Work IQ** and **Goals**.
+**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has five experiments: **Team workspaces**, **Migrate Power BI reports**, **Work IQ**, **Goals** and **Parallel UI builder**.
 
 ### Team workspaces
 
@@ -120,6 +120,13 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 > [!WARNING]
 > Goals are an experiment. Turn them on in **Settings → Experiments**. They may change or be removed in a future update.
+
+### Parallel UI builder
+
+**Parallel UI builder** lets chat build an app's screens at the same time as the rest of the app. When a request builds a new app, or adds or rebuilds a page, a screen or a dashboard, Copilot hands the screens to a second agent, the **UI builder**, early in the turn. The UI builder builds them while Copilot works out the app's data and builds the logic behind them, so the preview shows the app taking shape early. Its steps show in the work log under **UI builder**. It runs on the chat's model, so these turns use more of your Copilot plan's allowance. Turning the experiment on or off takes effect from each chat's next message. See [See the screens early with the UI builder](/docs/build/chat#see-the-screens-early-with-the-ui-builder).
+
+> [!WARNING]
+> The Parallel UI builder is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
 
 ## Publish after each chat turn
 

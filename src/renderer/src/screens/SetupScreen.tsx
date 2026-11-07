@@ -14,7 +14,14 @@ import npmSvg from '../assets/brands/npm.svg'
 import gitSvg from '../assets/brands/git.svg'
 import azureSvg from '../assets/brands/azure.svg'
 import { CopilotLogo } from '../components/brand-icons'
-import { CheckIcon, Codicon, DownloadIcon, ReloadIcon, TerminalIcon } from '../components/icons'
+import {
+  ArrowRightIcon,
+  CheckIcon,
+  Codicon,
+  DownloadIcon,
+  ReloadIcon,
+  TerminalIcon
+} from '../components/icons'
 import { getCopilotHost, signInToCopilot, signOutOfCopilot } from '../copilotAuth'
 import CopilotHostInput from '../components/CopilotHostInput'
 import { HelpView } from '../components/help/HelpView'
@@ -519,7 +526,7 @@ export default function SetupScreen({
               reading it — not stranded in the corner of a toolbar. When
               everything passes the steps above are collapsed, so this sits one
               glance below the title. */}
-          <div className={`setup-finish ${allReady ? 'is-ready' : ''}`}>
+          <div className="setup-finish">
             <div className="setup-finish-copy">
               <p className="setup-finish-title">
                 {allReady ? "You're all set" : 'Almost there'}
@@ -541,7 +548,8 @@ export default function SetupScreen({
             >
               Enter Fabricator
               <span className="setup-enter-arrow" aria-hidden="true">
-                →
+                <ArrowRightIcon className="setup-enter-arrow-ico" />
+                <ArrowRightIcon className="setup-enter-arrow-ico setup-enter-arrow-next" />
               </span>
             </button>
           </div>

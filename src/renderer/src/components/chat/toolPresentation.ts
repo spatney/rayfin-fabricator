@@ -30,8 +30,17 @@ export type ToolKind =
   | 'mcp'
   | 'other'
 
-/** Tools whose UI lives elsewhere (question cards, the plan card, the status line). */
-const HIDDEN_TOOLS = new Set(['ask_user', 'exit_plan_mode', 'report_intent'])
+/**
+ * Tools whose UI lives elsewhere (question cards, the plan card, the status
+ * line). Fabricator's Fabric IQ tool asks on a question card and reports in
+ * chat notices.
+ */
+const HIDDEN_TOOLS = new Set([
+  'ask_user',
+  'exit_plan_mode',
+  'report_intent',
+  'fabricator_connect_fabric_iq'
+])
 
 export function isHiddenTool(name: string): boolean {
   return HIDDEN_TOOLS.has(name.toLowerCase())
@@ -154,9 +163,17 @@ const PHASES: Record<ToolKind, string> = {
   other: 'Working'
 }
 
+/** The tools that manage agents already started, which delegate nothing new. */
+const AGENT_IO_VERBS: Record<string, [string, string]> = {
+  read_agent: ['Waiting for an agent', 'Checked on an agent'],
+  write_agent: ['Messaging an agent', 'Messaged an agent'],
+  list_agents: ['Listing agents', 'Listed agents']
+}
+
 /** Present-tense phrase for the live status line; `server` names the MCP server a tool came from. */
 export function phaseLabel(name: string, server?: string): string {
-  return server ? `Using ${server}` : PHASES[toolKind(name)]
+  if (server) return `Using ${server}`
+  return AGENT_IO_VERBS[name.toLowerCase()]?.[0] ?? PHASES[toolKind(name)]
 }
 
 const SHELL_IO_VERBS: Record<string, [string, string]> = {
@@ -263,6 +280,8 @@ export function describeStep(tool: ChatToolCall, projectPath: string): StepView 
       : undefined
   const bare = !target ? BARE_VERBS[kind] : undefined
   if (bare) [verbRunning, verbDone] = bare
+  const agentIo = kind === 'agent' ? AGENT_IO_VERBS[tool.name.toLowerCase()] : undefined
+  if (agentIo) [verbRunning, verbDone] = agentIo
   return {
     kind,
     verb: running ? verbRunning : verbDone,

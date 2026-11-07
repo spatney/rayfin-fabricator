@@ -31,7 +31,7 @@ Plugins let chat look things up in your organization's data, or use other servic
 - **Work IQ** looks up your Microsoft 365 email, meetings, files, Teams messages and people. It's an experiment: it shows in **Plugins** once you turn on **Work IQ** in **Settings → Experiments**.
 - **MCP servers** you add, such as a documentation server or your issue tracker's, give chat their tools. See [Connect MCP servers](/docs/build/mcp-servers).
 
-Chat uses a plugin only when a request needs it. Fabric IQ and Work IQ only read. See [Research with Fabric IQ and Work IQ](/docs/build/fabric-iq-and-work-iq).
+Chat uses a plugin only when a request needs it. Fabric IQ and Work IQ only read. When a request needs Fabric IQ while it's off, or while it needs you to sign in to Azure, chat asks you on a card, with **Turn on Fabric IQ** or **Sign in to Azure**. See [Research with Fabric IQ and Work IQ](/docs/build/fabric-iq-and-work-iq).
 
 ## Choose a model and reasoning effort
 
@@ -88,6 +88,8 @@ Expand it to review the steps. A step can show:
 
 Reasoning folds into a `Thought for …` row when it is available.
 
+When Copilot hands part of the work to another agent, such as the **UI builder**, that agent's steps show under the step that started it, with the agent's name, what it was asked to do, and how many steps it took. While the agent works, its newest steps stay open, and its row stays in view as the log moves on, so you can follow it beside Copilot's own steps. While Copilot waits for it, the status line names it, such as `Waiting for UI builder…` or `UI builder is working…`. When it's done, its steps fold into that one line. Select it to see them again.
+
 ## Review changed files
 
 Finished assistant turns end with **Changed** file chips. Select a chip to see what that turn changed in that file.
@@ -139,9 +141,23 @@ These checks show in the work log as steps such as **Checked the local backend**
 
 For a team app, or a published app that this computer can't run, Copilot checks without running the app: type-checking, the build, lint and the project's offline validators, and for charts, Fabricator's headless chart preview when the app has it. For such a published app, while **Publish after each chat turn** is off, Copilot ends by saying what to try in the preview, and whether it needs a publish first.
 
+## See the screens early with the UI builder
+
+> [!WARNING]
+> The Parallel UI builder is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
+
+In a big request, such as a new app or a dashboard, Copilot usually builds the screens last, so the preview shows the starter page for most of the turn. With **Parallel UI builder** turned on in **Settings → Experiments**, Copilot hands the screens to a second agent, the **UI builder**, early in the turn. The UI builder builds the screens while Copilot works out the app's data and builds the logic behind them, so the preview shows the app taking shape early.
+
+- Copilot uses it whenever a request builds a new app, or adds or rebuilds a page, a screen or a dashboard. It makes small changes and fixes itself.
+- The UI builder puts the app's layout and navigation in place first, then lays out each screen. Until the app's data is there, the screens show that they're loading or empty: the UI builder doesn't fill them with made-up data.
+- When the data is ready, Copilot sends it to the UI builder, which connects the screens to it.
+- Its steps show in the work log under **UI builder**. See [Review the work log](/docs/build/chat#review-the-work-log).
+- Copilot waits for the UI builder before it finishes, then checks the whole app.
+- The UI builder runs on the chat's model, so a turn that uses it uses more of your Copilot plan's allowance.
+
 ## Picks and Advisor cards in chat
 
-Elements you pick in the preview with **Touch Up** appear in your message as numbered chips with their pictures, instead of the details sent to Copilot. See [Touch Up](/docs/build/touch-up). Click a picture in the chat to see it large.
+Elements you pick in the preview with **Point & Edit** appear in your message as numbered chips with their pictures, instead of the details sent to Copilot. See [Point & Edit](/docs/build/touch-up). Click a picture in the chat to see it large.
 
 Advisor fixes appear as a card when you send findings to Copilot. See [Check app health with the Advisor](/docs/ship/advisor).
 

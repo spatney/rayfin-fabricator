@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use async_trait::async_trait;
 use base64::Engine;
@@ -26,13 +26,14 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use super::{clip, Iq, Opener, SignIn};
+use super::{clip, AzureProblem, Iq, Opener, SignIn};
 use crate::services::exec::CancelToken;
 use crate::services::team::entra::{self, AzErrorKind};
 
 const FABRIC_RESOURCE: &str = "https://api.fabric.microsoft.com";
-/// How long Fabricator reuses the Azure CLI's token, which lasts at least an hour.
-const FABRIC_TOKEN_LIFE: Duration = Duration::from_secs(30 * 60);
+/// How long Fabricator uses an Azure CLI token whose expiry it doesn't know:
+/// the Azure CLI hands out tokens with at least five minutes left.
+const FABRIC_UNKNOWN_LIFE: Duration = Duration::from_secs(5 * 60);
 
 const WORK_AUTHORITY: &str = "https://login.microsoftonline.com/organizations/oauth2/v2.0";
 /// Work IQ's Microsoft Entra app, a public client, and the redirect registered
@@ -58,7 +59,9 @@ const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::URL
 struct Token {
   access: String,
   expires_at: Instant,
-  issued_at: Instant,
+  /// When each session's runtime last got it from Fabricator, by session id.
+  /// Fabricator also gets tokens to check it can, before a runtime asks.
+  handed: HashMap<String, Instant>,
 }
 
 #[derive(Default)]
@@ -70,8 +73,17 @@ struct Store {
 impl Store {
   fn keep(&mut self, iq: Iq, access: String, life: Duration) -> (String, Duration) {
     let now = Instant::now();
-    self.tokens.insert(iq, Token { access: access.clone(), expires_at: now + life, issued_at: now });
+    // The Azure CLI hands out the same token until it nearly expires: a server
+    // that turned it down still has it turned down.
+    let handed = self.tokens.remove(&iq).filter(|t| t.access == access).map(|t| t.handed).unwrap_or_default();
+    self.tokens.insert(iq, Token { access: access.clone(), expires_at: now + life, handed });
     (access, life)
+  }
+
+  fn handed(&mut self, iq: Iq, access: &str, session: &str, now: Instant) {
+    if let Some(token) = self.tokens.get_mut(&iq).filter(|t| t.access == access) {
+      token.handed.insert(session.to_string(), now);
+    }
   }
 }
 
@@ -92,16 +104,20 @@ pub struct IqAuth;
 
 #[async_trait]
 impl McpAuthHandler for IqAuth {
-  async fn handle(&self, _: SessionId, _: RequestId, request: McpAuthRequest) -> McpAuthResult {
+  async fn handle(&self, session: SessionId, _: RequestId, request: McpAuthRequest) -> McpAuthResult {
     let Some(iq) = Iq::from_server(&request.server_name) else {
       return McpAuthResult::Cancelled;
     };
-    match token(iq, request.reason != McpOauthRequestReason::Initial).await {
-      Ok((access, life)) => McpAuthResult::Token {
-        access_token: access,
-        token_type: Some("Bearer".into()),
-        expires_in: Some(life.as_secs() as i64),
-      },
+    let turned_down = (request.reason != McpOauthRequestReason::Initial).then_some(session.as_str());
+    match token(iq, turned_down).await {
+      Ok((access, life)) => {
+        STORE.lock().unwrap().handed(iq, &access, session.as_str(), Instant::now());
+        McpAuthResult::Token {
+          access_token: access,
+          token_type: Some("Bearer".into()),
+          expires_in: Some(life.as_secs() as i64),
+        }
+      }
       Err(why) => {
         log::info!("No {} token for the Copilot runtime: {why}", iq.label());
         McpAuthResult::Cancelled
@@ -118,34 +134,36 @@ enum Cached {
   Fetch,
 }
 
-/// `fresh` is set when the server turned the last token down.
-fn cached(store: &Store, iq: Iq, fresh: bool, now: Instant) -> Cached {
+/// `turned_down` names the session whose server turned down the last token it
+/// got, when that's why it asks.
+fn cached(store: &Store, iq: Iq, turned_down: Option<&str>, now: Instant) -> Cached {
   let Some(token) = store.tokens.get(&iq) else {
     return Cached::Fetch;
   };
-  if fresh && now.saturating_duration_since(token.issued_at) < TURNED_DOWN_WITHIN {
-    return Cached::TurnedDown;
+  // Only a session that had this token can have turned it down: it's new to the others.
+  if let Some(handed_at) = turned_down.and_then(|session| token.handed.get(session)) {
+    if now.saturating_duration_since(*handed_at) < TURNED_DOWN_WITHIN {
+      return Cached::TurnedDown;
+    }
+    return Cached::Fetch;
   }
-  if !fresh && token.expires_at > now + EXPIRY_MARGIN {
+  if token.expires_at > now + EXPIRY_MARGIN {
     return Cached::Use(token.access.clone(), token.expires_at - now);
   }
   Cached::Fetch
 }
 
 /// `iq`'s token without asking the user, and how long it lasts, or why there
-/// isn't one, in words the user can act on.
-pub(super) async fn token(iq: Iq, fresh: bool) -> Result<(String, Duration), String> {
-  let found = cached(&STORE.lock().unwrap(), iq, fresh, Instant::now());
+/// isn't one, in words the user can act on. `turned_down`: see [`cached`].
+pub(super) async fn token(iq: Iq, turned_down: Option<&str>) -> Result<(String, Duration), String> {
+  let found = cached(&STORE.lock().unwrap(), iq, turned_down, Instant::now());
   match found {
     Cached::Use(access, life) => return Ok((access, life)),
     Cached::TurnedDown => return Err(iq.turned_down().into()),
     Cached::Fetch => {}
   }
   match iq {
-    Iq::Fabric => {
-      let access = entra::token(FABRIC_RESOURCE).await.map_err(|e| azure_problem(&e))?;
-      Ok(STORE.lock().unwrap().keep(iq, access, FABRIC_TOKEN_LIFE))
-    }
+    Iq::Fabric => fetch_fabric().await.map_err(|e| azure_problem(&e)),
     Iq::Work => {
       let refresh = STORE.lock().unwrap().work_refresh.clone().ok_or_else(|| NOT_SIGNED_IN.to_string())?;
       match redeem(&[("grant_type", "refresh_token"), ("refresh_token", &refresh)]).await {
@@ -160,14 +178,39 @@ pub(super) async fn token(iq: Iq, fresh: bool) -> Result<(String, Duration), Str
   }
 }
 
+/// A Fabric IQ token from the Azure CLI, kept until shortly before it expires.
+async fn fetch_fabric() -> Result<(String, Duration), entra::AzError> {
+  let (access, expires) = entra::token_until(FABRIC_RESOURCE).await?;
+  Ok(STORE.lock().unwrap().keep(Iq::Fabric, access, fabric_life(expires, SystemTime::now())))
+}
+
+/// How long an Azure CLI token that expires at `expires` lasts from `now`.
+fn fabric_life(expires: Option<SystemTime>, now: SystemTime) -> Duration {
+  match expires {
+    Some(at) => at.duration_since(now).unwrap_or_default(),
+    None => FABRIC_UNKNOWN_LIFE,
+  }
+}
+
+/// Whether Fabricator has a Fabric IQ token or gets one from the Azure CLI
+/// without asking the user, or what's in the way.
+pub(super) async fn fabric_ready() -> Result<(), AzureProblem> {
+  if let Cached::Use(..) = cached(&STORE.lock().unwrap(), Iq::Fabric, None, Instant::now()) {
+    return Ok(());
+  }
+  fetch_fabric().await.map(|_| ()).map_err(|e| match e.kind {
+    AzErrorKind::Missing => AzureProblem::Missing,
+    AzErrorKind::NeedsLogin => AzureProblem::SignIn,
+    _ => AzureProblem::Other(clip(&e.message)),
+  })
+}
+
 fn azure_problem(e: &entra::AzError) -> String {
   match e.kind {
     AzErrorKind::Missing => {
       "it uses the Azure CLI's sign-in, and the Azure CLI isn't installed. Settings → Setup installs it".into()
     }
-    AzErrorKind::NeedsLogin => "it uses the Azure CLI's sign-in, and the Azure CLI isn't signed in. Sign in to \
-                                Azure in Settings → Accounts, then send the message again"
-      .into(),
+    AzErrorKind::NeedsLogin => "it uses the Azure CLI's sign-in, and the user needs to sign in to Azure".into(),
     _ => format!("it uses the Azure CLI's sign-in, which didn't work ({})", clip(&e.message)),
   }
 }
@@ -179,6 +222,12 @@ pub(super) fn forget(iq: Iq) {
   if iq == Iq::Work {
     store.work_refresh = None;
   }
+}
+
+/// Drops `iq`'s access token, so the runtime gets a new one as it connects:
+/// after the user signed in again, say. Work IQ's sign-in stays.
+pub(super) fn renew(iq: Iq) {
+  STORE.lock().unwrap().tokens.remove(&iq);
 }
 
 /// Signs in to Work IQ in the browser: Microsoft's sign-in page comes back to
@@ -440,14 +489,43 @@ mod tests {
   fn a_token_turned_down_right_after_it_was_given_is_not_offered_again() {
     let now = Instant::now();
     let mut store = Store::default();
-    assert_eq!(cached(&store, Iq::Work, false, now), Cached::Fetch);
-    store.tokens.insert(Iq::Work, Token { access: "t".into(), expires_at: now + Duration::from_secs(3600), issued_at: now });
-    assert_eq!(cached(&store, Iq::Work, false, now), Cached::Use("t".into(), Duration::from_secs(3600)));
-    assert_eq!(cached(&store, Iq::Work, true, now), Cached::TurnedDown);
+    assert_eq!(cached(&store, Iq::Work, None, now), Cached::Fetch);
+    let handed = HashMap::from([("s".to_string(), now)]);
+    let token = Token { access: "t".into(), expires_at: now + Duration::from_secs(3600), handed };
+    store.tokens.insert(Iq::Work, token);
+    assert_eq!(cached(&store, Iq::Work, None, now), Cached::Use("t".into(), Duration::from_secs(3600)));
+    assert_eq!(cached(&store, Iq::Work, Some("s"), now), Cached::TurnedDown);
     // Turned down well after it was given, it has expired early: renew it.
-    assert_eq!(cached(&store, Iq::Work, true, now + Duration::from_secs(600)), Cached::Fetch);
+    assert_eq!(cached(&store, Iq::Work, Some("s"), now + Duration::from_secs(600)), Cached::Fetch);
     // About to expire: renew it too.
-    assert_eq!(cached(&store, Iq::Work, false, now + Duration::from_secs(3590)), Cached::Fetch);
+    assert_eq!(cached(&store, Iq::Work, None, now + Duration::from_secs(3590)), Cached::Fetch);
+    // The Azure CLI hands out the same token again: still turned down.
+    store.keep(Iq::Work, "t".into(), Duration::from_secs(3600));
+    assert_eq!(cached(&store, Iq::Work, Some("s"), now), Cached::TurnedDown);
+  }
+
+  /// Fabricator gets a token to check it can before a runtime asks, and a token
+  /// one chat's session got is new to another's: neither turned it down.
+  #[test]
+  fn only_the_session_that_got_a_token_can_have_turned_it_down() {
+    let now = Instant::now();
+    let mut store = Store::default();
+    store.keep(Iq::Fabric, "t".into(), Duration::from_secs(3600));
+    assert!(matches!(cached(&store, Iq::Fabric, Some("a"), now), Cached::Use(t, _) if t == "t"));
+    store.handed(Iq::Fabric, "t", "a", now);
+    assert_eq!(cached(&store, Iq::Fabric, Some("a"), now), Cached::TurnedDown);
+    assert!(matches!(cached(&store, Iq::Fabric, Some("b"), now), Cached::Use(t, _) if t == "t"));
+    // A token handed out before isn't the one Fabricator has now.
+    store.handed(Iq::Fabric, "an-older-one", "b", now);
+    assert!(matches!(cached(&store, Iq::Fabric, Some("b"), now), Cached::Use(t, _) if t == "t"));
+  }
+
+  #[test]
+  fn an_azure_cli_token_lasts_until_it_expires() {
+    let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+    assert_eq!(fabric_life(Some(now + Duration::from_secs(3115)), now), Duration::from_secs(3115));
+    assert_eq!(fabric_life(Some(now - Duration::from_secs(5)), now), Duration::ZERO);
+    assert_eq!(fabric_life(None, now), FABRIC_UNKNOWN_LIFE);
   }
 
   #[tokio::test]

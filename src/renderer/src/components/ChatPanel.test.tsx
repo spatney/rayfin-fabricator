@@ -1761,7 +1761,7 @@ describe('ChatPanel Touch Up', () => {
     expect(removed).toHaveBeenCalledWith('a')
 
     const composer = screen.getByPlaceholderText(
-      'Say how to change Button · Save, or press Enter to touch it up'
+      'Say how to change Button · Save, or press Enter to polish it'
     ) as HTMLTextAreaElement
     fireEvent.change(composer, { target: { value: 'make it the primary action' } })
     await act(async () => {

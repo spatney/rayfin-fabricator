@@ -1,12 +1,13 @@
 import { memo, useMemo, useState, type JSX } from 'react'
 import Markdown from '../Markdown'
 import { ChevronRightIcon } from '../icons'
+import { AgentRow } from './AgentRow'
 import { formatTurnDuration } from './format'
 import { CheckIcon, ToolKindIcon } from './icons'
 import { StepRow } from './StepRow'
 import { ThinkingRow } from './ThinkingRow'
 import { summarizeKinds } from './toolPresentation'
-import { workDuration, type TurnBlock } from './turnLayout'
+import { workDuration, type TurnBlock, type WorkItem } from './turnLayout'
 
 type WorkBlock = Extract<TurnBlock, { kind: 'work' }>
 
@@ -39,11 +40,14 @@ export const WorkLog = memo(function WorkLog({
   const kinds = useMemo(() => summarizeKinds(steps), [steps])
   const duration = live ? undefined : workDuration(steps, turnElapsedMs, soleBlock)
 
-  const hiddenCount = live && !showAll ? Math.max(0, items.length - LIVE_WINDOW) : 0
-  const shown = hiddenCount ? items.slice(hiddenCount) : items
-  const hiddenSteps = hiddenCount
-    ? items.slice(0, hiddenCount).filter((i) => i.kind === 'tool').length
-    : 0
+  const windowStart = live && !showAll ? Math.max(0, items.length - LIVE_WINDOW) : 0
+  // A subagent still working stays in view however far the log has moved on.
+  const working = (item: WorkItem): boolean =>
+    item.kind === 'tool' && item.tool.agent?.state === 'running'
+  const earlier = items.slice(0, windowStart)
+  const hidden = earlier.filter((item) => !working(item))
+  const shown = windowStart ? [...earlier.filter(working), ...items.slice(windowStart)] : items
+  const hiddenSteps = hidden.filter((i) => i.kind === 'tool').length
 
   const stepCount = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`
   const title = live
@@ -82,7 +86,7 @@ export const WorkLog = memo(function WorkLog({
       </button>
       {open && (
         <div className="worklog-body">
-          {hiddenCount > 0 && (
+          {hidden.length > 0 && (
             <button type="button" className="worklog-earlier" onClick={() => setShowAll(true)}>
               Show{' '}
               {hiddenSteps > 0
@@ -92,12 +96,22 @@ export const WorkLog = memo(function WorkLog({
           )}
           {shown.map((item) =>
             item.kind === 'tool' ? (
-              <StepRow
-                key={item.key}
-                tool={item.tool}
-                projectPath={projectPath}
-                onOpenFile={onOpenFile}
-              />
+              item.tool.agent || item.children?.length ? (
+                <AgentRow
+                  key={item.key}
+                  tool={item.tool}
+                  steps={item.children ?? []}
+                  projectPath={projectPath}
+                  onOpenFile={onOpenFile}
+                />
+              ) : (
+                <StepRow
+                  key={item.key}
+                  tool={item.tool}
+                  projectPath={projectPath}
+                  onOpenFile={onOpenFile}
+                />
+              )
             ) : item.kind === 'reasoning' ? (
               <ThinkingRow key={item.key} seg={item.seg} live={item.live} />
             ) : (

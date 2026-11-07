@@ -1964,8 +1964,8 @@ export default function ChatPanel({
               placeholder={
                 picks.length > 0
                   ? picks.length === 1
-                    ? `Say how to change ${picks[0].target.label}, or press Enter to touch it up`
-                    : `Say how to change these ${picks.length}, or press Enter to touch them up`
+                    ? `Say how to change ${picks[0].target.label}, or press Enter to polish it`
+                    : `Say how to change these ${picks.length}, or press Enter to polish them`
                   : dataChips.length > 0
                     ? 'Say what to build with this data, or just press Enter to connect it'
                     : fileChips.length > 0

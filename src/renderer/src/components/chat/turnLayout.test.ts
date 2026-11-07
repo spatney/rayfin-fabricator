@@ -88,6 +88,38 @@ describe('layoutTurn', () => {
     expect(kinds(m)).toEqual(['question', 'answer'])
   })
 
+  it('puts a subagent’s steps under the step that started it, and counts them in the log', () => {
+    const m = turn(
+      [
+        { kind: 'tool', id: 'task' },
+        { kind: 'tool', id: 'model' },
+        { kind: 'text', text: 'The screens are in.' }
+      ],
+      [
+        tool('task', 'task', {
+          title: 'Build the screens',
+          agent: { name: 'UI builder', state: 'success' }
+        }),
+        tool('shell', 'create', { parent: 'task' }),
+        tool('model', 'edit'),
+        tool('intent', 'report_intent', { parent: 'task' }),
+        tool('page', 'create', { parent: 'task' })
+      ]
+    )
+    const [work] = layoutTurn(m)
+    if (work.kind !== 'work') throw new Error('expected work')
+    expect(work.items.map((i) => (i.kind === 'tool' ? i.tool.id : i.kind))).toEqual([
+      'task',
+      'model'
+    ])
+    const [delegated] = work.items
+    expect(delegated.kind === 'tool' && delegated.children?.map((c) => c.id)).toEqual([
+      'shell',
+      'page'
+    ])
+    expect(work.steps.map((s) => s.id)).toEqual(['task', 'shell', 'page', 'model'])
+  })
+
   it('lays out legacy turns (no segments) as steps then answer', () => {
     const m: UIChatMessage = {
       id: 'a',

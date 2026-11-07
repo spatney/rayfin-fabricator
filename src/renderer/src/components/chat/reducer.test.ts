@@ -99,6 +99,67 @@ describe('reduceChatMessage streaming additions', () => {
   })
 })
 
+describe('reduceChatMessage subagents', () => {
+  const task: ChatToolCall = {
+    id: 'task1',
+    name: 'task',
+    title: 'Build the screens',
+    state: 'running'
+  }
+  const step = (id: string, parent: string): ChatToolCall => ({
+    id,
+    name: 'create',
+    title: `src/${id}.tsx`,
+    state: 'running',
+    parent
+  })
+
+  it('puts a subagent’s steps under the step that started it, and follows the agent’s run', () => {
+    let m = reduceChatMessage(base(), { type: 'tool-start', tool: task })
+    // A background agent keeps working after the step that started it ends.
+    m = reduceChatMessage(m, { type: 'tool-end', id: 'task1', state: 'success' })
+    m = reduceChatMessage(m, {
+      type: 'agent',
+      id: 'task1',
+      name: 'UI builder',
+      state: 'running',
+      background: true
+    })
+    m = reduceChatMessage(m, { type: 'tool-start', tool: step('shell', 'task1') })
+    // A step whose starter isn't in this turn shows in the turn's own flow.
+    m = reduceChatMessage(m, { type: 'tool-start', tool: step('stray', 'gone') })
+    expect(m.segments).toEqual([
+      { kind: 'tool', id: 'task1' },
+      { kind: 'tool', id: 'stray' }
+    ])
+    expect(m.tools.map((t) => [t.id, t.parent])).toEqual([
+      ['task1', undefined],
+      ['shell', 'task1'],
+      ['stray', undefined]
+    ])
+    expect(m.tools[0]).toMatchObject({
+      state: 'success',
+      agent: { name: 'UI builder', state: 'running', background: true }
+    })
+    m = reduceChatMessage(m, {
+      type: 'agent',
+      id: 'task1',
+      name: 'UI builder',
+      state: 'success',
+      background: true
+    })
+    expect(m.tools[0].agent).toEqual({ name: 'UI builder', state: 'success', background: true })
+  })
+
+  it('settles an agent still working when the turn ends', () => {
+    let m = reduceChatMessage(base(), { type: 'tool-start', tool: task })
+    m = reduceChatMessage(m, { type: 'tool-end', id: 'task1', state: 'success' })
+    m = reduceChatMessage(m, { type: 'agent', id: 'task1', name: 'UI builder', state: 'running' })
+    m = reduceChatMessage(m, { type: 'error', text: 'Stopped' })
+    expect(m.tools[0]).toMatchObject({ state: 'success', agent: { state: 'error' } })
+  })
+})
+
 describe('ChatEventBuffer', () => {
   it('merges consecutive deltas and reasoning, keeping order and the newest tool output', () => {
     const buf = new ChatEventBuffer()

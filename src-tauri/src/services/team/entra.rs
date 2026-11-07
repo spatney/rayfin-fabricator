@@ -5,6 +5,8 @@
 //! JSON parameters go through `@file` because `az` is a batch script on
 //! Windows, and `cmd.exe` mangles quotes and braces in arguments.
 
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde_json::{json, Value};
@@ -136,6 +138,29 @@ pub async fn token(resource: &str) -> Result<String, AzError> {
     return Err(AzError { kind: AzErrorKind::NeedsLogin, message: "The Azure CLI returned no token.".into() });
   }
   Ok(token)
+}
+
+/// An access token for `resource` as the signed-in user, and when it expires,
+/// when the Azure CLI says (2.54 and later do).
+pub async fn token_until(resource: &str) -> Result<(String, Option<SystemTime>), AzError> {
+  let out = az(&["account", "get-access-token", "--resource", resource, "--output", "json"], 60_000).await?;
+  token_of(&out)
+}
+
+/// The token and its expiry in `az account get-access-token`'s JSON. Never
+/// quotes the output, which holds the token.
+fn token_of(out: &str) -> Result<(String, Option<SystemTime>), AzError> {
+  let v: Value = serde_json::from_str(out.trim()).map_err(|_| AzError {
+    kind: AzErrorKind::Other,
+    message: "The Azure CLI answered in a way Fabricator didn't understand.".into(),
+  })?;
+  let token = str_of(&v, "accessToken")
+    .ok_or(AzError { kind: AzErrorKind::NeedsLogin, message: "The Azure CLI returned no token.".into() })?;
+  let expires = v
+    .get("expires_on")
+    .and_then(|e| e.as_u64().or_else(|| e.as_str().and_then(|s| s.trim().parse().ok())))
+    .map(|secs| UNIX_EPOCH + Duration::from_secs(secs));
+  Ok((token, expires))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -427,6 +452,19 @@ mod tests {
     assert_eq!(classify(&failed("ERROR: something else")).kind, AzErrorKind::Other);
     let missing = classify(&RunResult { ok: false, exit_code: None, stdout: String::new(), stderr: String::new(), not_found: true });
     assert_eq!(missing.kind, AzErrorKind::Missing);
+  }
+
+  #[test]
+  fn a_token_comes_with_its_expiry_when_the_azure_cli_says() {
+    let at = |secs: u64| Some(UNIX_EPOCH + Duration::from_secs(secs));
+    let json = r#"{"accessToken":"t","expiresOn":"2026-11-06 23:49:15.000000","expires_on":1794037755,"tokenType":"Bearer"}"#;
+    assert_eq!(token_of(json).unwrap(), ("t".to_string(), at(1794037755)));
+    assert_eq!(token_of(r#"{"accessToken":"t","expires_on":"1794037755"}"#).unwrap().1, at(1794037755));
+    // Before 2.54 there's only the local time.
+    assert_eq!(token_of(r#"{"accessToken":"t","expiresOn":"2026-11-06 23:49:15.000000"}"#).unwrap().1, None);
+    assert_eq!(token_of(r#"{"accessToken":""}"#).unwrap_err().kind, AzErrorKind::NeedsLogin);
+    let garbled = token_of("secret-token-text").unwrap_err();
+    assert!(!garbled.message.contains("secret"), "{}", garbled.message);
   }
 
   #[test]

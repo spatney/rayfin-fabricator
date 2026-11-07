@@ -141,6 +141,21 @@ describe('describeStep', () => {
     ).toBe('Sending input to a command')
   })
 
+  it('says what a step did with an agent already started, rather than delegating again', () => {
+    expect(stepLabel(describeStep(tool('task', 'Build the screens'), ROOT))).toBe(
+      'Delegated Build the screens'
+    )
+    const waiting = tool('read_agent', 'read_agent', { state: 'running' })
+    expect(stepLabel(describeStep(waiting, ROOT))).toBe('Waiting for an agent')
+    expect(phaseLabel('read_agent')).toBe('Waiting for an agent')
+    expect(stepLabel(describeStep(tool('read_agent', 'read_agent'), ROOT))).toBe(
+      'Checked on an agent'
+    )
+    expect(stepLabel(describeStep(tool('write_agent', 'write_agent'), ROOT))).toBe(
+      'Messaged an agent'
+    )
+  })
+
   it('describes the local backend tools in plain words', () => {
     expect(
       stepLabel(describeStep(tool('fabricator_local_status', 'fabricator_local_status'), ROOT))

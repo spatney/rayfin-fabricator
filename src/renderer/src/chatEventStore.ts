@@ -9,11 +9,20 @@ const KEY_SEP = '\u0000'
 /**
  * Keep chat event handling mounted at the workbench level. ChatPanel is removed
  * from the tree on Code/Model tabs, but active turns and Plan callbacks continue.
+ * `onPluginsChanged` hears when chat turned a plugin on in a project, such as
+ * Fabric IQ when the user agreed.
  */
-export function useChatEventStore(setChats: Dispatch<SetStateAction<ChatStore>>): void {
+export function useChatEventStore(
+  setChats: Dispatch<SetStateAction<ChatStore>>,
+  onPluginsChanged?: (projectId: string) => void
+): void {
   const buffer = useRef(new ChatEventBuffer())
   const flushTimer = useRef<number | null>(null)
   const lastFlush = useRef(0)
+  const pluginsChanged = useRef(onPluginsChanged)
+  useEffect(() => {
+    pluginsChanged.current = onPluginsChanged
+  }, [onPluginsChanged])
 
   useEffect(() => {
     const FLUSH_INTERVAL_MS = 90
@@ -54,6 +63,10 @@ export function useChatEventStore(setChats: Dispatch<SetStateAction<ChatStore>>)
 
     const off = window.api.onChatEvent((envelope) => {
       const event = envelope.event
+      if (event.type === 'plugins-changed') {
+        pluginsChanged.current?.(envelope.projectId)
+        return
+      }
       if (isStreamingEvent(event)) {
         buf.push(`${envelope.projectId}${KEY_SEP}${envelope.turnId}`, event)
         scheduleFlush()

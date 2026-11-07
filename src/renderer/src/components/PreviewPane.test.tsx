@@ -1266,13 +1266,13 @@ describe('PreviewPane Touch Up', () => {
 
     page({ seq: 2, type: 'pick', pick: { id: 'a', n: 1, target: SAVE_BUTTON, rect: null } })
     await settle(e)
-    expect(screen.getByRole('button', { name: 'Touch Up, 1 picked' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Point & Edit, 1 picked' })).toBeTruthy()
 
     // Escape or Done in the page: the pick still waits for the message.
     page({ seq: 3, type: 'exit' })
     await settle(e)
     expect(pickButton().getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByRole('button', { name: 'Touch Up, 1 picked' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Point & Edit, 1 picked' })).toBeTruthy()
   })
 
   it('ends picking while a publish takes the published app away, and says when it’s back', async () => {
@@ -1290,7 +1290,7 @@ describe('PreviewPane Touch Up', () => {
     fireEvent.mouseEnter(pickButton().parentElement!)
     act(() => e.advanceTimers(400))
     expect(screen.getByRole('tooltip').textContent).toBe(
-      'Touch Up is back once the publish finishes.'
+      'Point & Edit is back once the publish finishes.'
     )
   })
 
@@ -1311,7 +1311,7 @@ describe('PreviewPane Touch Up', () => {
 })
 
 const pickButton = (): HTMLButtonElement =>
-  screen.getByRole<HTMLButtonElement>('button', { name: /^touch up/i })
+  screen.getByRole<HTMLButtonElement>('button', { name: /^point & edit/i })
 
 /** The last `preview.pick.set` call's arguments. */
 function lastPickSet(e: PreviewEnv): unknown[] | undefined {

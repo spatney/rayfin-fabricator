@@ -10,7 +10,13 @@ type InterjectionSegment = Extract<ChatSegment, { kind: 'interjection' }>
 /** One entry in a work log, in stream order. */
 export type WorkItem =
   | { kind: 'text'; key: string; text: string }
-  | { kind: 'tool'; key: string; tool: ChatToolCall }
+  | {
+      kind: 'tool'
+      key: string
+      tool: ChatToolCall
+      /** For a step that started a subagent: the steps the agent took, in order. */
+      children?: ChatToolCall[]
+    }
   | { kind: 'reasoning'; key: string; seg: ReasoningSegment; live: boolean }
 
 /** A top-level block of an assistant turn, rendered as a direct child of `.turn-feed`. */
@@ -31,7 +37,7 @@ export type TurnBlock =
 
 type Resolved =
   | { kind: 'text'; index: number; text: string }
-  | { kind: 'tool'; index: number; tool: ChatToolCall }
+  | { kind: 'tool'; index: number; tool: ChatToolCall; children?: ChatToolCall[] }
   | { kind: 'reasoning'; index: number; seg: ReasoningSegment }
   | { kind: 'question'; index: number; id: string }
   | { kind: 'interjection'; index: number; seg: InterjectionSegment }
@@ -39,13 +45,26 @@ type Resolved =
 /** Legacy turns (persisted before segments existed) ran all tools, then wrote text. */
 function segmentsOf(m: UIChatMessage): ChatSegment[] {
   if (m.segments && m.segments.length > 0) return m.segments
-  const segs: ChatSegment[] = m.tools.map((t) => ({ kind: 'tool', id: t.id }))
+  const segs: ChatSegment[] = m.tools.flatMap((t) => (t.parent ? [] : [{ kind: 'tool', id: t.id }]))
   if (m.text) segs.push({ kind: 'text', text: m.text })
   return segs
 }
 
+/** The visible steps subagents took, by the step that started each agent. */
+function stepsByAgent(tools: readonly ChatToolCall[]): Map<string, ChatToolCall[]> {
+  const out = new Map<string, ChatToolCall[]>()
+  for (const t of tools) {
+    if (!t.parent || isHiddenTool(t.name)) continue
+    const list = out.get(t.parent)
+    if (list) list.push(t)
+    else out.set(t.parent, [t])
+  }
+  return out
+}
+
 function resolve(m: UIChatMessage): Resolved[] {
   const tools = new Map(m.tools.map((t) => [t.id, t]))
+  const children = stepsByAgent(m.tools)
   const out: Resolved[] = []
   segmentsOf(m).forEach((seg, index) => {
     switch (seg.kind) {
@@ -54,7 +73,8 @@ function resolve(m: UIChatMessage): Resolved[] {
         break
       case 'tool': {
         const tool = tools.get(seg.id)
-        if (tool && !isHiddenTool(tool.name)) out.push({ kind: 'tool', index, tool })
+        if (tool && !isHiddenTool(tool.name))
+          out.push({ kind: 'tool', index, tool, children: children.get(tool.id) })
         break
       }
       case 'reasoning':
@@ -88,13 +108,14 @@ export function layoutTurn(m: UIChatMessage): TurnBlock[] {
   let run: Resolved[] = []
   const flush = (last: boolean): void => {
     if (run.length === 0) return
-    const steps = run.flatMap((r) => (r.kind === 'tool' ? [r.tool] : []))
+    // A subagent's steps count toward the log that holds the step that started it.
+    const steps = run.flatMap((r) => (r.kind === 'tool' ? [r.tool, ...(r.children ?? [])] : []))
     const live = Boolean(m.pending) && last
     const toItem = (r: Resolved): WorkItem | null =>
       r.kind === 'text'
         ? { kind: 'text', key: `t${r.index}`, text: r.text }
         : r.kind === 'tool'
-          ? { kind: 'tool', key: `s${r.index}`, tool: r.tool }
+          ? { kind: 'tool', key: `s${r.index}`, tool: r.tool, children: r.children }
           : r.kind === 'reasoning'
             ? {
                 kind: 'reasoning',

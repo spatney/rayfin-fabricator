@@ -1334,6 +1334,31 @@ button.step-line:hover .step-base,
   animation: logOpen 0.18s ease both;
 }
 
+/* A subagent's steps hang off their own rail, under the text of the step that
+   started the agent. */
+.step-agent-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 0 4px 23px;
+  animation: logOpen 0.18s ease both;
+}
+
+.step-agent-body::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 15.5px;
+  width: 1px;
+  background: color-mix(in srgb, var(--text-faint) 34%, transparent);
+}
+
+.step-agent-output {
+  margin: 2px 0 8px 31px;
+}
+
 .step-cmd {
   display: flex;
   align-items: flex-start;

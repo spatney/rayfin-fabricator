@@ -207,6 +207,115 @@ describe('chat transcript', () => {
     expect(screen.getByText('Running a command…')).toBeTruthy()
   })
 
+  it('shows a subagent’s steps under it: open while it works, folded once it’s done', async () => {
+    installApi()
+    const user: UIChatMessage = {
+      id: 'u1',
+      role: 'user',
+      text: 'Build a lead tracker',
+      tools: [],
+      pending: false
+    }
+    const created = (id: string, state: ChatToolCall['state']): ChatToolCall =>
+      tool(id, 'create', {
+        title: `${ROOT}/src/${id}.tsx`,
+        paths: [`${ROOT}/src/${id}.tsx`],
+        parent: 'task1',
+        state
+      })
+    const working: UIChatMessage = {
+      id: 'a1',
+      turnId: 't1',
+      role: 'assistant',
+      text: '',
+      pending: true,
+      startedAt: Date.now(),
+      tools: [
+        tool('task1', 'task', {
+          title: 'Build the screens',
+          agent: { name: 'UI builder', state: 'running' }
+        }),
+        created('App', 'success'),
+        created('Leads', 'running')
+      ],
+      segments: [{ kind: 'tool', id: 'task1' }]
+    }
+    render(<Harness initial={[user, working]} />)
+    const live = screen.getByRole('button', { name: 'UI builder, Build the screens, 2 steps' })
+    expect(live.getAttribute('aria-expanded')).toBe('true')
+    expect(
+      document.querySelector('.step-agent-body .step-line[title="Created src/App.tsx"]')
+    ).toBeTruthy()
+    expect(
+      document.querySelector('.step-agent-body .step-line[title="Creating src/Leads.tsx"]')
+    ).toBeTruthy()
+    cleanup()
+
+    const done: UIChatMessage = {
+      ...working,
+      pending: false,
+      elapsedMs: 60_000,
+      tools: [
+        tool('task1', 'task', {
+          title: 'Build the screens',
+          output: 'Agent started in background with agent_id: ui-1.',
+          agent: { name: 'UI builder', state: 'success', background: true }
+        }),
+        created('App', 'success'),
+        created('Leads', 'success')
+      ],
+      segments: [
+        { kind: 'tool', id: 'task1' },
+        { kind: 'text', text: 'Your screens are in.' }
+      ]
+    }
+    render(<Harness initial={[user, done]} />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /^Worked for 1m/ })))
+    const folded = screen.getByRole('button', { name: 'UI builder, Build the screens, 2 steps' })
+    expect(folded.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('.step-agent-body')).toBeNull()
+    await act(async () => fireEvent.click(folded))
+    expect(document.querySelectorAll('.step-agent-body .step')).toHaveLength(2)
+    // A background agent's step only reported that it started: that isn't shown.
+    expect(screen.queryByText(/Agent started in background/)).toBeNull()
+  })
+
+  it('keeps a working agent in view as the log moves on, and names it in the status', () => {
+    installApi()
+    const steps = Array.from({ length: 7 }, (_, i) => tool(`main${i}`, 'view'))
+    const live: UIChatMessage = {
+      id: 'a1',
+      turnId: 't1',
+      role: 'assistant',
+      text: '',
+      pending: true,
+      startedAt: Date.now(),
+      tools: [
+        tool('task1', 'task', {
+          title: 'Build the screens',
+          agent: { name: 'UI builder', state: 'running', background: true }
+        }),
+        tool('page', 'create', { parent: 'task1' }),
+        ...steps
+      ],
+      segments: [
+        { kind: 'tool', id: 'task1' },
+        ...steps.map((s) => ({ kind: 'tool' as const, id: s.id }))
+      ]
+    }
+    render(
+      <Harness
+        initial={[{ id: 'u1', role: 'user', text: 'Build it', tools: [], pending: false }, live]}
+      />
+    )
+    // Only the newest steps stay on screen while live, but the agent at work does too.
+    expect(screen.getByRole('button', { name: 'Show 1 earlier step' })).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'UI builder, Build the screens, 1 step' })
+    ).toBeTruthy()
+    expect(screen.getByText('UI builder is working…')).toBeTruthy()
+  })
+
   it('opens a changed file’s diff from its chip, with a way into the Code tab', async () => {
     installApi()
     const onOpen = vi.fn()

@@ -205,8 +205,14 @@ function toStored(messages: UIChatMessage[]): ChatMessage[] {
         text,
         // A turn cut off mid-command leaves a tool 'running'; settle it so the
         // reloaded transcript shows a finished (errored) tile, not a spinner.
+        // A subagent still working is settled the same way.
         tools: cutOff
-          ? tools.map((t) => (t.state === 'running' ? { ...t, state: 'error' } : t))
+          ? tools.map((t) => {
+              const settled = t.state === 'running' ? { ...t, state: 'error' as const } : t
+              return t.agent?.state === 'running'
+                ? { ...settled, agent: { ...t.agent, state: 'error' as const } }
+                : settled
+            })
           : tools,
         segments: segmentsForStorage(segments),
         error,
@@ -493,7 +499,6 @@ export default function Workbench({
     localStorage.setItem('rayfin.splitFrac', '0.5')
   }
   const [chats, setChats] = useState<Record<string, UIChatMessage[]>>({})
-  useChatEventStore(setChats)
   const [deploys, setDeploys] = useState<Record<string, DeployUiState>>({})
   /** Live preview against a Fabric backend: per-project Vite dev-server state.
    *  For team apps, and published apps their local backend can't run (other
@@ -790,6 +795,8 @@ export default function Workbench({
   const refreshProjects = useCallback(async (): Promise<void> => {
     setProjects(await window.api.projects.state())
   }, [])
+  // Chat turns Fabric IQ on when you agree: its plugins show it on.
+  useChatEventStore(setChats, () => void refreshProjects())
 
   /** Import these files, after any already waiting. */
   const queueImports = useCallback((paths: string[]): void => {
@@ -3573,7 +3580,7 @@ export default function Workbench({
               applyUiScale(uiScale)
               onSettingsChange({ uiScale })
             }}
-            title="Interface zoom — scales the whole UI (and Touch Up in the preview)"
+            title="Interface zoom — scales the whole UI (and Point & Edit in the preview)"
             aria-label="Interface zoom"
           >
             {UI_SCALES.map((s) => (

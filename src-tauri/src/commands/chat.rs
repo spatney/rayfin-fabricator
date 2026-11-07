@@ -42,6 +42,7 @@ use crate::services::exec::CancelToken;
 use crate::services::iq::{self, IqConfig};
 use crate::services::mcp::{self, McpServers};
 use crate::services::store;
+use crate::services::ui_builder;
 use crate::services::usage;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
@@ -334,6 +335,37 @@ struct TurnCtx {
   mcp_servers: Vec<(String, String)>,
   /// What Copilot Fusion chose for the turn so far, on a Fusion tier.
   fusion: Option<ChatFusion>,
+  /// Where each subagent's steps go, by the subagent's id.
+  agents: HashMap<String, AgentLink>,
+  /// The group of each step a subagent took, by its call id: an agent that
+  /// step starts joins the same group.
+  agent_steps: HashMap<String, String>,
+}
+
+/// Where a subagent's steps go in the work log, and how its run is going.
+struct AgentLink {
+  /// The main agent's step that started this agent, or the agent above it.
+  group: String,
+  /// The agent's name, as the work log shows it.
+  name: String,
+  /// The main agent started it, so the group is its own.
+  top: bool,
+  /// It runs in the background.
+  background: bool,
+  /// How its run is going, as the work log last showed it.
+  state: ChatToolState,
+}
+
+impl AgentLink {
+  /// The work log's view of this agent's run.
+  fn event(&self) -> ChatEvent {
+    ChatEvent::Agent {
+      id: self.group.clone(),
+      name: self.name.clone(),
+      state: self.state.clone(),
+      background: self.background,
+    }
+  }
 }
 
 impl TurnCtx {
@@ -357,6 +389,8 @@ impl TurnCtx {
       provider: None,
       mcp_servers: vec![],
       fusion: None,
+      agents: HashMap::new(),
+      agent_steps: HashMap::new(),
     }
   }
 
@@ -435,6 +469,150 @@ fn ensure_separator(id: &str, sink: &mut dyn FnMut(ChatEvent), ctx: &mut TurnCtx
   ctx.cur_msg = Some(id.to_string());
 }
 
+/// A step starting: shown as it runs, and, for a step a subagent took, under
+/// `group`, the main agent's step that started that agent.
+fn tool_started(data: &Value, group: Option<String>, sink: &mut dyn FnMut(ChatEvent), ctx: &mut TurnCtx) {
+  let tool_name = data.get("toolName").and_then(|v| v.as_str()).unwrap_or("tool").to_string();
+  let args = data.get("arguments");
+  // A tool of a server the user added goes by its own name, with the server's.
+  let (title, server) = match ctx.mcp_tool(data, &tool_name) {
+    Some((server, tool)) => (tool, Some(server)),
+    None => (chat_tools::tool_title(&tool_name, args), None),
+  };
+  let command = args.and_then(|a| a.get("command")).and_then(|v| v.as_str()).unwrap_or("");
+  if RAYFIN_UP_RE.is_match(command) {
+    ctx.ran_deploy = true;
+  }
+  ctx.saw_activity = true;
+  let id = data
+    .get("toolCallId")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .unwrap_or_else(|| Uuid::new_v4().to_string());
+  ctx.tool_start(&id, &tool_name);
+  if let Some(group) = &group {
+    ctx.agent_steps.insert(id.clone(), group.clone());
+  }
+  sink(ChatEvent::ToolStart {
+    tool: ChatToolCall {
+      id,
+      command: chat_tools::shell_command(&tool_name, args),
+      paths: chat_tools::tool_paths(&tool_name, args),
+      name: tool_name,
+      title,
+      server,
+      state: ChatToolState::Running,
+      parent: group,
+      ..Default::default()
+    },
+  });
+}
+
+/// The name the work log gives an agent, from its internal name until the
+/// runtime reports its own (`subagent.selected`).
+fn agent_label(name: &str) -> String {
+  if name == ui_builder::AGENT {
+    return ui_builder::NAME.to_string();
+  }
+  let words = name.replace(['-', '_'], " ");
+  let mut chars = words.trim().chars();
+  match chars.next() {
+    Some(first) => first.to_uppercase().chain(chars).collect(),
+    None => "Agent".to_string(),
+  }
+}
+
+/// Set how an agent's run is going, and show it when the agent has a group of
+/// its own and that changed.
+fn set_agent_state(agent: &str, state: ChatToolState, sink: &mut dyn FnMut(ChatEvent), ctx: &mut TurnCtx) {
+  let Some(link) = ctx.agents.get_mut(agent) else { return };
+  if link.state == state {
+    return;
+  }
+  link.state = state;
+  if link.top {
+    sink(link.event());
+  }
+}
+
+/// A subagent starting, getting its name, or finishing. An agent the main
+/// agent started gets a group in the work log, under the step that started it;
+/// one a subagent started joins its starter's group.
+fn agent_lifecycle(agent: Option<&str>, event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ctx: &mut TurnCtx) {
+  let field = |key: &str| data.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+  match event_type {
+    "subagent.started" => {
+      let (Some(agent), Some(step)) = (agent, field("toolCallId")) else { return };
+      let starter = ctx.agent_steps.get(step).cloned();
+      let link = AgentLink {
+        top: starter.is_none(),
+        group: starter.unwrap_or_else(|| step.to_string()),
+        name: agent_label(field("agentName").unwrap_or_default()),
+        background: field("executionMode") == Some("background"),
+        state: ChatToolState::Running,
+      };
+      if link.top {
+        sink(link.event());
+      }
+      ctx.agents.insert(agent.to_string(), link);
+    }
+    "subagent.selected" => {
+      let (Some(link), Some(name)) = (agent.and_then(|a| ctx.agents.get_mut(a)), field("agentDisplayName")) else { return };
+      if link.name != name {
+        link.name = name.to_string();
+        if link.top {
+          sink(link.event());
+        }
+      }
+    }
+    "subagent.completed" | "subagent.failed" => {
+      let step = field("toolCallId");
+      let key = agent.filter(|a| ctx.agents.contains_key(*a)).map(str::to_string).or_else(|| {
+        ctx.agents.iter().find(|(_, l)| l.top && Some(l.group.as_str()) == step).map(|(key, _)| key.clone())
+      });
+      let Some(key) = key else { return };
+      // A cancelled agent reports completion too, but didn't finish its work.
+      let cancelled = data.get("cancelled").and_then(Value::as_bool) == Some(true);
+      let state =
+        if event_type == "subagent.completed" && !cancelled { ChatToolState::Success } else { ChatToolState::Error };
+      set_agent_state(&key, state, sink, ctx);
+    }
+    _ => {}
+  }
+}
+
+/// Map one server event by whoever sent it: `agent` is a subagent's id, absent
+/// for the main agent and for events of the whole session. A subagent's steps
+/// go under the step that started it, and its own messages and reasoning stay
+/// out of the reply: the main agent reads its result and reports what matters.
+fn route_event(agent: Option<&str>, event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ctx: &mut TurnCtx) -> Flow {
+  if event_type.starts_with("subagent.") {
+    agent_lifecycle(agent, event_type, data, sink, ctx);
+    return Flow::Continue;
+  }
+  let Some(agent) = agent else {
+    return map_event(event_type, data, sink, ctx);
+  };
+  match event_type {
+    "tool.execution_start" => {
+      let group = ctx.agents.get(agent).map(|link| link.group.clone());
+      tool_started(data, group, sink, ctx);
+    }
+    "tool.execution_partial_result" | "tool.execution_complete" | "session.info" => {
+      map_event(event_type, data, sink, ctx);
+    }
+    // A background agent takes more work after its first run (`write_agent`),
+    // and the runtime reports no start or end for those runs: a message to it
+    // starts one, and a response that asks for no tool ends it.
+    "user.message" => set_agent_state(agent, ChatToolState::Running, sink, ctx),
+    "assistant.message" if data.get("toolRequests").and_then(Value::as_array).is_some_and(|r| r.is_empty()) => {
+      set_agent_state(agent, ChatToolState::Success, sink, ctx);
+    }
+    _ => {}
+  }
+  Flow::Continue
+}
+
 /// Map a single Copilot **server** event (`event_type` plus its `data` object) to
 /// ChatEvents pushed into `sink`, updating the turn accumulator. Unlike the old
 /// one-shot `-p` JSONL, server events carry `data` as the inner object directly
@@ -492,38 +670,7 @@ fn map_event(event_type: &str, data: &Value, sink: &mut dyn FnMut(ChatEvent), ct
         sink(ChatEvent::Reasoning { id, text });
       }
     }
-    "tool.execution_start" => {
-      let tool_name = data.get("toolName").and_then(|v| v.as_str()).unwrap_or("tool").to_string();
-      let args = data.get("arguments");
-      // A tool of a server the user added goes by its own name, with the server's.
-      let (title, server) = match ctx.mcp_tool(data, &tool_name) {
-        Some((server, tool)) => (tool, Some(server)),
-        None => (chat_tools::tool_title(&tool_name, args), None),
-      };
-      let command = args.and_then(|a| a.get("command")).and_then(|v| v.as_str()).unwrap_or("");
-      if RAYFIN_UP_RE.is_match(command) {
-        ctx.ran_deploy = true;
-      }
-      ctx.saw_activity = true;
-      let id = data
-        .get("toolCallId")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
-      ctx.tool_start(&id, &tool_name);
-      sink(ChatEvent::ToolStart {
-        tool: ChatToolCall {
-          id,
-          command: chat_tools::shell_command(&tool_name, args),
-          paths: chat_tools::tool_paths(&tool_name, args),
-          name: tool_name,
-          title,
-          server,
-          state: ChatToolState::Running,
-          ..Default::default()
-        },
-      });
-    }
+    "tool.execution_start" => tool_started(data, None, sink, ctx),
     "tool.execution_partial_result" => {
       let id = data.get("toolCallId").and_then(|v| v.as_str()).unwrap_or("");
       let text = data.get("partialOutput").and_then(|v| v.as_str()).unwrap_or("");
@@ -852,7 +999,7 @@ pub(crate) async fn run_turn(
 
   // The guidance and Fabricator's in-process tools fit where the app's backend
   // runs (see `agent_skills::guidance_for`): on this computer, with the local
-  // backend tools beside the semantic-model ones, or on Microsoft Fabric. The
+  // backend tools beside the Fabric IQ one, or on Microsoft Fabric. The
   // session is resumed with another set when that changes.
   let guidance = agent_skills::guidance_for(&project, &crate::services::local_backend::snapshot(&app, &project_id));
   let fab_tools = crate::services::agent_tools::fabricator_tools(app.clone(), project_id.clone(), guidance);
@@ -867,6 +1014,7 @@ pub(crate) async fn run_turn(
   let settings = store::get_settings();
   let iq = IqConfig::for_project(&project, &settings);
   let mcp_servers = McpServers::for_project(&project, &settings);
+  let parallel_ui = store::parallel_ui_enabled();
   let provider_model = project.model.clone().filter(|m| byok::is_provider_selection(m));
   let provider = provider_model.as_deref().and_then(byok::describe);
   let choice = ModelChoice::new(
@@ -889,6 +1037,7 @@ pub(crate) async fn run_turn(
       byok_registry.clone(),
       iq,
       mcp_servers.clone(),
+      parallel_ui,
     );
   let first_open = match &provider_model {
     Some(model) => match state.byok.ensure_ready(model) {
@@ -1050,6 +1199,8 @@ pub(crate) async fn run_turn(
           Some(note) => format!("{note}\n\n{text}"),
           None => text.clone(),
         };
+        // A Plan-mode message only plans, so it builds nothing to hand over.
+        let text = if parallel_ui && !plan_context { format!("{}\n\n{text}", ui_builder::TURN_NOTE) } else { text };
         let opts = MessageOptions::new(turn_text(
           &project,
           &text,
@@ -1124,7 +1275,7 @@ pub(crate) async fn run_turn(
                   todos_dirty = false;
                 }
                 let mut sink = |e: ChatEvent| emit_chat_event(&app, &project_id, &turn_id, e);
-                if let Flow::Stop = map_event(&ev.event_type, &ev.data, &mut sink, &mut ctx) {
+                if let Flow::Stop = route_event(ev.agent_id.as_deref(), &ev.event_type, &ev.data, &mut sink, &mut ctx) {
                   return DrainEnd::Finished;
                 }
               }
@@ -1762,6 +1913,142 @@ mod tests {
       map_event(event_type, data, &mut sink, ctx);
     }
     out
+  }
+
+  /// Like [`collect`], with the id of the subagent each event came from.
+  fn route(events: &[(Option<&str>, &str, Value)], ctx: &mut TurnCtx) -> Vec<ChatEvent> {
+    let mut out = vec![];
+    let mut sink = |e: ChatEvent| out.push(e);
+    for (agent, event_type, data) in events {
+      route_event(*agent, event_type, data, &mut sink, ctx);
+    }
+    out
+  }
+
+  /// The agent runs (step, name, state, background) and the steps (id, parent) in events.
+  #[allow(clippy::type_complexity)]
+  fn agents_and_steps(events: &[ChatEvent]) -> (Vec<(String, String, Value, bool)>, Vec<(String, Option<String>)>) {
+    let mut agents = vec![];
+    let mut steps = vec![];
+    for event in events {
+      match event {
+        ChatEvent::Agent { id, name, state, background } => {
+          agents.push((id.clone(), name.clone(), json!(state), *background))
+        }
+        ChatEvent::ToolStart { tool } => steps.push((tool.id.clone(), tool.parent.clone())),
+        _ => {}
+      }
+    }
+    (agents, steps)
+  }
+
+  /// A subagent's steps go under the main agent's step that started it, the
+  /// steps of an agent it starts too, and its own words stay out of the reply.
+  #[test]
+  fn a_subagents_work_goes_under_the_step_that_started_it_and_its_words_stay_out_of_the_reply() {
+    let mut ctx = TurnCtx::new(false);
+    let ui = Some("ui-1");
+    let events = route(
+      &[
+        (None, "tool.execution_start", json!({"toolCallId":"task-1","toolName":"task","arguments":{"description":"Build the screens","agent_type":"ui-builder","mode":"background"}})),
+        (None, "tool.execution_complete", json!({"toolCallId":"task-1","success":true})),
+        (ui, "subagent.started", json!({"toolCallId":"task-1","agentName":"ui-builder","agentDisplayName":"screens","executionMode":"background"})),
+        (ui, "subagent.selected", json!({"agentName":"ui-builder","agentDisplayName":"UI builder"})),
+        (ui, "assistant.reasoning_delta", json!({"reasoningId":"r1","deltaContent":"Shell first."})),
+        (ui, "assistant.message_delta", json!({"messageId":"s1","deltaContent":"I'll put the shell in place."})),
+        (ui, "tool.execution_start", json!({"toolCallId":"edit-1","toolName":"create","arguments":{"path":"src/App.tsx"}})),
+        (ui, "session.info", json!({"infoType":"file_created","message":"src/App.tsx"})),
+        (ui, "tool.execution_complete", json!({"toolCallId":"edit-1","success":true})),
+        // An agent the UI builder starts joins its group.
+        (ui, "tool.execution_start", json!({"toolCallId":"task-2","toolName":"task","arguments":{"description":"Find the styles"}})),
+        (Some("explore-1"), "subagent.started", json!({"toolCallId":"task-2","agentName":"explore","parentId":"ui-1"})),
+        (Some("explore-1"), "tool.execution_start", json!({"toolCallId":"grep-1","toolName":"grep","arguments":{"pattern":"--accent"}})),
+        (Some("explore-1"), "subagent.completed", json!({"toolCallId":"task-2","agentName":"explore"})),
+        (ui, "assistant.message", json!({"messageId":"s2","content":"Report: the screens are in."})),
+        (None, "assistant.message_delta", json!({"messageId":"m1","deltaContent":"Your screens are in."})),
+        (ui, "subagent.completed", json!({"toolCallId":"task-1","agentName":"ui-builder"})),
+      ],
+      &mut ctx,
+    );
+    let reply: String = events.iter().map(|e| match e { ChatEvent::Delta { text } => text.as_str(), _ => "" }).collect();
+    assert_eq!(reply, "Your screens are in.");
+    assert!(!events.iter().any(|e| matches!(e, ChatEvent::Reasoning { .. })));
+    let (agents, steps) = agents_and_steps(&events);
+    assert_eq!(
+      agents,
+      [
+        ("task-1".to_string(), "UI builder".to_string(), json!("running"), true),
+        ("task-1".to_string(), "UI builder".to_string(), json!("success"), true),
+      ]
+    );
+    let group = Some("task-1".to_string());
+    assert_eq!(
+      steps,
+      [
+        ("task-1".to_string(), None),
+        ("edit-1".to_string(), group.clone()),
+        ("task-2".to_string(), group.clone()),
+        ("grep-1".to_string(), group),
+      ]
+    );
+    assert_eq!(ctx.files_modified, ["src/App.tsx"]);
+  }
+
+  /// An agent goes by the runtime's name for it once that's known, and one that
+  /// fails or is cancelled shows it didn't finish.
+  #[test]
+  fn an_agent_takes_the_runtimes_name_and_shows_when_it_didnt_finish() {
+    let mut ctx = TurnCtx::new(false);
+    let events = route(
+      &[
+        (Some("r-1"), "subagent.started", json!({"toolCallId":"t-1","agentName":"research"})),
+        (Some("r-1"), "subagent.selected", json!({"agentName":"research","agentDisplayName":"Research Agent"})),
+        (Some("r-1"), "subagent.completed", json!({"toolCallId":"t-1","agentName":"research","cancelled":true})),
+        (Some("g-1"), "subagent.started", json!({"toolCallId":"t-2","agentName":"general-purpose"})),
+        (Some("g-1"), "subagent.failed", json!({"toolCallId":"t-2","agentName":"general-purpose","error":"boom"})),
+      ],
+      &mut ctx,
+    );
+    let (agents, _) = agents_and_steps(&events);
+    assert_eq!(
+      agents,
+      [
+        ("t-1".to_string(), "Research".to_string(), json!("running"), false),
+        ("t-1".to_string(), "Research Agent".to_string(), json!("running"), false),
+        ("t-1".to_string(), "Research Agent".to_string(), json!("error"), false),
+        ("t-2".to_string(), "General purpose".to_string(), json!("running"), false),
+        ("t-2".to_string(), "General purpose".to_string(), json!("error"), false),
+      ]
+    );
+  }
+
+  /// A background agent takes more work after its first run (`write_agent`),
+  /// and the runtime reports no start or end for that run: the agent's own
+  /// messages show when it works and when it's done.
+  #[test]
+  fn a_background_agents_later_runs_show_from_its_own_messages() {
+    let mut ctx = TurnCtx::new(false);
+    let ui = Some("ui-1");
+    let done = json!({"messageId":"d","content":"The screens are in.","toolRequests":[]});
+    let events = route(
+      &[
+        (None, "tool.execution_start", json!({"toolCallId":"task-1","toolName":"task","arguments":{"agent_type":"ui-builder","mode":"background"}})),
+        (ui, "subagent.started", json!({"toolCallId":"task-1","agentName":"ui-builder","executionMode":"background"})),
+        (ui, "user.message", json!({"content":"Put up the shell."})),
+        (ui, "assistant.message", json!({"messageId":"a","content":"","toolRequests":[{"name":"create"}]})),
+        (ui, "assistant.message", done.clone()),
+        (ui, "subagent.completed", json!({"toolCallId":"task-1","agentName":"ui-builder"})),
+        (None, "tool.execution_start", json!({"toolCallId":"msg-1","toolName":"write_agent","arguments":{"agent_id":"ui-1"}})),
+        (ui, "user.message", json!({"content":"Here's the data contract."})),
+        (ui, "tool.execution_start", json!({"toolCallId":"edit-2","toolName":"edit","arguments":{"path":"src/App.tsx"}})),
+        (ui, "assistant.message", done),
+      ],
+      &mut ctx,
+    );
+    let (agents, steps) = agents_and_steps(&events);
+    let states: Vec<Value> = agents.into_iter().map(|(_, _, state, _)| state).collect();
+    assert_eq!(states, [json!("running"), json!("success"), json!("running"), json!("success")]);
+    assert!(steps.contains(&("edit-2".to_string(), Some("task-1".to_string()))), "{steps:?}");
   }
 
   /// What Copilot Fusion chose goes under the turn: each change once, with a

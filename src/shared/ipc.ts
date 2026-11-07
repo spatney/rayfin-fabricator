@@ -1785,6 +1785,13 @@ export interface ExperimentFlags {
    * fresh copy of the app before you publish.
    */
   goals?: boolean
+  /**
+   * Parallel UI builder: when chat builds a new app or new screens, Copilot
+   * hands the screens to a UI builder agent that builds the frontend while
+   * Copilot builds the data model and logic, so the preview shows the app
+   * taking shape early.
+   */
+  parallelUi?: boolean
 }
 
 /**
@@ -2480,6 +2487,27 @@ export interface ChatToolCall {
    * they added; `title` then names the tool.
    */
   server?: string
+  /**
+   * For a step a subagent took: the id of the main agent's step that started
+   * that agent (or the agent above it). The step shows under that one.
+   */
+  parent?: string
+  /**
+   * For a step that started a subagent: the agent, and how its run went. A
+   * background agent keeps working after the step that started it finished.
+   */
+  agent?: ChatAgentRun
+}
+
+/** A subagent that a chat step started: its name, and how its run went. */
+export interface ChatAgentRun {
+  name: string
+  state: ChatToolState
+  /**
+   * It runs in the background, so the step that started it only reports that
+   * it started; its result goes to the main agent.
+   */
+  background?: boolean
 }
 
 /**
@@ -2530,6 +2558,8 @@ export type ChatEvent =
   | { type: 'reasoning'; id: string; text: string }
   | { type: 'tool-start'; tool: ChatToolCall }
   | { type: 'tool-output'; id: string; text: string }
+  /** A subagent started by step `id` began, got its name, or finished. */
+  | { type: 'agent'; id: string; name: string; state: ChatToolState; background?: boolean }
   | {
       type: 'tool-end'
       id: string
@@ -2542,6 +2572,8 @@ export type ChatEvent =
       exitCode?: number
     }
   | { type: 'notice'; text: string }
+  /** Chat turned a plugin on in the project (Fabric IQ, when the user agreed), so its plugins changed. */
+  | { type: 'plugins-changed' }
   | { type: 'fusion'; fusion: ChatFusion }
   | { type: 'error'; text: string }
   | { type: 'result'; ok: boolean; filesModified: string[]; ranDeploy: boolean }

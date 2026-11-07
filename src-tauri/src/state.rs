@@ -212,6 +212,28 @@ impl PlanGate {
       .map(|p| (p.request_id.clone(), p.allow_freeform))
   }
 
+  /// Like [`Self::register_pending_question`], but only while no other question
+  /// awaits an answer for this session, so it never displaces one (an `ask_user`
+  /// card, say): `None` while one does. A question nobody waits for anymore
+  /// doesn't count.
+  pub fn try_register_pending_question(
+    &self,
+    session_id: &str,
+    request_id: &str,
+    allow_freeform: bool,
+  ) -> Option<oneshot::Receiver<Option<UserInputResponse>>> {
+    let mut pending = self.pending_questions.lock().unwrap();
+    if pending.get(session_id).is_some_and(|p| !p.tx.is_closed()) {
+      return None;
+    }
+    let (tx, rx) = oneshot::channel();
+    pending.insert(
+      session_id.to_string(),
+      PendingQuestion { request_id: request_id.to_string(), allow_freeform, tx },
+    );
+    Some(rx)
+  }
+
   /// Resolve a pending question by its request id with an answer (or `None`
   /// for "no answer available"). Returns `true` when a matching prompt was
   /// found and answered.
@@ -287,6 +309,12 @@ impl AppState {
   /// starting a fresh one.
   pub fn is_chat_running(&self, project_id: &str) -> bool {
     self.chat_cancels.lock().unwrap().contains_key(project_id)
+  }
+
+  /// The cancel token of the project's chat turn in flight, if any, so work a
+  /// tool does for the turn stops with it.
+  pub fn chat_token(&self, project_id: &str) -> Option<CancelToken> {
+    self.chat_cancels.lock().unwrap().get(project_id).cloned()
   }
 
   pub fn is_copilot_busy(&self) -> bool {
@@ -675,6 +703,24 @@ mod tests {
     let _rx = gate.register_pending_question("sess-1", "q-1", false);
     let owner = gate.question_owner("q-1").expect("owner");
     assert!(!owner.allow_freeform);
+  }
+
+  #[test]
+  fn a_question_that_waits_its_turn_never_displaces_another() {
+    let gate = PlanGate::default();
+    gate.set_route("sess-1", route("proj-1", "turn-1", false));
+    let mut asked = gate.register_pending_question("sess-1", "q-1", true);
+    assert!(gate.try_register_pending_question("sess-1", "q-2", false).is_none());
+    assert_eq!(gate.pending_question("sess-1"), Some(("q-1".to_string(), true)));
+
+    assert!(gate.resolve_question("q-1", Some(UserInputResponse { answer: "yes".into(), was_freeform: true })));
+    assert_eq!(asked.try_recv().expect("resolved").expect("answered").answer, "yes");
+    let next = gate.try_register_pending_question("sess-1", "q-2", false).expect("its turn");
+    assert_eq!(gate.pending_question("sess-1"), Some(("q-2".to_string(), false)));
+
+    // A question nobody waits for anymore doesn't hold up the next one.
+    drop(next);
+    assert!(gate.try_register_pending_question("sess-1", "q-3", false).is_some());
   }
 
   #[test]

@@ -41,6 +41,7 @@ fn default_flags() -> ExperimentFlags {
     report_migration: Some(false),
     work_iq: Some(false),
     goals: Some(false),
+    parallel_ui: Some(false),
   }
 }
 
@@ -187,11 +188,17 @@ fn merge_experiments(experiments: &mut Option<ExperimentFlags>, patch: Experimen
   if let Some(v) = patch.report_migration { current.report_migration = Some(v); }
   if let Some(v) = patch.work_iq { current.work_iq = Some(v); }
   if let Some(v) = patch.goals { current.goals = Some(v); }
+  if let Some(v) = patch.parallel_ui { current.parallel_ui = Some(v); }
 }
 
 /// The Goals experiment is on.
 pub fn goals_enabled() -> bool {
   with_cache(|c| c.settings.experiments.as_ref().and_then(|f| f.goals).unwrap_or(false))
+}
+
+/// The Parallel UI builder experiment is on.
+pub fn parallel_ui_enabled() -> bool {
+  with_cache(|c| c.settings.experiments.as_ref().and_then(|f| f.parallel_ui).unwrap_or(false))
 }
 
 /// Each provider's models and the ones shown in the model pickers.
@@ -538,6 +545,15 @@ mod tests {
       Some(serde_json::from_value(serde_json::json!({"workIq":true})).unwrap());
     merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"goals":true})).unwrap());
     assert_eq!(serde_json::to_value(flags.unwrap()).unwrap(), serde_json::json!({"workIq":true,"goals":true}));
+  }
+
+  #[test]
+  fn parallel_ui_flag_merges_and_defaults_off() {
+    assert_eq!(default_settings().experiments.unwrap().parallel_ui, Some(false));
+    let mut flags: Option<ExperimentFlags> =
+      Some(serde_json::from_value(serde_json::json!({"goals":true})).unwrap());
+    merge_experiments(&mut flags, serde_json::from_value(serde_json::json!({"parallelUi":true})).unwrap());
+    assert_eq!(serde_json::to_value(flags.unwrap()).unwrap(), serde_json::json!({"goals":true,"parallelUi":true}));
   }
 
   #[test]

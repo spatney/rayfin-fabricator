@@ -1,25 +1,23 @@
-//! Locate / search the Power BI / Fabric **semantic model (dataset)** behind a
-//! report or app, on behalf of the Fabricator agent's in-process tools
-//! ([`crate::services::agent_tools`]).
+//! Read a Power BI / Fabric **semantic model** and the data in a workspace, for
+//! the Model tab, the workspace pickers, and report migrations.
 //!
-//! Like [`crate::commands::fabric`], the heavy lifting runs in a short-lived
-//! `node` child so we can reuse the active project's (or global) Rayfin CLI MSAL
-//! token cache (native modules — DPAPI / msal-node-extensions — own that cache,
-//! so a pure-Rust port is impractical). The helper script
-//! ([`HELPER_SOURCE`], embedded from `semantic_model_helper.mjs`) mints the
-//! tokens *silently*, performs the REST calls, and writes exactly one JSON line
-//! to stdout. Authentication rejection is classified by the shared helper;
-//! Rust checks the process exit status and deserializes the result.
+//! Like [`crate::commands::fabric`], the work runs in a short-lived `node`
+//! child so it can reuse the active project's (or global) Rayfin CLI MSAL token
+//! cache (native modules — DPAPI / msal-node-extensions — own that cache, so a
+//! pure-Rust port is impractical). The helper script ([`HELPER_SOURCE`],
+//! embedded from `semantic_model_helper.mjs`) mints the tokens *silently*,
+//! performs the REST calls, and writes exactly one JSON line to stdout.
+//! Authentication rejection is classified by the shared helper; Rust checks the
+//! process exit status and deserializes the result.
 //!
-//! Two modes:
-//! - **locate** — id / URL → model. Pure Power BI REST with the silently-minted
-//!   Power BI token (`analysis.windows.net/powerbi/api`).
-//! - **search** — description / keywords → model. The Fabric OneLake catalog
-//!   search needs the delegated `Catalog.Read.All` scope, which the Rayfin app
-//!   registration cannot mint silently, so the catalog token comes from the
-//!   **Azure CLI** (`az`, an optional sign-in: without it the result is
-//!   `needs_az`, and the agent asks the user to sign in). Each
-//!   matched report is then resolved to its model with the Power BI token.
+//! Its modes:
+//! - **schema** — a model's tables, columns, measures and relationships, read
+//!   from its definition with the **Azure CLI**'s Fabric token.
+//! - **listWorkspaceModels** / **listWorkspaceData** — the semantic models, or
+//!   every item a Rayfin connector can read, in a workspace.
+//!
+//! Chat finds and reads the user's models with Fabric IQ
+//! ([`crate::services::iq`]), not with this helper.
 
 use std::path::PathBuf;
 
@@ -31,96 +29,15 @@ use crate::services::fabric_auth;
 use crate::services::paths;
 use crate::services::store;
 
-/// Generous upper bound: a `locate` may fan out a bounded parallel scan across
-/// every workspace the user can see, and a `search` resolves each matched
-/// report to its model. Keep it comfortably above the helper's own budget so a
-/// slow tenant degrades gracefully instead of being killed mid-flight.
+/// Generous upper bound: a large model's definition can take a while to come
+/// back, and a slow tenant should degrade gracefully instead of being killed
+/// mid-flight.
 const HELPER_TIMEOUT_MS: u64 = 120_000;
 
 /// The Node helper, embedded at compile time. Written to the app data dir at
 /// runtime (see [`write_helper`]) so the system `node` can execute it; the
 /// report-migration helper imports it too.
 pub(crate) const HELPER_SOURCE: &str = include_str!("semantic_model_helper.mjs");
-
-/// One semantic model in a result. A Power BI `dataset` *is* a Fabric
-/// semantic-model item, so [`item_id`](SemanticModel::item_id) ==
-/// [`id`](SemanticModel::id) and feeds `fabric-app-data add -w <workspace_id> -i
-/// <item_id>` directly.
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct SemanticModel {
-  pub name: Option<String>,
-  pub id: Option<String>,
-  pub item_id: Option<String>,
-  pub workspace_id: Option<String>,
-  pub workspace_name: Option<String>,
-  pub owner: Option<String>,
-  pub is_refreshable: Option<bool>,
-  pub web_url: Option<String>,
-  pub xmla_endpoint: Option<String>,
-  /// Set on `search` results: how this model was matched (e.g. a report name).
-  pub matched_via: Option<String>,
-}
-
-/// A report or app the target resolved through (locate only). Optional fields
-/// cover both shapes (a report has no `published_by` / `report_count`).
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct NamedRef {
-  pub id: Option<String>,
-  pub name: Option<String>,
-  pub workspace_id: Option<String>,
-  pub workspace_name: Option<String>,
-  pub web_url: Option<String>,
-  pub published_by: Option<String>,
-  pub report_count: Option<u32>,
-}
-
-/// A non-model catalog hit (search only) — e.g. a lakehouse or warehouse.
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct OtherMatch {
-  pub id: Option<String>,
-  pub r#type: Option<String>,
-  pub display_name: Option<String>,
-  pub workspace_id: Option<String>,
-  pub workspace_name: Option<String>,
-}
-
-/// The helper's single-line JSON contract, shared by both modes. Unknown/absent
-/// fields default, so the same struct deserializes a locate *or* a search reply
-/// (and a synthesized failure).
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct SemanticModelResult {
-  pub ok: bool,
-  pub matched: bool,
-  pub needs_login: bool,
-  pub needs_az: bool,
-  pub error: Option<String>,
-  pub models: Vec<SemanticModel>,
-  pub notes: Vec<String>,
-  /// locate: the report the id/URL pointed at (if any).
-  pub report: Option<NamedRef>,
-  /// locate: the app the id/URL pointed at (if any).
-  pub app: Option<NamedRef>,
-  /// search: catalog hits that aren't models/reports.
-  pub other_matches: Vec<OtherMatch>,
-}
-
-impl SemanticModelResult {
-  /// Build an `ok: false` failure with login/az classification from a message.
-  fn failure(error: String) -> Self {
-    let (needs_login, needs_az) = fabric_auth::failure_flags(&error);
-    SemanticModelResult {
-      ok: false,
-      needs_login,
-      needs_az,
-      error: Some(error),
-      ..Default::default()
-    }
-  }
-}
 
 /// One table in a semantic model's schema (a node in the Model-tab diagram).
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -291,7 +208,7 @@ impl WorkspaceDataResult {
 /// The helper source is a compile-time constant, so we only need to materialize
 /// it once per process: the first call writes it (refreshing any stale copy left
 /// by a previous app version) and caches the path; later calls skip the write
-/// entirely. This removes a redundant file write from every semantic-model lookup.
+/// entirely. This removes a redundant file write from every helper run.
 fn write_helper() -> std::io::Result<PathBuf> {
   fabric_auth::write_helper()?;
   static HELPER_PATH: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
@@ -343,51 +260,6 @@ async fn invoke_helper<T: DeserializeOwned>(request: &serde_json::Value) -> Resu
   };
 
   fabric_auth::parse_helper_output(&res)
-}
-
-/// Run the helper with a request JSON string and parse its reply. Never panics —
-/// every failure path returns an `ok: false` [`SemanticModelResult`] the caller
-/// can render.
-async fn run_helper(request: &serde_json::Value) -> SemanticModelResult {
-  match invoke_helper(request).await {
-    Ok(result) => result,
-    Err(detail) => SemanticModelResult::failure(detail),
-  }
-}
-
-/// Locate the semantic model behind a Power BI / Fabric **report, app, or
-/// dataset** referenced by `target` (a GUID or a Power BI URL). `workspace` is
-/// an optional workspace-id hint; `admin` opts into the tenant-admin lookup
-/// paths the ported script attempts when the caller has the rights.
-pub async fn locate_semantic_model(
-  target: &str,
-  workspace: Option<&str>,
-  admin: bool,
-) -> SemanticModelResult {
-  let request = serde_json::json!({
-    "mode": "locate",
-    "target": target,
-    "workspace": workspace,
-    "admin": admin,
-  });
-  run_helper(&request).await
-}
-
-/// Search the Fabric catalog by free-text `query` and resolve matches to their
-/// semantic model(s). `types` optionally narrows the catalog item types
-/// (defaults to reports + semantic models); `limit` caps the catalog hits.
-pub async fn search_semantic_models(
-  query: &str,
-  types: Option<Vec<String>>,
-  limit: Option<u32>,
-) -> SemanticModelResult {
-  let request = serde_json::json!({
-    "mode": "search",
-    "query": query,
-    "types": types,
-    "limit": limit,
-  });
-  run_helper(&request).await
 }
 
 /// Read the schema (tables/columns/measures/relationships) of the semantic model

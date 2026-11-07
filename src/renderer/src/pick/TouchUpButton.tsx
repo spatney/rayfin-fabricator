@@ -7,6 +7,9 @@ import './pick.css'
 /** How long the pointer rests on the button before its shortcuts show. */
 const TIP_DELAY_MS = 350
 
+/** What the switch is called on screen: what you do with it. */
+export const LABEL = 'Point & Edit'
+
 /**
  * Where the shortcuts show: one row beside the button, centred on the toolbar.
  * Below it the preview's native surface would cover them, and above it there's
@@ -23,8 +26,8 @@ function besideStyle(rect: DOMRect): CSSProperties {
 }
 
 /**
- * The preview toolbar's Touch Up switch, a control of its own. Resting on it
- * shows its shortcuts as keycaps, in a row beside it.
+ * The preview toolbar's Point & Edit switch (Touch Up in the code), a control
+ * of its own. Resting on it shows its shortcuts as keycaps, in a row beside it.
  */
 export function TouchUpButton({
   on,
@@ -73,7 +76,7 @@ export function TouchUpButton({
       <button
         type="button"
         className={`seg-btn pick-btn${on ? ' seg-btn--on' : ''}`}
-        aria-label={count > 0 ? `Touch Up, ${count} picked` : 'Touch Up'}
+        aria-label={count > 0 ? `${LABEL}, ${count} picked` : LABEL}
         aria-pressed={on}
         aria-keyshortcuts={mac ? 'Meta+Shift+C' : 'Control+Shift+C'}
         aria-describedby={tip ? tipId : undefined}
@@ -88,7 +91,7 @@ export function TouchUpButton({
         onBlur={hide}
       >
         <PickIcon />
-        <span className="seg-btn-label">Touch Up</span>
+        <span className="seg-btn-label">{LABEL}</span>
         {count > 0 && (
           <span className="pick-btn-count" aria-hidden="true">
             {count}

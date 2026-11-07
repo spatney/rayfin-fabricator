@@ -41,6 +41,7 @@ pub mod store;
 pub mod team;
 pub mod telemetry;
 pub mod thumbnails;
+pub mod ui_builder;
 pub mod updater;
 pub mod usage;
 pub mod version_history;

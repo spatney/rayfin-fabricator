@@ -1,4 +1,10 @@
-import type { ChatEvent, ChatPlanQuestion, ChatSegment, ChatToolCall } from '@shared/ipc'
+import type {
+  ChatAgentRun,
+  ChatEvent,
+  ChatPlanQuestion,
+  ChatSegment,
+  ChatToolCall
+} from '@shared/ipc'
 import { reducePlanEvent } from '../../chatPlan'
 import type { UIChatMessage } from './types'
 
@@ -73,15 +79,20 @@ export function rollbackInterjection(
  * Settle any tools still `running` to a terminal state. A `tool-end` can be
  * dropped when a turn is interrupted/cancelled mid-command, which would leave
  * its tile spinning forever (settled turns never re-render). Resolving them
- * when the turn ends keeps the UI honest. Returns the same array if nothing
- * was running, so memoized rows keep their identity.
+ * when the turn ends keeps the UI honest. A subagent still working when the
+ * turn ends settles the same way. Returns the same array if nothing was
+ * running, so memoized rows keep their identity.
  */
 export function settleRunningTools(tools: ChatToolCall[], to: 'success' | 'error'): ChatToolCall[] {
-  if (!tools.some((t) => t.state === 'running')) return tools
+  const running = (t: ChatToolCall): boolean =>
+    t.state === 'running' || t.agent?.state === 'running'
+  if (!tools.some(running)) return tools
   const now = Date.now()
-  return tools.map((t) =>
-    t.state === 'running' ? { ...t, state: to, endedAt: t.endedAt ?? now } : t
-  )
+  return tools.map((t) => {
+    if (!running(t)) return t
+    const settled = t.state === 'running' ? { ...t, state: to, endedAt: t.endedAt ?? now } : t
+    return t.agent?.state === 'running' ? { ...settled, agent: { ...t.agent, state: to } } : settled
+  })
 }
 
 export function reduceChatMessage(msg: UIChatMessage, ev: ChatEvent): UIChatMessage {
@@ -98,15 +109,31 @@ export function reduceChatMessage(msg: UIChatMessage, ev: ChatEvent): UIChatMess
     case 'reasoning':
       next = { ...msg, segments: appendReasoning(msg.segments, ev.id, ev.text), notice: undefined }
       break
-    case 'tool-start':
+    case 'tool-start': {
       if (msg.tools.some((t) => t.id === ev.tool.id)) return msg
+      const tool = { ...ev.tool, startedAt: ev.tool.startedAt ?? Date.now() }
+      // A subagent's step shows under the step that started the agent; without
+      // that step in this turn, it shows in the turn's own flow.
+      if (tool.parent && msg.tools.some((t) => t.id === tool.parent)) {
+        next = { ...msg, tools: [...msg.tools, tool], notice: undefined }
+        break
+      }
+      delete tool.parent
       next = {
         ...msg,
-        tools: [...msg.tools, { ...ev.tool, startedAt: ev.tool.startedAt ?? Date.now() }],
-        segments: [...(closeReasoning(msg.segments) ?? []), { kind: 'tool', id: ev.tool.id }],
+        tools: [...msg.tools, tool],
+        segments: [...(closeReasoning(msg.segments) ?? []), { kind: 'tool', id: tool.id }],
         notice: undefined
       }
       break
+    }
+    case 'agent': {
+      if (!msg.tools.some((t) => t.id === ev.id)) return msg
+      const agent: ChatAgentRun = { name: ev.name, state: ev.state }
+      if (ev.background) agent.background = true
+      next = { ...msg, tools: msg.tools.map((t) => (t.id === ev.id ? { ...t, agent } : t)) }
+      break
+    }
     case 'tool-output': {
       // The backend sends the running tool's current output tail (not a chunk).
       const text = ev.text.length > LIVE_OUTPUT_MAX ? ev.text.slice(-LIVE_OUTPUT_MAX) : ev.text

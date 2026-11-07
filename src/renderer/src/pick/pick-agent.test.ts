@@ -140,7 +140,7 @@ describe('Touch Up agent in the app’s page', () => {
     // Caught before the preview's DevTools open their inspector on it.
     expect(shortcut().defaultPrevented).toBe(true)
     expect(agent.peek()).toMatchObject({ armed: true, on: true })
-    expect(hint()).toContain('Click anything to touch it up')
+    expect(hint()).toContain('Click anything you want to change')
     expect(hint()).toContain('Shift+ drag to clip a screenshot')
     expect(document.getElementById('__fabricator_pick_cursor')).not.toBeNull()
 
@@ -200,7 +200,7 @@ describe('Touch Up agent in the app’s page', () => {
 
     pointerDown(button)
     expect(events(agent).slice(-1)[0]).toEqual({ seq: 2, type: 'unpick', id: first.pick.id })
-    expect(hint()).toContain('Click anything to touch it up')
+    expect(hint()).toContain('Click anything you want to change')
   })
 
   it('lets the app have clicks made with Alt held', () => {

@@ -220,6 +220,16 @@ export function ChevronRightIcon(props: IconProps): JSX.Element {
   )
 }
 
+/** Arrow right — go on, such as into Fabricator from setup. */
+export function ArrowRightIcon(props: IconProps): JSX.Element {
+  return (
+    <Icon {...props}>
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <polyline points="13 6 19 12 13 18" />
+    </Icon>
+  )
+}
+
 /** Circular arrow — reload the preview. */
 export function ReloadIcon(props: IconProps): JSX.Element {
   return (

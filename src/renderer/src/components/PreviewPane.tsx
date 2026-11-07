@@ -18,7 +18,7 @@ import {
 import { DEVICES, deviceHostHeight, deviceHostWidth, type DeviceId } from '../previewDevices'
 import { readFabricatorTheme } from '../pick/hostTheme'
 import type { TouchUp, PickSurface } from '../pick/useTouchUp'
-import { TouchUpButton } from '../pick/TouchUpButton'
+import { LABEL as POINT_AND_EDIT, TouchUpButton } from '../pick/TouchUpButton'
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -1058,8 +1058,8 @@ export default function PreviewPane({
   }, [pickSurface, onPickSurface])
   useEffect(() => () => onPickSurface?.(null), [onPickSurface])
   const pickReason = publishing
-    ? 'Touch Up is back once the publish finishes.'
-    : 'Touch Up works once your app shows here.'
+    ? `${POINT_AND_EDIT} is back once the publish finishes.`
+    : `${POINT_AND_EDIT} works once your app shows here.`
   // The preview width: the full pane, or a tablet's or phone's width to check
   // how the app responds.
   const [device, setDevice] = useState<DeviceId>('desktop')

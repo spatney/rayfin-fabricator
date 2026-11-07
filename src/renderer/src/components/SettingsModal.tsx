@@ -426,6 +426,12 @@ export default function SettingsModal({
                       checked={Boolean(settings.experiments?.goals)}
                       onChange={(v) => onChange({ experiments: { goals: v } })}
                     />
+                    <ToggleRow
+                      label="Parallel UI builder"
+                      hint="When chat builds a new app or new screens, Copilot hands the screens to a UI builder that builds them while Copilot builds the data and logic behind them, so the preview shows the app taking shape early. Its steps show under UI builder in the work log. It runs on the chat's model, so these turns use more of your Copilot allowance."
+                      checked={Boolean(settings.experiments?.parallelUi)}
+                      onChange={(v) => onChange({ experiments: { parallelUi: v } })}
+                    />
                   </div>
                 )}
               </div>

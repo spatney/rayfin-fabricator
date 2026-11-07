@@ -6,7 +6,7 @@ import {
   NeedsLogin, NeedsAz, acquireRayfinToken, azToken, apiUrl, apiError,
   makeApi, fetchAllPages, errorResult, needsLogin,
 } from './fabric_auth_helper.mjs'
-import { runLocate, runListWorkspaceModels, fetchModelBim } from './semantic_model_helper.mjs'
+import { runListWorkspaceModels, fetchModelBim } from './semantic_model_helper.mjs'
 import {
   resolvePrincipal, searchDirectory, shareApp, shareModel, shareRecipients,
 } from './fabric_share_helper.mjs'
@@ -154,16 +154,6 @@ test('HTTP 401 reports the token provider and forbids automatic redirects', asyn
   }
   await assert.rejects(makeApi(TOKEN, FABRIC).get('/workspaces'), NeedsLogin)
   await assert.rejects(makeApi(TOKEN, GRAPH, 'az').get('/users'), NeedsAz)
-})
-
-test('an explicit catalog-token override cannot be repaired with Azure login', async () => {
-  globalThis.fetch = async () => response(401)
-  await assert.rejects(makeApi(TOKEN, FABRIC, 'catalogOverride').post('/catalog/search', {}), (error) => {
-    const result = errorResult(error)
-    assert.equal(result.needsLogin, false)
-    assert.equal(result.needsAz, false)
-    return result.error.includes('FABRIC_CATALOG_TOKEN')
-  })
 })
 
 test('claims challenges require the correct provider but ordinary 403 does not', async () => {
@@ -353,13 +343,6 @@ test('successful sharing does not retain placeholder model errors', async () => 
   })
   assert.equal(result.ok, true)
   assert.equal(result.recipients[0].models[0].error, undefined)
-})
-
-test('model lookup cannot label an expired Power BI token as no matches', async () => {
-  globalThis.fetch = async () => response(401)
-  await assert.rejects(runLocate(async () => TOKEN, {
-    target: 'aaaaaaaa-1111-2222-3333-444444444444',
-  }), NeedsLogin)
 })
 
 test('Power BI admin-only 401 is a permission miss only if the normal token probe succeeds', async () => {

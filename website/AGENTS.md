@@ -166,8 +166,8 @@ in `.md`.
 | `preview-toolbar` | The default preview toolbar above the published sample app (sample data) | `/docs/build/preview` |
 | `preview-local` | The sample app's preview on this computer: **Local** and **Published**, **Preview as**, and **Output** open below the app (sample data) | `/docs/build/local-development`, `/docs/build/preview` |
 | `preview-as` | The **Preview as** menu open over the sample app on this computer: **You**, two test users, **Signed out** and **Add test user…** (sample data) | `/docs/build/preview` |
-| `design` | Design mode with an element selected and its change card open. No longer in the app (Touch Up replaced it): kept for the intro video | none (intro video only) |
-| `touch-up` | The sample app's preview with **Touch Up** on: two elements picked and numbered, the pointer resting on a bar, and the hint at the top (sample data) | `/docs/build/touch-up` |
+| `design` | Design mode with an element selected and its change card open. No longer in the app (Point & Edit, then called Touch Up, replaced it): kept for the intro video | none (intro video only) |
+| `touch-up` | The sample app's preview with **Point & Edit** on: two elements picked and numbered, the pointer resting on a bar, and the hint at the top (sample data) | `/docs/build/touch-up` |
 | `touch-up-chips` | The chat composer with the two picks as chips, a clip, and a request that refers to them by number (sample data) | `/docs/build/touch-up` |
 | `touch-up-draw` | Drawing on a screenshot of the sample app: an arrow at the month's total, a box round a bar and an underline, with the drawing tools (sample data) | `/docs/build/touch-up`, `/docs/build/chat` |
 | `code` | Code view with the file tree and the editor | `/docs/build/code-and-history` |
@@ -188,7 +188,7 @@ in `.md`.
 | `rayfin-version` | The Rayfin version control with an update available | `/docs/ship/rayfin-versions` |
 | `settings` | The Settings dialog: General (with **API keys**, **MCP servers** and **Chat defaults**) and Appearance (sample data) | `/docs/reference/settings` |
 | `chat-defaults` | **Chat defaults**: Claude Opus 5.5 at High, with Fabric IQ and the Charts MCP server on, and Work IQ, Microsoft Learn and Issue tracker off (sample data) | `/docs/reference/settings` |
-| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports**, **Work IQ** and **Goals**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq`, `/docs/ship/goals` |
+| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports**, **Work IQ**, **Goals** and **Parallel UI builder**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq`, `/docs/ship/goals` |
 | `migrate-report` | **Migrate a Power BI report** with a report picked: its workspace, semantic model, pages and the three checks, all passing (sample data) | `/docs/build/migrate-power-bi` |
 | `migration-card` | The Migration card above the chat composer after the first page, with **Migrate next page** and **Migrate the rest** (sample data) | `/docs/build/migrate-power-bi` |
 | `app-gallery` | The **App gallery** with the sample user's apps, and the sample app's details open beside them (sample data) | `/docs/build/app-gallery` |

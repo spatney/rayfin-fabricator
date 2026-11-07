@@ -804,6 +804,12 @@ pub struct ExperimentFlags {
   /// against a fresh copy of the app before a publish. Opt-in (off by default).
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub goals: Option<bool>,
+  /// Parallel UI builder: when a Build chat builds a new app or new screens,
+  /// Copilot hands the screens to a UI builder agent that builds the frontend
+  /// while Copilot builds the data model and logic, so the preview shows the
+  /// app taking shape early. Opt-in (off by default).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub parallel_ui: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -2811,7 +2817,7 @@ pub struct FileContent {
 
 /* ----------------------------- chat ----------------------------- */
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ChatToolState {
   #[default]
@@ -2858,6 +2864,26 @@ pub struct ChatToolCall {
   /// they added; `title` then names the tool.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub server: Option<String>,
+  /// For a step a subagent took: the id of the main agent's step that started
+  /// that agent (or the agent above it), which the step is shown under.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub parent: Option<String>,
+  /// For a step that started a subagent: the agent, and how its run went. A
+  /// background agent keeps working after the step that started it finished.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub agent: Option<ChatAgentRun>,
+}
+
+/// A subagent that a chat step started: its name, and how its run went.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatAgentRun {
+  pub name: String,
+  pub state: ChatToolState,
+  /// It runs in the background, so the step that started it only reports that
+  /// it started; its result goes to the main agent.
+  #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+  pub background: bool,
 }
 
 /// One chronological slice of an assistant turn (prose, a tool call, or a
@@ -2999,11 +3025,19 @@ pub enum ChatEvent {
   /// Incremental output from a still-running tool (appended by the renderer).
   #[serde(rename = "tool-output")]
   ToolOutput { id: String, text: String },
+  /// A subagent started by the main agent's step `id` began, got its name, or
+  /// finished. Steps it takes come as tool events with that step as `parent`.
+  #[serde(rename = "agent")]
+  Agent { id: String, name: String, state: ChatToolState, background: bool },
   /// Streamed readable reasoning; `id` groups the deltas of one reasoning block.
   #[serde(rename = "reasoning")]
   Reasoning { id: String, text: String },
   #[serde(rename = "notice")]
   Notice { text: String },
+  /// Chat turned a plugin on in the project (Fabric IQ, when the user takes
+  /// Copilot up on it), so the renderer reads the project's plugins again.
+  #[serde(rename = "plugins-changed")]
+  PluginsChanged,
   /// What Copilot Fusion has chosen for the turn so far; each replaces the last.
   #[serde(rename = "fusion")]
   Fusion { fusion: ChatFusion },

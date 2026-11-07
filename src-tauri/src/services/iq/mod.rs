@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use github_copilot_sdk::rpc::McpRestartServerRequest;
+use github_copilot_sdk::rpc::{McpRestartServerRequest, McpStartServerRequest};
 use github_copilot_sdk::session::Session;
 use github_copilot_sdk::session_events::McpServerStatus;
 use github_copilot_sdk::types::{McpHttpServerConfig, McpServerConfig};
@@ -26,6 +26,7 @@ use tokio::time::Instant;
 
 pub use auth::IqAuth;
 
+use crate::services::agent_tools::CONNECT_FABRIC_IQ_TOOL;
 use crate::services::exec::CancelToken;
 use crate::types::{AppSettings, StudioProject};
 
@@ -165,7 +166,7 @@ impl IqConfig {
     }
   }
 
-  fn with(mut self, iq: Iq) -> Self {
+  pub(crate) fn with(mut self, iq: Iq) -> Self {
     match iq {
       Iq::Fabric => self.fabric = true,
       Iq::Work => self.work = true,
@@ -217,7 +218,12 @@ impl Prepared {
     for (iq, why) in &self.unavailable {
       parts.push(format!("{} is turned on, but isn't available for this message: {why}.", iq.what()));
     }
-    if !self.unavailable.is_empty() {
+    if self.unavailable.iter().any(|(iq, _)| *iq == Iq::Fabric) {
+      parts.push(format!(
+        "If the request needs Fabric IQ, call `{CONNECT_FABRIC_IQ_TOOL}`: it asks the user to sign in, or connects it again."
+      ));
+    }
+    if self.unavailable.iter().any(|(iq, _)| *iq != Iq::Fabric) {
       parts.push("If the request needs that data, tell the user why it isn't available and how to fix it.".into());
     }
     (!parts.is_empty()).then(|| format!("[Fabricator: {}]", parts.join(" ")))
@@ -303,7 +309,7 @@ pub struct Microsoft;
 #[async_trait]
 impl Credentials for Microsoft {
   async fn ready(&self, iq: Iq) -> Result<(), String> {
-    auth::token(iq, false).await.map(|_| ())
+    auth::token(iq, None).await.map(|_| ())
   }
 
   async fn sign_in(&self, iq: Iq, open: Opener<'_>, cancel: &CancelToken, wait: Duration) -> SignIn {
@@ -481,11 +487,81 @@ fn left_out(prepared: &mut Prepared, memory: &Memory, iq: Iq, why: &str) {
   prepared.unavailable.push((iq, why.to_string()));
 }
 
+/// Why the Azure CLI, whose sign-in Fabric IQ uses, has no token for it.
+#[derive(Debug, PartialEq)]
+pub enum AzureProblem {
+  /// It isn't installed.
+  Missing,
+  /// The user has to sign in to Azure.
+  SignIn,
+  /// Something a sign-in won't fix.
+  Other(String),
+}
+
+/// Whether Fabricator can get a Fabric IQ token from the Azure CLI without
+/// asking the user.
+pub async fn azure_ready() -> Result<(), AzureProblem> {
+  auth::fabric_ready().await
+}
+
+/// Whether `iq` is connected in `session` now.
+pub async fn connected(session: &Session, iq: Iq) -> bool {
+  matches!(status(session, iq).await, Ok(Some(McpServerStatus::Connected)))
+}
+
+/// `iq`'s status in `session`: `None` when the session doesn't have its server.
+async fn status(session: &Session, iq: Iq) -> Result<Option<McpServerStatus>, String> {
+  match tokio::time::timeout(RPC_WAIT, session.rpc().mcp().list()).await {
+    Ok(Ok(list)) => Ok(list.servers.into_iter().find(|s| s.name == iq.server()).map(|s| s.status)),
+    Ok(Err(e)) => Err(format!("Fabricator couldn't check its connection ({})", clip(&e.to_string()))),
+    Err(_) => Err("it's taking too long to connect".into()),
+  }
+}
+
+/// Connects `iq` in a turn's running session, right after the user turned it
+/// on or signed in for it: adds its server when the session started without
+/// it, then connects it with a new token.
+pub async fn connect_now(session: &Session, iq: Iq, ui: &Ui<'_>, cancel: &CancelToken) -> Result<(), String> {
+  MEMORY.reset(iq);
+  auth::renew(iq);
+  if status(session, iq).await?.is_none() {
+    start(session, iq).await?;
+  }
+  let prepared = prepare(session, IqConfig::default().with(iq), ui, &Microsoft, &MEMORY, cancel, Waits::default()).await;
+  if prepared.ready.has(iq) {
+    return Ok(());
+  }
+  if cancel.is_cancelled() {
+    return Err("the user stopped the message".into());
+  }
+  let why = prepared.unavailable.into_iter().find(|(other, _)| *other == iq).map(|(_, why)| why);
+  Err(why.unwrap_or_else(|| "it didn't connect".into()))
+}
+
+/// Adds `iq`'s server to a running session.
+async fn start(session: &Session, iq: Iq) -> Result<(), String> {
+  let config = serde_json::to_value(iq.config()).map_err(|e| format!("Fabricator couldn't add it ({e})"))?;
+  let request = McpStartServerRequest { server_name: iq.server().into(), config: Some(config) };
+  match tokio::time::timeout(RPC_WAIT, session.rpc().mcp().start_server(request)).await {
+    Ok(Ok(())) => Ok(()),
+    Ok(Err(e)) if asks_for_sign_in(&e.to_string()) => Ok(()),
+    Ok(Err(e)) => Err(format!("it couldn't connect ({})", clip(&e.to_string()))),
+    Err(_) => Err("it's taking too long to connect".into()),
+  }
+}
+
+/// The runtime's answer when a server it starts needs a token first. It goes
+/// on to ask Fabricator for one, and connects with it.
+fn asks_for_sign_in(error: &str) -> bool {
+  error.contains("requires authentication")
+}
+
 /// Has the runtime connect to `iq` again.
 async fn restart(session: &Session, iq: Iq) -> Result<(), String> {
   let request = McpRestartServerRequest { server_name: iq.server().into(), config: None };
   match tokio::time::timeout(RPC_WAIT, session.rpc().mcp().restart_server(request)).await {
     Ok(Ok(())) => Ok(()),
+    Ok(Err(e)) if asks_for_sign_in(&e.to_string()) => Ok(()),
     Ok(Err(e)) => Err(format!("it couldn't connect ({})", clip(&e.to_string()))),
     Err(_) => Err("it's taking too long to connect".into()),
   }
@@ -550,8 +626,12 @@ mod tests {
     let mixed = Prepared { ready: FABRIC, unavailable: vec![(Iq::Work, "the sign-in didn't finish".into())] }.note().unwrap();
     assert!(mixed.contains("Work IQ (the user's Microsoft 365") && mixed.contains("isn't available for this message: the sign-in didn't finish."), "{mixed}");
     assert!(mixed.contains("tell the user why it isn't available and how to fix it"), "{mixed}");
+    assert!(!mixed.contains(CONNECT_FABRIC_IQ_TOOL), "{mixed}");
     let none_ready = Prepared { ready: IqConfig::default(), unavailable: vec![(Iq::Fabric, "x".into())] }.note().unwrap();
     assert!(!none_ready.contains("you can look things up"), "{none_ready}");
+    // Fabric IQ connects with a click, when the request needs it.
+    assert!(none_ready.contains(&format!("call `{CONNECT_FABRIC_IQ_TOOL}`")), "{none_ready}");
+    assert!(!none_ready.contains("tell the user why"), "{none_ready}");
   }
 
   #[test]
@@ -767,6 +847,45 @@ mod tests {
     ]);
     assert_eq!(requests.len(), 5, "no second restart");
     assert!(seen.notices.lock().unwrap().is_empty());
+  }
+
+  /// The runtime answers a reconnect with "requires authentication" while it
+  /// asks Fabricator for the token, then connects.
+  #[tokio::test]
+  async fn a_reconnect_that_asks_for_a_token_goes_on_connecting() {
+    let refused = json!({ "error": { "code": -32603, "message": "Request session.mcp.restartServer failed with message: MCP server \"FabricIQ\" requires authentication" } });
+    let steps = vec![
+      ("session.mcp.list", listed("FabricIQ", "needs-auth")),
+      ("session.mcp.restartServer", refused),
+      ("session.mcp.list", listed("FabricIQ", "pending")),
+      ("session.mcp.list", listed("FabricIQ", "connected")),
+    ];
+    let (prepared, _, _) = run(steps, FABRIC, &Fake::with(Iq::Fabric, Ok(())), &Memory::default(), 1).await;
+    assert_eq!(prepared[0], Prepared { ready: FABRIC, unavailable: vec![] });
+  }
+
+  /// A chat that turns Fabric IQ on as it works adds its server to the session.
+  #[tokio::test]
+  async fn fabric_iq_connects_in_a_session_that_started_without_it() {
+    let refused = json!({ "error": { "code": -32603, "message": "MCP server \"FabricIQ\" requires authentication" } });
+    let (client, server) = fake_client(vec![
+      ("session.create", json!({ "result": { "sessionId": "s" } })),
+      ("session.mcp.list", json!({ "result": { "servers": [] } })),
+      ("session.mcp.startServer", refused),
+      ("session.mcp.list", listed("FabricIQ", "pending")),
+      ("session.mcp.list", listed("FabricIQ", "connected")),
+    ]);
+    let session = client.create_session(SessionConfig::default().with_session_id(SessionId::new("s"))).await.unwrap();
+    let notice = |_: String| {};
+    let open = |_: &str| Ok(());
+    let ui = Ui { notice: &notice, open: &open };
+    assert_eq!(connect_now(&session, Iq::Fabric, &ui, &CancelToken::new()).await, Ok(()));
+    let requests = server.await.unwrap();
+    client.force_stop();
+    let start = &requests[2]["params"];
+    assert_eq!(start["serverName"], "FabricIQ");
+    assert_eq!(start["config"]["url"], "https://fabriciq.svc.cloud.microsoft/v1/mcp/fabriciq");
+    assert!(!start.to_string().to_ascii_lowercase().contains("authorization"), "{start}");
   }
 }
 

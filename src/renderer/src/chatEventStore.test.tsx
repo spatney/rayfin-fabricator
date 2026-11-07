@@ -30,7 +30,11 @@ function Harness(): JSX.Element {
   return <output data-testid="chat-state">{JSON.stringify(chats.p1[0])}</output>
 }
 
-function AgentHarness(): JSX.Element {
+function AgentHarness({
+  onPluginsChanged
+}: {
+  onPluginsChanged?: (projectId: string) => void
+}): JSX.Element {
   const [chats, setChats] = useState<ChatStore>({
     p1: [
       {
@@ -43,7 +47,7 @@ function AgentHarness(): JSX.Element {
       }
     ]
   })
-  useChatEventStore(setChats)
+  useChatEventStore(setChats, onPluginsChanged)
   return <output data-testid="chat-state">{JSON.stringify(chats.p1[0])}</output>
 }
 
@@ -138,5 +142,16 @@ describe('workbench chat event store', () => {
     })
     expect(setItem).not.toHaveBeenCalled()
     expect(localStorage.getItem('rayfin.chatMode.p1')).toBeNull()
+  })
+
+  it('says when chat turned a plugin on, so the project is read again', async () => {
+    const onPluginsChanged = vi.fn()
+    render(<AgentHarness onPluginsChanged={onPluginsChanged} />)
+    const before = state()
+    await act(async () => {
+      emit({ projectId: 'p1', turnId: 'turn-1', event: { type: 'plugins-changed' } })
+    })
+    expect(onPluginsChanged).toHaveBeenCalledWith('p1')
+    expect(state()).toEqual(before)
   })
 })

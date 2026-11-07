@@ -1,7 +1,9 @@
 //! In-process Copilot tools for Fabricator's chat sessions:
 //!
-//! - **Semantic models** (every session): find the Power BI / Fabric semantic
-//!   model behind a report, app, or dataset, to wire it into the app.
+//! - **Fabric IQ** (every session): `fabricator_connect_fabric_iq` gets Fabric
+//!   IQ, the plugin chat finds and reads the user's Power BI and Fabric data
+//!   with, when a request needs it: the user turns it on or signs in to Azure
+//!   with one click, and it connects in the running session.
 //! - **The local backend** (sessions with the Local guidance, see
 //!   [`crate::services::agent_skills`]): `fabricator_local_status` reports on the
 //!   app's local backend ([`crate::services::local_backend`]), and
@@ -27,88 +29,32 @@ use std::time::{Duration, Instant, SystemTime};
 
 use async_trait::async_trait;
 use github_copilot_sdk::tool::ToolHandler;
-use github_copilot_sdk::types::{ToolInvocation, ToolResultExpanded};
+use github_copilot_sdk::types::{DeferMode, ToolInvocation, ToolResultExpanded};
 use github_copilot_sdk::{Error as SdkError, Tool, ToolResult};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::services::agent_skills::Guidance;
 use crate::services::diagnostics::redact_secrets;
+use crate::services::emit::emit_chat_event;
+use crate::services::exec::CancelToken;
+use crate::services::iq::{self, Iq};
 use crate::services::local_backend::{self, AppCall, AppResponse, CallAs, LocalBackends};
 use crate::services::project_layout::ProjectLayout;
-use crate::services::{semantic_model, store};
-use crate::types::{LocalBackendState as State, LocalLogEvent, LocalProblem, LocalStartOptions, LocalStatus};
+use crate::services::store;
+use crate::state::{AppState, PlanGate};
+use crate::types::{
+  ChatEvent, LocalBackendState as State, LocalLogEvent, LocalProblem, LocalStartOptions, LocalStatus,
+};
 
 /// Build the Fabricator in-process tool set for one project's chat session.
 /// The local backend tools come with the Local guidance only: other apps'
 /// backends run on Microsoft Fabric.
 pub fn fabricator_tools(app: AppHandle, project_id: String, guidance: Guidance) -> Vec<Tool> {
-  let mut tools = vec![
-    Tool::new("fabricator_locate_semantic_model")
-      .with_description(
-        "Find the Power BI / Fabric semantic model (dataset) behind a report, app, or dataset \
-         when the user gives you a link or id. Pass a Power BI URL — a report, app, dataset, or \
-         model-editor link (.../modeling/<id>/modelView) — or a bare GUID as `target`. Returns \
-         the model's name, workspace id, and item id. \
-         A Power BI dataset id IS its Fabric semantic-model item id, so you can wire the model \
-         straight into this app (see the connect-semantic-model skill: a Rayfin connector, or \
-         `fabric-app-data add` in apps with a fabric.yaml). Use this to turn a report/app \
-         link the user pastes into the underlying model the app should connect to.",
-      )
-      .with_parameters(serde_json::json!({
-        "type": "object",
-        "properties": {
-          "target": {
-            "type": "string",
-            "description": "A Power BI URL (report/app/dataset or model-editor /modeling/<id>/modelView link) or a bare GUID to resolve."
-          },
-          "workspace": {
-            "type": "string",
-            "description": "Optional workspace-id hint to speed up / disambiguate the lookup."
-          },
-          "admin": {
-            "type": "boolean",
-            "description": "Optional: also try tenant-admin lookup paths (only works if you have admin rights)."
-          }
-        },
-        "required": ["target"]
-      }))
-      .with_skip_permission(true)
-      .with_handler(Arc::new(LocateSemanticModelTool)),
-    Tool::new("fabricator_search_semantic_models")
-      .with_description(
-        "Search Microsoft Fabric for semantic models (datasets) by description or keywords when \
-         you do NOT have a direct link or id. Pass natural-language keywords as `query` (e.g. \
-         \"sales pipeline\", \"finance revenue by region\"). Returns matching models with their \
-         workspace id and item id, ready to wire into this app (see the connect-semantic-model \
-         skill). If you already have a report/app link or id, use \
-         fabricator_locate_semantic_model instead. Requires Azure CLI \
-         sign-in (handled by the Fabricator setup screen).",
-      )
-      .with_parameters(serde_json::json!({
-        "type": "object",
-        "properties": {
-          "query": {
-            "type": "string",
-            "description": "Description or keywords to search for, e.g. \"customer churn\"."
-          },
-          "types": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Optional item types to match (defaults to [\"report\", \"model\"]). Accepts report, model/dataset, lakehouse, warehouse, notebook."
-          },
-          "limit": {
-            "type": "number",
-            "description": "Optional cap on the number of catalog hits to consider (default 30)."
-          }
-        },
-        "required": ["query"]
-      }))
-      .with_skip_permission(true)
-      .with_handler(Arc::new(SearchSemanticModelsTool)),
-  ];
+  let mut tools = vec![connect_fabric_iq_tool(app.clone(), project_id.clone())];
   if guidance == Guidance::Local {
     tools.push(local_status_tool(app.clone(), project_id.clone()));
     tools.push(local_call_tool(app.clone(), project_id.clone()));
@@ -127,194 +73,306 @@ pub(crate) fn failure(message: impl Into<String>) -> ToolResult {
   ToolResult::Expanded(ToolResultExpanded::new(message.clone(), "failure").with_error(message))
 }
 
-/* ------------------------ semantic-model locator -------------------------- */
+/* --------------------------------- Fabric IQ -------------------------------- */
 
+/// The tool chat calls to get Fabric IQ when its tools aren't there.
+pub(crate) const CONNECT_FABRIC_IQ_TOOL: &str = "fabricator_connect_fabric_iq";
 
-struct LocateSemanticModelTool;
+/// The choice on the card that leaves Fabric IQ as it is.
+const NOT_NOW: &str = "Not now";
 
-#[derive(Deserialize)]
-struct LocateParams {
-  #[serde(alias = "url", alias = "id", alias = "link", alias = "report", alias = "app")]
-  target: String,
-  #[serde(default)]
-  workspace: Option<String>,
-  #[serde(default)]
-  admin: Option<bool>,
-}
+/// What the agent hears once Fabric IQ is connected.
+const FABRIC_IQ_CONNECTED: &str = "Fabric IQ is connected in this chat. Use its tools: \
+  FabricIQ-DiscoverArtifacts finds reports and semantic models by name or topic, \
+  FabricIQ-GetReportMetadata reads a report and names its semantic model, \
+  FabricIQ-GetSemanticModelSchema reads a model's tables, columns and measures, and \
+  FabricIQ-ExecuteQuery runs DAX queries on a model. If they aren't in your tool list, find them \
+  with tool search (\"FabricIQ\").";
 
-#[async_trait]
-impl ToolHandler for LocateSemanticModelTool {
-  async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
-    let params: LocateParams = match invocation.params() {
-      Ok(p) => p,
-      Err(e) => return Ok(failure(format!("Invalid arguments: {e}"))),
-    };
-    let target = params.target.trim();
-    if target.is_empty() {
-      return Ok(failure(
-        "Provide a report/app/dataset id or a Power BI URL as `target`.",
-      ));
-    }
-    let result = semantic_model::locate_semantic_model(
-      target,
-      params.workspace.as_deref(),
-      params.admin.unwrap_or(false),
+/// The longest `reason` the user sees on the card.
+const REASON_CHARS: usize = 120;
+
+fn connect_fabric_iq_tool(app: AppHandle, project_id: String) -> Tool {
+  Tool::new(CONNECT_FABRIC_IQ_TOOL)
+    .with_description(
+      "Get Fabric IQ for this chat. Fabric IQ is how you find and read the user's Power BI and \
+       Microsoft Fabric data: its tools find reports and semantic models by name or topic \
+       (FabricIQ-DiscoverArtifacts), read a model's tables, columns and measures \
+       (FabricIQ-GetSemanticModelSchema), and run DAX queries (FabricIQ-ExecuteQuery). Call this \
+       when a request needs that data and those tools aren't available: Fabric IQ is off in this \
+       chat, or it needs the user to sign in to Azure. Fabricator asks the user with a button and \
+       waits for them, so don't ask them yourself. When it says Fabric IQ is connected, use its \
+       tools. Pass `reason`: what you want to look up, in a few plain words, which the user sees.",
     )
-    .await;
-    Ok(render_semantic_model_result(&result))
-  }
+    .with_parameters(json!({
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string",
+          "description": "What you want to look up with Fabric IQ, in a few plain words, such as \"the Hawaii sales data\"."
+        }
+      },
+      "required": ["reason"]
+    }))
+    .with_skip_permission(true)
+    // Always in the agent's tool list: a deferred tool is only found by searching for it.
+    .with_defer(DeferMode::Never)
+    .with_handler(Arc::new(ConnectFabricIqTool { app, project_id }))
 }
 
-struct SearchSemanticModelsTool;
+struct ConnectFabricIqTool {
+  app: AppHandle,
+  project_id: String,
+}
 
 #[derive(Deserialize)]
-struct SearchParams {
-  #[serde(alias = "description", alias = "keywords", alias = "q", alias = "text")]
-  query: String,
-  #[serde(default)]
-  types: Option<Vec<String>>,
-  #[serde(default)]
-  limit: Option<u32>,
+struct ConnectParams {
+  #[serde(default, alias = "purpose", alias = "description")]
+  reason: Option<String>,
 }
 
 #[async_trait]
-impl ToolHandler for SearchSemanticModelsTool {
+impl ToolHandler for ConnectFabricIqTool {
   async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
-    let params: SearchParams = match invocation.params() {
-      Ok(p) => p,
-      Err(e) => return Ok(failure(format!("Invalid arguments: {e}"))),
-    };
-    let query = params.query.trim();
-    if query.is_empty() {
-      return Ok(failure(
-        "Provide a description or keywords to search for as `query`.",
-      ));
-    }
-    let result = semantic_model::search_semantic_models(query, params.types.clone(), params.limit).await;
-    Ok(render_semantic_model_result(&result))
+    let reason = invocation.params::<ConnectParams>().ok().and_then(|p| p.reason).map(|r| shown_reason(&r));
+    let reason = reason.filter(|r| !r.is_empty());
+    Ok(connect_fabric_iq(&self.app, &self.project_id, invocation.session_id.as_str(), reason.as_deref()).await)
   }
 }
 
-/// Render a [`semantic_model::SemanticModelResult`] (from either tool) into a
-/// compact text block the agent can act on, including the wiring commands for
-/// the top match and any access/admin notes.
-fn render_semantic_model_result(r: &semantic_model::SemanticModelResult) -> ToolResult {
-  use std::fmt::Write as _;
+/// The agent's `reason`, as the user sees it in a sentence: on one line, without
+/// a closing period, and short.
+fn shown_reason(reason: &str) -> String {
+  let reason = reason.split_whitespace().collect::<Vec<_>>().join(" ");
+  let reason = reason.trim_end_matches('.');
+  match reason.char_indices().nth(REASON_CHARS) {
+    Some((end, _)) => format!("{}…", reason[..end].trim_end()),
+    None => reason.to_string(),
+  }
+}
 
-  if !r.ok {
-    let base = r
-      .error
-      .clone()
-      .unwrap_or_else(|| "The semantic-model lookup failed.".to_string());
-    if r.needs_az {
-      return failure(format!(
-        "Azure CLI isn't signed in, which is required to search the Fabric catalog. Run \
-         `az login` (or use the Fabricator setup screen), then try again. ({base})"
-      ));
+/// What the user is asked before chat can use Fabric IQ.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum FabricIqAsk {
+  /// It's off in this chat.
+  TurnOn,
+  /// It's on, but the Azure CLI, whose sign-in it uses, needs the user to sign in.
+  SignIn,
+}
+
+impl FabricIqAsk {
+  /// What, if anything, to ask the user, from whether Fabric IQ is on in the
+  /// chat and whether the Azure CLI has a token for it. An Azure CLI that a
+  /// sign-in can't fix is a failure for the agent to report.
+  fn of(on: bool, azure: &Result<(), iq::AzureProblem>) -> Result<Option<FabricIqAsk>, String> {
+    match azure {
+      Err(iq::AzureProblem::Missing) => Err(
+        "Fabric IQ uses the Azure CLI's sign-in, and the Azure CLI isn't installed. Tell the user to install it: \
+         in Fabricator, open Settings, select Open setup, and install the Azure CLI under Sign in to Azure."
+          .into(),
+      ),
+      Err(iq::AzureProblem::Other(why)) => Err(format!(
+        "Fabric IQ uses the Azure CLI's sign-in, which didn't work ({why}). Tell the user what happened."
+      )),
+      _ if !on => Ok(Some(FabricIqAsk::TurnOn)),
+      Err(iq::AzureProblem::SignIn) => Ok(Some(FabricIqAsk::SignIn)),
+      Ok(()) => Ok(None),
     }
-    if r.needs_login {
-      return failure(format!(
-        "Not signed in to Rayfin, so I couldn't query Power BI / Fabric. Sign in from the \
-         Fabricator setup screen, then try again. ({base})"
-      ));
-    }
-    return failure(base);
   }
 
-  let mut out = String::new();
-
-  // What the target (locate) resolved through, for context.
-  if let Some(app) = &r.app {
-    let name = app.name.as_deref().unwrap_or("(app)");
-    let _ = write!(out, "Resolved app '{name}'");
-    if let Some(ws) = app.workspace_name.as_deref().or(app.workspace_id.as_deref()) {
-      let _ = write!(out, " in workspace {ws}");
+  /// The question on the card, and the choice that does it. `signs_in`: the
+  /// Azure CLI needs a sign-in too.
+  fn question(self, reason: &str, signs_in: bool) -> (String, &'static str) {
+    match self {
+      FabricIqAsk::TurnOn => (
+        format!(
+          "Copilot wants to look up {reason} with Fabric IQ, which is off in this chat.{}",
+          if signs_in { " Turning it on also asks you to sign in to Azure in your browser." } else { "" }
+        ),
+        "Turn on Fabric IQ",
+      ),
+      FabricIqAsk::SignIn => {
+        (format!("Fabric IQ needs you to sign in to Azure before Copilot can look up {reason}."), "Sign in to Azure")
+      }
     }
-    out.push_str(".\n");
-  } else if let Some(rep) = &r.report {
-    let name = rep.name.as_deref().unwrap_or("(report)");
-    let _ = write!(out, "Resolved report '{name}'");
-    if let Some(ws) = rep.workspace_name.as_deref().or(rep.workspace_id.as_deref()) {
-      let _ = write!(out, " in workspace {ws}");
-    }
-    out.push_str(".\n");
   }
 
-  if r.models.is_empty() {
-    out.push_str(if r.matched {
-      "Matched the target, but its semantic model couldn't be resolved (you may not have access to it).\n"
+  /// What the agent hears when the user said no.
+  fn declined(self) -> &'static str {
+    match self {
+      FabricIqAsk::TurnOn => {
+        "The user didn't turn on Fabric IQ, so it isn't available for this message. Don't look the data up \
+         another way: carry on without it, or ask the user how they'd like to go on."
+      }
+      FabricIqAsk::SignIn => {
+        "The user didn't sign in to Azure, so Fabric IQ isn't available for this message. Don't look the \
+         data up another way: carry on without it, or ask the user how they'd like to go on."
+      }
+    }
+  }
+}
+
+/// Gets Fabric IQ for a chat turn: asks the user, with a button, when it's off
+/// or needs an Azure sign-in, then turns it on, signs in and connects it in the
+/// turn's session, so the agent can use it straight away.
+async fn connect_fabric_iq(app: &AppHandle, project_id: &str, session_id: &str, reason: Option<&str>) -> ToolResult {
+  let state = app.state::<AppState>();
+  let session = state.copilot.peek_session(project_id).await.filter(|s| s.id().as_str() == session_id);
+  let (Some(session), Some(route)) = (session, state.plan.route(session_id)) else {
+    return failure("Fabricator connects Fabric IQ only while a chat message is in progress.");
+  };
+  let cancel = state.chat_token(project_id).unwrap_or_else(CancelToken::new);
+  let stopped = || failure("The user stopped the message.");
+  let lock = connection_lock(project_id);
+  let _one_at_a_time = tokio::select! {
+    guard = lock.lock() => guard,
+    _ = cancel.wait_cancelled() => return stopped(),
+  };
+  // While this call waited, another may have connected it, or the user said no.
+  if let Some(ask) = declined_in(project_id, &route.turn_id) {
+    return ToolResult::Text(ask.declined().into());
+  }
+  let Some(project) = store::find_project(project_id) else {
+    return failure("This app isn't in Fabricator anymore.");
+  };
+  let on = project.plugins.iter().any(|p| p == Iq::Fabric.plugin());
+  if on && iq::connected(&session, Iq::Fabric).await {
+    return ToolResult::Text(FABRIC_IQ_CONNECTED.into());
+  }
+  let azure = iq::azure_ready().await;
+  let signs_in = matches!(azure, Err(iq::AzureProblem::SignIn));
+  let ask = match FabricIqAsk::of(on, &azure) {
+    Ok(ask) => ask,
+    Err(why) => return failure(why),
+  };
+  let emit = |event: ChatEvent| emit_chat_event(app, &route.project_id, &route.turn_id, event);
+  let notice = |text: String| emit(ChatEvent::Notice { text });
+  if let Some(ask) = ask {
+    let (question, accept) = ask.question(reason.unwrap_or("this data"), signs_in);
+    let card = Card { question, choices: vec![accept.to_string(), NOT_NOW.to_string()] };
+    match ask_on_card(&state.plan, session_id, route.plan_context, card, &emit, &cancel, QUESTION_POLL).await {
+      Some(answer) if answer == accept => {}
+      Some(_) => {
+        remember_declined(project_id, &route.turn_id, ask);
+        return ToolResult::Text(ask.declined().into());
+      }
+      None if cancel.is_cancelled() => return stopped(),
+      None => return failure("The user didn't answer, so Fabric IQ isn't available for this message."),
+    }
+  }
+  if !on {
+    if let Err(why) = crate::commands::chat::chat_set_plugin(project_id.into(), Iq::Fabric.plugin().into(), true) {
+      return failure(format!("Fabricator couldn't turn on Fabric IQ: {why}"));
+    }
+    emit(ChatEvent::PluginsChanged);
+  }
+  if signs_in {
+    notice("Sign in to Azure in your browser…".into());
+    let signed = tokio::select! {
+      result = crate::commands::auth::auth_login_az(app.clone(), None) => result,
+      _ = cancel.wait_cancelled() => return stopped(),
+    };
+    if !signed.ok {
+      let why = signed.error.unwrap_or_else(|| "it didn't finish".into());
+      return failure(format!(
+        "The Azure sign-in didn't work ({why}), so Fabric IQ isn't available. Tell the user, and that they can \
+         try again."
+      ));
+    }
+  }
+  notice("Connecting Fabric IQ…".into());
+  let open = |url: &str| {
+    app.opener().open_url(url, None::<&str>).map_err(|e| format!("Fabricator couldn't open the browser ({e})"))
+  };
+  let ui = iq::Ui { notice: &notice, open: &open };
+  match iq::connect_now(&session, Iq::Fabric, &ui, &cancel).await {
+    Ok(()) => {
+      state.copilot.plugins_started(project_id, &session, Iq::Fabric).await;
+      notice("Fabric IQ is on.".into());
+      ToolResult::Text(FABRIC_IQ_CONNECTED.into())
+    }
+    Err(why) => failure(format!("Fabric IQ couldn't connect: {why}. Tell the user.")),
+  }
+}
+
+/// How often a question waiting for another one to be answered looks again.
+const QUESTION_POLL: Duration = Duration::from_millis(300);
+
+/// One Fabric IQ connection at a time in a project, so a second call (from a
+/// subagent, or made in parallel) waits, then finds it connected rather than
+/// asking the user again or connecting it twice.
+static CONNECTING: Lazy<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> = Lazy::new(Mutex::default);
+
+/// The turn in which the user last said no to Fabric IQ, by project, and what
+/// to: chat doesn't ask again in that turn.
+static DECLINED: Lazy<Mutex<HashMap<String, (String, FabricIqAsk)>>> = Lazy::new(Mutex::default);
+
+fn connection_lock(project_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+  CONNECTING.lock().unwrap().entry(project_id.to_string()).or_default().clone()
+}
+
+fn declined_in(project_id: &str, turn_id: &str) -> Option<FabricIqAsk> {
+  DECLINED.lock().unwrap().get(project_id).filter(|(turn, _)| turn == turn_id).map(|(_, ask)| *ask)
+}
+
+fn remember_declined(project_id: &str, turn_id: &str, ask: FabricIqAsk) {
+  DECLINED.lock().unwrap().insert(project_id.to_string(), (turn_id.to_string(), ask));
+}
+
+/// A question for the user, and the choices on its card.
+struct Card {
+  question: String,
+  choices: Vec<String>,
+}
+
+/// Asks the user on a question card in the turn, the way `ask_user` does, and
+/// waits for their choice: `None` when the turn ends or stops first. Questions
+/// come one at a time: it waits for any other question to be answered before
+/// it asks, and when another one replaces it (an `ask_user` card, say), it
+/// takes its card back and asks again once that one's answered.
+async fn ask_on_card(
+  gate: &PlanGate,
+  session_id: &str,
+  plan_context: bool,
+  card: Card,
+  emit: &(dyn Fn(ChatEvent) + Send + Sync),
+  cancel: &CancelToken,
+  poll: Duration,
+) -> Option<String> {
+  loop {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let answered = loop {
+      if gate.route(session_id).is_none() {
+        return None;
+      }
+      if let Some(answered) = gate.try_register_pending_question(session_id, &request_id, false) {
+        break answered;
+      }
+      tokio::select! {
+        _ = tokio::time::sleep(poll) => {}
+        _ = cancel.wait_cancelled() => return None,
+      }
+    };
+    let (question, choices) = (card.question.clone(), Some(card.choices.clone()));
+    let id = request_id.clone();
+    emit(if plan_context {
+      ChatEvent::PlanQuestion { request_id: id, question, choices, allow_freeform: false }
     } else {
-      "No matching semantic model was found.\n"
+      ChatEvent::AgentQuestion { request_id: id, question, choices, allow_freeform: false }
     });
-  } else {
-    let n = r.models.len();
-    let _ = writeln!(out, "Found {n} semantic model{}:", if n == 1 { "" } else { "s" });
-    for (i, m) in r.models.iter().enumerate() {
-      let name = m.name.as_deref().unwrap_or("(unnamed model)");
-      let item = m.item_id.as_deref().or(m.id.as_deref()).unwrap_or("?");
-      let ws_id = m.workspace_id.as_deref().unwrap_or("?");
-      let _ = writeln!(out, "{}. {name}", i + 1);
-      if let Some(wn) = m.workspace_name.as_deref() {
-        let _ = writeln!(out, "   workspace: {wn} ({ws_id})");
-      } else {
-        let _ = writeln!(out, "   workspace id: {ws_id}");
-      }
-      let _ = writeln!(out, "   item id (= dataset id): {item}");
-      if let Some(via) = m.matched_via.as_deref() {
-        let _ = writeln!(out, "   matched via: {via}");
-      }
-      if let Some(owner) = m.owner.as_deref() {
-        let _ = writeln!(out, "   owner: {owner}");
-      }
-      if let Some(url) = m.web_url.as_deref() {
-        let _ = writeln!(out, "   url: {url}");
+    tokio::select! {
+      answer = answered => match answer {
+        Ok(Some(response)) => return Some(response.answer),
+        Ok(None) => return None,
+        // Another question took its place: take this card back.
+        Err(_) => emit(ChatEvent::PlanQuestionResolved { request_id, answer: None }),
+      },
+      _ = cancel.wait_cancelled() => {
+        gate.reject_pending_question(session_id);
+        return None;
       }
     }
-    let first = &r.models[0];
-    if let (Some(ws), Some(item)) = (
-      first.workspace_id.as_deref(),
-      first.item_id.as_deref().or(first.id.as_deref()),
-    ) {
-      let _ = write!(
-        out,
-        "\nTo connect this app to the first model:\n\
-         - Apps that read semantic models through Rayfin connectors (follow the project's analytics skill):\n    \
-         npx rayfin connector add --type fabric-semanticmodel --workspace-id {ws} --item-id {item} --name <alias>\n\
-         - Apps with a fabric.yaml:\n    \
-         fabric-app-data add <alias> -w {ws} -i {item}\n  then run a build (see the fabric-data skill).\n"
-      );
-    }
   }
-
-  if !r.other_matches.is_empty() {
-    out.push_str("\nOther catalog matches (not semantic models):\n");
-    for o in &r.other_matches {
-      let name = o.display_name.as_deref().unwrap_or("(item)");
-      let ty = o.r#type.as_deref().unwrap_or("item");
-      let ws = o
-        .workspace_name
-        .as_deref()
-        .or(o.workspace_id.as_deref())
-        .unwrap_or("?");
-      let _ = writeln!(out, "- {name} [{ty}] in {ws}");
-    }
-  }
-
-  if !r.notes.is_empty() {
-    out.push_str("\nNotes:\n");
-    for note in &r.notes {
-      let _ = writeln!(out, "- {note}");
-    }
-  }
-
-  // The helper sometimes returns a soft hint (ok:true) instead of a match.
-  if r.models.is_empty() {
-    if let Some(hint) = r.error.as_deref() {
-      let _ = write!(out, "\n{hint}");
-    }
-  }
-
-  ToolResult::Text(out.trim_end().to_string())
 }
 
 /* ------------------------------ local backend ----------------------------- */
@@ -1547,58 +1605,88 @@ mod tests {
     }
   }
 
+  /* ------------------------------- Fabric IQ ------------------------------- */
+
   #[test]
-  fn render_sm_needs_az_points_to_az_login() {
-    let r = semantic_model::SemanticModelResult {
-      ok: false,
-      needs_az: true,
-      error: Some("az account get-access-token failed".into()),
-      ..Default::default()
-    };
-    let t = text_of(&render_semantic_model_result(&r));
-    assert!(t.contains("az login"), "got: {t}");
+  fn fabric_iq_asks_the_user_only_for_what_a_click_fixes() {
+    use iq::AzureProblem::{Missing, Other, SignIn};
+    assert_eq!(FabricIqAsk::of(false, &Ok(())), Ok(Some(FabricIqAsk::TurnOn)));
+    assert_eq!(FabricIqAsk::of(false, &Err(SignIn)), Ok(Some(FabricIqAsk::TurnOn)));
+    assert_eq!(FabricIqAsk::of(true, &Err(SignIn)), Ok(Some(FabricIqAsk::SignIn)));
+    // On and signed in: it connects again without asking.
+    assert_eq!(FabricIqAsk::of(true, &Ok(())), Ok(None));
+    // A sign-in can't fix these: the agent tells the user.
+    assert!(FabricIqAsk::of(false, &Err(Missing)).unwrap_err().contains("select Open setup"));
+    assert!(FabricIqAsk::of(true, &Err(Other("AADSTS53003".into()))).unwrap_err().contains("AADSTS53003"));
+
+    let (question, accept) = FabricIqAsk::TurnOn.question("the Hawaii sales data", true);
+    assert_eq!(accept, "Turn on Fabric IQ");
+    assert!(question.contains("look up the Hawaii sales data") && question.contains("sign in to Azure"), "{question}");
+    assert!(!FabricIqAsk::TurnOn.question("x", false).0.contains("sign in"));
+    assert_eq!(FabricIqAsk::SignIn.question("x", false).1, "Sign in to Azure");
   }
 
   #[test]
-  fn render_sm_lists_models_and_wiring_command() {
-    let m = semantic_model::SemanticModel {
-      name: Some("Sales".into()),
-      id: Some("ds-1".into()),
-      item_id: Some("ds-1".into()),
-      workspace_id: Some("ws-1".into()),
-      workspace_name: Some("Finance".into()),
-      ..Default::default()
-    };
-    let r = semantic_model::SemanticModelResult {
-      ok: true,
-      matched: true,
-      models: vec![m],
-      ..Default::default()
-    };
-    let t = text_of(&render_semantic_model_result(&r));
-    assert!(t.contains("Sales"), "got: {t}");
-    assert!(t.contains("item id (= dataset id): ds-1"), "got: {t}");
-    assert!(
-      t.contains("fabric-app-data add <alias> -w ws-1 -i ds-1"),
-      "got: {t}"
-    );
-    assert!(
-      t.contains("npx rayfin connector add --type fabric-semanticmodel --workspace-id ws-1 --item-id ds-1 --name <alias>"),
-      "got: {t}"
-    );
+  fn the_reason_reads_as_part_of_the_question() {
+    assert_eq!(shown_reason("  the Hawaii\n sales data. "), "the Hawaii sales data");
+    let long = shown_reason(&"word ".repeat(60));
+    assert!(long.ends_with('…') && long.chars().count() <= REASON_CHARS + 1, "{long}");
   }
 
-  #[test]
-  fn render_sm_soft_no_match_surfaces_hint() {
-    let r = semantic_model::SemanticModelResult {
-      ok: true,
-      matched: false,
-      error: Some("That looks like a GUID — use the locate tool for direct id/URL lookups.".into()),
-      ..Default::default()
-    };
-    let t = text_of(&render_semantic_model_result(&r));
-    assert!(t.contains("No matching semantic model"), "got: {t}");
-    assert!(t.contains("use the locate tool"), "got: {t}");
+  /// Questions come one at a time: the card waits for another question to be
+  /// answered, and when one takes its place, it's taken back and asked again,
+  /// never reported as the user saying no.
+  #[tokio::test]
+  async fn a_fabric_iq_card_waits_its_turn_and_comes_back_when_replaced() {
+    use github_copilot_sdk::handler::UserInputResponse;
+    let gate = Arc::new(PlanGate::default());
+    gate.set_route("s", crate::state::TurnRoute { project_id: "p".into(), turn_id: "t".into(), plan_context: false });
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let answer = |text: &str| Some(UserInputResponse { answer: text.into(), was_freeform: false });
+    async fn until(seen: &Mutex<Vec<String>>, count: usize) {
+      for _ in 0..400 {
+        if seen.lock().unwrap().len() >= count {
+          return;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+      }
+      panic!("waited for {count} events: {:?}", seen.lock().unwrap());
+    }
+
+    let _other = gate.register_pending_question("s", "other", true);
+    let asking = tokio::spawn({
+      let (gate, seen) = (gate.clone(), seen.clone());
+      async move {
+        let emit = move |event: ChatEvent| {
+          seen.lock().unwrap().push(match event {
+            ChatEvent::AgentQuestion { request_id, .. } => format!("card {request_id}"),
+            ChatEvent::PlanQuestionResolved { request_id, .. } => format!("taken back {request_id}"),
+            _ => "something else".into(),
+          })
+        };
+        let card = Card { question: "Turn it on?".into(), choices: vec!["Turn on Fabric IQ".into(), NOT_NOW.into()] };
+        ask_on_card(&gate, "s", false, card, &emit, &CancelToken::new(), Duration::from_millis(5)).await
+      }
+    });
+    tokio::time::sleep(Duration::from_millis(40)).await;
+    assert!(seen.lock().unwrap().is_empty(), "it waits for the other question");
+
+    assert!(gate.resolve_question("other", answer("yes")));
+    until(&seen, 1).await;
+    let (first, _) = gate.pending_question("s").unwrap();
+    assert_eq!(seen.lock().unwrap()[0], format!("card {first}"));
+
+    let _replacing = gate.register_pending_question("s", "replacing", true);
+    until(&seen, 2).await;
+    assert_eq!(seen.lock().unwrap()[1], format!("taken back {first}"));
+    assert!(gate.resolve_question("replacing", answer("no")));
+    until(&seen, 3).await;
+    let (second, _) = gate.pending_question("s").unwrap();
+    assert_ne!(second, first);
+    assert_eq!(seen.lock().unwrap()[2], format!("card {second}"));
+
+    assert!(gate.resolve_question(&second, answer("Turn on Fabric IQ")));
+    assert_eq!(asking.await.unwrap().as_deref(), Some("Turn on Fabric IQ"));
   }
 
   /* ---------------------------- local backend ---------------------------- */

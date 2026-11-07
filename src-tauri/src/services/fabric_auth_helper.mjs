@@ -128,9 +128,6 @@ export function apiUrl(value, base) {
 
 export function checkAuthentication(response, provider = 'rayfin') {
   if (response.status !== 401 && !/insufficient_claims/i.test(response.headers.get('www-authenticate') || '')) return
-  if (provider === 'catalogOverride') {
-    throw new Error('FABRIC_CATALOG_TOKEN was rejected. Update or remove that environment override; Azure sign-in cannot replace it.')
-  }
   const ErrorType = provider === 'az' ? NeedsAz : NeedsLogin
   throw new ErrorType(provider === 'az'
     ? `Azure authentication was rejected (HTTP ${response.status}). Sign in to Azure again.`

@@ -60,7 +60,7 @@ const steps = [
 
     title: 'Watch it run',
 
-    text: 'Use the live preview while Copilot works, then point at parts of the running app with Touch Up, or clip and draw on a screenshot, to show Copilot what to change.',
+    text: 'Use the live preview while Copilot works, then point at parts of the running app with Point & Edit, or clip and draw on a screenshot, to show Copilot what to change.',
 
     href: '/docs/build/preview',
 
@@ -94,7 +94,7 @@ const features = [
 
   {
 
-    title: 'Live preview & Touch Up',
+    title: 'Live preview and Point & Edit',
 
     href: '/docs/build/touch-up',
 
