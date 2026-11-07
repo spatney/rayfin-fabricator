@@ -50,23 +50,42 @@ Microsoft Fabric, so the preview shows each change as soon as you save it.
 
 "#;
 
-const PROMPT_TAIL: &str = r#"## Put the app on screen early, then fill it in
-1. Read only what you need: the frontend's entry, routes and layout (such as `App.tsx` and
-   `main.tsx`), its styles and UI components, and the data layer you were told about. When the
-   project has design guidance, such as a design section in `AGENTS.md` or an `app-design`,
-   `crud-ui` or `visuals` skill, follow it.
-2. Within your first few edits, replace the starter page with the app's shell: its title, layout and
-   navigation, with a place for every screen and an honest loading or empty state in each.
+const PROMPT_TAIL: &str = r#"## Put the app on screen first, then fill it in
+The user is watching the preview, and it shows only what the app's entry renders: until you change
+it, they see the template's starter page, however many screens you've written. So build from the
+top down, and make every save show something:
+
+1. Read what you need for the shell: the frontend's entry and routes (such as `App.tsx` and
+   `main.tsx`), its styles and UI components, the project's design guidance, such as a design
+   section in `AGENTS.md` or an `app-design`, `crud-ui` or `visuals` skill, and the data layer you
+   were told about. Leave the rest of the guidance until a screen needs it.
+2. **Put the shell on screen before anything else**, because the user sees nothing until the app's
+   entry renders your work. Write the app's shell as one new component, such as
+   `src/AppShell.tsx`, with `create`; once that's written, not in the same batch of tool calls, make
+   the entry render it in place of the starter page with one small `edit`. In Rayfin's template,
+   the starter page is the `<EmptyStatePreview />` that `App.tsx` returns: replace that line and its
+   import. Do both before you create any other file. The shell is the moment the user's app comes
+   to life, so make it look like the finished app from that first save: the app's name, its header
+   and navigation with every screen, styled with the project's design system (its components, theme
+   tokens and Tailwind classes, as the design guidance says). Sketch each screen's real layout with
+   its real words, which aren't data: stat cards with their labels, panels with their chart titles
+   and a faint outline of the chart (a few bars, a line, a funnel), lists and tables with their
+   column headings. Put shimmering placeholders where the values will go, and let the sections fade
+   in one after another, with gentle motion that stops when the user prefers reduced motion. Never
+   show plain text such as "Loading…", or grey boxes with nothing in them. Keep the skeletons in the
+   shell's file for now, so it needs nothing else.
 3. Then build the screens one at a time, the most important first: lists, details, forms, dialogs,
    and dashboards' filters, cards and chart areas, each with its loading, empty and error states.
-   Finish a screen before starting the next.
+   As soon as a screen's file is written, swap it into the shell in place of its skeleton, so it
+   shows. Make shared helpers and components when a screen needs them, not all up front.
 4. Polish last: spacing, layouts that work in a narrow window, accessible labels, focus and keyboard
    use, and plain-language text.
 
 Keep the app working after every save, because the user is watching it: create a component before
-you import it, and don't leave a screen half-written between saves. The `create` tool fails when a
-file's folder doesn't exist yet, and on a file that already exists: make new folders first, in one
-command, and change existing files, such as `App.tsx`, with `edit`.
+you import it, and don't leave a screen half-written between saves. The `create` tool fails on a
+file that already exists, such as `App.tsx`: change existing files with `edit`, and never delete a
+file to write it again, because the preview breaks while it's gone. `create` also fails when a
+file's folder doesn't exist yet: make new folders first, in one command.
 
 ## When the data isn't ready yet
 The main agent starts you early, often before the app's data is settled, so the user sees the app
@@ -169,6 +188,10 @@ knows: it can't see this conversation or your instructions. Give it:
   queries, hooks and services;
 - what you know so far about the data, and that you'll send the rest.
 
+It puts the app's shell on screen first, in place of the starter page, then each screen as it's
+done. Don't ask it to read everything or build the pages before it changes the app's entry: the user
+sees nothing until it does.
+
 ## Send it the data contract
 Once the data is settled, send it the contract with `write_agent`: the entities or queries each
 screen uses, their fields or result columns, and how the frontend reads and changes the data (the
@@ -206,6 +229,10 @@ mod tests {
       for rule in ["`rayfin up`", "`npm run dev`", "`.rayfin-local`", "pack:add", "Never invent records", "`tsc -b`", "Don't start other agents"] {
         assert!(agent.prompt.contains(rule), "{guidance:?} prompt should say {rule}");
       }
+      // The preview shows only what the entry renders: the shell goes up before anything else.
+      for rule in ["Put the shell on screen before anything else", "`src/AppShell.tsx`", "`<EmptyStatePreview />`", "look like the finished app from that first save", "real layout with\n   its real words", "reduced motion", "swap it into the shell", "file to write it again"] {
+        assert!(agent.prompt.contains(rule), "{guidance:?} prompt should say {rule}");
+      }
     }
     // The local backend's tools exist only in a session for an app on this computer.
     assert!(agent(Guidance::Local).prompt.contains("`fabricator_local_status`"));
@@ -226,6 +253,7 @@ mod tests {
       "takes precedence over project guidance",
       "`AGENTS.md`",
       "`read_agent` and `wait: true`",
+      "build the pages before it changes the app's entry",
     ] {
       assert!(INSTRUCTIONS.contains(marker), "instructions should say {marker:?}");
     }

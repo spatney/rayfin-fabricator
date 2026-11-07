@@ -149,7 +149,7 @@ For a team app, or a published app that this computer can't run, Copilot checks 
 In a big request, such as a new app or a dashboard, Copilot usually builds the screens last, so the preview shows the starter page for most of the turn. With **Parallel UI builder** turned on in **Settings → Experiments**, Copilot hands the screens to a second agent, the **UI builder**, early in the turn. The UI builder builds the screens while Copilot works out the app's data and builds the logic behind them, so the preview shows the app taking shape early.
 
 - Copilot uses it whenever a request builds a new app, or adds or rebuilds a page, a screen or a dashboard. It makes small changes and fixes itself.
-- The UI builder puts the app's layout and navigation in place first, then lays out each screen. Until the app's data is there, the screens show that they're loading or empty: the UI builder doesn't fill them with made-up data.
+- The UI builder's first change replaces the starter page with your app's shell: its name, header and navigation, styled like the finished app, with each screen sketched as a loading skeleton. Then it builds each screen in place, so the preview shows the app take shape. Until the app's data is there, the screens show that they're loading or empty: the UI builder doesn't fill them with made-up data.
 - When the data is ready, Copilot sends it to the UI builder, which connects the screens to it.
 - Its steps show in the work log under **UI builder**. See [Review the work log](/docs/build/chat#review-the-work-log).
 - Copilot waits for the UI builder before it finishes, then checks the whole app.
