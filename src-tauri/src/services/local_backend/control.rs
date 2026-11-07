@@ -19,6 +19,9 @@ use crate::types::{
 
 const CONTROL: [&str; 2] = [".rayfin-local", "control"];
 const TIMEOUT: Duration = Duration::from_secs(30);
+/// A semantic-model query can first wait for the user to sign in, or consent to the Rayfin CLI
+/// querying Power BI, in a browser window the backend opened (up to 3 minutes), then for Power BI.
+const CONNECTOR_TIMEOUT: Duration = Duration::from_secs(300);
 /// Reloading rebuilds the model, the schema and the services.
 const RELOAD_TIMEOUT: Duration = Duration::from_secs(180);
 /// Loading seed data copies its files; exporting reads every row.
@@ -405,7 +408,8 @@ impl ControlClient {
     }
     let url = self.base.join(&call.path).map_err(|e| error("invalid", e.to_string(), None))?;
     let key = self.publishable_key().await?;
-    let mut request = HTTP.request(call.method, url).header("X-Publishable-Key", key).timeout(TIMEOUT);
+    let timeout = if call.path.starts_with("/connector-invoke/") { CONNECTOR_TIMEOUT } else { TIMEOUT };
+    let mut request = HTTP.request(call.method, url).header("X-Publishable-Key", key).timeout(timeout);
     let token = match &call.call_as {
       CallAs::Anonymous => None,
       CallAs::Developer => Some(self.token(None, false).await?),

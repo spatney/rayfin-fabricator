@@ -666,7 +666,7 @@ name: connect-semantic-model
 description: "Find and connect the Power BI / Fabric semantic model (dataset) behind a report or app. Use when this app needs to read data from an existing Power BI report, app, dataset, or semantic model — when the user pastes a Power BI link or id, or describes the data by name or topic and you need to find the model and wire it into the app's data."
 metadata:
   author: Fabricator
-  version: 2.0.0
+  version: 2.1.0
 ---
 # Connect a Power BI / Fabric semantic model
 
@@ -748,7 +748,10 @@ the app's own backend before you build on it:
    A 200 means the app reaches the model. Prove the app's own queries the same way.
 3. The local backend runs these queries as the user, with their Azure sign-in. If a call fails
    because no Azure token is available (`fabricator_local_status` warns `azure-sign-in`), ask the
-   user to sign in to the Azure CLI in Fabricator's **Accounts**.
+   user to sign in to the Azure CLI in Fabricator's **Accounts**. When Power BI turns that sign-in
+   down, the backend tries their Rayfin CLI sign-in instead, which the first time may open a browser
+   window for them to sign in and consent to it querying Power BI; the call waits for that. If the
+   answer still says Power BI turned down their sign-in, pass its `recoveryHint` on to the user.
 
 The answer can be an Apache Arrow stream, which only the app's SDK decodes. To read a query's
 values, run it with `npx rayfin connector invoke <alias> executeQuery --file <query>.json`. Then
@@ -760,13 +763,28 @@ const FABRIC_CONNECT_NOTE: &str = r#"- After wiring a connection, check your vis
   validate-headless skill); Fabricator deploys the app.
 "#;
 
+/// What to do when `rayfin connector invoke` can't get a Power BI token: the
+/// Rayfin CLI needs the user's one-time consent for Power BI, which only an
+/// interactive run asks for.
+const INVOKE_CONSENT: &str = r#"## When `rayfin connector invoke` can't sign in
+
+`npx rayfin connector invoke` queries a semantic model with the user's Rayfin CLI sign-in, which
+needs their consent, once, to query Power BI; `rayfin login` doesn't ask for it. Run it without
+`--json`, so it can ask: the first time, it may open a browser window for the user to sign in and
+consent. If it says no Power BI token could be acquired without an interactive prompt, or mentions
+consent or a token's audience, ask the user to run the same command once in a terminal in the
+project folder and finish signing in, then try again. A tenant administrator can consent for
+everyone instead. It isn't about the user's access to the model: don't send them to check
+permissions, app registrations or Entra.
+"#;
+
 /// The connect-semantic-model skill of a set.
 fn connect_model_skill(guidance: Guidance) -> String {
   let proof = match guidance {
     Guidance::Local => LOCAL_CONNECT_PROOF,
     Guidance::FabricBacked => FABRIC_CONNECT_NOTE,
   };
-  [CONNECT_MODEL_SKILL, proof].concat()
+  [CONNECT_MODEL_SKILL, proof, "\n", INVOKE_CONSENT].concat()
 }
 
 /// Model-invoked skill for rebuilding a Power BI report as the app, page by
@@ -778,7 +796,7 @@ name: migrate-powerbi-report
 description: "Rebuild a Power BI report as this Rayfin app, page by page, from the migration material Fabricator saved under .fabricator/migration/, with Graphein for the visuals. Use when the message asks to migrate a Power BI report or one of its pages, or names a .fabricator/migration folder."
 metadata:
   author: Fabricator
-  version: 1.2.0
+  version: 1.3.0
 ---
 # Migrate a Power BI report
 
@@ -966,7 +984,7 @@ fn migrate_report_skill(guidance: Guidance) -> String {
     Guidance::Local => LOCAL_MIGRATE_QUERIES,
     Guidance::FabricBacked => FABRIC_MIGRATE_QUERIES,
   };
-  [MIGRATE_REPORT_SKILL_HEAD, queries, MIGRATE_REPORT_SKILL_TAIL].concat()
+  [MIGRATE_REPORT_SKILL_HEAD, queries, INVOKE_CONSENT, "\n", MIGRATE_REPORT_SKILL_TAIL].concat()
 }
 
 /// Every file of a set: its path in the set's folder, and its text.
@@ -1290,6 +1308,14 @@ mod tests {
       assert!(skill.contains("dataset id is the same as the Fabric semantic-model item id"));
       assert!(skill.contains("`analytics` skill") && skill.contains("fabric-data"));
       assert!(skill.contains("validate-headless skill"));
+      // `rayfin connector invoke` needs the user's one-time consent for Power BI.
+      for marker in [
+        "## When `rayfin connector invoke` can't sign in",
+        "`--json`, so it can ask",
+        "no Power BI token could be acquired without an interactive prompt",
+      ] {
+        assert!(skill.contains(marker), "{guidance:?} connect skill should mention {marker}");
+      }
     }
     let local = connect_model_skill(Guidance::Local);
     for marker in [
@@ -1298,6 +1324,8 @@ mod tests {
       "`fabricator_local_call` with `target: \"connector\"`",
       r#"{"operation": "executeQuery", "input": {"query": "EVALUATE TOPN(5, '<table>')"}}"#,
       "`azure-sign-in`",
+      "the backend tries their Rayfin CLI sign-in instead",
+      "pass its `recoveryHint` on to the user",
       "Apache Arrow",
       "npx rayfin connector invoke <alias> executeQuery --file <query>.json",
     ] {
@@ -1321,6 +1349,7 @@ mod tests {
         "rayfin connector add",
         "rayfin connector invoke <alias> executeQuery --file <query>.json",
         "## Running queries",
+        "## When `rayfin connector invoke` can't sign in",
         "**every**",
         "saved selections",
         "holds data values",

@@ -31,6 +31,7 @@ At most two apps run at once: the one you have open and the one you had open bef
 
 - **Sign-in.** The app signs in as you: your Microsoft Entra account from the Azure CLI or, when the Azure CLI isn't signed in, the Fabric account in use. When neither is signed in, it signs in as a local account, `developer@example.com`. To try it as someone else, use [Preview as](/docs/build/preview#preview-as-someone-else).
 - **Connectors, and functions that ask for tokens,** run as you, with your Azure sign-in. That's true even for connections set to application access, which run as the [app identity](/docs/build/data-model#whose-credentials-the-app-identity-uses) once the app is published. So a call that works on this computer can still fail in the published app, when the app identity can't reach the data.
+- **Semantic models** are queried with your Azure sign-in too. When Power BI turns it down, the local backend uses your Rayfin CLI sign-in instead, and the first time, a browser window can open for you to sign in and let the Rayfin CLI query Power BI for you. See [Power BI turned down your sign-in](/docs/troubleshooting/preview#power-bi-turned-down-your-sign-in).
 - **Without an Azure sign-in,** the app still runs, but its connectors and those functions can't get a token. To sign in, see [Manage your accounts](/docs/start/accounts).
 
 ## What runs only on Fabric

@@ -175,6 +175,33 @@ For an app on an older release, select the Rayfin version in the status bar, the
 
 If the note names a Rayfin version that you expect Fabricator to run, [Report a problem](/docs/troubleshooting/report-a-problem).
 
+## Power BI turned down your sign-in
+
+Data from a semantic model doesn't load in your app on this computer. The preview's **Output** says "Power BI refused the query: it turned down the developer's sign-in.", or Copilot tells you Power BI turned down your sign-in. Copilot can also report that `npx rayfin connector invoke` failed with "Not signed in, or no Power BI token could be acquired without an interactive prompt."
+
+On this computer, your app queries semantic models as you. When Power BI turns down your Azure sign-in, the local backend uses your Rayfin CLI sign-in instead. The Rayfin CLI can query Power BI for you only after you consent to it once, and signing in to Fabric doesn't ask for that. Usually, your access to the model is fine.
+
+1. If a browser window opened asking you to sign in, or to let the Rayfin CLI access Power BI for you, finish signing in and accept. Then reload the preview.
+2. If no window opened, or you closed it, consent from a terminal:
+   1. Open a terminal, such as PowerShell, in the app's project folder. New apps are in `RayfinProjects` in your home folder unless you changed it in **Settings → Workspace folder**.
+   2. Save a file named `query.json` in that folder, with this content:
+
+      ```json title="query.json"
+      {"query": "EVALUATE {1}"}
+      ```
+
+   3. Run this command, with your connector's name from `rayfin/rayfin.yml` instead of `<connector>`, and finish signing in in the browser window it opens:
+
+      ```powershell
+      npx rayfin connector invoke <connector> executeQuery --file query.json
+      ```
+
+   4. Delete `query.json`, then reload the preview.
+3. Instead, a tenant administrator can consent for everyone in your organization: they grant admin consent to the Rayfin CLI app, `2f844663-8e82-4a34-8b65-09d9d14b0fb6`, for Power BI Service.
+4. If it still fails, check that your account can query the semantic model. You need Build permission on it, with an account in the model's tenant.
+
+If Power BI still turns down your sign-in, [Report a problem](/docs/troubleshooting/report-a-problem).
+
 ## Windows blocked rayfin-local
 
 You see "Windows blocked the local backend (rayfin-local):" followed by the reason Windows gave, such as "Access is denied.", and then "Your antivirus or your organization's app control policy may not allow it." In the preview, it's under "Your app couldn’t start on this computer", with **Learn how to allow it**. In setup, it's in the **Local backend** row.
