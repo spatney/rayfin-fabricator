@@ -6,7 +6,8 @@ const versions: AppVersions = {
   app: '1.2.3',
   tauri: '2.0.0',
   webview2: '120.0.0',
-  copilot: '1.0.0'
+  copilot: '1.0.0',
+  rayfinLocal: '0.2.8'
 }
 
 /** Decode the `body=` query param of a GitHub new-issue URL. */
@@ -28,6 +29,7 @@ describe('buildReportIssueUrl', () => {
     expect(body).toContain('Tauri: 2.0.0')
     expect(body).toContain('WebView2: 120.0.0')
     expect(body).toContain('Copilot CLI: 1.0.0')
+    expect(body).toContain('rayfin-local: 0.2.8')
     expect(body).toContain('User agent: UA/1.0')
   })
 
@@ -46,6 +48,7 @@ describe('buildReportIssueUrl', () => {
     const body = bodyOf(buildReportIssueUrl(null, null, 'UA/1.0'))
     expect(body).toContain('App: Fabricator unknown')
     expect(body).toContain('Copilot CLI: unknown')
+    expect(body).toContain('rayfin-local: unknown')
   })
 
   it('prefixes a drafted bug the way the repository template does', () => {

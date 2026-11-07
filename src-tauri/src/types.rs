@@ -25,6 +25,10 @@ pub struct AppVersions {
   /// determined (e.g. the platform isn't bundled).
   #[serde(skip_serializing_if = "Option::is_none")]
   pub copilot_bundled: Option<String>,
+  /// The rayfin-local that runs apps on this computer: the version a local
+  /// backend reported this session, else the one Fabricator runs reports.
+  /// `None` when neither says.
+  pub rayfin_local: Option<String>,
 }
 
 /* ----------------------------- updates ----------------------------- */

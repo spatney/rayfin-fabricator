@@ -38,6 +38,12 @@ export interface AppVersions {
    * to disambiguate the two. Absent when it can't be determined.
    */
   copilotBundled?: string | null
+  /**
+   * The rayfin-local that runs apps on this computer: the version a local
+   * backend reported this session, else the one Fabricator runs reports. Null
+   * when neither says.
+   */
+  rayfinLocal?: string | null
 }
 
 /** An available application update (mirrors the Rust `UpdateInfo`). */

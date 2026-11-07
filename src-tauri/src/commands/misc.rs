@@ -5,7 +5,7 @@ use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{AppError, AppResult};
-use crate::services::paths;
+use crate::services::{local_backend, paths, store};
 use crate::types::{AppVersions, OpenInEditorResult};
 
 #[tauri::command]
@@ -14,12 +14,13 @@ pub fn ping() -> &'static str {
 }
 
 /// Version info for the About/Settings panel. Under Tauri there is no Node/V8
-/// runtime, so the panel reports the app, Tauri framework, WebView2 and bundled
-/// Copilot CLI versions.
+/// runtime, so the panel reports the app, Tauri framework, WebView2, bundled
+/// Copilot CLI and rayfin-local versions.
 #[tauri::command]
 pub async fn get_versions(app: AppHandle) -> AppVersions {
   let app_version = app.package_info().version.to_string();
-  let copilot = crate::services::copilot::bundled_cli_version().await;
+  let (copilot, rayfin_local) =
+    tokio::join!(crate::services::copilot::bundled_cli_version(), rayfin_local_version(&app));
   let copilot_bundled = crate::services::copilot::bundled_cli_pinned_version();
   AppVersions {
     app: app_version,
@@ -27,11 +28,27 @@ pub async fn get_versions(app: AppHandle) -> AppVersions {
     webview2: webview_version(),
     copilot,
     copilot_bundled,
+    rayfin_local,
   }
 }
 
 fn webview_version() -> String {
   tauri::webview_version().unwrap_or_default()
+}
+
+/// The rayfin-local that runs apps on this computer: the version a personal
+/// project's backend reported this session, else what the one Fabricator runs
+/// says it is.
+async fn rayfin_local_version(app: &AppHandle) -> Option<String> {
+  let reported = store::get_state()
+    .projects
+    .into_iter()
+    .filter(|p| p.team.is_none())
+    .find_map(|p| local_backend::snapshot(app, &p.id).version);
+  match reported {
+    Some(version) => Some(version),
+    None => local_backend::doctor_status().await.version,
+  }
 }
 
 /// Open a URL in the user's default browser (http/https only).

@@ -40,6 +40,7 @@ export function buildReportIssueUrl(
         `- Tauri: ${versions?.tauri ?? 'unknown'}`,
         `- WebView2: ${versions?.webview2 ?? 'unknown'}`,
         `- Copilot CLI: ${formatCopilotCli(versions)}`,
+        `- rayfin-local: ${versions?.rayfinLocal || 'unknown'}`,
         `- User agent: ${userAgent}`,
         ...(bundlePath
           ? [

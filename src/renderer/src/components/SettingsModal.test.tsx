@@ -331,7 +331,8 @@ describe('SettingsModal About', () => {
     tauri: '2.12.3',
     webview2: '155.0.4283.45',
     copilot: '1.0.98',
-    copilotBundled: '1.0.96'
+    copilotBundled: '1.0.96',
+    rayfinLocal: '0.2.8'
   }
   const originalClipboard = (navigator as unknown as { clipboard?: unknown }).clipboard
 
@@ -347,14 +348,22 @@ describe('SettingsModal About', () => {
     const about = screen.getByRole('region', { name: 'About' })
     expect(within(about).getByText('Version 1.18.0')).toBeTruthy()
     expect(within(about).getByText('1.0.98 (bundled 1.0.96)')).toBeTruthy()
+    expect(within(about).getByText('rayfin-local').nextElementSibling?.textContent).toBe('0.2.8')
 
     await act(async () => {
       fireEvent.click(within(about).getByRole('button', { name: 'Copy version info' }))
     })
     expect(writeText).toHaveBeenCalledWith(
-      'Fabricator 1.18.0\nTauri 2.12.3\nWebView2 155.0.4283.45\nCopilot CLI 1.0.98 (bundled 1.0.96)'
+      'Fabricator 1.18.0\nTauri 2.12.3\nWebView2 155.0.4283.45\nCopilot CLI 1.0.98 (bundled 1.0.96)\nrayfin-local 0.2.8'
     )
     expect(within(about).getByText('Copied')).toBeTruthy()
+  })
+
+  it('says when the rayfin-local version is unknown', async () => {
+    installApi()
+    await renderModal({ versions: { ...versions, rayfinLocal: null } })
+    const about = screen.getByRole('region', { name: 'About' })
+    expect(within(about).getByText('rayfin-local').nextElementSibling?.textContent).toBe('unknown')
   })
 
   it('lists no versions until they load', async () => {

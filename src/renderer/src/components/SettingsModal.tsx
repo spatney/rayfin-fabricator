@@ -109,7 +109,8 @@ function VersionInfo({ versions }: { versions: AppVersions }): JSX.Element {
   const parts: Array<[name: string, version: string]> = [
     ['Tauri', versions.tauri],
     ['WebView2', versions.webview2],
-    ['Copilot CLI', formatCopilotCli(versions)]
+    ['Copilot CLI', formatCopilotCli(versions)],
+    ['rayfin-local', versions.rayfinLocal || 'unknown']
   ]
 
   async function copy(): Promise<void> {
