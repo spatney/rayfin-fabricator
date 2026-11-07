@@ -6808,6 +6808,11 @@ button.deploy-trouble-ray:focus-visible {
   font-size: 11.5px;
   color: var(--accent);
 }
+.dep-id {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
 .dep-dim {
   color: var(--text-dim);
 }

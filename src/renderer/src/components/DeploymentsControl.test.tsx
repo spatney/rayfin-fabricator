@@ -257,6 +257,59 @@ describe('DeploymentsControl chip', () => {
       expect(onSignIn).toHaveBeenCalledTimes(1)
       expect(api.auth.loginRayfin).not.toHaveBeenCalled()
     })
+
+    it('links the published app’s item in Fabric, with its ID to copy', async () => {
+      const WS = 'de0fcf1a-8c94-46cf-a029-650b2e87f172'
+      const ITEM = '6a1f0c2e-3b4d-4e5f-8a9b-0c1d2e3f4a5b'
+      const page = `https://app.fabric.microsoft.com/groups/${WS}/appbackends/${ITEM}`
+      const recorded = `${page}?ctid=22222222-2222-4222-8222-222222222222`
+      const api = Object.assign(installApi(), { openExternal: vi.fn() })
+      api.deploy.list.mockResolvedValue([
+        { workspaceName: 'Sales', workspaceId: WS, itemId: ITEM, active: true }
+      ])
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      const original = (navigator as unknown as { clipboard?: unknown }).clipboard
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+      const ui = (portalUrl?: string): JSX.Element => (
+        <ToastProvider>
+          <OverlayProvider>
+            <DeploymentsControl
+              project={makeProject({
+                workspace: WS,
+                lastDeploy: { url: 'https://sales.example.app/', portalUrl, status: 'success' }
+              })}
+              running={false}
+              onCreate={vi.fn()}
+              onRedeploy={vi.fn()}
+              onSwitch={vi.fn()}
+              onChanged={vi.fn()}
+            />
+          </OverlayProvider>
+        </ToastProvider>
+      )
+      try {
+        const { rerender } = render(ui(recorded))
+        fireEvent.click(screen.getByRole('button', { name: /Published app:/ }))
+        const id = await screen.findByText(ITEM)
+        expect(id.closest('dd')?.previousElementSibling?.textContent).toBe('Item')
+
+        // The link `rayfin up` recorded opens the item in its tenant.
+        fireEvent.click(screen.getByRole('button', { name: 'Open in Fabric' }))
+        expect(api.openExternal).toHaveBeenLastCalledWith(recorded)
+        // Without one, the link is built from the published app's ids.
+        rerender(ui(undefined))
+        fireEvent.click(screen.getByRole('button', { name: 'Open in Fabric' }))
+        expect(api.openExternal).toHaveBeenLastCalledWith(page)
+
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Copy item ID' }))
+        })
+        expect(writeText).toHaveBeenCalledWith(ITEM)
+        expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy()
+      } finally {
+        Object.defineProperty(navigator, 'clipboard', { value: original, configurable: true })
+      }
+    })
   })
 
   describe('DeploymentsControl state and action', () => {

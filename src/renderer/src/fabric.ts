@@ -74,8 +74,8 @@ export function refusedAfterPublish(
   return refused
 }
 
-/** Matches a Fabric workspace GUID (the `groups/{id}` segment of a portal URL). */
-const WORKSPACE_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** Matches a Fabric GUID: a workspace's id (the `groups/{id}` segment of a portal URL) or an item's. */
+const FABRIC_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Build the Fabric portal deep link for a workspace from its GUID, e.g.
@@ -89,8 +89,48 @@ const WORKSPACE_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
  */
 export function fabricWorkspaceUrl(workspaceId?: string): string | undefined {
   const id = workspaceId?.trim()
-  if (!id || !WORKSPACE_GUID.test(id)) return undefined
+  if (!id || !FABRIC_GUID.test(id)) return undefined
   return `https://app.fabric.microsoft.com/groups/${id}/`
+}
+
+/**
+ * The Fabric portal page of a published app's item, the one `rayfin up` links
+ * to: `https://app.fabric.microsoft.com/groups/{workspace}/appbackends/{item}`.
+ * `undefined` unless both ids are GUIDs, as a deployment records them.
+ */
+export function fabricItemUrl(workspaceId?: string, itemId?: string): string | undefined {
+  const workspace = workspaceId?.trim()
+  const item = itemId?.trim()
+  if (!workspace || !item || !FABRIC_GUID.test(workspace) || !FABRIC_GUID.test(item))
+    return undefined
+  return `https://app.fabric.microsoft.com/groups/${workspace}/appbackends/${item}`
+}
+
+/** A published app's item in the Fabric portal: its page, and its id. */
+export interface FabricItem {
+  url: string
+  id: string
+}
+
+/**
+ * The published app's item in the Fabric portal, as `rayfin up` linked it
+ * (`lastDeploy.portalUrl`: `…/groups/{workspace}/{type}/{item}`), while it's in
+ * the workspace the project names. `undefined` otherwise, so the footer and the
+ * published apps panel fall back to the workspace.
+ */
+export function publishedItem(project: StudioProject): FabricItem | undefined {
+  const link = project.lastDeploy?.portalUrl
+  let url: URL
+  try {
+    url = new URL(link ?? '')
+  } catch {
+    return undefined
+  }
+  const [, workspace, id] = /^\/groups\/([^/]+)\/[^/]+\/([^/]+)/i.exec(url.pathname) ?? []
+  if (!link || url.protocol !== 'https:' || !id) return undefined
+  const shown = project.workspace?.trim()
+  if (shown && FABRIC_GUID.test(shown) && !sameText(workspace, shown)) return undefined
+  return { url: link, id: decodeURIComponent(id) }
 }
 
 /** A workspace one of your apps uses, and when it last did (ms; 0 when unknown). */

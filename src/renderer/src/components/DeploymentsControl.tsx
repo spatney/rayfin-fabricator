@@ -12,7 +12,12 @@ import type {
 import { useSuppressPreview } from '../overlay'
 import { useToast } from '../toast'
 import { authErrorMessage } from '../authErrors'
-import { REGION_AVAILABILITY_URL, fabricWorkspaceUrl } from '../fabric'
+import {
+  REGION_AVAILABILITY_URL,
+  fabricItemUrl,
+  fabricWorkspaceUrl,
+  publishedItem
+} from '../fabric'
 import { clockLabel, meterStepLabel, useDeployMeter } from '../deployMeter'
 import { Codicon } from './icons'
 import DeploymentCreateForm, { checkActiveDeployTarget } from './DeploymentCreateForm'
@@ -191,7 +196,8 @@ export default function DeploymentsControl({
   const [sharing, setSharing] = useState<FabricDeployment | null>(null)
   /** Share was clicked and the deployment it targets is still loading. */
   const [openingShare, setOpeningShare] = useState(false)
-  const [copied, setCopied] = useState(false)
+  /** What was just copied: the app's link or its item's id. */
+  const [copied, setCopied] = useState<'link' | 'item' | null>(null)
   const copiedTimer = useRef(0)
   const openingShareRef = useRef(false)
   const projectIdRef = useRef(project.id)
@@ -375,6 +381,15 @@ export default function DeploymentsControl({
   // The address and workspace are the active deployment's: not yet the new one's.
   const appUrl = toNew ? undefined : activeDep?.hostingUrl || project.lastDeploy?.url || activeDep?.apiUrl
   const shownWorkspace = toNew ? undefined : workspaceName
+  // Its item in Fabric: the active deployment's, or the one `rayfin up` linked to. For the
+  // same item, that link wins: it opens the item in its tenant (`ctid`).
+  const recordedItem = publishedItem(project)
+  const itemId = toNew ? undefined : activeDep?.itemId?.trim() || recordedItem?.id
+  const itemLink = toNew
+    ? undefined
+    : recordedItem && recordedItem.id.toLowerCase() === itemId?.toLowerCase()
+      ? recordedItem.url
+      : fabricItemUrl(workspaceId, itemId)
   const others = (deployments ?? []).filter((d) => !d.active).sort(byDeployedAt)
 
   function openCreate(): void {
@@ -617,14 +632,16 @@ export default function DeploymentsControl({
     }
   }
 
-  async function copyLink(url: string): Promise<void> {
+  async function copyText(text: string, what: 'link' | 'item'): Promise<void> {
     try {
-      await navigator.clipboard.writeText(url)
-      setCopied(true)
+      await navigator.clipboard.writeText(text)
+      setCopied(what)
       window.clearTimeout(copiedTimer.current)
-      copiedTimer.current = window.setTimeout(() => setCopied(false), 1200)
+      copiedTimer.current = window.setTimeout(() => setCopied(null), 1200)
     } catch {
-      toast.error('Could not copy the link.', { title: 'Copy failed' })
+      toast.error(what === 'link' ? 'Could not copy the link.' : 'Could not copy the item ID.', {
+        title: 'Copy failed'
+      })
     }
   }
 
@@ -1005,11 +1022,11 @@ export default function DeploymentsControl({
                         <button
                           type="button"
                           className="dep-ico"
-                          title={copied ? 'Copied' : 'Copy link'}
-                          aria-label={copied ? 'Copied' : 'Copy link'}
-                          onClick={() => void copyLink(appUrl)}
+                          title={copied === 'link' ? 'Copied' : 'Copy link'}
+                          aria-label={copied === 'link' ? 'Copied' : 'Copy link'}
+                          onClick={() => void copyText(appUrl, 'link')}
                         >
-                          <Codicon name={copied ? 'check' : 'copy'} />
+                          <Codicon name={copied === 'link' ? 'check' : 'copy'} />
                         </button>
                         <button
                           type="button"
@@ -1017,6 +1034,34 @@ export default function DeploymentsControl({
                           title="Open in your browser"
                           aria-label="Open in your browser"
                           onClick={() => void window.api.openExternal(appUrl)}
+                        >
+                          <Codicon name="link-external" />
+                        </button>
+                      </dd>
+                    </>
+                  )}
+                  {itemLink && itemId && (
+                    <>
+                      <dt>Item</dt>
+                      <dd>
+                        <span className="dep-val dep-id" title={itemId}>
+                          {itemId}
+                        </span>
+                        <button
+                          type="button"
+                          className="dep-ico"
+                          title={copied === 'item' ? 'Copied' : 'Copy item ID'}
+                          aria-label={copied === 'item' ? 'Copied' : 'Copy item ID'}
+                          onClick={() => void copyText(itemId, 'item')}
+                        >
+                          <Codicon name={copied === 'item' ? 'check' : 'copy'} />
+                        </button>
+                        <button
+                          type="button"
+                          className="dep-ico"
+                          title="Open in Fabric"
+                          aria-label="Open in Fabric"
+                          onClick={() => void window.api.openExternal(itemLink)}
                         >
                           <Codicon name="link-external" />
                         </button>

@@ -39,6 +39,21 @@ describe('WorkspaceStatus footer item', () => {
     )
   })
 
+  it('opens the published app’s item in the workspace when rayfin up linked it', () => {
+    const item = `https://app.fabric.microsoft.com/groups/${WS_GUID}/appbackends/6a1f0c2e-3b4d-4e5f-8a9b-0c1d2e3f4a5b`
+    render(
+      <WorkspaceStatus
+        project={makeProject({
+          workspace: WS_GUID,
+          workspaceName: 'Rayfin Apps',
+          lastDeploy: { url: 'https://sales.example.app', portalUrl: item, status: 'success' }
+        })}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Rayfin Apps/ }))
+    expect(openExternal).toHaveBeenCalledWith(item)
+  })
+
   it('uses the raw workspace value as the label when there is no friendly name', () => {
     render(<WorkspaceStatus project={makeProject({ workspace: WS_GUID })} />)
     expect(screen.getByRole('button', { name: new RegExp(WS_GUID) })).toBeTruthy()

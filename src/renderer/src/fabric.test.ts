@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { StudioProject, UnsupportedWorkspace } from '@shared/ipc'
 import {
+  fabricItemUrl,
   fabricWorkspaceUrl,
+  publishedItem,
   recentWorkspaces,
   refusalFor,
   refusedAfterPublish,
@@ -35,6 +37,45 @@ describe('fabricWorkspaceUrl', () => {
     expect(fabricWorkspaceUrl(undefined)).toBeUndefined()
     expect(fabricWorkspaceUrl('')).toBeUndefined()
     expect(fabricWorkspaceUrl('   ')).toBeUndefined()
+  })
+})
+
+describe('Fabric items', () => {
+  const WS = 'de0fcf1a-8c94-46cf-a029-650b2e87f172'
+  const OTHER_WS = '11111111-1111-4111-8111-111111111111'
+  const ITEM = '6a1f0c2e-3b4d-4e5f-8a9b-0c1d2e3f4a5b'
+  const page = (ws: string, protocol = 'https'): string =>
+    `${protocol}://app.fabric.microsoft.com/groups/${ws}/appbackends/${ITEM}`
+  // How `rayfin up` records it: with the tenant to open it in.
+  const link = (ws: string, protocol = 'https'): string =>
+    `${page(ws, protocol)}?ctid=22222222-2222-4222-8222-222222222222`
+  const published = (portalUrl?: string): StudioProject => ({
+    id: 'p',
+    name: 'Sales',
+    path: 'C:\\apps\\sales',
+    addedAt: '2026-01-01T00:00:00.000Z',
+    workspace: WS,
+    lastDeploy: { url: 'https://sales.example.app', portalUrl, status: 'success' }
+  })
+
+  it('links an item in its workspace the way rayfin up does, given both GUIDs', () => {
+    expect(fabricItemUrl(WS, ITEM)).toBe(page(WS))
+    expect(fabricItemUrl(WS, undefined)).toBeUndefined()
+    expect(fabricItemUrl('Rayfin Apps', ITEM)).toBeUndefined()
+    expect(fabricItemUrl(WS, 'item-1')).toBeUndefined()
+  })
+
+  it('finds the published app’s item from the link rayfin up recorded', () => {
+    expect(publishedItem(published(link(WS)))).toEqual({ url: link(WS), id: ITEM })
+  })
+
+  it('finds no item in another workspace than the project’s, nor in a link that isn’t an item’s https page', () => {
+    expect(publishedItem(published(link(OTHER_WS)))).toBeUndefined()
+    expect(
+      publishedItem(published(`https://app.fabric.microsoft.com/groups/${WS}/`))
+    ).toBeUndefined()
+    expect(publishedItem(published(link(WS, 'http')))).toBeUndefined()
+    expect(publishedItem(published(undefined))).toBeUndefined()
   })
 })
 

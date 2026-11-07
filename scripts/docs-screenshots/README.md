@@ -217,7 +217,7 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `migration-card` | harness | `0,610,720,290` |
 | `account-menu` | harness | `1040,0,400,272` |
 | `accounts` | harness | `390,40,660,820` |
-| `deployments` | harness | `1000,0,440,360` |
+| `deployments` | harness | `1000,0,440,392` |
 | `share` | live, `--open` on Share, `--close` on Cancel | `400,240,640,420` |
 | `team-overview`, `skills`, `secrets`, `blueprint`, `app-gallery` | harness | none |
 | `model-relations`, `model-access` | harness | `0,0,1440,770` |
