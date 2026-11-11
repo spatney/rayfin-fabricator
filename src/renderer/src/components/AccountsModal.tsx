@@ -19,7 +19,13 @@ import { useSuppressPreview } from '../overlay'
 import { useModalFocus } from '../modalFocus'
 import { getCopilotHost, signInToCopilot, signOutOfCopilot } from '../copilotAuth'
 import { authErrorMessage } from '../authErrors'
-import { deviceCode, tenantLabel, tenantName, tenantsDiffer } from '../accounts'
+import {
+  deviceCode,
+  FABRIC_SIGN_IN_NEEDS_PROJECT,
+  tenantLabel,
+  tenantName,
+  tenantsDiffer
+} from '../accounts'
 import { openDocs } from '../docsLinks'
 import CopilotHostInput from './CopilotHostInput'
 import { CopilotLogo } from './brand-icons'
@@ -38,6 +44,8 @@ export interface FabricAccountActions {
   signingOut: boolean
   /** Refreshing credentials needs an open project's Rayfin CLI. */
   canRefresh: boolean
+  /** Signing in or adding an account runs a project's Rayfin CLI, so it waits for a project. */
+  canSignIn: boolean
   /** The open project, whose Rayfin CLI runs account changes. */
   projectId?: string
   onSignIn: () => void
@@ -352,7 +360,10 @@ export default function AccountsModal({
     })
 
   const copilotState = stateOf(copilot)
-  const fabricState = stateOf(rayfin)
+  // Without a project, Fabric's check has no project CLI to run. That's why
+  // sign-in waits (see fabricNote), not a problem to raise.
+  const fabricStatus = fabric.canSignIn ? rayfin : { ...rayfin, error: undefined }
+  const fabricState = stateOf(fabricStatus)
   const azureState = stateOf(az)
   const githubState: CardState = !github
     ? 'checking'
@@ -382,6 +393,7 @@ export default function AccountsModal({
   const ghMissing = Boolean(github && !github.ghInstalled)
   const fabricNote = [
     fabric.signingIn ? 'Finish signing in in the browser window that opened.' : '',
+    fabric.canSignIn ? '' : FABRIC_SIGN_IN_NEEDS_PROJECT,
     fabricAccounts?.sharedTokenStore &&
     (fabricAccounts.accounts.length > 1 || otherFabric.length > 0)
       ? 'On this Mac, signing out of one Fabric account signs all of them out until you sign in again.'
@@ -505,12 +517,15 @@ export default function AccountsModal({
             action={
               rayfin.signedIn
                 ? adding?.service !== 'fabric' && (
-                    <AddButton disabled={fabricBusy} onClick={() => setAdding({ service: 'fabric' })} />
+                    <AddButton
+                      disabled={fabricBusy || !fabric.canSignIn}
+                      onClick={() => setAdding({ service: 'fabric' })}
+                    />
                   )
                 : fabricState !== 'checking' && (
                     <button
                       className="btn btn--sm btn--primary"
-                      disabled={fabricBusy}
+                      disabled={fabricBusy || !fabric.canSignIn}
                       aria-label="Sign in to Microsoft Fabric"
                       onClick={fabric.onSignIn}
                     >
@@ -568,13 +583,14 @@ export default function AccountsModal({
             )}
             <Foot>
               {errorLine(
-                errors.fabric ?? (rayfin.signedIn && !rayfin.unverified ? undefined : rayfin.error)
+                errors.fabric ??
+                  (rayfin.signedIn && !rayfin.unverified ? undefined : fabricStatus.error)
               )}
               {action === 'fabric:add' && <SignInProgress log={log} service="Microsoft" />}
               {adding?.service === 'fabric' && (
                 <AddAccountForm
                   label="Add a Fabric account"
-                  busy={fabricBusy}
+                  busy={fabricBusy || !fabric.canSignIn}
                   running={action === 'fabric:add'}
                   onSubmit={async (tenant) => {
                     if (await fabricAdd(tenant)) setAdding(null)

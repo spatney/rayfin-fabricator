@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type JSX } from 'react'
 import { useSuppressPreview } from '../overlay'
 import { moveMenuFocus } from '../menuFocus'
+import { FABRIC_SIGN_IN_NEEDS_PROJECT } from '../accounts'
 import { Codicon, ReloadIcon, SignOutIcon } from './icons'
 
 /** Up-to-two-letter initials for the signed-in user's avatar, derived from their
@@ -33,6 +34,8 @@ interface Props {
   refreshing: boolean
   /** A credential refresh needs an open project's CLI. */
   canRefresh: boolean
+  /** Signing in runs a project's Rayfin CLI, so it waits until there's a project. */
+  canSignIn: boolean
   onSignIn: () => void
   onSignOut: () => void
   onRefresh: () => void
@@ -48,7 +51,8 @@ const ITEM = '[role="menuitem"]'
  * The app bar's account control, which also holds Settings. Signed in to
  * Fabric, it's the user's avatar and opens a menu with the account actions
  * (manage every account, refresh credentials, sign out) and Settings. Signed
- * out, "Sign in to Fabric" stays one click away, with the rest behind its caret.
+ * out, "Sign in to Fabric" stays one click away, with the rest behind its caret;
+ * until there's a project, whose Rayfin CLI signs in, it's disabled and says why.
  * While the launch check runs it's a neutral placeholder rather than a premature
  * sign-in prompt.
  */
@@ -63,6 +67,7 @@ export default function AccountMenu({
   signingOut,
   refreshing,
   canRefresh,
+  canSignIn,
   onSignIn,
   onSignOut,
   onRefresh,
@@ -163,7 +168,12 @@ export default function AccountMenu({
         </button>
       ) : (
         <div className="seg seg--toolbar account-signin">
-          <button className="seg-btn" disabled={busy} onClick={onSignIn}>
+          <button
+            className="seg-btn"
+            disabled={busy || !canSignIn}
+            title={canSignIn ? undefined : FABRIC_SIGN_IN_NEEDS_PROJECT}
+            onClick={onSignIn}
+          >
             {signingIn ? 'Signing in…' : 'Sign in to Fabric'}
           </button>
           <button
@@ -205,6 +215,9 @@ export default function AccountMenu({
                 <span className="account-pop-user">
                   {pending ? 'Checking your Fabric sign-in…' : 'Not signed in to Fabric'}
                 </span>
+                {!pending && !canSignIn && (
+                  <span className="account-pop-sub">{FABRIC_SIGN_IN_NEEDS_PROJECT}</span>
+                )}
                 {!pending && canRefresh && (
                   <span className="account-pop-sub">
                     Refresh clears stale credentials, then signs you in again.

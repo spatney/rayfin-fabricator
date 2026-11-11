@@ -2345,6 +2345,8 @@ export default function Workbench({
 
   const fabricAuthBusy =
     signingIn || signingOut || refreshingAuth || Object.values(deploys).some((d) => d.running)
+  /** Fabric sign-in runs a project's Rayfin CLI, so it waits until there's a project. */
+  const canSignInToFabric = listedProjects.some((p) => !p.missing)
 
   // Open Help. The assistant needs Copilot, and being signed out is exactly the
   // kind of problem someone opens Help about — so instead of a dead end, show
@@ -2818,6 +2820,7 @@ export default function Workbench({
       theme: settings?.theme ?? 'system',
       uiScale: settings?.uiScale ?? 1,
       fabricSignedIn: auth.rayfin.signedIn,
+      canSignInToFabric,
       modKey: modKey(),
       deployFailed: Boolean(active && lastDeployFailed(active, deploys[active.id])),
       advisorIssues: advisor.derived.badge?.count ?? 0,
@@ -3100,6 +3103,7 @@ export default function Workbench({
                 signingOut={signingOut}
                 refreshing={refreshingAuth}
                 canRefresh={Boolean(active)}
+                canSignIn={canSignInToFabric}
                 onSignIn={() => void signIn()}
                 onSignOut={() => void signOut()}
                 onRefresh={() => {
@@ -3711,6 +3715,7 @@ export default function Workbench({
             signingIn,
             signingOut,
             canRefresh: Boolean(active),
+            canSignIn: canSignInToFabric,
             projectId: active?.id,
             onSignIn: () => void signIn(),
             onSignOut: () => void signOut(),

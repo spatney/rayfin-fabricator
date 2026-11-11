@@ -1537,6 +1537,7 @@ function SearchShot(): JSX.Element {
     theme: light ? 'light' : 'dark',
     uiScale: 1,
     fabricSignedIn: true,
+    canSignInToFabric: true,
     modKey: 'Ctrl',
     deployFailed: false,
     advisorIssues: 0,
@@ -2013,6 +2014,7 @@ function AccountsShot({ providers = false }: { providers?: boolean }): JSX.Eleme
         signingIn: false,
         signingOut: false,
         canRefresh: !providers,
+        canSignIn: true,
         onSignIn: noop,
         onSignOut: noop,
         onRefresh: noop
@@ -2206,6 +2208,7 @@ function Deployments(): JSX.Element {
               signingOut={false}
               refreshing={false}
               canRefresh
+              canSignIn
               onSignIn={noop}
               onSignOut={noop}
               onRefresh={noop}
@@ -2253,6 +2256,7 @@ function AccountMenuShot(): JSX.Element {
                 signingOut={false}
                 refreshing={false}
                 canRefresh
+                canSignIn
                 onSignIn={noop}
                 onSignOut={noop}
                 onRefresh={noop}

@@ -36,6 +36,10 @@ A check mark next to a service's name means you're signed in. Otherwise the serv
 
 If Fabric and the Azure CLI are signed in to different organizations, **Accounts** warns you: sharing an app and connecting data look people up through the Azure CLI, so use one organization for both. The warning offers the fix. If the Azure CLI already has an account in Fabric's organization, select `Use <account> in the Azure CLI`. Otherwise select `Sign in to <organization> in the Azure CLI`, which opens **Add account** for the Azure CLI with Fabric's organization filled in.
 
+## Fabric sign-in needs a project
+
+Fabricator signs in to Fabric with the Rayfin CLI that comes with each project. Until you have a project, **Sign in to Fabric** in the app bar and **Sign in** and **Add account** under **Microsoft Fabric** are unavailable, and **Microsoft Fabric** says "Fabric sign-in uses a project’s Rayfin CLI, so create or open a project first." Create a new project or open one you already have, then sign in. See [Create and manage projects](/docs/build/projects).
+
 ## Use more than one Fabric account
 
 You can stay signed in to several Fabric accounts, for example your work account and an account in a client's organization. Fabricator uses one of them at a time, marked **In use**. Publishing, listing workspaces, sharing and secrets all use that account.

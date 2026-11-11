@@ -684,13 +684,14 @@ describe('Workbench authentication recovery', () => {
   it.each(['login', 'verification'])(
     'reports rejected Fabric %s without leaving buttons busy',
     async (failure) => {
-      const api = installApi()
+      const api = installApi(true)
       const onAuthChanged = vi.fn().mockResolvedValue(undefined)
       if (failure === 'login')
         api.auth.loginRayfin.mockRejectedValueOnce('Sign-in service unavailable')
       else onAuthChanged.mockRejectedValueOnce('Sign-in service unavailable')
       const props = makeProps({ auth: { ...auth, rayfin: { signedIn: false } }, onAuthChanged })
       render(<Workbench {...props} />, { wrapper: Wrapper })
+      await screen.findByLabelText('Chat draft')
       fireEvent.click(screen.getByRole('button', { name: 'Sign in to Fabric' }))
 
       expect((await screen.findByRole('alert')).textContent).toContain(
@@ -704,11 +705,12 @@ describe('Workbench authentication recovery', () => {
   )
 
   it('does not allow sign-out to race a pending sign-in when auth props change', async () => {
-    const api = installApi()
+    const api = installApi(true)
     const login = deferred<ProcResult>()
     api.auth.loginRayfin.mockReturnValueOnce(login.promise)
     const props = makeProps({ auth: { ...auth, rayfin: { signedIn: false } } })
     const view = render(<Workbench {...props} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
     fireEvent.click(screen.getByRole('button', { name: 'Sign in to Fabric' }))
     view.rerender(<Workbench {...props} auth={auth} />)
     const signOut = accountAction('Sign out')
@@ -850,6 +852,40 @@ describe('Workbench app bar', () => {
     expect(within(dialog).getByText('dev@example.com')).toBeTruthy()
     expect(within(dialog).getByText('octocat')).toBeTruthy()
   })
+
+  it.each<[string, StudioProject[], boolean]>([
+    ['no project', [], false],
+    ['only a project whose folder is gone', [{ ...project, missing: true }], false],
+    ['a project, even with none open', [project], true]
+  ])(
+    'offers Fabric sign-in only with a project to sign in with: %s',
+    async (_, projects, ready) => {
+      const api = installApi()
+      api.projects.state.mockResolvedValue({
+        workspaceRoot: 'C:\\projects',
+        activeProjectId: null,
+        projects
+      })
+      render(<Workbench {...makeProps({ auth: { ...auth, rayfin: { signedIn: false } } })} />, {
+        wrapper: Wrapper
+      })
+      await waitFor(() =>
+        expect(homeProps.mock.lastCall?.[0].projects).toHaveLength(projects.length)
+      )
+
+      const signIn = screen.getByRole('button', { name: 'Sign in to Fabric' }) as HTMLButtonElement
+      expect(signIn.disabled).toBe(!ready)
+      fireEvent.click(screen.getByRole('button', { name: 'Settings and accounts' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Manage accounts…' }))
+      const dialog = await screen.findByRole('dialog', { name: 'Accounts' })
+      const fabric = within(dialog).getByRole('region', { name: 'Microsoft Fabric' })
+      const dialogSignIn = within(fabric).getByRole('button', {
+        name: 'Sign in to Microsoft Fabric'
+      })
+      expect((dialogSignIn as HTMLButtonElement).disabled).toBe(!ready)
+      await waitFor(() => expect(api.github.accounts).toHaveBeenCalled())
+    }
+  )
   it('puts the project, its views, deploys and the account on one bar without the brand', async () => {
     installApi(true)
     const { container } = render(<Workbench {...makeProps()} />, { wrapper: Wrapper })

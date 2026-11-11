@@ -32,6 +32,7 @@ function context(overrides: Partial<ActionContext> = {}): ActionContext {
     theme: 'dark',
     uiScale: 1,
     fabricSignedIn: true,
+    canSignInToFabric: true,
     modKey: 'Ctrl',
     do: handlers,
     ...overrides
@@ -121,6 +122,12 @@ describe('Search actions', () => {
     goals.run()
     expect(ctx.do.showView).toHaveBeenCalledWith('goals')
     expect(rank(prepare(buildActions(ctx)), 'evals')[0]?.item.id).toBe('action:view-goals')
+  })
+
+  it('offers Fabric sign-in only once there’s a project to sign in with', () => {
+    const signedOut = context({ fabricSignedIn: false })
+    expect(ids(signedOut)).toContain('action:fabric-sign-in')
+    expect(ids({ ...signedOut, canSignInToFabric: false })).not.toContain('action:fabric-sign-in')
   })
 
   it('exports the open app, and imports one from anywhere', () => {

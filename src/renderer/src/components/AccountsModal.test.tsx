@@ -95,6 +95,7 @@ function renderModal(overrides: Partial<ComponentProps<typeof AccountsModal>> = 
       signingIn: false,
       signingOut: false,
       canRefresh: true,
+      canSignIn: true,
       projectId: 'p1',
       onSignIn: vi.fn(),
       onSignOut: vi.fn(),
@@ -257,6 +258,7 @@ describe('AccountsModal', () => {
         signingIn: false,
         signingOut: false,
         canRefresh: true,
+        canSignIn: true,
         onSignIn: vi.fn(),
         onSignOut: vi.fn(),
         onRefresh: vi.fn()
@@ -271,6 +273,48 @@ describe('AccountsModal', () => {
       (within(fabric).getByRole('button', { name: 'Use: alice@fabrikam.com' }) as HTMLButtonElement)
         .disabled
     ).toBe(true)
+  })
+
+  it.each([
+    { state: 'signed in', rayfin: auth.rayfin, button: 'Add account' },
+    {
+      state: 'signed out',
+      rayfin: {
+        signedIn: false,
+        error: 'Fabric authentication check failed. The required CLI could not be found.'
+      },
+      button: 'Sign in to Microsoft Fabric'
+    }
+  ])('waits for a project before Fabric signs in, $state', async ({ rayfin, button }) => {
+    installApi()
+    renderModal({
+      auth: { ...auth, rayfin },
+      fabric: {
+        busy: false,
+        signingIn: false,
+        signingOut: false,
+        canRefresh: false,
+        canSignIn: false,
+        onSignIn: vi.fn(),
+        onSignOut: vi.fn(),
+        onRefresh: vi.fn()
+      }
+    })
+    const fabric = card('Microsoft Fabric')
+    await within(fabric).findByRole('list', { name: 'Other Fabric accounts' })
+    expect(
+      (within(fabric).getByRole('button', { name: button }) as HTMLButtonElement).disabled
+    ).toBe(true)
+    expect(
+      within(fabric).getByText(
+        'Fabric sign-in uses a project’s Rayfin CLI, so create or open a project first.'
+      )
+    ).toBeTruthy()
+    // A check that had no project CLI to run isn't a problem to raise.
+    expect(within(fabric).queryByRole('alert')).toBeNull()
+    expect(within(fabric).queryByText('Needs attention')).toBeNull()
+    // Only Fabric signs in with a project's CLI.
+    expect(await enabled(card('Azure CLI'), 'Add account')).toBeTruthy()
   })
 
   it('says when signing out of one Fabric account signs them all out', async () => {

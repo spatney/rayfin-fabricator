@@ -67,6 +67,8 @@ export interface ActionContext {
   theme: ThemePreference
   uiScale: number
   fabricSignedIn: boolean
+  /** Fabric sign-in runs a project's Rayfin CLI, so it waits until there's a project. */
+  canSignInToFabric: boolean
   /** The shortcut modifier as printed on keycaps: Ctrl, or ⌘. */
   modKey: string
   do: ActionHandlers
@@ -395,7 +397,7 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
       run: run.refreshFabricAuth
     })
   }
-  if (!ctx.fabricSignedIn) {
+  if (!ctx.fabricSignedIn && ctx.canSignInToFabric) {
     add({
       id: 'action:fabric-sign-in',
       title: 'Sign in to Fabric',

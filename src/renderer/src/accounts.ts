@@ -31,6 +31,10 @@ export function tenantLabel(
   return tenantName(id, ...known) ?? (GUID.test(id) ? `Tenant ${id.slice(0, 8)}…` : id)
 }
 
+/** Why Fabric sign-in, and adding a Fabric account, wait until there's a project. */
+export const FABRIC_SIGN_IN_NEEDS_PROJECT =
+  'Fabric sign-in uses a project’s Rayfin CLI, so create or open a project first.'
+
 /** Fabric and the Azure CLI are both signed in, to different tenants. */
 export function tenantsDiffer(auth: AuthStatus): boolean {
   const fabric = auth.rayfin.signedIn ? auth.rayfin.tenant?.trim().toLowerCase() : undefined

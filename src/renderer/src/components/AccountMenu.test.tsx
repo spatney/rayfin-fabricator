@@ -15,6 +15,7 @@ function makeProps(overrides: Partial<Props> = {}): Props {
     signingOut: false,
     refreshing: false,
     canRefresh: true,
+    canSignIn: true,
     onSignIn: vi.fn(),
     onSignOut: vi.fn(),
     onRefresh: vi.fn(),
@@ -223,6 +224,23 @@ describe('AccountMenu', () => {
     expect(signIn.disabled).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Settings and accounts' }))
     expect(screen.queryByRole('menuitem', { name: 'Refresh Fabric authentication' })).toBeNull()
+    fireEvent.click(item('Manage accounts…'))
+    expect(props.onManageAccounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for a project before signing in, and says why', () => {
+    const props = renderMenu({
+      signedIn: false,
+      user: undefined,
+      canRefresh: false,
+      canSignIn: false
+    })
+    const why = 'Fabric sign-in uses a project’s Rayfin CLI, so create or open a project first.'
+    const signIn = screen.getByRole('button', { name: 'Sign in to Fabric' }) as HTMLButtonElement
+    expect(signIn.disabled).toBe(true)
+    expect(signIn.title).toBe(why)
+    fireEvent.click(screen.getByRole('button', { name: 'Settings and accounts' }))
+    expect(screen.getByText(why)).toBeTruthy()
     fireEvent.click(item('Manage accounts…'))
     expect(props.onManageAccounts).toHaveBeenCalledTimes(1)
   })
