@@ -8,11 +8,13 @@ import type {
   TeamWorkspace
 } from '@shared/ipc'
 import { useSuppressPreview } from '../overlay'
+import { useToast } from '../toast'
 import type { ModelSelection } from '../modelSelection'
-import { projectNameProblem } from '../projectName'
+import { funnyProjectName, projectNameProblem } from '../projectName'
 import { useMascotInstall } from './mascot/stage'
 import { ModelPicker } from './models/ModelPicker'
 import { displayPath } from './projectDisplay'
+import GithubRepoFields, { NEW_GITHUB_REPO, type GithubRepoChoice } from './github/GithubRepoFields'
 
 /** `scratch` = the Rayfin CLI's Universal App that grows into anything; `example` = a community template. */
 type Start = 'scratch' | 'example'
@@ -47,16 +49,23 @@ interface Props {
   projectsFolder?: string
   /** Other folders earlier new projects went in, most recent first. */
   recentLocations?: string[]
+  /** Open setup, to install the GitHub CLI for a GitHub repository. */
+  onReviewSetup?: () => void
 }
 
 const keyOf = (t: { path?: string; name: string }): string => t.path || t.name
+
+/** How many random names to try before leaving the name to the user. */
+const SUGGESTION_TRIES = 10
+/** Where to create a GitHub repository the new project didn't get. */
+const RETRY_REPO = 'Create it from the git item in the status bar.'
 
 /** A folder as Windows and macOS compare them: in any case, with either slash. */
 const comparable = (path: string): string =>
   path.trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
 
 /** The coarse stages a scaffold goes through, in order. `done` is authoritative. */
-type CreatePhase = 'preparing' | 'customizing' | 'installing' | 'finalizing' | 'done'
+type CreatePhase = 'preparing' | 'customizing' | 'installing' | 'finalizing' | 'github' | 'done'
 
 interface PhaseDef {
   id: CreatePhase
@@ -87,7 +96,21 @@ const CREATE_PHASES: PhaseDef[] = [
   { id: 'finalizing', label: 'Finishing up', markers: ['initializing git', 'git repository'] }
 ]
 
-const PHASE_ORDER: CreatePhase[] = ['preparing', 'customizing', 'installing', 'finalizing', 'done']
+/** Once the app exists, when it gets a GitHub repository: driven by that step, never by markers. */
+const GITHUB_PHASE: PhaseDef = {
+  id: 'github',
+  label: 'Creating the GitHub repository',
+  markers: []
+}
+
+const PHASE_ORDER: CreatePhase[] = [
+  'preparing',
+  'customizing',
+  'installing',
+  'finalizing',
+  'github',
+  'done'
+]
 const phaseRank = (p: CreatePhase): number => PHASE_ORDER.indexOf(p)
 
 /**
@@ -142,10 +165,12 @@ export default function CreateProjectScreen({
   initialExample,
   model,
   projectsFolder,
-  recentLocations
+  recentLocations,
+  onReviewSetup
 }: Props): JSX.Element {
   // The native preview webview floats above HTML; suppress it while this covers the body.
   useSuppressPreview()
+  const toast = useToast()
 
   const teamTargets = (teamWorkspaces ?? []).filter((w) => !w.setup || w.setup.done)
   /** '' = this computer; otherwise a team workspace id. */
@@ -156,6 +181,17 @@ export default function CreateProjectScreen({
   )
 
   const [name, setName] = useState(initialName ?? '')
+  const nameRef = useRef<HTMLInputElement>(null)
+  /** The name is the user's (or was given): Fabricator stops suggesting one. */
+  const nameChosen = useRef(Boolean(initialName))
+  /** The name Fabricator suggested, kept while it's free. */
+  const suggested = useRef('')
+  /** Also create a GitHub repository for the new app. */
+  const [github, setGithub] = useState(false)
+  const [githubChoice, setGithubChoice] = useState<GithubRepoChoice>(NEW_GITHUB_REPO)
+  const [githubReady, setGithubReady] = useState(false)
+  /** The new app's GitHub repository is being created. */
+  const [creatingRepo, setCreatingRepo] = useState(false)
   /** The folder the project goes in; blank is the projects folder. */
   const [location, setLocation] = useState(projectsFolder ?? '')
   const [locationCheck, setLocationCheck] = useState<
@@ -257,6 +293,53 @@ export default function CreateProjectScreen({
       ? location.trim()
       : ''
 
+  // Start with a random name that's free where the project goes ("Caffeinated
+  // Narwhal"), kept when that place changes unless it's taken there, until the
+  // user types a name of their own. Without a free one, the field starts empty.
+  useEffect(() => {
+    if (nameChosen.current || busy || done) return
+    let stale = false
+    const kept = suggested.current
+    const timer = window.setTimeout(
+      () => {
+        void (async () => {
+          for (let n = 0; n < SUGGESTION_TRIES; n += 1) {
+            const candidate = n === 0 && kept ? kept : funnyProjectName()
+            let free: boolean
+            try {
+              free = (
+                await window.api.projects.checkName(
+                  candidate,
+                  destination || undefined,
+                  customLocation || undefined
+                )
+              ).ok
+            } catch {
+              return
+            }
+            if (stale || nameChosen.current) return
+            if (free) {
+              suggested.current = candidate
+              setName(candidate)
+              return
+            }
+          }
+        })()
+      },
+      kept ? 300 : 0
+    )
+    return () => {
+      stale = true
+      window.clearTimeout(timer)
+    }
+  }, [destination, customLocation])
+
+  // A suggested name is selected, so typing replaces it.
+  useEffect(() => {
+    const input = nameRef.current
+    if (!nameChosen.current && input && document.activeElement === input) input.select()
+  }, [name])
+
   async function browse(): Promise<void> {
     const picked = await window.api.projects.pickFolder()
     if (picked) setLocation(picked)
@@ -277,6 +360,35 @@ export default function CreateProjectScreen({
       })
     } finally {
       setCreatingFolder(false)
+    }
+  }
+
+  /**
+   * Put the new app on GitHub. The app is there either way: when this fails it
+   * opens all the same, and a notice says why and where to try again.
+   */
+  async function createRepo(projectId: string, repoName: string): Promise<void> {
+    setCreatingRepo(true)
+    try {
+      const repo = await window.api.github.createRepo(projectId, {
+        ...githubChoice,
+        name: repoName
+      })
+      if (repo.ok) {
+        toast.success(
+          `The app’s first version is at ${repo.url?.replace(/^https:\/\//, '') ?? 'its repository'}.`,
+          { title: 'On GitHub' }
+        )
+      } else {
+        toast.error(`${repo.error ?? 'The repository wasn’t created.'} ${RETRY_REPO}`, {
+          title: 'Not on GitHub yet'
+        })
+      }
+    } catch (reason) {
+      const why = reason instanceof Error ? reason.message : 'The repository wasn’t created.'
+      toast.error(`${why} ${RETRY_REPO}`, { title: 'Not on GitHub yet' })
+    } finally {
+      setCreatingRepo(false)
     }
   }
 
@@ -322,6 +434,7 @@ export default function CreateProjectScreen({
         ...(customLocation ? { location: customLocation } : {})
       })
       if (result.ok) {
+        if (wantsGithub && result.project) await createRepo(result.project.id, slug)
         setDone(true)
         // The workbench opens in the same moment, so tell Ray directly.
         mascot.succeed()
@@ -411,13 +524,17 @@ export default function CreateProjectScreen({
     .slice(0, 5)
 
   const urlValid = /^(https?:\/\/|git@|git\+)/i.test(url.trim())
+  /** A GitHub repository goes with an app on this computer; a team app has its team's. */
+  const wantsGithub = github && !destination
   const canCreate =
     Boolean(slug) &&
     !nameWarning &&
     locationReady &&
+    (!wantsGithub || githubReady) &&
     (start === 'scratch' || (customMode ? urlValid : Boolean(selectedEntry)))
 
   // ----- Create progress (cosmetic; completion is driven by `done`) -----
+  const phases = wantsGithub ? [...CREATE_PHASES, GITHUB_PHASE] : CREATE_PHASES
   const elapsedSec = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0
   const elapsedLabel = `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`
   const detectedPhase = markerPhase(log)
@@ -425,13 +542,14 @@ export default function CreateProjectScreen({
   // Never regress: take the furthest of the parsed marker and the time floor.
   const phase: CreatePhase = done
     ? 'done'
-    : phaseRank(detectedPhase) >= phaseRank(fallback)
-      ? detectedPhase
-      : fallback
-  const activeIdx =
-    phase === 'done' ? CREATE_PHASES.length : CREATE_PHASES.findIndex((p) => p.id === phase)
+    : creatingRepo
+      ? 'github'
+      : phaseRank(detectedPhase) >= phaseRank(fallback)
+        ? detectedPhase
+        : fallback
+  const activeIdx = phase === 'done' ? phases.length : phases.findIndex((p) => p.id === phase)
   const activePhaseLabel =
-    phase === 'done' ? 'Project ready' : (CREATE_PHASES[activeIdx]?.label ?? 'Preparing')
+    phase === 'done' ? 'Project ready' : (phases[activeIdx]?.label ?? 'Preparing')
   const createFailed = !busy && !done && Boolean(error)
   const showProgress = busy || Boolean(log)
   /** The fields step aside while the app is created, and while the workbench opens it. */
@@ -462,6 +580,7 @@ export default function CreateProjectScreen({
           <label className={`field${hideFields ? ' create-field-hidden' : ''}`}>
             <span className="field-label">Project name</span>
             <input
+              ref={nameRef}
               className="field-input"
               type="text"
               value={name}
@@ -472,7 +591,10 @@ export default function CreateProjectScreen({
               spellCheck={false}
               disabled={busy}
               aria-invalid={nameWarning ? true : undefined}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                nameChosen.current = true
+                setName(e.target.value)
+              }}
             />
             {nameWarning ? (
               <span className="field-hint field-hint--warn" role="alert">
@@ -570,6 +692,36 @@ export default function CreateProjectScreen({
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+
+          {!destination && (
+            <div className={`create-github${hideFields ? ' create-field-hidden' : ''}`}>
+              <label className="create-github-check">
+                <input
+                  type="checkbox"
+                  checked={github}
+                  disabled={busy}
+                  onChange={(e) => setGithub(e.target.checked)}
+                />
+                <span>
+                  <span className="create-github-title">Create a GitHub repository</span>
+                  <span className="field-hint">
+                    Keep the app’s versions on GitHub. Fabricator pushes the first one, and you push
+                    later ones from the git item in the status bar.
+                  </span>
+                </span>
+              </label>
+              {github && (
+                <GithubRepoFields
+                  name={slug}
+                  value={githubChoice}
+                  onChange={setGithubChoice}
+                  onReady={setGithubReady}
+                  disabled={busy}
+                  onReviewSetup={onReviewSetup}
+                />
               )}
             </div>
           )}
@@ -752,7 +904,7 @@ export default function CreateProjectScreen({
                 {busy ? activePhaseLabel : done ? 'Project ready' : ''}
               </span>
               <ol className="create-phases">
-                {CREATE_PHASES.map((p, i) => {
+                {phases.map((p, i) => {
                   const state =
                     phase === 'done' || i < activeIdx
                       ? 'done'

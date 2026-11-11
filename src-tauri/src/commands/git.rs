@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use once_cell::sync::Lazy;
 use regex::Regex;
 
+use crate::commands::github_repo::network_auth;
 use crate::commands::util::{looks_binary, safe_resolve};
 use crate::services::exec::RunOptions;
 use crate::services::git::run;
@@ -1451,11 +1452,24 @@ fn net_opts(cwd: &str) -> RunOptions {
   }
 }
 
-/// Run a network-touching git command (fetch/pull/push) with [`net_opts`].
+/// Run a network-touching git command (fetch/pull/push) with [`net_opts`]. A
+/// project whose GitHub repository Fabricator created reaches it as the account
+/// that created it (see [`network_auth`]); any other uses git's own credentials.
 async fn git_net(cwd: &str, args: &[&str]) -> Git {
-  let mut full: Vec<&str> = vec!["-c", "core.quotepath=false"];
-  full.extend_from_slice(args);
-  let res = run(&full, net_opts(cwd)).await;
+  let mut full: Vec<String> = vec!["-c".into(), "core.quotepath=false".into()];
+  let mut opts = net_opts(cwd);
+  match network_auth(cwd).await {
+    Some(Ok(auth)) => {
+      full.extend(auth.args);
+      opts.env.extend(auth.env);
+      opts.env_remove.extend(["GH_TOKEN".to_string(), "GITHUB_TOKEN".to_string()]);
+    }
+    Some(Err(message)) => return Git { ok: false, stdout: String::new(), stderr: message },
+    None => {}
+  }
+  full.extend(args.iter().map(|a| a.to_string()));
+  let refs: Vec<&str> = full.iter().map(String::as_str).collect();
+  let res = run(&refs, opts).await;
   Git { ok: res.ok, stdout: res.stdout, stderr: res.stderr }
 }
 

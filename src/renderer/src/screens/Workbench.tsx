@@ -3175,6 +3175,7 @@ export default function Workbench({
           initialTeamWorkspaceId={newAppTeamId ?? undefined}
           projectsFolder={projects?.workspaceRoot}
           recentLocations={projects?.recentLocations}
+          onReviewSetup={onReviewSetup}
           onTeamCreated={(result) => {
             setShowCreate(false)
             setNewAppTeamId(null)
@@ -3571,6 +3572,8 @@ export default function Workbench({
                 busy={activeChatBusy}
                 onSynced={(packagesChanged) => void afterGitSync(active.id, packagesChanged)}
                 onSendToChat={sendGitToChat}
+                folderName={active.path.split(/[\\/]/).filter(Boolean).pop()}
+                onReviewSetup={onReviewSetup}
               />
             )}
             <RayfinVersionControl

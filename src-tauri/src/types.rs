@@ -747,6 +747,11 @@ pub struct StudioProject {
   /// Team projects never deploy from this machine: the workspace's pipeline does.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub team: Option<TeamBinding>,
+  /// The GitHub CLI account Fabricator created this project's GitHub repository
+  /// as. Getting and pushing changes use that account's sign-in, whichever
+  /// account the CLI has active (see `commands::github_repo`).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub github_account: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub missing: Option<bool>,
   /// The Rayfin version the project has installed (its CLI's, or else an SDK
@@ -1503,6 +1508,30 @@ pub struct GithubAccountsResult {
   pub accounts: Vec<GithubAccount>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub error: Option<String>,
+}
+
+/// A GitHub repository to create for a project.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubRepoRequest {
+  /// The GitHub CLI account that creates it, and that Fabricator then gets and
+  /// pushes changes as.
+  pub account: String,
+  /// Who owns it: the account itself, or one of its organizations.
+  pub owner: String,
+  pub name: String,
+  pub private: bool,
+}
+
+#[derive(Serialize, Clone, Default, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubRepoResult {
+  pub ok: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub error: Option<String>,
+  /// The repository's page, such as `https://github.com/contoso/sales`.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub url: Option<String>,
 }
 
 /// One repository entry from `gh repo list` (fields flattened/normalized for the UI).

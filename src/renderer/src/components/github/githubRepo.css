@@ -1,0 +1,157 @@
+/* A new GitHub repository for a project: the account that creates it, who owns
+   it, who can see it, and its name. Flat, like the forms it sits in. */
+.gh-repo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.gh-repo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+.gh-repo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gh-repo-field--grow {
+  flex: 1 1 160px;
+}
+
+.gh-repo-field .field-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.gh-repo-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.gh-repo .seg {
+  margin-bottom: 0;
+}
+
+.gh-repo .seg-btn {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.gh-repo-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gh-repo-account .field-input {
+  flex: 1;
+}
+
+.gh-repo-account .link-btn {
+  flex: none;
+}
+
+.gh-repo-where {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.gh-repo-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.gh-repo-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.gh-repo-signin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.gh-repo-problem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+/* In a popover: the same fields, at the popover's size. */
+.gh-repo--compact {
+  gap: 8px;
+}
+
+.gh-repo--compact .field-input {
+  padding: 5px 9px;
+  font-size: 12.5px;
+  border-radius: 6px;
+}
+
+.gh-repo--compact select.field-input {
+  padding-right: 26px;
+  background-position: right 8px center;
+  background-size: 12px 12px;
+}
+
+.gh-repo--compact .seg-btn {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+/* New project's "Create a GitHub repository": a checkbox, then its fields. */
+.create-github {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.create-github-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.create-github-check input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.create-github-check > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.create-github-title {
+  font-weight: 600;
+}
+
+.create-github .gh-repo {
+  padding-left: 22px;
+}

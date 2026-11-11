@@ -294,6 +294,9 @@ pub fn run() {
       commands::github::github_sign_out_account,
       commands::github::github_list_repos,
       commands::github::github_clone,
+      commands::github_repo::github_owners,
+      commands::github_repo::github_check_repo,
+      commands::github_repo::github_create_repo,
       // team workspaces (experimental)
       commands::team::team_env_status,
       commands::team::team_github_signin,

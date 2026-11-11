@@ -209,3 +209,59 @@ describe('GitControl branches and merges', () => {
     expect(git.finishMerge).toHaveBeenCalledWith('p1')
   })
 })
+
+describe('GitControl GitHub repository', () => {
+  function installGithub(createRepo: ReturnType<typeof vi.fn>): void {
+    const api = window as unknown as { api: Record<string, unknown> }
+    api.api.github = {
+      accounts: vi.fn().mockResolvedValue({
+        ghInstalled: true,
+        accounts: [{ login: 'octo', active: true, signedIn: true }]
+      }),
+      owners: vi.fn().mockResolvedValue({ ok: true, owners: [{ login: 'octo', isOrg: false }] }),
+      checkRepo: vi.fn().mockResolvedValue({ ok: true }),
+      createRepo
+    }
+  }
+
+  it('gives an app with no remote a GitHub repository named after its folder', async () => {
+    const git = installGit({})
+    const createRepo = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, error: 'Create the GitHub repository: Not Found' })
+      .mockResolvedValue({ ok: true, url: 'https://github.com/octo/Trip-Logger' })
+    installGithub(createRepo)
+    render(<GitControl projectId="p1" refreshKey={0} folderName="Trip Logger" />)
+    fireEvent.click(await screen.findByRole('button', { name: /clean/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create a GitHub repository' }))
+
+    const name = (await screen.findByLabelText('Repository name')) as HTMLInputElement
+    expect(name.value).toBe('Trip-Logger')
+    const create = screen.getByRole('button', { name: 'Create repository' }) as HTMLButtonElement
+    await waitFor(() => expect(create.disabled).toBe(false), { timeout: 5000 })
+    fireEvent.click(create)
+    // A failure stays on the form, to try again.
+    expect(await screen.findByText('Create the GitHub repository: Not Found')).toBeTruthy()
+    expect(createRepo).toHaveBeenCalledWith('p1', {
+      account: 'octo',
+      owner: 'octo',
+      private: true,
+      name: 'Trip-Logger'
+    })
+
+    const fetches = git.remoteStatus.mock.calls.length
+    fireEvent.click(create)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Git' })).toBeNull())
+    expect(createRepo).toHaveBeenCalledTimes(2)
+    expect(git.remoteStatus.mock.calls.length).toBeGreaterThan(fetches)
+  })
+
+  it('doesn’t offer one to an app that has a remote', async () => {
+    installGit({ remoteStatus: vi.fn().mockResolvedValue(upstream) })
+    installGithub(vi.fn())
+    render(<GitControl projectId="p1" refreshKey={0} folderName="trip-logger" />)
+    fireEvent.click(await screen.findByRole('button', { name: /clean/ }))
+    await screen.findByRole('button', { name: 'Get latest' })
+    expect(screen.queryByRole('button', { name: 'Create a GitHub repository' })).toBeNull()
+  })
+})

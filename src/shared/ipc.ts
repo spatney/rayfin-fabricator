@@ -191,6 +191,23 @@ export interface GithubAccountsResult {
   error?: string
 }
 
+/** A GitHub repository to create for a project. */
+export interface GithubRepoRequest {
+  /** The GitHub CLI account that creates it, and that Fabricator then gets and pushes changes as. */
+  account: string
+  /** Who owns it: the account itself, or one of its organizations. */
+  owner: string
+  name: string
+  private: boolean
+}
+
+export interface GithubRepoResult {
+  ok: boolean
+  error?: string
+  /** The repository's page, such as `https://github.com/contoso/sales`. */
+  url?: string
+}
+
 /** A Microsoft Fabric account signed in on this computer. */
 export interface FabricAccount {
   id: string
@@ -1617,6 +1634,12 @@ export interface StudioProject {
    * Team projects are deployed by the workspace's pipeline, never locally.
    */
   team?: TeamBinding
+  /**
+   * The GitHub CLI account Fabricator created the project's GitHub repository
+   * as. Getting and pushing changes use that account, whichever account the
+   * GitHub CLI has active.
+   */
+  githubAccount?: string
   /** True when the folder no longer exists / is no longer a Rayfin project. */
   missing?: boolean
   /** The Rayfin version the project has installed (its CLI's), read when projects are listed. */
@@ -4019,6 +4042,19 @@ export interface RayfinStudioApi {
      * register + open it. Fails if the clone isn't a Rayfin project.
      */
     clone: (repo: string) => Promise<ProjectActionResult>
+    /** Where `account` (the CLI's active account when absent) can create repositories: itself, then its organizations. */
+    owners: (account?: string) => Promise<TeamOwnersResult>
+    /**
+     * Whether `owner/name` can take a new project repository: a valid name that's
+     * free, or an empty repository `account` can push to (which it then uses).
+     */
+    checkRepo: (account: string, owner: string, name: string) => Promise<ProjectNameCheck>
+    /**
+     * Create a GitHub repository for a project with its own git history and no
+     * remote yet, push its versions, and remember `request.account` for getting
+     * and pushing its changes.
+     */
+    createRepo: (projectId: string, request: GithubRepoRequest) => Promise<GithubRepoResult>
   }
 
   fabric: {

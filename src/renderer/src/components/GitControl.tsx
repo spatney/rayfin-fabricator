@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import type { GitBranch, GitRemoteStatus, GitStatus, GitSyncResult } from '../../../shared/ipc'
 import { useSuppressPreview } from '../overlay'
+import { useToast } from '../toast'
 import { Codicon } from './icons'
+import GithubRepoFields, {
+  NEW_GITHUB_REPO,
+  githubRepoName,
+  type GithubRepoChoice
+} from './github/GithubRepoFields'
 
 interface Props {
   projectId: string
@@ -17,6 +23,10 @@ interface Props {
   onSynced?: (packagesChanged?: boolean) => void
   /** Send Copilot a request in the app's chat (`display` is what the chat shows). */
   onSendToChat?: (display: string, prompt: string) => void
+  /** The project's folder name: a new GitHub repository is named after it. */
+  folderName?: string
+  /** Open setup, to install the GitHub CLI. */
+  onReviewSetup?: () => void
 }
 
 /** How often we re-fetch the remote to keep ahead/behind fresh (ms). */
@@ -56,18 +66,26 @@ export function conflictsPrompt(files: string[], branch?: string): string {
  * (ahead). The popover switches branches, gets the latest changes, pushes and
  * commits. When your changes and the latest ones overlap, it merges them and
  * asks Copilot to resolve the conflicts, then finishes (or cancels) the merge.
+ * A project with no remote yet can get a GitHub repository from it.
  */
 export default function GitControl({
   projectId,
   refreshKey,
   busy: chatBusy = false,
   onSynced,
-  onSendToChat
+  onSendToChat,
+  folderName,
+  onReviewSetup
 }: Props): JSX.Element | null {
+  const toast = useToast()
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [remote, setRemote] = useState<GitRemoteStatus | null>(null)
   const [open, setOpen] = useState(false)
-  const [view, setView] = useState<'main' | 'branches'>('main')
+  const [view, setView] = useState<'main' | 'branches' | 'github'>('main')
+  const [repoName, setRepoName] = useState('')
+  const [repoChoice, setRepoChoice] = useState<GithubRepoChoice>(NEW_GITHUB_REPO)
+  const [repoReady, setRepoReady] = useState(false)
+  const [creatingRepo, setCreatingRepo] = useState(false)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   /** Copilot is writing the commit message. */
@@ -136,6 +154,7 @@ export default function GitControl({
     setQuery('')
     setError(null)
     setOverlap(false)
+    setRepoName('')
   }, [open])
 
   // The popover is HTML; the live preview is a native webview that paints above
@@ -150,6 +169,8 @@ export default function GitControl({
   const ahead = remote?.ahead ?? 0
   const canPush = ahead > 0 && Boolean(remote?.hasUpstream)
   const merging = Boolean(status.merging)
+  /** No remote yet: it can get a GitHub repository. */
+  const canCreateRepo = Boolean(remote?.isRepo && !remote.hasRemote) && !status.noCommits
   const conflicts = status.conflicts ?? []
   const locked = chatBusy || syncing !== null || busy
   const waitTitle = chatBusy ? 'Wait for Copilot to finish this turn' : undefined
@@ -301,6 +322,45 @@ export default function GitControl({
     if (res?.ok) setOpen(false)
   }
 
+  /** Ask for a GitHub repository, named after the app's folder until the name's changed. */
+  function showGithub(): void {
+    setView('github')
+    setError(null)
+    setRepoName((current) => current || githubRepoName(folderName ?? ''))
+  }
+
+  async function createRepo(): Promise<void> {
+    const asked = projectId
+    setCreatingRepo(true)
+    setError(null)
+    try {
+      const res = await window.api.github.createRepo(asked, {
+        ...repoChoice,
+        name: repoName.trim()
+      })
+      if (projectRef.current !== asked) return
+      if (!res.ok) {
+        setError(res.error ?? 'Couldn’t create the GitHub repository.')
+        return
+      }
+      toast.success(
+        `The app’s versions are at ${res.url?.replace(/^https:\/\//, '') ?? 'its new repository'}.`,
+        { title: 'On GitHub' }
+      )
+      setOpen(false)
+      void refresh()
+      void loadRemote()
+    } catch (reason) {
+      if (projectRef.current === asked) {
+        setError(
+          reason instanceof Error ? reason.message : 'Couldn’t create the GitHub repository.'
+        )
+      }
+    } finally {
+      setCreatingRepo(false)
+    }
+  }
+
   const chipLabel = merging
     ? conflicts.length
       ? plural(conflicts.length, 'conflict')
@@ -384,11 +444,64 @@ export default function GitControl({
           onKeyDown={(e) => {
             if (e.key !== 'Escape') return
             e.preventDefault()
-            if (view === 'branches') setView('main')
+            if (view !== 'main') setView('main')
             else setOpen(false)
           }}
         >
-          {view === 'branches' ? (
+          {view === 'github' ? (
+            <>
+              <div className="git-branches-head">
+                <button
+                  type="button"
+                  className="git-back"
+                  aria-label="Back"
+                  disabled={creatingRepo}
+                  onClick={() => setView('main')}
+                >
+                  <Codicon name="arrow-left" />
+                </button>
+                <span className="git-sync-title">Create a GitHub repository</span>
+              </div>
+              <GithubRepoFields
+                compact
+                name={repoName}
+                onNameChange={setRepoName}
+                value={repoChoice}
+                onChange={setRepoChoice}
+                onReady={setRepoReady}
+                disabled={creatingRepo}
+                onReviewSetup={
+                  onReviewSetup &&
+                  (() => {
+                    setOpen(false)
+                    onReviewSetup()
+                  })
+                }
+              />
+              <div className="git-sync-sub">
+                Fabricator pushes {status.branch ?? 'this branch'} and its versions to it.
+                {dirty &&
+                  ` Your ${plural(status.changedCount, 'uncommitted change')} ${status.changedCount === 1 ? 'stays' : 'stay'} here until you commit and push.`}
+              </div>
+              {error && <div className="git-error">{error}</div>}
+              <div className="git-popover-actions">
+                <button
+                  className="btn btn--xs btn--ghost"
+                  disabled={creatingRepo}
+                  onClick={() => setView('main')}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn--xs btn--primary"
+                  disabled={!repoReady || creatingRepo || syncing !== null || busy}
+                  onClick={() => void createRepo()}
+                >
+                  {creatingRepo ? 'Creating…' : 'Create repository'}
+                </button>
+              </div>
+            </>
+          ) : view === 'branches' ? (
             <>
               <div className="git-branches-head">
                 <button
@@ -510,6 +623,23 @@ export default function GitControl({
                     onClick={showBranches}
                   >
                     Switch…
+                  </button>
+                </div>
+              )}
+
+              {!merging && canCreateRepo && (
+                <div className="git-sync-row">
+                  <div className="git-sync-text">
+                    <div className="git-sync-title">Not on GitHub yet</div>
+                    <div className="git-sync-sub">Keep the app’s versions in a repository</div>
+                  </div>
+                  <button
+                    className="btn btn--xs btn--ghost"
+                    aria-label="Create a GitHub repository"
+                    disabled={syncing !== null || busy}
+                    onClick={showGithub}
+                  >
+                    Create…
                   </button>
                 </div>
               )}

@@ -228,6 +228,7 @@ pub(crate) fn register_project(dir: &Path, display_name: Option<&str>) -> Studio
     fabric_preview_defaulted: None,
     needs_fabric_portal: None,
     team: None,
+    github_account: None,
     missing: None,
     rayfin_version: None,
     last_opened_at: None,

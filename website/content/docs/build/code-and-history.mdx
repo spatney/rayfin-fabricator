@@ -44,6 +44,7 @@ The status bar starts with a git item: the branch and the number of uncommitted 
 Open it to use:
 
 - **Switch…**, next to the branch, to switch branches.
+- **Create…**, next to **Not on GitHub yet**, to put an app with no remote on GitHub.
 - **Get latest** for remote changes waiting to be pulled.
 - **Push** for local commits ready to push.
 - **Commit all** after entering a **Commit message**.
@@ -51,6 +52,21 @@ Open it to use:
 To have Copilot write the message, select the sparkle button at the end of the message box, **Write a message with Copilot**. Copilot reads what the commit would include and writes one line on its Auto model, which you can edit before you select **Commit all**. It doesn't read lockfiles, `.env` files or the local backend's data in `.rayfin-local`.
 
 For team apps, Fabricator saves changes through the team workflow instead of using these local push and pull actions.
+
+### Put an app on GitHub
+
+When the app's repository has no remote yet, the git item's panel says **Not on GitHub yet**. To create a GitHub repository for it:
+
+1. Next to **Not on GitHub yet**, select **Create…**.
+2. Choose the **GitHub account** to create the repository as. To use another one, select **Add account** and finish signing in in the terminal window that opens.
+3. Choose the **Owner**: that account, or one of its organizations.
+4. Choose **Private** or **Public**.
+5. Check the **Repository name**. It starts as the project's folder name, with characters GitHub doesn't take turned into hyphens.
+6. Select **Create repository**.
+
+Fabricator creates the repository, pushes the branch you're on with its versions, and says "The app’s versions are at `github.com/<owner>/<name>`." Uncommitted changes stay on this computer until you commit and push them. From then on, use **Push** and **Get latest** as with any remote. You can also create the repository when you create the app; see [Create a new project](/docs/build/projects#create-a-new-project).
+
+Fabricator gets and pushes the app's changes as the account that created the repository, whichever account the GitHub CLI has active. If GitHub already has an empty repository with that name that the account can push to, Fabricator puts the app in it. If an organization doesn't let you create private repositories, Fabricator says so; choose **Public** or another owner. Creating a repository needs the GitHub CLI: when it isn't installed, select **Install from setup**, and when it isn't signed in, select **Sign in to GitHub**.
 
 ### Switch branches
 

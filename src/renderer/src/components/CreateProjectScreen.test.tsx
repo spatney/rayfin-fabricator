@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { GithubRepoResult } from '@shared/ipc'
 import { OverlayProvider } from '../overlay'
+import { ToastProvider } from '../toast'
 import CreateProjectScreen from './CreateProjectScreen'
 
 /**
@@ -207,6 +209,119 @@ describe('CreateProjectScreen location', () => {
       expect.objectContaining({ name: 'Trip Logger', location: 'C:\\code\\apps' })
     )
   })
+})
+
+describe('CreateProjectScreen suggested name', () => {
+  it('starts with a random name that’s free where the project goes, until one is typed', async () => {
+    const projects = (
+      window as unknown as { api: { projects: Record<string, ReturnType<typeof vi.fn>> } }
+    ).api.projects
+    let first: string | undefined
+    projects.checkName.mockImplementation(async (name: string) => {
+      first ??= name
+      return name === first ? { ok: false, message: 'Taken.' } : { ok: true }
+    })
+    projects.checkLocation = vi.fn(async () => ({ ok: true }))
+    await act(async () => {
+      render(
+        <OverlayProvider>
+          <CreateProjectScreen onCancel={() => {}} projectsFolder="C:\Users\me\RayfinProjects" />
+        </OverlayProvider>
+      )
+    })
+    const input = screen.getByPlaceholderText('My Rayfin App') as HTMLInputElement
+    await waitFor(() => expect(input.value).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/), { timeout: 5000 })
+    const suggested = input.value
+    expect(suggested).not.toBe(first)
+    expect(projects.checkName).toHaveBeenCalledWith(first, undefined, undefined)
+
+    // Another folder keeps the name while it's free there too.
+    fireEvent.change(screen.getByLabelText('Location'), { target: { value: 'C:\\code\\apps' } })
+    await waitFor(
+      () => expect(projects.checkName).toHaveBeenCalledWith(suggested, undefined, 'C:\\code\\apps'),
+      { timeout: 5000 }
+    )
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(input.value).toBe(suggested)
+
+    fireEvent.change(input, { target: { value: 'Trip Logger' } })
+    fireEvent.change(screen.getByLabelText('Location'), { target: { value: 'C:\\code\\demos' } })
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    expect(input.value).toBe('Trip Logger')
+  })
+})
+
+describe('CreateProjectScreen GitHub repository', () => {
+  it.each<[string, GithubRepoResult, string, string]>([
+    [
+      'it’s created',
+      { ok: true, url: 'https://github.com/octo/trip-logger' },
+      'On GitHub',
+      'The app’s first version is at github.com/octo/trip-logger.'
+    ],
+    [
+      'it isn’t',
+      { ok: false, error: 'github.com/octo/trip-logger already exists. Choose another name.' },
+      'Not on GitHub yet',
+      'github.com/octo/trip-logger already exists. Choose another name. Create it from the git item in the status bar.'
+    ]
+  ])(
+    'creates the project, then its repository, and opens it when %s',
+    async (_, repo, title, message) => {
+      const api = (
+        window as unknown as { api: Record<string, Record<string, ReturnType<typeof vi.fn>>> }
+      ).api
+      const project = {
+        id: 'p1',
+        name: 'Trip Logger',
+        path: 'C:/projects/trip-logger',
+        addedAt: ''
+      }
+      api.projects.create.mockResolvedValue({ ok: true, project })
+      const createRepo = vi.fn().mockResolvedValue(repo)
+      api.github = {
+        accounts: vi.fn().mockResolvedValue({
+          ghInstalled: true,
+          accounts: [{ login: 'octo', active: true, signedIn: true }]
+        }),
+        owners: vi.fn().mockResolvedValue({ ok: true, owners: [{ login: 'octo', isOrg: false }] }),
+        checkRepo: vi.fn().mockResolvedValue({ ok: true }),
+        createRepo
+      }
+      const onCreated = vi.fn()
+      await act(async () => {
+        render(
+          <ToastProvider>
+            <OverlayProvider>
+              <CreateProjectScreen onCancel={() => {}} onCreated={onCreated} />
+            </OverlayProvider>
+          </ToastProvider>
+        )
+      })
+      fireEvent.change(screen.getByPlaceholderText('My Rayfin App'), {
+        target: { value: 'Trip Logger' }
+      })
+      fireEvent.click(screen.getByRole('checkbox', { name: /^Create a GitHub repository/ }))
+      const create = screen.getByRole('button', { name: 'Create project' }) as HTMLButtonElement
+      await waitFor(() => expect(create.disabled).toBe(false), { timeout: 5000 })
+      await act(async () => {
+        fireEvent.click(create)
+      })
+
+      await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ ok: true, project }))
+      expect(createRepo).toHaveBeenCalledWith('p1', {
+        account: 'octo',
+        owner: 'octo',
+        private: true,
+        name: 'trip-logger'
+      })
+      expect(api.projects.create.mock.invocationCallOrder[0]).toBeLessThan(
+        createRepo.mock.invocationCallOrder[0]
+      )
+      expect(screen.getByText(title)).toBeTruthy()
+      expect(screen.getByText(message)).toBeTruthy()
+    }
+  )
 })
 
 describe('CreateProjectScreen starting point', () => {

@@ -12,17 +12,20 @@ Projects are the Rayfin apps Fabricator can open. From **Your projects**, you ca
 A new Fabricator project starts from the Universal App, the default template that comes with the Rayfin CLI. You do not choose a template type up front. The app begins small, with Fabric sign-in and no database, and Copilot grows it into the app you describe in chat. It turns on a database only when the app needs to store its own records.
 
 1. On **Your projects**, select **New project**.
-2. Type a **Project name**. Use letters, numbers, spaces, hyphens and underscores; Fabricator says
+2. Keep the suggested **Project name**, or type your own. Fabricator suggests a random name, such as "Caffeinated Narwhal", that's free where the project goes; typing replaces it. Use letters, numbers, spaces, hyphens and underscores; Fabricator says
    so under the name when it has other characters, and **Create project** stays off until you
    change it.
 3. Check the folder hint. Fabricator turns the name into a folder name and checks whether that folder already exists where the project goes.
 4. If team workspaces are enabled, under **Where**, choose **Just me, on this computer** unless you are creating a team app. Its hint says "It runs on this computer. Publish it to a Fabric workspace whenever you’re ready." With a team workspace chosen, it says "It runs on this computer while you build it. Your team sees it once you publish it."
 5. Under **Location**, keep your projects folder, or put this project in another folder: type the folder's full path, select **Browse…**, or select one of the folders under **Recent**. If the folder doesn't exist yet, Fabricator says "This folder doesn’t exist yet." Select **Create folder** to create it.
-6. Select **Create project**.
+6. Optionally, select **Create a GitHub repository** to keep the app's versions on GitHub. Choose the **GitHub account** that creates it, the **Owner** (that account, or one of its organizations), and **Private** or **Public**. The repository is named after the project's folder, as shown under the fields, and Fabricator says so when GitHub already has one with that name. See [Put an app on GitHub](/docs/build/code-and-history#put-an-app-on-github).
+7. Select **Create project**.
 
 ![The New project screen with Contoso Expenses typed as the project name, the folder name below it, the Details and Publish steps, and the Create project button.](/screenshots/new-project.webp)
 
 Fabricator creates the project with the newest Rayfin release that it can run on this computer, and keeps the project's Rayfin packages on that release line, such as `~1.36.0` in `package.json`, so the app keeps running here. It installs the packages, starts the project's version history, and opens the project in the workbench with chat ready. The app runs on this computer from the start, and its data starts empty and stays here. Publish it to a Fabric workspace whenever you're ready. See [Develop on this computer](/docs/build/local-development) and [Publish to Microsoft Fabric](/docs/ship/deploy).
+
+With **Create a GitHub repository** selected, Fabricator then creates the repository, pushes the app's first version to it, and says "The app’s first version is at `github.com/<owner>/<name>`." If it can't, the project opens anyway, and a **Not on GitHub yet** notice says why. Create the repository later from the git item in the status bar.
 
 The first project you create on a Rayfin release takes the longest, because npm works out which versions of the app's packages to install and downloads them. Fabricator records those versions. A minute after you create a project, it also installs the packages for your next new project in the background, so that project's packages are ready in a few seconds. After a week, Fabricator works the versions out again, so new projects still get package updates. Community examples reuse recorded versions, but nothing is installed ahead of time for them. See [Packages for new projects](/docs/reference/files#packages-for-new-projects).
 
@@ -31,7 +34,7 @@ While the project installs its packages, Ray, Fabricator's stingray, keeps you c
 > [!NOTE]
 > New local projects are saved under the **Workspace folder** in **Settings**, unless you choose another **Location**. You can also use **Change folder** on **Your projects**.
 
-**Recent** lists the last five folders, other than your projects folder, that you created projects in. A project created in a folder that's already in a git repository, such as the apps folder of a repository that holds several apps, keeps its version history in that repository instead of starting its own.
+**Recent** lists the last five folders, other than your projects folder, that you created projects in. A project created in a folder that's already in a git repository, such as the apps folder of a repository that holds several apps, keeps its version history in that repository instead of starting its own, so it can't have a GitHub repository of its own.
 
 ## Start from a community example
 

@@ -49,6 +49,7 @@ import {
   type DeleteProgressEvent,
   type ExportOptions,
   type FileDropEvent,
+  type GithubRepoRequest,
   type GoalsEventEnvelope,
   type GoalsRunRequest,
   type RayfinStudioApi,
@@ -214,7 +215,12 @@ export const api: RayfinStudioApi = {
     switchAccount: (login: string) => invoke('github_switch_account', { login }),
     signOutAccount: (login: string) => invoke('github_sign_out_account', { login }),
     listRepos: () => invoke('github_list_repos'),
-    clone: (repo: string) => invoke('github_clone', { input: repo })
+    clone: (repo: string) => invoke('github_clone', { input: repo }),
+    owners: (account?: string) => invoke('github_owners', { account }),
+    checkRepo: (account: string, owner: string, name: string) =>
+      invoke('github_check_repo', { account, owner, name }),
+    createRepo: (projectId: string, request: GithubRepoRequest) =>
+      invoke('github_create_repo', { id: projectId, request })
   },
 
   fabric: {
