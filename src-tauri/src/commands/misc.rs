@@ -113,6 +113,8 @@ fn launch_vscode(dir: &str) -> bool {
     c.arg(dir);
     c
   };
+  // The Rayfin commands run in VS Code aren't Fabricator's.
+  crate::services::rayfin_telemetry::for_user_program(&mut cmd);
   cmd
     .stdin(Stdio::null())
     .stdout(Stdio::null())

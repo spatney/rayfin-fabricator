@@ -33,6 +33,7 @@ pub mod preview;
 pub mod project_layout;
 pub mod project_mutation;
 pub mod quicklook;
+pub mod rayfin_telemetry;
 pub mod redirect_uris;
 pub mod report_migration;
 pub mod semantic_model;

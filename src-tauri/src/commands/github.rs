@@ -248,11 +248,10 @@ fn launch_login_terminal() -> bool {
 pub(crate) fn launch_in_terminal(cmd: &str) -> bool {
   // `start "" cmd /K <cmd>` opens a fresh console window that stays open (so the
   // user can read the one-time code and any errors). No CREATE_NO_WINDOW here —
-  // we want the window to be visible.
-  std::process::Command::new("cmd")
-    .args(["/C", "start", "", "cmd", "/K", cmd])
-    .spawn()
-    .is_ok()
+  // we want the window to be visible. What the user runs in it isn't Fabricator's.
+  let mut terminal = std::process::Command::new("cmd");
+  terminal.args(["/C", "start", "", "cmd", "/K", cmd]);
+  crate::services::rayfin_telemetry::for_user_program(&mut terminal).spawn().is_ok()
 }
 
 #[cfg(target_os = "macos")]
@@ -272,10 +271,9 @@ pub(crate) fn launch_in_terminal(cmd: &str) -> bool {
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
 pub(crate) fn launch_in_terminal(cmd: &str) -> bool {
   // Best-effort on Linux (not a shipped target): try a common terminal emulator.
-  std::process::Command::new("x-terminal-emulator")
-    .args(["-e", "sh", "-c", &format!("{cmd}; exec sh")])
-    .spawn()
-    .is_ok()
+  let mut terminal = std::process::Command::new("x-terminal-emulator");
+  terminal.args(["-e", "sh", "-c", &format!("{cmd}; exec sh")]);
+  crate::services::rayfin_telemetry::for_user_program(&mut terminal).spawn().is_ok()
 }
 
 /* --------------------------------- list ----------------------------------- */

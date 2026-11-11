@@ -130,6 +130,10 @@ pub fn run() {
   // store (issue #17). Must run before anything spawns the CLI or its helpers.
   enable_rayfin_encryption_fallback();
 
+  // Label the Rayfin CLI's telemetry of every command Fabricator runs as
+  // Fabricator's (`RAYFIN_TELEMETRY_ENV`). Also before anything spawns the CLI.
+  services::rayfin_telemetry::init();
+
   // Point the Rayfin CLI at the Fabric account chosen in Accounts (each extra
   // account has its own config folder). Also before anything spawns the CLI.
   services::fabric_accounts::init();

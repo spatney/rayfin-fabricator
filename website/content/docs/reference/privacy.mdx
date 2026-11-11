@@ -109,6 +109,12 @@ Fabricator keeps the values of a server's environment variables and headers in W
 
 When you publish, Fabricator runs the project-pinned Rayfin CLI. The app and its platform configuration are sent to the Microsoft Fabric workspace you choose. Fabric sign-in and deployment are handled by Rayfin and Microsoft Fabric.
 
+## Rayfin's tools send their own telemetry
+
+Fabricator runs Rayfin's command-line tools to sign you in to Fabric, create apps and publish them, and chat runs them as it works. Those tools collect usage telemetry of their own unless you opt out. See [Telemetry](https://rayfin.ai/docs/reference/cli/telemetry) in Rayfin's docs.
+
+Fabricator sets `RAYFIN_TELEMETRY_ENV` to `fabricator` for every Rayfin command it runs, so that telemetry shows the commands came from Fabricator. The label is all Fabricator adds, and it doesn't change whether telemetry is sent. VS Code and the sign-in terminals that Fabricator opens for you keep your own setting.
+
 ## Exported projects stay with you until you send them
 
 When you export a project, Fabricator saves a `.fabricator` file where you choose and sends nothing anywhere: you decide who gets it. It holds the app's code, and, as you choose, its version history and where it's published. Anything in those goes to whoever you send it to.
