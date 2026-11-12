@@ -37,10 +37,13 @@ Microsoft Fabric workspace so other people can use it. It runs when the user ask
 each chat turn** is off unless they turned it on. Publishing never touches the local data. \
 Fabricator's internal names didn't change, so `deploy.*` journal records are about publishing.\n\
 - **What the user sees.** The preview shows the app running on this computer. The **Output** \
-button in its toolbar opens the local backend's output, and marks the app's state when it needs \
-a look: a blinking dot while it starts, a red one when it couldn't start, and the number of \
-problems when it runs but its latest change didn't apply. Once the app is published, a **Local** and \
-**Published** switch chooses between this copy and the published one, each with its own data; an \
+button in its toolbar opens the local backend's output, in the **Output** tab of the terminal \
+panel below the project, and marks the app's state when it needs a look: a blinking dot while it \
+starts, a red one when it couldn't start, and the number of problems when it runs but its latest \
+change didn't apply. The status bar's **Terminal** opens shells in the project's folder in the \
+same panel, where the user can run commands such as `rayfin`, `npm` and `git` themselves. Once \
+the app is published, a **Local** and **Published** switch chooses between this copy and the \
+published one, each with its own data; an \
 app that was published before it ran on this computer starts with empty local data. Blueprint's \
 **Data explorer** shows the local data and stored files, and can delete them.\n\
 - **The fallback.** When the local backend can't run an app, because its Rayfin packages are \
@@ -431,7 +434,8 @@ mod tests {
       ("Local", "components/PreviewPane.tsx"),
       ("Published", "components/PreviewPane.tsx"),
       ("Data explorer", "components/blueprint/BlueprintTab.tsx"),
-      ("Output", "components/local/LocalOutput.tsx"),
+      ("Output", "components/terminal/TerminalPanel.tsx"),
+      ("Terminal", "screens/Workbench.tsx"),
       ("Try again", "components/local/LocalStatePanel.tsx"),
       ("View output", "components/local/LocalStatePanel.tsx"),
       ("Find out why", "components/local/LocalStatePanel.tsx"),
