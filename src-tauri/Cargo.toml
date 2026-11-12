@@ -79,6 +79,9 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 # Decode an installed app's icon for its window (services/apps). Already in the tree
 # through Tauri's build tooling, so no new crates.
 png = "0.18"
+# The project terminal's pseudoterminals (services/terminal): ConPTY on Windows, a Unix PTY
+# on macOS. WezTerm's own PTY layer.
+portable-pty = "0.9"
 
 # Windows-only: capture the native WebView2 preview to a PNG or JPEG (ICoreWebView2::CapturePreview).
 # webview2-com / windows versions are pinned to what the vendored wry (and tauri) resolve to,

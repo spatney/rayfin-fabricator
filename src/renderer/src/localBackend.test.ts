@@ -1,13 +1,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { invoke } from '@tauri-apps/api/core'
-import type {
-  LocalLogEvent,
-  LocalProblem,
-  LocalReady,
-  LocalStatus,
-  StudioProject
-} from '@shared/ipc'
+import type { LocalProblem, LocalReady, LocalStatus, StudioProject } from '@shared/ipc'
 import { api } from './api'
 import {
   LocalBackendError,
@@ -22,8 +16,7 @@ import {
   refusedSchemaLosses,
   retriesAfterTurn,
   runningProblems,
-  useLocalBackend,
-  useLocalBackendLogs
+  useLocalBackend
 } from './localBackend'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
@@ -78,19 +71,7 @@ function problem(code: string, details: LocalProblem['details'] = null): LocalPr
   return { code, message: `${code} happened.`, hint: null, fatal: true, details, time: null }
 }
 
-function line(seq: number, projectId = 'p1'): LocalLogEvent {
-  return {
-    projectId,
-    seq,
-    source: 'vite',
-    level: 'info',
-    line: `line ${seq}`,
-    time: '2026-10-30T03:12:09.512Z'
-  }
-}
-
 let emitState: (status: LocalStatus) => void
-let emitLog: (line: LocalLogEvent) => void
 let local: Record<string, Mock>
 let preview: { resetSiteData: Mock }
 
@@ -109,10 +90,6 @@ beforeEach(() => {
     logs: vi.fn(async () => []),
     onState: vi.fn((cb: (status: LocalStatus) => void) => {
       emitState = cb
-      return () => {}
-    }),
-    onLog: vi.fn((cb: (line: LocalLogEvent) => void) => {
-      emitLog = cb
       return () => {}
     })
   }
@@ -260,23 +237,6 @@ describe('useLocalBackend', () => {
     expect(result.current.status).toBeNull()
     expect(local.start).not.toHaveBeenCalled()
     expect(local.status).not.toHaveBeenCalled()
-  })
-})
-
-describe('useLocalBackendLogs', () => {
-  it('merges the fetched tail with live lines, without repeats', async () => {
-    let resolveTail: (lines: LocalLogEvent[]) => void = () => {}
-    local.logs.mockReturnValueOnce(new Promise((resolve) => (resolveTail = resolve)))
-    const { result } = renderHook(() => useLocalBackendLogs('p1', 3))
-    act(() => emitLog(line(3)))
-    act(() => emitLog(line(9, 'p2')))
-    await act(async () => resolveTail([line(1), line(2), line(3)]))
-    expect(local.logs).toHaveBeenCalledWith('p1', 3)
-    expect(result.current.map((l) => l.seq)).toEqual([1, 2, 3])
-
-    act(() => emitLog(line(4)))
-    act(() => emitLog(line(4)))
-    expect(result.current.map((l) => l.seq)).toEqual([2, 3, 4])
   })
 })
 

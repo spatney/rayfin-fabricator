@@ -166,8 +166,19 @@ pub fn run() {
     .manage(services::local_backend::LocalBackends::default())
     .manage(services::apps::Apps::default())
     .manage(commands::goals::GoalRunners::default())
+    .manage(services::terminal::Terminals::default())
     // The stills the preview leaves in its place under an HTML overlay.
     .register_uri_scheme_protocol(services::preview::STILL_SCHEME, services::preview::serve_still)
+    // The renderer's terminals live on its page: a page that loads again (a
+    // reload) has none, so the shells it had end.
+    .on_page_load(|webview, payload| {
+      if webview.label() == "main" && matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+        if let Some(terminals) = webview.try_state::<services::terminal::Terminals>() {
+          let terminals = terminals.inner().clone();
+          std::thread::spawn(move || terminals.kill_all(None));
+        }
+      }
+    })
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -584,6 +595,14 @@ pub fn run() {
       commands::local::local_report_fallback,
       // Preview as: clear the local preview's site data and reload it
       services::preview::preview_reset_site_data,
+      // the project terminal
+      commands::terminal::terminal_shells,
+      commands::terminal::terminal_spawn,
+      commands::terminal::terminal_write,
+      commands::terminal::terminal_resize,
+      commands::terminal::terminal_pause,
+      commands::terminal::terminal_kill,
+      commands::terminal::terminal_kill_all,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
@@ -614,6 +633,9 @@ pub fn run() {
         services::local_backend::kill_all(app);
         services::apps::kill_all(app);
         commands::goals::kill_all(app);
+        if let Some(terminals) = app.try_state::<services::terminal::Terminals>() {
+          terminals.kill_all(None);
+        }
       }
     });
 }

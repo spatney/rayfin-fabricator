@@ -934,6 +934,26 @@ code {
   background: var(--bg-elev-2);
 }
 
+/* The terminal's button stays lit while the open project's terminal shows. */
+.statusbar-terminal--open {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+/* How many of the open project's shells are running. */
+.statusbar-count {
+  min-width: 16px;
+  padding: 0 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+  text-align: center;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
 /* The bar's menus (interface zoom): a native select with its arrow swapped for
    the bar's chevron, sized to the chosen option so the chevron sits right after it. */
 .statusbar-menu {

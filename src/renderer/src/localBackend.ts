@@ -8,11 +8,11 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import type {
   LocalBackendState,
   LocalCommandError,
-  LocalLogEvent,
   LocalProblem,
   LocalReady,
   LocalStartOptions,
   LocalStatus,
+  RayfinVersionInfo,
   StudioProject,
   TeamDeployRecord
 } from '@shared/ipc'
@@ -201,6 +201,27 @@ export function localStateLabel(status: LocalStatus | null | undefined, pending 
   }
 }
 
+/**
+ * How the app on this computer looks at a glance, for a dot: running, running
+ * with a problem ({@link runningProblems}), starting, failed, or stopped.
+ */
+export function localTone(
+  status: LocalStatus | null | undefined,
+  pending = false
+): 'ok' | 'warn' | 'busy' | 'err' | 'idle' {
+  switch (status?.state) {
+    case 'running':
+      return runningProblems(status).length > 0 ? 'warn' : 'ok'
+    case 'starting':
+    case 'restarting':
+      return 'busy'
+    case 'error':
+      return 'err'
+    default:
+      return pending ? 'busy' : 'idle'
+  }
+}
+
 /** The other `rayfin-local serve` that holds the project (`already-serving`), if that's why it isn't running. */
 export function alreadyServing(
   status: LocalStatus | null | undefined
@@ -345,6 +366,21 @@ export function localFallbackCode(
   if (!status) return null
   if (sdkFallback(status)) return 'sdk-unsupported'
   return unsupportedConnectors(status).length > 0 ? 'connector-unsupported' : null
+}
+
+/**
+ * The Rayfin version the backend last found it can't run, when that's why the
+ * app previews on its backend in Fabric. It's what the backend reported, so it
+ * stays the same after the app's packages change, until it starts again.
+ */
+export function fallbackSdkVersion(status: LocalStatus | null | undefined): string | null {
+  return (status && sdkFallback(status)?.version) || null
+}
+
+/** The Rayfin SDK version an app has installed: its packages ship in lockstep. */
+export function installedSdkVersion(info: RayfinVersionInfo | null | undefined): string | null {
+  const sdk = info?.packages.filter((p) => p.kind === 'sdk' && p.installed) ?? []
+  return (sdk.find((p) => p.name === '@microsoft/rayfin-core') ?? sdk[0])?.installed ?? null
 }
 
 /**
@@ -534,52 +570,4 @@ export function useLocalBackend(projectId: string | null | undefined): LocalBack
 
 function isStatus(value: unknown): value is LocalStatus {
   return Boolean(value && typeof value === 'object' && 'revision' in value && 'projectId' in value)
-}
-
-/** Merge output lines by `seq`, without repeats, keeping the last `limit`. */
-export function mergeLogLines(
-  lines: LocalLogEvent[],
-  more: LocalLogEvent[],
-  limit: number
-): LocalLogEvent[] {
-  const bySeq = new Map<number, LocalLogEvent>()
-  for (const line of [...lines, ...more]) bySeq.set(line.seq, line)
-  const merged = [...bySeq.values()].sort((a, b) => a.seq - b.seq)
-  return merged.slice(Math.max(0, merged.length - limit))
-}
-
-/**
- * A project's recent output, live: the last `limit` lines (fetched on mount)
- * followed by new ones from `local:log`.
- */
-export function useLocalBackendLogs(
-  projectId: string | null | undefined,
-  limit = 500
-): LocalLogEvent[] {
-  const [lines, setLines] = useState<LocalLogEvent[]>([])
-
-  useEffect(() => {
-    setLines([])
-    if (!projectId) return
-    let cancelled = false
-    let loaded = false
-    const early: LocalLogEvent[] = []
-    const off = window.api.local.onLog((line) => {
-      if (line.projectId !== projectId) return
-      if (!loaded) early.push(line)
-      else setLines((current) => mergeLogLines(current, [line], limit))
-    })
-    const settle = (tail: LocalLogEvent[]): void => {
-      if (cancelled) return
-      loaded = true
-      setLines(mergeLogLines(tail, early, limit))
-    }
-    window.api.local.logs(projectId, limit).then(settle, () => settle([]))
-    return () => {
-      cancelled = true
-      off()
-    }
-  }, [projectId, limit])
-
-  return lines
 }

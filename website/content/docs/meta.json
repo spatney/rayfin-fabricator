@@ -19,6 +19,7 @@
     "build/local-development",
     "build/touch-up",
     "build/code-and-history",
+    "build/terminal",
     "build/data-model",
     "build/migrate-power-bi",
     "build/app-gallery",

@@ -13,7 +13,7 @@ export interface MenuLayout {
  * zoomed, but offsets set on an element under it are zoomed again, so they're
  * divided by it.
  */
-function uiZoom(): number {
+export function uiZoom(): number {
   const zoom = Number(document.documentElement.style.zoom)
   return Number.isFinite(zoom) && zoom > 0 ? zoom : 1
 }

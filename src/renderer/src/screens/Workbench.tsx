@@ -60,7 +60,9 @@ import { LOCAL_QUESTION } from '../components/local/problems'
 import {
   backendStamp,
   changesLocalSupport,
+  fallbackSdkVersion,
   hasFabricBackend,
+  installedSdkVersion,
   isLocalBackendActive,
   localBackendStore,
   localFallbackCode,
@@ -80,7 +82,7 @@ import { withActivity } from '../components/team/appRun'
 import { useTeamWork } from '../components/team/useTeamWork'
 import ProjectDependencyGuard from '../components/ProjectDependencyGuard'
 import WorkspaceStatus from '../components/WorkspaceStatus'
-import { SuppressPreview } from '../overlay'
+import { SuppressPreview, topLayerOpen } from '../overlay'
 import RayfinVersionControl from '../components/RayfinVersionControl'
 import StatusMenu from '../components/StatusMenu'
 import AdvisorView from '../components/advisor/AdvisorView'
@@ -138,6 +140,13 @@ import { useTouchUp, type PickSurface } from '../pick/useTouchUp'
 import { readStoredSelection, selectionArgs, writeStoredSelection, type ModelSelection } from '../modelSelection'
 import { toProjectName } from '../projectName'
 import { ThumbnailCapture } from '../thumbnails'
+import {
+  liveCount,
+  projectTerminals,
+  terminalFocused,
+  terminalStore,
+  useTerminalState
+} from '../terminal/store'
 
 /** Help's offered steps that open a browser or a folder rather than a place in the app. */
 const HELP_ACTIONS_ELSEWHERE = new Set<HelpAction['id']>([
@@ -151,9 +160,14 @@ const MIGRATION_MODEL_KEY = 'fabricator.migration.model'
 /** How long the local backend's rebuild has to settle (an analysis, then the schema
  *  and functions it leads to) before the open page loads again, once. */
 const LOCAL_RELOAD_SETTLE_MS = 500
+/** How often an app that falls back for its Rayfin version has that version read again:
+ *  a terminal can update its packages, which nothing else notices. */
+const SDK_RECHECK_MS = 15_000
 
 // Monaco is heavy (~7 MB); only load the code viewer when the Code tab is opened.
 const CodeViewer = lazy(() => import('../components/CodeViewer'))
+// xterm.js loads with the terminal the first time it's opened.
+const TerminalPanel = lazy(() => import('../components/terminal/TerminalPanel'))
 
 /** Hydrate a persisted message into a live (non-pending) UI message. */
 function toUi(m: ChatMessage): UIChatMessage {
@@ -598,6 +612,11 @@ export default function Workbench({
   projectsRef.current = projects
   /** The currently active project (or null). Declared early — effects depend on it. */
   const active = projects?.projects.find((p) => p.id === projects.activeProjectId) ?? null
+  /** The open project's terminals, in the panel under its views. */
+  const terminalState = useTerminalState()
+  const activeTerminals = projectTerminals(terminalState, active?.id)
+  /** A shell is in front in the panel, rather than the app's Output. */
+  const shellShowing = activeTerminals.open && !activeTerminals.output
   /** The project whose preview first had something to show (see onSettled). */
   const [previewSettledId, setPreviewSettledId] = useState<string | null>(null)
   const onSettledRef = useRef(onSettled)
@@ -693,9 +712,15 @@ export default function Workbench({
   const removals = useProjectRemovals({
     onSignedIn: onAuthChanged,
     // A live preview runs from the project's folder; stop it before the folder moves.
+    // So do its terminals' shells, which would keep it in use on Windows.
     beforeTrash: async (project) => {
       stopDevServer(project.id)
-      await stoppingRef.current.get(project.id)
+      const terminals = projectTerminals(terminalStore.getState(), project.id).tabs.length > 0
+      terminalStore.forget(project.id)
+      await Promise.all([
+        stoppingRef.current.get(project.id),
+        terminals ? window.api.terminal.killAll(project.id).catch(() => undefined) : undefined
+      ])
     },
     onRemoved: (project, next, appDeleted) => {
       setProjects((current) => (current ? withoutProject(current, project.id) : next))
@@ -972,7 +997,8 @@ export default function Workbench({
     // Guard against a stale response after the user switches projects.
     if (activeIdRef.current === projectId) {
       rayfinVerForRef.current = projectId
-      setRayfinVer(info)
+      // The same versions again (read now and then, see SDK_RECHECK_MS) change nothing.
+      setRayfinVer((current) => (JSON.stringify(current) === JSON.stringify(info) ? current : info))
     }
   }, [])
 
@@ -1565,11 +1591,14 @@ export default function Workbench({
       const lastUser = messages.find((m) => m.role === 'user')
       const answer = messages.find((m) => m.role === 'assistant')
       const projectPath = projectsRef.current?.projects.find((p) => p.id === projectId)?.path ?? ''
-      // The turn changed files: Copilot reported them, or its transcript shows
-      // the edits (the "Changed" files under the answer).
-      const changedFiles =
-        result.filesModified.length > 0 ||
-        (answer ? filesChanged(answer.tools, projectPath).length > 0 : false)
+      // The files the turn changed: what Copilot reported, and the edits its
+      // transcript shows (the "Changed" files under the answer), which can be
+      // more.
+      const turnFiles = [
+        ...result.filesModified,
+        ...(answer ? filesChanged(answer.tools, projectPath).map((file) => file.path) : [])
+      ]
+      const changedFiles = turnFiles.length > 0
       // A personal app's turn that changed files is saved as a version, named
       // after what was asked, so History goes back turn by turn: while turns
       // don't publish, nothing else saves it. (A team app saves each turn to its
@@ -1621,11 +1650,7 @@ export default function Workbench({
         // A change to its packages or rayfin.yml may let this computer run the
         // open app: its local backend starts to find out, while the preview
         // stays as it is.
-        if (
-          fallback &&
-          activeIdRef.current === projectId &&
-          changesLocalSupport(result.filesModified)
-        ) {
+        if (fallback && activeIdRef.current === projectId && changesLocalSupport(turnFiles)) {
           void window.api.local.start(projectId).catch(() => {})
         }
       }
@@ -1986,6 +2011,22 @@ export default function Workbench({
     return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
+  // Ctrl+` (on macOS too, as in VS Code) shows the open project's terminal, or
+  // puts it away while it has the keyboard; Ctrl+Shift+` starts another. Not
+  // over a dialog or Search, which keep the keyboard.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!event.ctrlKey || event.altKey || event.metaKey || event.code !== 'Backquote') return
+      if (event.defaultPrevented || topLayerOpen()) return
+      event.preventDefault()
+      if (event.repeat) return
+      if (event.shiftKey) newTerminalRef.current()
+      else toggleTerminalRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   // Reflect the active project in the OS window title so users running one
   // instance per project can tell them apart in the taskbar / Alt-Tab. The
   // project name leads so it stays visible when the title is truncated.
@@ -2163,6 +2204,7 @@ export default function Workbench({
 
   async function removeFromList(p: StudioProject): Promise<void> {
     setProjects(await window.api.projects.remove(p.id, false))
+    terminalStore.forget(p.id)
   }
 
   /** Open Manage project, unless the project is on its way out. */
@@ -2371,6 +2413,42 @@ export default function Workbench({
   }
   const toggleHelpRef = useRef(toggleHelp)
   toggleHelpRef.current = toggleHelp
+
+  /** The terminal opens on the project's own screen, not under Help or a full-screen flow. */
+  const terminalBlocked =
+    showCreate || showClone || showMigrate || signingOut || showHelp || showHelpOffline
+  /** Back to the open project's own screen, from Home or an overview, for its terminal. */
+  function showProjectScreen(): void {
+    setShowHome(false)
+    setTeamMap(null)
+    setGallery(null)
+  }
+  /**
+   * Show the open project's shells, or move the keyboard into them, or put the
+   * terminal away when a shell has it. From the app's Output, it goes to a shell.
+   */
+  function toggleTerminal(): void {
+    const id = activeIdRef.current
+    if (!id || terminalBlocked) return
+    const terminals = projectTerminals(terminalStore.getState(), id)
+    if (terminals.open && !terminals.output && terminalFocused() && onProjectScreen) {
+      terminalStore.close(id)
+      return
+    }
+    showProjectScreen()
+    terminalStore.open(id)
+  }
+  /** Start another terminal in the open project. */
+  function newTerminal(): void {
+    const id = activeIdRef.current
+    if (!id || terminalBlocked) return
+    showProjectScreen()
+    terminalStore.add(id)
+  }
+  const toggleTerminalRef = useRef(toggleTerminal)
+  toggleTerminalRef.current = toggleTerminal
+  const newTerminalRef = useRef(newTerminal)
+  newTerminalRef.current = newTerminal
 
   /** Search opens over the workbench, but not over a dialog, Help or a full-screen flow. */
   const searchBlocked = showCreate || showClone || showMigrate || signingOut
@@ -2653,6 +2731,32 @@ export default function Workbench({
     if (!isLocalBackendActive(localBackendStore.get(localId))) void localRef.current.start()
   }, [localId, depsReady, localKnown, fallbackNow])
 
+  // An app that falls back because of its Rayfin version is checked again once
+  // its packages are another version: a Rayfin update in chat, a merge, or a
+  // terminal. What the backend said stays until it starts again, so it starts,
+  // to find out, while the preview stays as it is until it runs (see above).
+  // Once per version, so a backend that reads the version differently doesn't
+  // start over and over. Turns, publishes and opening the app read the version;
+  // nothing notices a terminal's update, so it's read now and then meanwhile.
+  const rejectedSdk = localId && activeFabricBackend ? fallbackSdkVersion(localStatus) : null
+  const installedSdk = rayfinVerForRef.current === localId ? installedSdkVersion(rayfinVer) : null
+  useEffect(() => {
+    if (!localId || !rejectedSdk) return
+    const timer = window.setInterval(
+      () => void refreshRayfinVer(localId).catch(() => {}),
+      SDK_RECHECK_MS
+    )
+    return () => window.clearInterval(timer)
+  }, [localId, rejectedSdk, refreshRayfinVer])
+  const sdkRetriedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!localId || !rejectedSdk || !installedSdk || installedSdk === rejectedSdk) return
+    const attempt = `${localId}@${installedSdk}`
+    if (localActive || sdkRetriedRef.current === attempt) return
+    sdkRetriedRef.current = attempt
+    void window.api.local.start(localId).catch(() => {})
+  }, [localId, rejectedSdk, installedSdk, localActive])
+
   // The page takes the app's code through hot updates. When the backend rebuilds
   // what the page uses (its data model, functions or services) it loads again,
   // once things settle: not while functions build, nor mid-turn, when Copilot
@@ -2815,6 +2919,7 @@ export default function Workbench({
       autoDeploy: !manualDeploy,
       migrationEnabled,
       goalsEnabled: goalsOn,
+      terminalOpen: shellShowing && onProjectScreen,
       inGallery: Boolean(gallery),
       teamWorkspaceName: activeTeamWorkspace?.name,
       theme: settings?.theme ?? 'system',
@@ -2862,6 +2967,20 @@ export default function Workbench({
         showCodeTab: (tab) => {
           toProject()
           showCodeTab(tab)
+        },
+        showTerminal: (show) => {
+          if (!active) return
+          if (show) {
+            toProject()
+            terminalStore.open(active.id)
+          } else {
+            terminalStore.close(active.id)
+          }
+        },
+        newTerminal: () => {
+          if (!active) return
+          toProject()
+          terminalStore.add(active.id)
         },
         goHome: () => {
           setTeamMap(null)
@@ -3205,7 +3324,13 @@ export default function Workbench({
         />
       ) : (
         <div className="workbench">
-          <main className="content">
+          <main
+            className={`content${
+              activeTerminals.open && terminalState.maximized && onProjectScreen
+                ? ' content--terminal-max'
+                : ''
+            }`}
+          >
             {notice && <div className="alert alert--error content-alert">{notice}</div>}
             {active ? (
               <ProjectDependencyGuard
@@ -3547,6 +3672,16 @@ export default function Workbench({
                 />
               </>
             ) : null}
+            {active && activeTerminals.open && (
+              <Suspense fallback={null}>
+                <TerminalPanel
+                  project={active}
+                  hidden={!onProjectScreen}
+                  onOpenFile={openFileInCode}
+                  local={runsLocally ? local : undefined}
+                />
+              </Suspense>
+            )}
           </main>
         </div>
       )}
@@ -3610,10 +3745,39 @@ export default function Workbench({
           </span>
         </span>
 
-        {/* One action. Help is the support surface: it answers questions,
-            links the documentation, and writes a bug report when the problem
-            is ours. */}
+        {/* The actions: the open project's terminal, and Help, the support
+            surface: it answers questions, links the documentation, and writes
+            a bug report when the problem is ours. */}
         <span className="statusbar-actions">
+          {active && (
+            <button
+              className={`statusbar-report statusbar-terminal${
+                shellShowing && onProjectScreen ? ' statusbar-terminal--open' : ''
+              }`}
+              onClick={() => {
+                if (shellShowing && onProjectScreen) {
+                  terminalStore.close(active.id)
+                } else {
+                  showProjectScreen()
+                  terminalStore.open(active.id)
+                }
+              }}
+              aria-pressed={shellShowing && onProjectScreen}
+              aria-keyshortcuts="Control+`"
+              title={`Terminal — run commands in ${active.name}’s folder (${isMac() ? '⌃`' : 'Ctrl+`'})`}
+            >
+              <Codicon name="terminal" className="statusbar-ico" />
+              Terminal
+              {liveCount(activeTerminals) > 0 && (
+                <span
+                  className="statusbar-count"
+                  aria-label={`${liveCount(activeTerminals)} running`}
+                >
+                  {liveCount(activeTerminals)}
+                </span>
+              )}
+            </button>
+          )}
           <button
             className="statusbar-report statusbar-help"
             onClick={() => openHelp()}

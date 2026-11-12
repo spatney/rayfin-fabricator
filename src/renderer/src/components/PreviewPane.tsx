@@ -16,6 +16,7 @@ import {
   type LocalBackend
 } from '../localBackend'
 import { DEVICES, deviceHostHeight, deviceHostWidth, type DeviceId } from '../previewDevices'
+import { terminalStore, useOutputShowing } from '../terminal/store'
 import { readFabricatorTheme } from '../pick/hostTheme'
 import type { TouchUp, PickSurface } from '../pick/useTouchUp'
 import { LABEL as POINT_AND_EDIT, TouchUpButton } from '../pick/TouchUpButton'
@@ -40,7 +41,6 @@ import LocalStatePanel from './local/LocalStatePanel'
 import LocalOutputButton from './local/LocalOutputButton'
 import LocalPublishedInfo from './local/LocalPublishedInfo'
 import PreviewAsMenu from './local/PreviewAsMenu'
-import LocalOutput from './local/LocalOutput'
 import SeedOffer from './local/SeedOffer'
 import {
   FallbackNote,
@@ -361,9 +361,8 @@ export default function PreviewPane({
   }, [running])
   useEffect(() => setFailureDismissed(false), [project.id])
 
-  // The local backend's output, under the preview.
-  const [outputOpen, setOutputOpen] = useState(false)
-  useEffect(() => setOutputOpen(false), [project.id])
+  // The app's output on this computer: the terminal panel's Output tab.
+  const outputShowing = useOutputShowing(project.id)
 
   // An app published before it ran here: its local data starts empty, so the
   // info button beside Local and Published stands out until it's opened, or the
@@ -1263,8 +1262,12 @@ export default function PreviewPane({
               <LocalOutputButton
                 status={local.status}
                 pending={!local.status || local.busy}
-                open={outputOpen}
-                onToggle={() => setOutputOpen((open) => !open)}
+                open={outputShowing}
+                onToggle={() =>
+                  outputShowing
+                    ? terminalStore.close(project.id)
+                    : terminalStore.showOutput(project.id)
+                }
               />
             )}
             <button
@@ -1363,7 +1366,7 @@ export default function PreviewPane({
           <LocalStatePanel
             name={project.name}
             local={local}
-            onViewOutput={() => setOutputOpen(true)}
+            onViewOutput={() => terminalStore.showOutput(project.id)}
             onDiagnose={onDiagnoseLocal}
             onOpenSetup={onOpenSetup}
             onReviewSchema={onReviewSchema}
@@ -1408,10 +1411,6 @@ export default function PreviewPane({
           </div>
         )}
       </div>
-
-      {outputOpen && localView && local && (
-        <LocalOutput projectId={project.id} local={local} onClose={() => setOutputOpen(false)} />
-      )}
     </div>
   )
 }

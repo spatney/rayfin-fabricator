@@ -8,7 +8,7 @@
  * Tauri convention: command arguments are passed as a JSON object with camelCase
  * keys, which Tauri maps to the Rust command's snake_case parameters.
  */
-import { invoke } from '@tauri-apps/api/core'
+import { Channel, invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { serializePreviewMutations } from './previewSurface'
@@ -60,6 +60,8 @@ import {
   type TeamProgressEvent,
   type TeamResourceRequest,
   type TeamRunner,
+  type TerminalEvent,
+  type TerminalSpawnRequest,
   type ToolId,
   type UpdateProgress,
   type ZipProgressEvent
@@ -761,6 +763,22 @@ export const api: RayfinStudioApi = {
     draftCancel: (projectId: string) => invoke('goals_draft_cancel', { projectId }),
     onEvent: (cb: (envelope: GoalsEventEnvelope) => void) =>
       subscribe<GoalsEventEnvelope>(IpcChannels.goalsEvent, cb)
+  },
+
+  terminal: {
+    shells: () => invoke('terminal_shells'),
+    spawn: (request: TerminalSpawnRequest, onEvent: (event: TerminalEvent) => void) => {
+      // A channel of its own: output arrives in order, and only here.
+      const events = new Channel<TerminalEvent>()
+      events.onmessage = onEvent
+      return invoke('terminal_spawn', { ...request, onEvent: events })
+    },
+    write: (id: string, data: string) => invoke('terminal_write', { id, data }),
+    resize: (id: string, cols: number, rows: number) =>
+      invoke('terminal_resize', { id, cols, rows }),
+    pause: (id: string, paused: boolean) => invoke('terminal_pause', { id, paused }),
+    kill: (id: string) => invoke('terminal_kill', { id }),
+    killAll: (projectId?: string) => invoke('terminal_kill_all', { projectId })
   }
 }
 

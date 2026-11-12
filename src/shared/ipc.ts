@@ -3771,6 +3771,71 @@ export interface HelpEventEnvelope {
 }
 
 /* ------------------------------------------------------------------ *
+ * Terminal
+ * ------------------------------------------------------------------ */
+
+/** A shell the project terminal can run. */
+export interface TerminalShell {
+  /** `pwsh`, `powershell`, `cmd`, `git-bash`, or a Unix shell's name (`zsh`). */
+  id: string
+  /** As the shell picker lists it: "PowerShell", "Command Prompt", "zsh". */
+  name: string
+  /** Its executable. */
+  path: string
+  /** What a new terminal runs unless another is chosen. */
+  default: boolean
+}
+
+/** A terminal to start in a project's folder. */
+export interface TerminalSpawnRequest {
+  /** Chosen by the renderer (a UUID), so keystrokes can go to it before it has started. */
+  id: string
+  projectId: string
+  /** A {@link TerminalShell} id; the default when absent or no longer installed. */
+  shell?: string
+  cols: number
+  rows: number
+}
+
+/** A terminal that started. */
+export interface TerminalInfo {
+  id: string
+  shellId: string
+  shellName: string
+  /** The folder it started in: the project's. */
+  cwd: string
+  pid: number | null
+  /** Windows' build number, which decides how xterm.js treats ConPTY; null elsewhere. */
+  windowsBuild: number | null
+}
+
+/** What a terminal streams while it runs: what the shell prints, then how it ended. */
+export type TerminalEvent = { kind: 'output'; data: string } | { kind: 'exit'; code: number | null }
+
+/**
+ * The project terminal: shells in pseudoterminals (ConPTY on Windows), started
+ * in a project's folder with its own command-line tools first on `PATH`.
+ */
+export interface TerminalApi {
+  /** The shells on this computer, the default first. */
+  shells: () => Promise<TerminalShell[]>
+  /** Start a terminal. Its output, then its exit, go to `onEvent`. */
+  spawn: (
+    request: TerminalSpawnRequest,
+    onEvent: (event: TerminalEvent) => void
+  ) => Promise<TerminalInfo>
+  /** Type into a terminal: keystrokes, a paste, or the terminal's replies. */
+  write: (id: string, data: string) => Promise<void>
+  resize: (id: string, cols: number, rows: number) => Promise<void>
+  /** Hold a terminal's output while the panel catches up, or let it flow again. */
+  pause: (id: string, paused: boolean) => Promise<void>
+  /** End a terminal's shell and what it started; its exit still arrives. */
+  kill: (id: string) => Promise<void>
+  /** End a project's terminals, or every terminal (a page that loaded again has none). */
+  killAll: (projectId?: string) => Promise<void>
+}
+
+/* ------------------------------------------------------------------ *
  * IPC channels
  * ------------------------------------------------------------------ */
 
@@ -5043,6 +5108,8 @@ export interface RayfinStudioApi {
   security: SecurityCheckApi
   /** The Goals experiment; see {@link GoalsApi}. */
   goals: GoalsApi
+  /** The project terminal; see {@link TerminalApi}. */
+  terminal: TerminalApi
 }
 
 /* ------------------------------------------------------------------ *

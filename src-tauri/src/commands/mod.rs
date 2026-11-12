@@ -37,6 +37,7 @@ pub mod settings;
 pub mod skills;
 pub mod suggest;
 pub mod team;
+pub mod terminal;
 pub mod transient;
 pub mod updates;
 pub mod util;

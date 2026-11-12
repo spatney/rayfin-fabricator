@@ -2299,8 +2299,9 @@ function Blueprint({ view = 'architecture' }: { view?: 'architecture' | 'data' |
 
 /**
  * The preview of the sample app running on this computer, in a preview-sized frame: its
- * toolbar with Local and Published, and the running local backend, whose output is open unless
- * `output` is false.
+ * toolbar with Local and Published, and the running local backend, with Output selected
+ * unless `output` is false. Output itself opens in the terminal panel, which this frame
+ * leaves out.
  */
 function LocalPreview({ output = true }: { output?: boolean }): JSX.Element {
   const local = useLocalBackend(expensesApp.id)

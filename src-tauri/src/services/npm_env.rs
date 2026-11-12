@@ -9,11 +9,18 @@
 //!     the latest scaffolder and its CLI against fresh registry metadata:
 //!     `prefer-offline` can report ETARGET for a published version even when
 //!     online (issue #28).
+//!   * [`for_user_shell`] gives a shell the user runs (the project terminal's)
+//!     the values Fabricator was launched with instead.
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
+use once_cell::sync::OnceCell;
+
 use crate::services::paths;
+
+/// What [`configure_env`] replaced, as Fabricator was launched with it.
+static INHERITED: OnceCell<Vec<(&'static str, Option<OsString>)>> = OnceCell::new();
 
 /// Make every npm process Fabricator spawns install quietly with normal
 /// freshness checks. Set process-wide (like the Rayfin encryption fallback) so it
@@ -26,9 +33,26 @@ pub fn configure_env() {
   if std::env::var_os("npm_config_cache").is_some_and(|cache| uses_retired_cache(&cache, &retired)) {
     std::env::remove_var("npm_config_cache");
   }
+  let _ = INHERITED.set(users_values(|key| std::env::var_os(key)));
   for (key, value) in quiet_env() {
     std::env::set_var(key, value);
   }
+}
+
+/// The variables [`configure_env`] sets, as Fabricator was launched with them
+/// (`None`: unset), for a shell the user runs: npm there works as it does in
+/// their own terminal.
+pub fn for_user_shell() -> Vec<(&'static str, Option<OsString>)> {
+  INHERITED.get().cloned().unwrap_or_else(|| quiet_env().iter().map(|(key, _)| (*key, None)).collect())
+}
+
+/// The user's own values of the quiet variables. Fabricator's own values, which
+/// a restart or an update passes on to the next Fabricator, aren't the user's.
+fn users_values(launched_with: impl Fn(&str) -> Option<OsString>) -> Vec<(&'static str, Option<OsString>)> {
+  quiet_env()
+    .iter()
+    .map(|(key, ours)| (*key, launched_with(key).filter(|value| value != ours)))
+    .collect()
 }
 
 /// Whether an inherited `npm_config_cache` is the retired per-user cache, rather
@@ -90,6 +114,20 @@ mod tests {
     assert_eq!(env["npm_config_fund"], "false");
     assert!(!env.contains_key("npm_config_cache"));
     assert!(!env.contains_key("npm_config_prefer_online"));
+  }
+
+  #[test]
+  fn the_users_shell_gets_the_values_fabricator_was_launched_with() {
+    let launched_with = |key: &str| match key {
+      "npm_config_audit" => Some(OsString::from("true")),
+      // Fabricator's own, passed on by a restart.
+      "npm_config_fund" => Some(OsString::from("false")),
+      _ => None,
+    };
+    let values: std::collections::HashMap<_, _> = users_values(launched_with).into_iter().collect();
+    assert_eq!(values["npm_config_audit"], Some(OsString::from("true")));
+    assert_eq!(values["npm_config_fund"], None);
+    assert_eq!(values["npm_config_prefer_offline"], None);
   }
 
   #[test]

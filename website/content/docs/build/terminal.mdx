@@ -1,0 +1,113 @@
+---
+title: "Run commands in the terminal"
+description: "Open a terminal in your project's folder to run commands such as rayfin, npm and git, in tabs with the shell of your choice, beside your app's output."
+---
+
+The terminal runs a shell, such as PowerShell or zsh, in the open project's folder, right in Fabricator. Use it to run commands yourself: the Rayfin CLI, `npm`, `git` or your app's own scripts. Each project keeps its own terminals, and they keep running while you work elsewhere in Fabricator. When your app runs on this computer, the terminal's first tab is its output.
+
+## Open the terminal
+
+1. Open a project.
+2. In the status bar, select **Terminal**, or press `` Ctrl+` `` (the key to the left of `1`).
+
+The terminal opens below the project's view, in the project's folder, and the keyboard goes to it. Its toolbar shows the folder's name: rest the pointer on it to see the full path. While shells are running, the status bar's **Terminal** shows how many.
+
+To put the terminal away, press `` Ctrl+` `` again while it has the keyboard, or select **Hide terminal** in its toolbar. Its shells keep running, and they're as you left them when you open it again. When the terminal is open but something else has the keyboard, `` Ctrl+` `` moves the keyboard back to it.
+
+On macOS, the shortcut uses the Control key too: `` ⌃` ``.
+
+The terminal stays with the project's own screen: it hides on Home, in the [App gallery](/docs/build/app-gallery) and in a workspace overview, and comes back when you return to the project. It doesn't open over Help, or while you create, clone or migrate a project. In [Search](/docs/start/search), the **Terminal** (**Hide terminal** while it's open) and **New terminal** actions do the same as the shortcuts.
+
+> [!NOTE]
+> When you're working in your app in the preview, the preview receives your keys. Select anywhere else in Fabricator, then press `` Ctrl+` ``.
+
+## What runs in the terminal
+
+Each terminal starts in the project's folder, with the environment a terminal you open yourself would have. The project's own command-line tools come first on `PATH`, so `rayfin` runs the Rayfin CLI version the project uses, without `npx`:
+
+```bash
+rayfin --version
+npm install
+git status
+```
+
+On macOS, your shell's startup files can put other folders ahead of the project's tools, so a Rayfin CLI you installed globally runs instead. Run `npx rayfin` to be sure of the project's version.
+
+Programs can use full color, and the terminal's colors follow Fabricator's light or dark theme.
+
+## Work with several terminals
+
+- To start another shell in the project's folder, select **New terminal** (**+**) in the tab bar, or press `` Ctrl+Shift+` ``.
+- To start one with a different shell, select **Choose a shell**, beside **New terminal**, and choose one. The shell you choose becomes the one **New terminal** starts; the list marks it **Default**.
+- Select a tab to switch to it. The dot on a tab shows its shell's state: green while it runs, and red when it couldn't start or ended with an error. Rest the pointer on a tab to see its shell and state, such as "Exited with code 1".
+- A second, smaller dot marks a tab with output you haven't seen yet.
+- To end a shell, select **Close terminal** (**×**) on its tab. The programs it started end with it. The terminal closes with its last shell, unless it's showing **Output**.
+
+Fabricator offers the shells it finds on your computer:
+
+| | Windows | macOS |
+| --- | --- | --- |
+| Shells | **PowerShell** (PowerShell 7), **Windows PowerShell**, **Command Prompt** and **Git Bash**, when they're installed | Your login shell, then the other common shells installed: `zsh`, `bash`, `fish`, `nu` and `pwsh` |
+| The first one | PowerShell 7 when it's installed, otherwise Windows PowerShell | Your login shell |
+
+On macOS, shells start as login shells, so they read your profile the way Terminal does.
+
+## Your app's output
+
+When your app runs on this computer, the terminal's first tab is **Output**: what your app's backend, Vite and functions print, with the time and source of each line and the newest at the bottom. Warnings are yellow and errors red. It follows new lines unless you scroll up. You can't type in it.
+
+To show it, select **Output** in the preview toolbar, or **View output** when your app can't start, or select the **Output** tab when the terminal is open. Select **Output** in the preview toolbar again to hide the terminal. From **Output**, `` Ctrl+` `` and the status bar's **Terminal** go to your shells, and start one when there's none.
+
+- The dot on the tab shows your app's state: green while it runs, amber when it runs with a problem, blinking while it starts, red when it couldn't start, and gray when it's stopped. When your app runs but its latest change didn't apply, what's wrong shows above the output, for example "Your app’s latest data model change couldn’t be read, so it still uses the previous data model."
+- **Copy output**, in the toolbar, copies all of it, for example for a bug report.
+- **Restart app** stops your app's backend and Vite and starts them again.
+- **Find**, **Clear** and links work as they do for a shell, so you can open a file named in an error in **Code**. Right-click it for **Copy**, **Select all**, **Find…** and **Clear**.
+
+See [Your app on this computer](/docs/build/preview#your-app-on-this-computer).
+
+## Copy, paste and find
+
+| To | Windows | macOS |
+| --- | --- | --- |
+| Copy the selected text | `Ctrl+C`, or `Ctrl+Shift+C` | `⌘C` |
+| Paste | `Ctrl+V` | `⌘V` |
+| Stop the command that's running | `Ctrl+C` with nothing selected | `⌃C` |
+| Find | `Ctrl+F` | `⌘F` |
+| Make the text larger or smaller | `Ctrl+=` and `Ctrl+-`, and `Ctrl+0` to reset it | `⌘=` and `⌘-`, and `⌘0` to reset it |
+
+Right-click the terminal for **Copy**, **Paste**, **Select all**, **Find…**, **Clear**, **Restart shell** and **Close terminal**.
+
+To find text in a terminal's output:
+
+1. Select **Find** in the terminal's toolbar, or press `Ctrl+F` (`⌘F` on macOS).
+2. Type what you're looking for. The box shows where you are, such as "1 of 9".
+3. Press `Enter` for the next match and `Shift+Enter` for the one before.
+
+Turn on **Match case**, **Match whole word** or **Use regular expression** to narrow the search. Press `Esc` to close it.
+
+## Open links and files
+
+Hold `Ctrl` (`⌘` on macOS) and click:
+
+- A web address, to open it in your browser.
+- A path to one of the project's files, such as `src/App.tsx:12:5` in an error, to open the file in **Code** at that line.
+
+Rest the pointer on a link to see how to open it, such as "Ctrl+click to open in Code".
+
+To type a file's path, drag the file from File Explorer (Finder on macOS) onto the terminal. Fabricator adds quotes when the shell needs them.
+
+## Resize the terminal
+
+- Drag the terminal's top edge. Double-click the edge to go back to the standard height.
+- Select **Maximize** to give the terminal the project's whole area, and **Restore size** to go back. Double-clicking an empty part of the toolbar does the same.
+
+Fabricator remembers the terminal's height and text size.
+
+## When a shell ends
+
+When you type `exit`, or the shell stops, the terminal says so, for example "The shell exited with code 0. Press Enter to start a new one." Press `Enter` to start a new shell in the same tab. If a shell couldn't start, the terminal says why, then "Press Enter to try again."
+
+- **Restart shell**, in the toolbar, ends the shell and starts a new one in the same tab.
+- **Clear** clears the terminal's output.
+
+A project's terminals end when you remove the project from Fabricator or move it to the trash. All terminals end when Fabricator quits, including when it restarts to install an update.

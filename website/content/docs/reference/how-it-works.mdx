@@ -143,6 +143,8 @@ Fabricator stores settings, project lists, chat history, Advisor state, Goals re
 
 The desktop app uses Tauri v2: a Rust core with a React renderer. On Windows, the embedded preview uses WebView2. On macOS, it uses the system web view. Your app's Vite dev server and its functions run with the Node.js that setup checks.
 
+A project's [terminal](/docs/build/terminal) runs your shell in a pseudo terminal on this computer: ConPTY on Windows, and a Unix pseudo terminal on macOS. Its input and output go only between the shell and Fabricator's window, and the shell, with the programs it started, ends when you close its tab or quit Fabricator.
+
 ## Accounts
 
 Fabricator doesn't keep credentials itself; each tool keeps its own.

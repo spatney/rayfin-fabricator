@@ -1,0 +1,517 @@
+/* The project terminal, under whichever view is showing: the app's Output and
+   the shells. Flat: solid surfaces, neutral 1px borders, status as a small dot.
+   Component CSS loads before codicon.css, so codicon sizes carry a parent class. */
+
+.terminal-panel {
+  position: relative;
+  flex: none;
+  height: var(--terminal-height, 300px);
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border);
+}
+
+.terminal-panel[hidden] {
+  display: none;
+}
+
+/* It slides up into place when it opens: the frame keeps its full height while
+   the panel grows, so the shell starts at the size it will have. */
+.terminal-panel--rise {
+  animation: terminal-rise 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes terminal-rise {
+  from {
+    height: 0;
+  }
+}
+
+.terminal-panel--max {
+  flex: 1;
+  height: auto;
+  border-top: none;
+}
+
+/* Maximized, it takes the project's area. */
+.content--terminal-max > .project-pane,
+.content--terminal-max > .project-dependency-guard {
+  display: none;
+}
+
+.terminal-frame {
+  display: flex;
+  flex-direction: column;
+  height: calc(var(--terminal-height, 300px) - 1px);
+}
+
+.terminal-panel--max .terminal-frame {
+  height: 100%;
+}
+
+/* Its top edge: drag to resize, the accent line showing while you do. */
+.terminal-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 4;
+  height: 5px;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.terminal-resize::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.terminal-resize:hover::before,
+.terminal-panel--resizing .terminal-resize::before {
+  background: var(--accent);
+}
+
+.terminal-panel--resizing {
+  user-select: none;
+}
+
+/* ── Header: the tabs, where the shells run, and the actions ─────────────── */
+
+.terminal-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 6px 0 8px;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.terminal-tabs {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.terminal-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 26px;
+  color: var(--text-dim);
+  border-radius: 6px;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.terminal-tab:hover {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.terminal-tab--active {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.terminal-tab-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 2px 0 9px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.terminal-tab-main:focus-visible,
+.terminal-tab-close:focus-visible,
+.terminal-btn:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: -1px;
+}
+
+.terminal-tab-main .codicon.terminal-tab-icon {
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+/* Output has no close button. */
+.terminal-tab-main--solo {
+  padding-right: 9px;
+}
+
+.terminal-tab-label {
+  white-space: nowrap;
+}
+
+/* Status: starting, running, ended well, ended badly. */
+.terminal-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  background: var(--text-faint);
+  border-radius: 50%;
+}
+
+.terminal-dot--running {
+  background: var(--ok);
+}
+
+.terminal-dot--starting {
+  background: var(--pending);
+  animation: terminal-blink 1.2s ease-in-out infinite;
+}
+
+.terminal-dot--failed {
+  background: var(--danger);
+}
+
+/* Output: the app runs, with a problem it carries on through. */
+.terminal-dot--warn {
+  background: var(--pending);
+}
+
+@keyframes terminal-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Printed something while another terminal was in front. */
+.terminal-unread {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+.terminal-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 3px;
+  padding: 0;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab--active .terminal-tab-close,
+.terminal-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.terminal-tab-close:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.terminal-tab-close .codicon[class*='codicon-'] {
+  font-size: 13px;
+}
+
+.terminal-new {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: 2px;
+}
+
+/* Where the shells start: the project's folder. */
+.terminal-where {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.terminal-where .codicon.terminal-where-icon {
+  flex: none;
+  font-size: 13px;
+}
+
+.terminal-where-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.terminal-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.terminal-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+
+.terminal-btn--on,
+.terminal-btn--on:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.terminal-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.terminal-btn--narrow {
+  width: 18px;
+}
+
+.terminal-btn .codicon[class*='codicon-'] {
+  font-size: 15px;
+}
+
+.terminal-btn--narrow .codicon[class*='codicon-'] {
+  font-size: 12px;
+}
+
+/* ── Output: the app's problems, above its lines ─────────────────────────── */
+
+.terminal-problems {
+  flex: none;
+  max-height: 50%;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.terminal-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.terminal-problem + .terminal-problem {
+  border-top: 1px solid var(--border);
+}
+
+.terminal-problem-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  background: var(--pending);
+  border-radius: 50%;
+}
+
+.terminal-problem-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.terminal-problem-summary {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.terminal-problem-detail {
+  max-height: 4.8em;
+  margin: 2px 0 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.terminal-failed {
+  flex: none;
+  margin: 0;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--danger);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── The terminal ──────────────────────────────────────────────────────── */
+
+.terminal-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--code-bg);
+}
+
+.terminal-body--drop {
+  outline: 2px dashed var(--accent);
+  outline-offset: -5px;
+}
+
+/* xterm.js maps the pointer to cells in its own pixels, which the interface
+   zoom would throw off, so the terminal undoes the zoom and scales its text
+   by it instead (see session.ts). */
+.terminal-surface {
+  position: absolute;
+  inset: 0;
+  zoom: calc(1 / var(--ui-scale, 1));
+}
+
+/* Inset from the panel's edges rather than padded, so FitAddon measures only
+   where the cells go. */
+.terminal-host {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  bottom: 0;
+  left: 12px;
+}
+
+.terminal-host .xterm {
+  height: 100%;
+}
+
+/* xterm.js paints its viewport black; the well's own color shows instead. */
+.terminal-host .xterm .xterm-viewport {
+  background-color: transparent;
+}
+
+.terminal-host .xterm:focus,
+.terminal-host .xterm-helper-textarea:focus {
+  outline: none;
+}
+
+/* ── Find ──────────────────────────────────────────────────────────────── */
+
+.terminal-find {
+  position: absolute;
+  top: 8px;
+  right: 20px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.terminal-find-input {
+  width: 200px;
+  height: 26px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+
+.terminal-find-input:focus {
+  border-color: var(--accent);
+}
+
+.terminal-find-count {
+  min-width: 70px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.terminal-find-count--bad {
+  color: var(--danger);
+}
+
+.terminal-find-rule {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--border);
+}
+
+/* "Ctrl+click to open", beside a link under the pointer. */
+.terminal-hint {
+  position: fixed;
+  z-index: 60;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-panel--rise,
+  .terminal-dot--starting {
+    animation: none;
+  }
+}

@@ -157,7 +157,7 @@ A team app uses the team's deployment of it instead, and its note ends "so the p
 
 1. Keep building in chat as usual. To put your changes in the published app, select **Publish** in the app bar, or turn on **Publish after each chat turn** in the publish control's panel.
 2. For an app on an older Rayfin release, update it to run it on this computer: select the Rayfin version in the status bar, then **Update with Copilot**. See [Keep Rayfin up to date](/docs/ship/rayfin-versions).
-3. When a chat turn changes the app's packages or `rayfin/rayfin.yml`, Fabricator checks again whether it can run the app on this computer. Once it can, the preview shows the app on this computer again.
+3. When a chat turn changes the app's packages or `rayfin/rayfin.yml`, or the app's Rayfin version changes, for example after **Update with Copilot** or an update you run in the [terminal](/docs/build/terminal), Fabricator checks again whether it can run the app on this computer. Once it can, the preview shows the app on this computer again.
 
 If the note names a connector or Rayfin version that you expect to run on this computer, [Report a problem](/docs/troubleshooting/report-a-problem).
 
@@ -180,7 +180,7 @@ If the note names a Rayfin version that you expect Fabricator to run, [Report a 
 
 ## Power BI turned down your sign-in
 
-Data from a semantic model doesn't load in your app on this computer. The preview's **Output** says "Power BI refused the query: it turned down the developer's sign-in.", or Copilot tells you Power BI turned down your sign-in. Copilot can also report that `npx rayfin connector invoke` failed with "Not signed in, or no Power BI token could be acquired without an interactive prompt."
+Data from a semantic model doesn't load in your app on this computer. Your app's **Output** says "Power BI refused the query: it turned down the developer's sign-in.", or Copilot tells you Power BI turned down your sign-in. Copilot can also report that `npx rayfin connector invoke` failed with "Not signed in, or no Power BI token could be acquired without an interactive prompt."
 
 On this computer, your app queries semantic models as you. When Power BI turns down your Azure sign-in, the local backend uses your Rayfin CLI sign-in instead. The Rayfin CLI can query Power BI for you only after you consent to it once, and signing in to Fabric doesn't ask for that. Usually, your access to the model is fine.
 

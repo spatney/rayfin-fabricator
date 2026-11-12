@@ -41,6 +41,7 @@ pub mod source_hints;
 pub mod store;
 pub mod team;
 pub mod telemetry;
+pub mod terminal;
 pub mod thumbnails;
 pub mod ui_builder;
 pub mod updater;

@@ -73,6 +73,24 @@ describe('Search actions', () => {
     expect(ids(context({ deploying: true }))).not.toContain('action:deploy')
   })
 
+  it('shows the terminal or puts it away, even before the project’s packages are ready', () => {
+    const closed = context({ toolsReady: false })
+    const show = buildActions(closed).find((a) => a.id === 'action:terminal')!
+    expect(show.title).toBe('Terminal')
+    show.run()
+    expect(closed.do.showTerminal).toHaveBeenCalledWith(true)
+
+    const open = context({ terminalOpen: true })
+    const hide = buildActions(open).find((a) => a.id === 'action:terminal')!
+    expect(hide.title).toBe('Hide terminal')
+    hide.run()
+    expect(open.do.showTerminal).toHaveBeenCalledWith(false)
+
+    const none = context({ project: null, onProjectScreen: false, onHome: true })
+    expect(ids(none)).not.toEqual(expect.arrayContaining(['action:terminal']))
+    expect(ids(none)).not.toEqual(expect.arrayContaining(['action:new-terminal']))
+  })
+
   it('offers a team app its overview, not Publish or Share', () => {
     const team = {
       ...project,

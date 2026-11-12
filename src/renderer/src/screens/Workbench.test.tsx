@@ -27,6 +27,7 @@ import type {
   ProcResult,
   ProjectsState,
   RayfinStudioApi,
+  RayfinVersionInfo,
   SavedTurn,
   StudioProject
 } from '@shared/ipc'
@@ -2129,6 +2130,44 @@ describe('Workbench local backend', () => {
     await waitFor(() => expect(preview().local?.state).toBe('running'))
     expect(preview().fallbackReason).toBeNull()
     expect(api.dev.stop).toHaveBeenCalledWith(project.id)
+  })
+
+  it('checks again once an update changes the app’s Rayfin version, reported or not', async () => {
+    const api = installApi(true)
+    nextLocal(project.id, tooOld)
+    api.dev.plan.mockResolvedValue({ port: 5174 })
+    const installed = (version: string): RayfinVersionInfo => ({
+      version,
+      latest: '1.36.2',
+      upgradeAvailable: version !== '1.36.2',
+      packages: [
+        {
+          name: '@microsoft/rayfin-core',
+          kind: 'sdk',
+          installed: version,
+          latest: '1.36.2',
+          upgradable: false
+        }
+      ]
+    })
+    api.rayfin.versions.mockResolvedValue(installed('1.35.1'))
+    render(<Workbench {...makeProps({ settings: manualSettings })} />, { wrapper: Wrapper })
+    await screen.findByLabelText('Chat draft')
+    await waitFor(() => expect(preview().localPreviewUrl).toBe('http://localhost:5174'))
+    expect(api.local.start, 'the same version still can’t run here').not.toHaveBeenCalled()
+
+    // The update turn ran npm, which Copilot doesn't report as a change.
+    api.rayfin.versions.mockResolvedValue(installed('1.36.2'))
+    await act(async () => completeTurn({ ok: true, filesModified: [], ranDeploy: false }))
+    await waitFor(() => expect(api.local.start).toHaveBeenCalledWith(project.id))
+    expect(preview().fallbackReason, 'the preview stays put while it checks').toContain(
+      'Rayfin 1.35.1'
+    )
+
+    emitLocal({ state: 'running', ready: localReady })
+    await waitFor(() => expect(preview().local?.state).toBe('running'))
+    expect(preview().fallbackReason).toBeNull()
+    expect(api.local.start).toHaveBeenCalledTimes(1)
   })
 
   it('runs an unpublished app here even when it can’t fully, with nothing to fall back to', async () => {

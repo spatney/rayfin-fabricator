@@ -4755,6 +4755,48 @@ mod tests {
   }
 }
 
+/* -------------------------------- terminal -------------------------------- */
+// The project terminal (services/terminal): shells in pseudoterminals, started
+// in a project's folder.
+
+/// A shell a terminal can run.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalShell {
+  /// `pwsh`, `powershell`, `cmd`, `git-bash`, or a Unix shell's name (`zsh`).
+  pub id: String,
+  /// As the shell picker lists it: "PowerShell", "Command Prompt", "zsh".
+  pub name: String,
+  /// Its executable.
+  pub path: String,
+  /// What a new terminal runs unless another is chosen.
+  pub default: bool,
+}
+
+/// A terminal that started.
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalInfo {
+  pub id: String,
+  pub shell_id: String,
+  pub shell_name: String,
+  /// The folder it started in: the project's.
+  pub cwd: String,
+  pub pid: Option<u32>,
+  /// Windows' build number, which decides how xterm.js treats ConPTY; `None` elsewhere.
+  pub windows_build: Option<u32>,
+}
+
+/// What a terminal streams to the renderer on its channel.
+#[derive(Serialize, Clone, Debug)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TerminalEvent {
+  /// What the shell printed, terminal escapes and all.
+  Output { data: String },
+  /// The shell ended, after its last output; `code` when the OS reported one.
+  Exit { code: Option<u32> },
+}
+
 /* ----------------------------- local backend ----------------------------- */
 // Each personal project's whole Rayfin backend runs on this computer under
 // rayfin-local (services/local_backend). These mirror its host contract

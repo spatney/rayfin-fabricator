@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type JSX, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { moveMenuFocus } from '../menuFocus'
+import { uiZoom } from '../menuLayout'
 import { useSuppressPreview } from '../overlay'
 import { Codicon } from './icons'
 import './models/modelPicker.css'
@@ -91,7 +92,8 @@ export function ContextMenu({
       className="mp-panel ctx-menu"
       role="menu"
       aria-label={label}
-      style={{ left: place.left, top: place.top }}
+      // `x`, `y` and the menu's size are the window's pixels, which the interface zoom scales again.
+      style={{ left: place.left / uiZoom(), top: place.top / uiZoom() }}
       onKeyDown={onKeyDown}
       onContextMenu={(event) => event.preventDefault()}
     >

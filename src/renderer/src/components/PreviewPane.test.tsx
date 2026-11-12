@@ -12,6 +12,7 @@ import { OverlayProvider, SuppressPreview } from '../overlay'
 import type { PickEvent, PickStatus, PickTarget } from '@shared/pick'
 import { useTouchUp, type PickSurface } from '../pick/useTouchUp'
 import type { LocalBackend } from '../localBackend'
+import { projectTerminals, terminalStore } from '../terminal/store'
 import PreviewPane, {
   type DeployUiState,
   type PreviewView,
@@ -1521,6 +1522,7 @@ describe('PreviewPane on this computer', () => {
 
   beforeEach(() => {
     localStorage.clear()
+    terminalStore.forget('p1')
     Object.assign(window.api, {
       local: {
         logs: vi.fn(async () => [outputLine]),
@@ -1621,10 +1623,10 @@ describe('PreviewPane on this computer', () => {
       fireEvent.click(within(card).getByRole('button', { name: 'Find out why' }))
       expect(onDiagnoseLocal).toHaveBeenCalledTimes(1)
       fireEvent.click(within(card).getByRole('button', { name: 'View output' }))
-      await act(async () => {})
-      expect(
-        within(screen.getByRole('region', { name: 'Output' })).getByText(outputLine.line)
-      ).toBeTruthy()
+      expect(projectTerminals(terminalStore.getState(), 'p1')).toMatchObject({
+        open: true,
+        output: true
+      })
     }
   )
 
@@ -1689,7 +1691,7 @@ describe('PreviewPane on this computer', () => {
     expect(screen.queryByRole('button', { name: /^Preview as/ })).toBeNull()
   })
 
-  it('opens and closes the output from the Output button', async () => {
+  it('shows and hides the app’s Output in the terminal from the Output button', async () => {
     render(
       <OnThisComputer
         project={makeProject('p1', { lastDeploy: undefined })}
@@ -1699,26 +1701,21 @@ describe('PreviewPane on this computer', () => {
     await settle(e)
     const output = screen.getByRole('button', { name: 'Output: Running' })
     fireEvent.click(output)
-    await act(async () => {})
     expect(output.getAttribute('aria-pressed')).toBe('true')
-    expect(
-      within(screen.getByRole('region', { name: 'Output' })).getByText(outputLine.line)
-    ).toBeTruthy()
-    expect(window.api.local.logs).toHaveBeenCalledWith('p1', 500)
+    expect(projectTerminals(terminalStore.getState(), 'p1')).toMatchObject({
+      open: true,
+      output: true,
+      tabs: []
+    })
     fireEvent.click(output)
-    expect(screen.queryByRole('region', { name: 'Output' })).toBeNull()
+    expect(output.getAttribute('aria-pressed')).toBe('false')
+    expect(projectTerminals(terminalStore.getState(), 'p1').open).toBe(false)
   })
 
-  it('says when the app runs with a problem, and restarts it from its output', async () => {
+  it('says on the Output button when the app runs with a problem', async () => {
     const project = makeProject('p1', { lastDeploy: undefined })
-    const healthy = runningLocally()
-    const { rerender } = render(<OnThisComputer project={project} local={healthy} />)
+    const { rerender } = render(<OnThisComputer project={project} local={runningLocally()} />)
     await settle(e)
-    fireEvent.click(screen.getByRole('button', { name: 'Output: Running' }))
-    await act(async () => {})
-    const output = (): HTMLElement => screen.getByRole('region', { name: 'Output' })
-    expect(within(output()).queryByRole('list', { name: 'Problems' })).toBeNull()
-    expect(within(output()).getByRole('button', { name: 'Restart' })).toBeTruthy()
 
     // A rayfin.yml change turned data on before the data package was built.
     const stuck = runningLocally({
@@ -1736,18 +1733,8 @@ describe('PreviewPane on this computer', () => {
     expect(button.className).toContain('local-output-btn--warn')
     expect(button.textContent).toBe('1 problem')
     expect(button.title).toBe(
-      'Your app’s latest data model change couldn’t be read, so it still uses the previous data model. The data package packages/data has not been built. Select to hide its output.'
+      'Your app’s latest data model change couldn’t be read, so it still uses the previous data model. The data package packages/data has not been built. Select to view its output.'
     )
-    const problems = within(output()).getByRole('list', { name: 'Problems' })
-    expect(problems.textContent).toContain(
-      'Your app’s latest data model change couldn’t be read, so it still uses the previous data model.'
-    )
-    expect(problems.textContent).toContain('The data package packages/data has not been built')
-
-    fireEvent.click(within(output()).getByRole('button', { name: 'Restart' }))
-    await act(async () => {})
-    expect(stuck.restart).toHaveBeenCalledTimes(1)
-    expect(healthy.restart).not.toHaveBeenCalled()
   })
 
   it('drops the app’s local address once it no longer runs on this computer', async () => {

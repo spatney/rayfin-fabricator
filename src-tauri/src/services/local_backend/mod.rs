@@ -20,7 +20,7 @@ mod control;
 mod events;
 mod logs;
 mod machine;
-mod process;
+pub(crate) mod process;
 pub mod seed;
 mod supervisor;
 #[cfg(test)]

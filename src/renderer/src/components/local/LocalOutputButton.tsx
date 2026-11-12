@@ -1,27 +1,13 @@
 import type { JSX } from 'react'
 import type { LocalStatus } from '@shared/ipc'
-import { localStateLabel, runningProblems, type LocalRunningProblem } from '../../localBackend'
+import {
+  localStateLabel,
+  localTone,
+  runningProblems,
+  type LocalRunningProblem
+} from '../../localBackend'
 import { TerminalIcon } from '../icons'
 import './local.css'
-
-/** The button's look for a state: a running app with a problem gets a warning dot. */
-function tone(
-  status: LocalStatus | null,
-  pending: boolean,
-  problems: LocalRunningProblem[]
-): 'ok' | 'warn' | 'busy' | 'err' | 'idle' {
-  switch (status?.state) {
-    case 'running':
-      return problems.length > 0 ? 'warn' : 'ok'
-    case 'starting':
-    case 'restarting':
-      return 'busy'
-    case 'error':
-      return 'err'
-    default:
-      return pending ? 'busy' : 'idle'
-  }
-}
 
 /** The first line of a problem's detail, kept short for a tooltip, as a sentence. */
 function firstLine(detail: string | null): string {
@@ -63,12 +49,12 @@ function problemCount(problems: LocalRunningProblem[]): string | null {
 }
 
 /**
- * The preview toolbar's **Output** button for the app on this computer: it opens
- * and closes the output of its backend, Vite and functions under the preview.
- * The app's state shows on it only when it needs a look: a blinking dot while it
- * starts, a red one when it couldn't start, and an amber one with the number of
- * problems when it runs but its latest change didn't apply. Running fine, the
- * app on screen says so itself.
+ * The preview toolbar's **Output** button for the app on this computer: it shows
+ * and hides the output of its backend, Vite and functions, the terminal panel's
+ * Output tab. The app's state shows on it only when it needs a look: a blinking
+ * dot while it starts, a red one when it couldn't start, and an amber one with
+ * the number of problems when it runs but its latest change didn't apply.
+ * Running fine, the app on screen says so itself.
  */
 export default function LocalOutputButton({
   status,
@@ -84,7 +70,7 @@ export default function LocalOutputButton({
   onToggle: () => void
 }): JSX.Element {
   const problems = runningProblems(status)
-  const look = tone(status, pending, problems)
+  const look = localTone(status, pending)
   const marked = look === 'busy' || look === 'warn' || look === 'err'
   const count = problemCount(problems)
   return (

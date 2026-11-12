@@ -175,8 +175,8 @@ pub fn bring_forward(app: &AppHandle) {
 /// the configured window it starts hidden, and the renderer shows it once its
 /// first screen is painted (see `window_reveal`); should the page never get
 /// that far, it shows anyway after a few seconds. Closing it while app windows
-/// stay open stops the projects' local backends, dev servers and Goals runs,
-/// which nothing shows anymore.
+/// stay open stops the projects' local backends, dev servers, Goals runs and
+/// terminals, which nothing shows anymore.
 pub fn open_main_window(app: &AppHandle) -> tauri::Result<()> {
   use tauri::Manager;
   if app.get_webview_window("main").is_some() {
@@ -185,7 +185,9 @@ pub fn open_main_window(app: &AppHandle) -> tauri::Result<()> {
   let Some(config) = app.config().app.windows.iter().find(|w| w.label == "main").cloned() else {
     return Err(tauri::Error::WindowNotFound);
   };
-  let window = tauri::WebviewWindowBuilder::from_config(app, &config)?.build()?;
+  // Clipboard access lets the page read the clipboard without a prompt, for the
+  // terminal's Paste. The window only ever shows Fabricator's own page.
+  let window = tauri::WebviewWindowBuilder::from_config(app, &config)?.enable_clipboard_access().build()?;
   let handle = app.clone();
   window.on_window_event(move |event| {
     if let tauri::WindowEvent::Destroyed = event {
@@ -194,6 +196,9 @@ pub fn open_main_window(app: &AppHandle) -> tauri::Result<()> {
         crate::services::dev_server::kill_all(&handle);
         if let Some(state) = handle.try_state::<crate::state::AppState>() {
           state.cancel_all_goals();
+        }
+        if let Some(terminals) = handle.try_state::<crate::services::terminal::Terminals>() {
+          terminals.kill_all(None);
         }
         crate::services::local_backend::stop_all(&handle).await;
       });

@@ -100,8 +100,8 @@ backend, so the build prompt, `chat-working`, `preview-local`, `preview-as`, `co
 app** step new projects had before they ran on this computer first, is no longer in the app. Its
 images stay for video lesson 02.) Add sample rows through the app's own form in the preview, and test users with
 **Preview as → Add test user…** (they exist only on this computer). Before `preview-local`,
-select **Restart** in **Output**, so its last lines are a clean start rather than a hot update
-from the last turn.
+select **Restart app** on the terminal's **Output** tab, so its last lines are a clean start
+rather than a hot update from the last turn.
 
 ### Show the app as published
 

@@ -8,9 +8,10 @@
 //! It replaces a label Fabricator was launched with, so all of them count as
 //! Fabricator's. It's only a label: the CLI's opt-out still applies.
 //!
-//! Programs Fabricator opens for the user rather than runs itself, VS Code and
-//! sign-in terminals, get the label Fabricator was launched with instead
-//! ([`for_user_program`]): the commands the user runs there aren't Fabricator's.
+//! Programs Fabricator opens for the user rather than runs itself, VS Code,
+//! sign-in terminals and the project terminal's shells, get the label
+//! Fabricator was launched with instead ([`for_user_program`],
+//! [`for_user_shell`]): the commands the user runs there aren't Fabricator's.
 
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
@@ -41,6 +42,12 @@ fn users_label(inherited: Option<OsString>) -> Option<OsString> {
 /// label Fabricator was launched with rather than Fabricator's.
 pub fn for_user_program(cmd: &mut Command) -> &mut Command {
   with_label(cmd, INHERITED.get().and_then(Option::as_deref))
+}
+
+/// The label for a shell the user runs, such as the project terminal's: the one
+/// Fabricator was launched with (`None`: unset), as [`for_user_program`] gives it.
+pub fn for_user_shell() -> (&'static str, Option<OsString>) {
+  (ENV, INHERITED.get().cloned().flatten())
 }
 
 fn with_label<'a>(cmd: &'a mut Command, label: Option<&OsStr>) -> &'a mut Command {

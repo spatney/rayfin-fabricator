@@ -8,6 +8,9 @@ import { HUE, type SearchItem } from './model'
 export interface ActionHandlers {
   showView(view: ProjectView): void
   showCodeTab(tab: 'history' | 'skills' | 'secrets'): void
+  /** Show the open project's terminal, or put it away. */
+  showTerminal(show: boolean): void
+  newTerminal(): void
   goHome(): void
   newProject(): void
   openFolder(): void
@@ -60,6 +63,8 @@ export interface ActionContext {
   migrationEnabled: boolean
   /** The open app has the Goals tab (an experiment). */
   goalsEnabled: boolean
+  /** The open project's terminal is showing. */
+  terminalOpen?: boolean
   /** The App gallery is showing. */
   inGallery: boolean
   /** The open team app's workspace. */
@@ -181,6 +186,41 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
       keywords: ['passwords', 'api keys', 'credentials', 'environment variables'],
       icon: { kind: 'codicon', name: 'lock' },
       run: () => run.showCodeTab('secrets')
+    })
+  }
+
+  // The terminal works while a project's packages are still being prepared too.
+  if (project && !project.missing) {
+    const ctrl = ctx.modKey === '⌘' ? '⌃' : 'Ctrl'
+    add({
+      id: 'action:terminal',
+      title: ctx.terminalOpen ? 'Hide terminal' : 'Terminal',
+      subtitle: ctx.terminalOpen
+        ? 'Put the terminal away; its shells keep running'
+        : `Run commands in ${project.name}’s folder`,
+      keywords: [
+        'shell',
+        'command line',
+        'console',
+        'powershell',
+        'bash',
+        'zsh',
+        'cmd',
+        'cli',
+        'npm'
+      ],
+      icon: { kind: 'codicon', name: 'terminal' },
+      keys: [ctrl, '`'],
+      run: () => run.showTerminal(!ctx.terminalOpen)
+    })
+    add({
+      id: 'action:new-terminal',
+      title: 'New terminal',
+      subtitle: `Start another shell in ${project.name}’s folder`,
+      keywords: ['shell', 'command line', 'console', 'powershell', 'bash', 'zsh', 'cmd', 'tab'],
+      icon: { kind: 'codicon', name: 'terminal' },
+      keys: [ctrl, 'Shift', '`'],
+      run: run.newTerminal
     })
   }
 
@@ -471,7 +511,7 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
 /** Each kind of action has its own tile colour, so a long list reads at a glance. */
 function hueOf(id: string): number {
   const name = id.replace(/^action:/, '')
-  if (/^(view-|code-|home$)/.test(name)) return HUE.blue
+  if (/^(view-|code-|home$|terminal$|new-terminal$)/.test(name)) return HUE.blue
   if (/^(new-project|open-folder|clone|migrate|manage-project|overview)$/.test(name)) {
     return HUE.violet
   }
