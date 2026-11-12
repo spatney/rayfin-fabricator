@@ -42,7 +42,6 @@ use crate::services::exec::CancelToken;
 use crate::services::iq::{self, IqConfig};
 use crate::services::mcp::{self, McpServers};
 use crate::services::store;
-use crate::services::ui_builder;
 use crate::services::usage;
 use crate::state::{AppState, TurnRoute};
 use crate::types::{
@@ -75,10 +74,14 @@ const LOCAL_UNPUBLISHED_NOTE: &str = "[Fabricator: this app runs on this compute
 const FALLBACK_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric, because the local backend can't run all of it. The preview shows your frontend changes against the published backend. Publish after each chat turn is off, so changes to data, permissions or functions reach that backend only once the user publishes. End by saying what to try in the preview and whether it needs a publish first.]";
 /// A published app the local backend can't run all of, published after each turn.
 const FALLBACK_AUTO_PUBLISH_NOTE: &str = "[Fabricator: this app's backend runs on Microsoft Fabric, because the local backend can't run all of it. Publish after each chat turn is on, so Fabricator publishes the app when this turn ends, and the preview then shows the result.]";
+/// While the user has custom instructions: a reminder on each message, since
+/// instructions alone are easy to miss among Fabricator's and the project's own.
+const CUSTOM_INSTRUCTIONS_NOTE: &str = "[Fabricator: the user's custom instructions are part of this message too. Follow them in what you build and change, and call fabricator_followed_instruction for each one that shapes your work.]";
 
 /// The text sent to Copilot for a chat message in `project`, with the note on
-/// how its changes go live, and on the Fabric IQ and Work IQ servers (`iq`) and
-/// the user's own MCP servers (`mcp`) it can use.
+/// how its changes go live, on the Fabric IQ and Work IQ servers (`iq`) and the
+/// user's own MCP servers (`mcp`) it can use, and on the user's custom
+/// instructions when they have some.
 fn turn_text(
   project: &StudioProject,
   text: &str,
@@ -86,8 +89,10 @@ fn turn_text(
   manual_publish: bool,
   iq: &iq::Prepared,
   mcp: &mcp::Prepared,
+  custom_instructions: bool,
 ) -> String {
-  let notes: Vec<String> = [iq.note(), mcp.note()].into_iter().flatten().collect();
+  let custom = custom_instructions.then(|| CUSTOM_INSTRUCTIONS_NOTE.to_string());
+  let notes: Vec<String> = [iq.note(), mcp.note(), custom].into_iter().flatten().collect();
   let text = if notes.is_empty() { text.to_string() } else { format!("{}\n\n{text}", notes.join("\n\n")) };
   if project.team.is_some() {
     let note = crate::services::team::chat_note(guidance == Guidance::FabricBacked);
@@ -512,9 +517,6 @@ fn tool_started(data: &Value, group: Option<String>, sink: &mut dyn FnMut(ChatEv
 /// The name the work log gives an agent, from its internal name until the
 /// runtime reports its own (`subagent.selected`).
 fn agent_label(name: &str) -> String {
-  if name == ui_builder::AGENT {
-    return ui_builder::NAME.to_string();
-  }
   let words = name.replace(['-', '_'], " ");
   let mut chars = words.trim().chars();
   match chars.next() {
@@ -1003,7 +1005,16 @@ pub(crate) async fn run_turn(
   // backend tools beside the Fabric IQ one, or on Microsoft Fabric. The
   // session is resumed with another set when that changes.
   let guidance = agent_skills::guidance_for(&project, &crate::services::local_backend::snapshot(&app, &project_id));
-  let fab_tools = crate::services::agent_tools::fabricator_tools(app.clone(), project_id.clone(), guidance);
+  // The user's own instructions for every app, beside Fabricator's guidance,
+  // with the tool that shows when one shaped the work.
+  let settings = store::get_settings();
+  let custom_instructions = settings.custom_instructions.as_deref().and_then(agent_skills::custom_instructions);
+  let fab_tools = crate::services::agent_tools::fabricator_tools(
+    app.clone(),
+    project_id.clone(),
+    guidance,
+    custom_instructions.is_some(),
+  );
 
   // Your own API keys: every session gets the provider registry so
   // a thread can switch between Copilot's models and the user's own, and a turn
@@ -1012,10 +1023,8 @@ pub(crate) async fn run_turn(
   let byok_registry = state.byok.session_registry();
   // The plugins on in this chat: the Fabric IQ and Work IQ servers it can research
   // with, and the MCP servers the user added (an experiment).
-  let settings = store::get_settings();
   let iq = IqConfig::for_project(&project, &settings);
   let mcp_servers = McpServers::for_project(&project, &settings);
-  let parallel_ui = store::parallel_ui_enabled();
   let provider_model = project.model.clone().filter(|m| byok::is_provider_selection(m));
   let provider = provider_model.as_deref().and_then(byok::describe);
   let choice = ModelChoice::new(
@@ -1038,7 +1047,7 @@ pub(crate) async fn run_turn(
       byok_registry.clone(),
       iq,
       mcp_servers.clone(),
-      parallel_ui,
+      custom_instructions.clone(),
     );
   let first_open = match &provider_model {
     Some(model) => match state.byok.ensure_ready(model) {
@@ -1196,8 +1205,6 @@ pub(crate) async fn run_turn(
     let opts = match continuation {
       Some(prompt) => MessageOptions::new(prompt.to_string()),
       None => {
-        // A Plan-mode message only plans, so it builds nothing to hand over.
-        let text = if parallel_ui && !plan_context { format!("{}\n\n{text}", ui_builder::TURN_NOTE) } else { text.clone() };
         let opts = MessageOptions::new(turn_text(
           &project,
           &text,
@@ -1205,6 +1212,7 @@ pub(crate) async fn run_turn(
           store::manual_deploy_enabled(),
           &iq_ready,
           &mcp_ready,
+          custom_instructions.is_some(),
         ));
         if attach.is_empty() { opts } else { opts.with_attachments(attach.clone()) }
       }
@@ -1944,26 +1952,26 @@ mod tests {
   #[test]
   fn a_subagents_work_goes_under_the_step_that_started_it_and_its_words_stay_out_of_the_reply() {
     let mut ctx = TurnCtx::new(false);
-    let ui = Some("ui-1");
+    let worker = Some("gp-1");
     let events = route(
       &[
-        (None, "tool.execution_start", json!({"toolCallId":"task-1","toolName":"task","arguments":{"description":"Build the screens","agent_type":"ui-builder","mode":"background"}})),
+        (None, "tool.execution_start", json!({"toolCallId":"task-1","toolName":"task","arguments":{"description":"Build the screens","agent_type":"general-purpose","mode":"background"}})),
         (None, "tool.execution_complete", json!({"toolCallId":"task-1","success":true})),
-        (ui, "subagent.started", json!({"toolCallId":"task-1","agentName":"ui-builder","agentDisplayName":"screens","executionMode":"background"})),
-        (ui, "subagent.selected", json!({"agentName":"ui-builder","agentDisplayName":"UI builder"})),
-        (ui, "assistant.reasoning_delta", json!({"reasoningId":"r1","deltaContent":"Shell first."})),
-        (ui, "assistant.message_delta", json!({"messageId":"s1","deltaContent":"I'll put the shell in place."})),
-        (ui, "tool.execution_start", json!({"toolCallId":"edit-1","toolName":"create","arguments":{"path":"src/App.tsx"}})),
-        (ui, "session.info", json!({"infoType":"file_created","message":"src/App.tsx"})),
-        (ui, "tool.execution_complete", json!({"toolCallId":"edit-1","success":true})),
-        // An agent the UI builder starts joins its group.
-        (ui, "tool.execution_start", json!({"toolCallId":"task-2","toolName":"task","arguments":{"description":"Find the styles"}})),
-        (Some("explore-1"), "subagent.started", json!({"toolCallId":"task-2","agentName":"explore","parentId":"ui-1"})),
+        (worker, "subagent.started", json!({"toolCallId":"task-1","agentName":"general-purpose","agentDisplayName":"screens","executionMode":"background"})),
+        (worker, "subagent.selected", json!({"agentName":"general-purpose","agentDisplayName":"General purpose"})),
+        (worker, "assistant.reasoning_delta", json!({"reasoningId":"r1","deltaContent":"Shell first."})),
+        (worker, "assistant.message_delta", json!({"messageId":"s1","deltaContent":"I'll put the shell in place."})),
+        (worker, "tool.execution_start", json!({"toolCallId":"edit-1","toolName":"create","arguments":{"path":"src/App.tsx"}})),
+        (worker, "session.info", json!({"infoType":"file_created","message":"src/App.tsx"})),
+        (worker, "tool.execution_complete", json!({"toolCallId":"edit-1","success":true})),
+        // An agent it starts joins its group.
+        (worker, "tool.execution_start", json!({"toolCallId":"task-2","toolName":"task","arguments":{"description":"Find the styles"}})),
+        (Some("explore-1"), "subagent.started", json!({"toolCallId":"task-2","agentName":"explore","parentId":"gp-1"})),
         (Some("explore-1"), "tool.execution_start", json!({"toolCallId":"grep-1","toolName":"grep","arguments":{"pattern":"--accent"}})),
         (Some("explore-1"), "subagent.completed", json!({"toolCallId":"task-2","agentName":"explore"})),
-        (ui, "assistant.message", json!({"messageId":"s2","content":"Report: the screens are in."})),
+        (worker, "assistant.message", json!({"messageId":"s2","content":"Report: the screens are in."})),
         (None, "assistant.message_delta", json!({"messageId":"m1","deltaContent":"Your screens are in."})),
-        (ui, "subagent.completed", json!({"toolCallId":"task-1","agentName":"ui-builder"})),
+        (worker, "subagent.completed", json!({"toolCallId":"task-1","agentName":"general-purpose"})),
       ],
       &mut ctx,
     );
@@ -1974,8 +1982,8 @@ mod tests {
     assert_eq!(
       agents,
       [
-        ("task-1".to_string(), "UI builder".to_string(), json!("running"), true),
-        ("task-1".to_string(), "UI builder".to_string(), json!("success"), true),
+        ("task-1".to_string(), "General purpose".to_string(), json!("running"), true),
+        ("task-1".to_string(), "General purpose".to_string(), json!("success"), true),
       ]
     );
     let group = Some("task-1".to_string());
@@ -2025,20 +2033,20 @@ mod tests {
   #[test]
   fn a_background_agents_later_runs_show_from_its_own_messages() {
     let mut ctx = TurnCtx::new(false);
-    let ui = Some("ui-1");
+    let worker = Some("gp-1");
     let done = json!({"messageId":"d","content":"The screens are in.","toolRequests":[]});
     let events = route(
       &[
-        (None, "tool.execution_start", json!({"toolCallId":"task-1","toolName":"task","arguments":{"agent_type":"ui-builder","mode":"background"}})),
-        (ui, "subagent.started", json!({"toolCallId":"task-1","agentName":"ui-builder","executionMode":"background"})),
-        (ui, "user.message", json!({"content":"Put up the shell."})),
-        (ui, "assistant.message", json!({"messageId":"a","content":"","toolRequests":[{"name":"create"}]})),
-        (ui, "assistant.message", done.clone()),
-        (ui, "subagent.completed", json!({"toolCallId":"task-1","agentName":"ui-builder"})),
-        (None, "tool.execution_start", json!({"toolCallId":"msg-1","toolName":"write_agent","arguments":{"agent_id":"ui-1"}})),
-        (ui, "user.message", json!({"content":"Here's the data contract."})),
-        (ui, "tool.execution_start", json!({"toolCallId":"edit-2","toolName":"edit","arguments":{"path":"src/App.tsx"}})),
-        (ui, "assistant.message", done),
+        (None, "tool.execution_start", json!({"toolCallId":"task-1","toolName":"task","arguments":{"agent_type":"general-purpose","mode":"background"}})),
+        (worker, "subagent.started", json!({"toolCallId":"task-1","agentName":"general-purpose","executionMode":"background"})),
+        (worker, "user.message", json!({"content":"Put up the shell."})),
+        (worker, "assistant.message", json!({"messageId":"a","content":"","toolRequests":[{"name":"create"}]})),
+        (worker, "assistant.message", done.clone()),
+        (worker, "subagent.completed", json!({"toolCallId":"task-1","agentName":"general-purpose"})),
+        (None, "tool.execution_start", json!({"toolCallId":"msg-1","toolName":"write_agent","arguments":{"agent_id":"gp-1"}})),
+        (worker, "user.message", json!({"content":"Here's the data contract."})),
+        (worker, "tool.execution_start", json!({"toolCallId":"edit-2","toolName":"edit","arguments":{"path":"src/App.tsx"}})),
+        (worker, "assistant.message", done),
       ],
       &mut ctx,
     );
@@ -2089,15 +2097,15 @@ mod tests {
     }))
     .unwrap();
     // The app runs here, or falls back to its published backend.
-    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default()), format!("{LOCAL_NOTE}\n\nAdd a list"));
-    assert!(turn_text(&project, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(FALLBACK_NOTE));
-    assert!(turn_text(&project, "x", Guidance::FabricBacked, false, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
+    assert_eq!(turn_text(&project, "Add a list", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default(), false), format!("{LOCAL_NOTE}\n\nAdd a list"));
+    assert!(turn_text(&project, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(LOCAL_AUTO_PUBLISH_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, true, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(FALLBACK_NOTE));
+    assert!(turn_text(&project, "x", Guidance::FabricBacked, false, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(FALLBACK_AUTO_PUBLISH_NOTE));
     // Never published: no turn publishes it, even with publishing after each turn on.
     let mut unpublished = project.clone();
     unpublished.last_deploy = None;
-    assert!(turn_text(&unpublished, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(LOCAL_UNPUBLISHED_NOTE));
-    assert!(turn_text(&unpublished, "x", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default()).starts_with(LOCAL_NOTE));
+    assert!(turn_text(&unpublished, "x", Guidance::Local, false, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(LOCAL_UNPUBLISHED_NOTE));
+    assert!(turn_text(&unpublished, "x", Guidance::Local, true, &iq::Prepared::default(), &mcp::Prepared::default(), false).starts_with(LOCAL_NOTE));
     assert!(LOCAL_NOTE.contains("runs on this computer") && LOCAL_NOTE.contains("Publish after each chat turn is off"));
     assert!(LOCAL_UNPUBLISHED_NOTE.contains("hasn't been published yet") && !LOCAL_UNPUBLISHED_NOTE.contains("when this turn ends"));
     assert!(FALLBACK_NOTE.contains("published backend") && FALLBACK_NOTE.contains("whether it needs a publish first"));
@@ -2105,9 +2113,9 @@ mod tests {
     let mut team = project.clone();
     team.team = Some(crate::types::TeamBinding::default());
     for manual in [true, false] {
-      let local = turn_text(&team, "x", Guidance::Local, manual, &iq::Prepared::default(), &mcp::Prepared::default());
+      let local = turn_text(&team, "x", Guidance::Local, manual, &iq::Prepared::default(), &mcp::Prepared::default(), false);
       assert_eq!(local, format!("{}\n\nx", crate::services::team::CHAT_NOTE));
-      let fallback = turn_text(&team, "x", Guidance::FabricBacked, manual, &iq::Prepared::default(), &mcp::Prepared::default());
+      let fallback = turn_text(&team, "x", Guidance::FabricBacked, manual, &iq::Prepared::default(), &mcp::Prepared::default(), false);
       assert_eq!(fallback, format!("{}\n\nx", crate::services::team::FALLBACK_CHAT_NOTE));
     }
     assert!(crate::services::team::CHAT_NOTE.contains("runs on this computer"));
@@ -2128,7 +2136,7 @@ mod tests {
     let work = iq::Prepared { ready: IqConfig { fabric: false, work: true }, unavailable: vec![] };
     let note = work.note().unwrap();
     assert_eq!(
-      turn_text(&project, "Who owns billing?", Guidance::Local, true, &work, &mcp::Prepared::default()),
+      turn_text(&project, "Who owns billing?", Guidance::Local, true, &work, &mcp::Prepared::default(), false),
       format!("{LOCAL_NOTE}\n\n{note}\n\nWho owns billing?")
     );
     // The user's MCP servers come after them.
@@ -2138,13 +2146,31 @@ mod tests {
     };
     let chart_note = chart.note().unwrap();
     assert_eq!(
-      turn_text(&project, "Chart sales", Guidance::Local, true, &work, &chart),
+      turn_text(&project, "Chart sales", Guidance::Local, true, &work, &chart, false),
       format!("{LOCAL_NOTE}\n\n{note}\n\n{chart_note}\n\nChart sales")
     );
     assert_eq!(
-      turn_text(&project, "Chart sales", Guidance::Local, true, &iq::Prepared::default(), &chart),
+      turn_text(&project, "Chart sales", Guidance::Local, true, &iq::Prepared::default(), &chart, false),
       format!("{LOCAL_NOTE}\n\n{chart_note}\n\nChart sales")
     );
+  }
+
+  /// While the user has custom instructions, each message reminds Copilot of
+  /// them, last of the notes, right before the user's own words.
+  #[test]
+  fn a_message_reminds_copilot_of_the_users_custom_instructions() {
+    let project: StudioProject = serde_json::from_value(json!({
+      "id": "p", "name": "App", "path": "C:\\apps\\app", "addedAt": "2026-01-01T00:00:00.000Z"
+    }))
+    .unwrap();
+    let work = iq::Prepared { ready: IqConfig { fabric: false, work: true }, unavailable: vec![] };
+    let note = work.note().unwrap();
+    assert_eq!(
+      turn_text(&project, "Add a list", Guidance::Local, true, &work, &mcp::Prepared::default(), true),
+      format!("{LOCAL_NOTE}\n\n{note}\n\n{CUSTOM_INSTRUCTIONS_NOTE}\n\nAdd a list")
+    );
+    assert!(CUSTOM_INSTRUCTIONS_NOTE.starts_with("[Fabricator: ") && CUSTOM_INSTRUCTIONS_NOTE.ends_with(']'));
+    assert!(CUSTOM_INSTRUCTIONS_NOTE.contains(crate::services::agent_tools::FOLLOWED_INSTRUCTION_TOOL));
   }
 
   #[test]

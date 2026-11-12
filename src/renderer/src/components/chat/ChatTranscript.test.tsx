@@ -233,7 +233,7 @@ describe('chat transcript', () => {
       tools: [
         tool('task1', 'task', {
           title: 'Build the screens',
-          agent: { name: 'UI builder', state: 'running' }
+          agent: { name: 'General purpose', state: 'running' }
         }),
         created('App', 'success'),
         created('Leads', 'running')
@@ -241,7 +241,7 @@ describe('chat transcript', () => {
       segments: [{ kind: 'tool', id: 'task1' }]
     }
     render(<Harness initial={[user, working]} />)
-    const live = screen.getByRole('button', { name: 'UI builder, Build the screens, 2 steps' })
+    const live = screen.getByRole('button', { name: 'General purpose, Build the screens, 2 steps' })
     expect(live.getAttribute('aria-expanded')).toBe('true')
     expect(
       document.querySelector('.step-agent-body .step-line[title="Created src/App.tsx"]')
@@ -259,7 +259,7 @@ describe('chat transcript', () => {
         tool('task1', 'task', {
           title: 'Build the screens',
           output: 'Agent started in background with agent_id: ui-1.',
-          agent: { name: 'UI builder', state: 'success', background: true }
+          agent: { name: 'General purpose', state: 'success', background: true }
         }),
         created('App', 'success'),
         created('Leads', 'success')
@@ -271,7 +271,9 @@ describe('chat transcript', () => {
     }
     render(<Harness initial={[user, done]} />)
     await act(async () => fireEvent.click(screen.getByRole('button', { name: /^Worked for 1m/ })))
-    const folded = screen.getByRole('button', { name: 'UI builder, Build the screens, 2 steps' })
+    const folded = screen.getByRole('button', {
+      name: 'General purpose, Build the screens, 2 steps'
+    })
     expect(folded.getAttribute('aria-expanded')).toBe('false')
     expect(document.querySelector('.step-agent-body')).toBeNull()
     await act(async () => fireEvent.click(folded))
@@ -293,7 +295,7 @@ describe('chat transcript', () => {
       tools: [
         tool('task1', 'task', {
           title: 'Build the screens',
-          agent: { name: 'UI builder', state: 'running', background: true }
+          agent: { name: 'General purpose', state: 'running', background: true }
         }),
         tool('page', 'create', { parent: 'task1' }),
         ...steps
@@ -311,9 +313,9 @@ describe('chat transcript', () => {
     // Only the newest steps stay on screen while live, but the agent at work does too.
     expect(screen.getByRole('button', { name: 'Show 1 earlier step' })).toBeTruthy()
     expect(
-      screen.getByRole('button', { name: 'UI builder, Build the screens, 1 step' })
+      screen.getByRole('button', { name: 'General purpose, Build the screens, 1 step' })
     ).toBeTruthy()
-    expect(screen.getByText('UI builder is working…')).toBeTruthy()
+    expect(screen.getByText('General purpose is working…')).toBeTruthy()
   })
 
   it('opens a changed file’s diff from its chip, with a way into the Code tab', async () => {

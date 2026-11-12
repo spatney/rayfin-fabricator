@@ -12,6 +12,9 @@
 //!   isn't running, start it again after a problem the agent's changes may have
 //!   fixed, and wait until it has picked up the latest changes to the app's
 //!   backend sources.
+//! - **Custom instructions** (sessions while the user has some):
+//!   `fabricator_followed_instruction` shows the user, under the turn's answer,
+//!   each of their custom instructions that shaped the agent's work.
 //!
 //! Registered on each chat session via
 //! [`SessionConfig::with_tools`](github_copilot_sdk::SessionConfig::with_tools)
@@ -52,9 +55,13 @@ use crate::types::{
 
 /// Build the Fabricator in-process tool set for one project's chat session.
 /// The local backend tools come with the Local guidance only: other apps'
-/// backends run on Microsoft Fabric.
-pub fn fabricator_tools(app: AppHandle, project_id: String, guidance: Guidance) -> Vec<Tool> {
+/// backends run on Microsoft Fabric. The tool that shows a followed custom
+/// instruction comes only while the user has some (`custom_instructions`).
+pub fn fabricator_tools(app: AppHandle, project_id: String, guidance: Guidance, custom_instructions: bool) -> Vec<Tool> {
   let mut tools = vec![connect_fabric_iq_tool(app.clone(), project_id.clone())];
+  if custom_instructions {
+    tools.push(followed_instruction_tool());
+  }
   if guidance == Guidance::Local {
     tools.push(local_status_tool(app.clone(), project_id.clone()));
     tools.push(local_call_tool(app.clone(), project_id.clone()));
@@ -372,6 +379,68 @@ async fn ask_on_card(
         return None;
       }
     }
+  }
+}
+
+/* --------------------------- custom instructions --------------------------- */
+
+/// The tool chat calls when one of the user's custom instructions shaped its
+/// work (see `agent_skills::custom_instructions_dir`). The turn shows the
+/// instruction (the call's title) and what was done (its output) under its
+/// answer.
+pub(crate) const FOLLOWED_INSTRUCTION_TOOL: &str = "fabricator_followed_instruction";
+
+fn followed_instruction_tool() -> Tool {
+  Tool::new(FOLLOWED_INSTRUCTION_TOOL)
+    .with_description(
+      "Show the user that you followed one of their custom instructions, the ones they set in \
+       Fabricator for every app they build. Call it once for each instruction that shaped your \
+       work in this turn, after you've applied it, and not for ones this turn didn't touch. Pass \
+       `instruction`, as the user wrote it, and `how`: what you did to follow it, in a few plain \
+       words, such as \"made the app follow the computer's light or dark setting\". Fabricator \
+       shows both under your answer.",
+    )
+    .with_parameters(json!({
+      "type": "object",
+      "properties": {
+        "instruction": { "type": "string", "description": "The custom instruction you followed, as the user wrote it." },
+        "how": { "type": "string", "description": "What you did to follow it, in a few plain words." }
+      },
+      "required": ["instruction", "how"]
+    }))
+    .with_skip_permission(true)
+    // Always in the agent's tool list: a deferred tool is only found by searching for it.
+    .with_defer(DeferMode::Never)
+    .with_handler(Arc::new(FollowedInstructionTool))
+}
+
+struct FollowedInstructionTool;
+
+#[derive(Deserialize)]
+struct FollowedParams {
+  #[serde(default)]
+  instruction: Option<String>,
+  #[serde(default)]
+  how: Option<String>,
+}
+
+#[async_trait]
+impl ToolHandler for FollowedInstructionTool {
+  async fn call(&self, invocation: ToolInvocation) -> Result<ToolResult, SdkError> {
+    let params = invocation.params::<FollowedParams>().ok();
+    let field = |pick: fn(&FollowedParams) -> &Option<String>| params.as_ref().and_then(|p| pick(p).as_deref());
+    Ok(followed_instruction(field(|p| &p.instruction), field(|p| &p.how)))
+  }
+}
+
+/// What a followed instruction's call returns: what was done, as the user sees
+/// it under the instruction.
+fn followed_instruction(instruction: Option<&str>, how: Option<&str>) -> ToolResult {
+  let given = |value: Option<&str>| value.map(shown_reason).filter(|v| !v.is_empty());
+  match (given(instruction), given(how)) {
+    (Some(_), Some(how)) => ToolResult::Text(how),
+    (None, _) => failure("Pass `instruction`: the custom instruction you followed, as the user wrote it."),
+    (_, None) => failure("Pass `how`: what you did to follow the instruction, in a few plain words."),
   }
 }
 
@@ -1625,6 +1694,21 @@ mod tests {
     assert_eq!(shown_reason("  the Hawaii\n sales data. "), "the Hawaii sales data");
     let long = shown_reason(&"word ".repeat(60));
     assert!(long.ends_with('…') && long.chars().count() <= REASON_CHARS + 1, "{long}");
+  }
+
+  /* -------------------------- custom instructions -------------------------- */
+
+  /// What the turn shows under the instruction is what the call returns: what
+  /// was done, on one line. A call missing either part says what to pass.
+  #[test]
+  fn a_followed_instruction_returns_what_was_done() {
+    let done = followed_instruction(Some("Use system theme by default"), Some(" made the app follow\n the system's setting. "));
+    assert!(matches!(done, ToolResult::Text(_)));
+    assert_eq!(text_of(&done), "made the app follow the system's setting");
+    let missing = |instruction: Option<&str>, how: Option<&str>| text_of(&followed_instruction(instruction, how));
+    assert!(missing(None, Some("x")).contains("Pass `instruction`"));
+    assert!(missing(Some(" "), Some("x")).contains("Pass `instruction`"));
+    assert!(missing(Some("Use system theme"), Some("")).contains("Pass `how`"));
   }
 
   /// Questions come one at a time: the card waits for another question to be

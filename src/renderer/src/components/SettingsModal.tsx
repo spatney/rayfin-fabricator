@@ -22,6 +22,8 @@ interface Props {
   onManageMcpServers?: () => void
   /** Open Chat defaults: the model and plugins a new project's chat starts with. */
   onManageChatDefaults?: () => void
+  /** Open Custom instructions: what Copilot follows in every app. */
+  onManageCustomInstructions?: () => void
   /** Leave for the setup screen to re-check tools and sign-ins. */
   onReviewSetup?: () => void
 }
@@ -167,6 +169,7 @@ export default function SettingsModal({
   onManageKeys,
   onManageMcpServers,
   onManageChatDefaults,
+  onManageCustomInstructions,
   onReviewSetup
 }: Props): JSX.Element {
   useSuppressPreview()
@@ -283,6 +286,20 @@ export default function SettingsModal({
                 >
                   <button type="button" className="btn btn--sm" onClick={onManageChatDefaults}>
                     Manage chat defaults
+                  </button>
+                </Item>
+              )}
+              {onManageCustomInstructions && (
+                <Item
+                  title="Custom instructions"
+                  desc="What Copilot follows in every app you build, such as “Use the system theme by default.”"
+                >
+                  <button
+                    type="button"
+                    className="btn btn--sm"
+                    onClick={onManageCustomInstructions}
+                  >
+                    Edit instructions
                   </button>
                 </Item>
               )}
@@ -420,12 +437,6 @@ export default function SettingsModal({
                       hint="Add Work IQ to chat's plugins. Turned on in a chat, it lets chat look up your Microsoft 365 email, meetings, files, Teams messages and people, with Microsoft's Work IQ, and use what it finds while it builds. Read-only. You sign in with your work account in your browser. Needs a Microsoft 365 Copilot license and your organization's approval."
                       checked={Boolean(settings.experiments?.workIq)}
                       onChange={(v) => onChange({ experiments: { workIq: v } })}
-                    />
-                    <ToggleRow
-                      label="Parallel UI builder"
-                      hint="When chat builds a new app or new screens, Copilot hands the screens to a UI builder that builds them while Copilot builds the data and logic behind them, so the preview shows the app taking shape early. Its steps show under UI builder in the work log. It runs on the chat's model, so these turns use more of your Copilot allowance."
-                      checked={Boolean(settings.experiments?.parallelUi)}
-                      onChange={(v) => onChange({ experiments: { parallelUi: v } })}
                     />
                   </div>
                 )}

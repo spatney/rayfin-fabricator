@@ -1824,7 +1824,8 @@ button.thinking-head:hover {
 }
 
 /* What Copilot Fusion chose for a turn: a quiet line under the answer. */
-.turn-fusion {
+.turn-fusion,
+.turn-instructions {
   display: flex;
   align-items: flex-start;
   gap: 5px;
@@ -1834,10 +1835,16 @@ button.thinking-head:hover {
   color: var(--text-faint);
 }
 
-.turn-fusion .codicon[class*='codicon-'] {
+.turn-fusion .codicon[class*='codicon-'],
+.turn-instructions .codicon[class*='codicon-'] {
   flex: none;
   margin-top: 2px;
   font-size: 14px;
+}
+
+/* The instruction itself reads a step brighter than the words around it. */
+.turn-instruction {
+  color: var(--text-dim);
 }
 
 .files-changed {

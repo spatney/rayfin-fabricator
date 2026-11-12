@@ -15,7 +15,7 @@ param(
   [Parameter(Mandatory)] [string] $Checkout,
   [Parameter(Mandatory)] [string] $Out,
   # preview-local is captured live (the harness renders it without the app): ask for it by name.
-  [string[]] $Shots = @('team-overview', 'team-publish', 'deployments', 'account-menu', 'accounts', 'team-create', 'rayfin-version', 'port-conflict', 'plan', 'skills', 'secrets', 'setup', 'help', 'search', 'deploy-progress', 'deploy-error', 'blueprint', 'model-relations', 'model-access', 'local-data', 'seed-offer', 'model-picker', 'model-providers', 'add-menu', 'plugins', 'mcp-plugins', 'connect-data', 'data-chips', 'settings', 'settings-experiments', 'chat-defaults', 'mcp-servers', 'migrate-report', 'migration-card', 'app-gallery', 'touch-up', 'touch-up-draw'),
+  [string[]] $Shots = @('team-overview', 'team-publish', 'deployments', 'account-menu', 'accounts', 'team-create', 'rayfin-version', 'port-conflict', 'plan', 'skills', 'secrets', 'setup', 'help', 'search', 'deploy-progress', 'deploy-error', 'blueprint', 'model-relations', 'model-access', 'local-data', 'seed-offer', 'model-picker', 'model-providers', 'add-menu', 'plugins', 'mcp-plugins', 'connect-data', 'data-chips', 'settings', 'settings-experiments', 'chat-defaults', 'custom-instructions', 'mcp-servers', 'migrate-report', 'migration-card', 'app-gallery', 'touch-up', 'touch-up-draw'),
   [ValidateSet('dark', 'light')] [string[]] $Themes = @('dark', 'light'),
   [int] $Port = 1437,
   [int] $Width = 1440,

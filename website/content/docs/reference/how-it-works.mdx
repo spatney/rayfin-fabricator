@@ -10,7 +10,7 @@ Fabricator wraps the tools you would otherwise run by hand. You describe the app
 1. You create, open, or clone a Rayfin project. A new project starts on the newest Rayfin release the local backend runs, with its `@microsoft/rayfin-*` packages pinned to that minor version, such as `~1.36.0`.
 2. When a project opens, Fabricator starts its local backend: the bundled rayfin-local runs the app's data API, sign-in, functions, connectors and storage, and starts the app's own Vite dev server.
 3. You type a request in chat.
-4. The bundled Copilot engine reads and edits files in the project folder. It doesn't run or publish the app: Fabricator runs it, and publishing is your choice.
+4. The bundled Copilot engine reads and edits files in the project folder. It follows Fabricator's own guidance and your [custom instructions](/docs/reference/settings#custom-instructions), which Fabricator gives each chat from its app data rather than the project. It doesn't run or publish the app: Fabricator runs it, and publishing is your choice.
 5. The local backend picks up each change as Copilot saves it. Vite hot-reloads the frontend, entity changes update the local database, functions rebuild, and changes to `rayfin/rayfin.yml` apply, with a restart of the backend when they need one. A data model change that would delete local data waits for you to decide.
 6. Copilot checks its work against the running app with two tools Fabricator gives it, `fabricator_local_status` and `fabricator_local_call`, instead of starting servers itself.
 7. The preview shows the app from its Vite dev server, signed in automatically.

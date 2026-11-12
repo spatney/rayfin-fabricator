@@ -1707,7 +1707,20 @@ export interface AppSettings {
    * project's chat keeps its own choice after that.
    */
   chatDefaults?: ChatDefaults
+  /**
+   * Your own instructions for every app (Settings → Custom instructions), such
+   * as "Use the system theme by default." Every Build chat follows them, with
+   * Fabricator's own guidance, from its next message. They stay in Fabricator:
+   * they're never written into a project. Saving an empty text clears them.
+   */
+  customInstructions?: string
 }
+
+/**
+ * The most characters of custom instructions Fabricator keeps, since they go
+ * with every message. Must match `agent_skills::CUSTOM_INSTRUCTIONS_MAX` in Rust.
+ */
+export const CUSTOM_INSTRUCTIONS_MAX = 8000
 
 /** The model and plugins a new project's chat starts with. */
 export interface ChatDefaults {
@@ -1812,13 +1825,6 @@ export interface ExperimentFlags {
    * turned on there.
    */
   workIq?: boolean
-  /**
-   * Parallel UI builder: when chat builds a new app or new screens, Copilot
-   * hands the screens to a UI builder agent that builds the frontend while
-   * Copilot builds the data model and logic, so the preview shows the app
-   * taking shape early.
-   */
-  parallelUi?: boolean
 }
 
 /**

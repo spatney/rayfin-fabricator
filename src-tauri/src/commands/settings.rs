@@ -1,8 +1,9 @@
-//! Settings commands: get + patch (theme, experiment flags, chat defaults).
+//! Settings commands: get + patch (theme, experiment flags, chat defaults,
+//! custom instructions).
 
 use serde::Deserialize;
 
-use crate::services::store;
+use crate::services::{agent_skills, store};
 use crate::types::{AppSettings, ChatDefaults, ExperimentFlags};
 
 /// Off the main thread, like every read the app makes while it starts.
@@ -27,6 +28,9 @@ pub struct SettingsPatch {
   /// Replaces the chat defaults as a whole.
   #[serde(default)]
   chat_defaults: Option<ChatDefaults>,
+  /// Replaces the custom instructions; an empty text clears them.
+  #[serde(default)]
+  custom_instructions: Option<String>,
 }
 
 #[tauri::command]
@@ -43,6 +47,12 @@ pub fn settings_set(patch: SettingsPatch) -> AppSettings {
   );
   if let Some(defaults) = patch.chat_defaults {
     settings = store::set_chat_defaults(crate::commands::chat::chat_defaults(defaults, &settings.mcp_servers));
+  }
+  // Each Build chat picks them up from its next message (see `CopilotManager::turn_session`).
+  if let Some(text) = patch.custom_instructions {
+    settings = store::set_custom_instructions(agent_skills::custom_instructions(&text));
+    // Their file follows now, so instructions cleared here leave none behind.
+    let _ = agent_skills::custom_instructions_dir(settings.custom_instructions.as_deref());
   }
   if work_iq_changed {
     use crate::services::iq::{self, Iq, IqConfig};

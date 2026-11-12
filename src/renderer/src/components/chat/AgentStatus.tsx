@@ -5,7 +5,7 @@ import type { UIChatMessage } from './types'
 
 /** What the turn is doing right now, in a few plain words. */
 export function livePhase(m: UIChatMessage): string {
-  // Subagents still working, such as the UI builder, by name.
+  // Subagents still working, such as an explore agent, by name.
   const agents = m.tools.flatMap((t) => (t.agent?.state === 'running' ? [t.agent.name] : []))
   const running = m.tools.find((t) => t.state === 'running' && !isHiddenTool(t.name))
   if (running) {

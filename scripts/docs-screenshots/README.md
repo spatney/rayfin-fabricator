@@ -213,6 +213,7 @@ of them. The current crops (no crop means the whole 1440×900 window):
 | `settings` | harness | `410,40,620,820` |
 | `settings-experiments` | harness, taller window (picked by the script) | `410,40,620,920` |
 | `chat-defaults` | harness | `410,74,620,752` |
+| `custom-instructions` | harness | `410,187,620,526` |
 | `migrate-report` | harness | `340,12,760,716` |
 | `migration-card` | harness | `0,610,720,290` |
 | `account-menu` | harness | `1040,0,400,272` |

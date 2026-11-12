@@ -31,6 +31,7 @@ export interface ActionHandlers {
   openApiKeys(): void
   openMcpServers(): void
   openChatDefaults(): void
+  openCustomInstructions(): void
   refreshFabricAuth(): void
   signInToFabric(): void
   openSetup(): void
@@ -409,6 +410,14 @@ export function buildActions(ctx: ActionContext): SearchItem[] {
     keywords: ['default model', 'models', 'plugins', 'mcp', 'chat', 'new project'],
     icon: { kind: 'codicon', name: 'comment-discussion' },
     run: run.openChatDefaults
+  })
+  add({
+    id: 'action:custom-instructions',
+    title: 'Edit custom instructions',
+    subtitle: 'What Copilot follows in every app you build',
+    keywords: ['instructions', 'rules', 'preferences', 'guidance', 'copilot', 'every app'],
+    icon: { kind: 'codicon', name: 'note' },
+    run: run.openCustomInstructions
   })
   if (ctx.fabricSignedIn && project) {
     add({

@@ -1,13 +1,13 @@
 ---
 title: "Settings"
-description: "Every option in Fabricator's Settings: accounts, API keys, MCP servers, chat defaults, setup, workspace folder, theme, text size, diagnostics, experiments, and About."
+description: "Every option in Fabricator's Settings: accounts, API keys, MCP servers, chat defaults, custom instructions, setup, workspace folder, theme, text size, diagnostics, experiments, and About."
 ---
 
-Open **Settings** to manage your accounts, choose what a new project's chat starts with, change how Fabricator looks, where new projects are created, how diagnostics are captured, and which experiments are on.
+Open **Settings** to manage your accounts, choose what a new project's chat starts with, tell Copilot what you want in every app, change how Fabricator looks, where new projects are created, how diagnostics are captured, and which experiments are on.
 
 Settings groups its options into **General**, **Appearance**, **Diagnostics**, **Experiments**, and **About**. Each option shows its name and what it does, with its control on the right.
 
-![The Settings dialog: Accounts, API keys, MCP servers, Chat defaults, Setup and Workspace folder under General, then Theme and Text size under Appearance.](/screenshots/settings.webp)
+![The Settings dialog: Accounts, API keys, MCP servers, Chat defaults, Custom instructions, Setup and Workspace folder under General, with Appearance below.](/screenshots/settings.webp)
 
 ## Accounts
 
@@ -32,6 +32,23 @@ Select **Manage MCP servers** to add, check, change or remove the MCP servers th
 ![Chat defaults: under Model, Claude Opus 5.5 at High; under Plugins, Fabric IQ on and Work IQ off; under MCP servers, Charts on and Microsoft Learn and Issue tracker off, each with its address or command.](/screenshots/chat-defaults.webp)
 
 Fabricator saves each choice as you make it. Projects you create, open, clone or import from then on start with them, and each project's chat keeps its own choice after that: changing your chat defaults doesn't change the projects you already have. A new project gets Work IQ only while its experiment is on. Without chat defaults, a new project's chat starts on **Auto** with every plugin off.
+
+## Custom instructions
+
+**Custom instructions** tell Copilot what you want in every app you build, such as "Use the system theme by default." Select **Edit instructions** to open **Custom instructions**, write your instructions in **Instructions**, then select **Save**.
+
+![Custom instructions: four instructions in the Instructions box, about the theme, wording, dates and where each page's main action goes, with the count of characters used out of 8,000.](/screenshots/custom-instructions.webp)
+
+- Each app's chat follows them from its next message, in the apps you already have and in new ones. Copilot treats them as part of every request: when it builds a new app, it sets the app up your way, even where the starter template does it differently.
+- When one of your instructions shapes a turn's work, a line under the answer says so, such as `Followed your instruction “Use system theme by default”`. Hover over the instruction to see what Copilot did to follow it.
+- What you ask in the chat comes first, and so do Fabricator's own rules: Copilot doesn't start or publish your app, even if your instructions say to.
+- They're saved in Fabricator's settings on this computer, not in your apps, so other people who work on an app don't get them.
+- They can be up to 8,000 characters. Keep them short: Copilot reads them with every message.
+
+To stop using them, delete the text and select **Save**.
+
+> [!TIP]
+> Custom instructions suit short rules that fit every app. For longer guidance that only some requests need, such as your brand guidelines, add a [custom skill](/docs/build/skills#add-a-custom-skill): Copilot reads a skill when a request calls for it.
 
 ## Theme
 
@@ -91,7 +108,7 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 ## Experiments
 
-**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has four experiments: **Team workspaces**, **Migrate Power BI reports**, **Work IQ** and **Parallel UI builder**.
+**Experiments** is collapsed by default. It says "These features are experimental and off by default. They may be unstable, change, or be removed in a future update." It has three experiments: **Team workspaces**, **Migrate Power BI reports** and **Work IQ**.
 
 ### Team workspaces
 
@@ -113,13 +130,6 @@ When **Full diagnostics** is on, Fabricator also captures prompts, responses, an
 
 > [!WARNING]
 > Work IQ is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
-
-### Parallel UI builder
-
-**Parallel UI builder** lets chat build an app's screens at the same time as the rest of the app. When a request builds a new app, or adds or rebuilds a page, a screen or a dashboard, Copilot hands the screens to a second agent, the **UI builder**, early in the turn. The UI builder builds them while Copilot works out the app's data and builds the logic behind them, so the preview shows the app taking shape early. Its steps show in the work log under **UI builder**. It runs on the chat's model, so these turns use more of your Copilot plan's allowance. Turning the experiment on or off takes effect from each chat's next message. See [See the screens early with the UI builder](/docs/build/chat#see-the-screens-early-with-the-ui-builder).
-
-> [!WARNING]
-> The Parallel UI builder is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
 
 ## Publish after each chat turn
 

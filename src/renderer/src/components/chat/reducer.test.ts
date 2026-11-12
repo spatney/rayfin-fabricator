@@ -121,7 +121,7 @@ describe('reduceChatMessage subagents', () => {
     m = reduceChatMessage(m, {
       type: 'agent',
       id: 'task1',
-      name: 'UI builder',
+      name: 'General purpose',
       state: 'running',
       background: true
     })
@@ -139,22 +139,31 @@ describe('reduceChatMessage subagents', () => {
     ])
     expect(m.tools[0]).toMatchObject({
       state: 'success',
-      agent: { name: 'UI builder', state: 'running', background: true }
+      agent: { name: 'General purpose', state: 'running', background: true }
     })
     m = reduceChatMessage(m, {
       type: 'agent',
       id: 'task1',
-      name: 'UI builder',
+      name: 'General purpose',
       state: 'success',
       background: true
     })
-    expect(m.tools[0].agent).toEqual({ name: 'UI builder', state: 'success', background: true })
+    expect(m.tools[0].agent).toEqual({
+      name: 'General purpose',
+      state: 'success',
+      background: true
+    })
   })
 
   it('settles an agent still working when the turn ends', () => {
     let m = reduceChatMessage(base(), { type: 'tool-start', tool: task })
     m = reduceChatMessage(m, { type: 'tool-end', id: 'task1', state: 'success' })
-    m = reduceChatMessage(m, { type: 'agent', id: 'task1', name: 'UI builder', state: 'running' })
+    m = reduceChatMessage(m, {
+      type: 'agent',
+      id: 'task1',
+      name: 'General purpose',
+      state: 'running'
+    })
     m = reduceChatMessage(m, { type: 'error', text: 'Stopped' })
     expect(m.tools[0]).toMatchObject({ state: 'success', agent: { state: 'error' } })
   })

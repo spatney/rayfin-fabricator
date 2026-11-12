@@ -9,7 +9,7 @@ import { StepRow } from './StepRow'
 const LIVE_WINDOW = 4
 
 /**
- * A step that started a subagent, such as the UI builder: the agent's name,
+ * A step that started a subagent, such as an explore agent: the agent's name,
  * what it was asked to do, and the steps it took. While the agent works its
  * steps stay open and follow the newest ones, so its progress shows beside the
  * main agent's; once it's done they fold into the one line. The user's own

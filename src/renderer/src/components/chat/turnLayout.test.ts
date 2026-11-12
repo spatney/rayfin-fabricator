@@ -98,7 +98,7 @@ describe('layoutTurn', () => {
       [
         tool('task', 'task', {
           title: 'Build the screens',
-          agent: { name: 'UI builder', state: 'success' }
+          agent: { name: 'General purpose', state: 'success' }
         }),
         tool('shell', 'create', { parent: 'task' }),
         tool('model', 'edit'),

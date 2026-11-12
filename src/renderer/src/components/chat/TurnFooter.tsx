@@ -1,4 +1,14 @@
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type JSX } from 'react'
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type JSX
+} from 'react'
 import type { ChatFusion } from '@shared/ipc'
 import { useAutoTiers, useCopilotModels } from '@renderer/copilotModels'
 import { ClockIcon, Codicon, ReloadIcon } from '../icons'
@@ -8,7 +18,13 @@ import { formatClock, formatFullDate, formatTurnDuration } from './format'
 import { describeFusion } from './fusion'
 import { ToolKindIcon } from './icons'
 import { basename } from './paths'
-import { answerText, filesChanged, type FileChange } from './turnLayout'
+import {
+  answerText,
+  filesChanged,
+  followedInstructions,
+  type FileChange,
+  type FollowedInstruction
+} from './turnLayout'
 import type { UIChatMessage } from './types'
 
 /** File chips shown before "+N more". */
@@ -161,9 +177,33 @@ function FusionLine({ fusion }: { fusion: ChatFusion }): JSX.Element {
 }
 
 /**
+ * The user's custom instructions a turn followed, as Copilot reported them,
+ * with what it did to follow each on hover.
+ */
+function InstructionsLine({ followed }: { followed: FollowedInstruction[] }): JSX.Element {
+  return (
+    <div className="turn-instructions">
+      <Codicon name="note" />
+      <span>
+        {followed.length === 1 ? 'Followed your instruction ' : 'Followed your instructions '}
+        {followed.map((f, i) => (
+          <Fragment key={f.instruction}>
+            {i > 0 && (i === followed.length - 1 ? ' and ' : ', ')}
+            <span className="turn-instruction" title={f.how}>
+              “{f.instruction}”
+            </span>
+          </Fragment>
+        ))}
+      </span>
+    </div>
+  )
+}
+
+/**
  * The foot of a finished assistant turn, in one wrapping row: the files it
  * changed, then its duration, timestamp, and actions (Copy, Try again). What
- * Copilot Fusion chose goes on a line above it.
+ * Copilot Fusion chose, and the user's custom instructions the turn followed,
+ * go on lines above it.
  */
 export const TurnFooter = memo(function TurnFooter({
   message: m,
@@ -184,8 +224,16 @@ export const TurnFooter = memo(function TurnFooter({
   const panelId = useId()
   const toggle = useCallback((path: string) => setShown((cur) => (cur === path ? null : path)), [])
   const hasActions = Boolean(copy || onTryAgain || m.elapsedMs != null || m.createdAt != null)
+  const followed = useMemo(() => followedInstructions(m.tools), [m.tools])
   const fusion = m.fusion ? <FusionLine fusion={m.fusion} /> : null
-  if (files.length === 0 && !hasActions) return fusion
+  const lines =
+    fusion || followed.length > 0 ? (
+      <>
+        {fusion}
+        {followed.length > 0 && <InstructionsLine followed={followed} />}
+      </>
+    ) : null
+  if (files.length === 0 && !hasActions) return lines
   const open = files.find((f) => f.path === shown && f.diff != null)
   const diff = open ? (
     <FileDiff
@@ -253,7 +301,7 @@ export const TurnFooter = memo(function TurnFooter({
   if (float) {
     return (
       <>
-        {fusion}
+        {lines}
         {chips}
         {diff}
         {actions}
@@ -263,13 +311,13 @@ export const TurnFooter = memo(function TurnFooter({
   if (!chips)
     return (
       <>
-        {fusion}
+        {lines}
         <div className="turn-footer">{actions}</div>
       </>
     )
   return (
     <>
-      {fusion}
+      {lines}
       {chips}
       {diff}
     </>

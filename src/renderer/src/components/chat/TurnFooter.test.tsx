@@ -47,4 +47,36 @@ describe('TurnFooter', () => {
       'Using Single: one solver will work on your request.'
     )
   })
+
+  it('says which of your custom instructions a turn followed, with what Copilot did on hover', () => {
+    const followed = (id: string, title: string, output?: string, state = 'success' as const) => ({
+      id,
+      name: 'fabricator_followed_instruction',
+      title,
+      state,
+      output
+    })
+    const message: UIChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      text: 'Done.',
+      tools: [
+        followed('f1', 'Use system theme by default', 'made the app follow the system’s setting'),
+        followed('f2', 'use system theme by default', 'again'),
+        followed('f3', 'Show dates like 5 Mar 2026'),
+        { ...followed('f4', 'Write in French'), state: 'error' }
+      ],
+      pending: false
+    }
+    const { container } = render(
+      <TurnFooter message={message} projectPath="C:\\apps\\todo" latest={false} />
+    )
+    const line = container.querySelector('.turn-instructions')
+    expect(line?.textContent).toBe(
+      'Followed your instructions “Use system theme by default” and “Show dates like 5 Mar 2026”'
+    )
+    expect(screen.getByText('“Use system theme by default”').getAttribute('title')).toBe(
+      'made the app follow the system’s setting'
+    )
+  })
 })

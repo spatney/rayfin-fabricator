@@ -44,6 +44,7 @@ import PortConflictModal, {
 import SettingsModal from '../components/SettingsModal'
 import McpServersModal from '../components/mcp/McpServersModal'
 import ChatDefaultsModal from '../components/ChatDefaultsModal'
+import CustomInstructionsModal from '../components/CustomInstructionsModal'
 import { applyUiScale, UI_SCALES } from '../theme'
 import ChatPanel, { type UIChatMessage, type OutboundPrompt } from '../components/ChatPanel'
 import { segmentsForStorage, segmentsFromStorage } from '../components/chat/storage'
@@ -339,6 +340,8 @@ export default function Workbench({
   const [showSettings, setShowSettings] = useState(false)
   /** Chat defaults, opened from Settings or Search. */
   const [showChatDefaults, setShowChatDefaults] = useState(false)
+  /** Custom instructions, opened from Settings or Search. */
+  const [showCustomInstructions, setShowCustomInstructions] = useState(false)
   /** The full-screen Help assistant, opened from the status bar or Ctrl/Cmd+J. */
   const [showHelp, setShowHelp] = useState(false)
   /** What Help was opened to ask, such as why a deploy failed. */
@@ -2953,6 +2956,7 @@ export default function Workbench({
         openApiKeys: openModelProviders,
         openMcpServers: () => openMcpServers(),
         openChatDefaults: () => setShowChatDefaults(true),
+        openCustomInstructions: () => setShowCustomInstructions(true),
         refreshFabricAuth: () => {
           if (active) openAuthRefresh(active)
         },
@@ -3751,6 +3755,10 @@ export default function Workbench({
             setShowSettings(false)
             setShowChatDefaults(true)
           }}
+          onManageCustomInstructions={() => {
+            setShowSettings(false)
+            setShowCustomInstructions(true)
+          }}
           onReviewSetup={() => {
             setShowSettings(false)
             onReviewSetup()
@@ -3772,6 +3780,14 @@ export default function Workbench({
             setShowChatDefaults(false)
             openMcpServers()
           }}
+        />
+      )}
+
+      {showCustomInstructions && settings && (
+        <CustomInstructionsModal
+          instructions={settings.customInstructions}
+          onSave={(customInstructions) => onSettingsChange({ customInstructions })}
+          onClose={() => setShowCustomInstructions(false)}
         />
       )}
 

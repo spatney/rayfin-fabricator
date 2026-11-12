@@ -185,9 +185,10 @@ in `.md`.
 | `advisor` | The Advisor: grade, check strip, summary and issues | `/docs/ship/advisor` |
 | `advisor-finding` | An open Advisor issue with its fix actions | `/docs/ship/advisor` |
 | `rayfin-version` | The Rayfin version control with an update available | `/docs/ship/rayfin-versions` |
-| `settings` | The Settings dialog: General (with **API keys**, **MCP servers** and **Chat defaults**) and Appearance (sample data) | `/docs/reference/settings` |
+| `settings` | The Settings dialog: General (with **API keys**, **MCP servers**, **Chat defaults** and **Custom instructions**), with Appearance below (sample data) | `/docs/reference/settings` |
 | `chat-defaults` | **Chat defaults**: Claude Opus 5.5 at High, with Fabric IQ and the Charts MCP server on, and Work IQ, Microsoft Learn and Issue tracker off (sample data) | `/docs/reference/settings` |
-| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports**, **Work IQ** and **Parallel UI builder**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq` |
+| `custom-instructions` | **Custom instructions** with four instructions about the theme, wording, dates and page layout, and the character count (sample data) | `/docs/reference/settings` |
+| `settings-experiments` | Settings' Experiments section with **Team workspaces**, **Migrate Power BI reports** and **Work IQ**, all off (sample data) | `/docs/team`, `/docs/build/migrate-power-bi`, `/docs/build/fabric-iq-and-work-iq` |
 | `migrate-report` | **Migrate a Power BI report** with a report picked: its workspace, semantic model, pages and the three checks, all passing (sample data) | `/docs/build/migrate-power-bi` |
 | `migration-card` | The Migration card above the chat composer after the first page, with **Migrate next page** and **Migrate the rest** (sample data) | `/docs/build/migrate-power-bi` |
 | `app-gallery` | The **App gallery** with the sample user's apps, and the sample app's details open beside them (sample data) | `/docs/build/app-gallery` |

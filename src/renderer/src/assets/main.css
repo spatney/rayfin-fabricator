@@ -10069,6 +10069,23 @@ button.deploy-trouble-ray:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Custom instructions: room for a few lines of guidance, with its count. */
+.custom-instructions-text {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 160px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.custom-instructions-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.custom-instructions-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
 .switch {
   position: relative;
   flex: none;

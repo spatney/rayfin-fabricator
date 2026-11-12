@@ -23,6 +23,8 @@ Use `Shift+Enter` for a new line. If you type `@`, Fabricator opens **Reference 
 
 You can also drag files and folders from File Explorer or Finder onto the message box. Each one waits in the box as a chip, like those you add with **Files and folders…**, so Copilot reads them with your next message. Images you drop are attached instead, like pasted ones.
 
+To have Copilot follow the same rules in every app, such as using the system theme, write them once in your [custom instructions](/docs/reference/settings#custom-instructions). When one of them shapes a turn's work, a line under the answer says so, such as `Followed your instruction “Use system theme by default”`.
+
 ## Turn on plugins
 
 Plugins let chat look things up in your organization's data, or use other services' tools, while it builds. Select **Plugins**, the plug button next to **+**, to turn them on or off. Each app's chat has its own: a new app's chat starts with the plugins in your [chat defaults](/docs/reference/settings#chat-defaults), or with none on. When a plugin is on, the button shows its name, or, in a narrow chat, how many are on.
@@ -88,7 +90,7 @@ Expand it to review the steps. A step can show:
 
 Reasoning folds into a `Thought for …` row when it is available.
 
-When Copilot hands part of the work to another agent, such as the **UI builder**, that agent's steps show under the step that started it, with the agent's name, what it was asked to do, and how many steps it took. While the agent works, its newest steps stay open, and its row stays in view as the log moves on, so you can follow it beside Copilot's own steps. While Copilot waits for it, the status line names it, such as `Waiting for UI builder…` or `UI builder is working…`. When it's done, its steps fold into that one line. Select it to see them again.
+When Copilot hands part of the work to another agent, that agent's steps show under the step that started it, with the agent's name, what it was asked to do, and how many steps it took. While the agent works, its newest steps stay open, and its row stays in view as the log moves on, so you can follow it beside Copilot's own steps. While Copilot waits for it, the status line names it: `Waiting for <agent>…`, or `<agent> is working…` while only other agents are working. When it's done, its steps fold into that one line. Select it to see them again.
 
 ## Review changed files
 
@@ -140,20 +142,6 @@ Copilot doesn't start your app or publish it: Fabricator runs your app, and publ
 These checks show in the work log as steps such as **Checked the local backend**, "Called the app's data API while signed out", "Called the getBacklog function as you" or **Checked the seed data**. If a change to the data model would delete data stored on this computer, Copilot tells you what it would delete instead of working around it. See [When a data model change would delete local data](/docs/build/local-development#when-a-data-model-change-would-delete-local-data).
 
 For a published app or a team app that this computer can't run, Copilot checks without running the app: type-checking, the build, lint and the project's offline validators, and for charts, Fabricator's headless chart preview when the app has it. For such an app, while chat turns don't publish it, Copilot ends by saying what to try in the preview, and whether it needs a publish first.
-
-## See the screens early with the UI builder
-
-> [!WARNING]
-> The Parallel UI builder is an experiment. Turn it on in **Settings → Experiments**. It may change or be removed in a future update.
-
-In a big request, such as a new app or a dashboard, Copilot usually builds the screens last, so the preview shows the starter page for most of the turn. With **Parallel UI builder** turned on in **Settings → Experiments**, Copilot hands the screens to a second agent, the **UI builder**, early in the turn. The UI builder builds the screens while Copilot works out the app's data and builds the logic behind them, so the preview shows the app taking shape early.
-
-- Copilot uses it whenever a request builds a new app, or adds or rebuilds a page, a screen or a dashboard. It makes small changes and fixes itself.
-- The UI builder's first change replaces the starter page with your app's shell: its name, header and navigation, styled like the finished app, with each screen sketched as a loading skeleton. Then it builds each screen in place, so the preview shows the app take shape. Until the app's data is there, the screens show that they're loading or empty: the UI builder doesn't fill them with made-up data.
-- When the data is ready, Copilot sends it to the UI builder, which connects the screens to it.
-- Its steps show in the work log under **UI builder**. See [Review the work log](/docs/build/chat#review-the-work-log).
-- Copilot waits for the UI builder before it finishes, then checks the whole app.
-- The UI builder runs on the chat's model, so a turn that uses it uses more of your Copilot plan's allowance.
 
 ## Picks and Advisor cards in chat
 

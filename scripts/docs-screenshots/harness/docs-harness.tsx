@@ -73,6 +73,7 @@ import AccountMenu from './components/AccountMenu'
 import AccountsModal from './components/AccountsModal'
 import SettingsModal from './components/SettingsModal'
 import ChatDefaultsModal from './components/ChatDefaultsModal'
+import CustomInstructionsModal from './components/CustomInstructionsModal'
 import BlueprintTab from './components/blueprint/BlueprintTab'
 import { ModelPicker } from './components/models/ModelPicker'
 import { AddMenu, PluginsMenu } from './components/chat/ComposerMenus'
@@ -1847,6 +1848,7 @@ function SettingsShot({ experiments = false }: { experiments?: boolean }): JSX.E
       onManageKeys={noop}
       onManageMcpServers={noop}
       onManageChatDefaults={noop}
+      onManageCustomInstructions={noop}
       onReviewSetup={noop}
     />
   )
@@ -2819,6 +2821,22 @@ function Shot({ id }: { id: string | null }): JSX.Element {
             onClose={noop}
             onManageKeys={noop}
             onManageMcpServers={noop}
+          />
+        </Unfocused>
+      )
+    case 'custom-instructions':
+      // The sample user's rules for every app they build.
+      return (
+        <Unfocused>
+          <CustomInstructionsModal
+            instructions={[
+              'Use the system’s light or dark theme by default.',
+              'Use sentence case for headings, labels and buttons.',
+              'Show amounts in US dollars and dates like 5 Mar 2026.',
+              'Put the main action of each page at the top right.'
+            ].join('\n')}
+            onSave={noop}
+            onClose={noop}
           />
         </Unfocused>
       )

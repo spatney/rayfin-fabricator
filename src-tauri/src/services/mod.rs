@@ -43,7 +43,6 @@ pub mod team;
 pub mod telemetry;
 pub mod terminal;
 pub mod thumbnails;
-pub mod ui_builder;
 pub mod updater;
 pub mod usage;
 pub mod version_history;

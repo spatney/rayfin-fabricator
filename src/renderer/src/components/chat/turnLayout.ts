@@ -177,6 +177,37 @@ export function visibleSteps(m: UIChatMessage): ChatToolCall[] {
   return m.tools.filter((t) => !isHiddenTool(t.name))
 }
 
+/** The tool Copilot calls when one of the user's custom instructions shaped its work. */
+export const FOLLOWED_INSTRUCTION_TOOL = 'fabricator_followed_instruction'
+
+/** One of the user's custom instructions a turn followed. */
+export interface FollowedInstruction {
+  /** The instruction, as Copilot quoted it (the call's title). */
+  instruction: string
+  /** What Copilot did to follow it (the call's output), when it said. */
+  how?: string
+}
+
+/**
+ * The user's custom instructions a turn followed, as Copilot reported them:
+ * each once, in the order it reported them.
+ */
+export function followedInstructions(tools: readonly ChatToolCall[]): FollowedInstruction[] {
+  const seen = new Set<string>()
+  const followed: FollowedInstruction[] = []
+  for (const t of tools) {
+    if (t.name.toLowerCase() !== FOLLOWED_INSTRUCTION_TOOL || t.state === 'error') continue
+    const instruction = t.title.trim()
+    const key = instruction.toLowerCase()
+    // Without an instruction, the title is the tool's name.
+    if (!instruction || key === FOLLOWED_INSTRUCTION_TOOL || seen.has(key)) continue
+    seen.add(key)
+    const how = t.output?.trim()
+    followed.push(how ? { instruction, how } : { instruction })
+  }
+  return followed
+}
+
 export type FileChangeStatus = 'created' | 'edited' | 'deleted'
 
 export interface FileChange {

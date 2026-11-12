@@ -808,12 +808,6 @@ pub struct ExperimentFlags {
   /// default); each chat still has the plugin off until it's turned on there.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub work_iq: Option<bool>,
-  /// Parallel UI builder: when a Build chat builds a new app or new screens,
-  /// Copilot hands the screens to a UI builder agent that builds the frontend
-  /// while Copilot builds the data model and logic, so the preview shows the
-  /// app taking shape early. Opt-in (off by default).
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub parallel_ui: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -852,6 +846,12 @@ pub struct AppSettings {
   /// project's chat keeps its own choice after that.
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub chat_defaults: Option<ChatDefaults>,
+  /// The user's own instructions for every app (Settings → Custom
+  /// instructions), saved as `agent_skills::custom_instructions` keeps them.
+  /// Every Build chat gets them beside Fabricator's guidance, from app data:
+  /// they're never written into a project.
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub custom_instructions: Option<String>,
 }
 
 /// The model and plugins a new project's chat starts with, saved as a chat

@@ -32,14 +32,16 @@ export type ToolKind =
 
 /**
  * Tools whose UI lives elsewhere (question cards, the plan card, the status
- * line). Fabricator's Fabric IQ tool asks on a question card and reports in
- * chat notices.
+ * line, the line under an answer). Fabricator's Fabric IQ tool asks on a
+ * question card and reports in chat notices; the custom instructions a turn
+ * followed show under its answer.
  */
 const HIDDEN_TOOLS = new Set([
   'ask_user',
   'exit_plan_mode',
   'report_intent',
-  'fabricator_connect_fabric_iq'
+  'fabricator_connect_fabric_iq',
+  'fabricator_followed_instruction'
 ])
 
 export function isHiddenTool(name: string): boolean {

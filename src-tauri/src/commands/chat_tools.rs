@@ -142,6 +142,12 @@ pub fn tool_title(tool_name: &str, args: Option<&Value>) -> String {
   if lower(tool_name) == "fabricator_local_call" {
     return local_call_title(args);
   }
+  // A followed custom instruction goes by the instruction, which the turn shows.
+  if lower(tool_name) == crate::services::agent_tools::FOLLOWED_INSTRUCTION_TOOL {
+    if let Some(instruction) = args.get("instruction").and_then(|v| v.as_str()).filter(|s| !s.trim().is_empty()) {
+      return truncate(collapse(instruction).trim(), 200);
+    }
+  }
   // What the work log says it did: `load`, else `check`.
   if lower(tool_name) == "fabricator_local_seed" {
     let action = args.get("action").and_then(|v| v.as_str()).map(|a| a.trim().to_ascii_lowercase());
@@ -377,6 +383,9 @@ mod tests {
     // The seed tool's title is what it does.
     assert_eq!(tool_title("fabricator_local_seed", Some(&json!({}))), "check");
     assert_eq!(tool_title("fabricator_local_seed", Some(&json!({"action":" Load "}))), "load");
+    // A followed custom instruction goes by the instruction.
+    let followed = json!({"instruction":"Use the system\n theme by default","how":"made the app follow the system's setting"});
+    assert_eq!(tool_title("fabricator_followed_instruction", Some(&followed)), "Use the system theme by default");
   }
 
   #[test]

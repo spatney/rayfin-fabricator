@@ -45,7 +45,6 @@ use crate::services::exec;
 use crate::services::iq::{Iq, IqConfig};
 use crate::services::mcp::{self, McpServers};
 use crate::services::store;
-use crate::services::ui_builder;
 use crate::state::PlanGate;
 use crate::types::{ChatEvent, CopilotAuthStatus};
 
@@ -94,9 +93,9 @@ struct Entry {
   /// (see `McpServers::revision`); turning one on or off, or changing it,
   /// reopens it.
   mcp: String,
-  /// Whether the session was opened with the UI builder (the Parallel UI
-  /// builder experiment); turning the experiment on or off reopens it.
-  parallel_ui: bool,
+  /// The user's custom instructions the session was opened with; changing
+  /// them reopens it, so each chat follows them from its next message.
+  custom_instructions: Option<String>,
 }
 
 /// Context window tiers (SDK `ContextTier`).
@@ -468,10 +467,10 @@ pub struct SessionOptions {
   /// checked before it's imported: the session reads none of them as its own
   /// instructions, skills, hooks or settings, and keeps git and memory off.
   pub untrusted: bool,
-  /// The Parallel UI builder experiment is on: a Build chat session (one with
-  /// `guidance`) gets the UI builder agent and the instruction to hand it an
-  /// app's screens (see [`ui_builder`]).
-  pub parallel_ui: bool,
+  /// The user's custom instructions (Settings → Custom instructions). A Build
+  /// chat (with `guidance`) gets them as one more instruction directory (see
+  /// `agent_skills::custom_instructions_dir`).
+  pub custom_instructions: Option<String>,
 }
 
 /* ----------------------------- Build chat sandbox ----------------------------- */
@@ -703,12 +702,10 @@ fn skill_directories(guidance: Guidance, cwd: &Path) -> Vec<PathBuf> {
 }
 
 /// The instruction directories of a Build chat session: Fabricator's set, and
-/// the Parallel UI builder's while that experiment is on.
-fn instruction_directories(guidance: Guidance, parallel_ui: bool) -> Vec<PathBuf> {
+/// the user's custom instructions when they have some.
+fn instruction_directories(guidance: Guidance, custom: Option<&str>) -> Vec<PathBuf> {
   let mut dirs = vec![agent_skills::instructions_dir(guidance)];
-  if parallel_ui {
-    dirs.push(agent_skills::parallel_ui_dir(guidance));
-  }
+  dirs.extend(agent_skills::custom_instructions_dir(custom));
   dirs
 }
 
@@ -766,10 +763,7 @@ async fn open_session(
       cfg = cfg
         .with_enable_skills(true)
         .with_skill_directories(skill_directories(guidance, &cwd_pb))
-        .with_instruction_directories(instruction_directories(guidance, opts.parallel_ui));
-      if opts.parallel_ui {
-        cfg = cfg.with_custom_agents([ui_builder::agent(guidance)]);
-      }
+        .with_instruction_directories(instruction_directories(guidance, opts.custom_instructions.as_deref()));
     }
     if !opts.tools.is_empty() {
       cfg = cfg.with_tools(opts.tools.clone());
@@ -836,10 +830,7 @@ async fn open_session(
     cfg = cfg
       .with_enable_skills(true)
       .with_skill_directories(skill_directories(guidance, Path::new(cwd)))
-      .with_instruction_directories(instruction_directories(guidance, opts.parallel_ui));
-    if opts.parallel_ui {
-      cfg = cfg.with_custom_agents([ui_builder::agent(guidance)]);
-    }
+      .with_instruction_directories(instruction_directories(guidance, opts.custom_instructions.as_deref()));
   }
   if !opts.tools.is_empty() {
     cfg = cfg.with_tools(opts.tools.clone());
@@ -1302,8 +1293,8 @@ impl CopilotManager {
   /// the registry of providers on the user's own keys, `guidance` the set of
   /// Fabricator's guidance that fits the app, `iq` the Fabric IQ and Work IQ
   /// servers it gets, `mcp` the user's MCP servers that are on, and
-  /// `parallel_ui` whether it gets the UI builder; a cached session opened with
-  /// a different one of these is reopened, since the runtime only takes them
+  /// `custom_instructions` the user's own; a cached session opened with a
+  /// different one of these is reopened, since the runtime only takes them
   /// (with `tools`) when a session is created or resumed.
   #[allow(clippy::too_many_arguments)]
   pub async fn turn_session(
@@ -1319,7 +1310,7 @@ impl CopilotManager {
     byok: Option<crate::services::byok::registry::ByokRegistry>,
     iq: IqConfig,
     mcp: McpServers,
-    parallel_ui: bool,
+    custom_instructions: Option<String>,
   ) -> Result<TurnSession, String> {
     let choice = with_own_key_effort(choice, byok.as_ref());
     let key = project_id.to_string();
@@ -1343,7 +1334,7 @@ impl CopilotManager {
           && e.iq == iq
           && e.mcp == mcp_rev
           && e.guidance == guidance
-          && e.parallel_ui == parallel_ui =>
+          && e.custom_instructions == custom_instructions =>
       {
         match session_sync(&e.choice, &choice) {
           // The choice changed — apply it on the live session. `set_model`
@@ -1387,7 +1378,7 @@ impl CopilotManager {
       byok,
       iq,
       mcp,
-      parallel_ui,
+      custom_instructions: custom_instructions.clone(),
       ..Default::default()
     };
     let opened = match open_session(&client, cwd, session_id, &choice, &opts, true).await {
@@ -1413,7 +1404,7 @@ impl CopilotManager {
         guidance,
         iq,
         mcp: mcp_rev,
-        parallel_ui,
+        custom_instructions,
       },
     );
     // The session starts the user's MCP servers afresh: try each one again.
@@ -1795,7 +1786,7 @@ pub(crate) mod tests {
     ).await.unwrap();
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), parallel_ui: false,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
     });
     manager.reload_auth().await;
     let engine = manager.engine.lock().await;
@@ -2048,11 +2039,11 @@ pub(crate) mod tests {
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None,
       iq: IqConfig { fabric: true, work: true },
-      mcp: String::new(), parallel_ui: false,
+      mcp: String::new(), custom_instructions: None,
     });
     let fabric = IqConfig { fabric: true, work: false };
     manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), None, None, fabric, McpServers::default(), false,
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), None, None, fabric, McpServers::default(), None,
     ).await.unwrap();
     let requests = server.await.unwrap();
     let servers = requests[3]["params"]["mcpServers"].as_object().unwrap();
@@ -2075,13 +2066,13 @@ pub(crate) mod tests {
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: cached.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
-      guidance: Some(Guidance::Local), iq: IqConfig { fabric: false, work: true }, mcp: String::new(), parallel_ui: false,
+      guidance: Some(Guidance::Local), iq: IqConfig { fabric: false, work: true }, mcp: String::new(), custom_instructions: None,
     });
     manager.plugins_started("project", &cached, Iq::Fabric).await;
     let both = IqConfig { fabric: true, work: true };
     assert_eq!(manager.engine.lock().await.sessions["project"].iq, both);
     let opened = manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::Local), None, both, McpServers::default(), false,
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::Local), None, both, McpServers::default(), None,
     ).await.unwrap();
     assert!(Arc::ptr_eq(&opened.session, &cached), "the same session");
     server.await.unwrap();
@@ -2127,17 +2118,17 @@ pub(crate) mod tests {
         .unwrap_or_default();
       assert_eq!(dirs, [fabricator.clone(), project.join(".agents/skills")], "{request}");
       assert_eq!(request["params"]["instructionDirectories"], json!([agent_skills::instructions_dir(Guidance::Local)]));
-      // Without the Parallel UI builder experiment, no agents of Fabricator's.
+      // Fabricator adds no agents of its own.
       assert!(request["params"].get("customAgents").is_none(), "{request}");
     }
     client.force_stop();
     let _ = std::fs::remove_dir_all(&project);
   }
 
-  /// Turning the Parallel UI builder experiment on reopens a Build chat's
-  /// session with the UI builder and the instruction to hand it the screens.
+  /// Changing the custom instructions reopens a Build chat's session with
+  /// their directory after Fabricator's.
   #[tokio::test]
-  async fn the_parallel_ui_builder_experiment_reopens_a_build_chat_with_the_ui_builder() {
+  async fn changed_custom_instructions_reopen_a_build_chat_with_them() {
     let (client, server) = fake_client(vec![
       ("session.create", json!({ "result": { "sessionId": "thread" } })),
       ("auth.getStatus", json!({ "result": { "isAuthenticated": true } })),
@@ -2151,23 +2142,18 @@ pub(crate) mod tests {
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
-      guidance: Some(Guidance::Local), iq: IqConfig::default(), mcp: String::new(), parallel_ui: false,
+      guidance: Some(Guidance::Local), iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
     });
+    let theirs = "Use the system theme by default.";
     manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::Local), None, IqConfig::default(), McpServers::default(), true,
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::Local), None, IqConfig::default(), McpServers::default(), Some(theirs.into()),
     ).await.unwrap();
     let requests = server.await.unwrap();
-    let resume = &requests[3]["params"];
     assert_eq!(
-      resume["instructionDirectories"],
-      json!([agent_skills::instructions_dir(Guidance::Local), agent_skills::parallel_ui_dir(Guidance::Local)])
+      requests[3]["params"]["instructionDirectories"],
+      json!([agent_skills::instructions_dir(Guidance::Local), agent_skills::custom_instructions_dir(Some(theirs)).unwrap()])
     );
-    let agents = resume["customAgents"].as_array().unwrap();
-    assert_eq!(agents.len(), 1, "{resume}");
-    assert_eq!((&agents[0]["name"], &agents[0]["displayName"]), (&json!(ui_builder::AGENT), &json!(ui_builder::NAME)));
-    // It runs on the chat's model.
-    assert!(agents[0].get("model").is_none());
-    assert!(manager.engine.lock().await.sessions["project"].parallel_ui);
+    assert_eq!(manager.engine.lock().await.sessions["project"].custom_instructions.as_deref(), Some(theirs));
     client.force_stop();
   }
 
@@ -2184,7 +2170,7 @@ pub(crate) mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), parallel_ui: false,
+      session: Arc::new(session), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
     });
     assert!(manager.list_models().await.is_err());
     let engine = manager.engine.lock().await;
@@ -2211,7 +2197,7 @@ pub(crate) mod tests {
     ).await.unwrap());
     let manager = manager_with(client);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), parallel_ui: false,
+      session: current.clone(), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
     });
     manager.invalidate_transport("project", &stale).await;
     assert!(manager.engine.lock().await.client.is_some());
@@ -2251,10 +2237,10 @@ pub(crate) mod tests {
     ).await.unwrap();
     let manager = manager_with(client.clone());
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
-      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), parallel_ui: false,
+      session: Arc::new(old), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None, guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
     });
     let opened = manager.turn_session(
-      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(), McpServers::default(), false,
+      "project", ".", "new-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(), McpServers::default(), None,
     ).await.unwrap();
     assert_eq!(opened.session.id().as_str(), "new-session");
     assert!(!opened.recreated);
@@ -2282,7 +2268,7 @@ pub(crate) mod tests {
     let choice = ModelChoice::of(m("anthropic/claude-opus-5-5"), None);
     manager.engine.lock().await.sessions.insert("project".into(), Entry {
       session: Arc::new(cached), cwd: ".".into(), choice: choice.clone(),
-      registry_rev: Some("before-the-new-key".into()), guidance: None, iq: IqConfig::default(), mcp: String::new(), parallel_ui: false,
+      registry_rev: Some("before-the-new-key".into()), guidance: None, iq: IqConfig::default(), mcp: String::new(), custom_instructions: None,
     });
     let mut settings = crate::types::ByokSettings::default();
     settings.providers.insert("anthropic".into(), crate::types::ByokProviderSettings {
@@ -2296,7 +2282,7 @@ pub(crate) mod tests {
     let keys = HashMap::from([("anthropic".to_string(), "sk-ant-test".to_string())]);
     let registry = crate::services::byok::registry::build(&settings, &keys);
     manager.turn_session(
-      "project", ".", "thread", choice, None, None, Vec::new(), None, Some(registry.clone()), IqConfig::default(), McpServers::default(), false,
+      "project", ".", "thread", choice, None, None, Vec::new(), None, Some(registry.clone()), IqConfig::default(), McpServers::default(), None,
     ).await.unwrap();
     let requests = server.await.unwrap();
     let resume = &requests[3]["params"];
@@ -2330,10 +2316,10 @@ pub(crate) mod tests {
       session: Arc::new(cached), cwd: ".".into(), choice: ModelChoice::default(), registry_rev: None,
       guidance: Some(Guidance::Local),
       iq: IqConfig::default(),
-      mcp: String::new(), parallel_ui: false,
+      mcp: String::new(), custom_instructions: None,
     });
     manager.turn_session(
-      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::FabricBacked), None, IqConfig::default(), McpServers::default(), false,
+      "project", ".", "thread", ModelChoice::default(), None, None, Vec::new(), Some(Guidance::FabricBacked), None, IqConfig::default(), McpServers::default(), None,
     ).await.unwrap();
     let requests = server.await.unwrap();
     let resume = &requests[3]["params"];
@@ -2500,7 +2486,7 @@ pub(crate) mod tests {
     ]);
     let manager = manager_with(client);
     let result = manager.turn_session(
-      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(), McpServers::default(), false,
+      "project", ".", "unauthenticated-session", ModelChoice::default(), None, None, Vec::new(), None, None, IqConfig::default(), McpServers::default(), None,
     ).await;
     assert!(result.err().unwrap().contains("Sign in to Copilot"));
     assert!(manager.engine.lock().await.sessions.is_empty());

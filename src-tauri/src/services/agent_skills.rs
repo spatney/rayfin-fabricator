@@ -24,6 +24,10 @@
 //!   without running the app (the headless `npm run preview` where the app has
 //!   it), and Fabricator deploys the app: after each chat turn or when the user
 //!   publishes, as the note on each message says.
+//!
+//! Beside both sets, the user's own **custom instructions** (Settings → Custom
+//! instructions) reach every Build chat the same way, from a folder of their
+//! own (see [`custom_instructions_dir`]).
 
 use std::path::{Path, PathBuf};
 
@@ -122,17 +126,6 @@ pub fn instructions_dir(guidance: Guidance) -> PathBuf {
   ensure_materialized();
   agent_root().join(guidance.folder()).join("instructions")
 }
-
-/// The instruction directory a Build chat also gets while the Parallel UI
-/// builder experiment is on (see [`crate::services::ui_builder`]).
-pub fn parallel_ui_dir(guidance: Guidance) -> PathBuf {
-  ensure_materialized();
-  agent_root().join(guidance.folder()).join(PARALLEL_UI_FOLDER)
-}
-
-/// The folder of a set that [`parallel_ui_dir`] names: beside its
-/// `instructions`, so a session without the experiment never reads it.
-const PARALLEL_UI_FOLDER: &str = "parallel-ui";
 
 /* ------------------------------ Local guidance ----------------------------- */
 
@@ -1020,7 +1013,6 @@ fn files(guidance: Guidance) -> Vec<(&'static str, String)> {
     ("skills/migrate-powerbi-report/SKILL.md", migrate_report_skill(guidance)),
     ("instructions/fabricator-stable-only.instructions.md", stable_only_instructions(guidance)),
     ("instructions/fabricator-chat-style.instructions.md", CHAT_STYLE_INSTRUCTIONS.to_string()),
-    ("parallel-ui/fabricator-parallel-ui.instructions.md", crate::services::ui_builder::INSTRUCTIONS.to_string()),
   ]);
   files
 }
@@ -1064,6 +1056,99 @@ fn write_all(root: &Path) -> std::io::Result<()> {
     }
   }
   Ok(())
+}
+
+/* --------------------------- Custom instructions --------------------------- */
+
+/// The most characters of custom instructions Fabricator keeps. They go with
+/// every message of every Build chat, so they stay small beside Fabricator's
+/// own guidance and leave room in the model's context window.
+pub const CUSTOM_INSTRUCTIONS_MAX: usize = 8_000;
+
+/// The folder, under [`agent_root`], that holds the user's custom instructions:
+/// beside the two sets, which [`write_all`] replaces, so it's left alone.
+const CUSTOM_FOLDER: &str = "custom";
+
+/// The custom instructions' file in [`CUSTOM_FOLDER`].
+const CUSTOM_FILE: &str = "user.instructions.md";
+
+/// What goes before the user's own words in their file. They count as part of
+/// every request: the project's own instructions say to make only the requested
+/// changes, and a starter template sets things up its own way.
+const CUSTOM_HEAD: &str = r#"---
+applyTo: '**'
+---
+# The user's custom instructions (Fabricator)
+
+The user set these instructions in Fabricator for every app they build. Treat them as part of
+every request in this chat, as if the user had written them in each message:
+
+- Follow them in everything you build and change.
+- When you build a new app, or a part of an app that one of them is about, set it up the way it
+  says, even where the starter template or the existing code does it differently.
+- When the user asks for something else in the chat, that comes first. So do Fabricator's other
+  instructions, such as never starting or publishing the app yourself.
+
+Each time one of them shapes your work, call `fabricator_followed_instruction` with the
+instruction, as the user wrote it, and what you did to follow it, so the user sees it was
+applied.
+
+## The user's instructions
+
+"#;
+
+/// The custom instructions to keep from what the user wrote in Settings →
+/// Custom instructions: trimmed, and at most [`CUSTOM_INSTRUCTIONS_MAX`]
+/// characters. None when that leaves nothing, which clears them.
+pub fn custom_instructions(text: &str) -> Option<String> {
+  let kept: String = text.trim().chars().take(CUSTOM_INSTRUCTIONS_MAX).collect();
+  let kept = kept.trim_end();
+  (!kept.is_empty()).then(|| kept.to_string())
+}
+
+/// The text of the custom instructions' file.
+fn custom_instructions_file(text: &str) -> String {
+  format!("{CUSTOM_HEAD}{}\n", text.trim())
+}
+
+/// The instruction directory a Build chat also gets when the user has custom
+/// instructions, `text`, with their file written. None without any, when
+/// their file is removed so cleared instructions leave nothing behind, or when
+/// the file can't be written.
+pub fn custom_instructions_dir(text: Option<&str>) -> Option<PathBuf> {
+  let text = text.unwrap_or_default();
+  let dir = agent_root().join(CUSTOM_FOLDER);
+  // Unit tests write the file to temporary folders (see `write_custom_instructions`), never the user's.
+  if cfg!(test) {
+    return (!text.trim().is_empty()).then_some(dir);
+  }
+  match write_custom_instructions(&dir, text) {
+    Ok(written) => written.then_some(dir),
+    Err(e) => {
+      log::warn!("failed to write the custom instructions: {e}");
+      None
+    }
+  }
+}
+
+/// Write the custom instructions' file in `dir`, leaving one that already says
+/// the same alone, or remove it when `text` is empty. True when the file is
+/// there.
+fn write_custom_instructions(dir: &Path, text: &str) -> std::io::Result<bool> {
+  let file = dir.join(CUSTOM_FILE);
+  if text.trim().is_empty() {
+    return match std::fs::remove_file(&file) {
+      Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+      _ => Ok(false),
+    };
+  }
+  let content = custom_instructions_file(text);
+  if std::fs::read_to_string(&file).is_ok_and(|saved| saved == content) {
+    return Ok(true);
+  }
+  std::fs::create_dir_all(dir)?;
+  std::fs::write(&file, content)?;
+  Ok(true)
 }
 
 #[cfg(test)]
@@ -1112,7 +1197,6 @@ mod tests {
       "skills/migrate-powerbi-report/SKILL.md",
       "instructions/fabricator-stable-only.instructions.md",
       "instructions/fabricator-chat-style.instructions.md",
-      "parallel-ui/fabricator-parallel-ui.instructions.md",
     ] {
       assert!(local.contains(&shared) && fabric.contains(&shared), "{shared}");
     }
@@ -1120,12 +1204,6 @@ mod tests {
     assert_ne!(skills_dir(Guidance::Local), skills_dir(Guidance::FabricBacked));
     assert!(instructions_dir(Guidance::Local).ends_with(Path::new("local").join("instructions")));
     assert!(instructions_dir(Guidance::FabricBacked).ends_with(Path::new("fabric").join("instructions")));
-    // The experiment's instruction is in its own folder, so only a session given it reads it.
-    for guidance in [Guidance::Local, Guidance::FabricBacked] {
-      assert!(parallel_ui_dir(guidance).ends_with(Path::new(guidance.folder()).join(PARALLEL_UI_FOLDER)));
-      let in_folder = names(guidance).into_iter().filter(|f| f.starts_with(&format!("{PARALLEL_UI_FOLDER}/"))).count();
-      assert_eq!(in_folder, 1, "{guidance:?}");
-    }
   }
 
   #[test]
@@ -1529,6 +1607,45 @@ mod tests {
     );
     assert!(!tmp.join("local").join("instructions").join("fabricator-deploy.instructions.md").exists());
     assert!(!tmp.join("fabric").join("instructions").join("fabricator-local.instructions.md").exists());
+    let _ = std::fs::remove_dir_all(&tmp);
+  }
+
+  #[test]
+  fn custom_instructions_are_kept_trimmed_and_capped() {
+    assert_eq!(custom_instructions("  Use the system theme by default.\n\n").as_deref(), Some("Use the system theme by default."));
+    assert_eq!(custom_instructions(" \n\t "), None);
+    // Capped by characters, never inside one.
+    let accented = custom_instructions(&"é".repeat(CUSTOM_INSTRUCTIONS_MAX + 10)).unwrap();
+    assert_eq!(accented.chars().count(), CUSTOM_INSTRUCTIONS_MAX);
+    // A cap that lands on a space leaves none at the end.
+    let kept = custom_instructions(&format!("{} more", "a".repeat(CUSTOM_INSTRUCTIONS_MAX - 1))).unwrap();
+    assert_eq!(kept, "a".repeat(CUSTOM_INSTRUCTIONS_MAX - 1));
+  }
+
+  /// The custom instructions' file sits beside the two sets, which `write_all`
+  /// replaces at every launch, and follows what the user saves.
+  #[test]
+  fn custom_instructions_are_written_beside_the_sets_and_follow_the_settings() {
+    let tmp = std::env::temp_dir().join(format!("fab-agent-custom-{}", uuid::Uuid::new_v4()));
+    let dir = tmp.join(CUSTOM_FOLDER);
+    let file = dir.join(CUSTOM_FILE);
+    assert!(!write_custom_instructions(&dir, " ").unwrap(), "nothing to write or remove");
+
+    assert!(write_custom_instructions(&dir, "Use the system theme by default.").unwrap());
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.starts_with("---\napplyTo: '**'\n---\n# The user's custom instructions (Fabricator)\n"), "{text}");
+    assert!(text.ends_with("## The user's instructions\n\nUse the system theme by default.\n"), "{text}");
+    for rule in ["as if the user had written them in each message", "even where the starter template", "that comes first", "never starting or publishing the app yourself", "`fabricator_followed_instruction`"] {
+      assert!(text.contains(rule), "the instructions should say {rule:?}");
+    }
+
+    write_all(&tmp).unwrap();
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), text, "the launch's rewrite leaves it alone");
+
+    assert!(write_custom_instructions(&dir, "Write dates like 5 Mar 2026.").unwrap());
+    assert!(std::fs::read_to_string(&file).unwrap().ends_with("\n\nWrite dates like 5 Mar 2026.\n"));
+    assert!(!write_custom_instructions(&dir, "").unwrap());
+    assert!(!file.exists(), "cleared instructions leave no file");
     let _ = std::fs::remove_dir_all(&tmp);
   }
 }
