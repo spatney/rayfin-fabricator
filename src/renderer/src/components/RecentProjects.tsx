@@ -378,7 +378,7 @@ export default function RecentProjects({
           <span className="home-project-removal-actions">
             <button
               type="button"
-              className="btn btn--sm"
+              className="btn btn--sm home-project-control"
               aria-label={`Try again to remove ${project.name}`}
               onClick={() => onRetryRemoval?.(project.id)}
             >
@@ -386,7 +386,7 @@ export default function RecentProjects({
             </button>
             <button
               type="button"
-              className="btn btn--sm btn--ghost"
+              className="btn btn--sm btn--ghost home-project-control"
               aria-label={`Keep ${project.name}`}
               onClick={() => onDismissRemoval?.(project.id)}
             >
